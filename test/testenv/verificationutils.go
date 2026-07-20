@@ -2499,6 +2499,20 @@ func (testenv *TestCaseEnv) VerifyStandaloneConditionReady(ctx context.Context, 
 // dedicated per-component readiness checks already passed) re-waits instead of failing
 // the whole spec.
 func (testenv *TestCaseEnv) VerifyC3ConditionsReady(ctx context.Context, deployment *Deployment) error {
+	return testenv.VerifyC3ConditionsReadyWithSearchHead(ctx, deployment, true)
+}
+
+// VerifyC3ConditionsReadyWithSearchHead fetches ClusterManager and IndexerCluster
+// by convention name, and optionally SearchHeadCluster, then verifies all present
+// CRs have Ready condition True. If the v4 ClusterManager object is not present
+// (i.e. the test is running the v3 ClusterMaster variant), this is a no-op since
+// v3 CRs do not publish a Conditions field.
+// The condition checks are retried with tolerance for up to 2 consecutive transient
+// non-Ready observations, since pods can briefly flap during legitimate operator activity.
+// The whole check is additionally wrapped in an outer retry loop bounded by the
+// deployment timeout, mirroring VerifySearchHeadClusterReady/VerifyIngestorReady: a
+// flap that outlasts the short tolerance window re-waits instead of failing the whole spec.
+func (testenv *TestCaseEnv) VerifyC3ConditionsReadyWithSearchHead(ctx context.Context, deployment *Deployment, includeSHC bool) error {
 	name := deployment.GetName()
 
 	cm := &enterpriseApi.ClusterManager{}
@@ -2533,6 +2547,10 @@ func (testenv *TestCaseEnv) VerifyC3ConditionsReady(ctx context.Context, deploym
 			}
 			if err := VerifyCRConditionsForPhase("IndexerCluster", idxcName, idc.Status.Conditions, enterpriseApi.PhaseReady); err != nil {
 				return err
+			}
+
+			if !includeSHC {
+				return nil
 			}
 
 			shc := &enterpriseApi.SearchHeadCluster{}

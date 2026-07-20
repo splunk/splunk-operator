@@ -63,7 +63,7 @@ func GetIndexOnPod(ctx context.Context, deployment *Deployment, podName string, 
 
 // RollHotToWarm rolls hot buckets to warm for a given index and pod
 func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, indexName string) bool {
-	stdin := "/opt/splunk/bin/splunk _internal call /data/indexes/" + indexName + "/roll-hot-buckets admin:$(cat /mnt/splunk-secrets/password)"
+	stdin := "/opt/splunk/bin/splunk _internal call /data/indexes/" + indexName + "/roll-hot-buckets -auth admin:$(cat /mnt/splunk-secrets/password)"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {

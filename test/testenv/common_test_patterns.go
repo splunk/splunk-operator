@@ -372,7 +372,16 @@ func (c *ClusterReadinessConfig) DeployAndVerifyC3(ctx context.Context, deployme
 	if err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), replicas, shc); err != nil {
 		return fmt.Errorf("unable to deploy C3 cluster: %w", err)
 	}
-	return c.VerifyC3ClusterReady(ctx, deployment, testcaseEnv)
+	if shc {
+		return c.VerifyC3ClusterReady(ctx, deployment, testcaseEnv)
+	}
+	if err := c.ClusterManagerReady(ctx, deployment, testcaseEnv); err != nil {
+		return err
+	}
+	if err := testcaseEnv.VerifySingleSiteIndexersReady(ctx, deployment); err != nil {
+		return err
+	}
+	return testcaseEnv.VerifyC3ConditionsReadyWithSearchHead(ctx, deployment, false)
 }
 
 // DeployAndVerifyM4 deploys an M4 multisite cluster and verifies the Cluster Manager

@@ -183,15 +183,15 @@ func (testcaseenv *TestCaseEnv) VerifyM4IndexersAndSHCReady(ctx context.Context,
 	return testcaseenv.VerifyM4ConditionsReady(ctx, deployment, siteCount)
 }
 
-// VerifyC3ClusterReady verifies the cluster coordinator, SHC, and single-site indexers are ready.
+// VerifyC3ClusterReady verifies the cluster coordinator, single-site indexers, and SHC are ready.
 func (testcaseenv *TestCaseEnv) VerifyC3ClusterReady(ctx context.Context, deployment *Deployment, verifyCoordinator func(context.Context, *Deployment) error) error {
 	if err := verifyCoordinator(ctx, deployment); err != nil {
 		return err
 	}
-	if err := testcaseenv.VerifySearchHeadClusterReady(ctx, deployment); err != nil {
+	if err := testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment); err != nil {
 		return err
 	}
-	if err := testcaseenv.VerifySingleSiteIndexersReady(ctx, deployment); err != nil {
+	if err := testcaseenv.VerifySearchHeadClusterReady(ctx, deployment); err != nil {
 		return err
 	}
 	return testcaseenv.VerifyC3ConditionsReady(ctx, deployment)

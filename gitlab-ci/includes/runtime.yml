@@ -271,6 +271,18 @@ qualification-indingsep-validation:
     WORKFLOW_SLUG: qualification-indingsep-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
+qualification-managerc3idxclustering-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managerc3idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:idxclustering && cloud:aws"
+
+qualification-managerm4idxclustering-validation:
+  extends: .runtime-qualification-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-managerm4idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:idxclustering && cloud:aws"
+
 helm-eks-validation:
   extends:
     - .runtime-released-sok-validation-job
@@ -504,6 +516,18 @@ qualification-distroless-indingsep-validation:
     WORKFLOW_SLUG: qualification-distroless-indingsep-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
 
+qualification-distroless-managerc3idxclustering-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managerc3idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:idxclustering && cloud:aws"
+
+qualification-distroless-managerm4idxclustering-validation:
+  extends: .runtime-released-sok-distroless-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-distroless-managerm4idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:idxclustering && cloud:aws"
+
 # Keep the arm64 suite set aligned with the proven splunk-operator-cicd
 # Graviton matrix instead of widening it independently in this repo.
 qualification-graviton-appframeworks-s1-validation:
@@ -561,6 +585,18 @@ qualification-graviton-indingsep-validation:
   variables:
     WORKFLOW_SLUG: qualification-graviton-indingsep-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
+
+qualification-graviton-managerc3idxclustering-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-managerc3idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:idxclustering && cloud:aws"
+
+qualification-graviton-managerm4idxclustering-validation:
+  extends: .runtime-released-sok-graviton-suite-job
+  variables:
+    WORKFLOW_SLUG: qualification-graviton-managerm4idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:idxclustering && cloud:aws"
 
 # Nightly integration fan-out follows the old GitHub nightly integration matrix:
 # one suite per job and one EKS cluster per suite instead of a single large run.
@@ -698,6 +734,12 @@ eks-smoke-licensemanager-validation:
     WORKFLOW_SLUG: eks-smoke-licensemanager-validation
     JOB_INT_TEST_LABELS: "tier:e2e-pr && variant:manager && feature:licensemanager"
 
+eks-smoke-managerc3idxclustering-validation:
+  extends: .runtime-smoke-suite-job
+  variables:
+    WORKFLOW_SLUG: eks-smoke-managerc3idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-pr && sva:c3 && variant:manager && feature:idxclustering && cloud:aws"
+
 nightly-eks-integration-appframeworks-s1-validation:
   extends:
     - .runtime-nightly-integration-suite-job
@@ -763,6 +805,18 @@ nightly-eks-integration-indingsep-validation:
   variables:
     WORKFLOW_SLUG: nightly-eks-integration-indingsep-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && feature:indingsep"
+
+nightly-eks-integration-managerc3idxclustering-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managerc3idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:c3 && variant:manager && feature:idxclustering && cloud:aws"
+
+nightly-eks-integration-managerm4idxclustering-validation:
+  extends: .runtime-nightly-integration-suite-job
+  variables:
+    WORKFLOW_SLUG: nightly-eks-integration-managerm4idxclustering-validation
+    JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:idxclustering && cloud:aws"
 
 nightly-eks-integration-ufingest-validation:
   extends: .runtime-nightly-integration-suite-job
