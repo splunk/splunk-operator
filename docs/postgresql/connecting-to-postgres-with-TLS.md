@@ -12,7 +12,7 @@ This guide describes how **application workloads** connect to a managed `**Postg
 
 **Separation of concerns:** the **cluster access ConfigMap** (same namespace as the `PostgresCluster`, often `<cluster-name>-configmap`) owns **infrastructure-level** data such as shared endpoints, port, superuser access, and CA discovery. The **database access ConfigMap** created per `PostgresDatabase.spec.databases[]` extends that same connection schema with **application-level** data such as `DATABASE_NAME`, `ADMIN_USER_NAME`, and `RW_USER_NAME`.
 
-Certificate lifecycle and server-side behaviour follow **[CloudNativePG — Certificates](https://cloudnative-pg.io/docs/1.28/certificates)** (pick the doc version that matches your CNPG release).
+Certificate lifecycle and server-side behaviour follow **[CloudNativePG — Certificates](https://cloudnative-pg.io/docs/1.30/certificates)** (pick the doc version that matches your CNPG release).
 
 ---
 
@@ -124,7 +124,7 @@ If you also need IPv6 clients, add equivalent rules for `**::/0**` (see the [Pos
 
 **Do not** put `**ssl`**, `**ssl_cert_file**`, or similar server certificate settings in `**postgresqlConfig**` here—the platform already provisions server TLS. Use `**pgHBA**` (and general non-TLS `**postgresqlConfig**` tuning) for policy and performance.
 
-For allowed PostgreSQL parameters in this setup, see **[CloudNativePG — PostgreSQL configuration](https://cloudnative-pg.io/documentation/1.28/postgresql_conf/)**.
+For allowed PostgreSQL parameters in this setup, see **[CloudNativePG — PostgreSQL configuration](https://cloudnative-pg.io/documentation/1.30/postgresql_conf/)**.
 
 ---
 

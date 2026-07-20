@@ -179,7 +179,7 @@ type ConnectionPoolerConfig struct {
 
 	// Config contains PgBouncer configuration parameters.
 	// Passed directly to CNPG Pooler spec.pgbouncer.parameters.
-	// See: https://cloudnative-pg.io/docs/1.28/connection_pooling/#pgbouncer-configuration-options
+	// See: https://cloudnative-pg.io/docs/1.30/connection_pooling/#pgbouncer-configuration-options
 	// +optional
 	Config map[string]string `json:"config,omitempty"`
 }
