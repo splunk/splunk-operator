@@ -1585,7 +1585,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				adminRoleNameForTest(dbDropdb), rwRoleNameForTest(dbDropdb),
 			}, "tenant-rw", "tenant-ro")
 
-			seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, clusterName, postgresDB, dbKeepdb, dbDropdb)
+			seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, cnpgClusterName, postgresDB, dbKeepdb, dbDropdb)
 
 			simulateClusterRoleOwnership(ctx, clusterName, namespace, postgresDB,
 				adminRoleNameForTest(dbKeepdb), rwRoleNameForTest(dbKeepdb),

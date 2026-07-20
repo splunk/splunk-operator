@@ -8,7 +8,7 @@ nav_order: 1
 
 This guide is for **platform teams** configuring automated PostgreSQL backups and **users** who need to understand backup status on their **`PostgresCluster`** instances. The Splunk Operator uses Kubernetes CSI **Volume Snapshots** as the backup method, delegating snapshot execution to CloudNativePG.
 
-For CNPG backup internals, see [CloudNativePG — Volume Snapshots (1.28)](https://cloudnative-pg.io/docs/devel/backup).
+For CNPG backup internals, see [CloudNativePG — Volume Snapshots (1.30)](https://cloudnative-pg.io/docs/devel/backup).
 
 ---
 
@@ -182,7 +182,7 @@ Examples:
 
 The operator translates this to CNPG's 6-field format internally (prepends `0` for the seconds field).
 
-> **Note:** The [CNPG backup documentation](https://cloudnative-pg.io/docs/1.28/backup/#cron-schedule) uses a **6-field cron** where the first field is seconds (e.g. `"0 0 2 * * *"`). This operator accepts standard **5-field cron only** — do not include the seconds field.
+> **Note:** The [CNPG backup documentation](https://cloudnative-pg.io/docs/1.30/backup/#cron-schedule) uses a **6-field cron** where the first field is seconds (e.g. `"0 0 2 * * *"`). This operator accepts standard **5-field cron only** — do not include the seconds field.
 
 ---
 

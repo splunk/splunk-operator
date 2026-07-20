@@ -36,7 +36,7 @@ When that field changes:
 - the cluster returns to `Ready` when CNPG reports a healthy state again
 
 Editing the CNPG `Cluster` directly is not recommended, as the operator will overwrite changes or not recognize them for status reporting.
-(See the [CNPG documentation ](https://cloudnative-pg.io/docs/1.28/postgres_upgrades#minor-version-upgrades) for more details on how CNPG handles minor version upgrades.)
+(See the [CNPG documentation ](https://cloudnative-pg.io/docs/1.30/postgres_upgrades#minor-version-upgrades) for more details on how CNPG handles minor version upgrades.)
 
 ### Upgrade options
 
@@ -211,3 +211,30 @@ You may also see additional namespace events from CNPG and Kubernetes, such as:
 
 Rolling back from a higher patch version to an earlier patch version within the same major version is supported.
 The process is the same as the upgrade: revert `spec.postgresVersion` in the tracked `PostgresCluster` manifest, review and commit the change, then apply it. Treat this as a validation or recovery procedure, not as a preferred steady-state operating pattern.
+
+### CNPG 1.30 behavioral notes
+
+The Splunk Operator does not install or manage the CloudNativePG (CNPG) operator itself —
+CNPG is an external prerequisite that must already be running in the cluster. This
+operator is compiled and tested against CNPG **1.30.0**; if you operate your own CNPG
+install, review the following behavior changes introduced in CNPG 1.30 before upgrading it:
+
+- **Immutable cluster references.** The `cluster`/`clusterRef` field on CNPG `Database`,
+  `Pooler`, `ScheduledBackup`, `Publication`, `Subscription`, and `DatabaseRole` resources
+  is now immutable after creation (enforced by CEL validation at the API server). The
+  Splunk Operator derives these references deterministically from the owning
+  `PostgresCluster` on every reconcile, so this does not require any manifest changes on
+  your part — but any manual edits to CNPG-managed resources that attempt to move them to
+  a different cluster will now be rejected outright instead of silently applied.
+- **Operator-side SCRAM-SHA-256 password encoding.** CNPG now hashes cleartext role
+  passwords before issuing `CREATE ROLE`/`ALTER ROLE`, rather than passing them through
+  verbatim. If you rely on pre-hashed passwords supplied directly in a role's Secret, set
+  the `cnpg.io/passwordPassthrough: "enabled"` annotation on that Secret to opt out of this encoding.
+- **Lease-based primary election.** CNPG now serializes primary promotion through a
+  Kubernetes `Lease` object rather than its previous election mechanism. This is an
+  internal CNPG implementation detail; no operator or user-facing configuration changes
+  are required, but expect a new `Lease` resource per CNPG cluster.
+- **Authenticated operator-to-instance communication.** CNPG instances now use in-memory
+  ECDSA client certificates to authenticate calls from the CNPG operator, hardening the
+  control plane channel. This has no impact on Splunk Operator-managed resources or on
+  application connectivity to PostgreSQL.
