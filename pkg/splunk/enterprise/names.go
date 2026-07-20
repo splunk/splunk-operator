@@ -35,9 +35,6 @@ const (
 	// identifier, instanceType, index (ex: 0, 1, 2, ...)
 	statefulSetPodTemplateStr = "splunk-%s-%s-%d"
 
-	// identifier, instanceType, "headless" or "service"
-	serviceTemplateStr = "splunk-%s-%s-%s"
-
 	// identifier
 	defaultsTemplateStr = "splunk-%s-%s-defaults"
 
@@ -222,14 +219,6 @@ access = read : [ * ], write : [ admin ]
 	// Command to reload app configuration
 	telAppReloadString = "curl -k -u admin:%s https://localhost:8089/services/apps/local/_reload"
 
-	// Name of the telemetry configmap: <namePrefix>-manager-telemetry
-	telConfigMapTemplateStr = "%smanager-telemetry"
-
-	// Name of the telemetry app: app_tel_for_sok
-	telAppNameStr     = "app_tel_for_sok"
-	telSOKVersionKey  = "version"
-	telLicenseInfoKey = "license_info"
-
 	managerConfigMapTemplateStr = "%smanager-config"
 )
 
@@ -262,19 +251,6 @@ func GetSplunkStatefulsetName(instanceType InstanceType, identifier string) stri
 // GetSplunkStatefulsetPodName uses a template to name a specific pod within a Kubernetes StatefulSet for Splunk instances.
 func GetSplunkStatefulsetPodName(instanceType InstanceType, identifier string, index int32) string {
 	return fmt.Sprintf(statefulSetPodTemplateStr, identifier, instanceType, index)
-}
-
-// GetSplunkServiceName uses a template to name a Kubernetes Service for Splunk instances.
-func GetSplunkServiceName(instanceType InstanceType, identifier string, isHeadless bool) string {
-	var result string
-
-	if isHeadless {
-		result = fmt.Sprintf(serviceTemplateStr, identifier, instanceType, "headless")
-	} else {
-		result = fmt.Sprintf(serviceTemplateStr, identifier, instanceType, "service")
-	}
-
-	return result
 }
 
 // GetSplunkDefaultsName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
@@ -318,7 +294,7 @@ func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identi
 		fmt.Sprintf(
 			"%s.%s",
 			podName,
-			GetSplunkServiceName(instanceType, identifier, true),
+			splcommon.GetSplunkServiceName(instanceType, identifier, true),
 		))
 }
 
@@ -396,11 +372,6 @@ func GetLivenessDriverFileDir() string {
 // GetStartupScriptName returns the name of startup probe script on pod
 func GetStartupScriptName() string {
 	return startupScriptName
-}
-
-// GetTelemetryConfigMapName returns the name of telemetry configmap
-func GetTelemetryConfigMapName(namePrefix string) string {
-	return fmt.Sprintf(telConfigMapTemplateStr, namePrefix)
 }
 
 // GetManagerConfigMapName returns the name of manager configmap

@@ -23,7 +23,7 @@ import (
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -41,7 +41,7 @@ const (
 	telemetryRetryDelay = time.Second * 600
 )
 
-var applyTelemetryFn = enterprise.ApplyTelemetry
+var applyTelemetryFn = telapp.ApplyTelemetry
 
 type TelemetryReconciler struct {
 	client.Client
@@ -107,7 +107,7 @@ func (r *TelemetryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			if labels == nil {
 				return false
 			}
-			return obj.GetName() == enterprise.GetTelemetryConfigMapName(ConfigMapNamePrefix) && labels["name"] == ConfigMapLabelName
+			return obj.GetName() == telapp.GetTelemetryConfigMapName(ConfigMapNamePrefix) && labels["name"] == ConfigMapLabelName
 		})).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,

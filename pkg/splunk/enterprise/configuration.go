@@ -86,13 +86,6 @@ var defaultStartupProbe corev1.Probe = corev1.Probe{
 	},
 }
 
-const (
-	defaultRequestsCPU    = "0.1"
-	defaultRequestsMemory = "512Mi"
-	defaultLimitsCPU      = "4"
-	defaultLimitsMemory   = "8Gi"
-)
-
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
 	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
@@ -205,7 +198,7 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 		APIVersion: "v1",
 	}
 
-	service.ObjectMeta.Name = GetSplunkServiceName(instanceType, cr.GetName(), isHeadless)
+	service.ObjectMeta.Name = splcommon.GetSplunkServiceName(instanceType, cr.GetName(), isHeadless)
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
@@ -374,12 +367,12 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse(defaultRequestsCPU),
-			corev1.ResourceMemory: resource.MustParse(defaultRequestsMemory),
+			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultRequestsCPU),
+			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultRequestsMemory),
 		},
 		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse(defaultLimitsCPU),
-			corev1.ResourceMemory: resource.MustParse(defaultLimitsMemory),
+			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultLimitsCPU),
+			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultLimitsMemory),
 		},
 	}
 
@@ -732,7 +725,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		Selector: &metav1.LabelSelector{
 			MatchLabels: selectLabels,
 		},
-		ServiceName:         GetSplunkServiceName(instanceType, cr.GetName(), true),
+		ServiceName:         splcommon.GetSplunkServiceName(instanceType, cr.GetName(), true),
 		Replicas:            &replicas,
 		PodManagementPolicy: appsv1.ParallelPodManagement,
 		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
@@ -968,7 +961,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		})
 	}
 	if instanceType != SplunkLicenseManager && spec.LicenseManagerRef.Name != "" {
-		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
 		if spec.LicenseManagerRef.Namespace != "" {
 			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
 		}
@@ -977,7 +970,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			Value: licenseManagerURL,
 		})
 	} else if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
-		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
 			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
 		}
@@ -993,7 +986,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		// This makes splunk-ansible configure indexer-discovery on cluster-manager
 		clusterManagerURL = "localhost"
 	} else if spec.ClusterManagerRef.Name != "" {
-		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterManagerRef.Name, false)
+		clusterManagerURL = splcommon.GetSplunkServiceName(SplunkClusterManager, spec.ClusterManagerRef.Name, false)
 		if spec.ClusterManagerRef.Namespace != "" {
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterManagerRef.Namespace, clusterManagerURL)
 		}
@@ -1010,7 +1003,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			}
 
 			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
-				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
 				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
 					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
 				}
@@ -1019,7 +1012,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					Value: licenseManagerURL,
 				})
 			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
-				licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
 				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
 					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
 				}
@@ -1030,7 +1023,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			}
 		}
 	} else if spec.ClusterMasterRef.Name != "" {
-		clusterManagerURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		clusterManagerURL = splcommon.GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
 		if spec.ClusterMasterRef.Namespace != "" {
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
@@ -1047,7 +1040,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			}
 
 			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
-				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
 				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
 					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
 				}
@@ -1056,7 +1049,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					Value: licenseManagerURL,
 				})
 			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
-				licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
 				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
 					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
 				}

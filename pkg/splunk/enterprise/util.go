@@ -316,7 +316,7 @@ func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Commo
 	return []corev1.EnvVar{
 		{
 			Name:  splcommon.ClusterManagerURL,
-			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
+			Value: splcommon.GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
 		},
 	}
 }
@@ -326,7 +326,7 @@ func getClusterManagerExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Comm
 	return []corev1.EnvVar{
 		{
 			Name:  splcommon.ClusterManagerURL,
-			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
+			Value: splcommon.GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
 		},
 	}
 }
@@ -344,7 +344,7 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 // getLicenseManagerURL returns URL of license manager
 func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseManagerRef.Name != "" {
-		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
 		if spec.LicenseManagerRef.Namespace != "" {
 			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
 		}
@@ -358,7 +358,7 @@ func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSpl
 	return []corev1.EnvVar{
 		{
 			Name:  splcommon.LicenseManagerURL,
-			Value: GetSplunkServiceName(SplunkLicenseManager, cr.GetName(), false),
+			Value: splcommon.GetSplunkServiceName(SplunkLicenseManager, cr.GetName(), false),
 		},
 	}
 }
@@ -366,7 +366,7 @@ func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSpl
 // getLicenseMasterURL returns URL of license manager
 func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseMasterRef.Name != "" {
-		licenseManagerURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
 			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
 		}
@@ -380,7 +380,7 @@ func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplu
 	return []corev1.EnvVar{
 		{
 			Name:  splcommon.LicenseManagerURL,
-			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
+			Value: splcommon.GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
 		},
 	}
 }
@@ -392,7 +392,7 @@ func getSearchHeadEnv(cr *enterpriseApi.SearchHeadCluster) []corev1.EnvVar {
 	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
 	env = append(env, corev1.EnvVar{
 		Name:  "SPLUNK_DEPLOYER_URL",
-		Value: GetSplunkServiceName(SplunkDeployer, cr.GetName(), false),
+		Value: splcommon.GetSplunkServiceName(SplunkDeployer, cr.GetName(), false),
 	})
 
 	return env
