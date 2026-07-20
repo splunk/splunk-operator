@@ -778,7 +778,7 @@ var newIndexerClusterPodManager = func(log *slog.Logger, cr *enterpriseApi.Index
 
 // getMonitoringConsoleClient for indexerClusterPodManager returns a SplunkClient for monitoring console
 func (mgr *indexerClusterPodManager) getMonitoringConsoleClient(cr *enterpriseApi.IndexerCluster, cmMonitoringConsoleConfigRef string) *splclient.SplunkClient {
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef, false))
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), splcommon.GetSplunkServiceName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef, false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
@@ -1158,7 +1158,7 @@ func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *sp
 
 	// Get Fully Qualified Domain Name
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)))
+		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)))
 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
@@ -1187,7 +1187,7 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 	}
 
 	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(cm, managerIdxcName, false))
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), splcommon.GetSplunkServiceName(cm, managerIdxcName, false))
 
 	// Retrieve admin password for Pod
 	podName := fmt.Sprintf("splunk-%s-%s-%s", managerIdxcName, cm, "0")
@@ -1471,7 +1471,7 @@ func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context,
 	var updateErr error
 	for n := 0; n < int(readyReplicas); n++ {
 		memberName := GetSplunkStatefulsetPodName(SplunkIndexer, newCR.GetName(), int32(n))
-		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, newCR.GetName(), true)))
+		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(SplunkIndexer, newCR.GetName(), true)))
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
 		if err != nil {
 			return err
