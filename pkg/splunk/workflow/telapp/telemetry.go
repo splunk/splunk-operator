@@ -1,4 +1,4 @@
-package enterprise
+package telapp
 
 import (
 	"context"
@@ -31,6 +31,12 @@ const (
 	cpuLimitKey      = "cpu_limit"
 	memoryLimitKey   = "memory_limit"
 	replicasKey      = "replicas"
+
+	telAppNameStr     = "app_tel_for_sok"
+	telSOKVersionKey  = "version"
+	telLicenseInfoKey = "license_info"
+
+	telConfigMapTemplateStr = "%smanager-telemetry"
 )
 
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
@@ -126,12 +132,12 @@ func collectResourceTelData(spec crDeploymentSpec) map[string]string {
 	retData := make(map[string]string)
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse(defaultRequestsCPU),
-			corev1.ResourceMemory: resource.MustParse(defaultRequestsMemory),
+			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultRequestsCPU),
+			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultRequestsMemory),
 		},
 		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse(defaultLimitsCPU),
-			corev1.ResourceMemory: resource.MustParse(defaultLimitsMemory),
+			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultLimitsCPU),
+			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultLimitsMemory),
 		},
 	}
 
@@ -452,26 +458,26 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		"kind", cr.GetObjectKind().GroupVersionKind().Kind)
 	logger.InfoContext(ctx, "start")
 
-	var instanceID InstanceType
+	var instanceID splcommon.InstanceType
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
-		instanceID = SplunkStandalone
+		instanceID = splcommon.SplunkStandalone
 	case "LicenseManager":
-		instanceID = SplunkLicenseManager
+		instanceID = splcommon.SplunkLicenseManager
 	case "LicenseMaster":
-		instanceID = SplunkLicenseMaster
+		instanceID = splcommon.SplunkLicenseMaster
 	case "SearchHeadCluster":
-		instanceID = SplunkSearchHead
+		instanceID = splcommon.SplunkSearchHead
 	case "ClusterMaster":
-		instanceID = SplunkClusterMaster
+		instanceID = splcommon.SplunkClusterMaster
 	case "ClusterManager":
-		instanceID = SplunkClusterManager
+		instanceID = splcommon.SplunkClusterManager
 	default:
 		logger.ErrorContext(ctx, "failed to determine instance type for telemetry", "error", fmt.Errorf("unknown CR kind"))
 		return false
 	}
 
-	serviceName := GetSplunkServiceName(instanceID, cr.GetName(), false)
+	serviceName := splcommon.GetSplunkServiceName(instanceID, cr.GetName(), false)
 	serviceFQDN := splcommon.GetServiceFQDN(cr.GetNamespace(), serviceName)
 	logger.InfoContext(ctx, "got service FQDN", "serviceFQDN", serviceFQDN)
 
@@ -522,4 +528,9 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 
 	logger.InfoContext(ctx, "successfully sent telemetry", "response", response)
 	return true
+}
+
+// GetTelemetryConfigMapName returns the name of telemetry configmap
+func GetTelemetryConfigMapName(namePrefix string) string {
+	return fmt.Sprintf(telConfigMapTemplateStr, namePrefix)
 }

@@ -259,7 +259,7 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 
 	// Get Fully Qualified Domain Name
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)))
+		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)))
 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")

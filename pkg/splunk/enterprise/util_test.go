@@ -384,7 +384,7 @@ func TestGetClusterMasterExtraEnv(t *testing.T) {
 	want := []corev1.EnvVar{
 		{
 			Name:  splcommon.ClusterManagerURL,
-			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
+			Value: splcommon.GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)
@@ -405,7 +405,7 @@ func TestGetClusterManagerExtraEnv(t *testing.T) {
 	want := []corev1.EnvVar{
 		{
 			Name:  splcommon.ClusterManagerURL,
-			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
+			Value: splcommon.GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)

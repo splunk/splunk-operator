@@ -89,7 +89,7 @@ CRD types.
 | `bootstrap/` | First-time init, admin secret seeding |
 | `indexercluster/` | Peer decommission, rebalance wait, scale-down |
 | `shc/` | Captain election, member join/drain |
-| `telapp/` | SOK usage-tracking app install |
+| `telapp/` | SOK telemetry collection and sending |
 | `upgrade/` | Rolling upgrade sequencing, version gating |
 
 ### `resources/`
