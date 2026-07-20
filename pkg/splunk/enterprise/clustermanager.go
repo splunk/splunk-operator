@@ -306,7 +306,7 @@ type clusterManagerPodManager struct {
 
 // getClusterManagerClient for clusterManagerPodManager returns a SplunkClient for cluster manager
 func (mgr *clusterManagerPodManager) getClusterManagerClient(cr *enterpriseApi.ClusterManager) *splclient.SplunkClient {
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false))
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), splcommon.GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
@@ -458,7 +458,7 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	logger.InfoContext(ctx, "issuing REST call to push manager aps bundle")
 
 	managerIdxcName := cr.GetName()
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, managerIdxcName, false))
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), splcommon.GetSplunkServiceName(SplunkClusterManager, managerIdxcName, false))
 
 	// Get a Splunk client to execute the REST call
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
@@ -502,7 +502,7 @@ var GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.Clus
 	if clusterInfo.MultiSite == "true" {
 		extraEnv = append(extraEnv,
 			corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"},
-			corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false)})
+			corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: splcommon.GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false)})
 	}
 
 	return extraEnv, nil

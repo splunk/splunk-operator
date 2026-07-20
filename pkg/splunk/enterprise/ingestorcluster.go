@@ -361,7 +361,7 @@ func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *s
 
 	// Get Fully Qualified Domain Name
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, mgr.cr.GetName(), true)))
+		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(SplunkIngestor, mgr.cr.GetName(), true)))
 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
@@ -417,7 +417,7 @@ func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Contex
 	var updateErr error
 	for n := 0; n < int(readyReplicas); n++ {
 		memberName := GetSplunkStatefulsetPodName(SplunkIngestor, newCR.GetName(), int32(n))
-		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, newCR.GetName(), true)))
+		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(SplunkIngestor, newCR.GetName(), true)))
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
 		if err != nil {
 			return err

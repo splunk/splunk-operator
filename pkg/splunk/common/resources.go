@@ -13,17 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package telapp implements SOK telemetry collection and sending.
+package common
 
-It collects deployment resource data from all Splunk CR types, gathers
-additional telemetry from the operator ConfigMap, and sends the aggregated
-payload to the Splunk telemetry endpoint via the telemetry app.
-
-The telemetry app *installation* logic (addTelApp) remains in
-enterprise/afwscheduler.go due to its coupling with the App Framework
-scheduler; it will move here in a later phase.
-
-Allowed imports: common/, util/, client/
-*/
-package telapp
+const (
+	DefaultRequestsCPU    = "0.1"
+	DefaultRequestsMemory = "512Mi"
+	DefaultLimitsCPU      = "4"
+	DefaultLimitsMemory   = "8Gi"
+)

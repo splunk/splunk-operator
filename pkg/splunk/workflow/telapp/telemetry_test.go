@@ -1,6 +1,6 @@
 // Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
 
-package enterprise
+package telapp
 
 import (
 	"context"
