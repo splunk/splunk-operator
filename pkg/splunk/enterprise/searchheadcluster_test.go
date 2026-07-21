@@ -947,11 +947,23 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 
 	cr.Spec.Replicas = 5
 	cr.Spec.ClusterManagerRef.Name = "stack1"
+	_ = splutil.CreateResource(ctx, c, &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	})
 	test(loadFixture(t, "statefulset_stack1_search_head_base_2.json"))
 
 	cr.Spec.Replicas = 6
 
 	cr.Spec.ClusterManagerRef.Namespace = "test2"
+	_ = splutil.CreateResource(ctx, c, &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test2",
+		},
+	})
 	test(loadFixture(t, "statefulset_stack1_search_head_base_3.json"))
 
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"

@@ -1878,3 +1878,53 @@ func TestGetSplunkPorts(t *testing.T) {
 	test(SplunkIngestor)
 	test(SplunkMonitoringConsole)
 }
+
+func TestUpdateSplunkPodTemplateLooksUpClusterManagerInRefNamespace(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+
+	// ClusterManager lives in a different namespace than the referencing SearchHeadCluster,
+	// same setup as the FQDN construction a few lines above the lookup this test targets.
+	cm := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cm1",
+			Namespace: "cm-namespace",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: "lm1",
+				},
+			},
+		},
+	}
+	client.AddObject(cm)
+
+	shc := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shc1",
+			Namespace: "shc-namespace",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name:      "cm1",
+					Namespace: "cm-namespace",
+				},
+			},
+		},
+	}
+
+	sts, err := getSplunkStatefulSet(ctx, client, shc, &shc.Spec.CommonSplunkSpec, SplunkSearchHead, 1, getSearchHeadExtraEnv(shc, shc.Spec.Replicas), nil)
+	require.NoError(t, err)
+
+	found := false
+	for _, env := range sts.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == splcommon.LicenseManagerURL {
+			require.Equal(t, splcommon.GetServiceFQDN(cm.GetNamespace(), splcommon.GetSplunkServiceName(SplunkLicenseManager, "lm1", false)), env.Value)
+			found = true
+		}
+	}
+	require.True(t, found, "expected SPLUNK_LICENSE_MASTER_URL to be qualified with the ClusterManager's namespace")
+}
