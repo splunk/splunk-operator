@@ -702,7 +702,7 @@ var _ = Describe("c3appfw test", func() {
 			searchString := fmt.Sprintf("index=%s host=%s | stats count", testenv.DefaultIngestIndex, indexerName)
 			Eventually(func() (int, error) {
 				return testenv.CountSearchResults(ctx, deployment, searchPod, searchString)
-			}, 2*time.Minute, testenv.PollInterval).Should(BeNumerically(">", 0), "No data from new indexer %s became searchable on pod %s", indexerName, searchPod)
+			}, testenv.ReadinessPollTimeout, testenv.PollInterval).Should(BeNumerically(">", 0), "No data from new indexer %s became searchable on pod %s", indexerName, searchPod)
 
 			//########## SCALING UP VERIFICATIONS #########
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
@@ -782,7 +782,7 @@ var _ = Describe("c3appfw test", func() {
 			searchString = fmt.Sprintf("index=%s host=%s | stats count by host", testenv.DefaultIngestIndex, indexerName)
 			Eventually(func() (int, error) {
 				return testenv.CountSearchResults(ctx, deployment, searchPod, searchString)
-			}, 2*time.Minute, testenv.PollInterval).Should(BeNumerically(">", 0), "Data from retained indexer %s was not searchable on pod %s after scale down", indexerName, searchPod)
+			}, testenv.ReadinessPollTimeout, testenv.PollInterval).Should(BeNumerically(">", 0), "Data from retained indexer %s was not searchable on pod %s after scale down", indexerName, searchPod)
 
 			//######## SCALING DOWN VERIFICATIONS #########
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
