@@ -368,13 +368,29 @@ for disk in json.load(sys.stdin):
       # suite name. Require the expected PVC name as a second independent check.
       if [[ "${namespace}" =~ ^[0-9a-f]{8}-(s1appfw|c3appfw|m4appfw)-[a-z0-9]{3}-[a-z0-9]{3}$ || \
               "${namespace}" =~ ^master[0-9a-f]{8}-(c3app|m4app)-[a-z0-9]{3}$ ]]; then
-        # These namespaces prove test ownership but do not identify one GKE
-        # cluster, so they are eligible only for the age-based account sweep.
-        [[ -n "${only_owner}" ]] && continue
         if [[ "${pvc_name}" != pvc-etc-splunk-"${namespace}"-* && \
               "${pvc_name}" != pvc-var-splunk-"${namespace}"-* ]]; then
           echo "SKIP disk ${name}: CSI metadata has unexpected test PVC '${namespace}/${pvc_name}'"
           continue
+        fi
+        # Test namespaces prove SOK ownership but not which concurrently running
+        # GKE test cluster owns the disk. Targeted cleanup therefore requires an
+        # exact cluster match from the disk's most recent attach event.
+        if [[ -n "${only_owner}" ]]; then
+          if ! attachment_owner=$(owner_from_disk_attachment_logs "${name}") || \
+              ! [[ "${attachment_owner}" =~ ^gke-[0-9]+$ ]]; then
+            echo "SKIP disk ${name}: unable to prove integration-test cluster ownership from attachment logs"
+            continue
+          fi
+          if [[ "${attachment_owner}" != "${only_owner}" ]]; then
+            echo "SKIP disk ${name}: attachment-log owner ${attachment_owner} does not match target ${only_owner}"
+            continue
+          fi
+          if is_live_cluster "${attachment_owner}"; then
+            echo "SKIP disk ${name}: attachment-log owner ${attachment_owner} is live"
+            continue
+          fi
+          owner="${attachment_owner}"
         fi
       elif [[ "${namespace}" == "splunk-operator" && "${pvc_name}" == "splunk-operator-app-download" ]]; then
         # The cluster-wide operator namespace is not test-specific. Recover
