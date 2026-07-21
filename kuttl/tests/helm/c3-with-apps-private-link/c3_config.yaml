@@ -15,8 +15,13 @@ sva:
     - name: idxc
     searchHeadClusters:
     - name: shc
-indexerClusters:
-  replicas: 3
+indexerCluster:
+  replicaCount: 3
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 24
 clusterManager:
   appRepo:
     appsRepoPollIntervalSeconds: 60

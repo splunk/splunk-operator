@@ -845,6 +845,46 @@ func TestPerformCmBundlePush(t *testing.T) {
 	}
 }
 
+func TestPerformCmBundlePushTargetsClusterManagerPod(t *testing.T) {
+	ctx := context.TODO()
+	current := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	current.Status.BundlePushTracker.NeedToPushManagerApps = true
+	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 10
+
+	client := spltest.NewMockClient()
+	smartstoreConfigMap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-clustermanager-smartstore",
+			Namespace: "test",
+		},
+		Data: map[string]string{configToken: "current-token"},
+	}
+	if _, err := splctrl.ApplyConfigMap(ctx, client, &smartstoreConfigMap); err != nil {
+		t.Fatal(err)
+	}
+
+	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
+	podExecClient := &spltest.MockPodExecClient{TargetPodName: "stale-pod"}
+	podExecClient.AddMockPodExecReturnContext(ctx, command, &spltest.MockPodExecReturnContext{StdOut: "stale-token"})
+
+	if err := PerformCmBundlePush(ctx, client, &current, podExecClient); err == nil {
+		t.Fatal("PerformCmBundlePush() should return an error when the config token has not propagated")
+	}
+
+	wantPodName := "splunk-stack1-cluster-manager-0"
+	if got := podExecClient.GetTargetPodName(); got != wantPodName {
+		t.Errorf("PerformCmBundlePush() target pod = %q, want %q", got, wantPodName)
+	}
+}
+
 func TestPushManagerAppsBundle(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 

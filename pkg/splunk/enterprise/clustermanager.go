@@ -410,11 +410,15 @@ var PerformCmBundlePush = func(ctx context.Context, c splcommon.ControllerClient
 	// for the configMap update to the Pod before proceeding for the manager apps
 	// bundle push.
 
+	cmPodName := fmt.Sprintf("splunk-%s-%s-0", cr.GetName(), "cluster-manager")
+
 	// Create podExecClient if not provided
 	if podExecClient == nil {
-		cmPodName := fmt.Sprintf("splunk-%s-%s-0", cr.GetName(), "cluster-manager")
 		podExecClient = splutil.GetPodExecClient(c, cr, cmPodName)
 	}
+	// The client may be reused after another operation changed or did not set its target pod.
+	podExecClient.SetTargetPodName(ctx, cmPodName)
+
 	err := CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, cr, podExecClient)
 	if err != nil {
 		return err
