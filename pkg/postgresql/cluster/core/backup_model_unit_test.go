@@ -22,8 +22,8 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
-	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/backuptypes"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -165,14 +165,15 @@ type spyBackupBackend struct {
 	scheduleErr error
 }
 
-func (s *spyBackupBackend) EnsureScheduled(_ context.Context, _ client.Object, spec backuptypes.ScheduleSpec) error {
+func (s *spyBackupBackend) EnsureScheduled(_ context.Context, _ client.Object, spec backuptypes.ScheduleSpec) (bool, error) {
 	s.ensured = append(s.ensured, spec)
-	return s.ensureErr
+	created := len(s.ensured) == 1 // first call is always a "create" in tests
+	return created, s.ensureErr
 }
 
-func (s *spyBackupBackend) DeleteScheduled(_ context.Context, _ client.Object, name, namespace string) error {
+func (s *spyBackupBackend) DeleteScheduled(_ context.Context, _ client.Object, name, namespace string) (bool, error) {
 	s.deleted = append(s.deleted, deletedSchedule{name: name, namespace: namespace})
-	return s.deleteErr
+	return s.deleteErr == nil, s.deleteErr
 }
 
 func (s *spyBackupBackend) GetSchedule(_ context.Context, name, _ string) (backuptypes.ScheduleResult, error) {
@@ -185,9 +186,9 @@ func (s *spyBackupBackend) GetSchedule(_ context.Context, name, _ string) (backu
 	return backuptypes.ScheduleResult{Exists: false}, nil
 }
 
-func (s *spyBackupBackend) BackupNow(_ context.Context, _ client.Object, req backuptypes.BackupRequest) error {
+func (s *spyBackupBackend) BackupNow(_ context.Context, _ client.Object, req backuptypes.BackupRequest) (bool, error) {
 	s.backups = append(s.backups, req)
-	return nil
+	return true, nil
 }
 
 func (s *spyBackupBackend) GetBackup(_ context.Context, _ client.Object, _, _ string) (backuptypes.BackupResult, bool, error) {
@@ -1001,6 +1002,64 @@ func newTestMergedConfigDualProvider(schedule string) *MergedConfig {
 	cfg := newTestMergedConfig(true, schedule)
 	cfg.CNPG.Backup.BarmanObjectStore = newTestBarmanObjectStoreConfig()
 	return cfg
+}
+
+func TestEffectiveBackupProvider(t *testing.T) {
+	tests := []struct {
+		name       string
+		cfg        *MergedConfig
+		wantMethod backuptypes.BackupMethod
+		wantPlugin string
+		wantOK     bool
+	}{
+		{
+			name:       "volume snapshot",
+			cfg:        newTestMergedConfig(true, "0 2 * * *"),
+			wantMethod: backuptypes.BackupMethodVolumeSnapshot,
+			wantOK:     true,
+		},
+		{
+			name:       "barman",
+			cfg:        newTestMergedConfigBarman("0 2 * * *"),
+			wantMethod: backuptypes.BackupMethodPlugin,
+			wantPlugin: barmanCloudPluginName,
+			wantOK:     true,
+		},
+		{
+			name:       "barman takes precedence",
+			cfg:        newTestMergedConfigDualProvider("0 2 * * *"),
+			wantMethod: backuptypes.BackupMethodPlugin,
+			wantPlugin: barmanCloudPluginName,
+			wantOK:     true,
+		},
+		{
+			name: "disabled",
+			cfg: func() *MergedConfig {
+				cfg := newTestMergedConfig(true, "0 2 * * *")
+				cfg.Spec.Backup.Enabled = ptr.To(false)
+				return cfg
+			}(),
+			wantOK: false,
+		},
+		{
+			name: "no provider",
+			cfg: func() *MergedConfig {
+				cfg := newTestMergedConfig(true, "0 2 * * *")
+				cfg.CNPG.Backup.VolumeSnapshot = nil
+				return cfg
+			}(),
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			method, plugin, ok := EffectiveBackupProvider(tt.cfg)
+			assert.Equal(t, tt.wantMethod, method)
+			assert.Equal(t, tt.wantPlugin, plugin)
+			assert.Equal(t, tt.wantOK, ok)
+		})
+	}
 }
 
 func TestBackupModel_Barman_EnsuresPluginScheduledBackup(t *testing.T) {

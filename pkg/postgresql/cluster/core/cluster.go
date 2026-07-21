@@ -22,11 +22,14 @@ import (
 	"fmt"
 
 	"log/slog"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -174,12 +177,40 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if err := validateComponentOrder(components); err != nil {
 		return ctrl.Result{}, fmt.Errorf("invalid component wiring: %w", err)
 	}
-	result, err := runComponents(ctx, logger, components)
+
+	useCaseReconciler := newUseCaseReconciler(rc, req.NamespacedName, postgresCluster, mergedConfig)
+	if useCaseReconciler != nil {
+		// Prerequisites are checked inside Schedule: a use case whose prereqs
+		// are unmet is silently deferred — it does not block components and
+		// does not Act this pass.
+		if err := useCaseReconciler.Schedule(ctx); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	result, err := runComponents(ctx, logger, components, blockedComponents(useCaseReconciler))
 	if err != nil {
 		return result, err
 	}
 	if result != (ctrl.Result{}) {
 		return result, nil
+	}
+
+	useCaseReport, useCaseErr := reconcileUseCases(ctx, useCaseReconciler)
+	if useCaseReport != nil || useCaseErr != nil {
+		if useCaseErr != nil {
+			logger.ErrorContext(ctx, "use case reconciliation failed",
+				"error", useCaseErr,
+				"name", useCaseReport.Name,
+				"reason", useCaseReport.Reason,
+				"phase", useCaseReport.Phase)
+		} else {
+			logger.InfoContext(ctx, "use case reconciled",
+				"name", useCaseReport.Name,
+				"reason", useCaseReport.Reason,
+				"phase", useCaseReport.Phase)
+		}
+		return resultFromUseCaseReport(useCaseReport), useCaseErr
 	}
 
 	logger.DebugContext(ctx, "reconciliation complete")
@@ -192,6 +223,41 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	return ctrl.Result{}, nil
 }
 
+func newUseCaseReconciler(rc *ReconcileContext, key types.NamespacedName, cluster *enterprisev4.PostgresCluster, mergedConfig *MergedConfig) *usecases.Reconciler {
+	if rc == nil || rc.UseCaseRegistryProvider == nil {
+		return nil
+	}
+	var spec *enterprisev4.PostgresClusterSpec
+	if cluster != nil {
+		spec = &cluster.Spec
+	}
+	return usecases.NewUseCaseReconciler(spec, rc.UseCaseRegistryProvider(key, cluster, mergedConfig))
+}
+
+func blockedComponents(reconciler *usecases.Reconciler) map[string]struct{} {
+	if reconciler == nil {
+		return nil
+	}
+	return reconciler.BlocksComponents()
+}
+
+func reconcileUseCases(ctx context.Context, reconciler *usecases.Reconciler) (*reconciliationTypes.Report, error) {
+	if reconciler == nil {
+		return nil, nil
+	}
+	return reconciler.Reconcile(ctx)
+}
+
+func resultFromUseCaseReport(report *reconciliationTypes.Report) ctrl.Result {
+	if report == nil || !report.Retry {
+		return ctrl.Result{}
+	}
+	if report.Sleep != nil && *report.Sleep > 0 {
+		return ctrl.Result{RequeueAfter: time.Duration(*report.Sleep) * time.Second}
+	}
+	return ctrl.Result{Requeue: true}
+}
+
 func writeComponentStatus(updateStatus healthStatusUpdater, before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
 	if updateStatus == nil {
 		return nil
@@ -199,10 +265,18 @@ func writeComponentStatus(updateStatus healthStatusUpdater, before *enterprisev4
 	return updateStatus(before, health)
 }
 
-func runComponents(ctx context.Context, logger *slog.Logger, components []component) (ctrl.Result, error) {
+func runComponents(ctx context.Context, logger *slog.Logger, components []component, blockedComponents ...map[string]struct{}) (ctrl.Result, error) {
+	var blocked map[string]struct{}
+	if len(blockedComponents) > 0 {
+		blocked = blockedComponents[0]
+	}
 	for _, c := range components {
-		var reconcileErr error
 		componentLogger := logger.With("component", c.Name())
+		if _, ok := blocked[c.Name()]; ok {
+			componentLogger.InfoContext(ctx, "component reconciliation blocked by active use case")
+			continue
+		}
+		var reconcileErr error
 		if reconcileErr = c.CheckContracts(); reconcileErr == nil {
 			reconcileErr = c.Reconcile(ctx)
 		}

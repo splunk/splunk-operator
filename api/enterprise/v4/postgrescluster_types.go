@@ -127,6 +127,10 @@ type PostgresClusterSpec struct {
 	// if non empty, external secret management is mandatory.
 	// +optional
 	PasswordConfig *SuperuserPasswordConfig `json:"passwordConfig,omitempty"`
+
+	// PostgresMajorUpgradeConfig sets up the upgrade flow according to backup, version and strategy requirements.
+	// +optional
+	PostgresMajorUpgradeConfig *PostgresMajorUpgradeConfig `json:"postgresMajorUpgradeConfig,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="self.superuserExternalSecretRef.name.size() > 0",message="superuserExternalSecretRef.name must not be empty"
@@ -159,6 +163,20 @@ type PostgresClusterResources struct {
 	// SuperUserSecretRef references the Secret containing the superuser credentials.
 	// +optional
 	SuperUserSecretRef *corev1.SecretKeySelector `json:"superUserSecretRef,omitempty"`
+}
+
+type PostgresMajorUpgradeConfig struct {
+	// Allow permits the operator to execute a PostgreSQL major-version
+	// upgrade when spec.postgresVersion crosses a major-version boundary.
+	// +optional
+	Allow *bool `json:"allow,omitempty"`
+
+	// Strategy selects the major-upgrade implementation.
+	// For now only pgUpgrade is supported.
+	// +kubebuilder:validation:Enum=pgUpgrade
+	// +kubebuilder:default=pgUpgrade
+	// +optional
+	Strategy *string `json:"strategy,omitempty"`
 }
 
 // PostgresClusterStatus defines the observed state of PostgresCluster.
@@ -215,6 +233,20 @@ type PostgresClusterStatus struct {
 	// CurrentPrimary is the name of the pod currently hosting the primary.
 	// +optional
 	CurrentPrimary *string `json:"currentPrimary,omitempty"`
+
+	// PostgresMajorUpgradeStatus contains the information
+	// about upgrade completion and any needed rollback/backup information
+	// shall the upgrade be reverted manually.
+	// It's a list to support a case of multi version upgrade.
+	// +optional
+	PostgresMajorUpgradeStatus []PostgresMajorUpgradeStatus `json:"postgresMajorUpgradeStatus,omitempty"`
+
+	// CurrentPgVersion is the PostgreSQL major version currently running against
+	// the data directory, as reported by CNPG (PGDataImageInfo.MajorVersion).
+	// Written on every reconcile; used as the source-version baseline for the
+	// major-version upgrade use case when no prior upgrade status entries exist.
+	// +optional
+	CurrentPgVersion string `json:"currentPgVersion,omitempty"`
 }
 
 // ManagedRolesStatus tracks the state of managed PostgreSQL roles.
@@ -374,6 +406,33 @@ type PostgresClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PostgresCluster `json:"items"`
+}
+
+type PostgresMajorUpgradeStatus struct {
+	Phase           *string            `json:"phase,omitempty"`
+	Strategy        *string            `json:"strategy,omitempty"`
+	SourcePgVersion *string            `json:"sourcePgVersion,omitempty"`
+	TargetPgVersion *string            `json:"targetPgVersion,omitempty"`
+	StartedAt       *metav1.Time       `json:"startedAt,omitempty"`
+	CompletedAt     *metav1.Time       `json:"completedAt,omitempty"`
+	Conditions      []metav1.Condition `json:"conditions,omitempty"`
+	BackupStatus    *BackupStatus      `json:"backupStatus,omitempty"`
+	// BackupNames holds the names of the CNPG Backup objects created as
+	// rollback baselines for this upgrade hop. Use these to locate the
+	// backup and any provider-specific references needed for manual recovery.
+	// +optional
+	BackupNames *UpgradeBackupNames `json:"backupNames,omitempty"`
+}
+
+// UpgradeBackupNames records the CNPG Backup object names created at each
+// gate of a major-version upgrade hop.
+type UpgradeBackupNames struct {
+	// PreUpgrade is the backup taken before the pg_upgrade run.
+	// +optional
+	PreUpgrade *string `json:"preUpgrade,omitempty"`
+	// PostUpgrade is the backup taken after the upgraded cluster is verified.
+	// +optional
+	PostUpgrade *string `json:"postUpgrade,omitempty"`
 }
 
 func init() {
