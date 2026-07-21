@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -176,7 +177,13 @@ func PollConsistentlyWithTolerance(ctx context.Context, duration, interval time.
 			consecutiveFails = 0
 			lastErr = nil
 		}
-		time.Sleep(interval)
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 	if lastErr != nil {
 		return fmt.Errorf("consistency check ended with %d consecutive failures: %w", consecutiveFails, lastErr)
@@ -1229,71 +1236,83 @@ func (testenv *TestCaseEnv) VerifyAppInstalled(ctx context.Context, deployment *
 		testenv.Log.Info("Proceeding with full verification of all pods and apps")
 	}
 
+	// Fan out the (pod, app) verification matrix: each pair polls independently,
+	// so a slow pod no longer blocks every other pod's checks from starting.
+	var wg sync.WaitGroup
+	var errOnce sync.Once
+	var firstErr error
 	for _, podName := range pods {
 		for _, appName := range apps {
-			// Poll per (pod, app) to tolerate transient mismatches just after install/bundle-push
-			var lastErr error
-			pollErr := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
-				status, versionInstalled, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
-				testenv.Log.Info("App details", "app", appName, "status", status, "version", versionInstalled, "error", err)
-				if err != nil {
-					lastErr = fmt.Errorf("unable to get app status on pod %s: %w", podName, err)
-					return false, nil
-				}
-				comparison := strings.EqualFold(status, statusCheck)
-				//Check the app is installed on specific pods and un-installed on others for cluster-wide install
-				var check bool
-				if clusterWideInstall {
-					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-						check = true
+			podName, appName := podName, appName
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				// Poll per (pod, app) to tolerate transient mismatches just after install/bundle-push
+				var lastErr error
+				pollErr := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
+					status, versionInstalled, err := GetPodAppStatus(ctx, deployment, podName, ns, appName, clusterWideInstall)
+					testenv.Log.Info("App details", "app", appName, "status", status, "version", versionInstalled, "error", err)
+					if err != nil {
+						lastErr = fmt.Errorf("unable to get app status on pod %s: %w", podName, err)
+						return false, nil
+					}
+					comparison := strings.EqualFold(status, statusCheck)
+					//Check the app is installed on specific pods and un-installed on others for cluster-wide install
+					var check bool
+					if clusterWideInstall {
+						if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
+							check = true
+							testenv.Log.Info("App Install Check", "pod", podName, "app", appName, "expected", check, "found", comparison, "scope:cluster", clusterWideInstall)
+							if comparison != check {
+								lastErr = fmt.Errorf("app %s install check failed on pod %s: expected=%v, found=%v", appName, podName, check, comparison)
+								return false, nil
+							}
+						}
+					} else {
+						// For local install check pods individually
+						if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
+							check = false
+						} else {
+							check = true
+						}
 						testenv.Log.Info("App Install Check", "pod", podName, "app", appName, "expected", check, "found", comparison, "scope:cluster", clusterWideInstall)
 						if comparison != check {
 							lastErr = fmt.Errorf("app %s install check failed on pod %s: expected=%v, found=%v", appName, podName, check, comparison)
 							return false, nil
 						}
 					}
-				} else {
-					// For local install check pods individually
-					if strings.Contains(podName, "-indexer-") || strings.Contains(podName, "-search-head-") {
-						check = false
-					} else {
-						check = true
-					}
-					testenv.Log.Info("App Install Check", "pod", podName, "app", appName, "expected", check, "found", comparison, "scope:cluster", clusterWideInstall)
-					if comparison != check {
-						lastErr = fmt.Errorf("app %s install check failed on pod %s: expected=%v, found=%v", appName, podName, check, comparison)
-						return false, nil
-					}
-				}
 
-				if versionCheck {
-					// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-					if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, "-"+splcommon.ClusterManager+"-"))) {
-						var expectedVersion string
-						if checkupdated {
-							expectedVersion = AppInfo[appName]["V2"]
-						} else {
-							expectedVersion = AppInfo[appName]["V1"]
-						}
-						testenv.Log.Info("Verify app", "pod", podName, "app", appName, "expectedVersion", expectedVersion, "versionInstalled", versionInstalled, "updated", checkupdated)
-						if versionInstalled != expectedVersion {
-							lastErr = fmt.Errorf("app %s version mismatch on pod %s: expected=%s, found=%s", appName, podName, expectedVersion, versionInstalled)
-							return false, nil
+					if versionCheck {
+						// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
+						if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, "-"+splcommon.ClusterManager+"-"))) {
+							var expectedVersion string
+							if checkupdated {
+								expectedVersion = AppInfo[appName]["V2"]
+							} else {
+								expectedVersion = AppInfo[appName]["V1"]
+							}
+							testenv.Log.Info("Verify app", "pod", podName, "app", appName, "expectedVersion", expectedVersion, "versionInstalled", versionInstalled, "updated", checkupdated)
+							if versionInstalled != expectedVersion {
+								lastErr = fmt.Errorf("app %s version mismatch on pod %s: expected=%s, found=%s", appName, podName, expectedVersion, versionInstalled)
+								return false, nil
+							}
 						}
 					}
+					lastErr = nil
+					return true, nil
+				})
+				if pollErr != nil {
+					resultErr := lastErr
+					if resultErr == nil {
+						resultErr = fmt.Errorf("timed out verifying app %s on pod %s: %w", appName, podName, pollErr)
+					}
+					errOnce.Do(func() { firstErr = resultErr })
 				}
-				lastErr = nil
-				return true, nil
-			})
-			if pollErr != nil {
-				if lastErr != nil {
-					return lastErr
-				}
-				return fmt.Errorf("timed out verifying app %s on pod %s: %w", appName, podName, pollErr)
-			}
+			}()
 		}
 	}
-	return nil
+	wg.Wait()
+	return firstErr
 }
 
 // VerifyAppsCopied verify that apps are copied to correct location based on POD. Set checkAppDirectory false to verify app is not copied.
