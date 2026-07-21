@@ -33,6 +33,7 @@ import (
 	cnpgpostgres "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -61,7 +62,8 @@ type clusterModel struct {
 	// cnpgPatch classifies this reconcile's CNPG spec change. Observe uses
 	// requiresPhaseGate() to decide whether to hold ClusterReady=Provisioning
 	// while CNPG.Status.Phase still reflects the pre-patch value.
-	cnpgPatch cnpgPatchKind
+	cnpgPatch     cnpgPatchKind
+	blockedHealth *componentHealth
 
 	metricsEnabled bool
 }
@@ -91,6 +93,7 @@ func (p *clusterModel) CheckContracts() error {
 func (p *clusterModel) Reconcile(ctx context.Context) error {
 	p.cnpgCreated = false
 	p.cnpgPatch = cnpgPatchNone
+	p.blockedHealth = nil
 
 	poolerEnabled := p.mergedConfig != nil && p.mergedConfig.Spec != nil &&
 		isPoolerEnabled(p.mergedConfig.Spec.ConnectionPooler)
@@ -145,6 +148,11 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		}
 		p.events.emitNormal(p.cluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster for PostgresCluster %s", p.cluster.Name))
 		p.cnpgPatch = cnpgPatchMetadata
+	}
+
+	if health, blocked := p.majorVersionDriftBlock(p.cnpgCluster); blocked {
+		p.blockedHealth = &health
+		return nil
 	}
 
 	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec)
@@ -218,6 +226,13 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 	p.cluster.Status.Instances = ptr.To(int32(p.cnpgCluster.Status.Instances))
 	p.cluster.Status.ReadyInstances = ptr.To(int32(p.cnpgCluster.Status.ReadyInstances))
 	p.cluster.Status.CurrentPrimary = ptr.To(p.cnpgCluster.Status.CurrentPrimary)
+	if info := p.cnpgCluster.Status.PGDataImageInfo; info != nil && info.MajorVersion > 0 {
+		p.cluster.Status.CurrentPgVersion = fmt.Sprintf("%d", info.MajorVersion)
+	}
+
+	if p.blockedHealth != nil {
+		return *p.blockedHealth, nil
+	}
 
 	if p.cnpgPatch.requiresPhaseGate() && (p.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy || p.cnpgCluster.Status.Phase == "") {
 		return newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, p.cnpgCluster.Status.Phase)), nil
@@ -288,6 +303,59 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, phase))
 	}
 	return health, convergeErr
+}
+
+func (p *clusterModel) majorVersionDriftBlock(existingCNPG *cnpgv1.Cluster) (componentHealth, bool) {
+	if p.cluster == nil || p.mergedConfig == nil || p.mergedConfig.Spec == nil || p.mergedConfig.Spec.PostgresVersion == nil {
+		return componentHealth{}, false
+	}
+
+	currentVersion := postgresVersionFromImageName(existingCNPG.Spec.ImageName)
+	if currentVersion == "" {
+		return componentHealth{}, false
+	}
+
+	currentMajor, _ := parseVersion(currentVersion)
+	requestedMajor, _ := parseVersion(*p.mergedConfig.Spec.PostgresVersion)
+	if currentMajor <= 0 || requestedMajor <= 0 || currentMajor == requestedMajor {
+		return componentHealth{}, false
+	}
+	if requestedMajor < currentMajor {
+		return newPendingHealth(
+			clusterReady,
+			reasonMajorDowngradeUnsupported,
+			fmt.Sprintf(string(msgFmtMajorDowngradeUnsupported), currentVersion, *p.mergedConfig.Spec.PostgresVersion),
+		), true
+	}
+
+	if isMajorUpgradeAllowed(p.cluster.Spec.PostgresMajorUpgradeConfig) {
+		// allow=true authorizes the major-upgrade *workflow*; it does not
+		// license the provisioner to bump the CNPG image itself. Hold here so
+		// the major-upgrade use case (backup -> preflight -> patch -> verify ->
+		// finalize) owns the transition. We must NOT patch the image directly:
+		// that would skip the orchestrated backup/preflight and could jump
+		// multiple majors at once, since this guard performs no multi-major-jump
+		// check.
+		//
+		// Holding (not patching) is also what lets the use case eventually take
+		// over: it reads the running major straight from the live CNPG cluster
+		// (PGDataImageInfo.MajorVersion), so once CNPG reports a version its
+		// Prerequisites pass and it activates and blocks this component outright.
+		// (Observe still latches status.currentPgVersion from the same CNPG field
+		// here, but that projection is now observability only — the use case does
+		// not depend on it.)
+		return newPendingHealth(
+			clusterReady,
+			reasonMajorUpgradePending,
+			fmt.Sprintf(string(msgFmtMajorUpgradePending), currentVersion, *p.mergedConfig.Spec.PostgresVersion),
+		), true
+	}
+
+	return newPendingHealth(
+		clusterReady,
+		reasonMajorUpgradeConfigRequired,
+		fmt.Sprintf(string(msgFmtMajorUpgradeConfigRequired), currentVersion, *p.mergedConfig.Spec.PostgresVersion),
+	), true
 }
 
 // scaleInProgress reports whether desired and observed/ready instance counts
@@ -477,6 +545,23 @@ func parseVersion(version string) (major, minor int) {
 	return major, -1
 }
 
+func isMajorUpgradeAllowed(config *enterprisev4.PostgresMajorUpgradeConfig) bool {
+	return config != nil && config.Allow != nil && *config.Allow
+}
+
+func postgresVersionFromImageName(imageName string) string {
+	if imageName == "" {
+		return ""
+	}
+	imageName = strings.SplitN(imageName, "@", 2)[0]
+	lastSlash := strings.LastIndex(imageName, "/")
+	lastColon := strings.LastIndex(imageName, ":")
+	if lastColon <= lastSlash {
+		return ""
+	}
+	return imageName[lastColon+1:]
+}
+
 // ValidateMergedConfig checks the merged configuration for required fields and cross-field constraints.
 func ValidateMergedConfig(merged *MergedConfig, className string) []ConfigValidationError {
 	var errs []ConfigValidationError
@@ -531,7 +616,7 @@ func validatePostgreSQLConfigNoCNPGFixedKeys(params map[string]string) error {
 // Operator-controlled invariants (e.g. SuperuserSecret, EnableSuperuserAccess) are exempt — they
 // are always the same value and are never exposed in the PostgresCluster CRD.
 func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, clusterName, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
-	live.ImageName = fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", *specCfg.Spec.PostgresVersion)
+	live.ImageName = clusterCnpg.PostgresImageName(*specCfg.Spec.PostgresVersion)
 	live.Instances = int(*specCfg.Spec.Instances)
 	live.PostgresConfiguration = cnpgv1.PostgresConfiguration{
 		Parameters: maps.Clone(specCfg.Spec.PostgreSQLConfig),

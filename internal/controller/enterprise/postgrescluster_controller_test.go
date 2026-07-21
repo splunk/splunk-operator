@@ -46,6 +46,7 @@ import (
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -156,9 +157,20 @@ func markCNPGClusterHealthy(cnpg *cnpgv1.Cluster, clusterName, caSecretName stri
 	const healthyReadyInstances = 2
 	cnpg.Status.Instances = healthyReadyInstances
 	cnpg.Status.ReadyInstances = healthyReadyInstances
+	cnpg.Status.CurrentPrimary = "example"
 	if caSecretName != "" {
 		cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 	}
+}
+
+func currentMajorUpgradePhase(ctx context.Context, key types.NamespacedName) string {
+	GinkgoHelper()
+	pc := &enterprisev4.PostgresCluster{}
+	Expect(k8sClient.Get(ctx, key, pc)).To(Succeed())
+	Expect(pc.Status.PostgresMajorUpgradeStatus).NotTo(BeEmpty())
+	current := pc.Status.PostgresMajorUpgradeStatus[len(pc.Status.PostgresMajorUpgradeStatus)-1]
+	Expect(current.Phase).NotTo(BeNil())
+	return *current.Phase
 }
 
 func seedClusterScopedDatabaseRoles(ctx context.Context, namespace, name, clusterName string, roleNames ...string) {
@@ -549,6 +561,122 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					received,
 					v1.EventTypeNormal, core.EventClusterReady,
 				)).To(BeTrue(), "events seen: %v", received)
+			})
+
+			It("drives the pg_upgrade major-version workflow and blocks provisioner drift while active", func() {
+				targetVersion := "16"
+				initialImage := fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", postgresVersion)
+				targetImage := fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", targetVersion)
+
+				// Use the backup-enabled class so the upgrade gate creates a CNPG
+				// Backup that matches the target Cluster's VolumeSnapshot config.
+				pgCluster.Spec.Class = classNameBackup
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.ImageName).To(Equal(initialImage))
+				markCNPGHealthy(cnpg, clusterMemberCount)
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				completedPhase := string(mvutypes.Completed)
+				strategy := mvutypes.MajorUpgradeFlowPgUpgrade
+				sourceVersion := "14"
+				pc.Status.PostgresMajorUpgradeStatus = []enterprisev4.PostgresMajorUpgradeStatus{{
+					Phase:           &completedPhase,
+					Strategy:        &strategy,
+					SourcePgVersion: &sourceVersion,
+					TargetPgVersion: ptr.To(postgresVersion),
+				}}
+				Expect(k8sClient.Status().Update(ctx, pc)).To(Succeed())
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				pc.Spec.PostgresVersion = ptr.To(targetVersion)
+				pc.Spec.PostgresMajorUpgradeConfig = &enterprisev4.PostgresMajorUpgradeConfig{
+					Allow:    ptr.To(true),
+					Strategy: &[]string{mvutypes.MajorUpgradeFlowPgUpgrade}[0],
+				}
+				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
+
+				// First reconcile: use case enters PreUpgradeBackup and the adapter creates the
+				// CNPG Backup CR. CNPG is not running in envtest so we patch it to completed.
+				_, err := reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.PreUpgradeBackup)))
+
+				backupName := fmt.Sprintf("%s-pre-upgrade-%s-%s", clusterName, postgresVersion, targetVersion)
+				backup := &cnpgv1.Backup{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: backupName, Namespace: namespace}, backup)).To(Succeed())
+				Expect(backup.Spec.Method).To(Equal(cnpgv1.BackupMethodVolumeSnapshot))
+				Expect(cnpg.Spec.Backup).NotTo(BeNil())
+				Expect(cnpg.Spec.Backup.VolumeSnapshot).NotTo(BeNil())
+				Expect(backup.Status.Phase).NotTo(Equal(cnpgv1.BackupPhaseCompleted))
+
+				// A pending Backup must keep the workflow at its safety gate.
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.PreUpgradeBackup)))
+
+				backup.Status.Phase = cnpgv1.BackupPhaseCompleted
+				Expect(k8sClient.Status().Update(ctx, backup)).To(Succeed())
+
+				// Second reconcile: backup Done → gate passes → use case advances to Preflight.
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.ImageName).To(Equal(initialImage), "provisioner drift must be blocked before pg_upgrade starts")
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Preflight)))
+
+				// Simulate CNPG becoming healthy first, but without managed roles status published yet.
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				cnpg = &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				//reconcileAfterCNPGHealthyOrPatch()
+
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.ImageName).To(Equal(targetImage))
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Upgrading)))
+
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Verifying)))
+
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.PostUpgradeBackup)))
+
+				// The previous reconcile ran onVerifying and persisted PostUpgradeBackup.
+				// The postUpgradeBackup intercept (and BackupNow) only runs on the next
+				// reconcile — trigger it so the Backup CR is created before we patch it.
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.PostUpgradeBackup)))
+
+				postBackupName := fmt.Sprintf("%s-post-upgrade-%s-%s", clusterName, postgresVersion, targetVersion)
+				postBackup := &cnpgv1.Backup{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: postBackupName, Namespace: namespace}, postBackup)).To(Succeed())
+				postBackup.Status.Phase = cnpgv1.BackupPhaseCompleted
+				Expect(k8sClient.Status().Update(ctx, postBackup)).To(Succeed())
+
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Completed)))
+
+				received := make([]string, 0, 16)
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(received, v1.EventTypeNormal, mvutypes.EventMajorUpgradeScheduled)).To(
+					BeTrue(), "MajorUpgradeScheduled event must fire when workflow enters Preflight; events seen: %v", received)
+				Expect(ContainsEvent(received, v1.EventTypeNormal, mvutypes.EventMajorUpgradeStarted)).To(
+					BeTrue(), "MajorUpgradeStarted event must fire when image patch succeeds; events seen: %v", received)
+				Expect(ContainsEvent(received, v1.EventTypeNormal, mvutypes.EventMajorUpgradeCompleted)).To(
+					BeTrue(), "MajorUpgradeCompleted event must fire when post-upgrade backup completes; events seen: %v", received)
 			})
 
 			It("reconciles external superuser secret and creates managed resources w/ status refs", func() {

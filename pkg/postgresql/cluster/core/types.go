@@ -19,9 +19,11 @@ import (
 	"time"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -44,11 +46,21 @@ type managedRole struct {
 // shell (primary adapter). The service layer declares what it needs via this struct
 // rather than reaching into context — keeping ports explicit and testable.
 type ReconcileContext struct {
-	Client   client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Metrics  ports.Recorder
+	Client                  client.Client
+	Scheme                  *runtime.Scheme
+	Recorder                record.EventRecorder
+	Metrics                 ports.Recorder
+	UseCaseRegistryProvider UseCaseRegistryProvider
 }
+
+// UseCaseRegistryProvider returns dumb per-use-case factories for one reconcile
+// pass, keyed by use-case name. It closes over per-reconcile runtime state
+// (object key, live PostgresCluster, resolved MergedConfig) so each factory can
+// wire its adapters the moment the reconciler first needs that use case. It
+// registers all known use cases unconditionally — relevance is not its concern.
+// The reconciler owns the trigger policies and skips any use case whose policy
+// returns false for the current spec, so factories stay pure builders.
+type UseCaseRegistryProvider func(types.NamespacedName, *enterprisev4.PostgresCluster, *MergedConfig) map[string]usecases.Factory
 
 // normalizedCNPGClusterSpec is a subset of cnpgv1.ClusterSpec fields used for drift detection.
 // Only fields we set in buildCNPGClusterSpec are included — CNPG-injected defaults are excluded
@@ -178,11 +190,14 @@ const (
 	reasonUpstreamNotReady conditionReasons = "UpstreamNotReady"
 
 	// condition reasons — cluster/provisioner
-	reasonClusterClassNotFound conditionReasons = "ClusterClassNotFound"
-	reasonInvalidConfiguration conditionReasons = "InvalidConfiguration"
-	reasonClusterBuildFailed   conditionReasons = "ClusterBuildFailed"
-	reasonClusterGetFailed     conditionReasons = "ClusterGetFailed"
-	reasonClusterPatchFailed   conditionReasons = "ClusterPatchFailed"
+	reasonClusterClassNotFound       conditionReasons = "ClusterClassNotFound"
+	reasonInvalidConfiguration       conditionReasons = "InvalidConfiguration"
+	reasonClusterBuildFailed         conditionReasons = "ClusterBuildFailed"
+	reasonClusterGetFailed           conditionReasons = "ClusterGetFailed"
+	reasonClusterPatchFailed         conditionReasons = "ClusterPatchFailed"
+	reasonMajorDowngradeUnsupported  conditionReasons = "MajorDowngradeUnsupported"
+	reasonMajorUpgradeConfigRequired conditionReasons = "MajorUpgradeConfigRequired"
+	reasonMajorUpgradePending        conditionReasons = "MajorUpgradePending"
 
 	// condition reasons — managedRolesReady
 	reasonManagedRolesReady   conditionReasons = "ManagedRolesReconciled"
@@ -249,23 +264,26 @@ const (
 	msgUpstreamNotReady statusMessage = "Waiting for upstream components"
 
 	// status messages — provisioner health check
-	msgProvisionerHealthy        statusMessage = "Provisioner cluster is healthy"
-	msgCNPGPendingCreation       statusMessage = "CNPG cluster is pending creation"
-	msgFmtCNPGProvisioning       statusMessage = "CNPG cluster provisioning: %s"
-	msgCNPGSwitchover            statusMessage = "Cluster changing primary node"
-	msgCNPGFailingOver           statusMessage = "Pod missing, need to change primary"
-	msgFmtCNPGRestarting         statusMessage = "CNPG cluster restarting: %s"
-	msgFmtCNPGUpgrading          statusMessage = "CNPG cluster upgrading: %s"
-	msgCNPGApplyingConfiguration statusMessage = "Configuration change is being applied"
-	msgCNPGPromoting             statusMessage = "Replica is being promoted to primary"
-	msgCNPGWaitingForUser        statusMessage = "Action from the user is required"
-	msgCNPGUnrecoverable         statusMessage = "Cluster failed, needs manual intervention"
-	msgCNPGCannotCreateObjects   statusMessage = "Cluster resources cannot be created"
-	msgFmtCNPGPluginError        statusMessage = "CNPG plugin error: %s"
-	msgFmtCNPGImageError         statusMessage = "CNPG image error: %s"
-	msgFmtCNPGClusterPhase       statusMessage = "CNPG cluster phase: %s"
-	msgFmtCNPGScaling            statusMessage = "Scaling cluster: %d/%d instances ready"
-	msgFmtCNPGStorageResizing    statusMessage = "Resizing storage: %d/%d PVCs pending"
+	msgProvisionerHealthy            statusMessage = "Provisioner cluster is healthy"
+	msgCNPGPendingCreation           statusMessage = "CNPG cluster is pending creation"
+	msgFmtCNPGProvisioning           statusMessage = "CNPG cluster provisioning: %s"
+	msgCNPGSwitchover                statusMessage = "Cluster changing primary node"
+	msgCNPGFailingOver               statusMessage = "Pod missing, need to change primary"
+	msgFmtCNPGRestarting             statusMessage = "CNPG cluster restarting: %s"
+	msgFmtCNPGUpgrading              statusMessage = "CNPG cluster upgrading: %s"
+	msgCNPGApplyingConfiguration     statusMessage = "Configuration change is being applied"
+	msgCNPGPromoting                 statusMessage = "Replica is being promoted to primary"
+	msgCNPGWaitingForUser            statusMessage = "Action from the user is required"
+	msgCNPGUnrecoverable             statusMessage = "Cluster failed, needs manual intervention"
+	msgCNPGCannotCreateObjects       statusMessage = "Cluster resources cannot be created"
+	msgFmtCNPGPluginError            statusMessage = "CNPG plugin error: %s"
+	msgFmtCNPGImageError             statusMessage = "CNPG image error: %s"
+	msgFmtCNPGClusterPhase           statusMessage = "CNPG cluster phase: %s"
+	msgFmtCNPGScaling                statusMessage = "Scaling cluster: %d/%d instances ready"
+	msgFmtMajorDowngradeUnsupported  statusMessage = "Detected requested PostgreSQL major version downgrade from %s to %s. Downgrades are not supported by reconciliation; restore from backup or create a new cluster."
+	msgFmtMajorUpgradeConfigRequired statusMessage = "Detected requested PostgreSQL major version change from %s to %s. Set spec.postgresMajorUpgradeConfig.allow=true to start the major upgrade workflow."
+	msgFmtMajorUpgradePending        statusMessage = "Major version upgrade from %s to %s is allowed; holding the CNPG image until the major upgrade workflow takes ownership."
+	msgFmtCNPGStorageResizing        statusMessage = "Resizing storage: %d/%d PVCs pending"
 
 	// status messages — backup
 	msgBackupDisabled              statusMessage = "Backup is not enabled"
