@@ -202,6 +202,24 @@ spec:
                 items:
                   type: string
                 type: array
+              postgresMajorUpgradeConfig:
+                description: PostgresMajorUpgradeConfig sets up the upgrade flow according
+                  to backup, version and strategy requirements.
+                properties:
+                  allow:
+                    description: |-
+                      Allow permits the operator to execute a PostgreSQL major-version
+                      upgrade when spec.postgresVersion crosses a major-version boundary.
+                    type: boolean
+                  strategy:
+                    default: pgUpgrade
+                    description: |-
+                      Strategy selects the major-upgrade implementation.
+                      For now only pgUpgrade is supported.
+                    enum:
+                    - pgUpgrade
+                    type: string
+                type: object
               postgresVersion:
                 description: |-
                   PostgresVersion is the PostgreSQL version (major or major.minor).
@@ -426,6 +444,13 @@ spec:
                       is reconciled by the operator.
                     type: boolean
                 type: object
+              currentPgVersion:
+                description: |-
+                  CurrentPgVersion is the PostgreSQL major version currently running against
+                  the data directory, as reported by CNPG (PGDataImageInfo.MajorVersion).
+                  Written on every reconcile; used as the source-version baseline for the
+                  major-version upgrade use case when no prior upgrade status entries exist.
+                type: string
               currentPrimary:
                 description: CurrentPrimary is the name of the pod currently hosting
                   the primary.
@@ -535,6 +560,145 @@ spec:
                   Phase represents the current phase of the PostgresCluster.
                   Values: "Pending", "Provisioning", "Failed", "Ready", "Deleting"
                 type: string
+              postgresMajorUpgradeStatus:
+                description: |-
+                  PostgresMajorUpgradeStatus contains the information
+                  about upgrade completion and any needed rollback/backup information
+                  shall the upgrade be reverted manually.
+                  It's a list to support a case of multi version upgrade.
+                items:
+                  properties:
+                    backupNames:
+                      description: |-
+                        BackupNames holds the names of the CNPG Backup objects created as
+                        rollback baselines for this upgrade hop. Use these to locate the
+                        backup and any provider-specific references needed for manual recovery.
+                      properties:
+                        postUpgrade:
+                          description: PostUpgrade is the backup taken after the upgraded
+                            cluster is verified.
+                          type: string
+                        preUpgrade:
+                          description: PreUpgrade is the backup taken before the pg_upgrade
+                            run.
+                          type: string
+                      type: object
+                    backupStatus:
+                      description: BackupStatus contains the observed state of backup
+                        configuration.
+                      properties:
+                        objectStore:
+                          description: ObjectStore contains status for barman object
+                            storage backups.
+                          properties:
+                            enabled:
+                              description: Enabled indicates whether object store
+                                backups are active.
+                              type: boolean
+                            lastScheduleTime:
+                              description: LastScheduleTime is when the last backup
+                                was scheduled.
+                              format: date-time
+                              type: string
+                            nextScheduleTime:
+                              description: NextScheduleTime is the next scheduled
+                                backup time.
+                              format: date-time
+                              type: string
+                          type: object
+                        volumeSnapshot:
+                          description: VolumeSnapshot contains status for volume snapshot
+                            backups.
+                          properties:
+                            enabled:
+                              description: Enabled indicates whether volume snapshot
+                                backups are active.
+                              type: boolean
+                            lastScheduleTime:
+                              description: LastScheduleTime is when the last backup
+                                was scheduled.
+                              format: date-time
+                              type: string
+                            nextScheduleTime:
+                              description: NextScheduleTime is the next scheduled
+                                backup time.
+                              format: date-time
+                              type: string
+                          type: object
+                      type: object
+                    completedAt:
+                      format: date-time
+                      type: string
+                    conditions:
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      type: array
+                    phase:
+                      type: string
+                    sourcePgVersion:
+                      type: string
+                    startedAt:
+                      format: date-time
+                      type: string
+                    strategy:
+                      type: string
+                    targetPgVersion:
+                      type: string
+                  type: object
+                type: array
               provisionerRef:
                 description: |-
                   ProvisionerRef contains reference to the provisioner resource managing this PostgresCluster.

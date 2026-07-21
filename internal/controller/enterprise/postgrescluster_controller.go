@@ -24,8 +24,13 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	majorupgradeadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/major_version_upgrade"
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	majorversionupgradetypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
+	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
+	majorversionupgrade "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case"
 	cnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
+	clusterk8s "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/k8s"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
@@ -37,6 +42,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -86,13 +92,57 @@ type PostgresClusterReconciler struct {
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := slog.Default().With("controller", "PostgresCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
-	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
-	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper, cnpgadapter.NewBackupBackend(r.Client, r.Scheme, r.Recorder))
+	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics, UseCaseRegistryProvider: r.useCaseRegistry}
+	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper, cnpgadapter.NewBackupBackend(r.Client, r.Scheme))
 	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
 	if sharedreconcile.IsPureConflict(err) {
 		return ctrl.Result{Requeue: true}, nil
 	}
 	return result, err
+}
+
+// useCaseRegistry decides which use cases may run this reconcile pass and
+// returns a dumb factory for each. Relevance is decided HERE, at registry-build
+// time, where the live cluster spec is in hand: a use case whose feature is
+// switched off is simply omitted from the map — never constructed, never
+// scheduled — so the steady-state cost of an inactive feature is one cheap
+// check here, not adapter construction or status reads. The factories
+// themselves contain no decision logic; they only build. Adding a use case
+// means adding one relevance check + factory here, not growing a shared ports
+// aggregate built up front.
+func (r *PostgresClusterReconciler) useCaseRegistry(key types.NamespacedName, cluster *enterprisev4.PostgresCluster, mergedConfig *clustercore.MergedConfig) map[string]usecases.Factory {
+	return map[string]usecases.Factory{
+		majorversionupgradetypes.UseCaseName: r.newMajorUpgradeUseCase(key, cluster, mergedConfig),
+	}
+}
+
+// newMajorUpgradeUseCase is the dumb factory for the major-version upgrade use
+// case: it closes over the per-reconcile runtime state and wires the three
+// adapters when invoked, with no relevance logic of its own (useCaseRegistry
+// already decided this use case is relevant before registering it).
+func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedName, cluster *enterprisev4.PostgresCluster, mergedConfig *clustercore.MergedConfig) usecases.Factory {
+	return func() usecases.UseCase {
+		targetVersion := ""
+		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.PostgresVersion != nil {
+			targetVersion = *mergedConfig.Spec.PostgresVersion
+		}
+
+		backupMethod, backupPluginName, providerConfigured := clustercore.EffectiveBackupProvider(mergedConfig)
+
+		stateStore := clusterk8s.NewClusterStateStore(r.Client, key)
+		infoStore := majorupgradeadapter.NewMajorUpgradeStateStoreWithTarget(stateStore, targetVersion)
+		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion)
+
+		var notifier *majorupgradeadapter.UpgradeNotifier
+		if cluster != nil {
+			notifier = majorupgradeadapter.NewUpgradeNotifier(&recorderEventEmitter{r.Recorder}, cluster)
+		}
+		if !providerConfigured {
+			return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, nil, driver, notifier)
+		}
+		rollback := majorupgradeadapter.NewRollbackCapabilityAdapter(r.Client, r.Scheme, key, backupMethod, backupPluginName)
+		return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, rollback, driver, notifier)
+	}
 }
 
 // SetupWithManager registers the controller, owned resource watches, and an
@@ -222,11 +272,19 @@ func postgresClusterPredicator() predicate.Predicate {
 				if !equality.Semantic.DeepEqual(e.ObjectOld.GetDeletionTimestamp(), e.ObjectNew.GetDeletionTimestamp()) {
 					return true
 				}
+				if retryAnnotationChanged(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations()) {
+					return true
+				}
 				// Finalizer list change signals a cleanup lifecycle transition.
 				return !equality.Semantic.DeepEqual(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers())
 			},
 		},
 	)
+}
+
+func retryAnnotationChanged(oldAnnotations, newAnnotations map[string]string) bool {
+	return oldAnnotations[majorversionupgradetypes.AnnotationMajorUpgradeRetryAt] !=
+		newAnnotations[majorversionupgradetypes.AnnotationMajorUpgradeRetryAt]
 }
 
 // cnpgClusterPredicator triggers on spec changes, phase changes, scale progress,
@@ -402,4 +460,16 @@ func (r *PostgresClusterReconciler) enqueueClustersForExternalSecret(ctx context
 			"postgresCluster", pc.Name)
 	}
 	return reqs
+}
+
+type recorderEventEmitter struct {
+	recorder record.EventRecorder
+}
+
+func (e *recorderEventEmitter) EmitNormalEvent(obj client.Object, reason, message string) {
+	e.recorder.Event(obj, corev1.EventTypeNormal, reason, message)
+}
+
+func (e *recorderEventEmitter) EmitWarningEvent(obj client.Object, reason, message string) {
+	e.recorder.Event(obj, corev1.EventTypeWarning, reason, message)
 }
