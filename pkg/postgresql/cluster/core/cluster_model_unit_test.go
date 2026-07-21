@@ -237,6 +237,259 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	assert.Contains(t, events.normals, EventClusterUpdateStarted+":CNPG cluster spec updated for PostgresCluster pg1, waiting for healthy state")
 }
 
+func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	currentVersion := "15.10"
+	requestedVersion := "18"
+	instances := int32(1)
+	storageSize := resource.MustParse("10Gi")
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: enterprisev4.PostgresClusterSpec{
+			PostgresVersion: &requestedVersion,
+		},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
+	}
+	currentConfig := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &currentVersion,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+	desiredConfig := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &requestedVersion,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+	existingCNPG := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: int(instances), ReadyInstances: int(instances)},
+	}
+	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
+
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
+	model := newClusterModel(
+		c,
+		scheme,
+		noopEventEmitter{},
+		nil,
+		cluster,
+		clusterClass,
+		desiredConfig,
+		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}},
+	)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	updated := &cnpgv1.Cluster{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:15.10", updated.Spec.ImageName)
+
+	health, err := model.Observe(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pendingClusterPhase, health.Phase)
+	assert.Equal(t, clusterReady, health.Condition)
+	assert.Equal(t, reasonMajorUpgradeConfigRequired, health.Reason)
+	assert.Equal(t, "Detected requested PostgreSQL major version change from 15.10 to 18. Set spec.postgresMajorUpgradeConfig.allow=true to start the major upgrade workflow.", health.Message)
+}
+
+func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	currentVersion := "18"
+	requestedVersion := "15.10"
+	instances := int32(1)
+	storageSize := resource.MustParse("10Gi")
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: enterprisev4.PostgresClusterSpec{
+			PostgresVersion: &requestedVersion,
+			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+				Allow: ptr.To(true),
+			},
+		},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
+	}
+	currentConfig := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &currentVersion,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+	desiredConfig := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &requestedVersion,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+	existingCNPG := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: int(instances), ReadyInstances: int(instances)},
+	}
+	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
+
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
+	model := newClusterModel(
+		c,
+		scheme,
+		noopEventEmitter{},
+		nil,
+		cluster,
+		clusterClass,
+		desiredConfig,
+		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}},
+	)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	updated := &cnpgv1.Cluster{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", updated.Spec.ImageName)
+
+	health, err := model.Observe(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pendingClusterPhase, health.Phase)
+	assert.Equal(t, clusterReady, health.Condition)
+	assert.Equal(t, reasonMajorDowngradeUnsupported, health.Reason)
+	assert.Equal(t, "Detected requested PostgreSQL major version downgrade from 18 to 15.10. Downgrades are not supported by reconciliation; restore from backup or create a new cluster.", health.Message)
+}
+
+// TestClusterModelHoldsMajorVersionUpgradeWhenAllowed verifies that allow=true does
+// NOT license the provisioner to bump the CNPG image itself. The provisioner must
+// hold (Pending) and leave the image untouched so the major-upgrade use case owns
+// the backup -> preflight -> patch -> verify -> finalize transition. Patching here
+// would skip the orchestrated workflow and could jump multiple majors at once.
+//
+// It also asserts that even while held, Observe still publishes
+// status.CurrentPgVersion from the live CNPG version. The major-upgrade use case
+// now reads its source version straight from CNPG (PGDataImageInfo.MajorVersion),
+// so it no longer depends on this projection to activate; the projection remains a
+// user-facing observability field, and this guards that the held provisioner keeps
+// it current.
+func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
+	t.Parallel()
+
+	scheme := newTestScheme()
+
+	currentVersion := "15.10"
+	requestedVersion := "18"
+	instances := int32(1)
+	storageSize := resource.MustParse("10Gi")
+
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec: enterprisev4.PostgresClusterSpec{
+			PostgresVersion: &requestedVersion,
+			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+				Allow: ptr.To(true),
+			},
+		},
+	}
+	clusterClass := &enterprisev4.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
+	}
+	currentConfig := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &currentVersion,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+	desiredConfig := &MergedConfig{
+		Spec: &enterprisev4.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &requestedVersion,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+	existingCNPG := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
+		Status: cnpgv1.ClusterStatus{
+			Phase:           cnpgv1.PhaseHealthy,
+			Instances:       int(instances),
+			ReadyInstances:  int(instances),
+			PGDataImageInfo: &cnpgv1.ImageInfo{Image: "ghcr.io/cloudnative-pg/postgresql:15.10", MajorVersion: 15},
+		},
+	}
+	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
+
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
+	model := newClusterModel(
+		c,
+		scheme,
+		noopEventEmitter{},
+		nil,
+		cluster,
+		clusterClass,
+		desiredConfig,
+		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}},
+	)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	updated := &cnpgv1.Cluster{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:15.10", updated.Spec.ImageName,
+		"allow=true must not let the provisioner patch the major bump itself")
+
+	health, err := model.Observe(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pendingClusterPhase, health.Phase)
+	assert.Equal(t, clusterReady, health.Condition)
+	assert.Equal(t, reasonMajorUpgradePending, health.Reason)
+	assert.Equal(t, "Major version upgrade from 15.10 to 18 is allowed; holding the CNPG image until the major upgrade workflow takes ownership.", health.Message)
+
+	// The held pass still publishes the observable current version projection.
+	assert.Equal(t, "15", cluster.Status.CurrentPgVersion,
+		"held provisioner must still publish CurrentPgVersion as an observability projection")
+}
+
 func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 	t.Parallel()
 
@@ -1491,7 +1744,7 @@ func TestRunComponentsStopsOnObserveError(t *testing.T) {
 	components := []component{firstComponent, secondComponent}
 
 	// Act
-	result, err := runComponents(context.Background(), slog.Default(), components)
+	result, err := runComponents(context.Background(), slog.Default(), components, nil)
 
 	// Assert: runComponents returns the error from the first component and does not proceed.
 	require.Error(t, err)
@@ -1517,7 +1770,7 @@ func TestRunComponentsSkipsReconcileWhenCheckContractsFails(t *testing.T) {
 	model := newConfigMapModel(fake.NewClientBuilder().WithScheme(scheme).Build(), scheme, noopEventEmitter{}, nil, cluster, contracts)
 
 	// Act — runComponents must not panic, and must return an intermediate result (Pending)
-	result, err := runComponents(context.Background(), slog.Default(), []component{model})
+	result, err := runComponents(context.Background(), slog.Default(), []component{model}, nil)
 
 	// Assert
 	require.NoError(t, err)
