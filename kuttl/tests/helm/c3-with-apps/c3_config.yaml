@@ -14,8 +14,8 @@ sva:
       - name: idxc
     searchHeadClusters:
       - name: shc
-indexerClusters:
-  replicas: 3
+indexerCluster:
+  replicaCount: 3
 
 
 clusterManager:
