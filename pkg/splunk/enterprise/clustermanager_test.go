@@ -1525,6 +1525,29 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
 
+	// Create the ClusterManager first since the LicenseManager's env assembly
+	// looks it up via ClusterManagerRef.
+	cm := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+	cm.Kind = "ClusterManager"
+	client.Create(ctx, &cm)
+
 	// Create License Manager
 	lm := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1565,28 +1588,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	// Create Cluster Manager
-	cm := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
-				},
-				Volumes: []corev1.Volume{},
-				LicenseManagerRef: corev1.ObjectReference{
-					Name: "test",
-				},
-			},
-		},
-	}
-
-	cm.Kind = "ClusterManager"
-	client.Create(ctx, &cm)
+	// Apply the ClusterManager created above now that its LicenseManager is ready
 	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)

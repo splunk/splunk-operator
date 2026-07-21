@@ -555,6 +555,12 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
+	c.AddObject(&enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack2",
+			Namespace: "test",
+		},
+	})
 	test := func(want string) {
 		f := func() (interface{}, error) {
 			if err := validateMonitoringConsoleSpec(ctx, c, &cr); err != nil {

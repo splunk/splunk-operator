@@ -367,6 +367,12 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
 
 	cr.Spec.ClusterManagerRef.Name = "stack2"
+	_ = splutil.CreateResource(ctx, c, &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack2",
+			Namespace: "test",
+		},
+	})
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.SchedulerName = "custom-scheduler"
