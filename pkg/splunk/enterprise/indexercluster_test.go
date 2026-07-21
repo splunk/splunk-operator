@@ -229,7 +229,16 @@ func TestApplyIndexerCluster(t *testing.T) {
 		_, err := ApplyIndexerClusterManager(context.TODO(), c, cr.(*enterpriseApi.IndexerCluster))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerClusterManager", &current, revised, createCalls, updateCalls, reconcileFn, true)
+	clusterManagerInitObj := &enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "manager1",
+			Namespace: "test",
+		},
+	}
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerClusterManager", &current, revised, createCalls, updateCalls, reconcileFn, true, clusterManagerInitObj)
 
 	// // test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -1409,6 +1418,12 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
+	c.AddObject(&enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "manager1",
+			Namespace: "test",
+		},
+	})
 
 	cr.Spec.ClusterManagerRef.Name = "manager1"
 	test := func(want string) {

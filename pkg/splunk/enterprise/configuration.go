@@ -17,11 +17,14 @@ package enterprise
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -788,7 +791,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	}
 
 	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(ctx, client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
+	if err = updateSplunkPodTemplateWithConfig(ctx, client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName()); err != nil {
+		return statefulSet, err
+	}
 
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
@@ -812,7 +817,7 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
-func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
+func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) error {
 
 	logger := logging.FromContext(ctx).With("func", "updateSplunkPodTemplateWithConfig")
 	// Add custom ports to splunk containers
@@ -868,11 +873,11 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
-		// We will update the annotation for resource version in the pod template spec
-		// so that any change in the ConfigMap will lead to recycle of the pod.
-		configMapResourceVersion, err := splctrl.GetConfigMapResourceVersion(ctx, client, namespacedName)
+		// We stamp a content hash of configMap.Data (not ResourceVersion) so that
+		// owner-reference-only writes during bootstrap do not trigger pod restarts.
+		configMapObj, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 		if err == nil {
-			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configMapResourceVersion
+			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configDataHash(configMapObj.Data)
 		} else {
 			logger.ErrorContext(ctx, "updation of default configMap annotation failed", "error", err)
 		}
@@ -896,10 +901,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 		// 1. For Indexer cluster case, do not set the annotation on CM pod. smartstore config is
 		// propagated through the CM manager apps bundle push
-		// 2. In case of Standalone, reset the Pod, by updating the latest Resource version of the
-		// smartstore config map.
+		// 2. In case of Standalone, reset the Pod by updating the content hash of the
+		// smartstore config map so that only real data changes trigger a pod restart.
 		if instanceType == SplunkStandalone {
-			podTemplateSpec.ObjectMeta.Annotations[smartStoreConfigRev] = smartstoreConfigMap.ResourceVersion
+			podTemplateSpec.ObjectMeta.Annotations[smartStoreConfigRev] = configDataHash(smartstoreConfigMap.Data)
 		}
 	}
 
@@ -990,32 +995,44 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		if spec.ClusterManagerRef.Namespace != "" {
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterManagerRef.Namespace, clusterManagerURL)
 		}
-		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
+		if spec.LicenseManagerRef.Name == "" && spec.LicenseMasterRef.Name == "" {
 			//Check if CM is connected to a LicenseManager
+			cmNamespace := cr.GetNamespace()
+			if spec.ClusterManagerRef.Namespace != "" {
+				cmNamespace = spec.ClusterManagerRef.Namespace
+			}
 			namespacedName := types.NamespacedName{
-				Namespace: cr.GetNamespace(),
+				Namespace: cmNamespace,
 				Name:      spec.ClusterManagerRef.Name,
 			}
 			managerIdxCluster := &enterpriseApi.ClusterManager{}
 			err := client.Get(ctx, namespacedName, managerIdxCluster)
 			if err != nil {
-				logger.ErrorContext(ctx, "unable to get ClusterManager", "error", err)
+				// Return the error so the reconcile loop requeues rather than continuing
+				// with a zero-value CR (which would produce an incomplete env and cause a
+				// spurious pod restart on the next reconcile when the real value is found).
+				logger.ErrorContext(ctx, "unable to get ClusterManager; requeueing", "error", err)
+				return err
 			}
 
 			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
-				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
-				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
-					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
+				licenseManagerNamespace := managerIdxCluster.Spec.LicenseManagerRef.Namespace
+				if licenseManagerNamespace == "" {
+					licenseManagerNamespace = managerIdxCluster.GetNamespace()
 				}
+				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				licenseManagerURL = splcommon.GetServiceFQDN(licenseManagerNamespace, licenseManagerURL)
 				env = append(env, corev1.EnvVar{
 					Name:  splcommon.LicenseManagerURL,
 					Value: licenseManagerURL,
 				})
 			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
-				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
-				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+				licenseMasterNamespace := managerIdxCluster.Spec.LicenseMasterRef.Namespace
+				if licenseMasterNamespace == "" {
+					licenseMasterNamespace = managerIdxCluster.GetNamespace()
 				}
+				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				licenseMasterURL = splcommon.GetServiceFQDN(licenseMasterNamespace, licenseMasterURL)
 				env = append(env, corev1.EnvVar{
 					Name:  splcommon.LicenseManagerURL,
 					Value: licenseMasterURL,
@@ -1027,32 +1044,44 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		if spec.ClusterMasterRef.Namespace != "" {
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
-		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
+		if spec.LicenseManagerRef.Name == "" && spec.LicenseMasterRef.Name == "" {
 			//Check if CM is connected to a LicenseManager
+			cmNamespace := cr.GetNamespace()
+			if spec.ClusterMasterRef.Namespace != "" {
+				cmNamespace = spec.ClusterMasterRef.Namespace
+			}
 			namespacedName := types.NamespacedName{
-				Namespace: cr.GetNamespace(),
+				Namespace: cmNamespace,
 				Name:      spec.ClusterMasterRef.Name,
 			}
 			managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
 			err := client.Get(ctx, namespacedName, managerIdxCluster)
 			if err != nil {
-				logger.ErrorContext(ctx, "unable to get ClusterMaster", "error", err)
+				// Return the error so the reconcile loop requeues rather than continuing
+				// with a zero-value CR (which would produce an incomplete env and cause a
+				// spurious pod restart on the next reconcile when the real value is found).
+				logger.ErrorContext(ctx, "unable to get ClusterMaster; requeueing", "error", err)
+				return err
 			}
 
 			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
-				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
-				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
-					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
+				licenseManagerNamespace := managerIdxCluster.Spec.LicenseManagerRef.Namespace
+				if licenseManagerNamespace == "" {
+					licenseManagerNamespace = managerIdxCluster.GetNamespace()
 				}
+				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				licenseManagerURL = splcommon.GetServiceFQDN(licenseManagerNamespace, licenseManagerURL)
 				env = append(env, corev1.EnvVar{
 					Name:  splcommon.LicenseManagerURL,
 					Value: licenseManagerURL,
 				})
 			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
-				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
-				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+				licenseMasterNamespace := managerIdxCluster.Spec.LicenseMasterRef.Namespace
+				if licenseMasterNamespace == "" {
+					licenseMasterNamespace = managerIdxCluster.GetNamespace()
 				}
+				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				licenseMasterURL = splcommon.GetServiceFQDN(licenseMasterNamespace, licenseMasterURL)
 				env = append(env, corev1.EnvVar{
 					Name:  splcommon.LicenseManagerURL,
 					Value: licenseMasterURL,
@@ -1117,6 +1146,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			},
 		}
 	}
+	return nil
 }
 
 func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
@@ -2108,4 +2138,23 @@ func validateSplunkGeneralTerms() error {
 		return nil
 	}
 	return fmt.Errorf("license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information")
+}
+
+// configDataHash returns a deterministic SHA-256 hex digest of the ConfigMap
+// Data map. Keys are sorted before hashing so the result is stable regardless
+// of iteration order. Using the Data hash rather than ResourceVersion prevents
+// spurious pod restarts when a ConfigMap is updated (e.g. owner-reference
+// annotation during bootstrap) without changing its actual content.
+func configDataHash(data map[string]string) string {
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	h := sha256.New()
+	for _, k := range keys {
+		_, _ = fmt.Fprintf(h, "%d:%s%d:%s", len(k), k, len(data[k]), data[k])
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }

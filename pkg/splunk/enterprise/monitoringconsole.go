@@ -220,7 +220,7 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	if err != nil {
 		return nil, err
 	}
-	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
+	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = configDataHash(monitoringConsoleConfigMap.Data)
 
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
