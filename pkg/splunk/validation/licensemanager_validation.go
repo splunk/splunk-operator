@@ -29,6 +29,11 @@ func ValidateLicenseManagerCreate(obj *enterpriseApi.LicenseManager) field.Error
 	// Validate common spec
 	allErrs = append(allErrs, validateCommonSplunkSpec(&obj.Spec.CommonSplunkSpec, field.NewPath("spec"))...)
 
+	// Validate AppFramework only if user provided config
+	if len(obj.Spec.AppFrameworkConfig.VolList) > 0 || len(obj.Spec.AppFrameworkConfig.AppSources) > 0 {
+		allErrs = append(allErrs, validateAppFramework(&obj.Spec.AppFrameworkConfig, field.NewPath("spec").Child("appRepo"), true)...)
+	}
+
 	return allErrs
 }
 

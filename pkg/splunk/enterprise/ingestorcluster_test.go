@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,10 +32,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func init() {
@@ -50,6 +53,121 @@ func init() {
 		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
 		return fileLocation
 	}
+}
+
+func TestApplyIngestorClusterTerminalFailures(t *testing.T) {
+	ctx := context.TODO()
+
+	// Case 1: spec validation failure (empty queueRef.name) is a terminal failure.
+	t.Run("empty queueRef is terminal", func(t *testing.T) {
+		os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+		scheme := runtime.NewScheme()
+		_ = enterpriseApi.AddToScheme(scheme)
+		_ = corev1.AddToScheme(scheme)
+		_ = appsv1.AddToScheme(scheme)
+		c := newFakeClientBuilder(scheme).Build()
+
+		cr := &enterpriseApi.IngestorCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+			Spec: enterpriseApi.IngestorClusterSpec{
+				Replicas:         1,
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Mock: true},
+				ObjectStorageRef: corev1.ObjectReference{Name: "os"},
+				// QueueRef.Name intentionally empty → validation fails
+			},
+		}
+
+		_, err := ApplyIngestorCluster(ctx, c, cr)
+		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "expected TerminalError, got %v", err)
+	})
+
+	// Case 2: SPLUNK_GENERAL_TERMS unset is a terminal failure.
+	t.Run("SPLUNK_GENERAL_TERMS unset is terminal", func(t *testing.T) {
+		os.Unsetenv("SPLUNK_GENERAL_TERMS")
+		defer os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+		scheme := runtime.NewScheme()
+		_ = enterpriseApi.AddToScheme(scheme)
+		_ = corev1.AddToScheme(scheme)
+		_ = appsv1.AddToScheme(scheme)
+		c := newFakeClientBuilder(scheme).Build()
+
+		cr := &enterpriseApi.IngestorCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+			Spec: enterpriseApi.IngestorClusterSpec{
+				Replicas:         1,
+				QueueRef:         corev1.ObjectReference{Name: "queue"},
+				ObjectStorageRef: corev1.ObjectReference{Name: "os"},
+			},
+		}
+
+		_, err := ApplyIngestorCluster(ctx, c, cr)
+		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "expected TerminalError, got %v", err)
+	})
+
+	// Case 3: Queue CR not found returns an error.
+	// ensureIngestorDefaults runs unconditionally on every reconcile, so a single
+	// call is sufficient — no need to reach PhaseReady first.
+	t.Run("Queue CR not found returns error", func(t *testing.T) {
+		os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+		scheme := runtime.NewScheme()
+		_ = enterpriseApi.AddToScheme(scheme)
+		_ = corev1.AddToScheme(scheme)
+		_ = appsv1.AddToScheme(scheme)
+		c := newFakeClientBuilder(scheme).Build()
+
+		cr := &enterpriseApi.IngestorCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+			Spec: enterpriseApi.IngestorClusterSpec{
+				Replicas:         1,
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Mock: true},
+				QueueRef:         corev1.ObjectReference{Name: "nonexistent-queue", Namespace: "test"},
+				ObjectStorageRef: corev1.ObjectReference{Name: "nonexistent-os", Namespace: "test"},
+			},
+		}
+
+		_, err := ApplyIngestorCluster(ctx, c, cr)
+		assert.Error(t, err, "expected error for missing Queue CR")
+	})
+
+	// Case 4: ObjectStorage CR not found returns an error.
+	// ensureIngestorDefaults runs unconditionally on every reconcile.
+	t.Run("ObjectStorage CR not found returns error", func(t *testing.T) {
+		os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+		scheme := runtime.NewScheme()
+		_ = enterpriseApi.AddToScheme(scheme)
+		_ = corev1.AddToScheme(scheme)
+		_ = appsv1.AddToScheme(scheme)
+		c := newFakeClientBuilder(scheme).Build()
+
+		// Create the Queue CR so only the ObjectStorage CR is missing.
+		_ = c.Create(ctx, &enterpriseApi.Queue{
+			ObjectMeta: metav1.ObjectMeta{Name: "queue", Namespace: "test"},
+			Spec: enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name: "test-queue", AuthRegion: "us-west-2",
+					Endpoint: "https://sqs.us-west-2.amazonaws.com", DLQ: "dlq",
+				},
+			},
+		})
+
+		cr := &enterpriseApi.IngestorCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+			Spec: enterpriseApi.IngestorClusterSpec{
+				Replicas:         1,
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Mock: true},
+				QueueRef:         corev1.ObjectReference{Name: "queue", Namespace: "test"},
+				ObjectStorageRef: corev1.ObjectReference{Name: "nonexistent-os", Namespace: "test"},
+			},
+		}
+
+		_, err := ApplyIngestorCluster(ctx, c, cr)
+		assert.Error(t, err, "expected error for missing ObjectStorage CR")
+	})
 }
 
 func TestApplyIngestorCluster(t *testing.T) {
@@ -281,6 +399,9 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 			Replicas: 0,
 			QueueRef: corev1.ObjectReference{
 				Name: queue.Name,
+			},
+			ObjectStorageRef: corev1.ObjectReference{
+				Name: "objectstorage",
 			},
 		},
 	}

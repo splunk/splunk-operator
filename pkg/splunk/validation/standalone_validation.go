@@ -44,7 +44,7 @@ func ValidateStandaloneCreate(obj *enterpriseApi.Standalone) field.ErrorList {
 
 	// Validate AppFramework only if user provided config
 	if len(obj.Spec.AppFrameworkConfig.VolList) > 0 || len(obj.Spec.AppFrameworkConfig.AppSources) > 0 {
-		allErrs = append(allErrs, validateAppFramework(&obj.Spec.AppFrameworkConfig, field.NewPath("spec").Child("appRepo"))...)
+		allErrs = append(allErrs, validateAppFramework(&obj.Spec.AppFrameworkConfig, field.NewPath("spec").Child("appRepo"), true)...)
 	}
 
 	return allErrs

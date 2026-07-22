@@ -46,15 +46,15 @@ func ApplyObjectStorage(ctx context.Context, client client.Client, cr *enterpris
 
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.ObjectStoragePausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string, isStalled bool) {
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(), IsStalled: isStalled,
+			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
 		})
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 		cr.Status.ObservedGeneration = cr.GetGeneration()
 	}
-	setPhaseAndConditions(enterpriseApi.PhaseError, "", false)
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -63,14 +63,14 @@ func ApplyObjectStorage(ctx context.Context, client client.Client, cr *enterpris
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted", false)
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
 		}
 		return result, err
 	}
 
-	setPhaseAndConditions(enterpriseApi.PhaseReady, "", false)
+	setPhaseAndConditions(enterpriseApi.PhaseReady, "")
 
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
