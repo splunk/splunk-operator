@@ -55,15 +55,15 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	var err error
 	// Initialize phase and conditions
 	isPaused := cr.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string, isStalled bool) {
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(), IsStalled: isStalled,
+			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
 		})
 		cr.Status.Phase = result.Phase
 		cr.Status.Conditions = result.Conditions
 		cr.Status.ObservedGeneration = cr.GetGeneration()
 	}
-	setPhaseAndConditions(enterpriseApi.PhaseError, "", false)
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 
 	// Update the CR Status
@@ -73,14 +73,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	err = validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Search Head Cluster spec validation failed", true)
-		return reconcile.Result{}, reconcile.TerminalError(err)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Search Head Cluster spec validation failed")
+		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Search Head Cluster spec validation failed", err)
 	}
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
 	}
 
@@ -88,7 +88,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
 	if err != nil {
 		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
 		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
@@ -100,7 +100,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
-			setPhaseAndConditions(enterpriseApi.PhaseError, "App framework initialization failed", false)
+			setPhaseAndConditions(enterpriseApi.PhaseError, "App framework initialization failed")
 			return result, err
 		}
 	}
@@ -127,7 +127,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), false)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion", false)
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -138,7 +138,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkSearchHead)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion", false)
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err
 			}
 		}
@@ -147,7 +147,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted", false)
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 			cr.Status.DeployerPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
@@ -161,28 +161,28 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// create or update a headless search head cluster service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, true))
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head headless service", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head headless service")
 		return result, err
 	}
 
 	// create or update a regular search head cluster service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, false))
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head service", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head service")
 		return result, err
 	}
 
 	// create or update a deployer service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, false))
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer service", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer service")
 		return result, err
 	}
 
 	// create or update statefulset for the deployer
 	statefulSet, err := getDeployerStatefulSet(ctx, client, cr)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer StatefulSet", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer StatefulSet")
 		return result, err
 	}
 
@@ -191,7 +191,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if err != nil || !continueReconcile {
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed", false)
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
 			}
 			return result, err
 		}
@@ -200,7 +200,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := deployerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Deployer pods", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Deployer pods")
 		return result, err
 	}
 	cr.Status.DeployerPhase = phase
@@ -208,14 +208,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// create or update statefulset for the search heads
 	statefulSet, err = getSearchHeadStatefulSet(ctx, client, cr)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head StatefulSet", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head StatefulSet")
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getSearchHeadEnv(cr))
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
@@ -225,10 +225,10 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Search Head pods", false)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Search Head pods")
 		return result, err
 	}
-	setPhaseAndConditions(phase, "", false)
+	setPhaseAndConditions(phase, "")
 
 	var finalResult *reconcile.Result
 	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
@@ -238,7 +238,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), true)
 		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap", false)
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 			return result, err
 		}
 	}
@@ -263,7 +263,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, numberOfDeployerReplicas, cr)
 			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app", false)
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 

@@ -281,10 +281,6 @@ func TestApplyIndexerCluster(t *testing.T) {
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
-	stalledCond := splcommon.GetCondition(noRefCR.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True when spec validation fails")
-	}
 
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
 	cManager := enterpriseApi.ClusterManager{
@@ -1369,10 +1365,6 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
-	stalledCond := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True for empty ClusterManagerRef")
-	}
 
 	cr.Spec.ClusterManagerRef.Name = "manager1"
 	// verifyRFPeers should return err here
@@ -1520,14 +1512,8 @@ func TestIndexerClusterSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Attempt to apply the indexer cluster spec
 	_, err := ApplyIndexerCluster(ctx, c, &idxc)
 
-	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
-	// and persists Stalled=True via deferred updateCRStatus.
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
-	}
-	stalledCond := splcommon.GetCondition(idxc.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
 	}
 }
 

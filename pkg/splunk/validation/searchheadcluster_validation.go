@@ -17,10 +17,47 @@ limitations under the License.
 package validation
 
 import (
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 )
+
+// validateSHCEsAutoSslNotAllowed rejects ES premium-app sources on SearchHeadCluster
+// that specify ssl_enablement: auto. The auto mode writes to web.conf on the SHC deployer
+// and is not supported; users must choose strict or ignore.
+func validateSHCEsAutoSslNotAllowed(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	for i, source := range appConfig.AppSources {
+		effectiveScope := source.Scope
+		if effectiveScope == "" {
+			effectiveScope = appConfig.Defaults.Scope
+		}
+		if effectiveScope != enterpriseApi.ScopePremiumApps {
+			continue
+		}
+		effectiveType := source.PremiumAppsProps.Type
+		if effectiveType == "" {
+			effectiveType = appConfig.Defaults.PremiumAppsProps.Type
+		}
+		if effectiveType != enterpriseApi.PremiumAppsTypeEs {
+			continue
+		}
+		effectiveSsl := source.PremiumAppsProps.EsDefaults.SslEnablement
+		if effectiveSsl == "" {
+			effectiveSsl = appConfig.Defaults.PremiumAppsProps.EsDefaults.SslEnablement
+		}
+		if effectiveSsl == enterpriseApi.SslEnablementAuto {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("appSources").Index(i).Child("premiumAppsProps").Child("esDefaults").Child("sslEnablement"),
+				effectiveSsl,
+				fmt.Sprintf("ssl_enablement %q is not supported for Enterprise Security apps on SearchHeadCluster; use %q or %q",
+					enterpriseApi.SslEnablementAuto, enterpriseApi.SslEnablementStrict, enterpriseApi.SslEnablementIgnore)))
+		}
+	}
+	return allErrs
+}
 
 // ValidateSearchHeadClusterCreate validates a SearchHeadCluster on CREATE
 func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field.ErrorList {
@@ -39,7 +76,9 @@ func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field
 
 	// Validate AppFramework only if user provided config
 	if len(obj.Spec.AppFrameworkConfig.VolList) > 0 || len(obj.Spec.AppFrameworkConfig.AppSources) > 0 {
-		allErrs = append(allErrs, validateAppFramework(&obj.Spec.AppFrameworkConfig, field.NewPath("spec").Child("appRepo"))...)
+		appFldPath := field.NewPath("spec").Child("appRepo")
+		allErrs = append(allErrs, validateAppFramework(&obj.Spec.AppFrameworkConfig, appFldPath, false)...)
+		allErrs = append(allErrs, validateSHCEsAutoSslNotAllowed(&obj.Spec.AppFrameworkConfig, appFldPath)...)
 	}
 
 	return allErrs

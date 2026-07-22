@@ -16,6 +16,7 @@ package certs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -24,9 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // --- helpers ---
@@ -453,3 +456,32 @@ type certRequesterStandalone struct {
 }
 
 func (c *certRequesterStandalone) Certificates() []string { return c.secrets }
+
+// TestValidateCertSecret_MissingKey_ErrorChain verifies that a missing-key error
+// satisfies both splcommon.TerminalMessage (so the controller can surface a
+// user-facing condition message) and errors.Is(reconcile.TerminalError(nil))
+// (so the controller stops requeueing).
+func TestValidateCertSecret_MissingKey_ErrorChain(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-certs", Namespace: "test"},
+		Data:       map[string][]byte{CertTLSCRTKey: []byte("cert")}, // tls.key missing
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme()).WithObjects(secret).Build()
+
+	_, err := ValidateCertSecret(context.Background(), c, "test", "my-certs")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Error("errors.Is(err, reconcile.TerminalError(nil)) = false; controller would requeue a non-retryable failure")
+	}
+
+	msg, ok := splcommon.TerminalMessage(err)
+	if !ok {
+		t.Error("splcommon.TerminalMessage returned ok=false; controller cannot surface condition message")
+	}
+	if msg == "" {
+		t.Error("TerminalMessage returned empty message")
+	}
+}

@@ -77,6 +77,12 @@ var (
 		Resource: "monitoringconsoles",
 	}
 
+	IngestorClusterGVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v4",
+		Resource: "ingestorclusters",
+	}
+
 	PostgresClusterGVR = schema.GroupVersionResource{
 		Group:    "enterprise.splunk.com",
 		Version:  "v4",
@@ -188,6 +194,19 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 		GroupKind: schema.GroupKind{
 			Group: "enterprise.splunk.com",
 			Kind:  "LicenseManager",
+		},
+	},
+
+	IngestorClusterGVR: &GenericValidator[*enterpriseApi.IngestorCluster]{
+		ValidateCreateFunc:            ValidateIngestorClusterCreate,
+		ValidateUpdateFunc:            ValidateIngestorClusterUpdate,
+		ValidateCreateWithContextFunc: ValidateIngestorClusterCreateWithContext,
+		ValidateUpdateWithContextFunc: ValidateIngestorClusterUpdateWithContext,
+		WarningsOnCreateFunc:          GetIngestorClusterWarningsOnCreate,
+		WarningsOnUpdateFunc:          GetIngestorClusterWarningsOnUpdate,
+		GroupKind: schema.GroupKind{
+			Group: "enterprise.splunk.com",
+			Kind:  "IngestorCluster",
 		},
 	},
 
