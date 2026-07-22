@@ -136,6 +136,12 @@ const SHCScalingTransitionTimeout = 20 * time.Minute
 // (cat config files, dump pod logs). Still below the 30s Ginkgo grace period.
 const KubectlExecTimeout = 25 * time.Second
 
+// AppPhaseChangeTimeout is the budget passed to WaitForAppPhaseChange when
+// waiting for an app to leave the Install phase. Preserves the 2-minute window
+// that the now-deprecated WaitforPhaseChange used but propagates the error
+// instead of swallowing it.
+const AppPhaseChangeTimeout = 2 * time.Minute
+
 // BestEffortProbeTimeout bounds the log-only diagnostic probes
 // (VerifyIsDeploymentInProgressFlagIsSet / WaitForAppPhaseChange) that run
 // between an app-framework CR update and its C3/M4 readiness check. These

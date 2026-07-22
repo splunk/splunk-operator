@@ -52,6 +52,9 @@ var _ = Describe("m4appfw test", func() {
 		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "master")
 		Expect(err).ToNot(HaveOccurred())
 
+		uploadedApps = nil
+		filePresentOnOperator = false
+
 		s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
 		s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
 		appSourceVolumeNameIdxc = "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
@@ -174,7 +177,7 @@ var _ = Describe("m4appfw test", func() {
 			// Upload V2 apps for Monitoring Console
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "M4 cluster not ready")
@@ -304,7 +307,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "M4 cluster not ready")
@@ -696,7 +699,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
 
 			// Ensure M4 indexers and SHC are ready
 			Expect(testcaseEnvInst.VerifyM4IndexersAndSHCReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "M4 Indexers and SHC not ready")
@@ -826,7 +829,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "M4 cluster not ready")
@@ -1015,7 +1018,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
 
 			// Ensure M4 indexers and SHC are ready
 			Expect(testcaseEnvInst.VerifyM4IndexersAndSHCReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "M4 Indexers and SHC not ready")
@@ -1269,7 +1272,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "M4 cluster not ready")
@@ -1763,7 +1766,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName, testenv.AppPhaseChangeTimeout)).To(Succeed())
 
 			// Ensure Cluster Master goes to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
@@ -2079,7 +2082,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
 
 			// Ensure that the Cluster Master goes to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifyClusterMasterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Master not ready")
