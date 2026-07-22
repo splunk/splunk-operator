@@ -74,7 +74,7 @@ The operational check is simple:
 The merge request lane is the normal branch-validation path.
 It runs on `merge_request_event`, not on plain feature-branch pushes.
 The same `merge_request_event` workflow rule supports GitLab merged results pipelines; GitLab creates a temporary merge-result commit and runs this lane against that commit instead of only the source branch tip.
-The lane checks the MR description template, runs repository verification, runs unit, `kubectl-splunk`, and `helm-chart-tests` (lint and helm-unittest for all three charts), builds the staged operator image, scans that staged image with the prodsec `.container-scan` template, and runs the smoke fanout on disposable EKS clusters.
+The lane checks the MR description template and biased language, runs repository verification, runs unit, `kubectl-splunk`, and `helm-chart-tests` (lint and helm-unittest for all three charts), builds the staged operator image, scans that staged image with the prodsec `.container-scan` template, and runs the smoke fanout on disposable EKS clusters.
 
 In practice this means:
 
