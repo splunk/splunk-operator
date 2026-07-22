@@ -13,6 +13,7 @@ pkg/splunk/
 ├── enterprise/       LEGACY — shrinks over time, eventually deleted
 ├── reconcile/        Per-CR orchestration (one sub-package per CRD)
 ├── workflow/         Multi-step, CR-agnostic state-change workflows
+├── splunkconfig/     Splunk configuration builders — pure functions, no I/O, no K8s types
 ├── resources/        K8s object builders — pure functions, no I/O
 ├── k8sops/           K8s API read/apply/diff/merge
 ├── validation/       Admission webhooks and CR spec validation
@@ -57,6 +58,7 @@ All packages may also import `api/enterprise/v4` (CRD types).
 | `common/` | Types, interfaces, constants | _(none)_ |
 | `util/` | Stateless helpers, naming, events | `common/` |
 | `client/<system>/` | 1:1 external API wrappers | `common/`, `util/` |
+| `splunkconfig/` | Splunk conf builders (pure functions) | `common/`, `util/` |
 | `resources/` | K8s object builders (pure functions) | `common/`, `util/` |
 | `k8sops/` | K8s API CRUD, diff/merge, finalizers | `common/`, `util/`, `resources/` |
 | `workflow/<domain>/` | Multi-step stateful workflows | `common/`, `util/`, `client/` |
@@ -131,6 +133,7 @@ package is deleted.
 |---|---|
 | A new CRD reconciler | `reconcile/<cr>/` |
 | A multi-step operation (upgrade, decommission, etc.) | `workflow/<domain>/` |
+| A Splunk configuration builder (role conf, queue stanzas) | `splunkconfig/` |
 | A K8s object builder (StatefulSet, Service, etc.) | `resources/` |
 | A Splunk REST API call | `client/splunk/` |
 | An object-storage SDK call | `client/storage/<provider>/` |
