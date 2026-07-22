@@ -1,6 +1,6 @@
 # Setup defaults for build arguments
 ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
-ARG BASE_IMAGE_VERSION=8.10-1784625896
+ARG BASE_IMAGE_VERSION=8.10-1784668437
 ARG BUILDER_IMAGE=golang:1.26.5
 ARG GOTOOLCHAIN=auto
 ARG BUILDPLATFORM
