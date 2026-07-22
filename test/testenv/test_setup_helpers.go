@@ -104,11 +104,15 @@ func TeardownTestCaseEnv(ctx context.Context, testcaseEnvInst *TestCaseEnv, depl
 // CleanupOperatorFile deletes the test_file.img from the operator pod's app download directory
 // if filePresentOnOperator is true.
 func CleanupOperatorFile(ctx context.Context, deployment *Deployment, testcaseEnvInst *TestCaseEnv, filePresentOnOperator bool) {
-	if filePresentOnOperator {
-		opPod := testcaseEnvInst.GetOperatorPodName()
-		podDownloadPath := filepath.Join(AppDownloadVolume, "test_file.img")
-		DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
+	if !filePresentOnOperator || testcaseEnvInst == nil {
+		return
 	}
+	opPod := testcaseEnvInst.GetOperatorPodName()
+	if opPod == "" {
+		return
+	}
+	podDownloadPath := filepath.Join(AppDownloadVolume, "test_file.img")
+	DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 }
 
 // TeardownAppFrameworkTestCaseEnv handles teardown for app framework tests with provider-specific
