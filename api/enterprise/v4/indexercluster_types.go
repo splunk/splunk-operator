@@ -41,11 +41,11 @@ type IndexerClusterSpec struct {
 
 	// +optional
 	// Queue reference. NOTE: part of the index and ingestion separation feature, which is currently in Preview and not recommended for production use.
-	QueueRef corev1.ObjectReference `json:"queueRef,omitempty"`
+	QueueRef *corev1.ObjectReference `json:"queueRef,omitempty"`
 
 	// +optional
 	// Object Storage reference. NOTE: part of the index and ingestion separation feature, which is currently in Preview and not recommended for production use.
-	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef,omitempty"`
+	ObjectStorageRef *corev1.ObjectReference `json:"objectStorageRef,omitempty"`
 
 	// Number of indexer cluster peers
 	Replicas int32 `json:"replicas"`
@@ -134,20 +134,6 @@ type IndexerClusterStatus struct {
 
 	// Auxiliary message describing CR status
 	Message string `json:"message"`
-
-	// Last-applied queue reference; used to detect ref changes and trigger config updates
-	// +optional
-	AppliedQueueRef corev1.ObjectReference `json:"appliedQueueRef,omitempty"`
-
-	// Last-applied object storage reference; used to detect ref changes and trigger config updates
-	// +optional
-	AppliedObjectStorageRef corev1.ObjectReference `json:"appliedObjectStorageRef,omitempty"`
-
-	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
-	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
-
-	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
-	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

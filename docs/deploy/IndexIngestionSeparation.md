@@ -121,15 +121,11 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 | queueRef   | corev1.ObjectReference | Message queue reference |
 | objectStorageRef   | corev1.ObjectReference | Object storage reference |
 
-**SOK doesn't support update of queueRef and objectStorageRef.**
-
-**First provisioning or scaling up the number of replicas requires Ingestor Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
-
 ## Example
 
-The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the s3-secret credentials allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the ingestion process. 
+The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the s3-secret credentials allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the ingestion process.
 
-In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
+In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, SOK generates the corresponding `default-mode.conf` and `outputs.conf` stanzas and delivers them via `SPLUNK_DEFAULTS_URL` — splunk-ansible writes the config to `$SPLUNK_HOME/etc/apps/100-sok/local/` on pod startup, so each ingestor pod initialises directly as an ingestor without a post-start conversion step.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -170,7 +166,7 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 
 The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the s3-secret credentials allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the indexing process. 
 
-In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
+In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, SOK generates the corresponding `default-mode.conf`, `inputs.conf`, and `outputs.conf` stanzas and delivers them via `SPLUNK_DEFAULTS_URL` — splunk-ansible writes the config to `$SPLUNK_HOME/etc/apps/100-sok/local/` on pod startup.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -777,7 +773,7 @@ AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/to
 AWS_REGION=us-west-2
 AWS_ROLE_ARN=arn:aws:iam::111111111111:role/eksctl-ind-ing-sep-demo-addon-iamserviceac-Role1-123456789123
 AWS_STS_REGIONAL_ENDPOINTS=regional
-sh-4.4$ cat /opt/splunk/etc/system/local/default-mode.conf 
+sh-4.4$ cat /opt/splunk/etc/apps/100-sok/local/default-mode.conf 
 [pipeline:remotequeueruleset]
 disabled = false
 
@@ -796,7 +792,7 @@ disabled = true
 [pipeline:indexerPipe]
 disabled = true
     
-sh-4.4$ cat /opt/splunk/etc/system/local/outputs.conf 
+sh-4.4$ cat /opt/splunk/etc/apps/100-sok/local/outputs.conf 
 [remote_queue:sqs-test]
 remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
@@ -868,7 +864,7 @@ AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/to
 AWS_REGION=us-west-2
 AWS_ROLE_ARN=arn:aws:iam::111111111111:role/eksctl-ind-ing-sep-demo-addon-iamserviceac-Role1-123456789123
 AWS_STS_REGIONAL_ENDPOINTS=regional
-sh-4.4$ cat /opt/splunk/etc/system/local/inputs.conf 
+sh-4.4$ cat /opt/splunk/etc/apps/100-sok/local/inputs.conf 
 
 [splunktcp://9997]
 disabled = 0
@@ -882,7 +878,7 @@ remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.am
 remote_queue.sqs_smartbus.large_message_store.path = s3://ingestion/smartbus-test
 remote_queue.sqs_smartbus.retry_policy = max_count
 remote_queue.type = sqs_smartbus
-sh-4.4$ cat /opt/splunk/etc/system/local/outputs.conf 
+sh-4.4$ cat /opt/splunk/etc/apps/100-sok/local/outputs.conf 
 [remote_queue:sqs-test]
 remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
@@ -894,7 +890,7 @@ remote_queue.sqs_smartbus.large_message_store.path = s3://ingestion/smartbus-tes
 remote_queue.sqs_smartbus.retry_policy = max_count
 remote_queue.sqs_smartbus.send_interval = 5s
 remote_queue.type = sqs_smartbus
-sh-4.4$ cat /opt/splunk/etc/system/local/default-mode.conf 
+sh-4.4$ cat /opt/splunk/etc/apps/100-sok/local/default-mode.conf 
 [pipeline:remotequeueruleset]
 disabled = false
 

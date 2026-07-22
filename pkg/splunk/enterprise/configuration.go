@@ -42,6 +42,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
@@ -682,7 +683,7 @@ func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.St
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar, certMounts *certs.CertMountConfig) (*appsv1.StatefulSet, error) {
+func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar, certMounts *certs.CertMountConfig, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
@@ -799,6 +800,8 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
 	certs.InjectCertMounts(&statefulSet.Spec.Template, certMounts)
+
+	resources.ApplyStatefulSetOptions(statefulSet, opts...)
 
 	return statefulSet, nil
 }

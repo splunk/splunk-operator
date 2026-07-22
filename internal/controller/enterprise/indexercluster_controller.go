@@ -188,7 +188,7 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 				var reqs []reconcile.Request
 				for _, ic := range list.Items {
-					if ic.Spec.QueueRef.Name == "" {
+					if ic.Spec.QueueRef == nil || ic.Spec.QueueRef.Name == "" {
 						continue
 					}
 
@@ -260,6 +260,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				var reqs []reconcile.Request
 				for _, ic := range list.Items {
+					if ic.Spec.QueueRef == nil {
+						continue
+					}
 					ns := ic.Spec.QueueRef.Namespace
 					if ns == "" {
 						ns = ic.Namespace
@@ -288,6 +291,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				var reqs []reconcile.Request
 				for _, ic := range list.Items {
+					if ic.Spec.ObjectStorageRef == nil {
+						continue
+					}
 					ns := ic.Spec.ObjectStorageRef.Namespace
 					if ns == "" {
 						ns = ic.Namespace
