@@ -17,6 +17,33 @@ ai-config-files-check:
   script:
     - bash gitlab-ci/validate-no-ai-config-files.sh
 
+bias-language-check:
+  extends:
+    - .go-verify-job
+    - .rules-default-validation-lane
+  image:
+    name: ghcr.io/splunk/biased_lang:1.0.0@sha256:38555f026715f0b7ab206cd300fcdcc88c7e8ab0e29ce389e371b4262b46e325
+    entrypoint: [""]
+  before_script: []
+  variables:
+    # The linter uses these GitHub-named variables to identify CI runs and to
+    # return a non-zero status when biased terms are found.
+    GITHUB_REPO: $CI_PROJECT_PATH
+    GITHUB_URL: $CI_SERVER_URL
+  script:
+    - cd /biased-lang
+    - python3 run_json.py --path="${CI_PROJECT_DIR}" --err_file=err_biased_lang.log
+  after_script:
+    - cp /biased-lang/biased-language-summary.json "${CI_PROJECT_DIR}/" || true
+    - cp /biased-lang/biased-language.codeclimate.json "${CI_PROJECT_DIR}/" || true
+  artifacts:
+    when: always
+    paths:
+      - biased-language-summary.json
+      - biased-language.codeclimate.json
+    reports:
+      codequality: biased-language.codeclimate.json
+
 format-and-vet:
   extends:
     - .go-verify-job
