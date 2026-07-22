@@ -87,20 +87,6 @@ type IngestorClusterStatus struct {
 
 	// Auxiliary message describing CR status
 	Message string `json:"message"`
-
-	// Last-applied queue reference; used to detect ref changes and trigger config updates
-	// +optional
-	AppliedQueueRef corev1.ObjectReference `json:"appliedQueueRef,omitempty"`
-
-	// Last-applied object storage reference; used to detect ref changes and trigger config updates
-	// +optional
-	AppliedObjectStorageRef corev1.ObjectReference `json:"appliedObjectStorageRef,omitempty"`
-
-	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
-	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
-
-	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
-	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // +kubebuilder:object:root=true

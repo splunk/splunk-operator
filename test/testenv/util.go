@@ -411,8 +411,8 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				Defaults: ansibleConfig,
 			},
 			Replicas:         int32(replicas),
-			QueueRef:         queue,
-			ObjectStorageRef: os,
+			QueueRef:         &queue,
+			ObjectStorageRef: &os,
 		},
 	}
 
