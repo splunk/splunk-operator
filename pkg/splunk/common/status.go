@@ -35,17 +35,15 @@ type PhaseConditionInput struct {
 	IsPaused   bool
 	Message    string
 	Generation int64
-	IsStalled  bool
 }
 
 // SetPhaseAndConditions atomically sets Phase and Conditions derived from the given phase.
 // If existingConditions is provided, LastTransitionTime is preserved when the condition status hasn't changed.
 // If existingConditions is nil, new conditions are created with the current time.
 func SetPhaseAndConditions(existingConditions []metav1.Condition, in PhaseConditionInput) PhaseAndConditions {
-	conditions := deriveConditionsFromPhase(existingConditions, in)
 	return PhaseAndConditions{
 		Phase:      in.Phase,
-		Conditions: conditions,
+		Conditions: deriveConditionsFromPhase(existingConditions, in),
 	}
 }
 
@@ -53,14 +51,9 @@ func SetPhaseAndConditions(existingConditions []metav1.Condition, in PhaseCondit
 // If existingConditions is provided, LastTransitionTime is preserved when status hasn't changed.
 // This ensures conditions are always consistent with the phase while maintaining proper transition tracking.
 func deriveConditionsFromPhase(existingConditions []metav1.Condition, in PhaseConditionInput) []metav1.Condition {
-	phase, isPaused, message, generation, isStalled := in.Phase, in.IsPaused, in.Message, in.Generation, in.IsStalled
-	// Stalled is only meaningful when reconciliation has failed; clear it for all other phases
-	// so that Ready=True and Stalled=True can never coexist.
-	if phase != enterpriseApi.PhaseError {
-		isStalled = false
-	}
+	phase, isPaused, message, generation := in.Phase, in.IsPaused, in.Message, in.Generation
 	now := metav1.NewTime(time.Now())
-	conditions := make([]metav1.Condition, 0, 3)
+	conditions := make([]metav1.Condition, 0, 4)
 
 	// Helper to get existing condition's LastTransitionTime if status matches
 	getTransitionTime := func(condType string, newStatus metav1.ConditionStatus) metav1.Time {
@@ -107,23 +100,6 @@ func deriveConditionsFromPhase(existingConditions []metav1.Condition, in PhaseCo
 		pausedCondition.Message = "Reconciliation is not paused"
 	}
 	pausedCondition.LastTransitionTime = getTransitionTime(pausedCondition.Type, pausedCondition.Status)
-
-	// Stalled condition
-	stalledCondition := metav1.Condition{
-		Type:               string(enterpriseApi.ConditionStalled),
-		ObservedGeneration: generation,
-	}
-
-	// Set Stalled condition based on isStalled flag
-	if isStalled {
-		stalledCondition.Status = metav1.ConditionTrue
-		stalledCondition.Reason = string(enterpriseApi.ReasonStalled)
-	} else {
-		stalledCondition.Status = metav1.ConditionFalse
-		stalledCondition.Reason = string(enterpriseApi.ReasonNotStalled)
-		stalledCondition.Message = ""
-	}
-	stalledCondition.LastTransitionTime = getTransitionTime(stalledCondition.Type, stalledCondition.Status)
 
 	// Derive Ready and Progressing conditions from Phase
 	switch phase {
@@ -221,14 +197,6 @@ func deriveConditionsFromPhase(existingConditions []metav1.Condition, in PhaseCo
 		}
 		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
-		if isStalled {
-			stalledCondition.Message = "Reconciliation failed"
-			if message != "" {
-				stalledCondition.Message = message
-			}
-		}
-		stalledCondition.LastTransitionTime = getTransitionTime(stalledCondition.Type, stalledCondition.Status)
-
 	default:
 		// Unknown phase - treat as not ready, not progressing
 		readyCondition.Status = metav1.ConditionUnknown
@@ -241,14 +209,56 @@ func deriveConditionsFromPhase(existingConditions []metav1.Condition, in PhaseCo
 		progressingCondition.Message = "Unknown phase"
 		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
-		if isStalled {
-			stalledCondition.Message = "Unknown phase"
-			stalledCondition.LastTransitionTime = getTransitionTime(stalledCondition.Type, stalledCondition.Status)
+	}
+
+	// Carry forward the existing Stalled condition so that UpsertStalledCondition /
+	// ClearStalledCondition results are never overwritten by phase derivation.
+	// If no existing stalled condition is present, default to NotStalled.
+	stalledCondition := metav1.Condition{
+		Type:               string(enterpriseApi.ConditionStalled),
+		Status:             metav1.ConditionFalse,
+		Reason:             string(enterpriseApi.ReasonNotStalled),
+		ObservedGeneration: generation,
+	}
+	for _, c := range existingConditions {
+		if c.Type == string(enterpriseApi.ConditionStalled) {
+			stalledCondition.Status = c.Status
+			stalledCondition.Reason = c.Reason
+			stalledCondition.Message = c.Message
+			break
 		}
 	}
+	stalledCondition.LastTransitionTime = getTransitionTime(stalledCondition.Type, stalledCondition.Status)
 
 	conditions = append(conditions, readyCondition, progressingCondition, pausedCondition, stalledCondition)
 	return conditions
+}
+
+// UpsertStalledCondition sets the Stalled condition to True with the given reason and message.
+// The stalled condition is independent of phase and may coexist with any phase value.
+// If reason is empty it falls back to ReasonStalled.
+func UpsertStalledCondition(conditions []metav1.Condition, reason, msg string, generation int64) []metav1.Condition {
+	if reason == "" {
+		reason = string(enterpriseApi.ReasonStalled)
+	}
+	return UpsertCondition(conditions, metav1.Condition{
+		Type:               string(enterpriseApi.ConditionStalled),
+		Status:             metav1.ConditionTrue,
+		Reason:             reason,
+		Message:            msg,
+		ObservedGeneration: generation,
+	})
+}
+
+// ClearStalledCondition sets the Stalled condition to False, indicating the CR is no longer stalled.
+func ClearStalledCondition(conditions []metav1.Condition, generation int64) []metav1.Condition {
+	return UpsertCondition(conditions, metav1.Condition{
+		Type:               string(enterpriseApi.ConditionStalled),
+		Status:             metav1.ConditionFalse,
+		Reason:             string(enterpriseApi.ReasonNotStalled),
+		Message:            "",
+		ObservedGeneration: generation,
+	})
 }
 
 // UpsertCondition updates or adds a condition in the conditions slice.

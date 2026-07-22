@@ -207,11 +207,19 @@ func validateStorageConfig(config *enterpriseApi.StorageClassSpec, fldPath *fiel
 func validateSmartStore(smartStore *enterpriseApi.SmartStoreSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Build a set of valid volume names for reference validation
+	// Build a set of valid volume names for reference validation and detect duplicates
 	validVolumes := make(map[string]bool)
-	for _, vol := range smartStore.VolList {
+	seenVolNames := make(map[string]int)
+	for i, vol := range smartStore.VolList {
 		if vol.Name != "" {
-			validVolumes[vol.Name] = true
+			if firstIdx, exists := seenVolNames[vol.Name]; exists {
+				allErrs = append(allErrs, field.Duplicate(
+					fldPath.Child("volumes").Index(i).Child("name"),
+					fmt.Sprintf("duplicate volume name %q (same as volumes[%d])", vol.Name, firstIdx)))
+			} else {
+				seenVolNames[vol.Name] = i
+				validVolumes[vol.Name] = true
+			}
 		}
 	}
 
@@ -231,6 +239,7 @@ func validateSmartStore(smartStore *enterpriseApi.SmartStoreSpec, fldPath *field
 		if vol.Endpoint == "" && vol.Path == "" {
 			allErrs = append(allErrs, field.Required(volPath, "either endpoint or path must be specified"))
 		}
+		allErrs = append(allErrs, validateVolumeProviderTypeMismatch(&smartStore.VolList[i], volPath)...)
 	}
 
 	// Validate index definitions
@@ -273,8 +282,58 @@ const (
 	maxAppsRepoPollInterval int64 = 86400
 )
 
-// validateAppFramework validates App Framework configuration
-func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *field.Path) field.ErrorList {
+// validAppFrameworkScopes is the set of all valid scope values for app sources
+var validAppFrameworkScopes = map[string]bool{
+	enterpriseApi.ScopeLocal:                true,
+	enterpriseApi.ScopeCluster:              true,
+	enterpriseApi.ScopeClusterWithPreConfig: true,
+	enterpriseApi.ScopePremiumApps:          true,
+}
+
+// validAppFrameworkScopesList is the sorted list used for NotSupported error messages
+var validAppFrameworkScopesList = []string{
+	enterpriseApi.ScopeLocal,
+	enterpriseApi.ScopeCluster,
+	enterpriseApi.ScopeClusterWithPreConfig,
+	enterpriseApi.ScopePremiumApps,
+}
+
+// localOnlyAppFrameworkScopes is the set of scopes valid for local-only CRs
+// (Standalone, LicenseManager, IngestorCluster)
+var localOnlyAppFrameworkScopes = map[string]bool{
+	enterpriseApi.ScopeLocal:       true,
+	enterpriseApi.ScopePremiumApps: true,
+}
+
+// validProviderTypeMap maps each provider to the single storageType it supports.
+var validProviderTypeMap = map[string]string{
+	"aws":   "s3",
+	"minio": "s3",
+	"azure": "blob",
+	"gcp":   "gcs",
+}
+
+// validateVolumeProviderTypeMismatch returns an error when the provider/storageType
+// combination on a VolumeSpec is invalid (e.g. azure provider with s3 type).
+func validateVolumeProviderTypeMismatch(vol *enterpriseApi.VolumeSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	if vol.Provider == "" || vol.Type == "" {
+		return allErrs
+	}
+	expectedType, knownProvider := validProviderTypeMap[vol.Provider]
+	if knownProvider && vol.Type != expectedType {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("storageType"),
+			vol.Type,
+			fmt.Sprintf("storageType %q is incompatible with provider %q; expected %q", vol.Type, vol.Provider, expectedType)))
+	}
+	return allErrs
+}
+
+// validateAppFramework validates App Framework configuration.
+// localOrPremiumScope must be true for CRs that only support local/premiumApps scope
+// (Standalone, LicenseManager); false for cluster-aware CRs (ClusterManager, SearchHeadCluster).
+func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *field.Path, localOrPremiumScope bool) field.ErrorList {
 	var allErrs field.ErrorList
 
 	// Validate appsRepoPollInterval
@@ -299,6 +358,22 @@ func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *fi
 			"must be less than or equal to 86400 seconds (1 day)"))
 	}
 
+	// Validate defaults.Scope if set
+	if appConfig.Defaults.Scope != "" {
+		if !validAppFrameworkScopes[appConfig.Defaults.Scope] {
+			allErrs = append(allErrs, field.NotSupported(
+				fldPath.Child("defaults").Child("scope"),
+				appConfig.Defaults.Scope,
+				validAppFrameworkScopesList))
+		} else if localOrPremiumScope && !localOnlyAppFrameworkScopes[appConfig.Defaults.Scope] {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("defaults").Child("scope"),
+				appConfig.Defaults.Scope,
+				fmt.Sprintf("scope %q is not supported by this CR type; valid values are %q and %q",
+					appConfig.Defaults.Scope, enterpriseApi.ScopeLocal, enterpriseApi.ScopePremiumApps)))
+		}
+	}
+
 	// Validate app sources
 	for i, source := range appConfig.AppSources {
 		sourcePath := fldPath.Child("appSources").Index(i)
@@ -309,13 +384,39 @@ func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *fi
 			allErrs = append(allErrs, field.Required(sourcePath.Child("location"), "app source location is required"))
 		}
 
-		// Validate premiumAppsProps is required when scope is "premiumApps"
-		scope := source.Scope
-		if scope == "" {
-			scope = appConfig.Defaults.Scope
+		// Require an effective volumeName: either source-level or via defaults.
+		effectiveVolName := source.VolName
+		if effectiveVolName == "" {
+			effectiveVolName = appConfig.Defaults.VolName
 		}
-		if scope == "premiumApps" {
-			// Check if premiumAppsProps.Type is set (either in source or defaults)
+		if effectiveVolName == "" {
+			allErrs = append(allErrs, field.Required(
+				sourcePath.Child("volumeName"),
+				"volumeName is required (set it directly on the app source or via defaults.volumeName)"))
+		}
+
+		// Validate scope value and CR kind compatibility when scope is explicitly set
+		if source.Scope != "" {
+			if !validAppFrameworkScopes[source.Scope] {
+				allErrs = append(allErrs, field.NotSupported(
+					sourcePath.Child("scope"),
+					source.Scope,
+					validAppFrameworkScopesList))
+			} else if localOrPremiumScope && !localOnlyAppFrameworkScopes[source.Scope] {
+				allErrs = append(allErrs, field.Invalid(
+					sourcePath.Child("scope"),
+					source.Scope,
+					fmt.Sprintf("scope %q is not supported by this CR type; valid values are %q and %q",
+						source.Scope, enterpriseApi.ScopeLocal, enterpriseApi.ScopePremiumApps)))
+			}
+		}
+
+		// Validate premiumAppsProps is required when effective scope is "premiumApps"
+		effectiveScope := source.Scope
+		if effectiveScope == "" {
+			effectiveScope = appConfig.Defaults.Scope
+		}
+		if effectiveScope == enterpriseApi.ScopePremiumApps {
 			premiumType := source.PremiumAppsProps.Type
 			if premiumType == "" {
 				premiumType = appConfig.Defaults.PremiumAppsProps.Type
@@ -328,29 +429,82 @@ func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *fi
 		}
 	}
 
-	// Validate uniqueness of app sources by Location + Scope combination
+	// Validate uniqueness of app sources by volumeName + Location + Scope combination.
+	// The reconciler treats (effectiveVolName, location, scope) as the unique tuple:
+	// two sources that share the same relative location but target different volumes are
+	// distinct and must not be rejected as duplicates.
 	seenAppSources := make(map[string]int) // map key -> first index seen
 	for i, source := range appConfig.AppSources {
-		// Use defaults if scope not specified in the source
+		// Resolve effective scope from source or defaults
 		scope := source.Scope
 		if scope == "" {
 			scope = appConfig.Defaults.Scope
 		}
-		key := source.Location + "|" + scope
+		// Resolve effective volumeName from source or defaults
+		effectiveVolName := source.VolName
+		if effectiveVolName == "" {
+			effectiveVolName = appConfig.Defaults.VolName
+		}
+		key := effectiveVolName + "|" + source.Location + "|" + scope
 		if firstIdx, exists := seenAppSources[key]; exists {
 			allErrs = append(allErrs, field.Duplicate(
 				fldPath.Child("appSources").Index(i),
-				fmt.Sprintf("duplicate app source: location=%q, scope=%q (same as appSources[%d])", source.Location, scope, firstIdx)))
+				fmt.Sprintf("duplicate app source: volumeName=%q, location=%q, scope=%q (same as appSources[%d])", effectiveVolName, source.Location, scope, firstIdx)))
 		} else {
 			seenAppSources[key] = i
 		}
 	}
 
-	// Validate volume definitions
+	// Validate uniqueness of app source names.
+	seenSourceNames := make(map[string]int)
+	for i, source := range appConfig.AppSources {
+		if source.Name == "" {
+			continue // already caught by the required-name check above
+		}
+		if firstIdx, exists := seenSourceNames[source.Name]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("appSources").Index(i).Child("name"),
+				fmt.Sprintf("duplicate app source name %q (same as appSources[%d])", source.Name, firstIdx)))
+		} else {
+			seenSourceNames[source.Name] = i
+		}
+	}
+
+	// Validate volume definitions, detect duplicates, and check provider/type compatibility.
+	seenVolNames := make(map[string]int)
+	validVolumes := make(map[string]bool)
 	for i, vol := range appConfig.VolList {
 		volPath := fldPath.Child("volumes").Index(i)
 		if vol.Name == "" {
 			allErrs = append(allErrs, field.Required(volPath.Child("name"), "volume name is required"))
+		} else {
+			if firstIdx, exists := seenVolNames[vol.Name]; exists {
+				allErrs = append(allErrs, field.Duplicate(
+					volPath.Child("name"),
+					fmt.Sprintf("duplicate volume name %q (same as volumes[%d])", vol.Name, firstIdx)))
+			} else {
+				seenVolNames[vol.Name] = i
+				validVolumes[vol.Name] = true
+			}
+		}
+		allErrs = append(allErrs, validateVolumeProviderTypeMismatch(&appConfig.VolList[i], volPath)...)
+	}
+
+	// Validate that defaults.volumeName references a declared volume (if set).
+	if appConfig.Defaults.VolName != "" && !validVolumes[appConfig.Defaults.VolName] {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("defaults").Child("volumeName"),
+			appConfig.Defaults.VolName,
+			fmt.Sprintf("volumeName %q does not reference any volume in the volumes list", appConfig.Defaults.VolName)))
+	}
+
+	// Validate that each appSources[].volumeName references a declared volume (if set).
+	for i, source := range appConfig.AppSources {
+		if source.VolName != "" && !validVolumes[source.VolName] {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("appSources").Index(i).Child("volumeName"),
+				source.VolName,
+				fmt.Sprintf("volumeName %q does not reference any volume in the volumes list", source.VolName)))
 		}
 	}
 

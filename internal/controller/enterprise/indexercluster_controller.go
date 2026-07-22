@@ -133,6 +133,18 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
+	fresh := &enterpriseApi.IndexerCluster{}
+	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr == nil {
+		if msg, ok := splcommon.TerminalMessage(err); ok {
+			reason, _ := splcommon.TerminalReason(err)
+			fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, msg, fresh.GetGeneration())
+		} else {
+			fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
+		}
+		if updateErr := r.Status().Update(ctx, fresh); updateErr != nil {
+			logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
+		}
+	}
 
 	return result, err
 }

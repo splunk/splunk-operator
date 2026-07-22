@@ -488,6 +488,26 @@ func TestValidateSmartStore(t *testing.T) {
 			},
 			wantErrCount: 4, // vol name required, vol endpoint/path required, idx name required, idx volumeName required
 		},
+		{
+			name: "duplicate volume names are invalid",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+					{Name: "vol1", Endpoint: "s3://other"},
+				},
+			},
+			wantErrCount: 1,
+		},
+		{
+			name: "unique volume names are valid",
+			smartStore: &enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+					{Name: "vol2", Endpoint: "s3://other"},
+				},
+			},
+			wantErrCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -523,6 +543,32 @@ func TestValidateAppFramework(t *testing.T) {
 					{Name: "vol1", Endpoint: "s3://bucket"},
 				},
 				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "vol1"}},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "app source missing volumeName and no defaults.volumeName is invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps"},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appSources[0].volumeName",
+		},
+		{
+			name: "app source with defaults.volumeName is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol1"},
+				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "source1", Location: "/apps"},
 				},
 			},
@@ -531,6 +577,8 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "app source without name",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "", Location: "/apps"},
 				},
@@ -540,6 +588,8 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "app source without location",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "source1", Location: ""},
 				},
@@ -620,6 +670,8 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "appSources - unique Location+Scope combinations are valid",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "source1", Location: "/apps1", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
 					{Name: "source2", Location: "/apps2", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
@@ -629,11 +681,56 @@ func TestValidateAppFramework(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name: "appSources - duplicate Location+Scope is invalid",
+			name: "appSources - same location+scope on different volumes is valid (P2 fix)",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket1"},
+					{Name: "vol2", Endpoint: "s3://bucket2"},
+				},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "source1", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol1"}},
 					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol2"}},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "appSources - same volume+location+scope is a duplicate",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol1"}},
+					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol1"}},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appSources[1]",
+		},
+		{
+			name: "appSources - same volume+location different scope is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol1"}},
+					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "cluster", VolName: "vol1"}},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "appSources - default volumeName resolved and checked for duplicate",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol1", Scope: "local"},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "source1", Location: "/apps"}, // effective: vol1,/apps,local
+					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "vol1", Scope: "local"}}, // explicit: vol1,/apps,local
 				},
 			},
 			wantErrCount: 1,
@@ -642,6 +739,8 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "appSources - same location different scope is valid",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "source1", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
 					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "cluster"}},
@@ -652,7 +751,8 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "appSources - uses defaults for scope uniqueness check",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
-				Defaults: enterpriseApi.AppSourceDefaultSpec{Scope: "local"},
+				VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol"},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "source1", Location: "/apps"}, // uses default scope
 					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}}, // explicit same scope
@@ -664,6 +764,8 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "appSources - multiple duplicates",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{Name: "source1", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
 					{Name: "source2", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local"}},
@@ -676,6 +778,7 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "premiumApps scope with premiumAppsProps.type is valid",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{
 						Name:     "esApps",
@@ -683,6 +786,7 @@ func TestValidateAppFramework(t *testing.T) {
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 							Scope:            "premiumApps",
 							PremiumAppsProps: enterpriseApi.PremiumAppsProps{Type: "enterpriseSecurity"},
+							VolName:          "vol",
 						},
 					},
 				},
@@ -692,6 +796,8 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "premiumApps scope without premiumAppsProps.type is invalid",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{
 						Name:     "esApps",
@@ -708,8 +814,10 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "premiumApps scope with premiumAppsProps.type from defaults is valid",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
 				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					PremiumAppsProps: enterpriseApi.PremiumAppsProps{Type: "enterpriseSecurity"},
+					VolName:          "vol",
 				},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{
@@ -726,8 +834,10 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "premiumApps scope from defaults without premiumAppsProps.type is invalid",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
 				Defaults: enterpriseApi.AppSourceDefaultSpec{
-					Scope: "premiumApps",
+					Scope:   "premiumApps",
+					VolName: "vol",
 				},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{
@@ -742,14 +852,211 @@ func TestValidateAppFramework(t *testing.T) {
 		{
 			name: "non-premiumApps scope without premiumAppsProps is valid",
 			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
 				AppSources: []enterpriseApi.AppSourceSpec{
 					{
 						Name:     "localApps",
 						Location: "/apps",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							Scope: "local",
+							Scope:   "local",
+							VolName: "vol",
 						},
 					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		// duplicate volume name tests
+		{
+			name: "duplicate volume names are invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket1"},
+					{Name: "vol1", Endpoint: "s3://bucket2"},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.volumes[1].name",
+		},
+		{
+			name: "unique volume names are valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket1"},
+					{Name: "vol2", Endpoint: "s3://bucket2"},
+				},
+			},
+			wantErrCount: 0,
+		},
+		// scope value validation tests
+		{
+			name: "invalid scope value is rejected",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "src", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "invalid-scope"}},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appSources[0].scope",
+		},
+		{
+			name: "cluster scope is valid for cluster-aware CR",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "src", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "cluster"}},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "invalid defaults.scope value is rejected",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{Scope: "bogus"},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.defaults.scope",
+		},
+		// duplicate app source name tests
+		{
+			name: "appSources - duplicate names are invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "shared", Location: "/apps1", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "vol1"}},
+					{Name: "shared", Location: "/apps2", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "vol1"}},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appSources[1].name",
+		},
+		{
+			name: "appSources - unique names are valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "src-a", Location: "/apps1", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "vol1"}},
+					{Name: "src-b", Location: "/apps2", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "vol1"}},
+				},
+			},
+			wantErrCount: 0,
+		},
+		// appSources[].volName reference tests
+		{
+			name: "appSources - volName references existing volume",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "src", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "vol1"}},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "appSources - volName references non-existent volume",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "src", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "nonexistent"}},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.appSources[0].volumeName",
+		},
+		{
+			name: "appSources - defaults.volName references non-existent volume",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket"},
+				},
+				Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "missing"},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.defaults.volumeName",
+		},
+		// provider/type mismatch tests
+		{
+			name: "volume - aws provider with s3 type is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket", Type: "s3", Provider: "aws"},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "volume - minio provider with s3 type is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "http://minio:9000", Type: "s3", Provider: "minio"},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "volume - azure provider with blob type is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "https://account.blob.core.windows.net", Type: "blob", Provider: "azure"},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "volume - gcp provider with gcs type is valid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "gs://bucket", Type: "gcs", Provider: "gcp"},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "volume - aws provider with blob type is invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket", Type: "blob", Provider: "aws"},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.volumes[0].storageType",
+		},
+		{
+			name: "volume - azure provider with s3 type is invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "https://account.blob.core.windows.net", Type: "s3", Provider: "azure"},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.volumes[0].storageType",
+		},
+		{
+			name: "volume - gcp provider with blob type is invalid",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "gs://bucket", Type: "blob", Provider: "gcp"},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appFramework.volumes[0].storageType",
+		},
+		{
+			name: "volume - no provider set skips mismatch check",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "vol1", Endpoint: "s3://bucket", Type: "s3"},
 				},
 			},
 			wantErrCount: 0,
@@ -758,7 +1065,7 @@ func TestValidateAppFramework(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			errs := validateAppFramework(tt.appConfig, field.NewPath("spec").Child("appFramework"))
+			errs := validateAppFramework(tt.appConfig, field.NewPath("spec").Child("appFramework"), false)
 
 			if len(errs) != tt.wantErrCount {
 				t.Errorf("validateAppFramework() got %d errors, want %d", len(errs), tt.wantErrCount)
@@ -777,6 +1084,107 @@ func TestValidateAppFramework(t *testing.T) {
 				}
 				if !found {
 					t.Errorf("validateAppFramework() expected error on field %s", tt.wantErrField)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateAppFrameworkLocalOrPremiumScope(t *testing.T) {
+	tests := []struct {
+		name         string
+		appConfig    *enterpriseApi.AppFrameworkSpec
+		wantErrCount int
+		wantErrField string
+	}{
+		{
+			name: "local scope is valid for local-only CR",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "src", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol"}},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "premiumApps scope is valid for local-only CR",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "src",
+						Location: "/apps",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							Scope:            "premiumApps",
+							PremiumAppsProps: enterpriseApi.PremiumAppsProps{Type: "enterpriseSecurity"},
+							VolName:          "vol",
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "cluster scope is invalid for local-only CR",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "src", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "cluster", VolName: "vol"}},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appRepo.appSources[0].scope",
+		},
+		{
+			name: "clusterWithPreConfig scope is invalid for local-only CR",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "src", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "clusterWithPreConfig", VolName: "vol"}},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appRepo.appSources[0].scope",
+		},
+		{
+			name: "cluster defaults.scope is invalid for local-only CR",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{Scope: "cluster"},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appRepo.defaults.scope",
+		},
+		{
+			name: "local defaults.scope is valid for local-only CR",
+			appConfig: &enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{Scope: "local"},
+			},
+			wantErrCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateAppFramework(tt.appConfig, field.NewPath("spec").Child("appRepo"), true)
+
+			if len(errs) != tt.wantErrCount {
+				t.Errorf("validateAppFramework(localOrPremiumScope=true) got %d errors, want %d", len(errs), tt.wantErrCount)
+				for _, e := range errs {
+					t.Logf("  error: %s", e.Error())
+				}
+			}
+
+			if tt.wantErrField != "" && len(errs) > 0 {
+				found := false
+				for _, e := range errs {
+					if e.Field == tt.wantErrField {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("validateAppFramework(localOrPremiumScope=true) expected error on field %s", tt.wantErrField)
 				}
 			}
 		})

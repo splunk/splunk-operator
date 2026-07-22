@@ -88,7 +88,7 @@ func TestValidateClusterManagerCreate(t *testing.T) {
 							{Name: "appvol", Endpoint: "s3://apps"},
 						},
 						AppSources: []enterpriseApi.AppSourceSpec{
-							{Name: "apps", Location: "/apps"},
+							{Name: "apps", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "appvol"}},
 						},
 					},
 				},
@@ -100,6 +100,8 @@ func TestValidateClusterManagerCreate(t *testing.T) {
 			obj: &enterpriseApi.ClusterManager{
 				Spec: enterpriseApi.ClusterManagerSpec{
 					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+						Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 						AppSources: []enterpriseApi.AppSourceSpec{
 							{Name: "", Location: "/apps"},
 						},

@@ -68,6 +68,10 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
+		if termErr := splctrl.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
+			logger.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
+			return enterpriseApi.PhaseError, termErr
+		}
 		logger.InfoContext(ctx, "SearchHeadCluster is not ready", "error", err)
 		// A scale up/down can already be underway even while captain election
 		// is in flight (e.g. the member being recycled was the captain). Report
