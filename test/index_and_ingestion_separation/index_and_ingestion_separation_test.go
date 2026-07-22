@@ -194,19 +194,17 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// Update IndexerCluster refs
 			idxc := &enterpriseApi.IndexerCluster{}
 			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-idxc", idxc)).To(Succeed(), "Failed to get IndexerCluster")
-			idxc.Spec.QueueRef = v1.ObjectReference{Name: q2.Name}
-			idxc.Spec.ObjectStorageRef = v1.ObjectReference{Name: os2.Name}
+			idxc.Spec.QueueRef = &v1.ObjectReference{Name: q2.Name}
+			idxc.Spec.ObjectStorageRef = &v1.ObjectReference{Name: os2.Name}
 			Expect(deployment.UpdateCR(ctx, idxc)).To(Succeed(), "Unable to update IndexerCluster CR with new refs")
 			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "IndexerCluster not ready after ref update")
 
-			// Verify applied refs match the new values
+			// Both IngestorCluster and IndexerCluster now deliver SmartBus config declaratively
+			// via content-addressed ConfigMap (structural) + Secret (credentials). A ref change
+			// produces new resource names and rolls the pods — verified via conf files below.
+			// Neither CR tracks applied refs in status any more; readiness is the signal.
 			Expect(deployment.GetInstance(ctx, ingest.Name, ingest)).To(Succeed(), "Failed to re-fetch IngestorCluster")
-			Expect(ingest.Status.AppliedQueueRef.Name).To(Equal(q2.Name), "IngestorCluster applied queue ref mismatch")
-			Expect(ingest.Status.AppliedObjectStorageRef.Name).To(Equal(os2.Name), "IngestorCluster applied object storage ref mismatch")
-
-			Expect(deployment.GetInstance(ctx, idxc.Name, idxc)).To(Succeed(), "Failed to re-fetch IndexerCluster")
-			Expect(idxc.Status.AppliedQueueRef.Name).To(Equal(q2.Name), "IndexerCluster applied queue ref mismatch")
-			Expect(idxc.Status.AppliedObjectStorageRef.Name).To(Equal(os2.Name), "IndexerCluster applied object storage ref mismatch")
+			Expect(testenv.VerifyCRConditionsForPhase("IngestorCluster", ingest.Name, ingest.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "IngestorCluster not ready after ref update")
 
 			// Verify conf files reflect the new v2 queue configuration
 			expectedV2 := []string{
@@ -220,13 +218,13 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			pods := testenv.DumpGetPods(deployment.GetName())
 			for _, pod := range pods {
 				if strings.Contains(pod, "ingest") || strings.Contains(pod, "idxc") {
-					outputsConf, err := testenv.GetConfFile(pod, "opt/splunk/etc/system/local/outputs.conf", deployment.GetName())
+					outputsConf, err := testenv.GetConfFile(pod, smartBusConfPath(pod, "outputs.conf"), deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get outputs.conf from pod %s", pod)
 					Expect(testenv.ValidateContent(outputsConf, expectedV2, true)).To(Succeed(), "outputs.conf on %s missing v2 queue config", pod)
 					Expect(testenv.ValidateContent(outputsConf, oldQueueStale, false)).To(Succeed(), "outputs.conf on %s still contains old queue config", pod)
 				}
 				if strings.Contains(pod, "idxc") {
-					inputsConf, err := testenv.GetConfFile(pod, "opt/splunk/etc/system/local/inputs.conf", deployment.GetName())
+					inputsConf, err := testenv.GetConfFile(pod, smartBusConfPath(pod, "inputs.conf"), deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get inputs.conf from pod %s", pod)
 					Expect(testenv.ValidateContent(inputsConf, expectedV2, true)).To(Succeed(), "inputs.conf on %s missing v2 queue config", pod)
 					Expect(testenv.ValidateContent(inputsConf, oldQueueStale, false)).To(Succeed(), "inputs.conf on %s still contains old queue config", pod)
@@ -249,18 +247,23 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			ingest := &enterpriseApi.IngestorCluster{}
 			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)).To(Succeed(), "Failed to get instance of Ingestor Cluster")
 
-			// Verify Ingestor Cluster Status
+			// Verify Ingestor Cluster Status. SmartBus config and credentials are now
+			// delivered declaratively via a content-addressed ConfigMap + Secret, so
+			// readiness is the signal that the mounted config was applied.
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(testenv.VerifyCredentialSecretVersion(ingest.Status.CredentialSecretVersion, "Ingestor")).To(Succeed(), "Ingestor credential secret version invalid")
+			Expect(testenv.VerifyCRConditionsForPhase("IngestorCluster", ingest.Name, ingest.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "IngestorCluster conditions not met at initial setup")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
 			index := &enterpriseApi.IndexerCluster{}
 			Expect(deployment.GetInstance(ctx, deployment.GetName()+"-idxc", index)).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
-			// Verify Indexer Cluster Status
+			// Verify Indexer Cluster Status. The IndexerCluster no longer tracks a credential
+			// secret version in status: SmartBus config and credentials are delivered
+			// declaratively via a content-addressed ConfigMap + Secret, so readiness is the
+			// signal that the mounted config was applied.
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(testenv.VerifyCredentialSecretVersion(index.Status.CredentialSecretVersion, "Indexer")).To(Succeed(), "Indexer credential secret version invalid")
+			Expect(testenv.VerifyCRConditionsForPhase("IndexerCluster", index.Name, index.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "IndexerCluster conditions not met")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")
@@ -269,11 +272,11 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 				defaultsConf := ""
 
 				if strings.Contains(pod, "ingest") || strings.Contains(pod, "idxc") {
-					// Verify outputs.conf
-					Expect(testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/outputs.conf", deployment.GetName(), outputs, "Failed to get outputs.conf from Ingestor Cluster pod")).To(Succeed(), "outputs.conf verification failed")
+					// Verify outputs.conf (indexer: declarative 100-sok/local; ingestor: imperative system/local)
+					Expect(testenv.VerifyConfFileContent(pod, smartBusConfPath(pod, "outputs.conf"), deployment.GetName(), outputs, "Failed to get outputs.conf from pod")).To(Succeed(), "outputs.conf verification failed")
 
-					// Verify default-mode.conf
-					Expect(testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/default-mode.conf", deployment.GetName(), defaultsAll, "Failed to get default-mode.conf from Ingestor Cluster pod")).To(Succeed(), "default-mode.conf verification failed")
+					// Verify default-mode.conf (always system/local — SOK leaves the pipeline conf in the default directory)
+					Expect(testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/default-mode.conf", deployment.GetName(), defaultsAll, "Failed to get default-mode.conf from pod")).To(Succeed(), "default-mode.conf verification failed")
 
 					// Verify AWS env variables
 					testcaseEnvInst.Log.Info("Verify AWS env variables")
@@ -287,8 +290,8 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 					testcaseEnvInst.Log.Info("Verify default-mode.conf")
 					Expect(testenv.ValidateContent(defaultsConf, defaultsIngest, true)).To(Succeed(), "default-mode.conf validation failed")
 				} else if strings.Contains(pod, "idxc") {
-					// Verify inputs.conf
-					Expect(testenv.VerifyConfFileContent(pod, "opt/splunk/etc/system/local/inputs.conf", deployment.GetName(), inputs, "Failed to get inputs.conf from Indexer Cluster pod")).To(Succeed(), "inputs.conf verification failed")
+					// Verify inputs.conf (indexer: declarative 100-sok/local)
+					Expect(testenv.VerifyConfFileContent(pod, smartBusConfPath(pod, "inputs.conf"), deployment.GetName(), inputs, "Failed to get inputs.conf from Indexer Cluster pod")).To(Succeed(), "inputs.conf verification failed")
 				}
 			}
 
@@ -297,3 +300,13 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 		})
 	})
 })
+
+// smartBusConfPath returns the on-pod path of a SmartBus conf file for the given pod.
+//
+// Both IngestorCluster and IndexerCluster deliver their structural SmartBus config declaratively
+// through a content-addressed ConfigMap mounted via SPLUNK_DEFAULTS_URL, which splunk-ansible
+// renders into the dedicated app directory 100-sok/local. Credentials (access_key/secret_key)
+// live separately in 101-sok-creds/local and are not asserted here.
+func smartBusConfPath(_, confFile string) string {
+	return "opt/splunk/etc/apps/100-sok/local/" + confFile
+}

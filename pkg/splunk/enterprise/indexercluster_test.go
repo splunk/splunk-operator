@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"strings"
 	"testing"
@@ -33,11 +34,11 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -49,6 +50,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -196,12 +198,20 @@ func TestApplyIndexerCluster(t *testing.T) {
 	listOpts1 := []client.ListOption{
 		client.InNamespace("test"),
 	}
+	// GarbageCollectConfigMaps / GarbageCollectSecrets scope their List by the CR-ownership
+	// labels server-side, so their ListOpts carry a MatchingLabels selector.
+	listOpts2 := []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels{resources.LabelCRName: "stack1", resources.LabelCRKind: "IndexerCluster"},
+	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts},
 		{ListOpts: listOpts1},
+		{ListOpts: listOpts2},
+		{ListOpts: listOpts2},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[1]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "List": {listmockCall[0], listmockCall[1]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[1], listmockCall[2], listmockCall[3]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "List": {listmockCall[0], listmockCall[1], listmockCall[2], listmockCall[3]}}
 
 	current := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -1405,7 +1415,7 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: enterpriseApi.IndexerClusterSpec{
-			QueueRef: corev1.ObjectReference{
+			QueueRef: &corev1.ObjectReference{
 				Name: queue.Name,
 			},
 		},
@@ -1942,6 +1952,9 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: "splunk-test-indexer-headless",
+			Selector: &metav1.LabelSelector{
+				MatchLabels: getSplunkLabels("test", SplunkIndexer, "test"),
+			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -2139,385 +2152,6 @@ func TestImageUpdatedTo9(t *testing.T) {
 	}
 }
 
-func TestGetQueueAndPipelineInputsForIndexerConfFiles(t *testing.T) {
-	provider := "sqs_smartbus"
-
-	queue := &enterpriseApi.Queue{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Queue",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "queue",
-		},
-		Spec: enterpriseApi.QueueSpec{
-			Provider: "sqs",
-			SQS: enterpriseApi.SQSSpec{
-				Name:       "test-queue",
-				AuthRegion: "us-west-2",
-				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-				DLQ:        "sqs-dlq-test",
-				VolList: []enterpriseApi.SQSVolumeSpec{
-					{SecretRef: "secret"},
-				},
-			},
-		},
-	}
-
-	os := &enterpriseApi.ObjectStorage{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ObjectStorage",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "os",
-		},
-		Spec: enterpriseApi.ObjectStorageSpec{
-			Provider: "s3",
-			S3: enterpriseApi.S3Spec{
-				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "bucket/key",
-			},
-		},
-	}
-
-	key := "key"
-	secret := "secret"
-
-	queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getQueueAndPipelineInputsForIndexerConfFiles(&queue.Spec, &os.Spec, key, secret)
-	assert.Equal(t, 10, len(queueChangedFieldsInputs))
-	assert.Equal(t, [][]string{
-		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
-		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
-		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
-		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
-	}, queueChangedFieldsInputs)
-
-	assert.Equal(t, 12, len(queueChangedFieldsOutputs))
-	assert.Equal(t, [][]string{
-		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
-		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
-		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
-		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
-		{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
-		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
-	}, queueChangedFieldsOutputs)
-
-	assert.Equal(t, 5, len(pipelineChangedFields))
-	assert.Equal(t, [][]string{
-		{"pipeline:remotequeueruleset", "disabled", "false"},
-		{"pipeline:ruleset", "disabled", "true"},
-		{"pipeline:remotequeuetyping", "disabled", "false"},
-		{"pipeline:remotequeueoutput", "disabled", "false"},
-		{"pipeline:typing", "disabled", "true"},
-	}, pipelineChangedFields)
-}
-
-func TestGetQueueAndPipelineInputsForIndexerConfFilesSQSCP(t *testing.T) {
-	provider := "sqs_smartbus_cp"
-
-	queue := &enterpriseApi.Queue{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Queue",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "queue",
-		},
-		Spec: enterpriseApi.QueueSpec{
-			Provider: "sqs_cp",
-			SQS: enterpriseApi.SQSSpec{
-				Name:       "test-queue",
-				AuthRegion: "us-west-2",
-				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-				DLQ:        "sqs-dlq-test",
-				VolList: []enterpriseApi.SQSVolumeSpec{
-					{SecretRef: "secret"},
-				},
-			},
-		},
-	}
-
-	os := &enterpriseApi.ObjectStorage{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ObjectStorage",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "os",
-		},
-		Spec: enterpriseApi.ObjectStorageSpec{
-			Provider: "s3",
-			S3: enterpriseApi.S3Spec{
-				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "bucket/key",
-			},
-		},
-	}
-
-	key := "key"
-	secret := "secret"
-
-	queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getQueueAndPipelineInputsForIndexerConfFiles(&queue.Spec, &os.Spec, key, secret)
-	assert.Equal(t, 10, len(queueChangedFieldsInputs))
-	assert.Equal(t, [][]string{
-		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
-		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
-		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
-		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
-	}, queueChangedFieldsInputs)
-
-	assert.Equal(t, 12, len(queueChangedFieldsOutputs))
-	assert.Equal(t, [][]string{
-		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
-		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
-		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
-		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
-		{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
-		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
-	}, queueChangedFieldsOutputs)
-
-	assert.Equal(t, 5, len(pipelineChangedFields))
-	assert.Equal(t, [][]string{
-		{"pipeline:remotequeueruleset", "disabled", "false"},
-		{"pipeline:ruleset", "disabled", "true"},
-		{"pipeline:remotequeuetyping", "disabled", "false"},
-		{"pipeline:remotequeueoutput", "disabled", "false"},
-		{"pipeline:typing", "disabled", "true"},
-	}, pipelineChangedFields)
-}
-
-func TestUpdateIndexerConfFiles(t *testing.T) {
-	c := spltest.NewMockClient()
-	ctx := context.TODO()
-
-	// Object definitions
-	provider := "sqs_smartbus"
-
-	accessKey := "accessKey"
-	secretKey := "secretKey"
-
-	queue := &enterpriseApi.Queue{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Queue",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "queue",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.QueueSpec{
-			Provider: "sqs",
-			SQS: enterpriseApi.SQSSpec{
-				Name:       "test-queue",
-				AuthRegion: "us-west-2",
-				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-				DLQ:        "sqs-dlq-test",
-			},
-		},
-	}
-	c.Create(ctx, queue)
-
-	os := enterpriseApi.ObjectStorage{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ObjectStorage",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "os",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ObjectStorageSpec{
-			Provider: "s3",
-			S3: enterpriseApi.S3Spec{
-				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "bucket/key",
-			},
-		},
-	}
-	c.Create(ctx, &os)
-
-	cr := &enterpriseApi.IndexerCluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "IndexerCluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.IndexerClusterSpec{
-			QueueRef: corev1.ObjectReference{
-				Name: queue.Name,
-			},
-			ObjectStorageRef: corev1.ObjectReference{
-				Name:      os.Name,
-				Namespace: os.Namespace,
-			},
-		},
-		Status: enterpriseApi.IndexerClusterStatus{
-			ReadyReplicas:           3,
-			CredentialSecretVersion: "123",
-		},
-	}
-	c.Create(ctx, cr)
-
-	pod0 := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-indexer-0",
-			Namespace: "test",
-			Labels: map[string]string{
-				"app.kubernetes.io/instance": "splunk-test-indexer",
-			},
-		},
-		Spec: corev1.PodSpec{
-			Volumes: []corev1.Volume{
-				{
-					Name: "dummy-volume",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-				{
-					Name: "mnt-splunk-secrets",
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName: "test-secrets",
-						},
-					},
-				},
-			},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{
-				{Ready: true},
-			},
-		},
-	}
-
-	pod1 := pod0.DeepCopy()
-	pod1.ObjectMeta.Name = "splunk-test-indexer-1"
-
-	pod2 := pod0.DeepCopy()
-	pod2.ObjectMeta.Name = "splunk-test-indexer-2"
-
-	c.Create(ctx, pod0)
-	c.Create(ctx, pod1)
-	c.Create(ctx, pod2)
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secrets",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{
-			"password": []byte("dummy"),
-		},
-	}
-
-	// Negative test case: secret not found
-	mgr := &indexerClusterPodManager{}
-	err := mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
-	assert.NotNil(t, err)
-
-	// Mock secret
-	c.Create(ctx, secret)
-
-	mockHTTPClient := &spltest.MockHTTPClient{}
-
-	// Negative test case: failure in creating remote queue stanza
-	mgr = newTestIndexerQueuePipelineManager(mockHTTPClient)
-
-	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
-	assert.NotNil(t, err)
-
-	// outputs.conf
-	propertyKVList := [][]string{
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
-		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
-	}
-	propertyKVListOutputs := propertyKVList
-
-	propertyKVListOutputs = append(propertyKVListOutputs, []string{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"})
-	propertyKVListOutputs = append(propertyKVListOutputs, []string{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"})
-
-	body := buildFormBody(propertyKVListOutputs)
-	addRemoteQueueHandlersForIndexer(mockHTTPClient, cr, &queue.Spec, "conf-outputs", body)
-
-	// Negative test case: failure in creating remote queue stanza
-	mgr = newTestIndexerQueuePipelineManager(mockHTTPClient)
-
-	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
-	assert.NotNil(t, err)
-
-	// inputs.conf
-	body = buildFormBody(propertyKVList)
-	addRemoteQueueHandlersForIndexer(mockHTTPClient, cr, &queue.Spec, "conf-inputs", body)
-
-	// Negative test case: failure in updating remote queue stanza
-	mgr = newTestIndexerQueuePipelineManager(mockHTTPClient)
-
-	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
-	assert.NotNil(t, err)
-
-	// default-mode.conf
-	propertyKVList = [][]string{
-		{"pipeline:remotequeueruleset", "disabled", "false"},
-		{"pipeline:ruleset", "disabled", "true"},
-		{"pipeline:remotequeuetyping", "disabled", "false"},
-		{"pipeline:remotequeueoutput", "disabled", "false"},
-		{"pipeline:typing", "disabled", "true"},
-	}
-
-	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
-		podName := fmt.Sprintf("splunk-test-indexer-%d", i)
-		baseURL := fmt.Sprintf("https://%s.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName)
-
-		for _, field := range propertyKVList {
-			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
-			mockHTTPClient.AddHandler(req, 200, "", nil)
-
-			updateURL := fmt.Sprintf("%s/%s", baseURL, field[0])
-			req, _ = http.NewRequest("POST", updateURL, strings.NewReader(fmt.Sprintf("%s=%s", field[1], field[2])))
-			mockHTTPClient.AddHandler(req, 200, "", nil)
-		}
-	}
-
-	mgr = newTestIndexerQueuePipelineManager(mockHTTPClient)
-
-	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
-	assert.Nil(t, err)
-}
-
 func buildFormBody(pairs [][]string) string {
 	var b strings.Builder
 	for i, kv := range pairs {
@@ -2530,272 +2164,6 @@ func buildFormBody(pairs [][]string) string {
 		}
 	}
 	return b.String()
-}
-
-func addRemoteQueueHandlersForIndexer(mockHTTPClient *spltest.MockHTTPClient, cr *enterpriseApi.IndexerCluster, queue *enterpriseApi.QueueSpec, confName, body string) {
-	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
-		podName := fmt.Sprintf("splunk-%s-indexer-%d", cr.GetName(), i)
-		baseURL := fmt.Sprintf(
-			"https://%s.splunk-%s-indexer-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/%s",
-			podName, cr.GetName(), cr.GetNamespace(), confName,
-		)
-
-		createReqBody := fmt.Sprintf("name=%s", fmt.Sprintf("remote_queue:%s", queue.SQS.Name))
-		reqCreate, _ := http.NewRequest("POST", baseURL, strings.NewReader(createReqBody))
-		mockHTTPClient.AddHandler(reqCreate, 200, "", nil)
-
-		updateURL := fmt.Sprintf("%s/%s", baseURL, fmt.Sprintf("remote_queue:%s", queue.SQS.Name))
-		reqUpdate, _ := http.NewRequest("POST", updateURL, strings.NewReader(body))
-		mockHTTPClient.AddHandler(reqUpdate, 200, "", nil)
-	}
-}
-
-func newTestIndexerQueuePipelineManager(mockHTTPClient *spltest.MockHTTPClient) *indexerClusterPodManager {
-	newSplunkClientForQueuePipeline = func(uri, user, pass string) *splclient.SplunkClient {
-		return &splclient.SplunkClient{
-			ManagementURI: uri,
-			Username:      user,
-			Password:      pass,
-			Client:        mockHTTPClient,
-		}
-	}
-	return &indexerClusterPodManager{
-		newSplunkClient: newSplunkClientForQueuePipeline,
-	}
-}
-
-func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
-	ctx := context.TODO()
-
-	scheme := runtime.NewScheme()
-	_ = enterpriseApi.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	c := newFakeClientBuilder(scheme).Build()
-
-	// Object definitions
-	queue := &enterpriseApi.Queue{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Queue",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "queue",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.QueueSpec{
-			Provider: "sqs",
-			SQS: enterpriseApi.SQSSpec{
-				Name:       "test-queue",
-				AuthRegion: "us-west-2",
-				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-				DLQ:        "sqs-dlq-test",
-			},
-		},
-	}
-	c.Create(ctx, queue)
-
-	os := &enterpriseApi.ObjectStorage{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ObjectStorage",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "os",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ObjectStorageSpec{
-			Provider: "s3",
-			S3: enterpriseApi.S3Spec{
-				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "bucket/key",
-			},
-		},
-	}
-	c.Create(ctx, os)
-
-	cm := &enterpriseApi.ClusterManager{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cm",
-			Namespace: "test",
-		},
-		Status: enterpriseApi.ClusterManagerStatus{
-			Phase: enterpriseApi.PhaseReady,
-		},
-	}
-	c.Create(ctx, cm)
-
-	cr := &enterpriseApi.IndexerCluster{
-		TypeMeta: metav1.TypeMeta{Kind: "IndexerCluster"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.IndexerClusterSpec{
-			Replicas: 1,
-			QueueRef: corev1.ObjectReference{
-				Name:      queue.Name,
-				Namespace: queue.Namespace,
-			},
-			ObjectStorageRef: corev1.ObjectReference{
-				Name:      os.Name,
-				Namespace: os.Namespace,
-			},
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				ClusterManagerRef: corev1.ObjectReference{
-					Name: "cm",
-				},
-				Mock: true,
-			},
-		},
-		Status: enterpriseApi.IndexerClusterStatus{
-			Phase: enterpriseApi.PhaseReady,
-		},
-	}
-	c.Create(ctx, cr)
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secrets",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{
-			"password": []byte("dummy"),
-		},
-	}
-	c.Create(ctx, secret)
-
-	cmPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-cm-cluster-manager-0",
-			Namespace: "test",
-		},
-		Spec: corev1.PodSpec{
-			Volumes: []corev1.Volume{
-				{
-					Name: "mnt-splunk-secrets",
-					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
-						SecretName: "test-secrets",
-					}},
-				},
-			},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{
-				{Ready: true},
-			},
-		},
-	}
-	c.Create(ctx, cmPod)
-
-	pod0 := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-indexer-0",
-			Namespace: "test",
-			Labels: map[string]string{
-				"app.kubernetes.io/instance": "splunk-test-indexer",
-			},
-		},
-		Spec: corev1.PodSpec{
-			Volumes: []corev1.Volume{
-				{
-					Name: "dummy-volume",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-				{
-					Name: "mnt-splunk-secrets",
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName: "test-secrets",
-						},
-					},
-				},
-			},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{
-				{Ready: true},
-			},
-		},
-	}
-	c.Create(ctx, pod0)
-
-	replicas := int32(1)
-	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-indexer",
-			Namespace: "test",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
-		},
-		Status: appsv1.StatefulSetStatus{
-			Replicas:        1,
-			ReadyReplicas:   1,
-			UpdatedReplicas: 1,
-		},
-	}
-	c.Create(ctx, sts)
-
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-indexer-headless",
-			Namespace: "test",
-		},
-	}
-	c.Create(ctx, svc)
-
-	// outputs.conf
-	mockHTTPClient := &spltest.MockHTTPClient{}
-
-	base := "https://splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs"
-	q := "remote_queue:test-queue"
-
-	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-outputs", base), "name="+q), 200, "", nil)
-	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-outputs/%s", base, q), ""), 200, "", nil)
-
-	// inputs.conf
-	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-inputs", base), "name="+q), 200, "", nil)
-	mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-inputs/%s", base, q), ""), 200, "", nil)
-
-	// default-mode.conf
-	pipelineFields := []string{
-		"pipeline:remotequeueruleset",
-		"pipeline:ruleset",
-		"pipeline:remotequeuetyping",
-		"pipeline:remotequeueoutput",
-		"pipeline:typing",
-	}
-	for range pipelineFields {
-		mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
-		mockHTTPClient.AddHandler(mustReq(t, "POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
-	}
-
-	res, err := ApplyIndexerCluster(ctx, c, cr)
-	assert.NotNil(t, res)
-	assert.Nil(t, err)
-}
-
-func mustReq(t *testing.T, method, url, body string) *http.Request {
-	t.Helper()
-	var r *http.Request
-	var err error
-	if body != "" {
-		r, err = http.NewRequest(method, url, strings.NewReader(body))
-	} else {
-		r, err = http.NewRequest(method, url, nil)
-	}
-	if err != nil {
-		t.Fatalf("failed to create HTTP request: %v", err)
-	}
-	return r
 }
 
 func TestPasswordSyncCompleted(t *testing.T) {
@@ -3456,7 +2824,232 @@ func (m *mockEventRecorder) AnnotatedEventf(object pkgruntime.Object, annotation
 	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: fmt.Sprintf(messageFmt, args...)})
 }
 
-func TestIdxcQueueConfigUpdatedIndexersRestartedEvents(t *testing.T) {
+// --- Declarative SmartBus credential delivery -------------------------------
+//
+// SmartBus queue/pipeline config (structural) is delivered through a
+// content-addressed ConfigMap, and the static access_key/secret_key credentials
+// through a separate content-addressed Secret. Both are mounted and joined into
+// SPLUNK_DEFAULTS_URL, so a change to either produces a new resource name and the
+// StatefulSet update path rolls the pods. The tests below assert that declarative
+// behavior, replacing the old imperative REST/restart path.
+
+// newQueueOSFixture creates a Queue, ObjectStorage, and the referenced credentials
+// Secret in the fake client, returning them for use by the reconciler tests.
+func newQueueOSFixture(t *testing.T, ctx context.Context, c client.Client, queueName, credsSecretName string) (*enterpriseApi.Queue, *enterpriseApi.ObjectStorage) {
+	t.Helper()
+
+	credsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: credsSecretName, Namespace: "test"},
+		Data: map[string][]byte{
+			"s3_access_key": []byte("AKIAEXAMPLE"),
+			"s3_secret_key": []byte("shhh-secret"),
+		},
+	}
+	require.NoError(t, c.Create(ctx, credsSecret))
+
+	queue := &enterpriseApi.Queue{
+		ObjectMeta: metav1.ObjectMeta{Name: queueName, Namespace: "test"},
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs",
+			SQS: enterpriseApi.SQSSpec{
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
+				VolList:    []enterpriseApi.SQSVolumeSpec{{SecretRef: credsSecretName}},
+			},
+		},
+	}
+	require.NoError(t, c.Create(ctx, queue))
+
+	os := &enterpriseApi.ObjectStorage{
+		ObjectMeta: metav1.ObjectMeta{Name: "os", Namespace: "test"},
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3: enterpriseApi.S3Spec{
+				Endpoint: "https://s3.us-west-2.amazonaws.com",
+				Path:     "bucket/key",
+			},
+		},
+	}
+	require.NoError(t, c.Create(ctx, os))
+
+	return queue, os
+}
+
+// listCredsSecrets returns the SOK credentials Secrets owned by the given IndexerCluster.
+func listCredsSecrets(t *testing.T, ctx context.Context, c client.Client, crName string) []corev1.Secret {
+	t.Helper()
+	var all corev1.SecretList
+	require.NoError(t, c.List(ctx, &all, client.InNamespace("test")))
+	var owned []corev1.Secret
+	for _, s := range all.Items {
+		if s.Labels[resources.LabelCRKind] == "IndexerCluster" &&
+			s.Labels[resources.LabelCRName] == crName {
+			owned = append(owned, s)
+		}
+	}
+	return owned
+}
+
+// TestEnsureIndexerCredentialsSecret_CreatesMountsAndRotates exercises the declarative
+// credentials path directly: a queueRef with a static credentials secret yields a
+// content-addressed Secret that mounts into the StatefulSet and is joined into
+// SPLUNK_DEFAULTS_URL; rotating the source credentials yields a new Secret name.
+func TestEnsureIndexerCredentialsSecret_CreatesMountsAndRotates(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(appsv1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	c := newFakeClientBuilder(sch).Build()
+
+	queue, os := newQueueOSFixture(t, ctx, c, "queue", "queue-secrets")
+
+	cr := &enterpriseApi.IndexerCluster{
+		// Kind mirrors the reconciler, which sets cr.Kind before calling
+		// ensureIndexerDefaults; the defaults resource names embed it.
+		TypeMeta:   metav1.TypeMeta{Kind: "IndexerCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas:         3,
+			QueueRef:         &corev1.ObjectReference{Name: queue.Name},
+			ObjectStorageRef: &corev1.ObjectReference{Name: os.Name},
+		},
+	}
+
+	// A queueRef with static credentials produces a non-empty, content-addressed Secret.
+	_, credsSecret, err := ensureIndexerDefaults(ctx, c, cr)
+	require.NoError(t, err)
+	require.NotEmpty(t, credsSecret.Name, "credentials Secret should be created when static creds are present")
+	assert.Regexp(t, regexp.MustCompile(`^sok-indexercluster-creds-[0-9a-f]{6}$`), credsSecret.Name)
+
+	var stored corev1.Secret
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: credsSecret.Name}, &stored))
+	require.NotNil(t, stored.Immutable)
+	assert.True(t, *stored.Immutable, "credentials Secret must be immutable")
+
+	// The Secret mounts into the pod and joins SPLUNK_DEFAULTS_URL.
+	ss := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk"}}},
+			},
+		},
+	}
+	credsSecret.AsStatefulSetOption()(ss)
+	require.Len(t, ss.Spec.Template.Spec.Volumes, 1)
+	require.NotNil(t, ss.Spec.Template.Spec.Volumes[0].Secret)
+	assert.Equal(t, credsSecret.Name, ss.Spec.Template.Spec.Volumes[0].Secret.SecretName)
+	require.Len(t, ss.Spec.Template.Spec.Containers[0].VolumeMounts, 1)
+
+	var defaultsURL string
+	for _, e := range ss.Spec.Template.Spec.Containers[0].Env {
+		if e.Name == "SPLUNK_DEFAULTS_URL" {
+			defaultsURL = e.Value
+		}
+	}
+	assert.Contains(t, defaultsURL, resources.SecretMountPath(), "creds mount path must be joined into SPLUNK_DEFAULTS_URL")
+
+	// Rotating the source credentials produces a different Secret name (rolls pods).
+	rotated := &corev1.Secret{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: "queue-secrets"}, rotated))
+	rotated.Data["s3_secret_key"] = []byte("rotated-secret")
+	require.NoError(t, c.Update(ctx, rotated))
+
+	_, rotatedSecret, err := ensureIndexerDefaults(ctx, c, cr)
+	require.NoError(t, err)
+	assert.NotEqual(t, credsSecret.Name, rotatedSecret.Name, "rotated credentials must produce a new Secret name")
+}
+
+// TestEnsureIndexerCredentialsSecret_NoQueueRef verifies no Secret is produced when
+// SmartBus is not configured.
+func TestEnsureIndexerCredentialsSecret_NoQueueRef(t *testing.T) {
+	ctx := context.TODO()
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	c := newFakeClientBuilder(sch).Build()
+
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+		Spec:       enterpriseApi.IndexerClusterSpec{Replicas: 1},
+	}
+
+	_, credsSecret, err := ensureIndexerDefaults(ctx, c, cr)
+	require.NoError(t, err)
+	assert.Empty(t, credsSecret.Name, "no queueRef → no credentials Secret")
+}
+
+// TestEnsureIndexerCredentialsSecret_IRSAProducesNoStaticCreds verifies that when the Queue
+// has no VolList (IRSA / workload identity), ResolveQueueAndObjectStorage leaves the keys
+// empty and no static-credential Secret is produced.
+func TestEnsureIndexerCredentialsSecret_IRSAProducesNoStaticCreds(t *testing.T) {
+	ctx := context.TODO()
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(appsv1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	c := newFakeClientBuilder(sch).Build()
+
+	// Queue with no VolList — simulates IRSA / workload identity where no static creds exist.
+	irsaQueue := &enterpriseApi.Queue{
+		ObjectMeta: metav1.ObjectMeta{Name: "irsa-queue", Namespace: "test"},
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs",
+			SQS: enterpriseApi.SQSSpec{
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
+				// VolList intentionally empty — IRSA uses pod identity, not static creds.
+			},
+		},
+	}
+	require.NoError(t, c.Create(ctx, irsaQueue))
+
+	objStorage := &enterpriseApi.ObjectStorage{
+		ObjectMeta: metav1.ObjectMeta{Name: "irsa-os", Namespace: "test"},
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3: enterpriseApi.S3Spec{
+				Endpoint: "https://s3.us-west-2.amazonaws.com",
+				Path:     "bucket/key",
+			},
+		},
+	}
+	require.NoError(t, c.Create(ctx, objStorage))
+
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas: 1,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ServiceAccount: "irsa-sa",
+			},
+			QueueRef:         &corev1.ObjectReference{Name: irsaQueue.Name},
+			ObjectStorageRef: &corev1.ObjectReference{Name: objStorage.Name},
+		},
+	}
+
+	_, credsSecret, err := ensureIndexerDefaults(ctx, c, cr)
+	require.NoError(t, err)
+	assert.Empty(t, credsSecret.Name, "no VolList → no static credentials Secret")
+}
+
+// TestApplyIndexerClusterManager_QueueCredsSecretLifecycle drives the full manager
+// reconciler and asserts that (1) a credentials Secret is created and mounted on the
+// indexer StatefulSet, and (2) rotating the source credentials creates a new Secret and
+// garbage-collects the stale one — the declarative replacement for the old
+// QueueConfigUpdated/IndexersRestarted imperative path.
+func TestApplyIndexerClusterManager_QueueCredsSecretLifecycle(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
@@ -3494,84 +3087,37 @@ func TestIdxcQueueConfigUpdatedIndexersRestartedEvents(t *testing.T) {
 	utilruntime.Must(appsv1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := newFakeClientBuilder(sch).
+	c := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
-		WithStatusSubresource(&enterpriseApi.IndexerCluster{})
-	c := builder.Build()
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		Build()
 
 	probeConfigMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-probe-configmap",
-			Namespace: "test",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-test-probe-configmap", Namespace: "test"},
 	}
-	_ = c.Create(ctx, probeConfigMap)
+	require.NoError(t, c.Create(ctx, probeConfigMap))
 
 	cm := &enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{Name: "manager1", Namespace: "test"},
 		Status:     enterpriseApi.ClusterManagerStatus{Phase: enterpriseApi.PhaseReady},
 	}
-	_ = c.Create(ctx, cm)
-	_ = c.Status().Update(ctx, cm)
+	require.NoError(t, c.Create(ctx, cm))
+	require.NoError(t, c.Status().Update(ctx, cm))
 
-	queueSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "queue-secrets", Namespace: "test"},
-		Data: map[string][]byte{
-			"s3_access_key": []byte("access"),
-			"s3_secret_key": []byte("secret"),
-		},
-	}
-	_ = c.Create(ctx, queueSecret)
-
-	queue := &enterpriseApi.Queue{
-		ObjectMeta: metav1.ObjectMeta{Name: "queue", Namespace: "test"},
-		Spec: enterpriseApi.QueueSpec{
-			Provider: "sqs",
-			SQS: enterpriseApi.SQSSpec{
-				Name:       "test-queue",
-				AuthRegion: "us-west-2",
-				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-				DLQ:        "sqs-dlq-test",
-				VolList: []enterpriseApi.SQSVolumeSpec{
-					{SecretRef: "queue-secrets"},
-				},
-			},
-		},
-	}
-	_ = c.Create(ctx, queue)
-
-	objStorage := &enterpriseApi.ObjectStorage{
-		ObjectMeta: metav1.ObjectMeta{Name: "os", Namespace: "test"},
-		Spec: enterpriseApi.ObjectStorageSpec{
-			Provider: "s3",
-			S3: enterpriseApi.S3Spec{
-				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "bucket/key",
-			},
-		},
-	}
-	_ = c.Create(ctx, objStorage)
+	queue, os := newQueueOSFixture(t, ctx, c, "queue", "queue-secrets")
 
 	passwordSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-secrets", Namespace: "test"},
 		Data:       map[string][]byte{"password": []byte("dummy")},
 	}
-	_ = c.Create(ctx, passwordSecret)
+	require.NoError(t, c.Create(ctx, passwordSecret))
 
 	cmPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-manager1-cluster-manager-0",
-			Namespace: "test",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-manager1-cluster-manager-0", Namespace: "test"},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
 			Volumes: []corev1.Volume{
-				{
-					Name: "mnt-splunk-secrets",
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{SecretName: "test-secrets"},
-					},
-				},
+				{Name: "mnt-splunk-secrets", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "test-secrets"}}},
 			},
 		},
 		Status: corev1.PodStatus{
@@ -3579,24 +3125,19 @@ func TestIdxcQueueConfigUpdatedIndexersRestartedEvents(t *testing.T) {
 			ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
 		},
 	}
-	_ = c.Create(ctx, cmPod)
+	require.NoError(t, c.Create(ctx, cmPod))
 
 	cmReplicas := int32(1)
 	cmSts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkClusterManager, "manager1"),
-			Namespace: "test",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: GetSplunkStatefulsetName(SplunkClusterManager, "manager1"), Namespace: "test"},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &cmReplicas,
 			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
-				},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}}},
 			},
 		},
 	}
-	_ = c.Create(ctx, cmSts)
+	require.NoError(t, c.Create(ctx, cmSts))
 
 	crName := "stack1"
 	cr := &enterpriseApi.IndexerCluster{
@@ -3604,22 +3145,15 @@ func TestIdxcQueueConfigUpdatedIndexersRestartedEvents(t *testing.T) {
 		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 3,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Mock: true,
-				ClusterManagerRef: corev1.ObjectReference{
-					Name: "manager1",
-				},
-				ServiceAccount: "",
+				Mock:              true,
+				ClusterManagerRef: corev1.ObjectReference{Name: "manager1"},
 			},
-			QueueRef:         corev1.ObjectReference{Name: "queue"},
-			ObjectStorageRef: corev1.ObjectReference{Name: "os"},
+			QueueRef:         &corev1.ObjectReference{Name: queue.Name},
+			ObjectStorageRef: &corev1.ObjectReference{Name: os.Name},
 		},
-		Status: enterpriseApi.IndexerClusterStatus{
-			ReadyReplicas:           0,
-			CredentialSecretVersion: "0",
-			ServiceAccount:          "",
-		},
+		Status: enterpriseApi.IndexerClusterStatus{ReadyReplicas: 0},
 	}
-	_ = c.Create(ctx, cr)
+	require.NoError(t, c.Create(ctx, cr))
 
 	threeReplicas := int32(3)
 	sts := &appsv1.StatefulSet{
@@ -3630,30 +3164,21 @@ func TestIdxcQueueConfigUpdatedIndexersRestartedEvents(t *testing.T) {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &threeReplicas,
 			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
-				},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}}},
 			},
 		},
 		Status: appsv1.StatefulSetStatus{
-			Replicas:        threeReplicas,
-			ReadyReplicas:   0,
-			CurrentRevision: "v1",
-			UpdateRevision:  "v1",
+			Replicas: threeReplicas, ReadyReplicas: 0,
+			CurrentRevision: "v1", UpdateRevision: "v1",
 		},
 	}
-	_ = c.Create(ctx, sts)
+	require.NoError(t, c.Create(ctx, sts))
 
 	basePod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
 			Volumes: []corev1.Volume{
-				{
-					Name: "mnt-splunk-secrets",
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{SecretName: "test-secrets"},
-					},
-				},
+				{Name: "mnt-splunk-secrets", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "test-secrets"}}},
 			},
 		},
 		Status: corev1.PodStatus{
@@ -3671,118 +3196,76 @@ func TestIdxcQueueConfigUpdatedIndexersRestartedEvents(t *testing.T) {
 				"controller-revision-hash":   "v1",
 			},
 		}
-		_ = c.Create(ctx, pod)
+		require.NoError(t, c.Create(ctx, pod))
 	}
 
-	mockHTTPClient := &spltest.MockHTTPClient{}
-	body := ""
-	crForHandlers := cr.DeepCopy()
-	crForHandlers.Status.ReadyReplicas = 3
-	addRemoteQueueHandlersForIndexer(mockHTTPClient, crForHandlers, &queue.Spec, "conf-outputs", body)
-	addRemoteQueueHandlersForIndexer(mockHTTPClient, crForHandlers, &queue.Spec, "conf-inputs", body)
-	for i := 0; i < int(crForHandlers.Status.ReadyReplicas); i++ {
-		podName := fmt.Sprintf("splunk-%s-indexer-%d", crForHandlers.GetName(), i)
-		baseURL := fmt.Sprintf(
-			"https://%s.splunk-%s-indexer-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode",
-			podName, crForHandlers.GetName(), crForHandlers.GetNamespace(),
-		)
-		for _, field := range getPipelineInputsForConfFile(true) {
-			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
-			mockHTTPClient.AddHandler(req, 200, "", nil)
-			updateURL := fmt.Sprintf("%s/%s", baseURL, field[0])
-			req, _ = http.NewRequest("POST", updateURL, strings.NewReader(fmt.Sprintf("%s=%s", field[1], field[2])))
-			mockHTTPClient.AddHandler(req, 200, "", nil)
-		}
-		req, _ := http.NewRequest(
-			"POST",
-			fmt.Sprintf(
-				"https://%s.splunk-%s-indexer-headless.%s.svc.cluster.local:8089/services/server/control/restart",
-				podName, crForHandlers.GetName(), crForHandlers.GetNamespace(),
-			),
-			nil,
-		)
-		mockHTTPClient.AddHandler(req, 200, "", nil)
-	}
-
-	var peersBuilder strings.Builder
-	peersBuilder.WriteString(`{"entry":[`)
-	for i := int32(0); i < threeReplicas; i++ {
-		if i > 0 {
-			peersBuilder.WriteString(",")
-		}
-		peersBuilder.WriteString(fmt.Sprintf(`{"content":{"label":"splunk-%s-indexer-%d"}}`, crForHandlers.GetName(), i))
-	}
-	peersBuilder.WriteString(`]}`)
-	peersBody := peersBuilder.String()
-
-	mockHTTPClient.AddHandlers(
-		spltest.MockHTTPHandler{
-			Method: "GET",
-			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
-			Status: 200,
-			Body:   loadFixture(t, "indexer_cluster_pod_manager_info.json"),
-		},
-		spltest.MockHTTPHandler{
-			Method: "GET",
-			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
-			Status: 200,
-			Body:   peersBody,
-		},
-	)
-
-	oldNewIndexerClusterPodManager := newIndexerClusterPodManager
-	oldNewSplunkClientForQueuePipeline := newSplunkClientForQueuePipeline
-	defer func() {
-		newIndexerClusterPodManager = oldNewIndexerClusterPodManager
-		newSplunkClientForQueuePipeline = oldNewSplunkClientForQueuePipeline
-	}()
-
-	newSplunkClientForQueuePipeline = func(uri, user, pass string) *splclient.SplunkClient {
-		return &splclient.SplunkClient{ManagementURI: uri, Username: user, Password: pass, Client: mockHTTPClient}
-	}
-	newIndexerClusterPodManager = func(l *slog.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) indexerClusterPodManager {
-		return indexerClusterPodManager{
-			c:       c,
-			log:     l,
-			cr:      cr,
-			secrets: secret,
-			newSplunkClient: func(uri, user, pass string) *splclient.SplunkClient {
-				return &splclient.SplunkClient{ManagementURI: uri, Username: user, Password: pass, Client: mockHTTPClient}
-			},
-		}
-	}
-
+	// --- Pass 1: reconcile creates the credentials Secret and mounts it ---
 	_, err := ApplyIndexerClusterManager(ctx, c, cr)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	assert.NoError(t, c.Get(ctx, client.ObjectKey{Name: sts.GetName(), Namespace: sts.GetNamespace()}, sts))
-	sts.Status.Replicas = threeReplicas
-	sts.Status.ReadyReplicas = threeReplicas
-	sts.Status.UpdatedReplicas = threeReplicas
-	sts.Status.CurrentRevision = "v1"
-	sts.Status.UpdateRevision = "v1"
-	assert.NoError(t, c.Status().Update(ctx, sts))
+	credsList := listCredsSecrets(t, ctx, c, crName)
+	require.Len(t, credsList, 1, "reconcile must create exactly one credentials Secret")
+	firstName := credsList[0].Name
+	assert.Regexp(t, regexp.MustCompile(`^sok-indexercluster-creds-[0-9a-f]{6}$`), firstName)
 
-	cr.Status.ServiceAccount = ""
-	cr.Status.CredentialSecretVersion = "old"
-	_, err = ApplyIndexerClusterManager(ctx, c, cr)
-	assert.NoError(t, err)
-
-	queueUpdated := false
-	indexersRestarted := false
-	for _, event := range recorder.events {
-		if event.reason == "QueueConfigUpdated" {
-			queueUpdated = true
-		}
-		if event.reason == "IndexersRestarted" {
-			indexersRestarted = true
+	// The indexer StatefulSet mounts the credentials Secret and joins SPLUNK_DEFAULTS_URL.
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: sts.GetName(), Namespace: sts.GetNamespace()}, sts))
+	var mounted bool
+	for _, v := range sts.Spec.Template.Spec.Volumes {
+		if v.Secret != nil && v.Secret.SecretName == firstName {
+			mounted = true
 		}
 	}
-	assert.True(t, queueUpdated)
-	assert.True(t, indexersRestarted)
+	assert.True(t, mounted, "indexer StatefulSet must mount the credentials Secret")
+
+	var defaultsURL string
+	for _, e := range sts.Spec.Template.Spec.Containers[0].Env {
+		if e.Name == "SPLUNK_DEFAULTS_URL" {
+			defaultsURL = e.Value
+		}
+	}
+	assert.Contains(t, defaultsURL, resources.SecretMountPath(), "SPLUNK_DEFAULTS_URL must include the creds mount path")
+
+	// The declarative path emits no imperative queue-config / restart events.
+	for _, event := range recorder.events {
+		assert.NotEqual(t, "QueueConfigUpdated", event.reason, "declarative path must not emit QueueConfigUpdated")
+		assert.NotEqual(t, "IndexersRestarted", event.reason, "declarative path must not emit IndexersRestarted")
+	}
+
+	// --- Pass 2: rotate credentials → new Secret name, stale one garbage-collected ---
+	rotated := &corev1.Secret{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: "queue-secrets"}, rotated))
+	rotated.Data["s3_secret_key"] = []byte("rotated-secret")
+	require.NoError(t, c.Update(ctx, rotated))
+
+	_, err = ApplyIndexerClusterManager(ctx, c, cr)
+	require.NoError(t, err)
+
+	credsList = listCredsSecrets(t, ctx, c, crName)
+	require.Len(t, credsList, 1, "stale credentials Secret must be garbage-collected after rotation")
+	assert.NotEqual(t, firstName, credsList[0].Name, "rotated credentials must produce a new Secret name")
 }
 
-func TestIdxcRefChangeTriggersConfigUpdate(t *testing.T) {
+// listCredsConfigMaps returns the SOK defaults ConfigMaps owned by the given IndexerCluster.
+func listCredsConfigMaps(t *testing.T, ctx context.Context, c client.Client, crName string) []corev1.ConfigMap {
+	t.Helper()
+	var all corev1.ConfigMapList
+	require.NoError(t, c.List(ctx, &all, client.InNamespace("test")))
+	var owned []corev1.ConfigMap
+	for _, cm := range all.Items {
+		if cm.Labels[resources.LabelCRKind] == "IndexerCluster" &&
+			cm.Labels[resources.LabelCRName] == crName {
+			owned = append(owned, cm)
+		}
+	}
+	return owned
+}
+
+// TestIdxcQueueRefChangeRollsPodsDeclarative verifies the declarative replacement for the
+// old QueueConfigUpdated/IndexersRestarted imperative path: swapping QueueRef to a
+// different queue produces new content-addressed ConfigMap and Secret names (which causes
+// Kubernetes to roll pods via the StatefulSet template hash), and GC removes the stale ones.
+func TestIdxcQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
@@ -3807,7 +3290,7 @@ func TestIdxcRefChangeTriggersConfigUpdate(t *testing.T) {
 	}
 	GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
 		peers := map[string]splclient.ClusterManagerPeerInfo{}
-		for i := int32(0); i < 1; i++ {
+		for i := int32(0); i < 3; i++ {
 			peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), i)
 			peers[peerName] = splclient.ClusterManagerPeerInfo{ID: fmt.Sprintf("peer-%d", i), Status: "Up", Searchable: true}
 		}
@@ -3820,65 +3303,66 @@ func TestIdxcRefChangeTriggersConfigUpdate(t *testing.T) {
 	utilruntime.Must(appsv1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := newFakeClientBuilder(sch).
+	c := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
-		WithStatusSubresource(&enterpriseApi.IndexerCluster{})
-	c := builder.Build()
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		Build()
 
-	probeConfigMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-probe-configmap",
-			Namespace: "test",
-		},
-	}
-	_ = c.Create(ctx, probeConfigMap)
+	require.NoError(t, c.Create(ctx, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-test-probe-configmap", Namespace: "test"},
+	}))
 
 	cm := &enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{Name: "manager1", Namespace: "test"},
 		Status:     enterpriseApi.ClusterManagerStatus{Phase: enterpriseApi.PhaseReady},
 	}
-	_ = c.Create(ctx, cm)
-	_ = c.Status().Update(ctx, cm)
+	require.NoError(t, c.Create(ctx, cm))
+	require.NoError(t, c.Status().Update(ctx, cm))
+
+	// Two queues with distinct config so their content-addressed names differ.
+	credsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "queue-secrets", Namespace: "test"},
+		Data: map[string][]byte{
+			"s3_access_key": []byte("AKIAEXAMPLE"),
+			"s3_secret_key": []byte("shhh-secret"),
+		},
+	}
+	require.NoError(t, c.Create(ctx, credsSecret))
 
 	queueOld := &enterpriseApi.Queue{
 		ObjectMeta: metav1.ObjectMeta{Name: "queue-old", Namespace: "test"},
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:       "test-queue-old",
-				AuthRegion: "us-west-2",
-				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-				DLQ:        "sqs-dlq-old",
+				Name: "old-queue", AuthRegion: "us-west-2",
+				Endpoint: "https://sqs.us-west-2.amazonaws.com", DLQ: "old-dlq",
+				VolList: []enterpriseApi.SQSVolumeSpec{{SecretRef: "queue-secrets"}},
 			},
 		},
 	}
-	_ = c.Create(ctx, queueOld)
+	require.NoError(t, c.Create(ctx, queueOld))
 
 	queueNew := &enterpriseApi.Queue{
 		ObjectMeta: metav1.ObjectMeta{Name: "queue-new", Namespace: "test"},
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:       "test-queue-new",
-				AuthRegion: "us-east-1",
-				Endpoint:   "https://sqs.us-east-1.amazonaws.com",
-				DLQ:        "sqs-dlq-new",
+				Name: "new-queue", AuthRegion: "us-east-1",
+				Endpoint: "https://sqs.us-east-1.amazonaws.com", DLQ: "new-dlq",
+				VolList: []enterpriseApi.SQSVolumeSpec{{SecretRef: "queue-secrets"}},
 			},
 		},
 	}
-	_ = c.Create(ctx, queueNew)
+	require.NoError(t, c.Create(ctx, queueNew))
 
 	objStorage := &enterpriseApi.ObjectStorage{
 		ObjectMeta: metav1.ObjectMeta{Name: "os", Namespace: "test"},
 		Spec: enterpriseApi.ObjectStorageSpec{
 			Provider: "s3",
-			S3: enterpriseApi.S3Spec{
-				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "bucket/key",
-			},
+			S3:       enterpriseApi.S3Spec{Endpoint: "https://s3.us-west-2.amazonaws.com", Path: "bucket/key"},
 		},
 	}
-	_ = c.Create(ctx, objStorage)
+	require.NoError(t, c.Create(ctx, objStorage))
 
 	nsSecretName := splcommon.GetNamespaceScopedSecretName("test")
 	nsSecret := &corev1.Secret{
@@ -3891,275 +3375,346 @@ func TestIdxcRefChangeTriggersConfigUpdate(t *testing.T) {
 			"shc_secret":   []byte("dummyShcSecretLongEno"),
 		},
 	}
-	_ = c.Create(ctx, nsSecret)
+	require.NoError(t, c.Create(ctx, nsSecret))
 
-	passwordSecret := &corev1.Secret{
+	require.NoError(t, c.Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-secrets", Namespace: "test"},
 		Data: map[string][]byte{
 			"password":    []byte("dummyPasswordLongEnough"),
 			"idxc_secret": []byte("dummyIdxcSecretLongEn"),
 		},
-	}
-	_ = c.Create(ctx, passwordSecret)
+	}))
 
-	cmPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-manager1-cluster-manager-0",
-			Namespace: "test",
-		},
+	require.NoError(t, c.Create(ctx, &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-manager1-cluster-manager-0", Namespace: "test"},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
 			Volumes: []corev1.Volume{
 				{Name: "mnt-splunk-secrets", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "test-secrets"}}},
 			},
 		},
-		Status: corev1.PodStatus{
-			Phase:             corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
-		},
-	}
-	_ = c.Create(ctx, cmPod)
+		Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Ready: true}}},
+	}))
 
 	cmReplicas := int32(1)
-	cmSts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkClusterManager, "manager1"),
-			Namespace: "test",
-		},
+	require.NoError(t, c.Create(ctx, &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: GetSplunkStatefulsetName(SplunkClusterManager, "manager1"), Namespace: "test"},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &cmReplicas,
 			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
-				},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}}},
 			},
 		},
-	}
-	_ = c.Create(ctx, cmSts)
-
-	oldQueueRef := corev1.ObjectReference{Name: queueOld.Name}
-	newQueueRef := corev1.ObjectReference{Name: queueNew.Name}
-	osRef := corev1.ObjectReference{Name: objStorage.Name}
+	}))
 
 	crName := "test"
 	cr := &enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
 		Spec: enterpriseApi.IndexerClusterSpec{
-			Replicas: 1,
+			Replicas: 3,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Mock: true,
-				ClusterManagerRef: corev1.ObjectReference{
-					Name: "manager1",
-				},
-				ServiceAccount: "sa",
+				Mock:              true,
+				ClusterManagerRef: corev1.ObjectReference{Name: "manager1"},
 			},
-			QueueRef:         oldQueueRef,
-			ObjectStorageRef: osRef,
+			QueueRef:         &corev1.ObjectReference{Name: queueOld.Name},
+			ObjectStorageRef: &corev1.ObjectReference{Name: objStorage.Name},
 		},
+		// Pre-set to the NS secret's ResourceVersion so ApplyIdxcSecret sees a
+		// matching version and skips the pod exec loop (which fails in fake clients).
 		Status: enterpriseApi.IndexerClusterStatus{
-			ReadyReplicas:                  1,
-			Replicas:                       1,
-			ServiceAccount:                 "sa",
 			NamespaceSecretResourceVersion: nsSecret.ResourceVersion,
 		},
 	}
-	_ = c.Create(ctx, cr)
+	require.NoError(t, c.Create(ctx, cr))
 
-	oneReplica := int32(1)
+	threeReplicas := int32(3)
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkIndexer, cr.GetName()),
-			Namespace: cr.GetNamespace(),
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: GetSplunkStatefulsetName(SplunkIndexer, crName), Namespace: "test"},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &oneReplica,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"app.kubernetes.io/instance": "splunk-test-indexer"},
-			},
+			Replicas: &threeReplicas,
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app.kubernetes.io/instance": "splunk-test-indexer"},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
-				},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}}},
 			},
 		},
 		Status: appsv1.StatefulSetStatus{
-			Replicas: oneReplica, ReadyReplicas: oneReplica,
+			Replicas: threeReplicas, ReadyReplicas: threeReplicas,
 			CurrentRevision: "v1", UpdateRevision: "v1",
 		},
 	}
-	_ = c.Create(ctx, sts)
+	require.NoError(t, c.Create(ctx, sts))
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: GetSplunkStatefulsetPodName(SplunkIndexer, cr.GetName(), 0), Namespace: cr.GetNamespace(),
-			Labels: map[string]string{
-				"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIndexer, cr.GetName()),
-				"controller-revision-hash":   "v1",
-			},
-		},
+	basePod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
 			Volumes: []corev1.Volume{
 				{Name: "mnt-splunk-secrets", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "test-secrets"}}},
 			},
 		},
-		Status: corev1.PodStatus{
-			Phase:             corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
-		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Ready: true}}},
 	}
-	_ = c.Create(ctx, pod)
-
-	// --- Pass 1: settle the StatefulSet template ---
-	_, err := ApplyIndexerClusterManager(ctx, c, cr)
-	assert.NoError(t, err)
-
-	// --- Pass 2: STS matches → Ready; backfill applied refs (no restart) ---
-	mockHTTPClient := &spltest.MockHTTPClient{}
-	oldNewIdxcPodMgr := newIndexerClusterPodManager
-	oldNewSplunkQP := newSplunkClientForQueuePipeline
-	defer func() {
-		newIndexerClusterPodManager = oldNewIdxcPodMgr
-		newSplunkClientForQueuePipeline = oldNewSplunkQP
-	}()
-
-	newSplunkClientForQueuePipeline = func(uri, user, pass string) *splclient.SplunkClient {
-		return &splclient.SplunkClient{ManagementURI: uri, Username: user, Password: pass, Client: mockHTTPClient}
-	}
-	newIndexerClusterPodManager = func(l *slog.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) indexerClusterPodManager {
-		return indexerClusterPodManager{
-			c: c, log: l, cr: cr, secrets: secret,
-			newSplunkClient: func(uri, user, pass string) *splclient.SplunkClient {
-				return &splclient.SplunkClient{ManagementURI: uri, Username: user, Password: pass, Client: mockHTTPClient}
+	for i := int32(0); i < threeReplicas; i++ {
+		pod := basePod.DeepCopy()
+		pod.ObjectMeta = metav1.ObjectMeta{
+			Name: GetSplunkStatefulsetPodName(SplunkIndexer, crName, i), Namespace: "test",
+			Labels: map[string]string{
+				"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIndexer, crName),
+				"controller-revision-hash":   "v1",
 			},
 		}
+		require.NoError(t, c.Create(ctx, pod))
 	}
 
-	addIdxcQueueHandlers := func(queue *enterpriseApi.Queue) {
-		crForHandlers := cr.DeepCopy()
-		crForHandlers.Status.ReadyReplicas = oneReplica
-		addRemoteQueueHandlersForIndexer(mockHTTPClient, crForHandlers, &queue.Spec, "conf-outputs", "")
-		addRemoteQueueHandlersForIndexer(mockHTTPClient, crForHandlers, &queue.Spec, "conf-inputs", "")
-		for i := int32(0); i < oneReplica; i++ {
-			podName := GetSplunkStatefulsetPodName(SplunkIndexer, cr.GetName(), i)
-			baseURL := fmt.Sprintf(
-				"https://%s.splunk-%s-indexer-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode",
-				podName, cr.GetName(), cr.GetNamespace(),
-			)
-			for _, field := range getPipelineInputsForConfFile(true) {
-				req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
-				mockHTTPClient.AddHandler(req, 200, "", nil)
-				updateURL := fmt.Sprintf("%s/%s", baseURL, field[0])
-				req, _ = http.NewRequest("POST", updateURL, strings.NewReader(fmt.Sprintf("%s=%s", field[1], field[2])))
-				mockHTTPClient.AddHandler(req, 200, "", nil)
-			}
-			restartURL := fmt.Sprintf(
-				"https://%s.splunk-%s-indexer-headless.%s.svc.cluster.local:8089/services/server/control/restart",
-				podName, cr.GetName(), cr.GetNamespace(),
-			)
-			req, _ := http.NewRequest("POST", restartURL, nil)
-			mockHTTPClient.AddHandler(req, 200, "", nil)
-		}
-	}
+	// --- Pass 1: reconcile with old queue ---
+	_, err := ApplyIndexerClusterManager(ctx, c, cr)
+	require.NoError(t, err)
 
-	peersBuilder := strings.Builder{}
-	peersBuilder.WriteString(`{"entry":[`)
-	peersBuilder.WriteString(fmt.Sprintf(`{"content":{"label":"splunk-%s-indexer-0"}}`, cr.GetName()))
-	peersBuilder.WriteString(`]}`)
-	peersBody := peersBuilder.String()
+	cmListOld := listCredsConfigMaps(t, ctx, c, crName)
+	secretListOld := listCredsSecrets(t, ctx, c, crName)
+	require.Len(t, cmListOld, 1, "pass 1 must create exactly one defaults ConfigMap")
+	require.Len(t, secretListOld, 1, "pass 1 must create exactly one credentials Secret")
+	oldCMName := cmListOld[0].Name
+	oldSecretName := secretListOld[0].Name
+	assert.Regexp(t, regexp.MustCompile(`^sok-indexercluster-defaults-[0-9a-f]{6}$`), oldCMName)
+	assert.Regexp(t, regexp.MustCompile(`^sok-indexercluster-creds-[0-9a-f]{6}$`), oldSecretName)
 
-	mockHTTPClient.AddHandlers(
-		spltest.MockHTTPHandler{
-			Method: "GET",
-			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
-			Status: 200,
-			Body:   loadFixture(t, "indexer_cluster_pod_manager_info.json"),
-		},
-		spltest.MockHTTPHandler{
-			Method: "GET",
-			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
-			Status: 200,
-			Body:   peersBody,
-		},
-	)
-
-	assert.NoError(t, c.Get(ctx, client.ObjectKey{Name: sts.GetName(), Namespace: sts.GetNamespace()}, sts))
-	sts.Status.Replicas = oneReplica
-	sts.Status.ReadyReplicas = oneReplica
-	sts.Status.UpdatedReplicas = oneReplica
-	sts.Status.CurrentRevision = "v1"
-	sts.Status.UpdateRevision = "v1"
-	assert.NoError(t, c.Status().Update(ctx, sts))
-
-	_, err = ApplyIndexerClusterManager(ctx, c, cr)
-	assert.NoError(t, err)
-	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
-	assert.Equal(t, oldQueueRef, cr.Status.AppliedQueueRef, "backfill should set applied ref from spec")
+	// The declarative path emits no imperative queue-config / restart events.
 	for _, event := range recorder.events {
-		assert.NotEqual(t, "QueueConfigUpdated", event.reason, "backfill must not trigger config update")
-		assert.NotEqual(t, "IndexersRestarted", event.reason, "backfill must not trigger restart")
+		assert.NotEqual(t, "QueueConfigUpdated", event.reason, "declarative path must not emit QueueConfigUpdated")
+		assert.NotEqual(t, "IndexersRestarted", event.reason, "declarative path must not emit IndexersRestarted")
 	}
 
-	// --- Pass 3: swap queueRef → config update + restart must fire ---
+	// --- Pass 2: swap QueueRef to a queue with different config ---
 	recorder.events = []mockEvent{}
-	cr.Spec.QueueRef = newQueueRef
-
-	assert.NoError(t, c.Get(ctx, client.ObjectKey{Name: sts.GetName(), Namespace: sts.GetNamespace()}, sts))
-	sts.Status.Replicas = oneReplica
-	sts.Status.ReadyReplicas = oneReplica
-	sts.Status.UpdatedReplicas = oneReplica
-	sts.Status.CurrentRevision = "v1"
-	sts.Status.UpdateRevision = "v1"
-	assert.NoError(t, c.Status().Update(ctx, sts))
-
-	mockHTTPClient.AddHandlers(
-		spltest.MockHTTPHandler{
-			Method: "GET",
-			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
-			Status: 200,
-			Body:   loadFixture(t, "indexer_cluster_pod_manager_info.json"),
-		},
-		spltest.MockHTTPHandler{
-			Method: "GET",
-			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
-			Status: 200,
-			Body:   peersBody,
-		},
-	)
-	addIdxcQueueHandlers(queueNew)
+	cr.Spec.QueueRef = &corev1.ObjectReference{Name: queueNew.Name}
 
 	_, err = ApplyIndexerClusterManager(ctx, c, cr)
-	assert.NoError(t, err)
-	// A ref change restarts every indexer, so the CR must report Updating (not
-	// Ready) until the pods come back, otherwise callers observe a Ready->Updating flip.
-	assert.Equal(t, enterpriseApi.PhaseUpdating, cr.Status.Phase)
+	require.NoError(t, err)
 
-	queueUpdated := false
-	indexersRestarted := false
+	// New queue config → new content-addressed names.
+	cmListNew := listCredsConfigMaps(t, ctx, c, crName)
+	secretListNew := listCredsSecrets(t, ctx, c, crName)
+	require.Len(t, cmListNew, 1, "stale defaults ConfigMap must be garbage-collected after queue ref change")
+	require.Len(t, secretListNew, 1, "stale credentials Secret must be garbage-collected after queue ref change")
+	assert.NotEqual(t, oldCMName, cmListNew[0].Name, "new queue config must produce a new ConfigMap name")
+	assert.NotEqual(t, oldSecretName, secretListNew[0].Name, "new queue config must produce a new Secret name")
+
+	// Still no imperative events on the ref-change pass.
 	for _, event := range recorder.events {
-		if event.reason == "QueueConfigUpdated" {
-			queueUpdated = true
-		}
-		if event.reason == "IndexersRestarted" {
-			indexersRestarted = true
-		}
+		assert.NotEqual(t, "QueueConfigUpdated", event.reason, "declarative path must not emit QueueConfigUpdated on ref change")
+		assert.NotEqual(t, "IndexersRestarted", event.reason, "declarative path must not emit IndexersRestarted on ref change")
 	}
-	assert.True(t, queueUpdated, "expected QueueConfigUpdated event on ref change")
-	assert.True(t, indexersRestarted, "expected IndexersRestarted event on ref change")
-	assert.Equal(t, newQueueRef, cr.Status.AppliedQueueRef, "applied ref should match spec after update")
-	assert.Equal(t, osRef, cr.Status.AppliedObjectStorageRef, "applied OS ref should match spec after update")
+}
 
-	// --- Pass 4: clear queueRef → must be rejected with PhaseError ---
-	recorder.events = []mockEvent{}
-	cr.Spec.QueueRef = corev1.ObjectReference{}
-	cr.Spec.ObjectStorageRef = corev1.ObjectReference{}
+// TestIdxcQueueRefRemovedGCsResources verifies that clearing QueueRef (setting it to nil)
+// after a queue was previously configured garbage-collects the stale ConfigMap and Secret
+// without creating new ones.
+func TestIdxcQueueRefRemovedGCsResources(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	ctx := context.TODO()
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	oldVerifyRFPeers := VerifyRFPeers
+	defer func() { VerifyRFPeers = oldVerifyRFPeers }()
+	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
+		return nil
+	}
+
+	oldGetCMInfo := GetClusterManagerInfoCall
+	oldGetCMPeers := GetClusterManagerPeersCall
+	defer func() {
+		GetClusterManagerInfoCall = oldGetCMInfo
+		GetClusterManagerPeersCall = oldGetCMPeers
+	}()
+	GetClusterManagerInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
+		return &splclient.ClusterManagerInfo{Initialized: true, IndexingReady: true, ServiceReady: true, MaintenanceMode: false}, nil
+	}
+	GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+		peers := map[string]splclient.ClusterManagerPeerInfo{}
+		for i := int32(0); i < 3; i++ {
+			peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), i)
+			peers[peerName] = splclient.ClusterManagerPeerInfo{ID: fmt.Sprintf("peer-%d", i), Status: "Up", Searchable: true}
+		}
+		return peers, nil
+	}
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(appsv1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	c := newFakeClientBuilder(sch).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		Build()
+
+	require.NoError(t, c.Create(ctx, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-test-probe-configmap", Namespace: "test"},
+	}))
+
+	cm := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "manager1", Namespace: "test"},
+		Status:     enterpriseApi.ClusterManagerStatus{Phase: enterpriseApi.PhaseReady},
+	}
+	require.NoError(t, c.Create(ctx, cm))
+	require.NoError(t, c.Status().Update(ctx, cm))
+
+	credsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "queue-secrets", Namespace: "test"},
+		Data: map[string][]byte{
+			"s3_access_key": []byte("AKIAEXAMPLE"),
+			"s3_secret_key": []byte("shhh-secret"),
+		},
+	}
+	require.NoError(t, c.Create(ctx, credsSecret))
+
+	queue := &enterpriseApi.Queue{
+		ObjectMeta: metav1.ObjectMeta{Name: "queue-to-remove", Namespace: "test"},
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs",
+			SQS: enterpriseApi.SQSSpec{
+				Name: "my-queue", AuthRegion: "us-west-2",
+				Endpoint: "https://sqs.us-west-2.amazonaws.com", DLQ: "my-dlq",
+				VolList: []enterpriseApi.SQSVolumeSpec{{SecretRef: "queue-secrets"}},
+			},
+		},
+	}
+	require.NoError(t, c.Create(ctx, queue))
+
+	objStorage := &enterpriseApi.ObjectStorage{
+		ObjectMeta: metav1.ObjectMeta{Name: "os", Namespace: "test"},
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3:       enterpriseApi.S3Spec{Endpoint: "https://s3.us-west-2.amazonaws.com", Path: "bucket/key"},
+		},
+	}
+	require.NoError(t, c.Create(ctx, objStorage))
+
+	nsSecretName := splcommon.GetNamespaceScopedSecretName("test")
+	nsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: nsSecretName, Namespace: "test"},
+		Data: map[string][]byte{
+			"hec_token":    []byte("ABCDEF01-2345-6789-ABCD-EF0123456789"),
+			"password":     []byte("dummyPasswordLongEnough"),
+			"pass4SymmKey": []byte("dummyPass4SymmKeyLong"),
+			"idxc_secret":  []byte("dummyIdxcSecretLongEn"),
+			"shc_secret":   []byte("dummyShcSecretLongEno"),
+		},
+	}
+	require.NoError(t, c.Create(ctx, nsSecret))
+
+	require.NoError(t, c.Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secrets", Namespace: "test"},
+		Data: map[string][]byte{
+			"password":    []byte("dummyPasswordLongEnough"),
+			"idxc_secret": []byte("dummyIdxcSecretLongEn"),
+		},
+	}))
+
+	require.NoError(t, c.Create(ctx, &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-manager1-cluster-manager-0", Namespace: "test"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
+			Volumes: []corev1.Volume{
+				{Name: "mnt-splunk-secrets", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "test-secrets"}}},
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Ready: true}}},
+	}))
+
+	cmReplicas := int32(1)
+	require.NoError(t, c.Create(ctx, &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: GetSplunkStatefulsetName(SplunkClusterManager, "manager1"), Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &cmReplicas,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}}},
+			},
+		},
+	}))
+
+	crName := "test"
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas: 3,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock:              true,
+				ClusterManagerRef: corev1.ObjectReference{Name: "manager1"},
+			},
+			QueueRef:         &corev1.ObjectReference{Name: queue.Name},
+			ObjectStorageRef: &corev1.ObjectReference{Name: objStorage.Name},
+		},
+		Status: enterpriseApi.IndexerClusterStatus{
+			NamespaceSecretResourceVersion: nsSecret.ResourceVersion,
+		},
+	}
+	require.NoError(t, c.Create(ctx, cr))
+
+	threeReplicas := int32(3)
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: GetSplunkStatefulsetName(SplunkIndexer, crName), Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &threeReplicas,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}}},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas: threeReplicas, ReadyReplicas: threeReplicas,
+			CurrentRevision: "v1", UpdateRevision: "v1",
+		},
+	}
+	require.NoError(t, c.Create(ctx, sts))
+
+	basePod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
+			Volumes: []corev1.Volume{
+				{Name: "mnt-splunk-secrets", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "test-secrets"}}},
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Ready: true}}},
+	}
+	for i := int32(0); i < threeReplicas; i++ {
+		pod := basePod.DeepCopy()
+		pod.ObjectMeta = metav1.ObjectMeta{
+			Name: GetSplunkStatefulsetPodName(SplunkIndexer, crName, i), Namespace: "test",
+			Labels: map[string]string{
+				"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIndexer, crName),
+				"controller-revision-hash":   "v1",
+			},
+		}
+		require.NoError(t, c.Create(ctx, pod))
+	}
+
+	// --- Pass 1: reconcile with queue set ---
+	_, err := ApplyIndexerClusterManager(ctx, c, cr)
+	require.NoError(t, err)
+
+	require.Len(t, listCredsConfigMaps(t, ctx, c, crName), 1, "pass 1 must create exactly one defaults ConfigMap")
+	require.Len(t, listCredsSecrets(t, ctx, c, crName), 1, "pass 1 must create exactly one credentials Secret")
+
+	// --- Pass 2: remove QueueRef ---
+	cr.Spec.QueueRef = nil
+	cr.Spec.ObjectStorageRef = nil
 
 	_, err = ApplyIndexerClusterManager(ctx, c, cr)
-	assert.Error(t, err, "clearing refs after they were applied should return an error")
-	assert.Contains(t, err.Error(), "queueRef was cleared", "error should mention cleared queueRef")
-	assert.Equal(t, enterpriseApi.PhaseError, cr.Status.Phase, "phase should be Error after clearing refs")
-	assert.Equal(t, newQueueRef, cr.Status.AppliedQueueRef, "applied ref should be unchanged after rejected clear")
+	require.NoError(t, err)
+
+	assert.Empty(t, listCredsConfigMaps(t, ctx, c, crName), "removing QueueRef must GC the stale defaults ConfigMap")
+	assert.Empty(t, listCredsSecrets(t, ctx, c, crName), "removing QueueRef must GC the stale credentials Secret")
+
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: sts.GetName(), Namespace: sts.GetNamespace()}, sts))
+	var defaultsURL string
+	for _, e := range sts.Spec.Template.Spec.Containers[0].Env {
+		if e.Name == "SPLUNK_DEFAULTS_URL" {
+			defaultsURL = e.Value
+		}
+	}
+	assert.NotContains(t, defaultsURL, resources.DefaultsMountPath(), "SPLUNK_DEFAULTS_URL must not reference the removed defaults ConfigMap mount")
+	assert.NotContains(t, defaultsURL, resources.SecretMountPath(), "SPLUNK_DEFAULTS_URL must not reference the removed credentials Secret mount")
 }
