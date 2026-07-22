@@ -15,6 +15,8 @@
 
 package enterprise
 
+import "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+
 const (
 	// Normal event reasons
 	EventReasonScaledUp              = "ScaledUp"
@@ -42,10 +44,11 @@ const (
 	EventReasonDeleteFailed = "DeleteFailed"
 
 	// Warning event reasons — secrets & credentials
-	EventReasonSecretMissing      = "SecretMissing"
-	EventReasonSecretInvalid      = "SecretInvalid"
-	EventReasonSecretAccessFailed = "SecretAccessFailed"
-	EventReasonPasswordSyncFailed = "PasswordSyncFailed"
+	EventReasonSecretMissing       = "SecretMissing"
+	EventReasonSecretInvalid       = "SecretInvalid"
+	EventReasonSecretAccessFailed  = "SecretAccessFailed"
+	EventReasonPasswordSyncFailed  = "PasswordSyncFailed"
+	EventReasonCertSecretMalformed = certs.EventReasonCertSecretMalformed
 
 	// Warning event reasons — monitoring console
 	EventReasonMonitoringConsoleConfigFailed  = "MonitoringConsoleConfigFailed"
@@ -56,15 +59,18 @@ const (
 	EventReasonImageGetFailed                 = "ImageGetFailed"
 
 	// Warning event reasons — cluster operations
-	EventReasonRemoteVolumeKeyCheckFailed = "RemoteVolumeKeyCheckFailed"
-	EventReasonVerifyRFPeersFailed        = "VerifyRFPeersFailed"
-	EventReasonMaintenanceModeFailed      = "MaintenanceModeFailed"
-	EventReasonRetrieveCMSpecFailed       = "RetrieveCMSpecFailed"
-	EventReasonConfFileUpdateFailed       = "ConfFileUpdateFailed"
-	EventReasonBundlePushFailed           = "BundlePushFailed"
-	EventReasonPodExecFailed              = "PodExecFailed"
-	EventReasonScalingBlockedRF           = "ScalingBlockedRF"
-	EventReasonLicenseExpired             = "LicenseExpired"
+	EventReasonResolveQueueObjectStorageFailed = "ResolveQueueObjectStorageFailed"
+	EventReasonImmutableRefsModified           = "ImmutableRefsModified"
+	EventReasonEmptyClusterManagerRef          = "EmptyClusterManagerRef"
+	EventReasonRemoteVolumeKeyCheckFailed      = "RemoteVolumeKeyCheckFailed"
+	EventReasonVerifyRFPeersFailed             = "VerifyRFPeersFailed"
+	EventReasonMaintenanceModeFailed           = "MaintenanceModeFailed"
+	EventReasonRetrieveCMSpecFailed            = "RetrieveCMSpecFailed"
+	EventReasonConfFileUpdateFailed            = "ConfFileUpdateFailed"
+	EventReasonBundlePushFailed                = "BundlePushFailed"
+	EventReasonPodExecFailed                   = "PodExecFailed"
+	EventReasonScalingBlockedRF                = "ScalingBlockedRF"
+	EventReasonLicenseExpired                  = "LicenseExpired"
 
 	// Warning event reasons — upgrade
 	EventReasonUpgradeCheckFailed            = "UpgradeCheckFailed"

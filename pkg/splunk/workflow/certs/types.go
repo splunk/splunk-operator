@@ -14,7 +14,24 @@
 
 package certs
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
+)
+
+// ErrCertSecretMalformed is returned when a cert secret exists but is missing
+// a required key (tls.crt or tls.key). This is a user misconfiguration that
+// will not self-heal without manual remediation.
+type ErrCertSecretMalformed struct {
+	Namespace  string
+	SecretName string
+	MissingKey string
+}
+
+func (e *ErrCertSecretMalformed) Error() string {
+	return fmt.Sprintf("cert secret %s/%s is missing required key %q", e.Namespace, e.SecretName, e.MissingKey)
+}
 
 // CertificateRequester is an optional interface implemented by CR types whose
 // controllers need to inject cert references derived from other CR fields

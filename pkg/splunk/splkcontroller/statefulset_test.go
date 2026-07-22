@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -342,6 +343,155 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	newCtx := context.WithValue(context.TODO(), "errVal", "newVal")
 	_, err = UpdateStatefulSetPods(newCtx, c, statefulSet, &mgr, 3)
 
+}
+
+func TestCheckPodsForTerminalFailures(t *testing.T) {
+	ctx := context.TODO()
+
+	selectorLabels := map[string]string{"app": "splunk-stack1"}
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+		},
+	}
+	makeWaitingPod := func(name, containerName, reason string, isInit bool) *corev1.Pod {
+		cs := corev1.ContainerStatus{
+			Name:  containerName,
+			State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: reason, Message: "test message"}},
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", Labels: selectorLabels},
+		}
+		if isInit {
+			pod.Status.InitContainerStatuses = []corev1.ContainerStatus{cs}
+		} else {
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{cs}
+		}
+		return pod
+	}
+
+	// nil selector: should return nil without listing
+	ssNoSelector := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "x", Namespace: "test"}}
+	c := spltest.NewMockClient()
+	if err := checkPodsForTerminalFailures(ctx, c, ssNoSelector); err != nil {
+		t.Errorf("nil selector: expected nil, got %v", err)
+	}
+
+	// healthy pod: no terminal failures
+	c = spltest.NewMockClient()
+	healthyPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1-0", Namespace: "test", Labels: selectorLabels},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{Name: "splunk", Ready: true}},
+		},
+	}
+	c.AddObject(healthyPod)
+	if err := checkPodsForTerminalFailures(ctx, c, statefulSet); err != nil {
+		t.Errorf("healthy pod: expected nil, got %v", err)
+	}
+
+	// ErrImagePull on main container
+	c = spltest.NewMockClient()
+	c.AddObject(makeWaitingPod("splunk-stack1-0", "splunk", "ErrImagePull", false))
+	if err := checkPodsForTerminalFailures(ctx, c, statefulSet); err == nil {
+		t.Errorf("ErrImagePull: expected error, got nil")
+	}
+
+	// ImagePullBackOff on main container
+	c = spltest.NewMockClient()
+	c.AddObject(makeWaitingPod("splunk-stack1-0", "splunk", "ImagePullBackOff", false))
+	if err := checkPodsForTerminalFailures(ctx, c, statefulSet); err == nil {
+		t.Errorf("ImagePullBackOff: expected error, got nil")
+	}
+
+	// InvalidImageName on main container
+	c = spltest.NewMockClient()
+	c.AddObject(makeWaitingPod("splunk-stack1-0", "splunk", "InvalidImageName", false))
+	if err := checkPodsForTerminalFailures(ctx, c, statefulSet); err == nil {
+		t.Errorf("InvalidImageName: expected error, got nil")
+	}
+
+	// CreateContainerConfigError on init-container
+	c = spltest.NewMockClient()
+	c.AddObject(makeWaitingPod("splunk-stack1-0", "init", "CreateContainerConfigError", true))
+	if err := checkPodsForTerminalFailures(ctx, c, statefulSet); err == nil {
+		t.Errorf("CreateContainerConfigError on init-container: expected error, got nil")
+	}
+
+	// CreateContainerError on main container
+	c = spltest.NewMockClient()
+	c.AddObject(makeWaitingPod("splunk-stack1-0", "splunk", "CreateContainerError", false))
+	if err := checkPodsForTerminalFailures(ctx, c, statefulSet); err == nil {
+		t.Errorf("CreateContainerError: expected error, got nil")
+	}
+
+	// RunContainerError on main container
+	c = spltest.NewMockClient()
+	c.AddObject(makeWaitingPod("splunk-stack1-0", "splunk", "RunContainerError", false))
+	if err := checkPodsForTerminalFailures(ctx, c, statefulSet); err == nil {
+		t.Errorf("RunContainerError: expected error, got nil")
+	}
+
+	// Non-terminal waiting reason should not trigger an error
+	c = spltest.NewMockClient()
+	c.AddObject(makeWaitingPod("splunk-stack1-0", "splunk", "ContainerCreating", false))
+	if err := checkPodsForTerminalFailures(ctx, c, statefulSet); err != nil {
+		t.Errorf("ContainerCreating: expected nil, got %v", err)
+	}
+
+	// CrashLoopBackOff is deliberately NOT terminal for Splunk (pods can crash-loop
+	// during initial cluster formation before stabilising)
+	c = spltest.NewMockClient()
+	c.AddObject(makeWaitingPod("splunk-stack1-0", "splunk", "CrashLoopBackOff", false))
+	if err := checkPodsForTerminalFailures(ctx, c, statefulSet); err != nil {
+		t.Errorf("CrashLoopBackOff: expected nil (not terminal for Splunk), got %v", err)
+	}
+}
+
+func TestUpdateStatefulSetPods_TerminalFailure(t *testing.T) {
+	mgr := DefaultStatefulSetPodManager{}
+	var replicas int32 = 1
+	selectorLabels := map[string]string{"app": "splunk-stack1"}
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: 0, // pod not yet ready → triggers terminal check
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1-0", Namespace: "test", Labels: selectorLabels},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "splunk",
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{
+							Reason:  "ImagePullBackOff",
+							Message: "Back-off pulling image \"bad-image:notexist\"",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	phase, err := updateStatefulSetPodsTester(t, &mgr, statefulSet, 1, statefulSet, pod)
+	if err == nil {
+		t.Errorf("expected error for ImagePullBackOff pod, got nil")
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Errorf("expected PhaseError for ImagePullBackOff pod, got %s", phase)
+	}
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("expected TerminalError so controller-runtime does not requeue, got %T: %v", err, err)
+	}
 }
 
 func TestSetStatefulSetOwnerRef(t *testing.T) {

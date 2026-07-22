@@ -64,6 +64,52 @@ func TestValidateLicenseManagerCreate(t *testing.T) {
 			wantErrCount: 1,
 			wantErrField: "spec.etcVolumeStorageConfig.storageCapacity",
 		},
+		{
+			name: "valid license manager - app framework with local scope",
+			obj: &enterpriseApi.LicenseManager{
+				Spec: enterpriseApi.LicenseManagerSpec{
+					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList: []enterpriseApi.VolumeSpec{
+							{Name: "vol1", Endpoint: "s3://bucket"},
+						},
+						AppSources: []enterpriseApi.AppSourceSpec{
+							{Name: "src", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "local", VolName: "vol1"}},
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "invalid license manager - app framework with cluster scope",
+			obj: &enterpriseApi.LicenseManager{
+				Spec: enterpriseApi.LicenseManagerSpec{
+					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList: []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+						AppSources: []enterpriseApi.AppSourceSpec{
+							{Name: "src", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{Scope: "cluster", VolName: "vol"}},
+						},
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appRepo.appSources[0].scope",
+		},
+		{
+			name: "invalid license manager - app framework with duplicate volume names",
+			obj: &enterpriseApi.LicenseManager{
+				Spec: enterpriseApi.LicenseManagerSpec{
+					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList: []enterpriseApi.VolumeSpec{
+							{Name: "vol1", Endpoint: "s3://bucket1"},
+							{Name: "vol1", Endpoint: "s3://bucket2"},
+						},
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appRepo.volumes[1].name",
+		},
 	}
 
 	for _, tt := range tests {

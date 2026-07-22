@@ -31,6 +31,10 @@ const (
 	// Ansible reads from /mnt/tls/splunk-<role>-tls-cert/ regardless of the secret name.
 	RoleMountFmt = CertMountRoot + "/splunk-%s-tls-cert"
 
+	// EventReasonCertSecretMalformed is the machine-readable TerminalError reason used
+	// when a cert secret exists but is missing a required key (tls.crt or tls.key).
+	EventReasonCertSecretMalformed = "CertSecretMalformed"
+
 	// CertRevAnnotFmt is the pod annotation key format for cert rotation detection.
 	// Uses the enterprise.splunk.com prefix, consistent with other SOK annotations
 	// (e.g. enterprise.splunk.com/admin-managed-pv, enterprise.splunk.com/delete-pvc).

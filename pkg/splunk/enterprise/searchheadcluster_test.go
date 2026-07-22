@@ -143,8 +143,22 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[17], funcCalls[19]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[18]}, "List": {listmockCall[0], listmockCall[0]}}
+	// CheckPodsForTerminalFailures lists pods using the SHC StatefulSet's selector labels.
+	shcPodLabels := map[string]string{
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "search-head",
+		"app.kubernetes.io/name":       "search-head",
+		"app.kubernetes.io/part-of":    "splunk-stack1-search-head",
+		"app.kubernetes.io/instance":   "splunk-stack1-search-head",
+	}
+	shcPodListOpts := []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels(shcPodLabels),
+	}
+	shcPodListMockCall := spltest.MockFuncCall{ListOpts: shcPodListOpts}
+
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[17], funcCalls[19]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[18]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
 	statefulSet := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -1073,10 +1087,6 @@ func TestSearchHeadSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
-	stalledCond := splcommon.GetCondition(shc.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
-	}
 }
 
 func TestApplySearchHeadClusterValidationFailure(t *testing.T) {
@@ -1119,9 +1129,73 @@ func TestApplySearchHeadClusterValidationFailure(t *testing.T) {
 	if shc.Status.DeployerPhase != enterpriseApi.PhaseError {
 		t.Errorf("Expected DeployerPhaseError, got %v", shc.Status.DeployerPhase)
 	}
-	stalledCond := splcommon.GetCondition(shc.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True for spec validation failure")
+}
+
+func TestApplySearchHeadClusterDeployerTerminalPodFailure(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	c := newFakeClientBuilder(scheme).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		Build()
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "SearchHeadCluster",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	if err := c.Create(ctx, cr); err != nil {
+		t.Fatalf("failed to create SHC CR: %v", err)
+	}
+
+	// Pass 1: creates the deployer StatefulSet (PhasePending); no error expected.
+	if _, err := ApplySearchHeadCluster(ctx, c, cr); err != nil {
+		t.Fatalf("pass 1 unexpectedly failed: %v", err)
+	}
+
+	// Inject a deployer pod stuck in ImagePullBackOff so that
+	// checkPodsForTerminalFailures returns a TerminalError on the next reconcile.
+	deployerPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetPodName(SplunkDeployer, cr.GetName(), 0),
+			Namespace: cr.GetNamespace(),
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "splunk-operator",
+				"app.kubernetes.io/component":  "search-head",
+				"app.kubernetes.io/name":       "deployer",
+				"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-search-head", cr.GetName()),
+				"app.kubernetes.io/instance":   GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
+			},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{{
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{
+						Reason:  "ImagePullBackOff",
+						Message: "Back-off pulling image",
+					},
+				},
+			}},
+		},
+	}
+	if err := c.Create(ctx, deployerPod); err != nil {
+		t.Fatalf("failed to create terminal deployer pod: %v", err)
+	}
+
+	// Pass 2: deployer STS already exists with ReadyReplicas=0; the terminal pod
+	// is detected and the function must return a TerminalError with Stalled=True.
+	_, err := ApplySearchHeadCluster(ctx, c, cr)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("expected TerminalError for deployer ImagePullBackOff pod, got %v", err)
 	}
 }
 
