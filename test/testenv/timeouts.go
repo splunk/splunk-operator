@@ -169,6 +169,10 @@ const (
 	MediumLongSuiteTimeout = 150 * time.Minute
 
 	// LongSuiteTimeout for heavy suites:
-	// crcrud, m4appfw, c3appfw.
+	// crcrud, m4appfw.
 	LongSuiteTimeout = 225 * time.Minute
+
+	// SuiteTimeout180m for heavy suites that don't need the full
+	// LongSuiteTimeout budget: c3appfw.
+	SuiteTimeout180m = 180 * time.Minute
 )

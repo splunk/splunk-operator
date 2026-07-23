@@ -696,10 +696,13 @@ eks-smoke-managerappframework-c3-validation:
   extends:
     - .runtime-smoke-suite-job
     - .runtime-appframework-suite-job
+  timeout: 4h
   variables:
     WORKFLOW_SLUG: eks-smoke-managerappframework-c3-validation
     JOB_INT_TEST_LABELS: "tier:e2e-pr && sva:c3 && variant:manager && feature:appframework && cloud:aws"
     JOB_INT_CLUSTER_NODES: "2"
+    # SuiteTimeout180m (test/testenv/timeouts.go) + 15m buffer.
+    JOB_INT_TEST_TIMEOUT: 195m
 
 eks-smoke-managerappframework-m4-validation:
   extends:
