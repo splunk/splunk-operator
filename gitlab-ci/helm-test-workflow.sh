@@ -176,6 +176,10 @@ docker version
 aws --version
 log_step "versions:complete"
 
+# creds-helper selects DOCKER_CONFIG. Configure source auth first so the ECR
+# login below is written to the same Docker config.
+login_enterprise_source_registry_if_needed "${SPLUNK_ENTERPRISE_IMAGE}"
+
 log_step "registry:ecr-login ${ECR_REGISTRY}"
 aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 log_step "registry:ecr-login:complete"
@@ -183,8 +187,8 @@ log_step "registry:ecr-login:complete"
 mirror_operator_image_to_ecr_if_needed
 
 log_step "registry:enterprise-image:start"
-# get-private-registry-enterprise.sh is a bash script and uses source/bash-only semantics.
-PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(bash "${CI_PROJECT_DIR}/test/get-private-registry-enterprise.sh" | tail -n 1)"
+# get-private-registry-enterprise.sh writes only the resolved image to stdout.
+PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(bash "${CI_PROJECT_DIR}/test/get-private-registry-enterprise.sh")"
 log_step "registry:enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 
 log_step "cluster:up ${TEST_CLUSTER_NAME}"

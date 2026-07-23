@@ -408,13 +408,8 @@ append_operator_runtime_context() {
 mirror_operator_image_to_ecr_if_needed() {
   if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
     RUNTIME_OPERATOR_FULL_IMAGE_REF="${RUNTIME_ECR_REGISTRY}/${RUNTIME_OPERATOR_MIRROR_PATH}"
-    source_registry="$(registry_host_from_image_ref "${RUNTIME_OPERATOR_SOURCE_IMAGE}")"
-    source_username="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_USERNAME:-}" "${PIPELINE_RELEASE_REGISTRY_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
-    source_password="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_PASSWORD:-}" "${PIPELINE_RELEASE_REGISTRY_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
     log_step "registry:mirror-operator:start ${RUNTIME_OPERATOR_SOURCE_IMAGE}"
-    if [ -n "${source_username}" ] || [ -n "${source_password}" ] || printf '%s' "${source_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
-      docker_login_registry "${source_registry}" "${source_username}" "${source_password}"
-    fi
+    login_source_registry_for_image "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
     docker pull "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
     docker tag "${RUNTIME_OPERATOR_SOURCE_IMAGE}" "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
     docker push "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
@@ -428,14 +423,73 @@ login_source_registry_for_image() {
   source_username="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_USERNAME:-}" "${PIPELINE_RELEASE_REGISTRY_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
   source_password="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_PASSWORD:-}" "${PIPELINE_RELEASE_REGISTRY_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
 
+  # Released SOK images on Docker Hub are public. Do not let stale optional
+  # project credentials turn an anonymous pull into an authentication failure.
+  case "${source_registry}" in
+    ""|docker.io|registry-1.docker.io|index.docker.io)
+      log_step "registry:source-login:skipped-public ${source_registry:-docker.io}"
+      return 0
+      ;;
+  esac
+
   if printf '%s' "${source_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
-    docker_login_registry "${source_registry}" "" ""
+    docker_login_registry "${source_registry}" "" "" || return 1
     return 0
   fi
 
   if [ -n "${source_username}" ] || [ -n "${source_password}" ]; then
     docker_login_registry "${source_registry}" "${source_username}" "${source_password}"
   fi
+}
+
+ensure_artifactory_docker_reader_creds() {
+  if [ "${CI_COMMIT_REF_PROTECTED:-false}" = "true" ]; then
+    enterprise_artifactory_role_path="artifactory:v2/cloud/role/docker-prod-read-role"
+  else
+    enterprise_artifactory_role_path="artifactory:v2/cloud/role/docker-nonprod-read-role"
+  fi
+  require_commands creds-helper || return 1
+  creds-helper init || return 1
+
+  enterprise_artifactory_docker_env="$(creds-helper docker --eval "${enterprise_artifactory_role_path}")" || return 1
+  eval "${enterprise_artifactory_docker_env}" || return 1
+  unset enterprise_artifactory_docker_env
+  require_nonempty "${DOCKER_CONFIG:-}" "DOCKER_CONFIG from ${enterprise_artifactory_role_path}" || return 1
+  if [ ! -d "${DOCKER_CONFIG}" ]; then
+    echo "Docker config directory from ${enterprise_artifactory_role_path} does not exist: ${DOCKER_CONFIG}" >&2
+    return 1
+  fi
+  export DOCKER_CONFIG
+}
+
+is_splunk_artifactory_registry() {
+  case "$1" in
+    repo.splunkdev.net|*.repo.splunkdev.net)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+login_enterprise_source_registry_if_needed() {
+  source_image_ref="$1"
+  source_registry="$(registry_host_from_image_ref "${source_image_ref}")"
+
+  case "${source_registry}" in
+    ""|docker.io|registry-1.docker.io|index.docker.io)
+      return 0
+      ;;
+  esac
+
+  if is_splunk_artifactory_registry "${source_registry}"; then
+    log_step "registry:enterprise-login ${source_registry} via=creds-helper"
+    ensure_artifactory_docker_reader_creds || return 1
+    log_step "registry:enterprise-login:complete"
+    return 0
+  fi
+
+  log_step "registry:enterprise-login:skipped ${source_registry}"
+  return 0
 }
 
 promote_image_to_private_registry() {
