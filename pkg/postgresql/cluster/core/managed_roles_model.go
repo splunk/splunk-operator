@@ -111,9 +111,12 @@ func (m *managedRolesModel) Reconcile(ctx context.Context) error {
 }
 
 // needsCredentialSweep gates the sweep to run exactly once per restore: only for
-// backup-bootstrapped clusters, and only until completion is recorded in status.
+// backup-bootstrapped clusters (any recovery source — volume snapshot or object storage), and only
+// until completion is recorded in status. The sweep is source-agnostic: any recovered cluster can
+// carry unmanaged roles with stale password hashes, so it must run for objectStorage restores too.
 func (m *managedRolesModel) needsCredentialSweep() bool {
-	if m.cluster.Spec.BootstrapFrom == nil || m.cluster.Spec.BootstrapFrom.VolumeSnapshot == nil {
+	b := m.cluster.Spec.BootstrapFrom
+	if b == nil || (b.VolumeSnapshot == nil && b.ObjectStorage == nil) {
 		return false
 	}
 	return m.cluster.Status.Restore == nil || !m.cluster.Status.Restore.CredentialSweep.Completed
@@ -215,13 +218,50 @@ func (m *managedRolesModel) computeHealth(reconcileErr error) (componentHealth, 
 // requeues so the next pass re-enables managed roles. The status write is what flips
 // needsCredentialSweep to false, so the sweep runs exactly once.
 func (m *managedRolesModel) observeCredentialSweepDone() componentHealth {
-	snapshotName := m.cluster.Spec.BootstrapFrom.VolumeSnapshot.Storage
 	m.cluster.Status.Restore = &enterprisev4.RestoreStatus{
-		Source:          enterprisev4.RestoreSourceStatus{VolumeSnapshot: &snapshotName},
+		Source:          restoreSourceStatus(m.cluster.Spec.BootstrapFrom),
 		CredentialSweep: enterprisev4.RestoreCredentialSweepStatus{Completed: true},
 	}
 	m.events.emitNormal(m.cluster, EventUnmanagedRolesSweepDone, fmt.Sprintf("unmanaged login roles disabled for PostgresCluster %s", m.cluster.Name))
 	return newProvisioningHealth(managedRolesReady, reasonManagedRolesPending, "Credential sweep completed, waiting for managed roles to be re-enabled")
+}
+
+// restoreSourceStatus builds the observed restore source from the (source-agnostic) bootstrapFrom
+// intent, echoing whichever source was used and the PITR target if any. Safe for either source type.
+func restoreSourceStatus(b *enterprisev4.BootstrapFrom) enterprisev4.RestoreSourceStatus {
+	source := enterprisev4.RestoreSourceStatus{}
+	if b == nil {
+		return source
+	}
+	if b.VolumeSnapshot != nil {
+		name := b.VolumeSnapshot.Storage
+		source.VolumeSnapshot = &name
+	}
+	if b.ObjectStorage != nil {
+		name := b.ObjectStorage.ServerName
+		source.ObjectStorage = &name
+	}
+	source.RequestedRecoveryTarget = recoveryTargetStatus(b.RecoveryTarget)
+	return source
+}
+
+// recoveryTargetStatus builds the structured echo of a requested recovery target for status display,
+// mirroring the spec RecoveryTarget shape so consumers need not parse a formatted string. It reflects
+// what the restore was asked to recover to, derived from the desired spec (not observed from the
+// provider). Returns nil when no target is set (recovery to latest available WAL).
+func recoveryTargetStatus(rt *enterprisev4.RecoveryTarget) *enterprisev4.RecoveryTargetStatus {
+	if rt == nil {
+		return nil
+	}
+	status := &enterprisev4.RecoveryTargetStatus{
+		Type:  rt.Type,
+		Value: rt.Value,
+	}
+	if rt.Exclusive != nil {
+		exclusive := *rt.Exclusive
+		status.Exclusive = &exclusive
+	}
+	return status
 }
 
 func (m *managedRolesModel) emitManagedRolesConvergeFailure(message string) {

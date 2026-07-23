@@ -29,8 +29,15 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
 	core "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	cnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 )
+
+// recoveryBackend is the provisioner capability oracle the webhook validates
+// recovery plans against. It is stateless (a pure capability check), so a single
+// shared instance is safe. The operator targets CNPG, so the webhook binds the
+// CNPG adapter here; core stays provisioner-agnostic behind the RecoveryBackend port.
+var recoveryBackend = cnpgadapter.NewRecoveryBackend()
 
 // ValidatePostgresClusterCreate validates a PostgresCluster on CREATE.
 func ValidatePostgresClusterCreate(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
@@ -120,6 +127,7 @@ func validateAgainstClass(ctx context.Context, obj, oldObj *enterpriseApi.Postgr
 
 	allErrs = append(allErrs, toFieldErrors(core.ValidateMergedConfig(core.GetMergedConfig(class, obj), class.Name))...)
 	allErrs = append(allErrs, toFieldErrors(core.ValidateCrossResource(class, obj))...)
+	allErrs = append(allErrs, toFieldErrors(core.ValidateRecoveryCapabilities(recoveryBackend, class, obj))...)
 	allErrs = append(allErrs, validateStorageTransition(class, obj, oldObj)...)
 	allErrs = append(allErrs, validatePoolerEndpoints(class, obj)...)
 	return allErrs

@@ -93,7 +93,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	logger := slog.Default().With("controller", "PostgresCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics, UseCaseRegistryProvider: r.useCaseRegistry}
-	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper, cnpgadapter.NewBackupBackend(r.Client, r.Scheme))
+	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper, cnpgadapter.NewBackupBackend(r.Client, r.Scheme), cnpgadapter.NewRecoveryBackend())
 	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
 	if sharedreconcile.IsPureConflict(err) {
 		return ctrl.Result{Requeue: true}, nil
