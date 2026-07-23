@@ -251,9 +251,9 @@ The barman-cloud plugin automatically prunes base backups and WAL segments older
 
 Because WAL is continuously archived, the backups in object storage can be replayed to **any point in time** between the first base backup and the last archived WAL segment.
 
-> **Not yet supported through the operator API.** The `PostgresCluster` API only exposes `spec.bootstrapFrom.volumeSnapshot` as a recovery source — there is no field to bootstrap a new `PostgresCluster` from an existing `ObjectStore`. You therefore cannot drive a Barman/object-storage PITR through `PostgresCluster` today.
+This is driven entirely through the `PostgresCluster` API: create a new cluster with `spec.bootstrapFrom.objectStorage` (restore purely from the object-store base backup) or with `spec.bootstrapFrom.volumeSnapshot.walArchive` (a snapshot base plus WAL replay from object storage), optionally with a `spec.bootstrapFrom.recoveryTarget`. Bucket path and credentials are resolved from the class's `barmanObjectStore` config — the same one used here for backups — so you can only restore from stores your class already has access to.
 
-To recover from object storage in the meantime, create a **direct CNPG `Cluster`** manifest with a barman-cloud recovery bootstrap that references the existing `ObjectStore`, outside of the Splunk Operator's management. See the CloudNativePG documentation for the bootstrap recovery spec: [PITR with Barman Cloud Plugin](https://cloudnative-pg.io/plugin-barman-cloud/docs/). Operator-managed Barman PITR is tracked as future work.
+See [Restoring a PostgresCluster §8 (PITR)](restore-from-volume-snapshot.md#8-point-in-time-recovery-pitr) and [§9 (Restoring from object storage)](restore-from-volume-snapshot.md#9-restoring-from-object-storage) for the full procedure and the recovery-target caveats.
 
 ---
 

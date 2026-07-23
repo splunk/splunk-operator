@@ -945,6 +945,239 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 	}
 }
 
+// TestBootstrapFromPITRAdmissionIntegration exercises the recovery/PITR bootstrapFrom validation
+// end-to-end through the admission webhook: exactly-one-source, walArchive-required-for-PITR, and
+// the class-must-define-barmanObjectStore coupling for object-store recovery sources.
+func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
+	baseConfig := func() *enterpriseApi.PostgresClusterClassConfig {
+		return &enterpriseApi.PostgresClusterClassConfig{
+			Instances:       ptr.To(int32(1)),
+			Storage:         ptr.To(resource.MustParse("10Gi")),
+			PostgresVersion: ptr.To("17"),
+		}
+	}
+
+	// Class with a barman object store — supports object-store and WAL-archive recovery sources.
+	classWithStore := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "with-store"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config:      baseConfig(),
+			CNPG: &enterpriseApi.CNPGConfig{
+				Backup: &enterpriseApi.CNPGBackupConfig{
+					BarmanObjectStore: &enterpriseApi.CNPGBarmanObjectStoreConfig{
+						DestinationPath: "s3://bucket/pg",
+					},
+				},
+			},
+		},
+	}
+	// Class without a barman object store — only plain snapshot restore is valid.
+	classNoStore := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "no-store"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config:      baseConfig(),
+		},
+	}
+
+	fakeClient := newFakeReader(classWithStore, classNoStore).Build()
+	server := validation.NewWebhookServer(validation.WebhookServerOptions{
+		Port:       9443,
+		Validators: validation.DefaultValidators,
+		Client:     fakeClient,
+	})
+
+	cluster := func(class string, b *enterpriseApi.BootstrapFrom) *enterpriseApi.PostgresCluster {
+		return &enterpriseApi.PostgresCluster{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec:       enterpriseApi.PostgresClusterSpec{Class: class, BootstrapFrom: b},
+		}
+	}
+
+	tests := []struct {
+		name        string
+		obj         *enterpriseApi.PostgresCluster
+		wantAllowed bool
+		wantMessage string
+	}{
+		{
+			name: "allowed - plain snapshot restore without object store",
+			obj: cluster("no-store", &enterpriseApi.BootstrapFrom{
+				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{Storage: "snap-1"},
+			}),
+			wantAllowed: true,
+		},
+		{
+			name: "rejected - both sources set",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{Storage: "snap-1"},
+				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+			}),
+			wantAllowed: false,
+			wantMessage: "exactly one of volumeSnapshot or objectStorage must be set",
+		},
+		{
+			name:        "rejected - neither source set",
+			obj:         cluster("with-store", &enterpriseApi.BootstrapFrom{}),
+			wantAllowed: false,
+			wantMessage: "exactly one of volumeSnapshot or objectStorage must be set",
+		},
+		{
+			name: "rejected - snapshot PITR without walArchive",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{Storage: "snap-1"},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+			}),
+			wantAllowed: false,
+			wantMessage: "walArchive is required when recoveryTarget is set",
+		},
+		{
+			name: "allowed - snapshot PITR with walArchive",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+					Storage:    "snap-1",
+					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+			}),
+			wantAllowed: true,
+		},
+		{
+			name: "rejected - walArchive but class has no barmanObjectStore",
+			obj: cluster("no-store", &enterpriseApi.BootstrapFrom{
+				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+					Storage:    "snap-1",
+					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				},
+			}),
+			wantAllowed: false,
+			wantMessage: "requires cnpg.backup.barmanObjectStore to be configured",
+		},
+		{
+			name: "rejected - objectStorage source but class has no barmanObjectStore",
+			obj: cluster("no-store", &enterpriseApi.BootstrapFrom{
+				ObjectStorage: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+			}),
+			wantAllowed: false,
+			wantMessage: "requires cnpg.backup.barmanObjectStore to be configured",
+		},
+		{
+			name: "allowed - objectStorage source with class barmanObjectStore",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+			}),
+			wantAllowed: true,
+		},
+		{
+			name: "rejected - objectStorage source with type xid (no backupID selection)",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetXID, Value: "1234567"},
+			}),
+			wantAllowed: false,
+			wantMessage: "not supported for an objectStorage source",
+		},
+		{
+			name: "rejected - malformed type time value",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: "May 1 2026"},
+			}),
+			wantAllowed: false,
+			wantMessage: "value for target type time must be an RFC 3339 timestamp",
+		},
+		{
+			name: "rejected - malformed type lsn value",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetLSN, Value: "nope"},
+			}),
+			wantAllowed: false,
+			wantMessage: "value for target type lsn must be a WAL log sequence number",
+		},
+		{
+			name: "rejected - non-numeric type xid value on snapshot base",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+					Storage:    "snap-1",
+					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetXID, Value: "12ab"},
+			}),
+			wantAllowed: false,
+			wantMessage: "value for target type xid must be a numeric transaction ID",
+		},
+		{
+			// An empty value is normally rejected by the CRD CEL rule (self.value != ''), but the
+			// value-format validators are the last line of defense if that rule is ever weakened, so
+			// assert an empty value is still rejected here on the webhook path.
+			name: "rejected - empty type time value",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: ""},
+			}),
+			wantAllowed: false,
+			wantMessage: "value for target type time must be an RFC 3339 timestamp",
+		},
+		{
+			name: "rejected - empty type name value on snapshot base",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+					Storage:    "snap-1",
+					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetName, Value: ""},
+			}),
+			wantAllowed: false,
+			wantMessage: "value for target type name must be a restore-point name",
+		},
+		{
+			name: "rejected - control character in type name value",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+					Storage:    "snap-1",
+					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetName, Value: "bad\tname"},
+			}),
+			wantAllowed: false,
+			wantMessage: "value for target type name must be a restore-point name",
+		},
+		{
+			name: "allowed - valid type name value on snapshot base",
+			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
+				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+					Storage:    "snap-1",
+					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+				},
+				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetName, Value: "before-upgrade"},
+			}),
+			wantAllowed: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ar := newPostgresClusterAdmissionReview(t, "uid-pitr-"+tt.name, admissionv1.Create, tt.obj, nil)
+			resp := sendAdmissionReview(t, server, ar)
+
+			assert.Equal(t, tt.wantAllowed, resp.Allowed, "unexpected admission result")
+			if !tt.wantAllowed {
+				require.NotNil(t, resp.Result)
+				assert.Equal(t, metav1.StatusReasonInvalid, resp.Result.Reason)
+				assert.Equal(t, int32(http.StatusUnprocessableEntity), resp.Result.Code)
+			}
+			if tt.wantMessage != "" {
+				require.NotNil(t, resp.Result)
+				assert.Contains(t, resp.Result.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
 func TestCrossResourceValidationDisabledWithoutClient(t *testing.T) {
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
 		Port:       9443,

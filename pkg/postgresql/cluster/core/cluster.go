@@ -44,7 +44,7 @@ import (
 )
 
 // PostgresClusterService is the application service entry point called by the primary adapter (reconciler).
-func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend) (ctrl.Result, error) {
+func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend, recoveryBackend RecoveryBackend) (ctrl.Result, error) {
 	c := rc.Client
 	logger := logging.FromContext(ctx).With("func", "PostgresClusterService")
 	logger.DebugContext(ctx, "reconciling PostgresCluster")
@@ -137,6 +137,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	// Merge PostgresClusterSpec on top of PostgresClusterClass defaults.
 	mergedConfig := GetMergedConfig(clusterClass, postgresCluster)
 	configErrs := append(ValidateMergedConfig(mergedConfig, clusterClass.Name), ValidateCrossResource(clusterClass, postgresCluster)...)
+	configErrs = append(configErrs, ValidateRecoveryCapabilities(recoveryBackend, clusterClass, postgresCluster)...)
 	if len(configErrs) > 0 {
 		var errMsgs []error
 		for _, e := range configErrs {

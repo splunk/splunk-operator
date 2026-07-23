@@ -48,9 +48,6 @@ const (
 	rolesExist  = true
 	rolesAbsent = false
 
-	readOnlyEndpoint  string = "ro"
-	readWriteEndpoint string = "rw"
-
 	deletionPolicyRetain string = "Retain"
 
 	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"

@@ -2148,4 +2148,151 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Expect(*pc.Status.Phase).To(Equal("Ready"))
 		})
 	})
+
+	When("restoring a cluster from an object-store archive (PITR)", func() {
+		const originExternalCluster = "origin"
+		const barmanPluginName = "barman-cloud.cloudnative-pg.io"
+
+		var classNameRestore string
+
+		objectStoreKey := func() types.NamespacedName {
+			return types.NamespacedName{Name: clusterName + "-object-store", Namespace: namespace}
+		}
+
+		findExternalCluster := func(cnpg *cnpgv1.Cluster, name string) *cnpgv1.ExternalCluster {
+			for i := range cnpg.Spec.ExternalClusters {
+				if cnpg.Spec.ExternalClusters[i].Name == name {
+					return &cnpg.Spec.ExternalClusters[i]
+				}
+			}
+			return nil
+		}
+
+		BeforeEach(func() {
+			classNameRestore = classNamePrefix + "restore-" + fmt.Sprintf(
+				"%d-%d-%d",
+				GinkgoParallelProcess(),
+				GinkgoRandomSeed(),
+				CurrentSpecReport().LeafNodeLocation.LineNumber,
+			)
+
+			// Object store defined but backup writing left disabled: the restore only
+			// reads the archive, exercising the recovery-only ObjectStore path.
+			pgClassRestore := &enterprisev4.PostgresClusterClass{
+				ObjectMeta: metav1.ObjectMeta{Name: classNameRestore},
+				Spec: enterprisev4.PostgresClusterClassSpec{
+					Provisioner: provisioner,
+					Config: &enterprisev4.PostgresClusterClassConfig{
+						Instances:       ptr.To(clusterMemberCount),
+						Storage:         ptr.To(resource.MustParse(storageAmount)),
+						PostgresVersion: ptr.To(postgresVersion),
+					},
+					CNPG: &enterprisev4.CNPGConfig{
+						Backup: &enterprisev4.CNPGBackupConfig{
+							BarmanObjectStore: &enterprisev4.CNPGBarmanObjectStoreConfig{
+								DestinationPath: "s3://test-bucket/clusters/",
+								EndpointURL:     ptr.To("https://s3.us-east-1.amazonaws.com"),
+								S3Credentials: enterprisev4.CNPGBarmanS3Credentials{
+									AccessKeyId: v1.SecretKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
+										Key:                  "accessKeyId",
+									},
+									SecretAccessKey: v1.SecretKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
+										Key:                  "secretAccessKey",
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pgClassRestore)).To(Succeed())
+
+			pgCluster.Spec.Class = classNameRestore
+		})
+
+		AfterEach(func() {
+			existing := &enterprisev4.PostgresClusterClass{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: classNameRestore}, existing)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, existing)).To(Succeed())
+			} else {
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}
+		})
+
+		// PITR-01
+		It("wires objectStorage + type=time target into the CNPG recovery spec, normalizing the timestamp", func() {
+			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
+				ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "pitr-src"},
+				RecoveryTarget: &enterprisev4.RecoveryTarget{
+					Type:  enterprisev4.RecoveryTargetTime,
+					Value: "2026-05-01T13:30:00Z",
+				},
+			}
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			// pass 1: finalizer; pass 2: CNPG cluster + managed ObjectStore created.
+			reconcileNTimes(2)
+
+			cnpg := &cnpgv1.Cluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+			Expect(cnpg.Spec.Bootstrap).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.InitDB).To(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery.Source).To(Equal(originExternalCluster))
+			Expect(cnpg.Spec.Bootstrap.Recovery.VolumeSnapshots).To(BeNil())
+
+			// PostgreSQL's recovery_target_time GUC rejects the RFC 3339 "Z" designator.
+			Expect(cnpg.Spec.Bootstrap.Recovery.RecoveryTarget).NotTo(BeNil())
+			targetTime := cnpg.Spec.Bootstrap.Recovery.RecoveryTarget.TargetTime
+			Expect(targetTime).To(Equal("2026-05-01 13:30:00+00:00"))
+			Expect(targetTime).NotTo(ContainSubstring("Z"))
+
+			origin := findExternalCluster(cnpg, originExternalCluster)
+			Expect(origin).NotTo(BeNil())
+			Expect(origin.PluginConfiguration).NotTo(BeNil())
+			Expect(origin.PluginConfiguration.Name).To(Equal(barmanPluginName))
+			Expect(origin.PluginConfiguration.Parameters).To(HaveKeyWithValue("barmanObjectName", clusterName+"-object-store"))
+			Expect(origin.PluginConfiguration.Parameters).To(HaveKeyWithValue("serverName", "pitr-src"))
+
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(core.ObjectStoreGVK)
+			Expect(k8sClient.Get(ctx, objectStoreKey(), obj)).To(Succeed())
+			owner := metav1.GetControllerOf(obj)
+			Expect(owner).NotTo(BeNil())
+			Expect(owner.Name).To(Equal(clusterName))
+		})
+
+		// PITR-02
+		It("sets recovery.source and externalClusters for a volumeSnapshot base with a WAL archive", func() {
+			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
+				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+					Storage:    "source-pg-backup-20260501120000",
+					WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "pitr-src"},
+				},
+				RecoveryTarget: &enterprisev4.RecoveryTarget{
+					Type:  enterprisev4.RecoveryTargetLSN,
+					Value: "0/16D68D0",
+				},
+			}
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			reconcileNTimes(2)
+
+			cnpg := &cnpgv1.Cluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+			Expect(cnpg.Spec.Bootstrap).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery.VolumeSnapshots).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery.VolumeSnapshots.Storage.Name).To(Equal("source-pg-backup-20260501120000"))
+			Expect(cnpg.Spec.Bootstrap.Recovery.Source).To(Equal(originExternalCluster))
+
+			Expect(cnpg.Spec.Bootstrap.Recovery.RecoveryTarget).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery.RecoveryTarget.TargetLSN).To(Equal("0/16D68D0"))
+
+			origin := findExternalCluster(cnpg, originExternalCluster)
+			Expect(origin).NotTo(BeNil())
+			Expect(origin.PluginConfiguration.Parameters).To(HaveKeyWithValue("serverName", "pitr-src"))
+		})
+	})
 })
