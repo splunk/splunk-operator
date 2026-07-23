@@ -170,6 +170,22 @@ ginkgo_cmd=(
   "--label-filter=${LABEL_FILTER}"
   --output-interceptor-mode=none
   --cover
+)
+
+# Smoke-tagged runs (tier:e2e-pr) should stop each suite at its first failure
+# instead of burning the remaining NodeTimeout budget on specs that share the
+# now-broken cluster state. TEST_LABELS is a Ginkgo label-filter expression, so
+# match tier:e2e-pr only as a positive token -- a plain substring check would
+# also fire on a negated override like "tier:e2e-full && !tier:e2e-pr". Strip
+# grouping parens first so a negated-and-grouped override such as
+# "!(tier:e2e-pr)" is still recognized by the negation check below.
+NORMALIZED_LABELS="${TEST_LABELS//[()]/}"
+if [[ "${NORMALIZED_LABELS}" =~ (^|[^![:alnum:]_])tier:e2e-pr($|[^[:alnum:]_]) ]] && \
+   [[ ! "${NORMALIZED_LABELS}" =~ !\ *tier:e2e-pr ]]; then
+  ginkgo_cmd+=(--fail-fast)
+fi
+
+ginkgo_cmd+=(
   "${topdir}/test/"
   --
   "-commit-hash=${COMMIT_HASH}"

@@ -45,7 +45,7 @@ func TestBasic(t *testing.T) {
 	Expect(testenv.LoadEnvFile()).ToNot(HaveOccurred(), "Error loading .env file")
 
 	sc, _ := GinkgoConfiguration()
-	sc.Timeout = testenv.LongSuiteTimeout
+	sc.Timeout = testenv.SuiteTimeout180m
 
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }
