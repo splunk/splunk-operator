@@ -1919,6 +1919,10 @@ func (in *PostgresClusterStatus) DeepCopyInto(out *PostgresClusterStatus) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.LastTransitionTime != nil {
+		in, out := &in.LastTransitionTime, &out.LastTransitionTime
+		*out = (*in).DeepCopy()
+	}
 	if in.ProvisionerRef != nil {
 		in, out := &in.ProvisionerRef, &out.ProvisionerRef
 		*out = new(corev1.ObjectReference)
@@ -2084,6 +2088,10 @@ func (in *PostgresDatabaseStatus) DeepCopyInto(out *PostgresDatabaseStatus) {
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
+	}
+	if in.LastTransitionTime != nil {
+		in, out := &in.LastTransitionTime, &out.LastTransitionTime
+		*out = (*in).DeepCopy()
 	}
 	if in.Databases != nil {
 		in, out := &in.Databases, &out.Databases

@@ -344,6 +344,12 @@ spec:
                       x-kubernetes-map-type: atomic
                   type: object
                 type: array
+              lastTransitionTime:
+                description: |-
+                  LastTransitionTime is the start time of the active time-to-Ready cycle.
+                  It is cleared when the PostgresDatabase successfully reaches Ready.
+                format: date-time
+                type: string
               observedGeneration:
                 description: ObservedGeneration represents the .metadata.generation
                   that the status was set based upon.

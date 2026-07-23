@@ -26,6 +26,12 @@ var (
 		Help: "Status condition transitions by controller, condition type, status, and reason.",
 	}, []string{"controller", "condition", "status", "reason"})
 
+	provisioningDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "splunk_operator_postgres_provisioning_duration_seconds",
+		Help:    "Wall-clock time from PostgreSQL resource creation or readiness-affecting operation start to Ready phase.",
+		Buckets: []float64{5, 15, 30, 60, 120, 300, 600, 900, 1800},
+	}, []string{"controller"})
+
 	clusters = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "splunk_operator_postgres_clusters",
 		Help: "Current number of PostgresCluster resources by status phase.",
@@ -48,6 +54,7 @@ var (
 
 	allCollectors = []prometheus.Collector{
 		statusTransitionsTotal,
+		provisioningDuration,
 		clusters,
 		poolerEnabledClusters,
 		databases,
@@ -76,6 +83,10 @@ func NewPrometheusRecorder() *PrometheusRecorder {
 
 func (p *PrometheusRecorder) IncStatusTransition(controller, condition, status, reason string) {
 	statusTransitionsTotal.WithLabelValues(controller, condition, status, reason).Inc()
+}
+
+func (p *PrometheusRecorder) ObserveProvisioningDuration(controller string, seconds float64) {
+	provisioningDuration.WithLabelValues(controller).Observe(seconds)
 }
 
 func (p *PrometheusRecorder) SetClusterPhases(phases map[string]float64) {

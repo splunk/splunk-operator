@@ -35,6 +35,7 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -59,6 +60,26 @@ type stubDBRepo struct {
 	execErr error
 	calls   []string
 }
+
+type provisioningDurationObservation struct {
+	controller string
+	seconds    float64
+}
+
+type captureMetricsRecorder struct {
+	provisioningDurations []provisioningDurationObservation
+}
+
+func (r *captureMetricsRecorder) IncStatusTransition(string, string, string, string) {}
+func (r *captureMetricsRecorder) ObserveProvisioningDuration(controller string, seconds float64) {
+	r.provisioningDurations = append(r.provisioningDurations, provisioningDurationObservation{controller: controller, seconds: seconds})
+}
+func (r *captureMetricsRecorder) SetClusterPhases(map[string]float64)        {}
+func (r *captureMetricsRecorder) SetPoolerEnabledClusters(float64)           {}
+func (r *captureMetricsRecorder) SetDatabasePhases(map[string]float64)       {}
+func (r *captureMetricsRecorder) SetManagedUsers(string, map[string]float64) {}
+
+var _ ports.Recorder = (*captureMetricsRecorder)(nil)
 
 // ExecGrants is a stub implementation of the DBRepo interface that records calls and returns a predefined error.
 func (r *stubDBRepo) ExecGrants(_ context.Context, dbName string) error {
@@ -788,6 +809,7 @@ func TestSetStatus(t *testing.T) {
 		c,
 		&pgprometheus.NoopRecorder{},
 		postgresDB,
+		false,
 		clusterReady,
 		metav1.ConditionTrue,
 		reasonClusterAvailable,
@@ -811,6 +833,88 @@ func TestSetStatus(t *testing.T) {
 	assert.Equal(t, *postgresDB.Status.Phase, *got.Status.Phase)
 	require.Len(t, got.Status.Conditions, 1)
 	assert.Equal(t, postgresDB.Status.Conditions[0], got.Status.Conditions[0])
+}
+
+func TestPersistStatusStartsReadinessCycleOnce(t *testing.T) {
+	scheme := testScheme(t)
+	creationTime := metav1.NewTime(time.Now().Add(-2 * time.Minute))
+	ready := string(readyDBPhase)
+	generation := int64(1)
+	existing := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "primary",
+			Namespace:         "dbs",
+			Generation:        generation,
+			CreationTimestamp: creationTime,
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			Phase:              &ready,
+			ObservedGeneration: &generation,
+		},
+	}
+	c := testClient(t, scheme, existing)
+
+	db := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, db))
+	require.NoError(t, persistStatus(
+		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
+		clusterReady, metav1.ConditionFalse, reasonClusterProvisioning,
+		"Cluster is not in ready state yet", pendingDBPhase,
+	))
+	require.NotNil(t, db.Status.LastTransitionTime)
+	lastTransitionTime := *db.Status.LastTransitionTime
+
+	stored := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, stored))
+	require.NotNil(t, stored.Status.LastTransitionTime)
+	assert.Equal(t, lastTransitionTime, *stored.Status.LastTransitionTime)
+
+	require.NoError(t, persistStatus(
+		context.Background(), c, &pgprometheus.NoopRecorder{}, stored, false,
+		clusterReady, metav1.ConditionFalse, reasonClusterProvisioning,
+		"Cluster is not in ready state yet", pendingDBPhase,
+	))
+	require.NotNil(t, stored.Status.LastTransitionTime)
+	assert.Equal(t, lastTransitionTime, *stored.Status.LastTransitionTime)
+}
+
+func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpdate(t *testing.T) {
+	scheme := testScheme(t)
+	generation := int64(1)
+	ready := string(readyDBPhase)
+	existing := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "primary",
+			Namespace:  "dbs",
+			Generation: generation,
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			Phase:              &ready,
+			ObservedGeneration: &generation,
+		},
+	}
+	c := testClient(t, scheme, existing)
+
+	db := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, db))
+	require.NoError(t, persistStatus(
+		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
+		clusterReady, metav1.ConditionTrue, reasonClusterAvailable,
+		"Cluster is operational", provisioningDBPhase,
+	))
+	require.Nil(t, db.Status.LastTransitionTime)
+
+	require.NoError(t, persistStatus(
+		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
+		secretsReady, metav1.ConditionFalse, reasonSecretsDriftDetected,
+		"managed role secret drift detected", provisioningDBPhase,
+	))
+	require.NotNil(t, db.Status.LastTransitionTime)
+
+	persisted := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, persisted))
+	require.NotNil(t, persisted.Status.LastTransitionTime)
+	assert.Equal(t, *db.Status.LastTransitionTime, *persisted.Status.LastTransitionTime)
 }
 
 // Uses a fake client because readiness is determined from CNPG Database objects in the API.
@@ -2607,6 +2711,17 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		}
 	}
 
+	failingGrantThenSuccessfulRepoFunc := func(dbName string) NewDBRepoFunc {
+		attempts := 0
+		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+			attempts++
+			if attempts == 1 {
+				return &stubDBRepo{execErr: fmt.Errorf("grant failed for %s", dbName)}, nil
+			}
+			return &stubDBRepo{}, nil
+		}
+	}
+
 	failingConnectionRepoFunc := func(calls *int, err error) NewDBRepoFunc {
 		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
 			(*calls)++
@@ -2802,7 +2917,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		return objects
 	}
 
-	runService := func(t *testing.T, c client.Client, newDBRepo NewDBRepoFunc) (ctrl.Result, *enterprisev4.PostgresDatabase, error) {
+	runService := func(t *testing.T, c client.Client, newDBRepo NewDBRepoFunc, metrics ports.Recorder) (ctrl.Result, *enterprisev4.PostgresDatabase, error) {
 		t.Helper()
 
 		before := &enterprisev4.PostgresDatabase{}
@@ -2814,7 +2929,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 				Client:   c,
 				Scheme:   scheme,
 				Recorder: record.NewFakeRecorder(10),
-				Metrics:  &pgprometheus.NoopRecorder{},
+				Metrics:  metrics,
 			},
 			before,
 			newDBRepo,
@@ -2854,6 +2969,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		wantConditionReason          conditionReasons
 		wantConditionMessageContains []string
 		wantConditionMessageExcludes []string
+		wantProvisioningObservations *int
 	}{
 		{
 			name:                     "retryable privileges error stays provisioning",
@@ -2868,6 +2984,16 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantConditionMessageContains: []string{
 				"Will retry automatically",
 			},
+		},
+		{
+			name:                         "provisioning blocker after routine update records one duration on recovery",
+			generation:                   7,
+			databases:                    []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:                  strPtr(string(readyDBPhase)),
+			newDBRepo:                    failingGrantThenSuccessfulRepoFunc("payments"),
+			reconcileCount:               2,
+			wantPhase:                    readyDBPhase,
+			wantProvisioningObservations: new(1),
 		},
 		{
 			name:                "retryable connection failures keep retrying",
@@ -3053,6 +3179,30 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantConditionMessageExcludes: []string{
 				"already current",
 			},
+			wantProvisioningObservations: new(1),
+		},
+		{
+			name:               "does not observe provisioning duration when final Ready status write fails",
+			generation:         8,
+			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase:        strPtr(string(failedDBPhase)),
+			observedGeneration: int64Ptr(7),
+			failureState:       true,
+			statusDatabases:    []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			conditions: []metav1.Condition{
+				{
+					Type:               string(privilegesReady),
+					Status:             metav1.ConditionFalse,
+					Reason:             string(reasonPrivilegesTerminalFailure),
+					Message:            "Failed to grant RW role privileges. Manual intervention required.",
+					ObservedGeneration: 7,
+				},
+			},
+			newDBRepo:                    successfulRepoFunc(),
+			wantErr:                      true,
+			statusUpdateErrOnReason:      reasonPrivilegesGranted,
+			wantErrContains:              []string{"failed to persist final status", "apiserver timeout"},
+			wantProvisioningObservations: new(0),
 		},
 		{
 			name:       "spec change restarts from Failed",
@@ -3198,8 +3348,9 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			var result ctrl.Result
 			var err error
 			var updated *enterprisev4.PostgresDatabase
+			metrics := &captureMetricsRecorder{}
 			for i := 1; i <= reconcileCount; i++ {
-				result, updated, err = runService(t, c, newDBRepo)
+				result, updated, err = runService(t, c, newDBRepo, metrics)
 				if i < reconcileCount {
 					require.Error(t, err)
 					assert.Equal(t, ctrl.Result{}, result)
@@ -3247,6 +3398,18 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 				}
 				for _, unwantedMessage := range tst.wantConditionMessageExcludes {
 					assert.NotContains(t, condition.Message, unwantedMessage)
+				}
+			}
+			if tst.wantProvisioningObservations != nil {
+				require.Len(t, metrics.provisioningDurations, *tst.wantProvisioningObservations)
+				if *tst.wantProvisioningObservations == 1 {
+					assert.Equal(t, ports.ControllerDatabase, metrics.provisioningDurations[0].controller)
+					assert.Positive(t, metrics.provisioningDurations[0].seconds)
+					assert.Nil(t, updated.Status.LastTransitionTime)
+
+					_, _, err = runService(t, c, newDBRepo, metrics)
+					require.NoError(t, err)
+					assert.Len(t, metrics.provisioningDurations, 1)
 				}
 			}
 		})
