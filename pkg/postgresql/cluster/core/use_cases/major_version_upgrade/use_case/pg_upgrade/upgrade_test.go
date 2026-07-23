@@ -100,6 +100,27 @@ func TestPgUpgradeFlowUpgradingWaitsUntilComplete(t *testing.T) {
 	if !report.Retry {
 		t.Fatalf("expected upgrading report to retry")
 	}
+	if report.Sleep == nil || *report.Sleep != 60 {
+		t.Fatalf("sleep = %v, want 60 seconds", report.Sleep)
+	}
+}
+
+func TestPgUpgradeFlowUpgradingDelaysRetryAfterTransientObservationError(t *testing.T) {
+	driver := &fakePgUpgrade{completeErr: errors.New("connection refused")}
+
+	report, err := NewPgUpgradeFlow(driver, mvutypes.Upgrading).Upgrade(t.Context())
+	if err != nil {
+		t.Fatalf("Upgrade() error = %v, want nil for transient error", err)
+	}
+	if report.Phase != string(mvutypes.Upgrading) {
+		t.Fatalf("phase = %q, want %q", report.Phase, mvutypes.Upgrading)
+	}
+	if !report.Retry {
+		t.Fatalf("transient observation error must retry")
+	}
+	if report.Sleep == nil || *report.Sleep != 60 {
+		t.Fatalf("sleep = %v, want 60 seconds", report.Sleep)
+	}
 }
 
 func TestPgUpgradeFlowUpgradingMovesToVerifyingWhenComplete(t *testing.T) {
