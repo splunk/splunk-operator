@@ -208,6 +208,10 @@ All event reasons are defined as constants in `pkg/splunk/enterprise/event_reaso
 | `EventReasonStatefulSetUpdateFailed` | `StatefulSetUpdateFailed` | StatefulSet update failures |
 | `EventReasonDeleteFailed` | `DeleteFailed` | CR deletion failures |
 | `EventReasonSecretMissing` | `SecretMissing` | Required secret not found |
+| `EventReasonCertSecretMalformed` | `CertSecretMalformed` | TLS Secret missing required key |
+| `EventReasonResolveQueueObjectStorageFailed` | `ResolveQueueObjectStorageFailed` | **Terminal error reason** when the referenced Queue or ObjectStorage CR is not found — sets `Stalled=True` with message `"referenced Queue or ObjectStorage CR not found"`, no requeue. Other failures from the same path (transient API errors, ConfigMap/Secret write failures) are retryable. The accompanying Warning event uses the literal reason `EnsureDefaultsFailed` |
+| `EventReasonImmutableRefsModified` | `ImmutableRefsModified` | Defined for future use. Mutating `queueRef`/`objectStorageRef` after initial apply is currently rejected by the admission webhook; this event is not emitted at runtime |
+| `EventReasonEmptyClusterManagerRef` | `EmptyClusterManagerRef` | ClusterManagerRef is empty during reconciliation |
 | `EventReasonUpgradeCheckFailed` | `UpgradeCheckFailed` | Upgrade path validation errors |
 
 See [`event_reasons.go`](https://github.com/splunk/splunk-operator/blob/main/pkg/splunk/enterprise/event_reasons.go) for the full list.
@@ -275,3 +279,33 @@ if err != nil {
 4. Always include the resource name in the message.
 5. Never pass `err.Error()` into event messages — log the full error, keep events clean.
 6. Don't emit events for routine internal operations — keep the event stream actionable.
+
+---
+
+## Terminal Errors
+
+Some failure conditions cannot self-heal without external intervention — for example, a pod stuck in `ImagePullBackOff`, a TLS Secret with a missing key, or a CR spec that fails validation. The operator wraps these in `splcommon.NewTerminalError(reason, message, err)` before returning from the `Apply*` function. controller-runtime treats terminal errors as non-retriable: the CR is not requeued and the reconcile loop stops.
+
+Terminal failures are surfaced to the user via the **`Stalled` status condition** (`Stalled=True`) in addition to `phase=Error`. See [Status Conditions](../operate/CustomResources.md#status-conditions) for the full condition schema.
+
+### How terminal errors propagate
+
+Business logic signals a non-retriable failure by returning `splcommon.NewTerminalError(reason, message, cause)` directly — no event publisher helpers are needed. The **controller layer** intercepts any terminal error returned from `Reconcile()` and automatically calls `splcommon.UpsertStalledCondition` to set `Stalled=True` on the CR status.
+
+**Rules:**
+
+1. Return `splcommon.NewTerminalError(reason, message, cause)` from business logic — the controller sets `Stalled=True` automatically.
+2. Never return `reconcile.TerminalError` for transient failures (network blips, temporary API unavailability).
+3. Use `splcommon.IsStalled(cr.Status.Conditions)` to check programmatically whether a CR is currently stalled.
+
+**Terminal container waiting states** detected by `splctrl.CheckPodsForTerminalFailures`:
+
+| Container `Waiting.Reason` | Cause |
+|---------------------------|-------|
+| `ErrImagePull` | Image pull failed (bad credentials or unreachable registry) |
+| `ImagePullBackOff` | kubelet backing off after repeated pull failures |
+| `InvalidImageName` | Image reference is syntactically malformed |
+| `ErrInvalidImage` | Image reference resolves but is not a valid image |
+| `CreateContainerConfigError` | env-var or volume references a missing ConfigMap or Secret key |
+| `CreateContainerError` | OCI runtime cannot create the container |
+| `RunContainerError` | OCI runtime cannot run the container (invalid entrypoint, missing binary) |

@@ -520,6 +520,7 @@ All Splunk Enterprise Custom Resources include Kubernetes-standard [status condi
 | `Ready` | Indicates whether the resource is fully operational and all replicas are ready |
 | `Progressing` | Indicates whether the resource is being updated, scaled, or initialized |
 | `Paused` | Indicates whether reconciliation is paused via the pause annotation |
+| `Stalled` | Indicates a non-recoverable failure that requires user intervention before reconciliation can resume |
 
 ### Condition Fields
 
@@ -527,7 +528,7 @@ Each condition includes the following fields:
 
 | Field | Description |
 |-------|-------------|
-| `type` | The condition type (Ready, Progressing, or Paused) |
+| `type` | The condition type (Ready, Progressing, Paused, or Stalled) |
 | `status` | Either "True", "False", or "Unknown" |
 | `reason` | A machine-readable reason code for the condition's state |
 | `message` | A human-readable description of the condition |
@@ -558,6 +559,44 @@ status:
       message: Reconciliation is not paused
       lastTransitionTime: "2026-05-04T08:00:00Z"
       observedGeneration: 3
+    - type: Stalled
+      status: "False"
+      reason: NotStalled
+      message: ""
+      lastTransitionTime: "2026-05-04T08:00:00Z"
+      observedGeneration: 3
+```
+
+When a terminal failure is detected, `Stalled` flips to `True`:
+
+```yaml
+status:
+  phase: Error
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: ReconcileFailed
+      message: Pod stuck in terminal state — manual fix required
+      lastTransitionTime: "2026-05-04T11:00:00Z"
+      observedGeneration: 4
+    - type: Progressing
+      status: "False"
+      reason: ReconcileFailed
+      message: Pod stuck in terminal state — manual fix required
+      lastTransitionTime: "2026-05-04T11:00:00Z"
+      observedGeneration: 4
+    - type: Paused
+      status: "False"
+      reason: NotPaused
+      message: Reconciliation is not paused
+      lastTransitionTime: "2026-05-04T08:00:00Z"
+      observedGeneration: 4
+    - type: Stalled
+      status: "True"
+      reason: PodTerminalFailure
+      message: Pod stuck in terminal state — manual fix required
+      lastTransitionTime: "2026-05-04T11:00:00Z"
+      observedGeneration: 4
 ```
 
 ### Checking Conditions
@@ -579,6 +618,8 @@ kubectl describe standalone example
 - **`lastTransitionTime`** only updates when the condition's `status` field changes (e.g., from "False" to "True"), not on every reconcile
 - **`observedGeneration`** reflects which spec generation the controller has processed
 - When an error occurs, the `Ready` condition's `message` field contains the specific error description
+- **`Stalled=True`** signals a non-recoverable failure: the operator has stopped requeueing the CR and will not retry until the user resolves the root cause. `Stalled` is always `False` when `phase` is not `Error` — `Ready=True` and `Stalled=True` can never coexist
+- Use `Stalled=True` in monitoring or alerting rules to page on failures that need human intervention, as opposed to transient errors that self-heal
 
 ## Troubleshooting
 
@@ -605,6 +646,73 @@ bash# kubectl get stdaln -o yaml | grep -i message -A 5 -B 5
     resourceRevMap: {}
     selector: ""
 ```
+#### Terminal Failures
+
+Some failure states are non-recoverable without external intervention. When the operator detects one, it stops reconciling the CR immediately — the CR is **not requeued** — and sets `status.phase` to `Error` with `Stalled=True` in the status conditions. The CR remains in this state until the root cause is resolved and the operator detects the change.
+
+**What triggers a terminal failure**
+
+| Cause | `Stalled` condition message | Affected CRs |
+|-------|----------------------------|---------------|
+| A container is stuck in a non-recoverable waiting state: `ErrImagePull`, `ImagePullBackOff`, `InvalidImageName`, `ErrInvalidImage`, `CreateContainerConfigError`, `CreateContainerError`, or `RunContainerError` | `Pod stuck in terminal state — manual fix required` | All |
+| The TLS Secret referenced by `spec.certs[]` is missing a required key (`tls.crt` or `tls.key`) | `cert secret <namespace>/<name> is missing required key "<key>"` | All |
+| The CR spec fails validation during reconciliation (e.g. missing required field, invalid value) | `<CR type> spec validation failed` | All |
+| The Queue or ObjectStorage CR referenced by an IndexerCluster or IngestorCluster cannot be found | `Referenced Queue or ObjectStorage CR not found` | IndexerCluster, IngestorCluster |
+| `queueRef` or `objectStorageRef` is removed after having been applied | `queueRef and objectStorageRef cannot be removed once applied` | IndexerCluster, IngestorCluster |
+| `clusterManagerRef` is empty at the point where it is required at runtime | `empty Cluster Manager reference` | IndexerCluster |
+
+**Detecting a terminal failure**
+
+When a terminal failure occurs, `status.phase` is `Error` and the `Stalled` condition flips to `True`. Check the conditions directly:
+
+```bash
+kubectl get standalone example -o jsonpath='{.status.conditions}' | jq .
+```
+
+Or filter for the `Stalled` condition specifically:
+
+```bash
+kubectl get standalone example -o jsonpath='{.status.conditions[?(@.type=="Stalled")]}' | jq .
+```
+
+The `Stalled` condition `message` field describes the failure. For pod-level failures, check the pod status for more detail:
+
+```bash
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+**Recovery**
+
+For a pod stuck in a terminal container state:
+1. Inspect the failing pod with `kubectl describe pod <pod-name> -n <namespace>` to read the `Waiting.Reason` and `Waiting.Message`.
+2. Fix the root cause (correct the image tag, provide the missing `imagePullSecret`, create the missing Secret or ConfigMap).
+3. Delete the stuck pods — the StatefulSet controller recreates them and the operator resumes reconciliation.
+
+```bash
+kubectl delete pod <stuck-pod-name> -n <namespace>
+```
+
+For a malformed TLS Secret:
+1. Update or recreate the Secret to include both `tls.crt` and `tls.key`.
+2. The operator detects the fix and resumes automatically on the next reconcile cycle.
+
+For a missing Queue or ObjectStorage CR (IndexerCluster, IngestorCluster):
+1. Create the missing CR in the same namespace as the IndexerCluster or IngestorCluster.
+2. The operator resumes automatically on the next reconcile cycle.
+
+For a spec validation failure:
+1. Check the `Stalled` condition `message` and operator logs to identify the invalid field.
+2. Correct the spec with `kubectl edit` or `kubectl patch`.
+3. The operator processes the spec change and resumes reconciliation automatically.
+
+For immutable refs cleared (`queueRef`/`objectStorageRef` removed after being applied):
+1. Restore the previous `queueRef` and `objectStorageRef` values in the CR spec.
+2. Apply the corrected spec — the operator resumes automatically.
+
+For an empty ClusterManager reference (IndexerCluster):
+1. Ensure `spec.clusterManagerRef.name` is set on the IndexerCluster.
+2. Apply the corrected spec — the operator resumes automatically.
+
 #### Pause Annotations
 The Splunk Operator controller reconciles every Splunk Enterprise CR. However, there might be circumstances wherein the influence of the Splunk Operator is not desired and needs to be paused. Every Splunk Enterprise CR has its own pause annotation associated with it, which when configured ensures that the Splunk Operator controller reconcile is paused for it. Below is a table listing the pause annotations:
 

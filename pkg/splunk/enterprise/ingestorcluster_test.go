@@ -106,10 +106,10 @@ func TestApplyIngestorClusterTerminalFailures(t *testing.T) {
 		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "expected TerminalError, got %v", err)
 	})
 
-	// Case 3: Queue CR not found returns an error.
+	// Case 3: Queue CR not found is a terminal failure.
 	// ensureIngestorDefaults runs unconditionally on every reconcile, so a single
 	// call is sufficient — no need to reach PhaseReady first.
-	t.Run("Queue CR not found returns error", func(t *testing.T) {
+	t.Run("Queue CR not found is terminal", func(t *testing.T) {
 		os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 		scheme := runtime.NewScheme()
@@ -129,12 +129,12 @@ func TestApplyIngestorClusterTerminalFailures(t *testing.T) {
 		}
 
 		_, err := ApplyIngestorCluster(ctx, c, cr)
-		assert.Error(t, err, "expected error for missing Queue CR")
+		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "expected TerminalError, got %v", err)
 	})
 
-	// Case 4: ObjectStorage CR not found returns an error.
+	// Case 4: ObjectStorage CR not found is a terminal failure.
 	// ensureIngestorDefaults runs unconditionally on every reconcile.
-	t.Run("ObjectStorage CR not found returns error", func(t *testing.T) {
+	t.Run("ObjectStorage CR not found is terminal", func(t *testing.T) {
 		os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 		scheme := runtime.NewScheme()
@@ -166,7 +166,7 @@ func TestApplyIngestorClusterTerminalFailures(t *testing.T) {
 		}
 
 		_, err := ApplyIngestorCluster(ctx, c, cr)
-		assert.Error(t, err, "expected error for missing ObjectStorage CR")
+		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "expected TerminalError, got %v", err)
 	})
 }
 
