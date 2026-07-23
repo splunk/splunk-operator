@@ -463,6 +463,12 @@ spec:
                   provisioner.
                 format: int32
                 type: integer
+              lastTransitionTime:
+                description: |-
+                  LastTransitionTime is the start time of the active time-to-Ready cycle.
+                  It is cleared when the PostgresCluster successfully reaches Ready.
+                format: date-time
+                type: string
               managedRolesStatus:
                 description: ManagedRolesStatus tracks the reconciliation status of
                   managed roles.

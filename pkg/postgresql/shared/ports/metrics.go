@@ -36,6 +36,10 @@ type Recorder interface {
 	// Called automatically by persistStatus/setStatus — no manual calls needed in service code.
 	IncStatusTransition(controller, condition, status, reason string)
 
+	// ObserveProvisioningDuration records elapsed wall-clock seconds from resource creation
+	// or a readiness-affecting operation start to a transition into Ready.
+	ObserveProvisioningDuration(controller string, seconds float64)
+
 	// SetClusterPhases sets gauge values for cluster counts by phase.
 	SetClusterPhases(phases map[string]float64)
 

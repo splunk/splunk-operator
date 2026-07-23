@@ -190,6 +190,11 @@ type PostgresClusterStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// LastTransitionTime is the start time of the active time-to-Ready cycle.
+	// It is cleared when the PostgresCluster successfully reaches Ready.
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+
 	// ProvisionerRef contains reference to the provisioner resource managing this PostgresCluster.
 	// Right now, only CNPG is supported.
 	// +optional

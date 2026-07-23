@@ -234,7 +234,8 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		return *p.blockedHealth, nil
 	}
 
-	if p.cnpgPatch.requiresPhaseGate() && (p.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy || p.cnpgCluster.Status.Phase == "") {
+	if (p.cnpgPatch.requiresPhaseGate() || imageUpdateInProgress(p.cnpgCluster)) &&
+		(p.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy || p.cnpgCluster.Status.Phase == "") {
 		return newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, p.cnpgCluster.Status.Phase)), nil
 	}
 
@@ -838,6 +839,24 @@ const (
 // requiresPhaseGate reports whether Observe should hold ClusterReady=Provisioning
 // while CNPG.Status.Phase still reflects the pre-patch value.
 func (k cnpgPatchKind) requiresPhaseGate() bool { return k == cnpgPatchBody }
+
+// imageUpdateInProgress reports whether CNPG has applied the requested image
+// to both the running pods and the data directory.
+func imageUpdateInProgress(cluster *cnpgv1.Cluster) bool {
+	specImage := stripImageRefForDrift(cluster.Spec.ImageName)
+	if specImage == "" {
+		return false
+	}
+	statusImage := stripImageRefForDrift(cluster.Status.Image)
+	if statusImage != "" && specImage != statusImage {
+		return true
+	}
+	if cluster.Status.PGDataImageInfo == nil {
+		return false
+	}
+	dataImage := stripImageRefForDrift(cluster.Status.PGDataImageInfo.Image)
+	return dataImage != "" && specImage != dataImage
+}
 
 // isClusterDrift reports whether two normalized specs differ in any field CNPG
 // must observably reconcile against. InheritedAnnotations is excluded (metadata-only).
