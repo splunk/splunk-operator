@@ -70,7 +70,7 @@ func (o *objectStoreModel) Provides() []contractKey { return nil }
 func (o *objectStoreModel) CheckContracts() error   { return nil }
 
 func (o *objectStoreModel) Reconcile(ctx context.Context) error {
-	cfg := activeBarmanObjectStoreCfg(o.mergedConfig)
+	cfg := managedObjectStoreCfg(o.mergedConfig)
 	if cfg == nil {
 		if err := o.deleteObjectStore(ctx); err != nil {
 			return newReconcileFailure(reasonObjectStoreReconcileFailed, err)
@@ -95,7 +95,7 @@ func (o *objectStoreModel) computeHealth(reconcileErr error) (componentHealth, e
 		return h, err
 	}
 
-	if activeBarmanObjectStoreCfg(o.mergedConfig) == nil {
+	if managedObjectStoreCfg(o.mergedConfig) == nil {
 		return newReadyHealth(objectStoreReady, reasonObjectStoreDisabled, "Object store backup not configured"), nil
 	}
 

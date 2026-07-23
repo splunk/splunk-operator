@@ -79,6 +79,38 @@ type normalizedCNPGClusterSpec struct {
 	Backup               *normalizedBackupSpec
 	Plugins              []normalizedPluginSpec
 	BootstrapType        bootstrapKind
+	Recovery             *normalizedRecoverySpec
+}
+
+// normalizedRecoverySpec captures the operator-owned recovery wiring (recovery.source, the
+// synthesized "origin" externalCluster, and the recovery target) so it participates in drift
+// detection. These fields are set once from the immutable bootstrapFrom and rebuilt identically
+// every reconcile; including them here means an out-of-band edit to the live CNPG spec (e.g. the
+// origin externalCluster deleted or the source cleared before bootstrap completes) is detected and
+// healed, not silently accepted. Only fields the operator sets are captured — CNPG-defaulted fields
+// (e.g. targetTLI) are excluded so they cannot register as false-positive drift.
+type normalizedRecoverySpec struct {
+	Source          string
+	ExternalCluster *normalizedRecoveryExternalCluster
+	Target          *normalizedRecoveryTarget
+}
+
+// normalizedRecoveryExternalCluster is the drift-relevant subset of the "origin" externalCluster
+// entry the operator synthesizes for object-store WAL replay during recovery.
+type normalizedRecoveryExternalCluster struct {
+	Name       string
+	PluginName string
+	Parameters map[string]string
+}
+
+// normalizedRecoveryTarget mirrors the operator-set fields of cnpgv1.RecoveryTarget.
+type normalizedRecoveryTarget struct {
+	TargetTime      string
+	TargetLSN       string
+	TargetXID       string
+	TargetName      string
+	TargetImmediate *bool
+	Exclusive       *bool
 }
 
 // bootstrapKind enumerates the CNPG bootstrap strategies the operator selects between.
