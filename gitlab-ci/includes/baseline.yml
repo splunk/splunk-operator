@@ -24,6 +24,8 @@ format-and-vet:
   script:
     - make fmt
     - make vet
+    - sh gitlab-ci/tests/pipeline-common-registry-auth-test.sh
+    - bash gitlab-ci/tests/enterprise-image-mirror-test.sh
     - git diff --exit-code
 
 unit-tests:

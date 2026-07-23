@@ -247,6 +247,10 @@ append_context "${context_file}" "azure_registry_pull_mode_requested" "${PRIVATE
 append_context "${context_file}" "test_labels" "${TEST_LABELS}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 
+# creds-helper selects DOCKER_CONFIG. Configure source auth before Azure auth
+# so the ACR login is written to the same Docker config.
+login_enterprise_source_registry_if_needed "${enterprise_source_image}" >> "${run_log}" 2>&1
+
 if [ "${azure_auth_mode}" = "oidc" ]; then
   log_step "azure:auth:start mode=oidc" | tee -a "${run_log}" >/dev/null
   if azure_auth_with_oidc; then
@@ -279,7 +283,7 @@ copy_if_exists "${build_image_digest_file}" "${digest_file}" >/dev/null 2>&1 || 
 log_step "azure:operator-image:promote:complete" | tee -a "${build_log}" >/dev/null
 
 log_step "azure:registry-enterprise-image:start" | tee -a "${run_log}" >/dev/null
-PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(bash "${CI_PROJECT_DIR}/test/get-private-registry-enterprise.sh" | tail -n 1)"
+PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(bash "${CI_PROJECT_DIR}/test/get-private-registry-enterprise.sh")"
 export SPLUNK_ENTERPRISE_IMAGE="${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 append_context "${context_file}" "private_splunk_enterprise_image" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 log_step "azure:registry-enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" | tee -a "${run_log}" >/dev/null

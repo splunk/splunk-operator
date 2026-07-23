@@ -17,11 +17,11 @@ skinparam Note {
   FontColor #3f3420
 }
 
-rectangle "Manual web or API trigger\nSOK_PIPELINE_MODE=qualification_lane" as trigger
+rectangle "Manual, API, trigger-token,\nor downstream trigger\nSOK_PIPELINE_MODE=qualification_lane" as trigger
 rectangle "Baseline\nverify and test jobs" as baseline
 rectangle "Released SOK contract\nresolve released image and chart inputs" as contract
 rectangle "Released image scan\nscan-released-operator-image-container" as scan
-rectangle "Qualification EKS runtime\nfull validation in one cluster" as runtime_eks #eefbf1
+rectangle "Qualification EKS runtime\nfanout suites, one cluster per suite" as runtime_eks #eefbf1
 rectangle "Qualification FIPS runtime\nexisting-cluster smoke + managersecret" as runtime_fips #eefbf1
 rectangle "Qualification Azure runtime\nazure_sanity" as runtime_azure #eefbf1
 rectangle "Qualification GCP runtime\nGCP sanity fanout" as runtime_gcp #eefbf1

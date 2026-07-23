@@ -109,6 +109,9 @@ scan-released-operator-image-container:
 
 .runtime-released-sok-validation-job:
   extends: .runtime-integration-job
+  id_tokens:
+    CI_JOB_JWT:
+      aud: $CICD_VAULT_ADDR
   needs:
     - job: released-sok-contract
       artifacts: true

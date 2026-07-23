@@ -130,15 +130,15 @@ What the user needs to do:
 
 ![Qualification lane](diagrams/qualification-lane-target.png)
 
-The qualification lane is the manual compatibility decision path.
-It is intentionally separate from the normal `develop` and nightly flow because it answers a different question: whether the current released SOK baseline is compatible with the targeted release inputs.
+The qualification lane is the compatibility decision path for a targeted Splunk Enterprise runtime image.
+It is intentionally separate from the normal `develop`, nightly, and SOK release flows because it answers a different question: whether the current released SOK baseline is compatible with the supplied Enterprise image.
 
 What the qualification automation does:
 
 - runs baseline repository verification and tests
 - resolves the released-SOK contract
 - scans the released operator image with the prodsec `.container-scan` template
-- runs the qualification EKS integration validation
+- runs the qualification EKS integration fanout
 - runs qualification FIPS smoke and managersecret validation on the approved existing FIPS EKS cluster when `PIPELINE_FIPS_EKS_CLUSTER_NAME` is configured
 - runs Azure validation against the released operator path
 - runs the GCP validation suite set against the released operator path
@@ -157,6 +157,7 @@ Qualification inputs:
 
 - required trigger: `SOK_PIPELINE_MODE=qualification_lane`
 - required Splunk Enterprise runtime input: `PIPELINE_RUNTIME_ENTERPRISE_IMAGE=<repo:tag>`, for example `splunk/splunk:10.4.0`
+- optional qualification metadata: `PIPELINE_QUALIFICATION_PROFILE=<name>` (default `monthly`); it is recorded in the qualification manifest and report but does not change the job matrix
 - released SOK baseline: automatically resolved from the latest released `splunk-operator`
 - supported pipeline sources: manual GitLab UI (`web`), direct API (`api`), trigger token (`trigger`), multi-project downstream (`pipeline`), or child pipeline (`parent_pipeline`)
 - EKS runtime inputs: `PIPELINE_AWS_*`, `PIPELINE_EKS_VPC_PUBLIC_SUBNET_STRING`, `PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING`, `PIPELINE_TEST_BUCKET`, and `PIPELINE_TEST_INDEXES_S3_BUCKET`
@@ -165,14 +166,54 @@ Qualification inputs:
 - GCP runtime inputs: either GitLab OIDC with `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT_EMAIL`, or `PIPELINE_GCP_SERVICE_ACCOUNT_KEY`, plus `PIPELINE_GCP_ARTIFACT_REGISTRY`, `PIPELINE_GCP_PROJECT_ID`, `PIPELINE_GCP_REGION`, and `PIPELINE_GCP_ZONE`
 - Graviton runtime input: set `PIPELINE_ENABLE_GRAVITON=true` to run the arm64 suites against the same `PIPELINE_RUNTIME_ENTERPRISE_IMAGE`; set `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` only when arm64 needs a different repo:tag
 
+### Splunk Enterprise Downstream Qualification
+
+Splunk Enterprise release or sustain pipelines in `splcore/main` should call only the qualification lane when they need SOK compatibility evidence.
+They should not call the SOK release validation or release publish lanes.
+Those lanes are owned by the SOK release process and run on the SOK release timeline.
+
+The downstream contract is:
+
+- target project: `sok/splunk-operator`
+- target ref: normally `develop`, because the lane uses current CI logic but tests the latest released SOK artifact
+- required variable: `SOK_PIPELINE_MODE=qualification_lane`
+- required Enterprise image: `PIPELINE_RUNTIME_ENTERPRISE_IMAGE=<enterprise image repo:tag>`
+- optional profile metadata: `PIPELINE_QUALIFICATION_PROFILE=release` or `PIPELINE_QUALIFICATION_PROFILE=sustain`; it is recorded in the qualification manifest and report but does not change the job matrix
+- optional coverage switches: `PIPELINE_FIPS_EKS_CLUSTER_NAME`, `PIPELINE_ENABLE_GRAVITON`, `PIPELINE_GRAVITON_ENTERPRISE_IMAGE`, and the cloud-specific `PIPELINE_AWS_*`, `PIPELINE_AZURE_*`, and `PIPELINE_GCP_*` inputs
+
+When `PIPELINE_RUNTIME_ENTERPRISE_IMAGE` points at `docker.repo.splunkdev.net`, qualification jobs use the Vault-backed SOK Docker read role before mirroring the Enterprise image into the test registry's pre-provisioned `splunk/splunk:<source-tag>` repository.
+The `sok/splunk-operator` project ID `266994` belongs to the `sg-cloud-sok-developer-platform` vault-role-generator policy and already has protected and unprotected Docker read roles; otherwise Docker fails before test deployment with an unauthorized manifest error.
+For any new role grant, update the owning SOK policy rather than adding `project266994` to an unrelated Okta-group policy.
+
+Example upstream trigger job:
+
+```yaml
+sok-qualification:
+  stage: qualification
+  trigger:
+    project: sok/splunk-operator
+    branch: develop
+    strategy: depend
+    forward:
+      pipeline_variables: true
+  variables:
+    SOK_PIPELINE_MODE: qualification_lane
+    PIPELINE_RUNTIME_ENTERPRISE_IMAGE: $SPLUNK_ENTERPRISE_RELEASE_IMAGE
+    PIPELINE_QUALIFICATION_PROFILE: release
+```
+
+The SOK qualification pipeline writes `qualification-manifest`, `qualification-report`, `compatibility-publish-plan`, and `qualification-gate` outputs under `ci-output/release-controller/`.
+The gate succeeds only when the released SOK baseline is qualified with the supplied Enterprise image.
+If the gate fails, the result is a compatibility failure or missing-evidence failure; it does not publish a SOK release.
+
 Qualification runtime inventory:
 
-- EKS full validation: one full released-SOK integration run in one EKS cluster
+- EKS integration fanout: `sva:s1 && feature:appframework`, `sva:c3 && variant:manager && feature:appframework`, `sva:m4 && variant:manager && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `feature:indingsep`, `sva:c3 && variant:manager && feature:idxclustering`, `sva:m4 && variant:manager && feature:idxclustering`
 - FIPS existing-cluster validation: `tier:e2e-pr && feature:basic`, `tier:e2e-pr && variant:manager && feature:secret`
 - Azure validation: `tier:e2e-full && cloud:azure`
 - GCP validation: `tier:e2e-full && sva:s1 && cloud:gcp`, `tier:e2e-full && sva:c3 && cloud:gcp && variant:master`, `tier:e2e-full && sva:c3 && cloud:gcp && variant:manager`, `tier:e2e-full && sva:m4 && cloud:gcp && variant:master`, `tier:e2e-full && sva:m4 && cloud:gcp && variant:manager`
-- Distroless validation: per-suite label-filters (`sva:s1 && feature:appframework`, `sva:c3 && variant:manager && feature:appframework`, `sva:m4 && variant:manager && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `variant:manager && feature:deletecr`, `feature:indingsep`)
-- Graviton validation: `sva:s1 && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `variant:manager && feature:deletecr`, `feature:indingsep`
+- Distroless validation: per-suite label-filters (`sva:s1 && feature:appframework`, `sva:c3 && variant:manager && feature:appframework`, `sva:m4 && variant:manager && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `variant:manager && feature:deletecr`, `feature:indingsep`, `sva:c3 && variant:manager && feature:idxclustering`, `sva:m4 && variant:manager && feature:idxclustering`)
+- Graviton validation: `sva:s1 && feature:appframework`, `variant:manager && feature:secret`, `variant:manager && feature:smartstore`, `variant:manager && feature:monitoringconsole && suite:mc1`, `variant:manager && feature:monitoringconsole && suite:mc2`, `variant:manager && feature:crcrud`, `variant:manager && feature:licensemanager`, `variant:manager && feature:deletecr`, `feature:indingsep`, `sva:c3 && variant:manager && feature:idxclustering`, `sva:m4 && variant:manager && feature:idxclustering`
 - Helm validation: full Helm chart path
 
 ## Release Validation Lane
@@ -277,10 +318,11 @@ The important guardrails are:
 
 ### Qualification cycle
 
-1. Trigger the qualification lane intentionally with `SOK_PIPELINE_MODE=qualification_lane`, either manually or from the release-management orchestrator.
+1. Trigger the qualification lane intentionally with `SOK_PIPELINE_MODE=qualification_lane`, either manually, through API, or from an upstream Splunk Enterprise release or sustain pipeline.
 2. Review the qualification report and gate result.
 3. If qualification says no new SOK release is needed, stop there.
-4. If qualification says a new SOK release is required, cut a release branch and move into the release flow.
+4. If qualification shows current released SOK is not compatible, decide whether a SOK fix and separate SOK release are required.
+5. If a SOK release is required, cut a SOK release branch and move into the SOK release flow.
 
 ### Product release
 
@@ -312,7 +354,7 @@ When a patch is needed:
 ### End-to-end flow summary
 
 1. Normal code change: MR lane -> merge to `develop` -> `develop` lane -> nightly lane
-2. Qualification cycle: intentional `qualification_lane` -> review report and gate
+2. Qualification cycle: Enterprise image or manual input -> intentional `qualification_lane` -> review report and gate
 3. New product release: `release/<version>` branch -> release validation -> MR to `main` -> `main` publish path
 4. Patch release: retained maintenance `release/*` branch -> release validation on that branch -> intentional `release_publish` on that maintenance branch -> forward-port to `main`
 

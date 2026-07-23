@@ -252,6 +252,10 @@ gcp_auth_with_service_account_key() {
   return "${auth_rc}"
 }
 
+# creds-helper selects DOCKER_CONFIG. Configure source auth before GCP auth so
+# the GAR login is written to the same Docker config.
+login_enterprise_source_registry_if_needed "${enterprise_source_image}" >> "${run_log}" 2>&1
+
 log_step "gcp:auth:start" | tee -a "${run_log}" >/dev/null
 if [ "${gcp_auth_mode}" = "oidc" ]; then
   if gcp_auth_with_oidc; then
@@ -301,7 +305,7 @@ copy_if_exists "${build_image_digest_file}" "${digest_file}" >/dev/null 2>&1 || 
 log_step "gcp:operator-image:promote:complete" | tee -a "${build_log}" >/dev/null
 
 log_step "gcp:registry-enterprise-image:start" | tee -a "${run_log}" >/dev/null
-PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(bash "${CI_PROJECT_DIR}/test/get-private-registry-enterprise.sh" | tail -n 1)"
+PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(bash "${CI_PROJECT_DIR}/test/get-private-registry-enterprise.sh")"
 export SPLUNK_ENTERPRISE_IMAGE="${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 append_context "${context_file}" "private_splunk_enterprise_image" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 log_step "gcp:registry-enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" | tee -a "${run_log}" >/dev/null

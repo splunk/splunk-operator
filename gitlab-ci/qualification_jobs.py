@@ -6,7 +6,6 @@ BASE_REQUIRED_QUALIFICATION_JOBS = [
     "released-sok-contract",
     "gosec-scan",
     "govulncheck-scan",
-    "eks-qualification-integration-validation",
     "helm-eks-validation",
     "qualification-azure-validation",
     "qualification-gcp-c3-validation",
@@ -14,6 +13,21 @@ BASE_REQUIRED_QUALIFICATION_JOBS = [
     "qualification-gcp-m4-validation",
     "qualification-gcp-m4-manager-validation",
     "qualification-gcp-s1-validation",
+]
+
+EKS_QUALIFICATION_SUITE_JOBS = [
+    "qualification-appframeworks-s1-validation",
+    "qualification-managerappframework-c3-validation",
+    "qualification-managerappframework-m4-validation",
+    "qualification-managersecret-validation",
+    "qualification-managersmartstore-validation",
+    "qualification-managermc1-validation",
+    "qualification-managermc2-validation",
+    "qualification-managercrcrud-validation",
+    "qualification-licensemanager-validation",
+    "qualification-indingsep-validation",
+    "qualification-managerc3idxclustering-validation",
+    "qualification-managerm4idxclustering-validation",
 ]
 
 FIPS_QUALIFICATION_JOBS = [
@@ -33,6 +47,8 @@ DISTROLESS_QUALIFICATION_SUITE_JOBS = [
     "qualification-distroless-licensemanager-validation",
     "qualification-distroless-managerdeletecr-validation",
     "qualification-distroless-indingsep-validation",
+    "qualification-distroless-managerc3idxclustering-validation",
+    "qualification-distroless-managerm4idxclustering-validation",
 ]
 
 GRAVITON_QUALIFICATION_SUITE_JOBS = [
@@ -45,10 +61,13 @@ GRAVITON_QUALIFICATION_SUITE_JOBS = [
     "qualification-graviton-licensemanager-validation",
     "qualification-graviton-managerdeletecr-validation",
     "qualification-graviton-indingsep-validation",
+    "qualification-graviton-managerc3idxclustering-validation",
+    "qualification-graviton-managerm4idxclustering-validation",
 ]
 
 REQUIRED_QUALIFICATION_JOBS = (
     BASE_REQUIRED_QUALIFICATION_JOBS
+    + EKS_QUALIFICATION_SUITE_JOBS
     + FIPS_QUALIFICATION_JOBS
     + DISTROLESS_QUALIFICATION_SUITE_JOBS
     + GRAVITON_QUALIFICATION_SUITE_JOBS
@@ -57,6 +76,7 @@ REQUIRED_QUALIFICATION_JOBS = (
 
 def qualification_jobs_for_environment(*, include_fips: bool, include_graviton: bool) -> list[str]:
     jobs = list(BASE_REQUIRED_QUALIFICATION_JOBS)
+    jobs.extend(EKS_QUALIFICATION_SUITE_JOBS)
     if include_fips:
         jobs.extend(FIPS_QUALIFICATION_JOBS)
     jobs.extend(DISTROLESS_QUALIFICATION_SUITE_JOBS)
@@ -69,8 +89,19 @@ JOB_EVIDENCE = {
     "released-sok-contract": ["ci-output/release-controller/released-sok-contract.json"],
     "gosec-scan": ["gosec-results.txt"],
     "govulncheck-scan": ["govulncheck-results.txt"],
-    "eks-qualification-integration-validation": ["ci-output/qualification-int-test-workflow-inttest-junit.xml"],
     "helm-eks-validation": ["ci-output/helm-test-workflow-kuttl-junit.xml"],
+    "qualification-appframeworks-s1-validation": ["ci-output/qualification-appframeworks-s1-validation-inttest-junit.xml"],
+    "qualification-managerappframework-c3-validation": ["ci-output/qualification-managerappframework-c3-validation-inttest-junit.xml"],
+    "qualification-managerappframework-m4-validation": ["ci-output/qualification-managerappframework-m4-validation-inttest-junit.xml"],
+    "qualification-managersecret-validation": ["ci-output/qualification-managersecret-validation-inttest-junit.xml"],
+    "qualification-managersmartstore-validation": ["ci-output/qualification-managersmartstore-validation-inttest-junit.xml"],
+    "qualification-managermc1-validation": ["ci-output/qualification-managermc1-validation-inttest-junit.xml"],
+    "qualification-managermc2-validation": ["ci-output/qualification-managermc2-validation-inttest-junit.xml"],
+    "qualification-managercrcrud-validation": ["ci-output/qualification-managercrcrud-validation-inttest-junit.xml"],
+    "qualification-licensemanager-validation": ["ci-output/qualification-licensemanager-validation-inttest-junit.xml"],
+    "qualification-indingsep-validation": ["ci-output/qualification-indingsep-validation-inttest-junit.xml"],
+    "qualification-managerc3idxclustering-validation": ["ci-output/qualification-managerc3idxclustering-validation-inttest-junit.xml"],
+    "qualification-managerm4idxclustering-validation": ["ci-output/qualification-managerm4idxclustering-validation-inttest-junit.xml"],
     "qualification-fips-smoke-validation": ["ci-output/qualification-fips-smoke-validation-inttest-junit.xml"],
     "qualification-fips-integration-validation": ["ci-output/qualification-fips-integration-validation-inttest-junit.xml"],
     "qualification-azure-validation": ["ci-output/qualification-azure-validation-inttest-junit.xml"],
@@ -90,6 +121,8 @@ JOB_EVIDENCE = {
     "qualification-distroless-licensemanager-validation": ["ci-output/qualification-distroless-licensemanager-validation-inttest-junit.xml"],
     "qualification-distroless-managerdeletecr-validation": ["ci-output/qualification-distroless-managerdeletecr-validation-inttest-junit.xml"],
     "qualification-distroless-indingsep-validation": ["ci-output/qualification-distroless-indingsep-validation-inttest-junit.xml"],
+    "qualification-distroless-managerc3idxclustering-validation": ["ci-output/qualification-distroless-managerc3idxclustering-validation-inttest-junit.xml"],
+    "qualification-distroless-managerm4idxclustering-validation": ["ci-output/qualification-distroless-managerm4idxclustering-validation-inttest-junit.xml"],
     "qualification-graviton-appframeworks-s1-validation": ["ci-output/qualification-graviton-appframeworks-s1-validation-inttest-junit.xml"],
     "qualification-graviton-managersecret-validation": ["ci-output/qualification-graviton-managersecret-validation-inttest-junit.xml"],
     "qualification-graviton-managersmartstore-validation": ["ci-output/qualification-graviton-managersmartstore-validation-inttest-junit.xml"],
@@ -99,6 +132,8 @@ JOB_EVIDENCE = {
     "qualification-graviton-licensemanager-validation": ["ci-output/qualification-graviton-licensemanager-validation-inttest-junit.xml"],
     "qualification-graviton-managerdeletecr-validation": ["ci-output/qualification-graviton-managerdeletecr-validation-inttest-junit.xml"],
     "qualification-graviton-indingsep-validation": ["ci-output/qualification-graviton-indingsep-validation-inttest-junit.xml"],
+    "qualification-graviton-managerc3idxclustering-validation": ["ci-output/qualification-graviton-managerc3idxclustering-validation-inttest-junit.xml"],
+    "qualification-graviton-managerm4idxclustering-validation": ["ci-output/qualification-graviton-managerm4idxclustering-validation-inttest-junit.xml"],
 }
 
 JOB_JUNIT_EVIDENCE = {
