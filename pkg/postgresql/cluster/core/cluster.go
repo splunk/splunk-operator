@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"log/slog"
 	"time"
 
@@ -92,8 +91,15 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	}
 	updatePhaseStatus := func(phase reconcileClusterPhases) error {
 		oldPhase := currentPhase()
-		if err := setPhaseStatus(ctx, c, postgresCluster, phase); err != nil {
+		readinessDuration, completedReadinessCycle, err := setPhaseStatus(ctx, c, postgresCluster, phase)
+		if err != nil {
 			return err
+		}
+		if completedReadinessCycle && rc.Metrics != nil {
+			rc.Metrics.ObserveProvisioningDuration(
+				ports.ControllerCluster,
+				readinessDuration,
+			)
 		}
 		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), "", "")
 		return nil
@@ -187,8 +193,14 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			return ctrl.Result{}, err
 		}
 	}
+	blocked := blockedComponents(useCaseReconciler)
+	if len(blocked) > 0 {
+		if err := startReadinessCycle(ctx, c, postgresCluster); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 
-	result, err := runComponents(ctx, logger, components, blockedComponents(useCaseReconciler))
+	result, err := runComponents(ctx, logger, components, blocked)
 	if err != nil {
 		return result, err
 	}
@@ -426,6 +438,7 @@ func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, clu
 		Message:            message,
 		ObservedGeneration: cluster.Generation,
 	})
+	beginReadinessCycle(cluster, before, phase)
 
 	if equality.Semantic.DeepEqual(*before, cluster.Status) {
 		return nil
@@ -449,17 +462,64 @@ func setStatusFromHealth(ctx context.Context, c client.Client, metrics ports.Rec
 	return setStatus(ctx, c, metrics, cluster, before, health.Condition, conditionStatus, health.Reason, health.Message, health.Phase)
 }
 
-func setPhaseStatus(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, phase reconcileClusterPhases) error {
+// beginReadinessCycle persists the start of a single time-to-Ready cycle. Initial
+// provisioning starts at creation. Later cycles start when a persisted Ready
+// cluster becomes non-Ready, or when a new generation resumes a failed cycle.
+func beginReadinessCycle(cluster *enterprisev4.PostgresCluster, before *enterprisev4.PostgresClusterStatus, phase reconcileClusterPhases) {
+	if phase == "" || phase == readyClusterPhase || cluster.Status.LastTransitionTime != nil {
+		return
+	}
+
+	if before.Phase == nil && before.ObservedGeneration == nil {
+		lastTransitionTime := cluster.CreationTimestamp
+		cluster.Status.LastTransitionTime = &lastTransitionTime
+		return
+	}
+
+	wasReady := before.Phase != nil && *before.Phase == string(readyClusterPhase)
+	generationChanged := before.ObservedGeneration != nil && *before.ObservedGeneration != cluster.Generation
+	if wasReady || generationChanged {
+		lastTransitionTime := metav1.Now()
+		cluster.Status.LastTransitionTime = &lastTransitionTime
+	}
+}
+
+// startReadinessCycle records a readiness cycle when an active use case blocks
+// normal component reconciliation before a non-Ready status can be written.
+func startReadinessCycle(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster) error {
 	before := cluster.Status.DeepCopy()
-	p := string(phase)
-	cluster.Status.Phase = &p
+	beginReadinessCycle(cluster, before, provisioningClusterPhase)
 	if equality.Semantic.DeepEqual(*before, cluster.Status) {
 		return nil
 	}
 	if err := c.Status().Update(ctx, cluster); err != nil {
-		return fmt.Errorf("failed to update PostgresCluster status phase: %w", err)
+		return fmt.Errorf("failed to start PostgresCluster readiness cycle: %w", err)
 	}
 	return nil
+}
+
+// setPhaseStatus persists a final phase and returns the duration only when that
+// successful write completes an active time-to-Ready cycle.
+func setPhaseStatus(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, phase reconcileClusterPhases) (float64, bool, error) {
+	before := cluster.Status.DeepCopy()
+	p := string(phase)
+	cluster.Status.Phase = &p
+	completedReadinessCycle := phase == readyClusterPhase && cluster.Status.LastTransitionTime != nil
+	var lastTransitionTime time.Time
+	if completedReadinessCycle {
+		lastTransitionTime = cluster.Status.LastTransitionTime.Time
+		cluster.Status.LastTransitionTime = nil
+	}
+	if equality.Semantic.DeepEqual(*before, cluster.Status) {
+		return 0, false, nil
+	}
+	if err := c.Status().Update(ctx, cluster); err != nil {
+		return 0, false, fmt.Errorf("failed to update PostgresCluster status phase: %w", err)
+	}
+	if completedReadinessCycle {
+		return time.Since(lastTransitionTime).Seconds(), true, nil
+	}
+	return 0, false, nil
 }
 
 // deleteCNPGCluster deletes the CNPG Cluster if it exists.

@@ -2548,13 +2548,20 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 
 	// makeModel builds a clusterModel with cnpgPatch and cnpgCluster already set,
 	// simulating the post-Reconcile state seen by Observe.
-	makeModel := func(patchKind cnpgPatchKind, cnpgPhase string) *clusterModel {
+	makeModel := func(patchKind cnpgPatchKind, cnpgPhase, specImage, statusImage, pgDataImage string) *clusterModel {
 		cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 		cnpg := &cnpgv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+			Spec:       cnpgv1.ClusterSpec{ImageName: specImage},
 			// Settled instance count matching cfg so the scale gate does not fire —
 			// this test isolates the patch-kind phase gate.
-			Status: cnpgv1.ClusterStatus{Phase: cnpgPhase, Instances: int(instances), ReadyInstances: int(instances)},
+			Status: cnpgv1.ClusterStatus{
+				Phase:           cnpgPhase,
+				Image:           statusImage,
+				PGDataImageInfo: &cnpgv1.ImageInfo{Image: pgDataImage},
+				Instances:       int(instances),
+				ReadyInstances:  int(instances),
+			},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
 		contracts := &reconcileContracts{CNPGCluster: cnpg}
@@ -2568,6 +2575,9 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 		name          string
 		patchKind     cnpgPatchKind
 		cnpgPhase     string
+		specImage     string
+		statusImage   string
+		pgDataImage   string
 		expectedState pgcConstants.State
 		expectRequeue bool
 	}{
@@ -2592,13 +2602,42 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 			expectedState: pgcConstants.Ready,
 			expectRequeue: false,
 		},
+		{
+			name:          "stale CNPG pod image + Healthy holds at Provisioning",
+			patchKind:     cnpgPatchNone,
+			cnpgPhase:     cnpgv1.PhaseHealthy,
+			specImage:     "ghcr.io/cloudnative-pg/postgresql:18.0",
+			statusImage:   "ghcr.io/cloudnative-pg/postgresql:17.6",
+			expectedState: pgcConstants.Provisioning,
+			expectRequeue: true,
+		},
+		{
+			name:          "stale CNPG data image + Healthy holds at Provisioning",
+			patchKind:     cnpgPatchNone,
+			cnpgPhase:     cnpgv1.PhaseHealthy,
+			specImage:     "ghcr.io/cloudnative-pg/postgresql:18.0",
+			statusImage:   "ghcr.io/cloudnative-pg/postgresql:18.0",
+			pgDataImage:   "ghcr.io/cloudnative-pg/postgresql:17.6",
+			expectedState: pgcConstants.Provisioning,
+			expectRequeue: true,
+		},
+		{
+			name:          "digest-qualified CNPG images + Healthy reaches Ready",
+			patchKind:     cnpgPatchNone,
+			cnpgPhase:     cnpgv1.PhaseHealthy,
+			specImage:     "ghcr.io/cloudnative-pg/postgresql:18.0",
+			statusImage:   "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			pgDataImage:   "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			expectedState: pgcConstants.Ready,
+			expectRequeue: false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			model := makeModel(tt.patchKind, tt.cnpgPhase)
+			model := makeModel(tt.patchKind, tt.cnpgPhase, tt.specImage, tt.statusImage, tt.pgDataImage)
 
 			health, err := model.Observe(context.Background(), nil)
 

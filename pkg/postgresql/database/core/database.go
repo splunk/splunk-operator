@@ -116,7 +116,7 @@ func PostgresDatabaseService(
 	wasReady := postgresDB.Status.Phase != nil && *postgresDB.Status.Phase == string(readyDBPhase)
 
 	updateStatus := func(conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
-		return persistStatus(ctx, c, rc.Metrics, postgresDB, conditionType, conditionStatus, reason, message, phase)
+		return persistStatus(ctx, c, rc.Metrics, postgresDB, wasReady, conditionType, conditionStatus, reason, message, phase)
 	}
 
 	// Finalizer: cleanup on deletion, register on creation.
@@ -496,6 +496,12 @@ func PostgresDatabaseService(
 		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, privilegesReady, EventPrivilegesReady, privilegesMsg)
 	}
 	applyStatus(postgresDB, privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted, privilegesMsg, readyDBPhase)
+	completedReadinessCycle := postgresDB.Status.LastTransitionTime != nil
+	var lastTransitionTime time.Time
+	if completedReadinessCycle {
+		lastTransitionTime = postgresDB.Status.LastTransitionTime.Time
+		postgresDB.Status.LastTransitionTime = nil
+	}
 
 	if !wasReady {
 		rc.emitNormal(postgresDB, EventPostgresDatabaseReady, fmt.Sprintf("PostgresDatabase %s is ready", postgresDB.Name))
@@ -508,6 +514,12 @@ func PostgresDatabaseService(
 			return result, conflictErr
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to persist final status: %w", err)
+	}
+	if completedReadinessCycle && rc.Metrics != nil {
+		rc.Metrics.ObserveProvisioningDuration(
+			ports.ControllerDatabase,
+			time.Since(lastTransitionTime).Seconds(),
+		)
 	}
 
 	logger.DebugContext(ctx, "PostgresDatabase reconciliation completed")
@@ -687,13 +699,17 @@ func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *ente
 	return notReady, nil
 }
 
-func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder, db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) error {
+func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder, db *enterprisev4.PostgresDatabase, wasReadyAtReconcileStart bool, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases,
+) error {
 	before := db.Status.DeepCopy()
 	applyStatus(db, conditionType, conditionStatus, reason, message, phase)
+	beginReadinessCycle(db, before, wasReadyAtReconcileStart, conditionStatus, phase)
 	if equality.Semantic.DeepEqual(*before, db.Status) {
 		return nil
 	}
-	metrics.IncStatusTransition(ports.ControllerDatabase, string(conditionType), string(conditionStatus), string(reason))
+	if metrics != nil {
+		metrics.IncStatusTransition(ports.ControllerDatabase, string(conditionType), string(conditionStatus), string(reason))
+	}
 	return c.Status().Update(ctx, db)
 }
 
@@ -708,6 +724,30 @@ func applyStatus(db *enterprisev4.PostgresDatabase, conditionType conditionTypes
 	p := string(phase)
 	db.Status.Phase = &p
 	db.Status.ObservedGeneration = &db.Generation
+}
+
+// beginReadinessCycle persists the start of a single time-to-Ready cycle. Initial
+// provisioning starts at creation. Later cycles start for a new generation or a
+// real readiness blocker. Routine successful Provisioning updates are written
+// on every reconcile and do not start a cycle.
+func beginReadinessCycle(db *enterprisev4.PostgresDatabase, before *enterprisev4.PostgresDatabaseStatus, wasReadyAtReconcileStart bool, conditionStatus metav1.ConditionStatus, phase reconcileDBPhases) {
+	if phase == readyDBPhase || db.Status.LastTransitionTime != nil {
+		return
+	}
+
+	if before.Phase == nil && before.ObservedGeneration == nil {
+		lastTransitionTime := db.CreationTimestamp
+		db.Status.LastTransitionTime = &lastTransitionTime
+		return
+	}
+
+	wasReady := before.Phase != nil && *before.Phase == string(readyDBPhase)
+	generationChanged := before.ObservedGeneration != nil && *before.ObservedGeneration != db.Generation
+	readinessBlocked := conditionStatus == metav1.ConditionFalse || phase == pendingDBPhase || phase == failedDBPhase
+	if generationChanged || ((wasReady || wasReadyAtReconcileStart) && readinessBlocked) {
+		lastTransitionTime := metav1.Now()
+		db.Status.LastTransitionTime = &lastTransitionTime
+	}
 }
 
 func buildDeletionPlan(databases []enterprisev4.DatabaseDefinition) deletionPlan {

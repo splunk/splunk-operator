@@ -194,7 +194,7 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrlBuilder.
-		Named("postgresCluster").
+		Named(ports.ControllerCluster).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: ClusterTotalWorker,
 		}).

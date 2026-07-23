@@ -48,6 +48,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
@@ -84,6 +85,26 @@ func ContainsEvent(events []string, eventType string, event string) bool {
 	}
 	return false
 }
+
+type provisioningDurationObservation struct {
+	controller string
+	seconds    float64
+}
+
+type captureMetricsRecorder struct {
+	provisioningDurations []provisioningDurationObservation
+}
+
+func (r *captureMetricsRecorder) IncStatusTransition(string, string, string, string) {}
+func (r *captureMetricsRecorder) ObserveProvisioningDuration(controller string, seconds float64) {
+	r.provisioningDurations = append(r.provisioningDurations, provisioningDurationObservation{controller: controller, seconds: seconds})
+}
+func (r *captureMetricsRecorder) SetClusterPhases(map[string]float64)        {}
+func (r *captureMetricsRecorder) SetPoolerEnabledClusters(float64)           {}
+func (r *captureMetricsRecorder) SetDatabasePhases(map[string]float64)       {}
+func (r *captureMetricsRecorder) SetManagedUsers(string, map[string]float64) {}
+
+var _ ports.Recorder = (*captureMetricsRecorder)(nil)
 
 // seedCNPGClusterServerCASecret creates a minimal CNPG-style server CA Secret (ca.crt) so the access
 // ConfigMap can expose SERVER_CA_* keys once status.certificates.serverCASecret points at it.
@@ -563,7 +584,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				)).To(BeTrue(), "events seen: %v", received)
 			})
 
-			It("drives the pg_upgrade major-version workflow and blocks provisioner drift while active", func() {
+			It("drives the pg_upgrade major-version workflow and observes one readiness duration", func() {
 				targetVersion := "16"
 				initialImage := fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", postgresVersion)
 				targetImage := fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", targetVersion)
@@ -577,11 +598,20 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				Expect(cnpg.Spec.ImageName).To(Equal(initialImage))
-				markCNPGHealthy(cnpg, clusterMemberCount)
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+				cnpg.Status.Image = initialImage
+				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: initialImage, MajorVersion: 15}
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileAfterCNPGHealthyOrPatch()
 
 				pc := &enterprisev4.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				Expect(pc.Status.Phase).NotTo(BeNil())
+				Expect(*pc.Status.Phase).To(Equal("Ready"))
+
+				metrics := &captureMetricsRecorder{}
+				reconciler.Metrics = metrics
 				completedPhase := string(mvutypes.Completed)
 				strategy := mvutypes.MajorUpgradeFlowPgUpgrade
 				sourceVersion := "14"
@@ -606,6 +636,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				_, err := reconciler.Reconcile(ctx, req)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.PreUpgradeBackup)))
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				Expect(pc.Status.LastTransitionTime).NotTo(BeNil())
+				lastTransitionTime := *pc.Status.LastTransitionTime
 
 				backupName := fmt.Sprintf("%s-pre-upgrade-%s-%s", clusterName, postgresVersion, targetVersion)
 				backup := &cnpgv1.Backup{}
@@ -630,19 +663,32 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(cnpg.Spec.ImageName).To(Equal(initialImage), "provisioner drift must be blocked before pg_upgrade starts")
 				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Preflight)))
 
-				// Simulate CNPG becoming healthy first, but without managed roles status published yet.
-				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				// CNPG applies the target image while the data directory still uses the
+				// source image. A major-upgrade phase must keep the readiness cycle open.
 				cnpg = &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
-				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
-				//reconcileAfterCNPGHealthyOrPatch()
-
 				_, err = reconciler.Reconcile(ctx, req)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				Expect(cnpg.Spec.ImageName).To(Equal(targetImage))
 				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Upgrading)))
+
+				cnpg.Status.Phase = cnpgv1.PhaseMajorUpgrade
+				cnpg.Status.Image = targetImage
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Upgrading)))
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				Expect(pc.Status.LastTransitionTime).NotTo(BeNil())
+				Expect(*pc.Status.LastTransitionTime).To(Equal(lastTransitionTime))
+				Expect(metrics.provisioningDurations).To(BeEmpty())
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+				cnpg.Status.Image = targetImage
+				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: targetImage, MajorVersion: 16}
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 
 				_, err = reconciler.Reconcile(ctx, req)
 				Expect(err).NotTo(HaveOccurred())
@@ -668,6 +714,22 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				_, err = reconciler.Reconcile(ctx, req)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Completed)))
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+					g.Expect(pc.Status.Phase).NotTo(BeNil())
+					g.Expect(*pc.Status.Phase).To(Equal("Ready"))
+					g.Expect(pc.Status.LastTransitionTime).To(BeNil())
+				}).WithTimeout(45 * time.Second).WithPolling(50 * time.Millisecond).Should(Succeed())
+
+				Expect(metrics.provisioningDurations).To(HaveLen(1))
+				Expect(metrics.provisioningDurations[0].controller).To(Equal(ports.ControllerCluster))
+				Expect(metrics.provisioningDurations[0].seconds).To(BeNumerically(">", 0))
+
+				reconcileNTimes(2)
+				Expect(metrics.provisioningDurations).To(HaveLen(1))
 
 				received := make([]string, 0, 16)
 				CollectEvents(&received, fakeRecorder)

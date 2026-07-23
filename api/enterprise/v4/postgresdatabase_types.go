@@ -105,6 +105,11 @@ type PostgresDatabaseStatus struct {
 	Phase *string `json:"phase,omitempty"`
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// LastTransitionTime is the start time of the active time-to-Ready cycle.
+	// It is cleared when the PostgresDatabase successfully reaches Ready.
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+
 	// +optional
 	Databases []DatabaseInfo `json:"databases,omitempty"`
 	// ObservedGeneration represents the .metadata.generation that the status was set based upon.
