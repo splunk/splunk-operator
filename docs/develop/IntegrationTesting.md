@@ -642,6 +642,7 @@ make int-test
 ```
 
 This runs `test/run-tests.sh`, which deploys the operator and invokes Ginkgo with the settings from `test/env.sh`.
+When `PRIVATE_REGISTRY` is set, `run-tests.sh` prepares the Enterprise image through `get-private-registry-enterprise.sh`, captures its single resolved image reference, and stops before deployment if the image pull, tag, or push fails. Diagnostic and Docker output remains in the job log instead of being included in the captured image reference.
 
 ### Run a Specific Suite Directly
 
