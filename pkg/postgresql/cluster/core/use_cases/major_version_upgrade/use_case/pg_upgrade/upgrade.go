@@ -110,22 +110,10 @@ func (v *pgUpgradeFlow) onUpgrading(ctx context.Context) (reconciliationTypes.Re
 			errors.Is(err, mvutypes.ErrUpgradeUnrecoverablePostConversion) {
 			return mvutypes.ReportFromError(err), err
 		}
-		return reconciliationTypes.Report{
-			Name:    mvutypes.UseCaseName,
-			Phase:   string(mvutypes.Upgrading),
-			Reason:  mvutypes.ReasonUpgradeFlowPending,
-			Message: mvutypes.MessagePgUpgradeStillRunning,
-			Retry:   true,
-		}, nil
+		return mvutypes.ReportFromError(mvutypes.ErrUpgradeFlowPending), nil
 	}
 	if !done {
-		return reconciliationTypes.Report{
-			Name:    mvutypes.UseCaseName,
-			Phase:   string(mvutypes.Upgrading),
-			Reason:  mvutypes.ReasonUpgradeFlowPending,
-			Message: mvutypes.MessagePgUpgradeStillRunning,
-			Retry:   true,
-		}, nil
+		return mvutypes.ReportFromError(mvutypes.ErrUpgradeFlowPending), nil
 	}
 
 	return reconciliationTypes.Report{
