@@ -498,7 +498,8 @@ Per-spec and suite-level timeouts are defined in `test/testenv/timeouts.go`. Use
 | `ShortSuiteTimeout` | 30 min | SmartStore, index/ingestion separation |
 | `MediumSuiteTimeout` | 120 min | Smoke, S1 app framework |
 | `MediumLongSuiteTimeout` | 150 min | MC, License Manager, secret |
-| `LongSuiteTimeout` | 225 min | CR CRUD, M4/C3 app framework |
+| `LongSuiteTimeout` | 225 min | CR CRUD, M4 app framework |
+| `SuiteTimeout180m` | 180 min | C3 app framework |
 
 **Other timeouts:**
 
@@ -713,7 +714,7 @@ ginkgo -v -nodes=3 ./test/smoke -- \
 
 ### Using the Script Directly
 
-The `test/trigger-tests.sh` script wraps Ginkgo and selects tests via `TEST_LABELS` (a Ginkgo label-filter expression). The legacy `TEST_FOCUS` / `TEST_REGEX` / `TEST_TO_SKIP` / `SKIP_REGEX` variables are no longer honoured and will cause the script to exit.
+The `test/trigger-tests.sh` script wraps Ginkgo and selects tests via `TEST_LABELS` (a Ginkgo label-filter expression). The legacy `TEST_FOCUS` / `TEST_REGEX` / `TEST_TO_SKIP` / `SKIP_REGEX` variables are no longer honoured and will cause the script to exit. When `TEST_LABELS` includes `tier:e2e-pr` (the smoke tier), the script also passes `--fail-fast` so a suite stops at its first failure instead of running every remaining spec against already-broken cluster state. This is scoped to `tier:e2e-pr` only: smoke runs gate PR merges, so stopping fast gets a red/green signal back quickly. Nightly/full suites intentionally keep `keep-going` semantics so a single run surfaces every failing spec instead of just the first.
 
 ```bash
 export TEST_LABELS="tier:e2e-pr && sva:s1"
