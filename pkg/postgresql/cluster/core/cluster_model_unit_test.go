@@ -1329,6 +1329,50 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				Instances:           1,
 				PrimaryUpdateMethod: "",
 				BootstrapType:       "recovery",
+				// A bare recovery stanza (no source/externalCluster/target) still captures an empty
+				// recovery spec so the wiring participates in drift detection once populated.
+				Recovery: &normalizedRecoverySpec{},
+			},
+		},
+		{
+			name: "recovery bootstrap captures source, origin externalCluster and target",
+			spec: cnpgv1.ClusterSpec{
+				ImageName: "img:18",
+				Instances: 1,
+				Bootstrap: &cnpgv1.BootstrapConfiguration{
+					Recovery: &cnpgv1.BootstrapRecovery{
+						Source:         recoveryExternalClusterName,
+						RecoveryTarget: &cnpgv1.RecoveryTarget{TargetTime: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)},
+					},
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{Name: "foreign"},
+					{
+						Name: recoveryExternalClusterName,
+						PluginConfiguration: &cnpgv1.PluginConfiguration{
+							Name:       barmanCloudPluginName,
+							Parameters: map[string]string{"serverName": "src"},
+						},
+					},
+				},
+			},
+			expected: normalizedCNPGClusterSpec{
+				ImageName:           "img:18",
+				Instances:           1,
+				PrimaryUpdateMethod: "",
+				BootstrapType:       "recovery",
+				Recovery: &normalizedRecoverySpec{
+					Source: recoveryExternalClusterName,
+					ExternalCluster: &normalizedRecoveryExternalCluster{
+						Name:       recoveryExternalClusterName,
+						PluginName: barmanCloudPluginName,
+						Parameters: map[string]string{"serverName": "src"},
+					},
+					Target: &normalizedRecoveryTarget{
+						TargetTime: "2026-05-01T13:30:00Z",
+						Exclusive:  ptr.To(true),
+					},
+				},
 			},
 		},
 		{

@@ -84,16 +84,82 @@ spec:
                   When set, the cluster is initialized from the specified backup source instead of a fresh initdb.
                   This field is immutable after creation.
                 properties:
+                  objectStorage:
+                    description: |-
+                      ObjectStorage restores from an object storage backup (e.g. S3) managed by the
+                      PostgresClusterClass. Bucket path and credentials are resolved from the class.
+                      Mutually exclusive with volumeSnapshot.
+                    properties:
+                      serverName:
+                        description: |-
+                          ServerName is the identifier of the source cluster in the object store.
+                          Must match the server name used when the backup was written.
+                        minLength: 1
+                        type: string
+                    required:
+                    - serverName
+                    type: object
+                  recoveryTarget:
+                    description: |-
+                      RecoveryTarget defines an optional point-in-time recovery (PITR) target.
+                      When omitted, recovery replays all available WAL (recovery to latest).
+                      For a volumeSnapshot source, setting recoveryTarget requires volumeSnapshot.walArchive
+                      so WAL segments can be replayed past the snapshot point.
+                    properties:
+                      exclusive:
+                        description: |-
+                          Exclusive stops recovery just before the target rather than just after (default: false).
+                          Ignored for type immediate.
+                        type: boolean
+                      type:
+                        description: Type selects which kind of recovery target Value
+                          carries.
+                        enum:
+                        - time
+                        - lsn
+                        - xid
+                        - name
+                        - immediate
+                        type: string
+                      value:
+                        description: |-
+                          Value is the target's value, interpreted according to Type:
+                          an RFC 3339 timestamp (time), a WAL LSN (lsn), a transaction ID (xid), or a restore-point name
+                          (name). It must be empty when Type is immediate.
+                        type: string
+                    required:
+                    - type
+                    type: object
+                    x-kubernetes-validations:
+                    - message: value is required for target types time, lsn, xid,
+                        and name, and must be empty for type immediate
+                      rule: 'self.type == ''immediate'' ? !has(self.value) || size(self.value)
+                        == 0 : has(self.value) && size(self.value) > 0'
                   volumeSnapshot:
                     description: |-
                       VolumeSnapshot restores from Kubernetes VolumeSnapshot resources.
-                      Required whenever bootstrapFrom is set — it is the only supported recovery source.
+                      Mutually exclusive with objectStorage.
                     properties:
                       storage:
                         description: Storage is the name of the VolumeSnapshot containing
                           the PGDATA directory.
                         minLength: 1
                         type: string
+                      walArchive:
+                        description: |-
+                          WalArchive identifies the object store WAL archive to replay WAL segments after the
+                          snapshot. Bucket path and credentials are resolved from the class backup config.
+                          Required when RecoveryTarget is set (PITR); optional for a plain snapshot restore.
+                        properties:
+                          serverName:
+                            description: |-
+                              ServerName is the identifier of the source cluster in the object store.
+                              Must match the server name used when the backup was written.
+                            minLength: 1
+                            type: string
+                        required:
+                        - serverName
+                        type: object
                       walStorage:
                         description: |-
                           WalStorage is the name of the VolumeSnapshot containing the pg_wal directory.
@@ -103,12 +169,13 @@ spec:
                     required:
                     - storage
                     type: object
-                required:
-                - volumeSnapshot
                 type: object
                 x-kubernetes-validations:
                 - message: bootstrapFrom is immutable
                   rule: self == oldSelf
+                - message: exactly one of volumeSnapshot or objectStorage must be
+                    set
+                  rule: has(self.volumeSnapshot) != has(self.objectStorage)
               class:
                 description: This field is IMMUTABLE after creation.
                 minLength: 1
@@ -821,6 +888,37 @@ spec:
                     description: Source identifies the backup the cluster was restored
                       from.
                     properties:
+                      objectStorage:
+                        description: ObjectStorage is the server name of the object
+                          storage backup the cluster was restored from.
+                        type: string
+                      requestedRecoveryTarget:
+                        description: |-
+                          RequestedRecoveryTarget echoes the point-in-time recovery target requested in spec.bootstrapFrom,
+                          if any. It is derived from the desired spec, not observed from the provider, so it records what
+                          the restore was asked to recover to (not a confirmation of where recovery actually stopped).
+                          Nil for recovery to the latest available WAL.
+                        properties:
+                          exclusive:
+                            description: |-
+                              Exclusive reports whether recovery was requested to stop just before the target (true) rather
+                              than just after (false/omitted).
+                            type: boolean
+                          type:
+                            description: Type is the kind of recovery target that
+                              was requested.
+                            enum:
+                            - time
+                            - lsn
+                            - xid
+                            - name
+                            - immediate
+                            type: string
+                          value:
+                            description: Value is the target's value (empty for type
+                              immediate).
+                            type: string
+                        type: object
                       volumeSnapshot:
                         description: VolumeSnapshot is the name of the VolumeSnapshot
                           the cluster was restored from.

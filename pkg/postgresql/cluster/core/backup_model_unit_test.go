@@ -79,19 +79,6 @@ func newTestCluster(name, ns string) *enterprisev4.PostgresCluster {
 	}
 }
 
-// ownedByCluster returns an OwnerReferences slice marking the object as controlled by the
-// given PostgresCluster, matching what ctrl.SetControllerReference writes at runtime. Used to
-// seed ScheduledBackups that the controller is allowed to garbage-collect.
-func ownedByCluster(cluster *enterprisev4.PostgresCluster) []metav1.OwnerReference {
-	return []metav1.OwnerReference{{
-		APIVersion: enterprisev4.GroupVersion.String(),
-		Kind:       "PostgresCluster",
-		Name:       cluster.Name,
-		UID:        cluster.UID,
-		Controller: ptr.To(true),
-	}}
-}
-
 func newTestMergedConfig(backupEnabled bool, schedule string) *MergedConfig {
 	instances := int32(3)
 	version := "18"
