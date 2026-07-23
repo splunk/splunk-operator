@@ -39,6 +39,7 @@ import (
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -179,6 +180,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if err != nil {
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue or ObjectStorage CR not found", err)
+		}
 		return result, fmt.Errorf("ensure defaults: %w", err)
 	}
 
@@ -474,6 +478,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if err != nil {
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue or ObjectStorage CR not found", err)
+		}
 		return result, fmt.Errorf("ensure defaults: %w", err)
 	}
 
@@ -1245,7 +1252,15 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 // the ConfigMap and Secret are derived from a single consistent read of the source
 // queue/storage/secret.
 func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
-	if cr.Spec.QueueRef == nil || cr.Spec.QueueRef.Name == "" {
+	queueRefName := ""
+	if cr.Spec.QueueRef != nil {
+		queueRefName = cr.Spec.QueueRef.Name
+	}
+	osRefName := ""
+	if cr.Spec.ObjectStorageRef != nil {
+		osRefName = cr.Spec.ObjectStorageRef.Name
+	}
+	if queueRefName == "" && osRefName == "" {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, nil
 	}
 	var queueRef, osRef corev1.ObjectReference
@@ -1305,6 +1320,19 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 	// We cannot have 0 replicas in IndexerCluster spec, since this refers to number of indexers in an indexer cluster
 	if cr.Spec.Replicas == 0 {
 		cr.Spec.Replicas = 1
+	}
+
+	// queueRef and objectStorageRef are both-or-neither: if one name is set the other must be too
+	queueRefName := ""
+	if cr.Spec.QueueRef != nil {
+		queueRefName = cr.Spec.QueueRef.Name
+	}
+	osRefName := ""
+	if cr.Spec.ObjectStorageRef != nil {
+		osRefName = cr.Spec.ObjectStorageRef.Name
+	}
+	if (queueRefName == "") != (osRefName == "") {
+		return fmt.Errorf("queueRef and objectStorageRef must both be set or both be empty")
 	}
 
 	// Cannot leave clusterManagerRef field empty or else we cannot connect to CM

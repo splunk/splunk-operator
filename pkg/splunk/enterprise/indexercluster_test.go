@@ -71,6 +71,86 @@ func init() {
 	}
 }
 
+func TestApplyIndexerClusterTerminalFailures(t *testing.T) {
+	ctx := context.TODO()
+
+	newScheme := func() *pkgruntime.Scheme {
+		s := pkgruntime.NewScheme()
+		_ = enterpriseApi.AddToScheme(s)
+		_ = corev1.AddToScheme(s)
+		_ = appsv1.AddToScheme(s)
+		return s
+	}
+
+	// Case 1: only queueRef set (objectStorageRef empty) — both-or-neither is terminal.
+	t.Run("only queueRef set is terminal", func(t *testing.T) {
+		os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+		c := newFakeClientBuilder(newScheme()).Build()
+
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+			Spec: enterpriseApi.IndexerClusterSpec{
+				Replicas:         3,
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Mock: true, ClusterManagerRef: corev1.ObjectReference{Name: "cm"}},
+				QueueRef:         &corev1.ObjectReference{Name: "queue"},
+				// ObjectStorageRef intentionally absent
+			},
+		}
+
+		_, err := ApplyIndexerClusterManager(ctx, c, cr)
+		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "expected TerminalError, got %v", err)
+	})
+
+	// Case 2: Queue CR not found is terminal.
+	t.Run("Queue CR not found is terminal", func(t *testing.T) {
+		os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+		c := newFakeClientBuilder(newScheme()).Build()
+
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+			Spec: enterpriseApi.IndexerClusterSpec{
+				Replicas:         3,
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Mock: true, ClusterManagerRef: corev1.ObjectReference{Name: "cm"}},
+				QueueRef:         &corev1.ObjectReference{Name: "nonexistent-queue", Namespace: "test"},
+				ObjectStorageRef: &corev1.ObjectReference{Name: "nonexistent-os", Namespace: "test"},
+			},
+		}
+
+		_, err := ApplyIndexerClusterManager(ctx, c, cr)
+		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "expected TerminalError, got %v", err)
+	})
+
+	// Case 3: ObjectStorage CR not found is terminal.
+	t.Run("ObjectStorage CR not found is terminal", func(t *testing.T) {
+		os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+		c := newFakeClientBuilder(newScheme()).Build()
+
+		_ = c.Create(ctx, &enterpriseApi.Queue{
+			ObjectMeta: metav1.ObjectMeta{Name: "queue", Namespace: "test"},
+			Spec: enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name: "test-queue", AuthRegion: "us-west-2",
+					Endpoint: "https://sqs.us-west-2.amazonaws.com", DLQ: "dlq",
+				},
+			},
+		})
+
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+			Spec: enterpriseApi.IndexerClusterSpec{
+				Replicas:         3,
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Mock: true, ClusterManagerRef: corev1.ObjectReference{Name: "cm"}},
+				QueueRef:         &corev1.ObjectReference{Name: "queue", Namespace: "test"},
+				ObjectStorageRef: &corev1.ObjectReference{Name: "nonexistent-os", Namespace: "test"},
+			},
+		}
+
+		_, err := ApplyIndexerClusterManager(ctx, c, cr)
+		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "expected TerminalError, got %v", err)
+	})
+}
+
 func TestApplyIndexerClusterOld(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	c := spltest.NewMockClient()
@@ -1382,35 +1462,12 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 func TestGetIndexerStatefulSet(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
-	queue := enterpriseApi.Queue{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Queue",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "queue",
-		},
-		Spec: enterpriseApi.QueueSpec{
-			Provider: "sqs",
-			SQS: enterpriseApi.SQSSpec{
-				Name:       "test-queue",
-				AuthRegion: "us-west-2",
-				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-				DLQ:        "sqs-dlq-test",
-			},
-		},
-	}
-
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.IndexerClusterSpec{
-			QueueRef: &corev1.ObjectReference{
-				Name: queue.Name,
-			},
-		},
+		Spec: enterpriseApi.IndexerClusterSpec{},
 	}
 
 	ctx := context.TODO()
