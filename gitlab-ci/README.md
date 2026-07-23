@@ -285,16 +285,19 @@ The important guardrails are:
 ### Product release
 
 1. Cut `release/<version>` or `release-<version>`.
-2. Let the release validation pipeline run on that branch.
-3. Fix the branch until release validation is green.
-4. Update changelog or release notes on the release branch.
-5. Open the MR from the release branch to `main`.
-6. Let the MR pipeline re-run on the final release-branch tip.
-7. Get review and approval.
-8. Merge to `main`.
-9. Start the manual publish jobs on `main`, or start a dedicated `release_publish` pipeline on `main` if the publish path must be re-run intentionally.
-10. Run the final GitLab release-record job after the publish jobs finish.
-11. Complete any external release steps that stay outside GitLab, such as the actual upstream PR submission or partner-portal approval.
+2. Set the telemetry `test` flag to `false` on the release branch.
+   - `helm-chart/splunk-operator/values.yaml`: set `splunkOperator.telemetry.test: false`
+   - `config/manager/controller_manager_telemetry.yaml`: set `"test": "false"` 
+3. Let the release validation pipeline run on that branch.
+4. Fix the branch until release validation is green.
+5. Update changelog or release notes on the release branch.
+6. Open the MR from the release branch to `main`.
+7. Let the MR pipeline re-run on the final release-branch tip.
+8. Get review and approval.
+9. Merge to `main`.
+10. Start the manual publish jobs on `main`, or start a dedicated `release_publish` pipeline on `main` if the publish path must be re-run intentionally.
+11. Run the final GitLab release-record job after the publish jobs finish.
+12. Complete any external release steps that stay outside GitLab, such as the actual upstream PR submission or partner-portal approval.
 
 ### Patch release later
 
