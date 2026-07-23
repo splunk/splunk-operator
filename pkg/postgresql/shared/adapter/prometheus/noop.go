@@ -21,6 +21,7 @@ import "github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 type NoopRecorder struct{}
 
 func (n *NoopRecorder) IncStatusTransition(string, string, string, string) {}
+func (n *NoopRecorder) ObserveProvisioningDuration(string, float64)        {}
 func (n *NoopRecorder) SetClusterPhases(map[string]float64)                {}
 func (n *NoopRecorder) SetPoolerEnabledClusters(float64)                   {}
 func (n *NoopRecorder) SetDatabasePhases(map[string]float64)               {}
