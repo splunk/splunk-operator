@@ -76,6 +76,7 @@ metadata:
     service.beta.kubernetes.io/azure-load-balancer-internal: "true"
   name: example
 spec:
+  disableResourceDefaults: false
   imagePullPolicy: Always
   livenessInitialDelaySeconds: 400
   readinessInitialDelaySeconds: 390
@@ -114,13 +115,14 @@ configuration parameters:
 | --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
 | image                 | string     | Container image to use for pod instances (overrides `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable |
 | imagePullPolicy       | string     | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                           |
+| disableResourceDefaults | boolean | Prevents the operator from filling in default CPU and memory requests and limits. Defaults to `false`. Set to `true` to preserve `resources` exactly as provided, including an empty value. |
 | livenessInitialDelaySeconds       | number     | Sets the initialDelaySeconds for Liveness probe (default: 300)                           |
 | readinessInitialDelaySeconds       | number     | Sets the initialDelaySeconds for Readiness probe (default: 10)                           |
 | extraEnv       | [EnvVar](https://v1-17.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#envvar-v1-core)     | Sets the extra environment variables to be passed to the Splunk instance containers. WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation                           |
 | schedulerName         | string     | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
 | podAnnotations        | map[string]string | Sets annotations on Splunk instance pods. These annotations can override operator-provided pod annotations, including the Istio sidecar traffic annotations. |
 | affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
-| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. The default settings should be considered for demo/test purposes.  Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#hardware-resources-requirements) for production values.|
+| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. Missing CPU and memory keys receive operator defaults unless `disableResourceDefaults` is `true`. The default settings should be considered for demo/test purposes. Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#hardware-resources-requirements) for production values.|
 | serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
 | topologySpreadConstraint       | [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) | Template used to create Kubernetes [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) |
 
@@ -501,7 +503,19 @@ spec:
 ```
 
 ### A BestEffort QoS Class example:
-With no requests or limits values set for CPU and memory, the QoS class is set to BestEffort. The BestEffort QoS is not recommended for use with Splunk Operator.
+Set `disableResourceDefaults` to `true` and omit requests and limits to prevent the operator from adding resource defaults:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+spec:
+  disableResourceDefaults: true
+  resources: {}
+```
+
+With no requests or limits set for any container, Kubernetes assigns the pod the BestEffort QoS class. BestEffort QoS is not recommended for Splunk Enterprise production workloads. A namespace `LimitRange` may add resources during pod admission and result in a different QoS class.
 
 ### Pod Resources Management
 

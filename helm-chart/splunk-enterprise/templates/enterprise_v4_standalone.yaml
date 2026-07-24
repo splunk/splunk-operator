@@ -13,6 +13,7 @@ metadata:
 {{ toYaml . | indent 4 }}
 {{- end }}
 spec:
+  disableResourceDefaults: {{ .Values.standalone.disableResourceDefaults }}
 {{- if .Values.standalone.serviceAccount }}
   serviceAccount: {{ .Values.standalone.serviceAccount }}
 {{- end }}
