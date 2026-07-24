@@ -88,6 +88,9 @@ clusterManager:
   # Deploy a cluster manager instance
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   # Specify the custom resource name
   name: "cm"
 
@@ -274,6 +277,9 @@ indexerCluster:
 
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   name: "idxc"
 
   namespaceOverride: ""
@@ -367,6 +373,9 @@ indexerCluster:
 searchHeadCluster:
 
   enabled: false
+
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
 
   name: "shc"
 
@@ -486,6 +495,9 @@ monitoringConsole:
 
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   name: "mc"
 
   namespaceOverride: ""
@@ -592,6 +604,9 @@ monitoringConsole:
 licenseManager:
 
   enabled: false
+
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
 
   name: "lm"
 
@@ -710,6 +725,9 @@ licenseManager:
 standalone:
 
   enabled: false
+
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
 
   name: "stdln"
 
@@ -842,6 +860,9 @@ extraManifests: []
 ingestorCluster:
 
   enabled: false
+
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
 
   name: "ingestor"
 

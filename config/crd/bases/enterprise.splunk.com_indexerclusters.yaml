@@ -1141,6 +1141,11 @@ spec:
                   will be installed on the CM, standalone, search head deployer
                   or license manager instance.
                 type: string
+              disableResourceDefaults:
+                default: false
+                description: DisableResourceDefaults prevents the operator from filling
+                  in default CPU and memory requests and limits.
+                type: boolean
               etcVolumeStorageConfig:
                 description: Storage configuration for /opt/splunk/etc volume
                 properties:
@@ -5572,6 +5577,11 @@ spec:
                   will be installed on the CM, standalone, search head deployer
                   or license manager instance.
                 type: string
+              disableResourceDefaults:
+                default: false
+                description: DisableResourceDefaults prevents the operator from filling
+                  in default CPU and memory requests and limits.
+                type: boolean
               etcVolumeStorageConfig:
                 description: Storage configuration for /opt/splunk/etc volume
                 properties:

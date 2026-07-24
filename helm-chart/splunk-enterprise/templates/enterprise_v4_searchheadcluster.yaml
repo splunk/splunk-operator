@@ -21,6 +21,7 @@ items:
 {{ toYaml . | indent 6 }}
   {{- end }}
   spec:
+    disableResourceDefaults: {{ $.Values.searchHeadCluster.disableResourceDefaults }}
   {{- if $.Values.searchHeadCluster.replicaCount }}
     replicas: {{ $.Values.searchHeadCluster.replicaCount }}
   {{- end }}
