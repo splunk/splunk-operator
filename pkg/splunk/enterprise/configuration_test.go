@@ -35,9 +35,123 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
+
+func TestValidateSpecResourceDefaulting(t *testing.T) {
+	defaultResources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("4"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
+		},
+	}
+
+	tests := []struct {
+		name                    string
+		disableResourceDefaults bool
+		resources               corev1.ResourceRequirements
+		want                    corev1.ResourceRequirements
+	}{
+		{
+			name: "omitted opt-out retains defaulting",
+			want: defaultResources,
+		},
+		{
+			name: "false opt-out retains defaulting for empty maps",
+			resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{},
+				Limits:   corev1.ResourceList{},
+			},
+			want: defaultResources,
+		},
+		{
+			name:                    "true opt-out preserves nil requests and limits",
+			disableResourceDefaults: true,
+		},
+		{
+			name:                    "true opt-out preserves empty requests and limits",
+			disableResourceDefaults: true,
+			resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{},
+				Limits:   corev1.ResourceList{},
+			},
+			want: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{},
+				Limits:   corev1.ResourceList{},
+			},
+		},
+		{
+			name:                    "true opt-out preserves partial resources without backfilling",
+			disableResourceDefaults: true,
+			resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("250m"),
+				},
+			},
+			want: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("250m"),
+				},
+			},
+		},
+		{
+			name: "false opt-out retains per-key defaulting",
+			resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("16Gi"),
+				},
+			},
+			want: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("512Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("4"),
+					corev1.ResourceMemory: resource.MustParse("16Gi"),
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := enterpriseApi.Spec{
+				ImagePullPolicy:         "IfNotPresent",
+				DisableResourceDefaults: tt.disableResourceDefaults,
+				Resources:               tt.resources,
+			}
+
+			require.NoError(t, ValidateSpec(&spec, defaultResources))
+			require.Equal(t, tt.want, spec.Resources)
+		})
+	}
+}
+
+func TestEffectiveResourcesDoesNotMutateSpec(t *testing.T) {
+	spec := enterpriseApi.Spec{
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("250m"),
+			},
+		},
+	}
+
+	effective := EffectiveResources(spec, SplunkDefaultResources())
+
+	require.Equal(t, "250m", effective.Requests.Cpu().String())
+	require.Equal(t, splcommon.DefaultRequestsMemory, effective.Requests.Memory().String())
+	require.Equal(t, splcommon.DefaultLimitsCPU, effective.Limits.Cpu().String())
+	require.Equal(t, splcommon.DefaultLimitsMemory, effective.Limits.Memory().String())
+	require.Len(t, spec.Resources.Requests, 1)
+	require.Nil(t, spec.Resources.Limits)
+}
 
 func configTester2(t *testing.T, method string, f func() (interface{}, error), want string) {
 	result, err := f()

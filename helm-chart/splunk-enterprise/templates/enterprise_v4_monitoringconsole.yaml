@@ -13,6 +13,7 @@ metadata:
 {{ toYaml . | indent 4 }}
 {{- end }}
 spec:
+  disableResourceDefaults: {{ .Values.monitoringConsole.disableResourceDefaults }}
 {{- with .Values.monitoringConsole.appRepo }}
   appRepo: 
 {{ toYaml . | indent 4 }}

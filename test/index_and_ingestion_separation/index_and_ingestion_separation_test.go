@@ -17,7 +17,9 @@ import (
 	"fmt"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -65,6 +67,40 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			Expect(testcaseEnvInst.SetupIngestorStack(ctx, deployment, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
+
+			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
+		})
+
+		It("Splunk Operator can disable resource defaults for IngestorCluster", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+			Expect(testcaseEnvInst.SetupIngestorStack(ctx, deployment, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
+
+			ingestorName := deployment.GetName() + "-ingest"
+			ingestorStatefulSet := &appsv1.StatefulSet{}
+			Expect(deployment.GetInstance(ctx, fmt.Sprintf("splunk-%s-ingestor", ingestorName), ingestorStatefulSet)).To(Succeed(), "Unable to get IngestorCluster StatefulSet")
+			Expect(ingestorStatefulSet.Spec.Template.Spec.Containers).NotTo(BeEmpty(), "IngestorCluster StatefulSet has no containers")
+			Expect(ingestorStatefulSet.Spec.Template.Spec.Containers[0].Resources.Requests).To(HaveKeyWithValue(v1.ResourceCPU, resource.MustParse("100m")), "IngestorCluster should receive default CPU requests")
+			Expect(ingestorStatefulSet.Spec.Template.Spec.Containers[0].Resources.Limits).To(HaveKeyWithValue(v1.ResourceMemory, resource.MustParse("8Gi")), "IngestorCluster should receive default memory limits")
+
+			ingestor := &enterpriseApi.IngestorCluster{}
+			Expect(deployment.GetInstance(ctx, ingestorName, ingestor)).To(Succeed(), "Unable to get IngestorCluster")
+			ingestor.Spec.DisableResourceDefaults = true
+			Expect(deployment.UpdateCR(ctx, ingestor)).To(Succeed(), "Unable to enable the IngestorCluster resource-default opt-out")
+
+			Eventually(func() error {
+				updatedStatefulSet := &appsv1.StatefulSet{}
+				if err := deployment.GetInstance(ctx, fmt.Sprintf("splunk-%s-ingestor", ingestorName), updatedStatefulSet); err != nil {
+					return err
+				}
+				if len(updatedStatefulSet.Spec.Template.Spec.Containers) == 0 {
+					return fmt.Errorf("IngestorCluster StatefulSet has no containers")
+				}
+				resources := updatedStatefulSet.Spec.Template.Spec.Containers[0].Resources
+				if len(resources.Requests) != 0 || len(resources.Limits) != 0 {
+					return fmt.Errorf("IngestorCluster resources were not cleared after opt-out: %v", resources)
+				}
+				return nil
+			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "IngestorCluster resources should remain empty after explicitly opting out")
+			Expect(testcaseEnvInst.VerifyIngestorReady(ctx, deployment)).To(Succeed(), "IngestorCluster should return to Ready after enabling the resource-default opt-out")
 
 			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
 		})
