@@ -4,6 +4,7 @@ remote_theme: null
 theme: just-the-docs
 plugins:
   - jekyll-relative-links
+  - jekyll-sitemap
 relative_links:
   enabled: true
   collections: true
