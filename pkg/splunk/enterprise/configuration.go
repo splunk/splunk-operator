@@ -90,6 +90,20 @@ var defaultStartupProbe corev1.Probe = corev1.Probe{
 	},
 }
 
+// SplunkDefaultResources returns the default resource requests and limits for Splunk workloads.
+func SplunkDefaultResources() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultRequestsCPU),
+			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultRequestsMemory),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultLimitsCPU),
+			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultLimitsMemory),
+		},
+	}
+}
+
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
 	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
@@ -297,8 +311,8 @@ func ValidateImagePullPolicy(imagePullPolicy *string) error {
 	return nil
 }
 
-// ValidateResources checks resource requests and limits and sets defaults if not provided
-func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.ResourceRequirements) {
+// SetDefaultResources checks resource requests and limits and sets defaults if not provided
+func SetDefaultResources(resources *corev1.ResourceRequirements, defaults corev1.ResourceRequirements) {
 	// check for nil maps
 	if resources.Requests == nil {
 		resources.Requests = make(corev1.ResourceList)
@@ -332,6 +346,16 @@ func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.R
 	}
 }
 
+// EffectiveResources returns the resources the operator will apply for a spec.
+func EffectiveResources(spec enterpriseApi.Spec, defaults corev1.ResourceRequirements) corev1.ResourceRequirements {
+	resources := *spec.Resources.DeepCopy()
+	// Preserve legacy per-key defaults unless the user explicitly opts out.
+	if !spec.DisableResourceDefaults {
+		SetDefaultResources(&resources, defaults)
+	}
+	return resources
+}
+
 // ValidateSpec checks validity and makes default updates to a Spec, and returns error if something is wrong.
 func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequirements) error {
 	// make sure SchedulerName is not empty
@@ -342,8 +366,7 @@ func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequ
 	// set default values for service template
 	setServiceTemplateDefaults(spec)
 
-	// if not provided, set default resource requests and limits
-	ValidateResources(&spec.Resources, defaultResources)
+	spec.Resources = EffectiveResources(*spec, defaultResources)
 
 	return ValidateImagePullPolicy(&spec.ImagePullPolicy)
 }
@@ -368,17 +391,6 @@ func setServiceTemplateDefaults(spec *enterpriseApi.Spec) {
 func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, cr splcommon.MetaObject) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
 	spec.Image = GetSplunkImage(spec.Image)
-
-	defaultResources := corev1.ResourceRequirements{
-		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultRequestsCPU),
-			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultRequestsMemory),
-		},
-		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultLimitsCPU),
-			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultLimitsMemory),
-		},
-	}
 
 	err := validateLivenessProbe(ctx, cr, spec.LivenessProbe)
 	if err != nil {
@@ -416,7 +428,7 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 
 	setVolumeDefaults(spec)
 
-	return ValidateSpec(&spec.Spec, defaultResources)
+	return ValidateSpec(&spec.Spec, SplunkDefaultResources())
 }
 
 // ValidateImagePullSecrets sets default values for imagePullSecrets if not provided

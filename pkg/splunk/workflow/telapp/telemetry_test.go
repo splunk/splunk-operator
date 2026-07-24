@@ -91,7 +91,7 @@ func (c *FakeListClient) List(_ context.Context, list client.ObjectList, _ ...cl
 }
 
 func TestTelemetryCollectResourceTelData_NilMaps(t *testing.T) {
-	data := collectResourceTelData(crDeploymentSpec{Resources: corev1.ResourceRequirements{}})
+	data := collectResourceTelData(crDeploymentSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}})
 	if data[cpuRequestKey] == "" || data[memoryRequestKey] == "" || data[cpuLimitKey] == "" || data[memoryLimitKey] == "" {
 		t.Errorf("expected default values for nil maps")
 	}
@@ -102,9 +102,47 @@ func TestTelemetryCollectResourceTelData_MissingKeys(t *testing.T) {
 		Requests: corev1.ResourceList{},
 		Limits:   corev1.ResourceList{},
 	}
-	data := collectResourceTelData(crDeploymentSpec{Resources: reqs})
+	data := collectResourceTelData(crDeploymentSpec{Spec: enterpriseApi.Spec{Resources: reqs}})
 	if data[cpuRequestKey] == "" || data[memoryRequestKey] == "" || data[cpuLimitKey] == "" || data[memoryLimitKey] == "" {
 		t.Errorf("expected default values for missing keys")
+	}
+}
+
+func TestTelemetryCollectResourceTelData_ResourceDefaultsDisabledWithNilMaps(t *testing.T) {
+	data := collectResourceTelData(crDeploymentSpec{
+		Spec: enterpriseApi.Spec{
+			Resources:               corev1.ResourceRequirements{},
+			DisableResourceDefaults: true,
+		},
+	})
+	if len(data) != 0 {
+		t.Errorf("expected no resource telemetry when defaults are disabled, got %+v", data)
+	}
+}
+
+func TestTelemetryCollectResourceTelData_ResourceDefaultsDisabledWithPartialResources(t *testing.T) {
+	reqs := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU: resource.MustParse("250m"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		},
+	}
+	data := collectResourceTelData(crDeploymentSpec{
+		Spec: enterpriseApi.Spec{
+			Resources:               reqs,
+			DisableResourceDefaults: true,
+		},
+	})
+	if data[cpuRequestKey] != "250m" || data[memoryLimitKey] != "1Gi" {
+		t.Errorf("unexpected configured resource telemetry: %+v", data)
+	}
+	if _, ok := data[memoryRequestKey]; ok {
+		t.Errorf("expected missing memory request to remain absent, got %+v", data)
+	}
+	if _, ok := data[cpuLimitKey]; ok {
+		t.Errorf("expected missing CPU limit to remain absent, got %+v", data)
 	}
 }
 
@@ -119,7 +157,7 @@ func TestTelemetryCollectResourceTelData_ValuesPresent(t *testing.T) {
 			corev1.ResourceMemory: resource.MustParse("1Gi"),
 		},
 	}
-	data := collectResourceTelData(crDeploymentSpec{Resources: reqs})
+	data := collectResourceTelData(crDeploymentSpec{Spec: enterpriseApi.Spec{Resources: reqs}})
 	if data[cpuRequestKey] != "123m" || data[memoryRequestKey] != "456Mi" || data[cpuLimitKey] != "789m" || data[memoryLimitKey] != "1Gi" {
 		t.Errorf("unexpected values: got %+v", data)
 	}
@@ -127,14 +165,14 @@ func TestTelemetryCollectResourceTelData_ValuesPresent(t *testing.T) {
 
 func TestTelemetryCollectResourceTelData_ReplicasPresent(t *testing.T) {
 	replicas := int32(5)
-	data := collectResourceTelData(crDeploymentSpec{Resources: corev1.ResourceRequirements{}, Replicas: &replicas})
+	data := collectResourceTelData(crDeploymentSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}, Replicas: &replicas})
 	if data[replicasKey] != "5" {
 		t.Errorf("expected replicas=5, got %q", data[replicasKey])
 	}
 }
 
 func TestTelemetryCollectResourceTelData_ReplicasNil(t *testing.T) {
-	data := collectResourceTelData(crDeploymentSpec{Resources: corev1.ResourceRequirements{}})
+	data := collectResourceTelData(crDeploymentSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}})
 	if _, ok := data[replicasKey]; ok {
 		t.Errorf("expected no replicas key when Replicas is nil, got %q", data[replicasKey])
 	}
@@ -641,6 +679,32 @@ func TestHandleStandalones_OneCR(t *testing.T) {
 	}
 	if res[cpuRequestKey] != "1" || res[memoryRequestKey] != "2Gi" || res[cpuLimitKey] != "2" || res[memoryLimitKey] != "4Gi" {
 		t.Errorf("unexpected resource telemetry: %+v", res)
+	}
+}
+func TestHandleStandalones_ResourceDefaultsDisabled(t *testing.T) {
+	cr := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{Name: "s1"},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{DisableResourceDefaults: true},
+			},
+		},
+	}
+	mockClient := &FakeListClient{crs: map[string][]client.Object{"Standalone": {cr}}}
+	data, _, err := handleStandalones(context.TODO(), mockClient)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m, ok := data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected Standalone telemetry map, got %T", data)
+	}
+	resources, ok := m["s1"].(map[string]string)
+	if !ok {
+		t.Fatalf("expected resource telemetry for s1, got %T", m["s1"])
+	}
+	if len(resources) != 0 {
+		t.Errorf("expected handler to preserve resource default opt-out, got %+v", resources)
 	}
 }
 func TestHandleStandalones_MultipleCRs(t *testing.T) {
