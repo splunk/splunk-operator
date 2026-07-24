@@ -361,7 +361,7 @@ release-distroless-managerm4idxclustering-validation:
     WORKFLOW_SLUG: release-distroless-managerm4idxclustering-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:idxclustering && cloud:aws"
 
-# Keep the arm64 suite set aligned with the existing splunk-operator-cicd
+# Keep the arm64 suite set aligned with the existing
 # release validation matrix instead of drifting from the operational baseline.
 release-graviton-appframeworks-s1-validation:
   extends:

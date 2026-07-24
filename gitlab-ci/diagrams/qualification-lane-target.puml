@@ -55,6 +55,6 @@ end note
 
 note bottom of runtime_graviton
 The Graviton suite set stays aligned with the existing
-splunk-operator-cicd arm64 validation matrix.
+arm64 validation matrix.
 end note
 @enduml
