@@ -143,7 +143,7 @@ What the qualification automation does:
 - runs Azure validation against the released operator path
 - runs the GCP validation suite set against the released operator path
 - runs distroless runtime validation against the released distroless image
-- runs the Graviton or arm64 runtime suite set from the existing `splunk-operator-cicd` arm64 matrix against the released multi-arch operator image when `PIPELINE_ENABLE_GRAVITON=true` or `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` is configured
+- runs the Graviton or arm64 runtime suite set from the existing arm64 matrix against the released multi-arch operator image when `PIPELINE_ENABLE_GRAVITON=true` or `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` is configured
 - runs Helm validation against the released chart path
 - writes the qualification manifest, report, gate result, and compatibility publish plan
 
@@ -234,7 +234,7 @@ What the release validation automation does:
 - runs Azure validation against the staged release candidate
 - runs the GCP validation suite set against the staged release candidate
 - runs distroless runtime validation against the staged distroless candidate image
-- runs the Graviton or arm64 runtime suite set from the existing `splunk-operator-cicd` arm64 matrix against the staged multi-arch candidate image when `PIPELINE_ENABLE_GRAVITON=true` or `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` is configured
+- runs the Graviton or arm64 runtime suite set from the existing arm64 matrix against the staged multi-arch candidate image when `PIPELINE_ENABLE_GRAVITON=true` or `PIPELINE_GRAVITON_ENTERPRISE_IMAGE` is configured
 - runs the release Helm validation job
 - packages the release-candidate artifacts only after validation
 - records the PSR qualification plan only; it does not dispatch PSR automatically

@@ -531,7 +531,7 @@ qualification-distroless-managerm4idxclustering-validation:
     WORKFLOW_SLUG: qualification-distroless-managerm4idxclustering-validation
     JOB_INT_TEST_LABELS: "tier:e2e-full && sva:m4 && variant:manager && feature:idxclustering && cloud:aws"
 
-# Keep the arm64 suite set aligned with the proven splunk-operator-cicd
+# Keep the arm64 suite set aligned with the proven
 # Graviton matrix instead of widening it independently in this repo.
 qualification-graviton-appframeworks-s1-validation:
   extends:

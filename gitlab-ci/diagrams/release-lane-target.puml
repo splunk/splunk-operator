@@ -58,7 +58,7 @@ The selected publish branch later promotes those validated outputs instead of re
 end note
 
 note bottom of runtime_graviton
-The arm64 suite set follows the existing splunk-operator-cicd
+The arm64 suite set follows the existing
 Graviton release validation matrix.
 end note
 @enduml
