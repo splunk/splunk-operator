@@ -106,6 +106,38 @@ func StartReplacement(
 	}
 }
 
+// CompleteScaleDown records durable completion only after Kubernetes observes
+// that the permanently removed ordinal is no longer part of the StatefulSet.
+func CompleteScaleDown(
+	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	observedReplicas int32,
+	now time.Time,
+) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
+	if current == nil {
+		return nil
+	}
+	operation := current.DeepCopy()
+	if operation.Intent != enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown ||
+		operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement ||
+		operation.TargetOrdinal == nil ||
+		operation.MembershipRemovalRequestedAt == nil ||
+		observedReplicas > *operation.TargetOrdinal {
+		return operation
+	}
+	transition(
+		operation,
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		enterpriseApi.SearchHeadClusterLifecycleReasonOperationCompleted,
+		fmt.Sprintf(
+			"%s was permanently removed from the Search Head Cluster",
+			operation.TargetPod,
+		),
+		now,
+	)
+	return operation
+}
+
 // EvaluateReplacement advances a durable replacement operation from an
 // authoritative observation. The input operation is never mutated.
 func EvaluateReplacement(

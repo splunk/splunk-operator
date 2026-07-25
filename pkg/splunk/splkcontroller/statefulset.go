@@ -266,6 +266,9 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			var pvc corev1.PersistentVolumeClaim
 			err := c.Get(ctx, namespacedName, &pvc)
 			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					continue
+				}
 				scopedLog.ErrorContext(ctx, "unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name, "error", err)
 				return enterpriseApi.PhaseError, err
 			}

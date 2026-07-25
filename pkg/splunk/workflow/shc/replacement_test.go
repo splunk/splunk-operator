@@ -218,6 +218,53 @@ func TestReplacementCannotAuthorizeWithoutPersistentMemberIdentity(t *testing.T)
 	}
 }
 
+func TestScaleDownCompletesOnlyAfterRemovedOrdinalIsObservedGone(t *testing.T) {
+	now := time.Date(2026, 7, 25, 9, 0, 0, 0, time.UTC)
+	target := int32(2)
+	operation := StartReplacement(
+		"scale-down:example-search-head-2",
+		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown,
+		"revision-2",
+		"example-search-head-2",
+		target,
+		now,
+	)
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement
+	requestedAt := metav1.NewTime(now.Add(time.Second))
+	operation.MembershipRemovalRequestedAt = &requestedAt
+
+	decision := CompleteScaleDown(operation, 3, now.Add(2*time.Second))
+	if decision.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement {
+		t.Fatalf(
+			"scale-down completed while target still existed: %q",
+			decision.Stage,
+		)
+	}
+
+	decision = CompleteScaleDown(
+		decision,
+		2,
+		now.Add(3*time.Second),
+	)
+	if decision.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
+		t.Fatalf("scale-down stage = %q, want Completed", decision.Stage)
+	}
+	if decision.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonOperationCompleted {
+		t.Fatalf(
+			"scale-down reason = %q, want OperationCompleted",
+			decision.Reason,
+		)
+	}
+	if operation.Stage ==
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
+		t.Fatal("scale-down completion mutated persisted input")
+	}
+}
+
 func TestCaptainChangeDuringDrainIsReobserved(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	operation := newTestOperation(now)

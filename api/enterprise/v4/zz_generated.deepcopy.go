@@ -2632,6 +2632,10 @@ func (in *SearchHeadClusterLifecycleOperationStatus) DeepCopyInto(out *SearchHea
 		in, out := &in.ReplacementAuthorizedAt, &out.ReplacementAuthorizedAt
 		*out = (*in).DeepCopy()
 	}
+	if in.MembershipRemovalRequestedAt != nil {
+		in, out := &in.MembershipRemovalRequestedAt, &out.MembershipRemovalRequestedAt
+		*out = (*in).DeepCopy()
+	}
 	if in.MemberRejoinStartedAt != nil {
 		in, out := &in.MemberRejoinStartedAt, &out.MemberRejoinStartedAt
 		*out = (*in).DeepCopy()

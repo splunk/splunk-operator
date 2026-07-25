@@ -13,8 +13,10 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // searchHeadClusterPodManager is used to manage the pods within a search head cluster
@@ -69,6 +71,16 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
+	if err == nil &&
+		mgr.cr.Status.LifecycleOperation != nil &&
+		mgr.cr.Status.LifecycleOperation.Intent ==
+			enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown {
+		mgr.cr.Status.LifecycleOperation = shcworkflow.CompleteScaleDown(
+			mgr.cr.Status.LifecycleOperation,
+			statefulSet.Status.Replicas,
+			searchHeadClusterLifecycleNow(),
+		)
+	}
 	if err == nil &&
 		searchHeadClusterLifecycleEnabled() &&
 		lifecycleRecoveryActiveForStatefulSet(
@@ -284,6 +296,9 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 	if err != nil || !result {
 		return result, err
 	}
+	if searchHeadClusterLifecycleEnabled() {
+		return mgr.requestScaleDownMembershipRemoval(ctx, n)
+	}
 
 	// pod is quarantined; decommission it
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
@@ -291,14 +306,55 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 		"member", memberName,
 		"remaining_count", len(mgr.cr.Status.Members)-1)
 
-	c := mgr.getClient(ctx, n)
-	err = c.RemoveSearchHeadClusterMember()
+	err = removeSearchHeadClusterMember(ctx, mgr, n)
 	if err != nil {
 		return false, err
 	}
 
 	// all done -> ok to scale down the statefulset
 	return true, nil
+}
+
+var removeSearchHeadClusterMember = func(
+	ctx context.Context,
+	mgr *searchHeadClusterPodManager,
+	n int32,
+) error {
+	return mgr.getClient(ctx, n).
+		RemoveSearchHeadClusterMember()
+}
+
+func (mgr *searchHeadClusterPodManager) requestScaleDownMembershipRemoval(
+	ctx context.Context,
+	n int32,
+) (bool, error) {
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.Intent != enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != n {
+		return false, fmt.Errorf(
+			"SHC scale-down authorization does not match ordinal %d",
+			n,
+		)
+	}
+	if operation.MembershipRemovalRequestedAt != nil {
+		return true, nil
+	}
+	logger := logging.FromContext(ctx).With("func", "PrepareScaleDown")
+	logger.WarnContext(
+		ctx,
+		"member leaving SearchHeadCluster",
+		"member", operation.TargetPod,
+		"remaining_count", len(mgr.cr.Status.Members)-1,
+	)
+	if err := removeSearchHeadClusterMember(ctx, mgr, n); err != nil {
+		return false, err
+	}
+	requestedAt := metav1.NewTime(searchHeadClusterLifecycleNow())
+	operation.MembershipRemovalRequestedAt = &requestedAt
+	// Persist successful membership removal before changing replicas.
+	return false, nil
 }
 
 // PrepareRecycle for searchHeadClusterPodManager prepares search head pod to be recycled for updates; it returns true when ready

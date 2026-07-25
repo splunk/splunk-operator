@@ -398,6 +398,60 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 
 }
 
+func TestScaleDownPVCDeletionIsIdempotentWhenClaimIsAlreadyGone(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(3)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pvc-etc",
+						Namespace: "test",
+					},
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: replicas,
+		},
+	}
+	client := spltest.NewMockClient()
+	client.AddObject(statefulSet)
+	mgr := &DefaultStatefulSetPodManager{}
+
+	phase, err := UpdateStatefulSetPods(
+		ctx,
+		client,
+		statefulSet,
+		mgr,
+		2,
+	)
+	if err != nil {
+		t.Fatalf("retry scale-down with missing PVC: %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingDown {
+		t.Fatalf(
+			"scale-down phase = %q, want %q",
+			phase,
+			enterpriseApi.PhaseScalingDown,
+		)
+	}
+	if statefulSet.Spec.Replicas == nil ||
+		*statefulSet.Spec.Replicas != 2 {
+		t.Fatalf(
+			"scale-down replicas = %v, want 2",
+			statefulSet.Spec.Replicas,
+		)
+	}
+}
+
 func TestCheckPodsForTerminalFailures(t *testing.T) {
 	ctx := context.TODO()
 

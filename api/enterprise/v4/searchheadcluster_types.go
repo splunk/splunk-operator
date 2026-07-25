@@ -212,6 +212,7 @@ type SearchHeadClusterLifecycleOperationStatus struct {
 	ReplacementPodUID            string                           `json:"replacementPodUID,omitempty"`
 	ReplacementMemberID          string                           `json:"replacementMemberID,omitempty"`
 	ReplacementAuthorizedAt      *metav1.Time                     `json:"replacementAuthorizedAt,omitempty"`
+	MembershipRemovalRequestedAt *metav1.Time                     `json:"membershipRemovalRequestedAt,omitempty"`
 	MemberRejoinStartedAt        *metav1.Time                     `json:"memberRejoinStartedAt,omitempty"`
 	DetentionReleaseRequestedAt  *metav1.Time                     `json:"detentionReleaseRequestedAt,omitempty"`
 	ActiveHistoricalSearches     int32                            `json:"activeHistoricalSearches,omitempty"`

@@ -982,6 +982,68 @@ func TestLifecycleFinishRecycleDoesNotBlockCompletedHigherOrdinal(t *testing.T) 
 	assertLifecycleAdapterResult(t, complete, err, true)
 }
 
+func TestScaleDownMembershipRemovalHasDurableBarrier(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	now := time.Date(2026, 7, 25, 9, 0, 0, 0, time.UTC)
+	target := int32(2)
+	cr := &enterpriseApi.SearchHeadCluster{
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				OperationID:   "scale-down:search-head-2",
+				Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown,
+				TargetPod:     "splunk-example-search-head-2",
+				TargetOrdinal: &target,
+				Stage: enterpriseApi.
+					SearchHeadClusterLifecycleStageAuthorizingReplacement,
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	oldNow := searchHeadClusterLifecycleNow
+	oldRemoveMember := removeSearchHeadClusterMember
+	t.Cleanup(func() {
+		searchHeadClusterLifecycleNow = oldNow
+		removeSearchHeadClusterMember = oldRemoveMember
+	})
+	searchHeadClusterLifecycleNow = func() time.Time {
+		now = now.Add(time.Second)
+		return now
+	}
+	removeCalls := 0
+	removeSearchHeadClusterMember = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) error {
+		removeCalls++
+		return nil
+	}
+
+	ready, err := mgr.requestScaleDownMembershipRemoval(
+		context.Background(),
+		target,
+	)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if removeCalls != 1 ||
+		cr.Status.LifecycleOperation.MembershipRemovalRequestedAt == nil {
+		t.Fatalf(
+			"first removal calls = %d, requestedAt = %v",
+			removeCalls,
+			cr.Status.LifecycleOperation.MembershipRemovalRequestedAt,
+		)
+	}
+
+	ready, err = mgr.requestScaleDownMembershipRemoval(
+		context.Background(),
+		target,
+	)
+	assertLifecycleAdapterResult(t, ready, err, true)
+	if removeCalls != 1 {
+		t.Fatalf("removal calls after durable resume = %d, want 1", removeCalls)
+	}
+}
+
 func assertLifecycleAdapterResult(t *testing.T, got bool, err error, want bool) {
 	t.Helper()
 	if err != nil {

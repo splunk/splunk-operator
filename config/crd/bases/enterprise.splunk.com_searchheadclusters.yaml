@@ -10215,6 +10215,9 @@ spec:
                   memberRejoinStartedAt:
                     format: date-time
                     type: string
+                  membershipRemovalRequestedAt:
+                    format: date-time
+                    type: string
                   message:
                     type: string
                   operationID:
