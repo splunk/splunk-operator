@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/stretchr/testify/require"
 	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -2321,6 +2322,81 @@ func TestConfigMapVolAnnotationOptOutProjected(t *testing.T) {
 		if strings.HasPrefix(k, splcommon.ConfigMapRevAnnotationPrefix) {
 			t.Errorf("unexpected restart annotation %q present when projected ConfigMap opted out", k)
 		}
+	}
+}
+
+func TestGetSplunkStatefulSetTerminationGracePeriod(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	oldGateValue := config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle)
+	t.Cleanup(func() {
+		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{
+			string(config.SplunkPodLifecycle): oldGateValue,
+		}))
+	})
+
+	render := func(t *testing.T, instanceType InstanceType, gateEnabled bool, configuredValue *int64) *int64 {
+		t.Helper()
+		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{
+			string(config.SplunkPodLifecycle): gateEnabled,
+		}))
+
+		client := spltest.NewMockClient()
+		cr := &enterpriseApi.Standalone{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "termination-grace",
+				Namespace: "test",
+			},
+			Spec: enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					TerminationGracePeriodSeconds: configuredValue,
+				},
+				Replicas: 1,
+			},
+		}
+		statefulSet, err := getSplunkStatefulSet(
+			context.Background(),
+			client,
+			cr,
+			&cr.Spec.CommonSplunkSpec,
+			instanceType,
+			1,
+			nil,
+			nil,
+		)
+		require.NoError(t, err)
+		return statefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds
+	}
+
+	allSplunkStatefulSetTypes := []InstanceType{
+		SplunkStandalone,
+		SplunkClusterMaster,
+		SplunkClusterManager,
+		SplunkSearchHead,
+		SplunkIndexer,
+		SplunkIngestor,
+		SplunkDeployer,
+		SplunkLicenseMaster,
+		SplunkLicenseManager,
+		SplunkMonitoringConsole,
+	}
+
+	configuredValue := int64(900)
+	for _, instanceType := range allSplunkStatefulSetTypes {
+		t.Run(instanceType.ToString(), func(t *testing.T) {
+			require.Nil(t, render(t, instanceType, false, nil),
+				"disabled gate with omitted field must preserve the existing Pod template")
+			require.Nil(t, render(t, instanceType, false, &configuredValue),
+				"disabled gate must not render an explicitly stored value")
+
+			resolvedDefault := render(t, instanceType, true, nil)
+			require.NotNil(t, resolvedDefault)
+			require.Equal(t, DefaultTerminationGracePeriodSeconds, *resolvedDefault)
+
+			resolvedConfiguredValue := render(t, instanceType, true, &configuredValue)
+			require.NotNil(t, resolvedConfiguredValue)
+			require.Equal(t, configuredValue, *resolvedConfiguredValue)
+		})
 	}
 }
 

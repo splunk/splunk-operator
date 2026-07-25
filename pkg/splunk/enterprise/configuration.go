@@ -753,11 +753,12 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
-				Affinity:                  affinity,
-				Tolerations:               spec.Tolerations,
-				TopologySpreadConstraints: spec.TopologySpreadConstraints,
-				SchedulerName:             spec.SchedulerName,
-				ImagePullSecrets:          spec.ImagePullSecrets,
+				TerminationGracePeriodSeconds: ResolveTerminationGracePeriodSeconds(spec),
+				Affinity:                      affinity,
+				Tolerations:                   spec.Tolerations,
+				TopologySpreadConstraints:     spec.TopologySpreadConstraints,
+				SchedulerName:                 spec.SchedulerName,
+				ImagePullSecrets:              spec.ImagePullSecrets,
 				Containers: []corev1.Container{
 					{
 						Image:           spec.Image,
