@@ -139,6 +139,164 @@ func TestGetConfigMapResourceVersion(t *testing.T) {
 	}
 }
 
+func TestGetConfigMapDataHash(t *testing.T) {
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+	namespacedName := types.NamespacedName{Namespace: "test", Name: "defaults"}
+
+	// Returns error when ConfigMap does not exist.
+	_, err := GetConfigMapDataHash(ctx, client, namespacedName, nil)
+	if err == nil {
+		t.Errorf("expected error when ConfigMap does not exist, got nil")
+	}
+
+	cm := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "defaults", Namespace: "test"},
+		Data: map[string]string{
+			"default.yml": "splunk:\n  key: value\n",
+			"extra.conf":  "key = val",
+		},
+	}
+	_, err = ApplyConfigMap(ctx, client, &cm)
+	if err != nil {
+		t.Fatalf("failed to create ConfigMap: %v", err)
+	}
+
+	hash1, err := GetConfigMapDataHash(ctx, client, namespacedName, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(hash1) != 16 {
+		t.Errorf("expected 16-char hash, got %q (len=%d)", hash1, len(hash1))
+	}
+
+	// Same data must produce the same hash (deterministic / no map-iteration variance).
+	hash2, err := GetConfigMapDataHash(ctx, client, namespacedName, nil)
+	if err != nil {
+		t.Fatalf("unexpected error on second call: %v", err)
+	}
+	if hash1 != hash2 {
+		t.Errorf("hash is not deterministic: first=%q second=%q", hash1, hash2)
+	}
+
+	// Changing data must produce a different hash.
+	cm2 := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "defaults", Namespace: "test"},
+		Data: map[string]string{
+			"default.yml": "splunk:\n  key: CHANGED\n",
+			"extra.conf":  "key = val",
+		},
+	}
+	_, err = ApplyConfigMap(ctx, client, &cm2)
+	if err != nil {
+		t.Fatalf("failed to update ConfigMap: %v", err)
+	}
+	hashChanged, err := GetConfigMapDataHash(ctx, client, namespacedName, nil)
+	if err != nil {
+		t.Fatalf("unexpected error after data change: %v", err)
+	}
+	if hashChanged == hash1 {
+		t.Errorf("expected hash to change after data update, but got same value %q", hash1)
+	}
+
+	// Metadata-only change (simulated by restoring original data) must yield original hash.
+	_, err = ApplyConfigMap(ctx, client, &cm)
+	if err != nil {
+		t.Fatalf("failed to restore ConfigMap: %v", err)
+	}
+	hashRestored, err := GetConfigMapDataHash(ctx, client, namespacedName, nil)
+	if err != nil {
+		t.Fatalf("unexpected error after restore: %v", err)
+	}
+	if hashRestored != hash1 {
+		t.Errorf("expected restored hash %q to equal original hash %q", hashRestored, hash1)
+	}
+
+	// Items filter: changing an unmounted key must NOT change the hash.
+	items := []corev1.KeyToPath{{Key: "default.yml", Path: "default.yml"}}
+	hashFiltered, err := GetConfigMapDataHash(ctx, client, namespacedName, items)
+	if err != nil {
+		t.Fatalf("unexpected error with items filter: %v", err)
+	}
+	// Now update only "extra.conf" (not in items) — hash must stay the same.
+	cm3 := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "defaults", Namespace: "test"},
+		Data: map[string]string{
+			"default.yml": "splunk:\n  key: value\n",
+			"extra.conf":  "CHANGED",
+		},
+	}
+	_, err = ApplyConfigMap(ctx, client, &cm3)
+	if err != nil {
+		t.Fatalf("failed to update unmounted key: %v", err)
+	}
+	hashFilteredAfter, err := GetConfigMapDataHash(ctx, client, namespacedName, items)
+	if err != nil {
+		t.Fatalf("unexpected error after unmounted key change: %v", err)
+	}
+	if hashFilteredAfter != hashFiltered {
+		t.Errorf("hash should not change when only an unmounted key changes: before=%q after=%q", hashFiltered, hashFilteredAfter)
+	}
+	// Changing the mounted key must produce a different hash.
+	cm4 := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "defaults", Namespace: "test"},
+		Data: map[string]string{
+			"default.yml": "splunk:\n  key: MOUNTED_CHANGED\n",
+			"extra.conf":  "CHANGED",
+		},
+	}
+	_, err = ApplyConfigMap(ctx, client, &cm4)
+	if err != nil {
+		t.Fatalf("failed to update mounted key: %v", err)
+	}
+	hashFilteredMountedChanged, err := GetConfigMapDataHash(ctx, client, namespacedName, items)
+	if err != nil {
+		t.Fatalf("unexpected error after mounted key change: %v", err)
+	}
+	if hashFilteredMountedChanged == hashFiltered {
+		t.Errorf("hash should change when a mounted key changes: before=%q after=%q", hashFiltered, hashFilteredMountedChanged)
+	}
+}
+
+// TestGetConfigMapDataHashNoAmbiguity verifies that the length-delimited framing prevents
+// hash collisions between ConfigMaps whose key/value content would be indistinguishable
+// under naive "key=value\n" concatenation — e.g. {"a":"x\nb=y"} vs {"a":"x","b":"y"}.
+func TestGetConfigMapDataHashNoAmbiguity(t *testing.T) {
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+
+	cmAmbig1 := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "ambig", Namespace: "test"},
+		Data:       map[string]string{"a": "x\nb=y"},
+	}
+	_, err := ApplyConfigMap(ctx, client, &cmAmbig1)
+	if err != nil {
+		t.Fatalf("failed to create ConfigMap: %v", err)
+	}
+	nn := types.NamespacedName{Namespace: "test", Name: "ambig"}
+	hash1, err := GetConfigMapDataHash(ctx, client, nn, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cmAmbig2 := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "ambig", Namespace: "test"},
+		Data:       map[string]string{"a": "x", "b": "y"},
+	}
+	_, err = ApplyConfigMap(ctx, client, &cmAmbig2)
+	if err != nil {
+		t.Fatalf("failed to update ConfigMap: %v", err)
+	}
+	hash2, err := GetConfigMapDataHash(ctx, client, nn, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Errorf("ambiguous framing: {\"a\":\"x\\nb=y\"} and {\"a\":\"x\",\"b\":\"y\"} produced the same hash %q", hash1)
+	}
+}
+
 func TestGetMCConfigMap(t *testing.T) {
 	ctx := context.TODO()
 	current := corev1.ConfigMap{

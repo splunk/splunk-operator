@@ -540,6 +540,51 @@ has been disabled. Please review [`PasswordManagement.md`](../operate/PasswordMa
 and [`Managing global kubernetes secret object`](#managing-global-kubernetes-secret-object)
 for more details.
 
+### Rolling restarts on ConfigMap changes
+
+When a ConfigMap is referenced in `spec.Volumes`, the operator automatically triggers a rolling
+restart of the affected pods whenever the ConfigMap's **data** changes. This ensures pods always
+run with the latest configuration.
+
+The restart is triggered by stamping a content-hash annotation
+(`revision.configmap.enterprise.splunk.com/<volume-name>`) on the pod template spec. Because the
+annotation is based on a SHA256 hash of the ConfigMap data, metadata-only changes (labels,
+annotations on the ConfigMap itself) do **not** cause restarts.
+
+**Opting out of restarts for dynamic-reload ConfigMaps**
+
+Some ConfigMaps are consumed by sidecar processes or Splunk apps that watch the mounted file path
+and reload configuration dynamically. In those cases, Kubernetes already propagates file changes
+to running pods within ~60 seconds without any restart. An operator-triggered restart would be
+unnecessary churn.
+
+To opt out, add the `enterprise.splunk.com/configmap-restart: "false"` annotation to the
+ConfigMap itself:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-app-config
+  namespace: splunk-operator
+  annotations:
+    enterprise.splunk.com/configmap-restart: "false"  # app reloads files dynamically
+data:
+  config.json: |
+    {"feature_flag": true}
+```
+
+With this annotation, the operator skips the restart-triggering annotation for that volume.
+Kubernetes still updates the mounted files on disk; no pod restart occurs.
+
+**Summary of behaviors**
+
+| Scenario | Restart triggered? |
+|---|---|
+| ConfigMap data changes, no annotation | Yes — rolling restart |
+| ConfigMap metadata only (labels) changes | No — hash unchanged |
+| ConfigMap has `enterprise.splunk.com/configmap-restart: "false"` | No — opt-out respected |
+
 ## Installing Splunk Apps
 
 *Note that this requires using the Splunk Enterprise container version 9.0.0 or later*
