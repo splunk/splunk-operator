@@ -296,6 +296,70 @@ func TestLifecycleObservationRejectsCaptainDisagreement(t *testing.T) {
 	}
 }
 
+func TestLifecycleAdapterObservesUnschedulableReplacementPod(t *testing.T) {
+	target := int32(2)
+	targetPod := "splunk-example-search-head-2"
+	cr := &enterpriseApi.SearchHeadCluster{
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				TargetPod:     targetPod,
+				TargetOrdinal: &target,
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
+	t.Cleanup(func() { getSearchHeadLifecyclePod = oldGetLifecyclePod })
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				UID:    types.UID("new-pod-uid"),
+				Labels: map[string]string{"controller-revision-hash": "revision-2"},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodPending,
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodScheduled,
+						Status: corev1.ConditionFalse,
+						Reason: corev1.PodReasonUnschedulable,
+					},
+				},
+			},
+		}, nil
+	}
+
+	observation, err := mgr.observeLifecycleRecovery(
+		context.Background(),
+		target,
+	)
+	if err != nil {
+		t.Fatalf("observe unschedulable replacement: %v", err)
+	}
+	if !observation.PodExists ||
+		observation.PodUID != "new-pod-uid" ||
+		observation.PodRevision != "revision-2" {
+		t.Fatalf("replacement identity observation = %#v", observation)
+	}
+	if observation.PodScheduled || !observation.PodUnschedulable {
+		t.Fatalf(
+			"scheduling observation = scheduled %t, unschedulable %t",
+			observation.PodScheduled,
+			observation.PodUnschedulable,
+		)
+	}
+	if observation.MemberObserved ||
+		observation.CaptainMemberObserved ||
+		observation.MemberRegistered {
+		t.Fatalf("unscheduled Pod produced Splunk observations: %#v", observation)
+	}
+}
+
 func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 
