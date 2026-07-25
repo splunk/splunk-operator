@@ -43,6 +43,7 @@ type Observation struct {
 	Captain                            string
 	CaptainReady                       bool
 	TargetMemberObserved               bool
+	TargetMemberID                     string
 	TargetMemberStatus                 string
 	TargetMemberRegistered             bool
 	ActiveHistoricalSearches           int32
@@ -61,6 +62,7 @@ const (
 	ActionRequestDetention     ActionType = "RequestDetention"
 	ActionTransferCaptain      ActionType = "TransferCaptain"
 	ActionAuthorizeReplacement ActionType = "AuthorizeReplacement"
+	ActionReleaseDetention     ActionType = "ReleaseDetention"
 )
 
 // Action is a declarative request from the decision engine. The engine itself
@@ -400,7 +402,8 @@ func validateObservation(
 		observation.Captain == "" ||
 		!observation.CaptainReady ||
 		!observation.TargetMemberObserved ||
-		!observation.TargetMemberRegistered {
+		!observation.TargetMemberRegistered ||
+		observation.TargetMemberID == "" {
 		setReason(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleReasonClusterNotSafe,
@@ -424,6 +427,9 @@ func recordObservation(
 	operation.CaptainReady = observation.CaptainReady
 	operation.ActiveHistoricalSearches = observation.ActiveHistoricalSearches
 	operation.ActiveRealtimeSearches = observation.ActiveRealtimeSearches
+	if operation.TargetMemberID == "" && observation.TargetMemberID != "" {
+		operation.TargetMemberID = observation.TargetMemberID
+	}
 	if observation.Available && observation.Fresh && !observation.ObservedAt.IsZero() {
 		observedAt := metav1.NewTime(observation.ObservedAt)
 		operation.LastSuccessfulSHCObservation = &observedAt

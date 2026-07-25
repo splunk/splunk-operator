@@ -171,6 +171,9 @@ func (c *SplunkClient) GetSearchHeadCaptainInfo() (*SearchHeadCaptainInfo, error
 // SearchHeadCaptainMemberInfo represents the status of a search head cluster member (captain endpoint).
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#shcluster.2Fcaptain.2Fmembers
 type SearchHeadCaptainMemberInfo struct {
+	// Persistent identifier assigned to this SHC member.
+	Identifier string `json:"-"`
+
 	// Flag that indicates if this member can run scheduled searches.
 	Adhoc bool `json:"adhoc_searchhead"`
 
@@ -226,6 +229,7 @@ type SearchHeadCaptainMemberInfo struct {
 func (c *SplunkClient) GetSearchHeadCaptainMembers() (map[string]SearchHeadCaptainMemberInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
+			Name    string                      `json:"name"`
 			Content SearchHeadCaptainMemberInfo `json:"content"`
 		} `json:"entry"`
 	}{}
@@ -237,7 +241,9 @@ func (c *SplunkClient) GetSearchHeadCaptainMembers() (map[string]SearchHeadCapta
 
 	members := make(map[string]SearchHeadCaptainMemberInfo)
 	for _, e := range apiResponse.Entry {
-		members[e.Content.Label] = e.Content
+		member := e.Content
+		member.Identifier = e.Name
+		members[member.Label] = member
 	}
 
 	return members, nil

@@ -172,6 +172,9 @@ func TestGetSearchHeadCaptainMembers(t *testing.T) {
 			if member.Status != wantStatus {
 				t.Errorf("member %s want Status=%s: got %s", wantMembers[n], member.Status, wantStatus)
 			}
+			if member.Identifier == "" {
+				t.Errorf("member %s has empty persistent identifier", wantMembers[n])
+			}
 			if member.Captain {
 				if wantMembers[n] != wantCaptain {
 					t.Errorf("member %s want Captain=%t: got %t", wantMembers[n], false, true)

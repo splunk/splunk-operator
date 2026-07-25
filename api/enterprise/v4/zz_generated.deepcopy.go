@@ -2628,6 +2628,18 @@ func (in *SearchHeadClusterLifecycleOperationStatus) DeepCopyInto(out *SearchHea
 		in, out := &in.CaptainTransferRequestedAt, &out.CaptainTransferRequestedAt
 		*out = (*in).DeepCopy()
 	}
+	if in.ReplacementAuthorizedAt != nil {
+		in, out := &in.ReplacementAuthorizedAt, &out.ReplacementAuthorizedAt
+		*out = (*in).DeepCopy()
+	}
+	if in.MemberRejoinStartedAt != nil {
+		in, out := &in.MemberRejoinStartedAt, &out.MemberRejoinStartedAt
+		*out = (*in).DeepCopy()
+	}
+	if in.DetentionReleaseRequestedAt != nil {
+		in, out := &in.DetentionReleaseRequestedAt, &out.DetentionReleaseRequestedAt
+		*out = (*in).DeepCopy()
+	}
 	if in.LastSuccessfulSHCObservation != nil {
 		in, out := &in.LastSuccessfulSHCObservation, &out.LastSuccessfulSHCObservation
 		*out = (*in).DeepCopy()

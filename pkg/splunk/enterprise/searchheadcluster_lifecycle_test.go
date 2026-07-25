@@ -22,6 +22,9 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
@@ -32,11 +35,13 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 	oldGetMembers := getSearchHeadCaptainMembers
 	oldRequestDetention := requestSearchHeadDetention
 	oldTransferCaptain := transferSearchHeadCaptain
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
 	t.Cleanup(func() {
 		searchHeadClusterLifecycleNow = oldNow
 		getSearchHeadCaptainMembers = oldGetMembers
 		requestSearchHeadDetention = oldRequestDetention
 		transferSearchHeadCaptain = oldTransferCaptain
+		getSearchHeadLifecyclePod = oldGetLifecyclePod
 	})
 	searchHeadClusterLifecycleNow = func() time.Time {
 		now = now.Add(time.Second)
@@ -75,17 +80,20 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 
 	captainMembers := map[string]splclient.SearchHeadCaptainMemberInfo{
 		"splunk-example-search-head-0": {
+			Identifier:    "member-guid-0",
 			Label:         "splunk-example-search-head-0",
 			Status:        "Up",
 			ManagementURI: "https://splunk-example-search-head-0:8089",
 		},
 		"splunk-example-search-head-1": {
+			Identifier:       "member-guid-1",
 			Label:            "splunk-example-search-head-1",
 			Status:           "Up",
 			ManagementURI:    "https://splunk-example-search-head-1:8089",
 			PreferredCaptain: true,
 		},
 		"splunk-example-search-head-2": {
+			Identifier:    "member-guid-2",
 			Label:         "splunk-example-search-head-2",
 			Status:        "Up",
 			Captain:       true,
@@ -116,6 +124,17 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 		transferCalls++
 		transferTarget = managementURI
 		return nil
+	}
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				UID: types.UID("original-pod-uid"),
+			},
+		}, nil
 	}
 
 	// Reconcile 1 persists operation identity; no action is allowed.
@@ -203,11 +222,13 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 	// authorization, but cannot authorize deletion in the same reconcile.
 	cr.Status.Captain = "splunk-example-search-head-0"
 	captainMembers["splunk-example-search-head-2"] = splclient.SearchHeadCaptainMemberInfo{
+		Identifier:    "member-guid-2",
 		Label:         "splunk-example-search-head-2",
 		Status:        "ManualDetention",
 		ManagementURI: "https://splunk-example-search-head-2:8089",
 	}
 	captainMembers["splunk-example-search-head-0"] = splclient.SearchHeadCaptainMemberInfo{
+		Identifier:    "member-guid-0",
 		Label:         "splunk-example-search-head-0",
 		Status:        "Up",
 		Captain:       true,
@@ -273,6 +294,160 @@ func TestLifecycleObservationRejectsCaptainDisagreement(t *testing.T) {
 	if !observation.ConflictingCaptain {
 		t.Fatal("expected disagreement between captain info and captain member view")
 	}
+}
+
+func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+
+	now := time.Date(2026, 7, 24, 14, 0, 0, 0, time.UTC)
+	oldNow := searchHeadClusterLifecycleNow
+	oldGetMembers := getSearchHeadCaptainMembers
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
+	oldReleaseDetention := releaseSearchHeadDetention
+	t.Cleanup(func() {
+		searchHeadClusterLifecycleNow = oldNow
+		getSearchHeadCaptainMembers = oldGetMembers
+		getSearchHeadLifecyclePod = oldGetLifecyclePod
+		releaseSearchHeadDetention = oldReleaseDetention
+	})
+	searchHeadClusterLifecycleNow = func() time.Time {
+		now = now.Add(time.Second)
+		return now
+	}
+
+	ordinal := int32(2)
+	authorizedAt := metav1.NewTime(now)
+	cr := &enterpriseApi.SearchHeadCluster{}
+	cr.Name = "example"
+	cr.Status.Captain = "splunk-example-search-head-0"
+	cr.Status.CaptainReady = true
+	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+		{Name: "splunk-example-search-head-0", Status: "Up", Registered: true},
+		{Name: "splunk-example-search-head-1", Status: "Up", Registered: true},
+		{Name: "splunk-example-search-head-2", Status: "ManualDetention", Registered: true},
+	}
+	cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:             "operation-1",
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:         "revision-2",
+		TargetPod:               "splunk-example-search-head-2",
+		TargetOrdinal:           &ordinal,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		TargetPodUID:            "old-pod-uid",
+		TargetMemberID:          "member-guid-2",
+		ReplacementAuthorizedAt: &authorizedAt,
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "splunk-example-search-head-2",
+				UID:  types.UID("new-pod-uid"),
+				Labels: map[string]string{
+					"controller-revision-hash": "revision-2",
+				},
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodScheduled, Status: corev1.ConditionTrue},
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		}, nil
+	}
+	captainMembers := map[string]splclient.SearchHeadCaptainMemberInfo{
+		"splunk-example-search-head-0": {
+			Identifier: "member-guid-0",
+			Label:      "splunk-example-search-head-0",
+			Status:     "Up",
+			Captain:    true,
+		},
+		"splunk-example-search-head-2": {
+			Identifier: "member-guid-2",
+			Label:      "splunk-example-search-head-2",
+			Status:     "ManualDetention",
+		},
+	}
+	getSearchHeadCaptainMembers = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+		return captainMembers, nil
+	}
+	releaseCalls := 0
+	releaseSearchHeadDetention = func(context.Context, *searchHeadClusterPodManager, int32) error {
+		releaseCalls++
+		return nil
+	}
+
+	// Persist ValidatingRecovery before releasing detention.
+	complete, err := mgr.resumeLifecycleRecovery(context.Background(), ordinal)
+	assertLifecycleAdapterResult(t, complete, err, false)
+	if cr.Status.LifecycleOperation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery {
+		t.Fatalf("stage = %q, want ValidatingRecovery", cr.Status.LifecycleOperation.Stage)
+	}
+	if releaseCalls != 0 {
+		t.Fatal("detention release ran in the same reconcile as its stage transition")
+	}
+
+	complete, err = mgr.resumeLifecycleRecovery(context.Background(), ordinal)
+	assertLifecycleAdapterResult(t, complete, err, false)
+	if releaseCalls != 1 || cr.Status.LifecycleOperation.DetentionReleaseRequestedAt == nil {
+		t.Fatalf("release calls = %d, requestedAt = %v; want one durable request",
+			releaseCalls,
+			cr.Status.LifecycleOperation.DetentionReleaseRequestedAt,
+		)
+	}
+
+	// Restart/resume observes the durable request without calling it again.
+	complete, err = mgr.resumeLifecycleRecovery(context.Background(), ordinal)
+	assertLifecycleAdapterResult(t, complete, err, false)
+	if releaseCalls != 1 {
+		t.Fatalf("release calls after resume = %d, want 1", releaseCalls)
+	}
+
+	cr.Status.Members[2].Status = "Up"
+	captainMembers["splunk-example-search-head-2"] = splclient.SearchHeadCaptainMemberInfo{
+		Identifier: "member-guid-2",
+		Label:      "splunk-example-search-head-2",
+		Status:     "Up",
+	}
+	complete, err = mgr.resumeLifecycleRecovery(context.Background(), ordinal)
+	assertLifecycleAdapterResult(t, complete, err, true)
+	if cr.Status.LifecycleOperation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
+		t.Fatalf("stage = %q, want Completed", cr.Status.LifecycleOperation.Stage)
+	}
+}
+
+func TestLifecycleFinishRecycleDoesNotBlockCompletedHigherOrdinal(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	targetOrdinal := int32(1)
+	mgr := &searchHeadClusterPodManager{
+		cr: &enterpriseApi.SearchHeadCluster{
+			Status: enterpriseApi.SearchHeadClusterStatus{
+				LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+					TargetOrdinal: &targetOrdinal,
+					Stage:         enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+				},
+			},
+		},
+	}
+
+	complete, err := mgr.FinishRecycle(context.Background(), 2)
+	assertLifecycleAdapterResult(t, complete, err, true)
+
+	complete, err = mgr.FinishRecycle(context.Background(), targetOrdinal)
+	assertLifecycleAdapterResult(t, complete, err, false)
+
+	mgr.cr.Status.LifecycleOperation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+	complete, err = mgr.FinishRecycle(context.Background(), targetOrdinal)
+	assertLifecycleAdapterResult(t, complete, err, true)
 }
 
 func assertLifecycleAdapterResult(t *testing.T, got bool, err error, want bool) {

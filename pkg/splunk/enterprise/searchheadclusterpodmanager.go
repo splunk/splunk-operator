@@ -69,11 +69,26 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
+	if err == nil &&
+		searchHeadClusterLifecycleEnabled() &&
+		lifecycleRecoveryActive(mgr.cr.Status.LifecycleOperation) {
+		recoveryComplete, lifecycleErr := mgr.resumeLifecycleRecovery(
+			ctx,
+			*mgr.cr.Status.LifecycleOperation.TargetOrdinal,
+		)
+		if lifecycleErr != nil {
+			return enterpriseApi.PhaseError, lifecycleErr
+		}
+		if !recoveryComplete {
+			return enterpriseApi.PhaseUpdating, nil
+		}
+	}
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
 		if err == nil &&
 			searchHeadClusterLifecycleEnabled() &&
 			mgr.cr.Status.LifecycleOperation != nil &&
-			mgr.cr.Status.LifecycleOperation.TargetOrdinal != nil {
+			mgr.cr.Status.LifecycleOperation.TargetOrdinal != nil &&
+			mgr.cr.Status.LifecycleOperation.TargetPodUID == "" {
 			_, lifecycleErr := mgr.prepareLifecycleReplacement(
 				ctx,
 				*mgr.cr.Status.LifecycleOperation.TargetOrdinal,
@@ -238,6 +253,19 @@ func (mgr *searchHeadClusterPodManager) prepareRecycleLegacy(ctx context.Context
 
 // FinishRecycle for searchHeadClusterPodManager completes recycle event for search head pod; it returns true when complete
 func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
+	if searchHeadClusterLifecycleEnabled() {
+		operation := mgr.cr.Status.LifecycleOperation
+		if operation != nil &&
+			operation.TargetOrdinal != nil &&
+			*operation.TargetOrdinal == n {
+			return operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageCompleted, nil
+		}
+		// This Pod is not the active lifecycle target. Up-to-date higher
+		// ordinals from an earlier completed step must not block traversal to
+		// the current target.
+		return true, nil
+	}
+
 	logger := logging.FromContext(ctx).With("func", "FinishRecycle")
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 

@@ -173,6 +173,7 @@ const (
 	SearchHeadClusterLifecycleReasonReplacementAuthorized         SearchHeadClusterLifecycleReason = "ReplacementAuthorized"
 	SearchHeadClusterLifecycleReasonPodTerminationTimedOut        SearchHeadClusterLifecycleReason = "PodTerminationTimedOut"
 	SearchHeadClusterLifecycleReasonPodUnschedulable              SearchHeadClusterLifecycleReason = "PodUnschedulable"
+	SearchHeadClusterLifecycleReasonPodRevisionMismatch           SearchHeadClusterLifecycleReason = "PodRevisionMismatch"
 	SearchHeadClusterLifecycleReasonVolumeAttachmentPending       SearchHeadClusterLifecycleReason = "VolumeAttachmentPending"
 	SearchHeadClusterLifecycleReasonImagePullFailed               SearchHeadClusterLifecycleReason = "ImagePullFailed"
 	SearchHeadClusterLifecycleReasonSplunkStartupFailed           SearchHeadClusterLifecycleReason = "SplunkStartupFailed"
@@ -206,6 +207,13 @@ type SearchHeadClusterLifecycleOperationStatus struct {
 	CaptainReady                 bool                             `json:"captainReady,omitempty"`
 	CaptainTransferTarget        string                           `json:"captainTransferTarget,omitempty"`
 	CaptainTransferRequestedAt   *metav1.Time                     `json:"captainTransferRequestedAt,omitempty"`
+	TargetPodUID                 string                           `json:"targetPodUID,omitempty"`
+	TargetMemberID               string                           `json:"targetMemberID,omitempty"`
+	ReplacementPodUID            string                           `json:"replacementPodUID,omitempty"`
+	ReplacementMemberID          string                           `json:"replacementMemberID,omitempty"`
+	ReplacementAuthorizedAt      *metav1.Time                     `json:"replacementAuthorizedAt,omitempty"`
+	MemberRejoinStartedAt        *metav1.Time                     `json:"memberRejoinStartedAt,omitempty"`
+	DetentionReleaseRequestedAt  *metav1.Time                     `json:"detentionReleaseRequestedAt,omitempty"`
 	ActiveHistoricalSearches     int32                            `json:"activeHistoricalSearches,omitempty"`
 	ActiveRealtimeSearches       int32                            `json:"activeRealtimeSearches,omitempty"`
 	LastSuccessfulSHCObservation *metav1.Time                     `json:"lastSuccessfulSHCObservation,omitempty"`

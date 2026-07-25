@@ -10198,6 +10198,9 @@ spec:
                     type: array
                   desiredRevision:
                     type: string
+                  detentionReleaseRequestedAt:
+                    format: date-time
+                    type: string
                   intent:
                     description: |-
                       SearchHeadClusterLifecycleIntent identifies why a durable lifecycle
@@ -10209,6 +10212,9 @@ spec:
                   lastTransitionTime:
                     format: date-time
                     type: string
+                  memberRejoinStartedAt:
+                    format: date-time
+                    type: string
                   message:
                     type: string
                   operationID:
@@ -10217,6 +10223,13 @@ spec:
                     description: |-
                       SearchHeadClusterLifecycleReason is a bounded, machine-readable explanation
                       for the current lifecycle operation state.
+                    type: string
+                  replacementAuthorizedAt:
+                    format: date-time
+                    type: string
+                  replacementMemberID:
+                    type: string
+                  replacementPodUID:
                     type: string
                   retryCount:
                     format: int32
@@ -10232,10 +10245,14 @@ spec:
                   startedAt:
                     format: date-time
                     type: string
+                  targetMemberID:
+                    type: string
                   targetOrdinal:
                     format: int32
                     type: integer
                   targetPod:
+                    type: string
+                  targetPodUID:
                     type: string
                 type: object
               maintenanceMode:

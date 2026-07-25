@@ -238,6 +238,7 @@ func safeObservation(now time.Time) Observation {
 		Captain:                "example-search-head-0",
 		CaptainReady:           true,
 		TargetMemberObserved:   true,
+		TargetMemberID:         "member-guid-2",
 		TargetMemberStatus:     "Up",
 		TargetMemberRegistered: true,
 	}
