@@ -154,14 +154,23 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 	// found an existing StatefulSet
 
 	// check for changes in Pod template
+	desiredUpdateStrategy := revised.Spec.UpdateStrategy
+	hasUpdateStrategyChanges := !reflect.DeepEqual(
+		current.Spec.UpdateStrategy,
+		desiredUpdateStrategy,
+	)
 	hasUpdates := MergePodUpdates(ctx, &current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
 	*revised = current // caller expects that object passed represents latest state
+	if hasUpdateStrategyChanges {
+		revised.Spec.UpdateStrategy = desiredUpdateStrategy
+	}
 
 	// only update if there are material differences, as determined by comparison function
-	if hasUpdates {
-		// this updates the desired state template, but doesn't actually modify any pods
-		// because we use an "OnUpdate" strategy https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
-		// note also that this ignores Replicas, which is handled below by UpdateStatefulSetPods
+	if hasUpdates || hasUpdateStrategyChanges {
+		// Persist the desired Pod template and replacement policy together. OnDelete
+		// retains Operator-owned replacement. A partitioned RollingUpdate makes only
+		// ordinals authorized by its partition eligible for Kubernetes replacement.
+		// Replicas remain managed below by UpdateStatefulSetPods.
 
 		err = splutil.UpdateResource(ctx, c, revised)
 		if err != nil {

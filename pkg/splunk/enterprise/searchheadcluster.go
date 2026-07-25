@@ -33,6 +33,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -482,7 +483,78 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 		return nil, err
 	}
 
+	updateStrategy, err := getSearchHeadStatefulSetUpdateStrategy(
+		ctx,
+		client,
+		cr,
+		&ss.Spec.Template,
+	)
+	if err != nil {
+		return nil, err
+	}
+	ss.Spec.UpdateStrategy = updateStrategy
+
 	return ss, nil
+}
+
+// getSearchHeadStatefulSetUpdateStrategy keeps OnDelete as the compatibility
+// default and renders a fail-closed RollingUpdate partition only when the SHC
+// lifecycle contract explicitly selects Kubernetes-owned Pod replacement.
+func getSearchHeadStatefulSetUpdateStrategy(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.SearchHeadCluster,
+	desiredTemplate *corev1.PodTemplateSpec,
+) (appsv1.StatefulSetUpdateStrategy, error) {
+	onDelete := appsv1.StatefulSetUpdateStrategy{
+		Type: appsv1.OnDeleteStatefulSetStrategyType,
+	}
+	if !searchHeadClusterLifecycleEnabled() {
+		return onDelete, nil
+	}
+
+	policy, err := ResolveSearchHeadClusterLifecyclePolicy(&cr.Spec)
+	if err != nil {
+		return appsv1.StatefulSetUpdateStrategy{}, err
+	}
+	if policy.PodUpdateStrategy != enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate {
+		return onDelete, nil
+	}
+
+	partition := cr.Spec.Replicas
+	current := &appsv1.StatefulSet{}
+	err = client.Get(ctx, types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+	}, current)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return appsv1.StatefulSetUpdateStrategy{}, err
+	}
+	if err == nil &&
+		current.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType &&
+		current.Spec.UpdateStrategy.RollingUpdate != nil &&
+		current.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
+		currentPartition := *current.Spec.UpdateStrategy.RollingUpdate.Partition
+		currentTemplate := current.Spec.Template.DeepCopy()
+		templateChanged := splctrl.MergePodUpdates(
+			ctx,
+			currentTemplate,
+			desiredTemplate,
+			current.GetName(),
+		)
+		if !templateChanged &&
+			currentPartition >= 0 &&
+			currentPartition <= cr.Spec.Replicas {
+			partition = currentPartition
+		}
+	}
+
+	return appsv1.StatefulSetUpdateStrategy{
+		Type: appsv1.RollingUpdateStatefulSetStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+			Partition: &partition,
+		},
+	}, nil
 }
 
 // CSPL-3652 Configure deployer resources if configured

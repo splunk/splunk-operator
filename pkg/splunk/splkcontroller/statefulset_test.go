@@ -128,6 +128,59 @@ func TestApplyStatefulSet(t *testing.T) {
 	}
 }
 
+func TestApplyStatefulSetPersistsUpdateStrategyChanges(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(3)
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-search-head",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
+		},
+	}
+	partition := replicas
+	revised := current.DeepCopy()
+	revised.Spec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{
+		Type: appsv1.RollingUpdateStatefulSetStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+			Partition: &partition,
+		},
+	}
+	c := spltest.NewMockClient()
+	if err := c.Create(ctx, current); err != nil {
+		t.Fatalf("create StatefulSet: %v", err)
+	}
+
+	phase, err := ApplyStatefulSet(ctx, c, revised)
+	if err != nil {
+		t.Fatalf("apply StatefulSet: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("phase = %q, want %q", phase, enterpriseApi.PhaseUpdating)
+	}
+
+	stored := &appsv1.StatefulSet{}
+	err = c.Get(ctx, types.NamespacedName{
+		Name:      current.GetName(),
+		Namespace: current.GetNamespace(),
+	}, stored)
+	if err != nil {
+		t.Fatalf("get StatefulSet: %v", err)
+	}
+	if stored.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType ||
+		stored.Spec.UpdateStrategy.RollingUpdate == nil ||
+		stored.Spec.UpdateStrategy.RollingUpdate.Partition == nil ||
+		*stored.Spec.UpdateStrategy.RollingUpdate.Partition != partition {
+		t.Fatalf("stored strategy = %#v, want RollingUpdate partition %d",
+			stored.Spec.UpdateStrategy, partition)
+	}
+}
+
 func TestDefaultStatefulSetPodManager(t *testing.T) {
 
 	// test for updating
