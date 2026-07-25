@@ -39,6 +39,7 @@ type SHCRolloutReason string
 const (
 	SHCRolloutReasonStable                        SHCRolloutReason = "Stable"
 	SHCRolloutReasonPaused                        SHCRolloutReason = "Paused"
+	SHCRolloutReasonRollbackPending               SHCRolloutReason = "RollbackPending"
 	SHCRolloutReasonWaitingForRevision            SHCRolloutReason = "WaitingForRevision"
 	SHCRolloutReasonPrepareTarget                 SHCRolloutReason = "PrepareTarget"
 	SHCRolloutReasonPartitionAdvanceAuthorized    SHCRolloutReason = "PartitionAdvanceAuthorized"

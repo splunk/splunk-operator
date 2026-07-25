@@ -873,6 +873,68 @@ func TestRollingUpdateControllerRollbackCompletionResetsPartition(t *testing.T) 
 	assertNoRollingUpdatePodDelete(t, client)
 }
 
+func TestRollingUpdateControllerHoldsPartitionDuringOnDeleteRollback(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-2"},
+	)
+	mgr.cr.Spec.LifecyclePolicy.PodUpdateStrategy =
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:             "pod-update-2",
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:         "revision-2",
+		TargetPod:               statefulSet.GetName() + "-2",
+		TargetOrdinal:           &target,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+		ReplacementAuthorizedAt: &authorizedAt,
+	}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("hold rollback partition: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("rollback hold phase = %q, want %q", phase, enterpriseApi.PhaseUpdating)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("rollback hold changed partition: %v", client.Calls["Update"])
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, target)
+	assertNoRollingUpdatePodDelete(t, client)
+	if !strings.Contains(
+		mgr.cr.Status.Message,
+		string(upgrade.SHCRolloutReasonRollbackPending),
+	) {
+		t.Fatalf(
+			"rollback hold status = %q, want %s",
+			mgr.cr.Status.Message,
+			upgrade.SHCRolloutReasonRollbackPending,
+		)
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != target ||
+		operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin {
+		t.Fatalf(
+			"rollback hold operation = %#v, want active ordinal 2 recovery",
+			operation,
+		)
+	}
+}
+
 func TestRollingUpdateControllerCompletesThreeMembersInReverseOrdinalOrder(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(

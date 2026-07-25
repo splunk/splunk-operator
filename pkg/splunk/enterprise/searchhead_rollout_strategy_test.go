@@ -129,6 +129,128 @@ func TestSearchHeadStatefulSetRollingUpdatePreservesExistingPartition(t *testing
 	assertRollingUpdatePartition(t, strategy, partition)
 }
 
+func TestSearchHeadStatefulSetRollbackWaitsForActiveOperationCompletion(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	cr := searchHeadRolloutStrategyTestCR()
+	replicas := int32(3)
+	partition := int32(2)
+	target := int32(2)
+	cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:     "pod-update-2",
+		Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision: "revision-2",
+		TargetPod:       GetSplunkStatefulsetPodName(SplunkSearchHead, cr.GetName(), target),
+		TargetOrdinal:   &target,
+		Stage:           enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+	}
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+			Namespace: cr.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+	}
+	client := spltest.NewMockClient()
+	if err := client.Create(context.Background(), current); err != nil {
+		t.Fatalf("create StatefulSet: %v", err)
+	}
+
+	strategy, err := getSearchHeadStatefulSetUpdateStrategy(
+		context.Background(),
+		client,
+		cr,
+		&current.Spec.Template,
+	)
+	if err != nil {
+		t.Fatalf("resolve pending rollback strategy: %v", err)
+	}
+	assertRollingUpdatePartition(t, strategy, partition)
+
+	cr.Status.LifecycleOperation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+	strategy, err = getSearchHeadStatefulSetUpdateStrategy(
+		context.Background(),
+		client,
+		cr,
+		&current.Spec.Template,
+	)
+	if err != nil {
+		t.Fatalf("resolve completed rollback strategy: %v", err)
+	}
+	if strategy.Type != appsv1.OnDeleteStatefulSetStrategyType ||
+		strategy.RollingUpdate != nil {
+		t.Fatalf("completed rollback strategy = %#v, want OnDelete", strategy)
+	}
+}
+
+func TestSearchHeadStatefulSetRollbackBeforePartitionAdvanceRestoresOnDelete(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	cr := searchHeadRolloutStrategyTestCR()
+	replicas := int32(3)
+	partition := int32(3)
+	target := int32(2)
+	cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:     "pod-update-2",
+		Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision: "revision-2",
+		TargetPod:       GetSplunkStatefulsetPodName(SplunkSearchHead, cr.GetName(), target),
+		TargetOrdinal:   &target,
+		Stage:           enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+	}
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+			Namespace: cr.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+	}
+	client := spltest.NewMockClient()
+	if err := client.Create(context.Background(), current); err != nil {
+		t.Fatalf("create StatefulSet: %v", err)
+	}
+
+	strategy, err := getSearchHeadStatefulSetUpdateStrategy(
+		context.Background(),
+		client,
+		cr,
+		&current.Spec.Template,
+	)
+	if err != nil {
+		t.Fatalf("resolve rollback before partition advance: %v", err)
+	}
+	if strategy.Type != appsv1.OnDeleteStatefulSetStrategyType ||
+		strategy.RollingUpdate != nil {
+		t.Fatalf("pre-advance rollback strategy = %#v, want OnDelete", strategy)
+	}
+	operation := cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != target ||
+		operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement {
+		t.Fatalf(
+			"pre-advance rollback operation = %#v, want retained ordinal 2 authorization",
+			operation,
+		)
+	}
+}
+
 func TestSearchHeadStatefulSetRollingUpdateRejectsInvalidStoredPartition(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	cr := searchHeadRolloutStrategyTestCR()

@@ -67,6 +67,27 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 	if err != nil {
 		return enterpriseApi.PhaseError, err
 	}
+	policy, err := ResolveSearchHeadClusterLifecyclePolicy(&mgr.cr.Spec)
+	if err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+	if policy.PodUpdateStrategy !=
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate {
+		decision := upgrade.SHCRolloutDecision{
+			Action: upgrade.SHCRolloutActionWait,
+			Reason: upgrade.SHCRolloutReasonRollbackPending,
+			Message: fmt.Sprintf(
+				"rollback requested; hold partition %d until the active lifecycle operation completes recovery",
+				state.Partition,
+			),
+		}
+		if mgr.cr.Status.LifecycleOperation != nil {
+			decision.TargetOrdinal =
+				mgr.cr.Status.LifecycleOperation.TargetOrdinal
+		}
+		mgr.recordRollingUpdateDecision(ctx, state, decision)
+		return enterpriseApi.PhaseUpdating, nil
+	}
 	decision := upgrade.EvaluateSHCRollout(state)
 	mgr.recordRollingUpdateDecision(ctx, state, decision)
 

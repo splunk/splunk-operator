@@ -522,7 +522,59 @@ func getSearchHeadStatefulSetUpdateStrategy(
 		return appsv1.StatefulSetUpdateStrategy{}, err
 	}
 	if policy.PodUpdateStrategy != enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate {
-		return onDelete, nil
+		operation := cr.Status.LifecycleOperation
+		rollbackPending := operation != nil &&
+			operation.Intent == enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+			operation.TargetOrdinal != nil &&
+			operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+		if !rollbackPending {
+			return onDelete, nil
+		}
+
+		current := &appsv1.StatefulSet{}
+		err = client.Get(ctx, types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+		}, current)
+		if k8serrors.IsNotFound(err) {
+			return onDelete, nil
+		}
+		if err != nil {
+			return appsv1.StatefulSetUpdateStrategy{}, err
+		}
+		if current.Spec.UpdateStrategy.Type !=
+			appsv1.RollingUpdateStatefulSetStrategyType {
+			return onDelete, nil
+		}
+		if current.Spec.Replicas == nil ||
+			current.Spec.UpdateStrategy.RollingUpdate == nil ||
+			current.Spec.UpdateStrategy.RollingUpdate.Partition == nil {
+			return appsv1.StatefulSetUpdateStrategy{}, fmt.Errorf(
+				"cannot roll back Search Head StatefulSet %s with an incomplete RollingUpdate strategy",
+				current.GetName(),
+			)
+		}
+		partition := *current.Spec.UpdateStrategy.RollingUpdate.Partition
+		if partition < 0 || partition > *current.Spec.Replicas {
+			return appsv1.StatefulSetUpdateStrategy{}, fmt.Errorf(
+				"cannot roll back Search Head StatefulSet %s with partition %d outside replica range 0..%d",
+				current.GetName(),
+				partition,
+				*current.Spec.Replicas,
+			)
+		}
+		if partition > *operation.TargetOrdinal {
+			// Kubernetes has not been authorized to replace this target. It is
+			// safe to restore OnDelete now; the durable lifecycle operation is
+			// retained and the Operator continues that same target.
+			return onDelete, nil
+		}
+		return appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &partition,
+			},
+		}, nil
 	}
 
 	partitionCeiling := cr.Spec.Replicas
