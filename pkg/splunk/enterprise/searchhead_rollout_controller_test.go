@@ -29,7 +29,9 @@ import (
 	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -150,6 +152,105 @@ func TestRollingUpdateControllerAdvancesOnlyAfterPersistedAuthorization(t *testi
 		*stored.Spec.UpdateStrategy.RollingUpdate.Partition != target {
 		t.Fatalf("stored strategy = %#v, want partition %d",
 			stored.Spec.UpdateStrategy, target)
+	}
+}
+
+func TestRollingUpdateControllerRetriesPartitionConflictWithoutSkippingOrdinal(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	// The mock client stores pointers, unlike the Kubernetes API. Keep the
+	// reconcile-local object independent so a failed Update cannot mutate the
+	// object representing persisted API state.
+	statefulSet = statefulSet.DeepCopy()
+	mgr.statefulSet = statefulSet
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:             "pod-update-2",
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:         "revision-2",
+		TargetPod:               statefulSet.GetName() + "-2",
+		TargetOrdinal:           &target,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		ReplacementAuthorizedAt: &authorizedAt,
+	}
+	conflict := k8serrors.NewConflict(
+		schema.GroupResource{
+			Group:    appsv1.GroupName,
+			Resource: "statefulsets",
+		},
+		statefulSet.GetName(),
+		fmt.Errorf("simulated concurrent StatefulSet update"),
+	)
+	client.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = conflict
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if !k8serrors.IsConflict(err) {
+		t.Fatalf("partition conflict error = %v, want Kubernetes Conflict", err)
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Fatalf("partition conflict phase = %q, want %q", phase, enterpriseApi.PhaseError)
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+
+	stored := getRollingUpdateFixtureStatefulSet(t, client, statefulSet)
+	assertRollingUpdatePartition(t, stored.Spec.UpdateStrategy, 3)
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != target ||
+		operation.DesiredRevision != "revision-2" ||
+		operation.ReplacementAuthorizedAt == nil {
+		t.Fatalf(
+			"authorization after conflict = %#v, want persisted ordinal 2 authorization",
+			operation,
+		)
+	}
+
+	// A new reconciliation discards the locally mutated object and observes
+	// the unchanged partition from the API before retrying the same ordinal.
+	client.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = nil
+	client.ResetCalls()
+	mgr.statefulSet = stored
+	phase, err = mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		stored,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("retry partition update: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("partition retry phase = %q, want %q", phase, enterpriseApi.PhaseUpdating)
+	}
+	if len(client.Calls["Update"]) != 1 {
+		t.Fatalf(
+			"partition retry updates = %d, want one",
+			len(client.Calls["Update"]),
+		)
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+
+	stored = getRollingUpdateFixtureStatefulSet(t, client, stored)
+	assertRollingUpdatePartition(t, stored.Spec.UpdateStrategy, target)
+	operation = mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != target {
+		t.Fatalf(
+			"operation after partition retry = %#v, want ordinal 2",
+			operation,
+		)
 	}
 }
 
