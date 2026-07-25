@@ -130,13 +130,11 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	}
 
 	// manage scaling and updates
-	var phase enterpriseApi.Phase
-	if statefulSet.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType {
-		phase, err = mgr.updateRollingStatefulSetPods(ctx, statefulSet, desiredReplicas)
-	} else {
-		mgr.cr.Status.Message = ""
-		phase, err = splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
-	}
+	phase, err := mgr.updateStatefulSetPods(
+		ctx,
+		statefulSet,
+		desiredReplicas,
+	)
 	if err != nil {
 		return phase, err
 	}
@@ -157,6 +155,119 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	}
 
 	return phase, nil
+}
+
+func (mgr *searchHeadClusterPodManager) updateStatefulSetPods(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32,
+) (enterpriseApi.Phase, error) {
+	currentMemberJoined := true
+	if statefulSet.Spec.Replicas != nil &&
+		*statefulSet.Spec.Replicas < desiredReplicas {
+		currentMemberJoined = mgr.currentScaleUpMemberJoined(
+			ctx,
+			statefulSet,
+		)
+		if statefulSet.Status.ReadyReplicas >=
+			*statefulSet.Spec.Replicas &&
+			!currentMemberJoined {
+			return enterpriseApi.PhaseScalingUp, nil
+		}
+	}
+	reconcileReplicas := nextSearchHeadClusterReplicaTarget(
+		statefulSet,
+		desiredReplicas,
+		currentMemberJoined,
+	)
+	if statefulSet.Spec.UpdateStrategy.Type ==
+		appsv1.RollingUpdateStatefulSetStrategyType {
+		return mgr.updateRollingStatefulSetPods(
+			ctx,
+			statefulSet,
+			reconcileReplicas,
+		)
+	}
+	mgr.cr.Status.Message = ""
+	return splctrl.UpdateStatefulSetPods(
+		ctx,
+		mgr.c,
+		statefulSet,
+		mgr,
+		reconcileReplicas,
+	)
+}
+
+func nextSearchHeadClusterReplicaTarget(
+	statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32,
+	currentMemberJoined bool,
+) int32 {
+	if statefulSet.Spec.Replicas == nil {
+		return desiredReplicas
+	}
+	currentReplicas := *statefulSet.Spec.Replicas
+	if currentReplicas >= desiredReplicas {
+		return desiredReplicas
+	}
+	if statefulSet.Status.ReadyReplicas < currentReplicas ||
+		!currentMemberJoined {
+		return currentReplicas
+	}
+	return currentReplicas + 1
+}
+
+func (mgr *searchHeadClusterPodManager) currentScaleUpMemberJoined(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+) bool {
+	if statefulSet.Spec.Replicas == nil || *statefulSet.Spec.Replicas == 0 {
+		return true
+	}
+	currentReplicas := *statefulSet.Spec.Replicas
+	targetOrdinal := currentReplicas - 1
+	if targetOrdinal >= int32(len(mgr.cr.Status.Members)) ||
+		!mgr.cr.Status.Initialized ||
+		!mgr.cr.Status.MinPeersJoined ||
+		!mgr.cr.Status.CaptainReady {
+		return false
+	}
+	targetPod := fmt.Sprintf("%s-%d", statefulSet.GetName(), targetOrdinal)
+	target := mgr.cr.Status.Members[targetOrdinal]
+	if target.Name != targetPod ||
+		!target.Registered ||
+		target.Status != "Up" {
+		return false
+	}
+
+	captainOrdinal := int32(-1)
+	for ordinal := range mgr.cr.Status.Members {
+		if mgr.cr.Status.Members[ordinal].Name == mgr.cr.Status.Captain {
+			captainOrdinal = int32(ordinal)
+			break
+		}
+	}
+	if captainOrdinal < 0 {
+		return false
+	}
+	members, err := getSearchHeadCaptainMembers(ctx, mgr, captainOrdinal)
+	if err != nil {
+		return false
+	}
+	captainCount := 0
+	authoritativeCaptain := false
+	for _, member := range members {
+		if member.Captain {
+			captainCount++
+			authoritativeCaptain = member.Label == mgr.cr.Status.Captain
+		}
+	}
+	targetFromCaptain, targetObserved := members[targetPod]
+	return captainCount == 1 &&
+		authoritativeCaptain &&
+		targetObserved &&
+		targetFromCaptain.Identifier != "" &&
+		targetFromCaptain.Status == "Up"
 }
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready

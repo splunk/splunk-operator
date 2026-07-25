@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splmetrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
@@ -141,6 +142,219 @@ func TestRollingUpdateControllerWaitsForParallelInitialFormation(t *testing.T) {
 	}
 	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
 	assertNoRollingUpdatePodDelete(t, client)
+}
+
+func TestSearchHeadScaleUpAddsOneNewOrdinalWithoutRecyclingMembers(t *testing.T) {
+	for _, strategy := range []appsv1.StatefulSetUpdateStrategyType{
+		appsv1.OnDeleteStatefulSetStrategyType,
+		appsv1.RollingUpdateStatefulSetStrategyType,
+	} {
+		t.Run(string(strategy), func(t *testing.T) {
+			setLifecyclePolicyTestGates(t, true, true)
+			mgr, statefulSet, client := rollingUpdateControllerFixture(
+				t,
+				3,
+				"revision-2",
+				"revision-2",
+				[]string{"revision-2", "revision-2", "revision-2"},
+			)
+			statefulSet.Spec.UpdateStrategy.Type = strategy
+			if strategy == appsv1.OnDeleteStatefulSetStrategyType {
+				statefulSet.Spec.UpdateStrategy.RollingUpdate = nil
+			}
+			mgr.cr.Status.Captain = statefulSet.GetName() + "-0"
+			mgr.cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+				{Name: statefulSet.GetName() + "-0", Status: "Up", Registered: true},
+				{Name: statefulSet.GetName() + "-1", Status: "Up", Registered: true},
+				{Name: statefulSet.GetName() + "-2", Status: "Up", Registered: true},
+			}
+			oldGetMembers := getSearchHeadCaptainMembers
+			t.Cleanup(func() { getSearchHeadCaptainMembers = oldGetMembers })
+			getSearchHeadCaptainMembers = func(
+				context.Context,
+				*searchHeadClusterPodManager,
+				int32,
+			) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+				return map[string]splclient.SearchHeadCaptainMemberInfo{
+					statefulSet.GetName() + "-0": {
+						Identifier: "member-guid-0",
+						Label:      statefulSet.GetName() + "-0",
+						Status:     "Up",
+						Captain:    true,
+					},
+					statefulSet.GetName() + "-1": {
+						Identifier: "member-guid-1",
+						Label:      statefulSet.GetName() + "-1",
+						Status:     "Up",
+					},
+					statefulSet.GetName() + "-2": {
+						Identifier: "member-guid-2",
+						Label:      statefulSet.GetName() + "-2",
+						Status:     "Up",
+					},
+				}, nil
+			}
+			client.ResetCalls()
+
+			phase, err := mgr.updateStatefulSetPods(
+				context.Background(),
+				statefulSet,
+				5,
+			)
+			if err != nil {
+				t.Fatalf("scale established SHC from 3 to 5: %v", err)
+			}
+			if phase != enterpriseApi.PhaseScalingUp {
+				t.Fatalf(
+					"scale-up phase = %q, want %q",
+					phase,
+					enterpriseApi.PhaseScalingUp,
+				)
+			}
+			if statefulSet.Spec.Replicas == nil ||
+				*statefulSet.Spec.Replicas != 4 {
+				t.Fatalf(
+					"first scale-up target = %v, want 4",
+					statefulSet.Spec.Replicas,
+				)
+			}
+			if len(client.Calls["Update"]) != 1 {
+				t.Fatalf(
+					"scale-up updates = %v, want one replica update",
+					client.Calls["Update"],
+				)
+			}
+			assertNoRollingUpdatePodDelete(t, client)
+			if mgr.cr.Status.LifecycleOperation != nil {
+				t.Fatalf(
+					"scale-up started replacement lifecycle: %#v",
+					mgr.cr.Status.LifecycleOperation,
+				)
+			}
+		})
+	}
+}
+
+func TestSearchHeadScaleUpWaitsForCurrentOrdinalBeforeAddingNext(t *testing.T) {
+	replicas := int32(4)
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      4,
+			ReadyReplicas: 3,
+		},
+	}
+
+	if target := nextSearchHeadClusterReplicaTarget(
+		statefulSet,
+		5,
+		false,
+	); target != 4 {
+		t.Fatalf("in-flight scale-up target = %d, want 4", target)
+	}
+	statefulSet.Status.ReadyReplicas = 4
+	if target := nextSearchHeadClusterReplicaTarget(
+		statefulSet,
+		5,
+		false,
+	); target != 4 {
+		t.Fatalf("locally ready but unjoined scale-up target = %d, want 4", target)
+	}
+	if target := nextSearchHeadClusterReplicaTarget(
+		statefulSet,
+		5,
+		true,
+	); target != 5 {
+		t.Fatalf("qualified next scale-up target = %d, want 5", target)
+	}
+	if target := nextSearchHeadClusterReplicaTarget(
+		statefulSet,
+		3,
+		false,
+	); target != 3 {
+		t.Fatalf("scale-down target = %d, want unchanged desired 3", target)
+	}
+}
+
+func TestSearchHeadScaleUpRemainsInProgressUntilCaptainObservesNewOrdinal(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		4,
+		"revision-2",
+		"revision-2",
+		[]string{"revision-2", "revision-2", "revision-2", "revision-2"},
+	)
+	mgr.cr.Status.Captain = statefulSet.GetName() + "-0"
+	mgr.cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+		{Name: statefulSet.GetName() + "-0", Status: "Up", Registered: true},
+		{Name: statefulSet.GetName() + "-1", Status: "Up", Registered: true},
+		{Name: statefulSet.GetName() + "-2", Status: "Up", Registered: true},
+		{Name: statefulSet.GetName() + "-3", Status: "Up", Registered: true},
+	}
+	oldGetMembers := getSearchHeadCaptainMembers
+	t.Cleanup(func() { getSearchHeadCaptainMembers = oldGetMembers })
+	getSearchHeadCaptainMembers = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+		return map[string]splclient.SearchHeadCaptainMemberInfo{
+			statefulSet.GetName() + "-0": {
+				Identifier: "member-guid-0",
+				Label:      statefulSet.GetName() + "-0",
+				Status:     "Up",
+				Captain:    true,
+			},
+			statefulSet.GetName() + "-1": {
+				Identifier: "member-guid-1",
+				Label:      statefulSet.GetName() + "-1",
+				Status:     "Up",
+			},
+			statefulSet.GetName() + "-2": {
+				Identifier: "member-guid-2",
+				Label:      statefulSet.GetName() + "-2",
+				Status:     "Up",
+			},
+		}, nil
+	}
+	client.ResetCalls()
+
+	phase, err := mgr.updateStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		5,
+	)
+	if err != nil {
+		t.Fatalf("wait for captain to observe ordinal 3: %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingUp {
+		t.Fatalf(
+			"unjoined ordinal phase = %q, want %q",
+			phase,
+			enterpriseApi.PhaseScalingUp,
+		)
+	}
+	if statefulSet.Spec.Replicas == nil ||
+		*statefulSet.Spec.Replicas != 4 {
+		t.Fatalf(
+			"unjoined ordinal changed replica target to %v",
+			statefulSet.Spec.Replicas,
+		)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf(
+			"unjoined ordinal changed Kubernetes state: %v",
+			client.Calls["Update"],
+		)
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+	if mgr.cr.Status.LifecycleOperation != nil {
+		t.Fatalf(
+			"unjoined ordinal started replacement lifecycle: %#v",
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
 }
 
 func TestRollingUpdateControllerAdvancesOnlyAfterPersistedAuthorization(t *testing.T) {
