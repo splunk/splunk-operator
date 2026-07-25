@@ -391,7 +391,10 @@ func validateSHCDefaultsRestartSafety(
 	return nil
 }
 
-// ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it
+// ApplyShcSecret synchronizes the admin password after proving that the
+// namespace shc_secret still matches every existing member. An shc_secret
+// change modifies [shclustering] and requires an approximately simultaneous
+// restart, which this phased controller does not automate.
 func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, mgr.cr)
@@ -423,83 +426,68 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 	// Retrieve shc_secret password from secret data
 	nsAdminSecret := string(namespaceSecret.Data["password"])
 
-	// Loop over all sh pods and get individual pod's shc_secret
-	howManyPodsHaveSecretChanged := 0
+	type podSecretObservation struct {
+		ordinal       int32
+		podName       string
+		adminPassword string
+	}
+	observations := make([]podSecretObservation, 0, replicas)
+
+	// Observe every member before changing any credential. This prevents an
+	// early admin-password update from running before a later member reveals
+	// that the namespace shc_secret was rotated.
 	for i := int32(0); i <= replicas-1; i++ {
-		// Get search head pod's name
 		shPodName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), i)
-
-		podLogger := logging.FromContext(ctx).With("func", "ApplyShcSecretPodLoop", "desiredReplicas", replicas, "shcSecretChanged", mgr.cr.Status.ShcSecretChanged, "adminSecretChanged", mgr.cr.Status.AdminSecretChanged, "namespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "pod", shPodName)
-
-		// Retrieve shc_secret password from Pod
 		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
 		if err != nil {
 			return fmt.Errorf("couldn't retrieve shc_secret from secret data, error: %s", err.Error())
 		}
-
-		// set the targetPodName here
-		podExecClient.SetTargetPodName(ctx, shPodName)
-
-		var streamOptions *remotecommand.StreamOptions = &remotecommand.StreamOptions{}
-
-		// Retrieve admin password from Pod
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "password")
 		if err != nil {
 			return fmt.Errorf("couldn't retrieve admin password from secret data, error: %s", err.Error())
 		}
-
-		// If shc secret is different from namespace scoped secret change it
 		if shcSecret != nsShcSecret {
-			podLogger.InfoContext(ctx, "shcSecret different from namespace scoped secret, changing shc secret")
-			// If shc secret already changed, skip the sync below, but still fall through
-			// to the independent admin-password check for this pod.
-			shcSecretAlreadyChanged := i < int32(len(mgr.cr.Status.ShcSecretChanged)) && mgr.cr.Status.ShcSecretChanged[i]
-			if !shcSecretAlreadyChanged {
-				// Change shc secret key
-				command := fmt.Sprintf("/opt/splunk/bin/splunk edit shcluster-config -auth admin:%s -secret %s", adminPwd, nsShcSecret)
-				streamOptions.Stdin = strings.NewReader(command)
-
-				_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-				if err != nil {
-					// Emit event for password sync failure
-					if eventPublisher != nil {
-						eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
-							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
-					}
-					return err
-				}
-				podLogger.InfoContext(ctx, "shcSecret changed")
-
-				howManyPodsHaveSecretChanged += 1
-
-				// Get client for Pod and restart splunk instance on pod
-				shClient := mgr.getClient(ctx, i)
-				err = shClient.RestartSplunk()
-				if err != nil {
-					// Emit event for password sync failure
-					if eventPublisher != nil {
-						eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
-							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
-					}
-					return err
-				}
-				podLogger.InfoContext(ctx, "restarted Splunk")
-
-				// Set the shc_secret changed flag to true
-				if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
-					mgr.cr.Status.ShcSecretChanged[i] = true
-				} else {
-					mgr.cr.Status.ShcSecretChanged = append(mgr.cr.Status.ShcSecretChanged, true)
-				}
+			const message = "namespace shc_secret rotation is blocked because Search Head Cluster security-key changes require an approximately simultaneous restart that the phased Kubernetes lifecycle does not automate"
+			mgr.cr.Status.Message = "SHCSecretRotationBlocked: " + message
+			logger.ErrorContext(
+				ctx,
+				"namespace shc_secret differs from an existing Search Head member",
+				"pod", shPodName,
+			)
+			if eventPublisher != nil {
+				eventPublisher.Warning(
+					ctx,
+					EventReasonSHCSecretRotationBlocked,
+					"Namespace shc_secret rotation was not applied; use a supported Search Head Cluster security-key rotation procedure",
+				)
 			}
+			return errors.New(message)
 		}
+		observations = append(observations, podSecretObservation{
+			ordinal:       i,
+			podName:       shPodName,
+			adminPassword: adminPwd,
+		})
+	}
+
+	adminPasswordsChanged := 0
+	for _, observation := range observations {
+		podLogger := logging.FromContext(ctx).With(
+			"func", "ApplyShcSecretPodLoop",
+			"desiredReplicas", replicas,
+			"adminSecretChanged", mgr.cr.Status.AdminSecretChanged,
+			"namespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion,
+			"pod", observation.podName,
+		)
+		podExecClient.SetTargetPodName(ctx, observation.podName)
+		streamOptions := &remotecommand.StreamOptions{}
 
 		// If admin secret is different from namespace scoped secret change it
-		if adminPwd != nsAdminSecret {
+		if observation.adminPassword != nsAdminSecret {
 			podLogger.InfoContext(ctx, "admin password different from namespace scoped secret, changing admin password")
 			// If admin password already changed, ignore
-			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
-				if mgr.cr.Status.AdminSecretChanged[i] {
+			if observation.ordinal < int32(len(mgr.cr.Status.AdminSecretChanged)) {
+				if mgr.cr.Status.AdminSecretChanged[observation.ordinal] {
 					continue
 				}
 			}
@@ -514,7 +502,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			podLogger.InfoContext(ctx, "admin password changed on the splunk instance of pod")
 
 			// Get client for Pod and restart splunk instance on pod
-			shClient := mgr.getClient(ctx, i)
+			shClient := mgr.getClient(ctx, observation.ordinal)
 			err = shClient.RestartSplunk()
 			if err != nil {
 				return err
@@ -522,15 +510,21 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			podLogger.InfoContext(ctx, "restarted Splunk")
 
 			// Set the adminSecretChanged changed flag to true
-			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
-				mgr.cr.Status.AdminSecretChanged[i] = true
+			if observation.ordinal < int32(len(mgr.cr.Status.AdminSecretChanged)) {
+				mgr.cr.Status.AdminSecretChanged[observation.ordinal] = true
 			} else {
 				podLogger.InfoContext(ctx, "appending to AdminSecretChanged")
 				mgr.cr.Status.AdminSecretChanged = append(mgr.cr.Status.AdminSecretChanged, true)
 			}
+			adminPasswordsChanged++
 
 			// Adding to map of secrets to be synced
-			podSecret, err := splutil.GetSecretFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace())
+			podSecret, err := splutil.GetSecretFromPod(
+				ctx,
+				mgr.c,
+				observation.podName,
+				mgr.cr.GetNamespace(),
+			)
 			if err != nil {
 				return err
 			}
@@ -566,7 +560,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 	// Emit event for password sync completed
 	if eventPublisher != nil {
 		eventPublisher.Normal(ctx, EventReasonPasswordSyncCompleted,
-			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
+			fmt.Sprintf("Password synchronized for %d pods", adminPasswordsChanged))
 	}
 
 	return nil

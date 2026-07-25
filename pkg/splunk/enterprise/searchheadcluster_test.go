@@ -730,19 +730,13 @@ func TestFinishRecycle(t *testing.T) {
 
 func TestApplyShcSecret(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	ctx := context.TODO()
+	ctx := context.Background()
 	method := "ApplyShcSecret"
-	var initObjectList []client.Object
-
 	c := spltest.NewMockClient()
-
-	// Get namespace scoped secret
 	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf("Apply namespace scoped secret failed")
+		t.Fatalf("apply namespace scoped secret: %v", err)
 	}
-
-	// Create pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1-search-head-0",
@@ -774,44 +768,25 @@ func TestApplyShcSecret(t *testing.T) {
 			},
 		},
 	}
-	initObjectList = append(initObjectList, pod)
-
-	secrets := &corev1.Secret{
+	podSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1-secrets",
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"password":   {'1', '2', '3'},
-			"shc_secret": {'a'},
+			"password":   []byte("old-admin-password"),
+			"shc_secret": append([]byte(nil), nsSecret.Data["shc_secret"]...),
 		},
 	}
-	initObjectList = append(initObjectList, secrets)
+	c.AddObjects([]client.Object{pod, podSecret})
 
-	c.AddObjects(initObjectList)
-
-	mockHandlers := []spltest.MockHTTPHandler{
-		{
-			Method: "POST",
-			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
-			Status: 200,
-			Err:    nil,
-		},
-		{
-			Method: "POST",
-			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
-			Status: 200,
-			Err:    nil,
-		},
-		{
-			Method: "POST",
-			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
-			Status: 200,
-			Err:    nil,
-		},
-	}
-
-	cr := enterpriseApi.SearchHeadCluster{
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandlers(spltest.MockHTTPHandler{
+		Method: "POST",
+		URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
+		Status: 200,
+	})
+	cr := &enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
 		},
@@ -819,157 +794,206 @@ func TestApplyShcSecret(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			NamespaceSecretResourceVersion: "stale",
+			AdminPasswordChangedSecrets:    make(map[string]bool),
+		},
 	}
-	cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
-	mockSplunkClient := &spltest.MockHTTPClient{}
-	mockSplunkClient.AddHandlers(mockHandlers...)
 	mgr := &searchHeadClusterPodManager{
 		c:       c,
-		cr:      &cr,
-		secrets: secrets,
-		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
-			c := splclient.NewSplunkClient(managementURI, username, password)
-			c.Client = mockSplunkClient
-			return c
+		cr:      cr,
+		secrets: podSecret,
+		newSplunkClient: func(
+			managementURI,
+			username,
+			password string,
+		) *splclient.SplunkClient {
+			result := splclient.NewSplunkClient(
+				managementURI,
+				username,
+				password,
+			)
+			result.Client = mockSplunkClient
+			return result
 		},
 	}
-
-	podExecCommands := []string{
-		"/opt/splunk/bin/splunk edit shcluster-config",
+	mockPodExecClient := &spltest.MockPodExecClient{}
+	mockPodExecClient.AddMockPodExecReturnContext(
+		ctx,
 		"opt/splunk/bin/splunk cmd splunkd rest",
-	}
-	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
-		{
-			StdOut: "",
-			StdErr: "",
-			Err:    fmt.Errorf("some dummy error"),
-		},
-		{
-			StdOut: "",
-			StdErr: "",
-			Err:    fmt.Errorf("some dummy error"),
-		},
-	}
+		&spltest.MockPodExecReturnContext{},
+	)
 
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
-	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
-	// Set resource version as that of NS secret
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err != nil {
-		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	if err := ApplyShcSecret(
+		ctx,
+		mgr,
+		1,
+		mockPodExecClient,
+	); err != nil {
+		t.Fatalf("apply admin password update: %v", err)
 	}
-
-	// Change resource version and test
-	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err == nil {
-		t.Errorf("Couldn't apply shc secret")
-	}
-
-	mockPodExecReturnContexts[0].Err = nil
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err == nil {
-		t.Errorf("Couldn't apply shc secret")
-	}
-
-	mgr.cr.Status.ShcSecretChanged[0] = false
-	mockPodExecReturnContexts[1].Err = nil
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err != nil {
-		t.Errorf("Couldn't apply shc secret %s", err.Error())
-	}
+	mockPodExecClient.CheckPodExecCommands(t, method)
 	mockSplunkClient.CheckRequests(t, method)
-
-	// Don't set as it is set already
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err != nil {
-		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	if !reflect.DeepEqual(
+		mgr.cr.Status.AdminSecretChanged,
+		[]bool{true},
+	) ||
+		!mgr.cr.Status.AdminPasswordChangedSecrets[podSecret.GetName()] {
+		t.Fatalf("admin sync status = %#v", mgr.cr.Status)
 	}
-
-	// Update admin password in secret again to hit already set scenario
-	secrets.Data["password"] = []byte{'1'}
-	err = splutil.UpdateResource(ctx, c, secrets)
-	if err != nil {
-		t.Errorf("Couldn't update resource")
+	storedSecret := &corev1.Secret{}
+	if err := c.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      podSecret.GetName(),
+			Namespace: podSecret.GetNamespace(),
+		},
+		storedSecret,
+	); err != nil {
+		t.Fatalf("get synchronized Pod secret: %v", err)
 	}
-
-	mgr.cr.Status.ShcSecretChanged[0] = false
-	// Test set again for shc_secret
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err != nil {
-		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	if !reflect.DeepEqual(
+		storedSecret.Data["password"],
+		nsSecret.Data["password"],
+	) {
+		t.Fatal("mounted Pod secret did not receive namespace admin password")
 	}
+}
 
-	// Update admin password in secret again to hit already set scenario
-	secrets.Data["password"] = []byte{'1'}
-	err = splutil.UpdateResource(ctx, c, secrets)
+func TestApplyShcSecretBlocksRotationBeforeMutation(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.Background()
+	c := spltest.NewMockClient()
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf("Couldn't update resource")
+		t.Fatalf("apply namespace scoped secret: %v", err)
 	}
-
-	mgr.cr.Status.ShcSecretChanged[0] = false
-	mgr.cr.Status.AdminSecretChanged[0] = false
-	// Test set again for admin password
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err != nil {
-		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-search-head-0",
+			Namespace: "test",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				VolumeMounts: []corev1.VolumeMount{{
+					MountPath: "/mnt/splunk-secrets",
+					Name:      "mnt-splunk-secrets",
+				}},
+			}},
+			Volumes: []corev1.Volume{{
+				Name: "mnt-splunk-secrets",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: "stack1-secrets",
+					},
+				},
+			}},
+		},
 	}
-
-	// Missing shc_secret scenario
-	secrets = &corev1.Secret{
+	podSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1-secrets",
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"password": {'1', '2', '3'},
+			"password":   []byte("old-admin-password"),
+			"shc_secret": append([]byte(nil), nsSecret.Data["shc_secret"]...),
 		},
 	}
-	err = splutil.UpdateResource(ctx, c, secrets)
-	if err != nil {
-		t.Errorf("Couldn't update resource")
-	}
+	secondPod := pod.DeepCopy()
+	secondPod.Name = "splunk-stack1-search-head-1"
+	secondPod.Spec.Volumes[0].Secret.SecretName = "stack1-secrets-1"
+	secondPodSecret := podSecret.DeepCopy()
+	secondPodSecret.Name = "stack1-secrets-1"
+	secondPodSecret.Data["shc_secret"] = []byte("old-shc-secret")
+	c.AddObjects([]client.Object{
+		pod,
+		podSecret,
+		secondPod,
+		secondPodSecret,
+	})
 
-	errMsg := fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "shc_secret") + ", error: invalid secret data"
-
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err.Error() != errMsg {
-		t.Errorf("Couldn't recognize missing shc_secret %s", err.Error())
-	}
-
-	// Missing admin password scenario
-	secrets = &corev1.Secret{
+	cr := &enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1-secrets",
+			Name:      "stack1",
 			Namespace: "test",
 		},
-		Data: map[string][]byte{
-			"shc_secret": {'a'},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			NamespaceSecretResourceVersion: "stale",
+			AdminPasswordChangedSecrets:    make(map[string]bool),
 		},
 	}
+	mgr := &searchHeadClusterPodManager{c: c, cr: cr, secrets: podSecret}
+	recorder := &mockEventRecorder{}
+	ctx = context.WithValue(
+		ctx,
+		splcommon.EventPublisherKey,
+		&K8EventPublisher{recorder: recorder},
+	)
+	mockPodExecClient := &spltest.MockPodExecClient{}
 
-	err = splutil.UpdateResource(ctx, c, secrets)
-	if err != nil {
-		t.Errorf("Couldn't update resource")
+	err = ApplyShcSecret(ctx, mgr, 2, mockPodExecClient)
+	if err == nil ||
+		!strings.Contains(err.Error(), "approximately simultaneous restart") {
+		t.Fatalf("rotation error = %v", err)
 	}
-
-	errMsg = fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "admin password") + ", error: invalid secret data"
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err.Error() != errMsg {
-		t.Errorf("Couldn't recognize missing admin password %s", err.Error())
+	if len(mockPodExecClient.GotCmdList) != 0 ||
+		len(mgr.cr.Status.AdminSecretChanged) != 0 ||
+		len(mgr.cr.Status.AdminPasswordChangedSecrets) != 0 ||
+		mgr.cr.Status.NamespaceSecretResourceVersion != "stale" ||
+		!strings.HasPrefix(
+			mgr.cr.Status.Message,
+			"SHCSecretRotationBlocked:",
+		) {
+		t.Fatalf(
+			"blocked rotation mutated state commands=%v status=%#v",
+			mockPodExecClient.GotCmdList,
+			mgr.cr.Status,
+		)
 	}
-
-	// Make resource version of ns secret and cr the same
-	mgr.cr.Status.NamespaceSecretResourceVersion = "1"
-	nsSecret.ResourceVersion = mgr.cr.Status.NamespaceSecretResourceVersion
-	err = splutil.UpdateResource(ctx, c, nsSecret)
-	if err != nil {
-		t.Errorf("Couldn't update resource")
+	storedSecret := &corev1.Secret{}
+	if err := c.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      podSecret.GetName(),
+			Namespace: podSecret.GetNamespace(),
+		},
+		storedSecret,
+	); err != nil {
+		t.Fatalf("get blocked Pod secret: %v", err)
 	}
-
-	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err != nil {
-		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	if !reflect.DeepEqual(
+		storedSecret.Data["shc_secret"],
+		nsSecret.Data["shc_secret"],
+	) ||
+		string(storedSecret.Data["password"]) != "old-admin-password" {
+		t.Fatalf("blocked rotation changed an earlier Pod secret")
+	}
+	if err := c.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      secondPodSecret.GetName(),
+			Namespace: secondPodSecret.GetNamespace(),
+		},
+		storedSecret,
+	); err != nil {
+		t.Fatalf("get mismatched Pod secret: %v", err)
+	}
+	if string(storedSecret.Data["shc_secret"]) != "old-shc-secret" {
+		t.Fatal("blocked rotation changed the mismatched Pod secret")
+	}
+	foundBlockedEvent := false
+	for _, event := range recorder.events {
+		if event.reason == EventReasonSHCSecretRotationBlocked {
+			foundBlockedEvent = true
+		}
+	}
+	if !foundBlockedEvent {
+		t.Fatal("blocked rotation did not emit SHCSecretRotationBlocked")
+	}
+	if strings.Contains(mgr.cr.Status.Message, string(nsSecret.Data["shc_secret"])) ||
+		strings.Contains(err.Error(), string(nsSecret.Data["shc_secret"])) {
+		t.Fatal("blocked rotation exposed namespace shc_secret")
 	}
 }
 
@@ -983,7 +1007,7 @@ func TestApplyShcSecretAdminPasswordNotStarvedByShcSecretAlreadyChanged(t *testi
 
 	c := spltest.NewMockClient()
 
-	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Apply namespace scoped secret failed")
 	}
@@ -1031,8 +1055,8 @@ func TestApplyShcSecretAdminPasswordNotStarvedByShcSecretAlreadyChanged(t *testi
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"password":   {'1'},
-			"shc_secret": {'a'},
+			"password":   []byte("old-admin-password"),
+			"shc_secret": append([]byte(nil), nsSecret.Data["shc_secret"]...),
 		},
 	}
 	initObjectList = append(initObjectList, secrets)
@@ -1087,7 +1111,7 @@ func TestApplyShcSecretAdminPasswordNotStarvedByShcSecretAlreadyChanged(t *testi
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
-	// Namespace secret's shc_secret ('a') already matches the pod's, so the
+	// Namespace shc_secret already matches the pod's, so the
 	// admin-password mismatch is the only thing that should trigger a sync.
 	// Bump the resource version so ApplyShcSecret doesn't early-return.
 	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
@@ -2746,7 +2770,7 @@ func TestSetDeployerConfig(t *testing.T) {
 	}
 }
 
-func TestShcPasswordSyncFailedEvent(t *testing.T) {
+func TestSHCSecretRotationBlockedEvent(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	sch := pkgruntime.NewScheme()
@@ -2817,38 +2841,39 @@ func TestShcPasswordSyncFailedEvent(t *testing.T) {
 		cr: &shc,
 	}
 
-	// Configure mock pod exec client to return an error on shcluster-config command
 	mockPodExecClient := &spltest.MockPodExecClient{}
-	mockPodExecClient.AddMockPodExecReturnContext(ctx, "shcluster-config", &spltest.MockPodExecReturnContext{
-		StdOut: "",
-		StdErr: "connection refused",
-		Err:    fmt.Errorf("connection refused"),
-	})
 
-	// Call ApplyShcSecret — should fail at RunPodExecCommand and emit PasswordSyncFailed
 	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err == nil {
-		t.Errorf("Expected error from ApplyShcSecret when pod exec fails")
+	if err == nil ||
+		!strings.Contains(err.Error(), "approximately simultaneous restart") {
+		t.Fatalf("rotation error = %v", err)
+	}
+	if len(mockPodExecClient.GotCmdList) != 0 {
+		t.Fatalf(
+			"blocked rotation executed commands: %v",
+			mockPodExecClient.GotCmdList,
+		)
 	}
 
 	found := false
 	for _, event := range recorder.events {
-		if event.reason == "PasswordSyncFailed" {
+		if event.reason == EventReasonSHCSecretRotationBlocked {
 			found = true
 			if event.eventType != corev1.EventTypeWarning {
-				t.Errorf("Expected Warning event type for PasswordSyncFailed, got %s", event.eventType)
-			}
-			if !strings.Contains(event.message, shPodName) {
-				t.Errorf("Expected event message to contain pod name '%s', got: %s", shPodName, event.message)
-			}
-			if !strings.Contains(event.message, "connection refused") {
-				t.Errorf("Expected event message to contain error details, got: %s", event.message)
+				t.Errorf(
+					"Expected Warning event type for %s, got %s",
+					EventReasonSHCSecretRotationBlocked,
+					event.eventType,
+				)
 			}
 			break
 		}
 	}
 	if !found {
-		t.Errorf("Expected PasswordSyncFailed event to be published")
+		t.Errorf(
+			"Expected %s event to be published",
+			EventReasonSHCSecretRotationBlocked,
+		)
 	}
 }
 

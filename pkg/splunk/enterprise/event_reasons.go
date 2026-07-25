@@ -47,11 +47,12 @@ const (
 	EventReasonDeleteFailed = "DeleteFailed"
 
 	// Warning event reasons — secrets & credentials
-	EventReasonSecretMissing       = "SecretMissing"
-	EventReasonSecretInvalid       = "SecretInvalid"
-	EventReasonSecretAccessFailed  = "SecretAccessFailed"
-	EventReasonPasswordSyncFailed  = "PasswordSyncFailed"
-	EventReasonCertSecretMalformed = certs.EventReasonCertSecretMalformed
+	EventReasonSecretMissing            = "SecretMissing"
+	EventReasonSecretInvalid            = "SecretInvalid"
+	EventReasonSecretAccessFailed       = "SecretAccessFailed"
+	EventReasonPasswordSyncFailed       = "PasswordSyncFailed"
+	EventReasonSHCSecretRotationBlocked = "SHCSecretRotationBlocked"
+	EventReasonCertSecretMalformed      = certs.EventReasonCertSecretMalformed
 
 	// Warning event reasons — monitoring console
 	EventReasonMonitoringConsoleConfigFailed  = "MonitoringConsoleConfigFailed"
