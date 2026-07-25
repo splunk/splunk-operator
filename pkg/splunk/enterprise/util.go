@@ -388,6 +388,19 @@ func getSearchHeadEnv(cr *enterpriseApi.SearchHeadCluster) []corev1.EnvVar {
 
 	// get search head env variables with deployer
 	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
+	preferredCaptaincyConfigured := false
+	for _, item := range cr.Spec.CommonSplunkSpec.ExtraEnv {
+		if item.Name == "SPLUNK_PREFERRED_CAPTAINCY" {
+			preferredCaptaincyConfigured = true
+			break
+		}
+	}
+	if !preferredCaptaincyConfigured {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_PREFERRED_CAPTAINCY",
+			Value: "false",
+		})
+	}
 	env = append(env, corev1.EnvVar{
 		Name:  "SPLUNK_DEPLOYER_URL",
 		Value: splcommon.GetSplunkServiceName(SplunkDeployer, cr.GetName(), false),

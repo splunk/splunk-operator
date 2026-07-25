@@ -3399,6 +3399,28 @@ func TestGetSearchHeadEnv(t *testing.T) {
 	if envVar == nil {
 		t.Errorf("Expected a valid return value")
 	}
+
+	envByName := make(map[string]string, len(envVar))
+	for _, item := range envVar {
+		envByName[item.Name] = item.Value
+	}
+	if got := envByName["SPLUNK_PREFERRED_CAPTAINCY"]; got != "false" {
+		t.Errorf("SPLUNK_PREFERRED_CAPTAINCY = %q, want false", got)
+	}
+	if got := envByName["SPLUNK_SEARCH_HEAD_CAPTAIN_URL"]; got != "splunk-test-search-head-0.splunk-test-search-head-headless.test.svc.cluster.local" {
+		t.Errorf("SPLUNK_SEARCH_HEAD_CAPTAIN_URL = %q, want bootstrap seed at ordinal zero", got)
+	}
+
+	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{{
+		Name:  "SPLUNK_PREFERRED_CAPTAINCY",
+		Value: "true",
+	}}
+	envVar = getSearchHeadEnv(&cr)
+	for _, item := range envVar {
+		if item.Name == "SPLUNK_PREFERRED_CAPTAINCY" {
+			t.Errorf("getSearchHeadEnv returned default preferred captaincy despite customer override")
+		}
+	}
 }
 
 func TestGetLicenseMasterURL(t *testing.T) {
