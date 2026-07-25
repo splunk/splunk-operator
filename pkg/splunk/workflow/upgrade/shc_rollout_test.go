@@ -216,6 +216,27 @@ func TestSHCRolloutDoesNotCompleteBeforeFinalSHCRecovery(t *testing.T) {
 	)
 }
 
+func TestSHCRolloutCompletesRollbackWhenUntouchedPodsAlreadyMatch(t *testing.T) {
+	state := pendingSHCRolloutState()
+	state.Partition = 2
+	state.CurrentRevision = state.UpdateRevision
+	for i := range state.Pods {
+		state.Pods[i].Revision = state.UpdateRevision
+	}
+	state.Lifecycle = lifecycleForOrdinal(
+		2,
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		true,
+	)
+
+	decision := EvaluateSHCRollout(state)
+
+	if decision.Action != SHCRolloutActionComplete ||
+		decision.Reason != SHCRolloutReasonStable {
+		t.Fatalf("decision = %#v, want rollback completion", decision)
+	}
+}
+
 func pendingSHCRolloutState() SHCRolloutState {
 	return SHCRolloutState{
 		Replicas:        3,

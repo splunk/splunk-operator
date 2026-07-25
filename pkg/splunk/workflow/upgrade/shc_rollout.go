@@ -127,8 +127,13 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 		}
 		noRolloutInProgress := state.Partition == state.Replicas &&
 			state.CurrentRevision == state.UpdateRevision
-		rolloutRecovered := state.Partition == 0 &&
-			lifecycleCompletedForOrdinal(state.Lifecycle, 0)
+		rolloutRecovered := state.Lifecycle.TargetOrdinal != nil &&
+			*state.Lifecycle.TargetOrdinal == state.Partition &&
+			state.Lifecycle.ReplacementAuthorized &&
+			lifecycleCompletedForOrdinal(
+				state.Lifecycle,
+				*state.Lifecycle.TargetOrdinal,
+			)
 		if noRolloutInProgress || rolloutRecovered || state.Replicas == 0 {
 			return SHCRolloutDecision{
 				Action:  SHCRolloutActionComplete,

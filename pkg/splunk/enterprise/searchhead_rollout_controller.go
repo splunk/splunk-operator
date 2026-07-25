@@ -98,6 +98,21 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		return enterpriseApi.PhaseUpdating, nil
 
 	case upgrade.SHCRolloutActionComplete:
+		if statefulSet.Spec.UpdateStrategy.RollingUpdate == nil ||
+			statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition == nil {
+			return enterpriseApi.PhaseError, fmt.Errorf(
+				"SHC rollout completion has no partition",
+			)
+		}
+		if *statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition !=
+			*statefulSet.Spec.Replicas {
+			partition := *statefulSet.Spec.Replicas
+			statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition = &partition
+			if err := splutil.UpdateResource(ctx, mgr.c, statefulSet); err != nil {
+				return enterpriseApi.PhaseError, err
+			}
+			return enterpriseApi.PhaseUpdating, nil
+		}
 		if err := mgr.FinishUpgrade(ctx, 0); err != nil {
 			return enterpriseApi.PhaseError, err
 		}
