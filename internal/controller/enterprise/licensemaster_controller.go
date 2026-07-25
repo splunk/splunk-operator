@@ -34,6 +34,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -155,6 +156,33 @@ func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApiV3.LicenseMaster{},
 			)).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				cm, ok := obj.(*corev1.ConfigMap)
+				if !ok {
+					return nil
+				}
+				var list enterpriseApiV3.LicenseMasterList
+				if err := r.Client.List(ctx, &list, client.InNamespace(cm.Namespace)); err != nil {
+					return nil
+				}
+				var reqs []reconcile.Request
+				for _, cr := range list.Items {
+					for _, vol := range cr.Spec.Volumes {
+						if common.VolumeReferencesConfigMap(vol, cm.Name) {
+							reqs = append(reqs, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Name:      cr.Name,
+									Namespace: cr.Namespace,
+								},
+							})
+							break
+						}
+					}
+				}
+				return reqs
+			}),
+		).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
