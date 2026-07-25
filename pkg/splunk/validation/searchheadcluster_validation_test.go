@@ -440,9 +440,9 @@ func TestValidateSearchHeadClusterUpdate(t *testing.T) {
 	}
 }
 
-// TestValidateSearchHeadClusterInlineDefaultsRestartSafety qualifies only the
-// admission portion of OPS-008. Controller-side enforcement and shc_secret
-// rotation guards are required before OPS-008 is complete.
+// TestValidateSearchHeadClusterInlineDefaultsRestartSafety qualifies the
+// admission portion of OPS-008. Reconciliation independently repeats this
+// classification; shc_secret rotation protection remains separate.
 func TestValidateSearchHeadClusterInlineDefaultsRestartSafety(t *testing.T) {
 	const (
 		unsafeThree = `splunk:

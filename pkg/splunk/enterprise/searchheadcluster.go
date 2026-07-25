@@ -29,6 +29,7 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
@@ -77,6 +78,28 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Search Head Cluster spec validation failed")
 		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Search Head Cluster spec validation failed", err)
+	}
+	if cr.GetDeletionTimestamp() == nil {
+		err = validateSHCDefaultsRestartSafety(ctx, client, cr)
+		if err != nil {
+			eventPublisher.Warning(
+				ctx,
+				EventReasonValidateSpecFailed,
+				fmt.Sprintf(
+					"Search Head Cluster configuration cannot use phased restart for %s — check operator logs",
+					cr.GetName(),
+				),
+			)
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Search Head Cluster configuration requires an unsupported restart mode",
+			)
+			return reconcile.Result{}, splcommon.NewTerminalError(
+				EventReasonValidateSpecFailed,
+				"Search Head Cluster configuration requires an unsupported restart mode",
+				err,
+			)
+		}
 	}
 
 	// If needed, Migrate the app framework status
@@ -295,6 +318,77 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	return result, nil
+}
+
+// validateSHCDefaultsRestartSafety repeats the admission restart-safety
+// classification from observed Kubernetes state. The validation webhook is
+// optional, so reconciliation must not update the defaults ConfigMap before it
+// proves that an existing SHC can consume the change through phased restart.
+func validateSHCDefaultsRestartSafety(
+	ctx context.Context,
+	controllerClient splcommon.ControllerClient,
+	cr *enterpriseApi.SearchHeadCluster,
+) error {
+	previousDefaults := ""
+	defaultsConfigMap := &corev1.ConfigMap{}
+	defaultsName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkDefaultsName(cr.GetName(), SplunkSearchHead),
+	}
+	err := controllerClient.Get(ctx, defaultsName, defaultsConfigMap)
+	switch {
+	case err == nil:
+		previousDefaults = defaultsConfigMap.Data["default.yml"]
+	case k8serrors.IsNotFound(err):
+		// A missing defaults ConfigMap is a create only when the Search Head
+		// StatefulSet is also absent. If the StatefulSet exists, classify the
+		// requested defaults against an empty prior document.
+		currentStatefulSet := &appsv1.StatefulSet{}
+		statefulSetName := types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name: GetSplunkStatefulsetName(
+				SplunkSearchHead,
+				cr.GetName(),
+			),
+		}
+		err = controllerClient.Get(
+			ctx,
+			statefulSetName,
+			currentStatefulSet,
+		)
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf(
+				"read existing Search Head StatefulSet before classifying inline defaults: %w",
+				err,
+			)
+		}
+	default:
+		return fmt.Errorf(
+			"read current Search Head inline defaults before classification: %w",
+			err,
+		)
+	}
+
+	classification, err := splunkconfig.ClassifySHCDefaultsRestart(
+		cr.Spec.Defaults,
+		previousDefaults,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"cannot classify inline Search Head Cluster configuration restart safety: %w",
+			err,
+		)
+	}
+	if classification.RequiresSimultaneousRestart {
+		return fmt.Errorf(
+			"changing [shclustering] setting %q requires an approximately simultaneous restart and cannot be treated as an ordinary phased Search Head Cluster rollout",
+			classification.Setting,
+		)
+	}
+	return nil
 }
 
 // ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it

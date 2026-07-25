@@ -33,6 +33,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
@@ -66,9 +67,268 @@ func init() {
 	}
 }
 
+func TestValidateSHCDefaultsRestartSafetyFromObservedState(t *testing.T) {
+	const (
+		unsafeThree = `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          replication_factor: 3
+`
+		unsafeFive = `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          replication_factor: 5
+`
+		allowed = `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          shcluster_label: production
+`
+	)
+
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+
+	newCR := func(defaults string) *enterpriseApi.SearchHeadCluster {
+		return &enterpriseApi.SearchHeadCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "example",
+				Namespace: "test",
+			},
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Defaults: defaults,
+				},
+				Replicas: 3,
+			},
+		}
+	}
+	defaultsConfigMap := func(defaults string) *corev1.ConfigMap {
+		return &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: GetSplunkDefaultsName(
+					"example",
+					SplunkSearchHead,
+				),
+				Namespace: "test",
+			},
+			Data: map[string]string{"default.yml": defaults},
+		}
+	}
+	searchHeadStatefulSet := func() *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: GetSplunkStatefulsetName(
+					SplunkSearchHead,
+					"example",
+				),
+				Namespace: "test",
+			},
+		}
+	}
+
+	tests := []struct {
+		name      string
+		defaults  string
+		objects   []client.Object
+		wantError bool
+	}{
+		{
+			name:     "initial create may establish cluster settings",
+			defaults: unsafeThree,
+		},
+		{
+			name:     "unchanged existing cluster setting",
+			defaults: unsafeThree,
+			objects: []client.Object{
+				defaultsConfigMap(unsafeThree),
+			},
+		},
+		{
+			name:     "rolling compatible setting",
+			defaults: allowed,
+			objects: []client.Object{
+				defaultsConfigMap(""),
+			},
+		},
+		{
+			name:      "existing ConfigMap reveals unsafe change",
+			defaults:  unsafeFive,
+			objects:   []client.Object{defaultsConfigMap(unsafeThree)},
+			wantError: true,
+		},
+		{
+			name:      "existing StatefulSet makes missing ConfigMap an update",
+			defaults:  unsafeThree,
+			objects:   []client.Object{searchHeadStatefulSet()},
+			wantError: true,
+		},
+		{
+			name:     "malformed previous defaults fail closed",
+			defaults: allowed,
+			objects: []client.Object{
+				defaultsConfigMap("splunk: ["),
+			},
+			wantError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			controllerClient := newFakeClientBuilder(scheme).
+				WithObjects(test.objects...).
+				Build()
+			err := validateSHCDefaultsRestartSafety(
+				context.Background(),
+				controllerClient,
+				newCR(test.defaults),
+			)
+			if (err != nil) != test.wantError {
+				t.Fatalf("validation error = %v, wantError=%t", err, test.wantError)
+			}
+			if err != nil &&
+				(strings.Contains(err.Error(), test.defaults) ||
+					strings.Contains(err.Error(), unsafeThree)) {
+				t.Fatalf("validation error exposed defaults content: %v", err)
+			}
+		})
+	}
+}
+
+func TestApplySearchHeadClusterBlocksUnsafeDefaultsBeforeConfigMutation(
+	t *testing.T,
+) {
+	os.Setenv(
+		"SPLUNK_GENERAL_TERMS",
+		"--accept-sgt-current-at-splunk-com",
+	)
+	const previousDefaults = `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          replication_factor: 3
+`
+	const requestedDefaults = `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          replication_factor: 5
+`
+
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "example",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Defaults: requestedDefaults,
+			},
+			Replicas: 3,
+		},
+	}
+	defaultsName := GetSplunkDefaultsName(
+		cr.GetName(),
+		SplunkSearchHead,
+	)
+	defaultsConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      defaultsName,
+			Namespace: cr.GetNamespace(),
+		},
+		Data: map[string]string{"default.yml": previousDefaults},
+	}
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: GetSplunkStatefulsetName(
+				SplunkSearchHead,
+				cr.GetName(),
+			),
+			Namespace: cr.GetNamespace(),
+		},
+	}
+	controllerClient := newFakeClientBuilder(scheme).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		WithObjects(cr, defaultsConfigMap, statefulSet).
+		Build()
+
+	_, err := ApplySearchHeadCluster(
+		context.Background(),
+		controllerClient,
+		cr.DeepCopy(),
+	)
+	reason, terminal := splcommon.TerminalReason(err)
+	if !terminal || reason != EventReasonValidateSpecFailed {
+		t.Fatalf(
+			"reconcile error=%v reason=%q terminal=%t",
+			err,
+			reason,
+			terminal,
+		)
+	}
+
+	storedDefaults := &corev1.ConfigMap{}
+	if err := controllerClient.Get(
+		context.Background(),
+		types.NamespacedName{
+			Name:      defaultsName,
+			Namespace: cr.GetNamespace(),
+		},
+		storedDefaults,
+	); err != nil {
+		t.Fatalf("get defaults ConfigMap: %v", err)
+	}
+	if storedDefaults.Data["default.yml"] != previousDefaults {
+		t.Fatalf(
+			"unsafe reconcile changed defaults ConfigMap: %q",
+			storedDefaults.Data["default.yml"],
+		)
+	}
+	service := &corev1.Service{}
+	err = controllerClient.Get(
+		context.Background(),
+		types.NamespacedName{
+			Name: splcommon.GetSplunkServiceName(
+				SplunkSearchHead,
+				cr.GetName(),
+				false,
+			),
+			Namespace: cr.GetNamespace(),
+		},
+		service,
+	)
+	if !k8serrors.IsNotFound(err) {
+		t.Fatalf(
+			"Search Head service lookup error=%v, want not found",
+			err,
+		)
+	}
+}
+
 func TestApplySearchHeadCluster(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
+	restartSafetyGetCalls := []spltest.MockFuncCall{
+		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+	}
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -157,8 +417,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	}
 	shcPodListMockCall := spltest.MockFuncCall{ListOpts: shcPodListOpts}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[17], funcCalls[19]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[18]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": append(restartSafetyGetCalls, funcCalls...), "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[17], funcCalls[19]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": append(restartSafetyGetCalls, createFuncCalls...), "Update": {createFuncCalls[6], createFuncCalls[18]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
 	statefulSet := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
