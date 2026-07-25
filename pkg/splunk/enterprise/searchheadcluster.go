@@ -521,7 +521,8 @@ func getSearchHeadStatefulSetUpdateStrategy(
 		return onDelete, nil
 	}
 
-	partition := cr.Spec.Replicas
+	partitionCeiling := cr.Spec.Replicas
+	partition := partitionCeiling
 	current := &appsv1.StatefulSet{}
 	err = client.Get(ctx, types.NamespacedName{
 		Namespace: cr.GetNamespace(),
@@ -529,6 +530,10 @@ func getSearchHeadStatefulSetUpdateStrategy(
 	}, current)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return appsv1.StatefulSetUpdateStrategy{}, err
+	}
+	if err == nil && current.Spec.Replicas != nil {
+		partitionCeiling = *current.Spec.Replicas
+		partition = partitionCeiling
 	}
 	if err == nil &&
 		current.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType &&
@@ -544,7 +549,7 @@ func getSearchHeadStatefulSetUpdateStrategy(
 		)
 		if !templateChanged &&
 			currentPartition >= 0 &&
-			currentPartition <= cr.Spec.Replicas {
+			currentPartition <= partitionCeiling {
 			partition = currentPartition
 		}
 	}

@@ -118,7 +118,12 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	}
 
 	// manage scaling and updates
-	phase, err := splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
+	var phase enterpriseApi.Phase
+	if statefulSet.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType {
+		phase, err = mgr.updateRollingStatefulSetPods(ctx, statefulSet, desiredReplicas)
+	} else {
+		phase, err = splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
+	}
 	if err != nil {
 		return phase, err
 	}
