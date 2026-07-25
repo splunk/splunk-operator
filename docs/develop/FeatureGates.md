@@ -58,6 +58,26 @@ When running the operator binary directly, pass feature gates at startup:
 `SplunkPodLifecycle=true`. The Operator rejects this invalid combination at
 startup.
 
+### Splunk Pod lifecycle
+
+When `SplunkPodLifecycle=true`, the Operator renders
+`spec.terminationGracePeriodSeconds` into every Splunk Enterprise StatefulSet
+Pod template. An explicitly configured value is used when present; otherwise
+the Wave 0 spike resolves 1200 seconds. The field covers ClusterManager,
+IndexerCluster, IngestorCluster, LicenseManager, MonitoringConsole,
+SearchHeadCluster members and deployer, Standalone, and their v3 compatibility
+workloads.
+
+When the gate is disabled, the Operator leaves the Pod-template field unset,
+including when a stored custom resource contains the gated field. With the
+current `OnDelete` StatefulSet strategy, changing this value creates a new
+StatefulSet revision but does not itself replace an existing Pod. The new grace
+period takes effect when a Pod is subsequently replaced. Automated replacement
+is owned by the separate lifecycle-orchestration work.
+
+The Splunk Enterprise Helm chart exposes
+`terminationGracePeriodSeconds` under each workload's values section.
+
 ## Adding a New Feature Gate
 
 Follow these steps:
