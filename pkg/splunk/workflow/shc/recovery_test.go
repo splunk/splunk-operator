@@ -589,6 +589,97 @@ func TestRecoveryWaitsForUpStatusInMemberAndCaptainViews(t *testing.T) {
 	}
 }
 
+func TestRecoveryBlocksSuspectedConsensusCatchupWithoutDestructiveAction(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin
+	rejoinStartedAt := metav1.NewTime(now)
+	operation.MemberRejoinStartedAt = &rejoinStartedAt
+	observation := recoveredPodObservation()
+	observation.MemberStatus = "Up"
+	observation.CaptainMemberStatus = "Joining"
+	policy := testRecoveryPolicy()
+	policy.MemberRejoinTimeout = 30 * time.Second
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		policy,
+		now.Add(29*time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+		ActionObserveCluster,
+	)
+	if decision.Operation.Reason != enterpriseApi.
+		SearchHeadClusterLifecycleReasonMemberSynchronizationPending {
+		t.Fatalf(
+			"reason = %q, want MemberSynchronizationPending",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.ReplacementMemberID != "member-guid-2" {
+		t.Fatalf(
+			"replacement identity = %q, want member-guid-2",
+			decision.Operation.ReplacementMemberID,
+		)
+	}
+
+	decision = EvaluateRecovery(
+		decision.Operation,
+		observation,
+		policy,
+		now.Add(30*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonMemberRejoinTimedOut {
+		t.Fatalf(
+			"reason = %q, want MemberRejoinTimedOut",
+			decision.Operation.Reason,
+		)
+	}
+	for _, fragment := range []string{
+		"memberObserved=true",
+		"memberStatusAccepted=true",
+		"captainMemberObserved=true",
+		"captainMemberStatusAccepted=false",
+	} {
+		if !strings.Contains(decision.Operation.Message, fragment) {
+			t.Fatalf(
+				"timeout message = %q, want fragment %q",
+				decision.Operation.Message,
+				fragment,
+			)
+		}
+	}
+	if decision.Operation.TargetMemberID != "member-guid-2" ||
+		decision.Operation.ReplacementMemberID != "member-guid-2" {
+		t.Fatalf(
+			"timeout lost identity evidence: target %q, replacement %q",
+			decision.Operation.TargetMemberID,
+			decision.Operation.ReplacementMemberID,
+		)
+	}
+	if decision.Operation.DetentionReleaseRequestedAt != nil ||
+		len(decision.Operation.CompletedOrdinals) != 0 {
+		t.Fatalf(
+			"blocked catch-up changed recovery state: release=%v completed=%v",
+			decision.Operation.DetentionReleaseRequestedAt,
+			decision.Operation.CompletedOrdinals,
+		)
+	}
+}
+
 func authorizedRecoveryOperation(now time.Time) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
 	operation := StartReplacement(
 		"operation-1",
