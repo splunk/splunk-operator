@@ -46,6 +46,30 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 			},
 		},
 		Status: SearchHeadClusterStatus{
+			ImageUpgrade: &SearchHeadClusterImageUpgradeStatus{
+				OperationID:                 "image-upgrade:example-search-head:revision-2",
+				StatefulSetName:             "example-search-head",
+				DesiredRevision:             "revision-2",
+				SourceImage:                 "splunk/splunk:9.4.0",
+				TargetImage:                 "splunk/splunk:10.0.0",
+				TargetReplicas:              3,
+				Phase:                       SearchHeadClusterImageUpgradePhaseRollingMembers,
+				Reason:                      SearchHeadClusterImageUpgradeReasonMemberRecovered,
+				Message:                     "ordinal 2 recovered",
+				StartedAt:                   &now,
+				PhaseStartedAt:              &now,
+				LastTransitionTime:          &now,
+				InitializationIntentAt:      &now,
+				InitializationLastAttemptAt: &now,
+				InitializationSucceededAt:   &now,
+				InitializationAttemptCount:  1,
+				CompletedOrdinals:           []int32{2},
+				FinalizationIntentAt:        &now,
+				FinalizationLastAttemptAt:   &now,
+				FinalizationSucceededAt:     &now,
+				FinalizationAttemptCount:    1,
+				CompletedAt:                 &now,
+			},
 			LifecycleOperation: &SearchHeadClusterLifecycleOperationStatus{
 				OperationID:                  "operation-1",
 				Intent:                       SearchHeadClusterLifecycleIntentPodUpdate,
@@ -85,6 +109,8 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 		t.Fatalf("JSON round trip changed representation:\ninput: %s\ndecoded: %s", encoded, reencoded)
 	}
 	if decoded.Spec.LifecyclePolicy == nil ||
+		decoded.Status.ImageUpgrade == nil ||
+		decoded.Status.ImageUpgrade.Phase != SearchHeadClusterImageUpgradePhaseRollingMembers ||
 		decoded.Status.LifecycleOperation == nil ||
 		decoded.Status.LifecycleOperation.Stage != SearchHeadClusterLifecycleStageDrainingSearches {
 		t.Fatalf("JSON round trip lost lifecycle fields: %#v", decoded)
@@ -93,9 +119,11 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 	copied := input.DeepCopy()
 	*copied.Spec.TerminationGracePeriodSeconds = 10
 	*copied.Spec.LifecyclePolicy.SearchDrainTimeoutSeconds = 20
+	copied.Status.ImageUpgrade.CompletedOrdinals[0] = 1
 	copied.Status.LifecycleOperation.CompletedOrdinals[0] = 1
 	if *input.Spec.TerminationGracePeriodSeconds != 1200 ||
 		*input.Spec.LifecyclePolicy.SearchDrainTimeoutSeconds != 180 ||
+		input.Status.ImageUpgrade.CompletedOrdinals[0] != 2 ||
 		input.Status.LifecycleOperation.CompletedOrdinals[0] != 3 {
 		t.Fatal("DeepCopy shares lifecycle pointer or slice storage")
 	}

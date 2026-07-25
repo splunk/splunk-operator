@@ -10168,6 +10168,79 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              imageUpgrade:
+                description: |-
+                  ImageUpgrade is the current or most recent cluster-wide image-upgrade
+                  workflow. Per-member rollout state remains in LifecycleOperation.
+                properties:
+                  completedAt:
+                    format: date-time
+                    type: string
+                  completedOrdinals:
+                    items:
+                      format: int32
+                      type: integer
+                    type: array
+                  desiredRevision:
+                    type: string
+                  finalizationAttemptCount:
+                    format: int32
+                    type: integer
+                  finalizationIntentAt:
+                    format: date-time
+                    type: string
+                  finalizationLastAttemptAt:
+                    format: date-time
+                    type: string
+                  finalizationSucceededAt:
+                    format: date-time
+                    type: string
+                  initializationAttemptCount:
+                    format: int32
+                    type: integer
+                  initializationIntentAt:
+                    format: date-time
+                    type: string
+                  initializationLastAttemptAt:
+                    format: date-time
+                    type: string
+                  initializationSucceededAt:
+                    format: date-time
+                    type: string
+                  lastTransitionTime:
+                    format: date-time
+                    type: string
+                  message:
+                    type: string
+                  operationID:
+                    type: string
+                  phase:
+                    description: |-
+                      SearchHeadClusterImageUpgradePhase identifies the durable cluster-wide
+                      phase of an image upgrade. Per-member replacement remains in
+                      LifecycleOperation.
+                    type: string
+                  phaseStartedAt:
+                    format: date-time
+                    type: string
+                  reason:
+                    description: |-
+                      SearchHeadClusterImageUpgradeReason is a bounded, machine-readable
+                      explanation for the current cluster-wide image-upgrade state.
+                    type: string
+                  sourceImage:
+                    type: string
+                  startedAt:
+                    format: date-time
+                    type: string
+                  statefulSetName:
+                    type: string
+                  targetImage:
+                    type: string
+                  targetReplicas:
+                    format: int32
+                    type: integer
+                type: object
               initialized:
                 description: true if the search head cluster has finished initialization
                 type: boolean

@@ -189,6 +189,79 @@ const (
 	SearchHeadClusterLifecycleReasonUnsupportedRuntimeContract    SearchHeadClusterLifecycleReason = "UnsupportedRuntimeContract"
 )
 
+// SearchHeadClusterImageUpgradePhase identifies the durable cluster-wide
+// phase of an image upgrade. Per-member replacement remains in
+// LifecycleOperation.
+type SearchHeadClusterImageUpgradePhase string
+
+const (
+	SearchHeadClusterImageUpgradePhasePendingInitialization SearchHeadClusterImageUpgradePhase = "PendingInitialization"
+	SearchHeadClusterImageUpgradePhaseInitializing          SearchHeadClusterImageUpgradePhase = "Initializing"
+	SearchHeadClusterImageUpgradePhaseRollingMembers        SearchHeadClusterImageUpgradePhase = "RollingMembers"
+	SearchHeadClusterImageUpgradePhasePendingFinalization   SearchHeadClusterImageUpgradePhase = "PendingFinalization"
+	SearchHeadClusterImageUpgradePhaseFinalizing            SearchHeadClusterImageUpgradePhase = "Finalizing"
+	SearchHeadClusterImageUpgradePhaseCompleted             SearchHeadClusterImageUpgradePhase = "Completed"
+	SearchHeadClusterImageUpgradePhaseBlocked               SearchHeadClusterImageUpgradePhase = "Blocked"
+	SearchHeadClusterImageUpgradePhaseFailed                SearchHeadClusterImageUpgradePhase = "Failed"
+)
+
+// SearchHeadClusterImageUpgradeReason is a bounded, machine-readable
+// explanation for the current cluster-wide image-upgrade state.
+type SearchHeadClusterImageUpgradeReason string
+
+const (
+	SearchHeadClusterImageUpgradeReasonWorkflowRecorded             SearchHeadClusterImageUpgradeReason = "WorkflowRecorded"
+	SearchHeadClusterImageUpgradeReasonInitializationIntentRecorded SearchHeadClusterImageUpgradeReason = "InitializationIntentRecorded"
+	SearchHeadClusterImageUpgradeReasonInitializationRetrying       SearchHeadClusterImageUpgradeReason = "InitializationRetrying"
+	SearchHeadClusterImageUpgradeReasonInitializationSucceeded      SearchHeadClusterImageUpgradeReason = "InitializationSucceeded"
+	SearchHeadClusterImageUpgradeReasonMemberLifecycleInProgress    SearchHeadClusterImageUpgradeReason = "MemberLifecycleInProgress"
+	SearchHeadClusterImageUpgradeReasonMemberRecovered              SearchHeadClusterImageUpgradeReason = "MemberRecovered"
+	SearchHeadClusterImageUpgradeReasonAllMembersRecovered          SearchHeadClusterImageUpgradeReason = "AllMembersRecovered"
+	SearchHeadClusterImageUpgradeReasonFinalizationIntentRecorded   SearchHeadClusterImageUpgradeReason = "FinalizationIntentRecorded"
+	SearchHeadClusterImageUpgradeReasonFinalizationRetrying         SearchHeadClusterImageUpgradeReason = "FinalizationRetrying"
+	SearchHeadClusterImageUpgradeReasonFinalizationSucceeded        SearchHeadClusterImageUpgradeReason = "FinalizationSucceeded"
+	SearchHeadClusterImageUpgradeReasonUnsupportedUpgradePath       SearchHeadClusterImageUpgradeReason = "UnsupportedUpgradePath"
+	SearchHeadClusterImageUpgradeReasonUnknownUpgradePath           SearchHeadClusterImageUpgradeReason = "UnknownUpgradePath"
+	SearchHeadClusterImageUpgradeReasonRevisionConflict             SearchHeadClusterImageUpgradeReason = "RevisionConflict"
+	SearchHeadClusterImageUpgradeReasonTargetImageConflict          SearchHeadClusterImageUpgradeReason = "TargetImageConflict"
+	SearchHeadClusterImageUpgradeReasonReplicaConflict              SearchHeadClusterImageUpgradeReason = "ReplicaConflict"
+	SearchHeadClusterImageUpgradeReasonMixedSourceImages            SearchHeadClusterImageUpgradeReason = "MixedSourceImages"
+	SearchHeadClusterImageUpgradeReasonConflictingPlannedOperation  SearchHeadClusterImageUpgradeReason = "ConflictingPlannedOperation"
+	SearchHeadClusterImageUpgradeReasonClusterNotReady              SearchHeadClusterImageUpgradeReason = "ClusterNotReady"
+	SearchHeadClusterImageUpgradeReasonMemberLifecycleBlocked       SearchHeadClusterImageUpgradeReason = "MemberLifecycleBlocked"
+	SearchHeadClusterImageUpgradeReasonOperationCompleted           SearchHeadClusterImageUpgradeReason = "OperationCompleted"
+)
+
+// SearchHeadClusterImageUpgradeStatus records one cluster-wide image-upgrade
+// workflow across all per-member lifecycle operations.
+type SearchHeadClusterImageUpgradeStatus struct {
+	OperationID     string `json:"operationID"`
+	StatefulSetName string `json:"statefulSetName"`
+	DesiredRevision string `json:"desiredRevision"`
+	SourceImage     string `json:"sourceImage"`
+	TargetImage     string `json:"targetImage"`
+	TargetReplicas  int32  `json:"targetReplicas"`
+
+	Phase   SearchHeadClusterImageUpgradePhase  `json:"phase"`
+	Reason  SearchHeadClusterImageUpgradeReason `json:"reason,omitempty"`
+	Message string                              `json:"message,omitempty"`
+
+	StartedAt          *metav1.Time `json:"startedAt,omitempty"`
+	PhaseStartedAt     *metav1.Time `json:"phaseStartedAt,omitempty"`
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	InitializationIntentAt      *metav1.Time `json:"initializationIntentAt,omitempty"`
+	InitializationLastAttemptAt *metav1.Time `json:"initializationLastAttemptAt,omitempty"`
+	InitializationSucceededAt   *metav1.Time `json:"initializationSucceededAt,omitempty"`
+	InitializationAttemptCount  int32        `json:"initializationAttemptCount,omitempty"`
+	CompletedOrdinals           []int32      `json:"completedOrdinals,omitempty"`
+	FinalizationIntentAt        *metav1.Time `json:"finalizationIntentAt,omitempty"`
+	FinalizationLastAttemptAt   *metav1.Time `json:"finalizationLastAttemptAt,omitempty"`
+	FinalizationSucceededAt     *metav1.Time `json:"finalizationSucceededAt,omitempty"`
+	FinalizationAttemptCount    int32        `json:"finalizationAttemptCount,omitempty"`
+	CompletedAt                 *metav1.Time `json:"completedAt,omitempty"`
+}
+
 // SearchHeadClusterLifecycleOperationStatus records enough information to
 // resume and diagnose one lifecycle operation across reconciliations.
 type SearchHeadClusterLifecycleOperationStatus struct {
@@ -302,6 +375,11 @@ type SearchHeadClusterStatus struct {
 	// result. It is not an unbounded history.
 	// +optional
 	LifecycleOperation *SearchHeadClusterLifecycleOperationStatus `json:"lifecycleOperation,omitempty"`
+
+	// ImageUpgrade is the current or most recent cluster-wide image-upgrade
+	// workflow. Per-member rollout state remains in LifecycleOperation.
+	// +optional
+	ImageUpgrade *SearchHeadClusterImageUpgradeStatus `json:"imageUpgrade,omitempty"`
 }
 
 type UpgradePhase string
