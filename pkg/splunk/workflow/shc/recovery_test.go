@@ -277,6 +277,76 @@ func TestRecoveryTimeoutContinuesWithoutPodOrSplunkObservation(t *testing.T) {
 	}
 }
 
+func TestRecoveryTimeoutRecordsBoundedGateSnapshot(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin
+	rejoinStartedAt := metav1.NewTime(now)
+	operation.MemberRejoinStartedAt = &rejoinStartedAt
+	observation := recoveredPodObservation()
+	observation.CaptainMemberObserved = false
+	observation.CaptainMemberID = ""
+	observation.CaptainMemberStatus = ""
+	policy := testRecoveryPolicy()
+	policy.MemberRejoinTimeout = 30 * time.Second
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		policy,
+		now.Add(30*time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonMemberRejoinTimedOut {
+		t.Fatalf(
+			"reason = %q, want MemberRejoinTimedOut",
+			decision.Operation.Reason,
+		)
+	}
+	for _, fragment := range []string{
+		"podExists=true",
+		"podScheduled=true",
+		"podReady=true",
+		"memberObserved=true",
+		"memberRegistered=true",
+		"memberStatusAccepted=true",
+		"authoritativeCaptain=true",
+		"captainReady=true",
+		"captainMemberObserved=false",
+		"captainMemberStatusAccepted=false",
+	} {
+		if !strings.Contains(decision.Operation.Message, fragment) {
+			t.Fatalf(
+				"timeout message = %q, want fragment %q",
+				decision.Operation.Message,
+				fragment,
+			)
+		}
+	}
+	if len(decision.Operation.Message) > 512 {
+		t.Fatalf(
+			"timeout snapshot is not bounded: %d bytes",
+			len(decision.Operation.Message),
+		)
+	}
+	if decision.Operation.TargetPod != "example-search-head-2" ||
+		decision.Operation.TargetMemberID != "member-guid-2" {
+		t.Fatalf(
+			"timeout lost target identity: pod %q, member %q",
+			decision.Operation.TargetPod,
+			decision.Operation.TargetMemberID,
+		)
+	}
+}
+
 func TestRecoveryClassifiesImagePullFailure(t *testing.T) {
 	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
 	operation := authorizedRecoveryOperation(now)

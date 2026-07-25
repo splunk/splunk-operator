@@ -77,7 +77,7 @@ func EvaluateRecovery(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
 			enterpriseApi.SearchHeadClusterLifecycleReasonMemberRejoinTimedOut,
-			fmt.Sprintf("member recovery timed out in stage %s", operation.Stage),
+			recoveryTimeoutMessage(operation, observation),
 			now,
 		)
 		return Decision{Operation: operation}
@@ -257,6 +257,30 @@ func classifyPodRecovery(
 		return decision
 	}
 	return evaluateMemberRejoin(operation, observation, now)
+}
+
+func recoveryTimeoutMessage(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	observation RecoveryObservation,
+) string {
+	memberStatusAccepted := observation.MemberStatus == "Up" ||
+		observation.MemberStatus == "ManualDetention"
+	captainMemberStatusAccepted := observation.CaptainMemberStatus == "Up" ||
+		observation.CaptainMemberStatus == "ManualDetention"
+	return fmt.Sprintf(
+		"member recovery timed out in stage %s: podExists=%t podScheduled=%t podReady=%t memberObserved=%t memberRegistered=%t memberStatusAccepted=%t authoritativeCaptain=%t captainReady=%t captainMemberObserved=%t captainMemberStatusAccepted=%t",
+		operation.Stage,
+		observation.PodExists,
+		observation.PodScheduled,
+		observation.PodReady,
+		observation.MemberObserved,
+		observation.MemberRegistered,
+		memberStatusAccepted,
+		observation.AuthoritativeCaptain,
+		observation.CaptainReady,
+		observation.CaptainMemberObserved,
+		captainMemberStatusAccepted,
+	)
 }
 
 func validateReplacementIdentity(
