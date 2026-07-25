@@ -434,6 +434,84 @@ func TestLifecycleAdapterObservesReplacementWaitingForStorage(t *testing.T) {
 	}
 }
 
+func TestLifecycleAdapterObservesTerminalImagePullFailure(t *testing.T) {
+	for _, reason := range []string{
+		"ErrImagePull",
+		"ImagePullBackOff",
+		"InvalidImageName",
+		"ErrInvalidImage",
+	} {
+		t.Run(reason, func(t *testing.T) {
+			target := int32(2)
+			targetPod := "splunk-example-search-head-2"
+			cr := &enterpriseApi.SearchHeadCluster{
+				Status: enterpriseApi.SearchHeadClusterStatus{
+					LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+						TargetPod:     targetPod,
+						TargetOrdinal: &target,
+					},
+				},
+			}
+			mgr := &searchHeadClusterPodManager{cr: cr}
+
+			oldGetLifecyclePod := getSearchHeadLifecyclePod
+			t.Cleanup(func() { getSearchHeadLifecyclePod = oldGetLifecyclePod })
+			getSearchHeadLifecyclePod = func(
+				context.Context,
+				*searchHeadClusterPodManager,
+				string,
+			) (*corev1.Pod, error) {
+				return &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						UID: types.UID("new-pod-uid"),
+						Labels: map[string]string{
+							"controller-revision-hash": "revision-2",
+						},
+					},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodPending,
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.PodScheduled,
+								Status: corev1.ConditionTrue,
+							},
+						},
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								Name: "splunk",
+								State: corev1.ContainerState{
+									Waiting: &corev1.ContainerStateWaiting{
+										Reason:  reason,
+										Message: "failed to pull image",
+									},
+								},
+							},
+						},
+					},
+				}, nil
+			}
+
+			observation, err := mgr.observeLifecycleRecovery(
+				context.Background(),
+				target,
+			)
+			if err != nil {
+				t.Fatalf("observe image-pull failure: %v", err)
+			}
+			if !observation.PodExists ||
+				!observation.PodScheduled ||
+				!observation.ImagePullFailed {
+				t.Fatalf("image-pull observation = %#v", observation)
+			}
+			if observation.StoragePending ||
+				observation.ContainerStartupFailed ||
+				observation.MemberObserved {
+				t.Fatalf("image-pull failure was misclassified: %#v", observation)
+			}
+		})
+	}
+}
+
 func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 

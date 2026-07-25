@@ -218,9 +218,15 @@ func TestRecoveryClassifiesImagePullFailure(t *testing.T) {
 
 	decision := EvaluateRecovery(operation, observation, testRecoveryPolicy(), now.Add(time.Second))
 
-	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer, ActionNone)
+	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageBlocked, ActionNone)
 	if decision.Operation.Reason != enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed {
 		t.Fatalf("reason = %q, want ImagePullFailed", decision.Operation.Reason)
+	}
+	if decision.Operation.MemberRejoinStartedAt != nil {
+		t.Fatalf(
+			"image-pull failure started Splunk rejoin timer at %v",
+			decision.Operation.MemberRejoinStartedAt,
+		)
 	}
 }
 

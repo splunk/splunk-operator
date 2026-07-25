@@ -202,13 +202,21 @@ func classifyPodRecovery(
 		return Decision{Operation: operation}
 	}
 
+	if observation.ImagePullFailed {
+		transition(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed,
+			fmt.Sprintf("replacement Pod %s cannot pull its image", operation.TargetPod),
+			now,
+		)
+		return Decision{Operation: operation}
+	}
+
 	if !observation.PodReady {
 		reason := enterpriseApi.SearchHeadClusterLifecycleReasonReplacementAuthorized
 		message := fmt.Sprintf("waiting for containers in replacement Pod %s", operation.TargetPod)
-		if observation.ImagePullFailed {
-			reason = enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed
-			message = fmt.Sprintf("replacement Pod %s cannot pull its image", operation.TargetPod)
-		} else if observation.ContainerStartupFailed {
+		if observation.ContainerStartupFailed {
 			reason = enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed
 			message = fmt.Sprintf("splunkd has not started in replacement Pod %s", operation.TargetPod)
 		}
