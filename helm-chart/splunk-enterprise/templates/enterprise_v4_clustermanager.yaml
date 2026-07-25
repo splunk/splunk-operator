@@ -14,6 +14,9 @@ metadata:
 {{- end }}
 spec:
   disableResourceDefaults: {{ .Values.clusterManager.disableResourceDefaults }}
+{{- if .Values.clusterManager.terminationGracePeriodSeconds }}
+  terminationGracePeriodSeconds: {{ .Values.clusterManager.terminationGracePeriodSeconds }}
+{{- end }}
 {{- with .Values.clusterManager.appRepo }}
   appRepo: 
 {{ toYaml . | indent 4 }}

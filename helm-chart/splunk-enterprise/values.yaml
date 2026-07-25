@@ -91,6 +91,9 @@ clusterManager:
   # Disable operator-provided CPU and memory request/limit defaults
   disableResourceDefaults: false
 
+  # Optional Pod termination grace used when SplunkPodLifecycle is enabled.
+  terminationGracePeriodSeconds:
+
   # Specify the custom resource name
   name: "cm"
 
@@ -279,6 +282,9 @@ indexerCluster:
 
   # Disable operator-provided CPU and memory request/limit defaults
   disableResourceDefaults: false
+
+  # Optional Pod termination grace used when SplunkPodLifecycle is enabled.
+  terminationGracePeriodSeconds:
 
   name: "idxc"
 
@@ -510,6 +516,9 @@ monitoringConsole:
   # Disable operator-provided CPU and memory request/limit defaults
   disableResourceDefaults: false
 
+  # Optional Pod termination grace used when SplunkPodLifecycle is enabled.
+  terminationGracePeriodSeconds:
+
   name: "mc"
 
   namespaceOverride: ""
@@ -619,6 +628,9 @@ licenseManager:
 
   # Disable operator-provided CPU and memory request/limit defaults
   disableResourceDefaults: false
+
+  # Optional Pod termination grace used when SplunkPodLifecycle is enabled.
+  terminationGracePeriodSeconds:
 
   name: "lm"
 
@@ -740,6 +752,9 @@ standalone:
 
   # Disable operator-provided CPU and memory request/limit defaults
   disableResourceDefaults: false
+
+  # Optional Pod termination grace used when SplunkPodLifecycle is enabled.
+  terminationGracePeriodSeconds:
 
   name: "stdln"
 
@@ -875,6 +890,9 @@ ingestorCluster:
 
   # Disable operator-provided CPU and memory request/limit defaults
   disableResourceDefaults: false
+
+  # Optional Pod termination grace used when SplunkPodLifecycle is enabled.
+  terminationGracePeriodSeconds:
 
   name: "ingestor"
 

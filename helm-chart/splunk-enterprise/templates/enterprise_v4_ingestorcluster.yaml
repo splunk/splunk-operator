@@ -16,6 +16,9 @@ metadata:
 spec:
   disableResourceDefaults: {{ .Values.ingestorCluster.disableResourceDefaults }}
   replicas: {{ default 3 .Values.ingestorCluster.replicaCount }}
+  {{- if .Values.ingestorCluster.terminationGracePeriodSeconds }}
+  terminationGracePeriodSeconds: {{ .Values.ingestorCluster.terminationGracePeriodSeconds }}
+  {{- end }}
   {{- if .Values.image.repository }}
   image: {{ .Values.image.repository }}
   {{- end }}

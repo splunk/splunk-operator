@@ -22,6 +22,9 @@ spec:
 {{- else if and .Values.standalone.enabled .Values.standalone.replicaCount }}
   replicas: {{ .Values.standalone.replicaCount }}
 {{- end }}
+{{- if .Values.standalone.terminationGracePeriodSeconds }}
+  terminationGracePeriodSeconds: {{ .Values.standalone.terminationGracePeriodSeconds }}
+{{- end }}
 {{- with .Values.standalone.appRepo }}
   appRepo:
 {{ toYaml . | indent 4 }}

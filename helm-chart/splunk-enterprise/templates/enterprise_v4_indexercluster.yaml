@@ -28,6 +28,9 @@ items:
   {{- if $.Values.indexerCluster.replicaCount }}
     replicas: {{ $.Values.indexerCluster.replicaCount }}
   {{- end }}
+  {{- if $.Values.indexerCluster.terminationGracePeriodSeconds }}
+    terminationGracePeriodSeconds: {{ $.Values.indexerCluster.terminationGracePeriodSeconds }}
+  {{- end }}
   {{- if $.Values.existingClusterManager }}
     clusterManagerRef:
       name: {{ $.Values.existingClusterManager.name }}

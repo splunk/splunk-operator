@@ -14,6 +14,9 @@ metadata:
 {{- end }}
 spec:
   disableResourceDefaults: {{ .Values.monitoringConsole.disableResourceDefaults }}
+{{- if .Values.monitoringConsole.terminationGracePeriodSeconds }}
+  terminationGracePeriodSeconds: {{ .Values.monitoringConsole.terminationGracePeriodSeconds }}
+{{- end }}
 {{- with .Values.monitoringConsole.appRepo }}
   appRepo: 
 {{ toYaml . | indent 4 }}

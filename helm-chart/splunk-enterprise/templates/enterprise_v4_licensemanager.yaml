@@ -14,6 +14,9 @@ metadata:
   {{- end }}
 spec:
   disableResourceDefaults: {{ .Values.licenseManager.disableResourceDefaults }}
+{{- if .Values.licenseManager.terminationGracePeriodSeconds }}
+  terminationGracePeriodSeconds: {{ .Values.licenseManager.terminationGracePeriodSeconds }}
+{{- end }}
 {{- with .Values.licenseManager.appRepo }}
   appRepo:
 {{ toYaml . | indent 4 }}
