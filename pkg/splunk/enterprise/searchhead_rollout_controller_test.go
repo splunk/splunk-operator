@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -561,6 +562,186 @@ func TestRollingUpdateControllerRollbackCompletionResetsPartition(t *testing.T) 
 	assertNoRollingUpdatePodDelete(t, client)
 }
 
+func TestRollingUpdateControllerCompletesThreeMembersInReverseOrdinalOrder(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	ctx := context.Background()
+	observedPartitions := make([]int32, 0, 4)
+
+	for target := int32(2); target >= 0; target-- {
+		if target == 2 {
+			phase, err := mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+			if err != nil {
+				t.Fatalf("prepare ordinal %d: %v", target, err)
+			}
+			if phase != enterpriseApi.PhaseUpdating {
+				t.Fatalf("prepare ordinal %d phase = %q, want Updating", target, phase)
+			}
+		}
+
+		operation := mgr.cr.Status.LifecycleOperation
+		if operation == nil ||
+			operation.TargetOrdinal == nil ||
+			*operation.TargetOrdinal != target ||
+			operation.DesiredRevision != "revision-2" ||
+			operation.ReplacementAuthorizedAt != nil {
+			t.Fatalf(
+				"ordinal %d preparation = %#v, want unapproved durable operation",
+				target,
+				operation,
+			)
+		}
+		assertRollingUpdatePartition(
+			t,
+			statefulSet.Spec.UpdateStrategy,
+			target+1,
+		)
+		assertNoRollingUpdatePodDelete(t, client)
+
+		authorizedAt := metav1.Now()
+		operation.Stage =
+			enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement
+		operation.ReplacementAuthorizedAt = &authorizedAt
+		client.ResetCalls()
+
+		phase, err := mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+		if err != nil {
+			t.Fatalf("authorize ordinal %d: %v", target, err)
+		}
+		if phase != enterpriseApi.PhaseUpdating {
+			t.Fatalf("authorize ordinal %d phase = %q, want Updating", target, phase)
+		}
+		if len(client.Calls["Update"]) != 1 {
+			t.Fatalf(
+				"ordinal %d partition updates = %d, want one",
+				target,
+				len(client.Calls["Update"]),
+			)
+		}
+		assertNoRollingUpdatePodDelete(t, client)
+
+		statefulSet = getRollingUpdateFixtureStatefulSet(t, client, statefulSet)
+		mgr.statefulSet = statefulSet
+		assertRollingUpdatePartition(
+			t,
+			statefulSet.Spec.UpdateStrategy,
+			target,
+		)
+		observedPartitions = append(observedPartitions, target)
+
+		setRollingUpdateFixturePodRevision(
+			t,
+			client,
+			statefulSet,
+			target,
+			"revision-2",
+		)
+		operation.Stage =
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin
+		client.ResetCalls()
+
+		phase, err = mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+		if err != nil {
+			t.Fatalf("wait for ordinal %d SHC recovery: %v", target, err)
+		}
+		if phase != enterpriseApi.PhaseUpdating {
+			t.Fatalf("recovery wait ordinal %d phase = %q, want Updating", target, phase)
+		}
+		if len(client.Calls["Update"]) != 0 {
+			t.Fatalf(
+				"ordinal %d recovery wait changed Kubernetes state: %v",
+				target,
+				client.Calls["Update"],
+			)
+		}
+		assertRollingUpdatePartition(
+			t,
+			statefulSet.Spec.UpdateStrategy,
+			target,
+		)
+		assertNoRollingUpdatePodDelete(t, client)
+
+		operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+		client.ResetCalls()
+		phase, err = mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+		if err != nil {
+			t.Fatalf("complete ordinal %d: %v", target, err)
+		}
+		if phase != enterpriseApi.PhaseUpdating {
+			t.Fatalf("complete ordinal %d phase = %q, want Updating", target, phase)
+		}
+		assertNoRollingUpdatePodDelete(t, client)
+
+		if target > 0 {
+			if len(client.Calls["Update"]) != 0 {
+				t.Fatalf(
+					"ordinal %d completion changed partition before preparing next: %v",
+					target,
+					client.Calls["Update"],
+				)
+			}
+			nextOperation := mgr.cr.Status.LifecycleOperation
+			if nextOperation == nil ||
+				nextOperation.TargetOrdinal == nil ||
+				*nextOperation.TargetOrdinal != target-1 ||
+				nextOperation.ReplacementAuthorizedAt != nil {
+				t.Fatalf(
+					"operation after ordinal %d = %#v, want preparation for ordinal %d",
+					target,
+					nextOperation,
+					target-1,
+				)
+			}
+			assertRollingUpdatePartition(
+				t,
+				statefulSet.Spec.UpdateStrategy,
+				target,
+			)
+			continue
+		}
+
+		if len(client.Calls["Update"]) != 1 {
+			t.Fatalf(
+				"final recovery updates = %d, want one fail-closed partition reset",
+				len(client.Calls["Update"]),
+			)
+		}
+		statefulSet = getRollingUpdateFixtureStatefulSet(t, client, statefulSet)
+		mgr.statefulSet = statefulSet
+		assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+		observedPartitions = append(observedPartitions, 3)
+	}
+
+	statefulSet.Status.CurrentRevision = statefulSet.Status.UpdateRevision
+	client.ResetCalls()
+	phase, err := mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+	if err != nil {
+		t.Fatalf("observe converged rollout: %v", err)
+	}
+	if phase != enterpriseApi.PhaseReady {
+		t.Fatalf("converged rollout phase = %q, want Ready", phase)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("converged rollout changed Kubernetes state: %v", client.Calls["Update"])
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+
+	wantPartitions := []int32{2, 1, 0, 3}
+	if !reflect.DeepEqual(observedPartitions, wantPartitions) {
+		t.Fatalf(
+			"partition history = %v, want reverse rollout and reset %v",
+			observedPartitions,
+			wantPartitions,
+		)
+	}
+}
+
 func rollingUpdateControllerFixture(
 	t *testing.T,
 	partition int32,
@@ -640,6 +821,43 @@ func rollingUpdateControllerFixture(
 		statefulSet: statefulSet,
 	}
 	return mgr, statefulSet, client
+}
+
+func getRollingUpdateFixtureStatefulSet(
+	t *testing.T,
+	client *spltest.MockClient,
+	statefulSet *appsv1.StatefulSet,
+) *appsv1.StatefulSet {
+	t.Helper()
+	stored := &appsv1.StatefulSet{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Namespace: statefulSet.GetNamespace(),
+		Name:      statefulSet.GetName(),
+	}, stored); err != nil {
+		t.Fatalf("get StatefulSet: %v", err)
+	}
+	return stored
+}
+
+func setRollingUpdateFixturePodRevision(
+	t *testing.T,
+	client *spltest.MockClient,
+	statefulSet *appsv1.StatefulSet,
+	ordinal int32,
+	revision string,
+) {
+	t.Helper()
+	pod := &corev1.Pod{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Namespace: statefulSet.GetNamespace(),
+		Name:      fmt.Sprintf("%s-%d", statefulSet.GetName(), ordinal),
+	}, pod); err != nil {
+		t.Fatalf("get Pod %d: %v", ordinal, err)
+	}
+	pod.Labels["controller-revision-hash"] = revision
+	if err := client.Update(context.Background(), pod); err != nil {
+		t.Fatalf("update Pod %d revision: %v", ordinal, err)
+	}
 }
 
 func assertNoRollingUpdatePodDelete(t *testing.T, client *spltest.MockClient) {
