@@ -2624,6 +2624,10 @@ func (in *SearchHeadClusterLifecycleOperationStatus) DeepCopyInto(out *SearchHea
 		*out = make([]int32, len(*in))
 		copy(*out, *in)
 	}
+	if in.CaptainTransferRequestedAt != nil {
+		in, out := &in.CaptainTransferRequestedAt, &out.CaptainTransferRequestedAt
+		*out = (*in).DeepCopy()
+	}
 	if in.LastSuccessfulSHCObservation != nil {
 		in, out := &in.LastSuccessfulSHCObservation, &out.LastSuccessfulSHCObservation
 		*out = (*in).DeepCopy()

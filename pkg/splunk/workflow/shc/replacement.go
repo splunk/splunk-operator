@@ -33,21 +33,22 @@ type ReplacementPolicy struct {
 // assemble it from Splunk's cluster and member endpoints before evaluating the
 // workflow.
 type Observation struct {
-	ObservedAt               time.Time
-	Available                bool
-	Fresh                    bool
-	ConflictingCaptain       bool
-	Initialized              bool
-	MinPeersJoined           bool
-	MaintenanceMode          bool
-	Captain                  string
-	CaptainReady             bool
-	TargetMemberObserved     bool
-	TargetMemberStatus       string
-	TargetMemberRegistered   bool
-	ActiveHistoricalSearches int32
-	ActiveRealtimeSearches   int32
-	CaptainTransferTarget    string
+	ObservedAt                         time.Time
+	Available                          bool
+	Fresh                              bool
+	ConflictingCaptain                 bool
+	Initialized                        bool
+	MinPeersJoined                     bool
+	MaintenanceMode                    bool
+	Captain                            string
+	CaptainReady                       bool
+	TargetMemberObserved               bool
+	TargetMemberStatus                 string
+	TargetMemberRegistered             bool
+	ActiveHistoricalSearches           int32
+	ActiveRealtimeSearches             int32
+	CaptainTransferTarget              string
+	CaptainTransferTargetManagementURI string
 }
 
 // ActionType identifies a side effect that an adapter may perform after it
@@ -65,8 +66,9 @@ const (
 // Action is a declarative request from the decision engine. The engine itself
 // never calls Splunk and never mutates Kubernetes objects.
 type Action struct {
-	Type   ActionType
-	Target string
+	Type          ActionType
+	Target        string
+	ManagementURI string
 }
 
 // Decision is the next durable operation state and optional external action.
@@ -121,6 +123,36 @@ func EvaluateReplacement(
 	case enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
 		enterpriseApi.SearchHeadClusterLifecycleStageFailed,
 		enterpriseApi.SearchHeadClusterLifecycleStageCompleted:
+		return Decision{Operation: operation}
+	}
+
+	// Deadline enforcement must not depend on Splunk remaining observable. An
+	// unavailable or unready captain is precisely when the controller must
+	// continue aging an in-flight operation instead of waiting forever.
+	if operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches &&
+		stageTimedOut(operation, policy.SearchDrainTimeout, now) {
+		transition(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			enterpriseApi.SearchHeadClusterLifecycleReasonSearchDrainTimedOut,
+			fmt.Sprintf("search drain timed out for %s: historical=%d realtime=%d",
+				operation.TargetPod,
+				observation.ActiveHistoricalSearches,
+				observation.ActiveRealtimeSearches,
+			),
+			now,
+		)
+		return Decision{Operation: operation}
+	}
+	if operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain &&
+		stageTimedOut(operation, policy.CaptainTransferTimeout, now) {
+		transition(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferTimedOut,
+			fmt.Sprintf("captain transfer away from %s timed out", operation.TargetPod),
+			now,
+		)
 		return Decision{Operation: operation}
 	}
 
@@ -220,21 +252,6 @@ func evaluateSearchDrain(
 	now time.Time,
 ) Decision {
 	if observation.ActiveHistoricalSearches > 0 || observation.ActiveRealtimeSearches > 0 {
-		if stageTimedOut(operation, policy.SearchDrainTimeout, now) {
-			transition(
-				operation,
-				enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
-				enterpriseApi.SearchHeadClusterLifecycleReasonSearchDrainTimedOut,
-				fmt.Sprintf("search drain timed out for %s: historical=%d realtime=%d",
-					operation.TargetPod,
-					observation.ActiveHistoricalSearches,
-					observation.ActiveRealtimeSearches,
-				),
-				now,
-			)
-			return Decision{Operation: operation}
-		}
-
 		setReason(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleReasonSearchesActive,
@@ -280,19 +297,25 @@ func evaluateCaptainTransfer(
 		return authorizeReplacement(operation, now)
 	}
 
-	if stageTimedOut(operation, policy.CaptainTransferTimeout, now) {
-		transition(
+	if operation.CaptainTransferRequestedAt != nil {
+		setReason(
 			operation,
-			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
-			enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferTimedOut,
-			fmt.Sprintf("captain transfer away from %s timed out", operation.TargetPod),
+			enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferRequired,
+			fmt.Sprintf("waiting to confirm captain transfer from %s to %s",
+				operation.TargetPod,
+				operation.CaptainTransferTarget,
+			),
 			now,
 		)
-		return Decision{Operation: operation}
+		return Decision{
+			Operation: operation,
+			Action:    Action{Type: ActionObserveCluster},
+		}
 	}
 
 	if observation.CaptainTransferTarget == "" ||
-		observation.CaptainTransferTarget == operation.TargetPod {
+		observation.CaptainTransferTarget == operation.TargetPod ||
+		observation.CaptainTransferTargetManagementURI == "" {
 		setReason(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleReasonClusterNotSafe,
@@ -311,11 +334,13 @@ func evaluateCaptainTransfer(
 		fmt.Sprintf("requesting captain transfer from %s to %s", operation.TargetPod, observation.CaptainTransferTarget),
 		now,
 	)
+	operation.CaptainTransferTarget = observation.CaptainTransferTarget
 	return Decision{
 		Operation: operation,
 		Action: Action{
-			Type:   ActionTransferCaptain,
-			Target: observation.CaptainTransferTarget,
+			Type:          ActionTransferCaptain,
+			Target:        observation.CaptainTransferTarget,
+			ManagementURI: observation.CaptainTransferTargetManagementURI,
 		},
 	}
 }

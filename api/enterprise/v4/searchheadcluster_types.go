@@ -204,6 +204,8 @@ type SearchHeadClusterLifecycleOperationStatus struct {
 	Message                      string                           `json:"message,omitempty"`
 	Captain                      string                           `json:"captain,omitempty"`
 	CaptainReady                 bool                             `json:"captainReady,omitempty"`
+	CaptainTransferTarget        string                           `json:"captainTransferTarget,omitempty"`
+	CaptainTransferRequestedAt   *metav1.Time                     `json:"captainTransferRequestedAt,omitempty"`
 	ActiveHistoricalSearches     int32                            `json:"activeHistoricalSearches,omitempty"`
 	ActiveRealtimeSearches       int32                            `json:"activeRealtimeSearches,omitempty"`
 	LastSuccessfulSHCObservation *metav1.Time                     `json:"lastSuccessfulSHCObservation,omitempty"`

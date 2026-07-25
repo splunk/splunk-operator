@@ -209,6 +209,22 @@ func TestSetSearchHeadDetention(t *testing.T) {
 	splunkClientErrorTester(t, test)
 }
 
+func TestTransferSearchHeadCaptain(t *testing.T) {
+	body := strings.NewReader("mgmt_uri=https%3A%2F%2Fsplunk-example-search-head-1%3A8089")
+	wantRequest, _ := http.NewRequest(
+		"POST",
+		"https://localhost:8089/services/shcluster/member/consensus/default/transfer_captaincy",
+		body,
+	)
+	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	test := func(c splunk.SplunkClient) error {
+		return c.TransferSearchHeadCaptain("https://splunk-example-search-head-1:8089")
+	}
+	splunkClientTester(t, "TestTransferSearchHeadCaptain", 200, "", wantRequest, test)
+
+	splunkClientErrorTester(t, test)
+}
+
 func TestBundlePush(t *testing.T) {
 	body := strings.NewReader("&ignore_identical_bundle=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/manager/control/default/apply", body)

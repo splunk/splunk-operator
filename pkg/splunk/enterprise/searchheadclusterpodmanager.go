@@ -22,6 +22,7 @@ type searchHeadClusterPodManager struct {
 	c               splcommon.ControllerClient
 	cr              *enterpriseApi.SearchHeadCluster
 	secrets         *corev1.Secret
+	statefulSet     *appsv1.StatefulSet
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
@@ -43,6 +44,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	if mgr.c == nil {
 		mgr.c = c
 	}
+	mgr.statefulSet = statefulSet
 
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, mgr.cr)
@@ -68,6 +70,19 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
+		if err == nil &&
+			searchHeadClusterLifecycleEnabled() &&
+			mgr.cr.Status.LifecycleOperation != nil &&
+			mgr.cr.Status.LifecycleOperation.TargetOrdinal != nil {
+			_, lifecycleErr := mgr.prepareLifecycleReplacement(
+				ctx,
+				*mgr.cr.Status.LifecycleOperation.TargetOrdinal,
+				mgr.cr.Status.LifecycleOperation.Intent,
+			)
+			if lifecycleErr != nil {
+				return enterpriseApi.PhaseError, lifecycleErr
+			}
+		}
 		if termErr := splctrl.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
 			logger.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
 			return enterpriseApi.PhaseError, termErr
@@ -115,7 +130,13 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
 	logger := logging.FromContext(ctx).With("func", "PrepareScaleDown")
 	// start by quarantining the pod
-	result, err := mgr.PrepareRecycle(ctx, n)
+	var result bool
+	var err error
+	if searchHeadClusterLifecycleEnabled() {
+		result, err = mgr.prepareLifecycleReplacement(ctx, n, enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown)
+	} else {
+		result, err = mgr.prepareRecycleLegacy(ctx, n)
+	}
 	if err != nil || !result {
 		return result, err
 	}
@@ -138,6 +159,13 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 
 // PrepareRecycle for searchHeadClusterPodManager prepares search head pod to be recycled for updates; it returns true when ready
 func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
+	if searchHeadClusterLifecycleEnabled() {
+		return mgr.prepareLifecycleReplacement(ctx, n, enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate)
+	}
+	return mgr.prepareRecycleLegacy(ctx, n)
+}
+
+func (mgr *searchHeadClusterPodManager) prepareRecycleLegacy(ctx context.Context, n int32) (bool, error) {
 	logger := logging.FromContext(ctx).With("func", "PrepareRecycle")
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 

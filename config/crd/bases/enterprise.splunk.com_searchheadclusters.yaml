@@ -10186,6 +10186,11 @@ spec:
                     type: string
                   captainReady:
                     type: boolean
+                  captainTransferRequestedAt:
+                    format: date-time
+                    type: string
+                  captainTransferTarget:
+                    type: string
                   completedOrdinals:
                     items:
                       format: int32

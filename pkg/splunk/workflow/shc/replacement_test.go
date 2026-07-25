@@ -19,6 +19,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestNonCaptainReplacementRequiresDetentionAndDrain(t *testing.T) {
@@ -54,6 +55,7 @@ func TestCaptainReplacementRequiresConfirmedTransfer(t *testing.T) {
 	observation := safeObservation(now)
 	observation.Captain = operation.TargetPod
 	observation.CaptainTransferTarget = "example-search-head-1"
+	observation.CaptainTransferTargetManagementURI = "https://example-search-head-1:8089"
 
 	decision := EvaluateReplacement(operation, observation, testPolicy(), now)
 	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget, ActionRequestDetention)
@@ -64,12 +66,18 @@ func TestCaptainReplacementRequiresConfirmedTransfer(t *testing.T) {
 	if decision.Action.Target != "example-search-head-1" {
 		t.Fatalf("captain transfer target = %q, want example-search-head-1", decision.Action.Target)
 	}
+	if decision.Action.ManagementURI != "https://example-search-head-1:8089" {
+		t.Fatalf("captain transfer management URI = %q, want https://example-search-head-1:8089", decision.Action.ManagementURI)
+	}
 
-	// A successful command response is not represented as completion. The
-	// operation remains in transfer until a fresh observation reports a
-	// different, ready captain.
+	// Once the adapter records successful submission, the operation only
+	// observes. A successful command response is not completion; a fresh
+	// observation must report a different, ready captain.
+	requestedAt := metav1.NewTime(now.Add(2 * time.Second))
+	decision.Operation.CaptainTransferTarget = decision.Action.Target
+	decision.Operation.CaptainTransferRequestedAt = &requestedAt
 	decision = EvaluateReplacement(decision.Operation, observation, testPolicy(), now.Add(2*time.Second))
-	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain, ActionTransferCaptain)
+	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain, ActionObserveCluster)
 
 	observation.Captain = "example-search-head-1"
 	decision = EvaluateReplacement(decision.Operation, observation, testPolicy(), now.Add(3*time.Second))
@@ -102,11 +110,35 @@ func TestCaptainTransferTimeoutBlocksReplacement(t *testing.T) {
 	observation := safeObservation(now)
 	observation.Captain = operation.TargetPod
 	observation.CaptainTransferTarget = "example-search-head-1"
+	observation.CaptainTransferTargetManagementURI = "https://example-search-head-1:8089"
 
 	decision := EvaluateReplacement(operation, observation, testPolicy(), now)
 	observation.TargetMemberStatus = "ManualDetention"
 	decision = EvaluateReplacement(decision.Operation, observation, testPolicy(), now.Add(time.Second))
 	decision = EvaluateReplacement(decision.Operation, observation, testPolicy(), now.Add(32*time.Second))
+
+	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageBlocked, ActionNone)
+	if decision.Operation.Reason != enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferTimedOut {
+		t.Fatalf("reason = %q, want %q",
+			decision.Operation.Reason,
+			enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferTimedOut,
+		)
+	}
+}
+
+func TestCaptainTransferTimeoutDoesNotRequireAvailableObservation(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain
+	stageStartedAt := metav1.NewTime(now)
+	operation.StageStartedAt = &stageStartedAt
+
+	decision := EvaluateReplacement(
+		operation,
+		Observation{},
+		testPolicy(),
+		now.Add(30*time.Second),
+	)
 
 	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageBlocked, ActionNone)
 	if decision.Operation.Reason != enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferTimedOut {
@@ -164,6 +196,7 @@ func TestCaptainChangeDuringDrainIsReobserved(t *testing.T) {
 	observation.ActiveHistoricalSearches = 0
 	observation.Captain = operation.TargetPod
 	observation.CaptainTransferTarget = "example-search-head-1"
+	observation.CaptainTransferTargetManagementURI = "https://example-search-head-1:8089"
 	decision = EvaluateReplacement(decision.Operation, observation, testPolicy(), now.Add(2*time.Second))
 
 	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain, ActionTransferCaptain)

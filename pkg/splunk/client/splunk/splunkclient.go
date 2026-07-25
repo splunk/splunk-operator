@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -203,6 +204,9 @@ type SearchHeadCaptainMemberInfo struct {
 	// Used by the captain to keep track of pending jobs requested by the captain to this member.
 	PendingJobCount int `json:"pending_job_count"`
 
+	// Indicates that the member is preferred as a captain election target.
+	PreferredCaptain bool `json:"preferred_captain"`
+
 	// Number of replications this peer is part of, as either source or target.
 	ReplicationCount int `json:"replication_count"`
 
@@ -308,6 +312,23 @@ func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 	}
 	expectedStatus := []int{200}
 	return c.Do(request, expectedStatus, nil)
+}
+
+// TransferSearchHeadCaptain asks the current captain to transfer captaincy to
+// the member identified by managementURI. Splunk proxies this endpoint to the
+// active captain when it is called through another cluster member. A
+// successful response means the transfer was initiated; callers must observe
+// captain info again to confirm completion.
+func (c *SplunkClient) TransferSearchHeadCaptain(managementURI string) error {
+	form := url.Values{}
+	form.Set("mgmt_uri", managementURI)
+	endpoint := fmt.Sprintf("%s/services/shcluster/member/consensus/default/transfer_captaincy", c.ManagementURI)
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return c.Do(request, []int{200}, nil)
 }
 
 // InitiateUpgrade initializes rolling upgrade process for a search head cluster
