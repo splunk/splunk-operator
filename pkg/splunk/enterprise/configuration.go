@@ -898,6 +898,69 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
+	// Stamp splcommon.ConfigMapRevAnnotationPrefix+<vol-name> annotation for each user-supplied
+	// ConfigMap volume using a content hash rather than ResourceVersion. ResourceVersion changes
+	// on any metadata update (labels, annotations) and would cause spurious pod rolls; the hash
+	// only changes when the mounted data itself changes.
+	// The annotation key uses the volume name (a valid DNS label, ≤63 chars) as the suffix,
+	// not the ConfigMap name, which can exceed Kubernetes' 63-char annotation-suffix limit.
+	// Projected volumes that reference ConfigMaps are handled via the Sources loop.
+	for _, vol := range spec.Volumes {
+		switch {
+		case vol.ConfigMap != nil:
+			cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: vol.ConfigMap.Name}
+			cm, err := splctrl.GetConfigMap(ctx, client, cmNS)
+			if err != nil {
+				logger.ErrorContext(ctx, "Failed to fetch ConfigMap for restart annotation", "volume", vol.Name, "error", err)
+				break
+			}
+			if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
+				// Consumer handles dynamic reload; skip the restart-triggering annotation.
+				break
+			}
+			hash, err := splctrl.GetConfigMapDataHash(ctx, client, cmNS, vol.ConfigMap.Items)
+			if err == nil {
+				podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+vol.Name] = hash
+			} else {
+				logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for annotation", "volume", vol.Name, "error", err)
+			}
+		case vol.Projected != nil:
+			for i, src := range vol.Projected.Sources {
+				if src.ConfigMap == nil {
+					continue
+				}
+				cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: src.ConfigMap.Name}
+				cm, err := splctrl.GetConfigMap(ctx, client, cmNS)
+				if err != nil {
+					logger.ErrorContext(ctx, "Failed to fetch projected ConfigMap for restart annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
+					continue
+				}
+				if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
+					continue
+				}
+				hash, err := splctrl.GetConfigMapDataHash(ctx, client, cmNS, src.ConfigMap.Items)
+				if err == nil {
+					// Build a collision-free annotation key suffix ≤63 chars.
+					// vol.Name is a DNS label (≤63 chars); appending ".<n>" can push past the
+					// Kubernetes annotation name-segment limit. When the combined length exceeds
+					// 63, replace vol.Name with "p.<8-hex-digest>" — the "p." prefix contains a
+					// dot, which is legal in annotation name segments but cannot appear in a
+					// Kubernetes DNS-label volume name, making hashed keys structurally distinct
+					// from any real short volume name and preventing false collisions.
+					idxStr := strconv.Itoa(i)
+					volNamePart := vol.Name
+					if len(volNamePart)+1+len(idxStr) > 63 {
+						sum := sha256.Sum256([]byte(vol.Name))
+						volNamePart = "p." + hex.EncodeToString(sum[:])[:8]
+					}
+					podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+volNamePart+"."+idxStr] = hash
+				} else {
+					logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for projected annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
+				}
+			}
+		}
+	}
+
 	smartstoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, instanceType)
 	if smartstoreConfigMap != nil {
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-operator", "/mnt/splunk-operator/local/", corev1.VolumeSource{

@@ -6,6 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -105,7 +106,9 @@ func ConfigMapChangedPredicate() predicate.Predicate {
 			if !ok {
 				return false
 			}
-			return !cmp.Equal(newObj.Data, oldObj.Data)
+			return !cmp.Equal(newObj.Data, oldObj.Data) ||
+				!cmp.Equal(newObj.BinaryData, oldObj.BinaryData) ||
+				newObj.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] != oldObj.Annotations[splcommon.ConfigMapRestartOptOutAnnotation]
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// Evaluates to false if the object has been confirmed deleted.
