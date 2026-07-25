@@ -33,24 +33,25 @@ type RecoveryPolicy struct {
 // RecoveryObservation separates Kubernetes Pod recovery from the stronger
 // Splunk member recovery contract.
 type RecoveryObservation struct {
-	PodExists              bool
-	PodUID                 string
-	PodDeleting            bool
-	PodScheduled           bool
-	PodUnschedulable       bool
-	StoragePending         bool
-	ImagePullFailed        bool
-	ContainerStartupFailed bool
-	PodReady               bool
-	PodRevision            string
-	MemberObserved         bool
-	MemberStatus           string
-	MemberRegistered       bool
-	CaptainMemberObserved  bool
-	CaptainMemberID        string
-	CaptainMemberStatus    string
-	CaptainReady           bool
-	AuthoritativeCaptain   bool
+	PodExists                bool
+	PodUID                   string
+	PodDeleting              bool
+	PodScheduled             bool
+	PodUnschedulable         bool
+	StoragePending           bool
+	ImagePullFailed          bool
+	ContainerStartupFailed   bool
+	ContainerFailureTerminal bool
+	PodReady                 bool
+	PodRevision              string
+	MemberObserved           bool
+	MemberStatus             string
+	MemberRegistered         bool
+	CaptainMemberObserved    bool
+	CaptainMemberID          string
+	CaptainMemberStatus      string
+	CaptainReady             bool
+	AuthoritativeCaptain     bool
 }
 
 // EvaluateRecovery advances an authorized Pod replacement through Kubernetes
@@ -208,6 +209,17 @@ func classifyPodRecovery(
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
 			enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed,
 			fmt.Sprintf("replacement Pod %s cannot pull its image", operation.TargetPod),
+			now,
+		)
+		return Decision{Operation: operation}
+	}
+
+	if observation.ContainerFailureTerminal {
+		transition(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed,
+			fmt.Sprintf("replacement Pod %s has a terminal container startup failure", operation.TargetPod),
 			now,
 		)
 		return Decision{Operation: operation}

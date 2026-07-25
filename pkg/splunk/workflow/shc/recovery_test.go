@@ -230,6 +230,77 @@ func TestRecoveryClassifiesImagePullFailure(t *testing.T) {
 	}
 }
 
+func TestRecoveryWaitsForRecoverableContainerStartupFailure(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := recoveredPodObservation()
+	observation.PodReady = false
+	observation.ContainerStartupFailed = true
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed {
+		t.Fatalf(
+			"reason = %q, want SplunkStartupFailed",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.MemberRejoinStartedAt != nil {
+		t.Fatalf(
+			"container startup failure started Splunk rejoin timer at %v",
+			decision.Operation.MemberRejoinStartedAt,
+		)
+	}
+}
+
+func TestRecoveryBlocksTerminalContainerStartupFailure(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := recoveredPodObservation()
+	observation.PodReady = false
+	observation.ContainerStartupFailed = true
+	observation.ContainerFailureTerminal = true
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed {
+		t.Fatalf(
+			"reason = %q, want SplunkStartupFailed",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.MemberRejoinStartedAt != nil {
+		t.Fatalf(
+			"terminal startup failure started Splunk rejoin timer at %v",
+			decision.Operation.MemberRejoinStartedAt,
+		)
+	}
+}
+
 func authorizedRecoveryOperation(now time.Time) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
 	operation := StartReplacement(
 		"operation-1",

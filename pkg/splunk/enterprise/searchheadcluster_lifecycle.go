@@ -360,8 +360,11 @@ func (mgr *searchHeadClusterPodManager) observeLifecycleRecovery(
 			switch reason {
 			case "ErrImagePull", "ImagePullBackOff", "InvalidImageName", "ErrInvalidImage":
 				observation.ImagePullFailed = true
-			case "CrashLoopBackOff", "RunContainerError":
+			case "CrashLoopBackOff":
 				observation.ContainerStartupFailed = true
+			case "CreateContainerConfigError", "CreateContainerError", "RunContainerError":
+				observation.ContainerStartupFailed = true
+				observation.ContainerFailureTerminal = true
 			case "ContainerCreating":
 				if strings.Contains(message, "volume") ||
 					strings.Contains(message, "attach") ||

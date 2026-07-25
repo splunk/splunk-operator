@@ -21,6 +21,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
+	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -442,62 +443,7 @@ func TestLifecycleAdapterObservesTerminalImagePullFailure(t *testing.T) {
 		"ErrInvalidImage",
 	} {
 		t.Run(reason, func(t *testing.T) {
-			target := int32(2)
-			targetPod := "splunk-example-search-head-2"
-			cr := &enterpriseApi.SearchHeadCluster{
-				Status: enterpriseApi.SearchHeadClusterStatus{
-					LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
-						TargetPod:     targetPod,
-						TargetOrdinal: &target,
-					},
-				},
-			}
-			mgr := &searchHeadClusterPodManager{cr: cr}
-
-			oldGetLifecyclePod := getSearchHeadLifecyclePod
-			t.Cleanup(func() { getSearchHeadLifecyclePod = oldGetLifecyclePod })
-			getSearchHeadLifecyclePod = func(
-				context.Context,
-				*searchHeadClusterPodManager,
-				string,
-			) (*corev1.Pod, error) {
-				return &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						UID: types.UID("new-pod-uid"),
-						Labels: map[string]string{
-							"controller-revision-hash": "revision-2",
-						},
-					},
-					Status: corev1.PodStatus{
-						Phase: corev1.PodPending,
-						Conditions: []corev1.PodCondition{
-							{
-								Type:   corev1.PodScheduled,
-								Status: corev1.ConditionTrue,
-							},
-						},
-						ContainerStatuses: []corev1.ContainerStatus{
-							{
-								Name: "splunk",
-								State: corev1.ContainerState{
-									Waiting: &corev1.ContainerStateWaiting{
-										Reason:  reason,
-										Message: "failed to pull image",
-									},
-								},
-							},
-						},
-					},
-				}, nil
-			}
-
-			observation, err := mgr.observeLifecycleRecovery(
-				context.Background(),
-				target,
-			)
-			if err != nil {
-				t.Fatalf("observe image-pull failure: %v", err)
-			}
+			observation := observeWaitingLifecyclePod(t, reason)
 			if !observation.PodExists ||
 				!observation.PodScheduled ||
 				!observation.ImagePullFailed {
@@ -507,6 +453,41 @@ func TestLifecycleAdapterObservesTerminalImagePullFailure(t *testing.T) {
 				observation.ContainerStartupFailed ||
 				observation.MemberObserved {
 				t.Fatalf("image-pull failure was misclassified: %#v", observation)
+			}
+		})
+	}
+}
+
+func TestLifecycleAdapterClassifiesContainerStartupFailures(t *testing.T) {
+	tests := []struct {
+		reason   string
+		terminal bool
+	}{
+		{reason: "CrashLoopBackOff"},
+		{reason: "CreateContainerConfigError", terminal: true},
+		{reason: "CreateContainerError", terminal: true},
+		{reason: "RunContainerError", terminal: true},
+	}
+	for _, test := range tests {
+		t.Run(test.reason, func(t *testing.T) {
+			observation := observeWaitingLifecyclePod(t, test.reason)
+			if !observation.PodExists ||
+				!observation.PodScheduled ||
+				!observation.ContainerStartupFailed {
+				t.Fatalf("container startup observation = %#v", observation)
+			}
+			if observation.ContainerFailureTerminal != test.terminal {
+				t.Fatalf(
+					"terminal = %t, want %t: %#v",
+					observation.ContainerFailureTerminal,
+					test.terminal,
+					observation,
+				)
+			}
+			if observation.StoragePending ||
+				observation.ImagePullFailed ||
+				observation.MemberObserved {
+				t.Fatalf("container startup failure was misclassified: %#v", observation)
 			}
 		})
 	}
@@ -830,4 +811,68 @@ func assertLifecycleAdapterResult(t *testing.T, got bool, err error, want bool) 
 	if got != want {
 		t.Fatalf("ready = %t, want %t", got, want)
 	}
+}
+
+func observeWaitingLifecyclePod(
+	t *testing.T,
+	reason string,
+) shcworkflow.RecoveryObservation {
+	t.Helper()
+	target := int32(2)
+	targetPod := "splunk-example-search-head-2"
+	cr := &enterpriseApi.SearchHeadCluster{
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				TargetPod:     targetPod,
+				TargetOrdinal: &target,
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
+	t.Cleanup(func() { getSearchHeadLifecyclePod = oldGetLifecyclePod })
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				UID: types.UID("new-pod-uid"),
+				Labels: map[string]string{
+					"controller-revision-hash": "revision-2",
+				},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodPending,
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodScheduled,
+						Status: corev1.ConditionTrue,
+					},
+				},
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name: "splunk",
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{
+								Reason:  reason,
+								Message: "container startup failed",
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	observation, err := mgr.observeLifecycleRecovery(
+		context.Background(),
+		target,
+	)
+	if err != nil {
+		t.Fatalf("observe waiting container: %v", err)
+	}
+	return observation
 }
