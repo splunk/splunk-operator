@@ -301,6 +301,90 @@ func TestRecoveryBlocksTerminalContainerStartupFailure(t *testing.T) {
 	}
 }
 
+func TestRecoveryWaitsWhenCaptainDoesNotObserveReplacementMember(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := recoveredPodObservation()
+	observation.CaptainMemberObserved = false
+	observation.CaptainMemberID = ""
+	observation.CaptainMemberStatus = ""
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+		ActionObserveCluster,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonMemberNotRegistered {
+		t.Fatalf(
+			"reason = %q, want MemberNotRegistered",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.MemberRejoinStartedAt == nil {
+		t.Fatal("member rejoin timer was not started")
+	}
+	startedAt := decision.Operation.MemberRejoinStartedAt.DeepCopy()
+
+	decision = EvaluateRecovery(
+		decision.Operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(2*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+		ActionObserveCluster,
+	)
+	if decision.Operation.TargetOrdinal == nil ||
+		*decision.Operation.TargetOrdinal != 2 {
+		t.Fatalf(
+			"waiting recovery changed target ordinal: %#v",
+			decision.Operation.TargetOrdinal,
+		)
+	}
+	if decision.Operation.MemberRejoinStartedAt == nil ||
+		!decision.Operation.MemberRejoinStartedAt.Equal(startedAt) {
+		t.Fatalf(
+			"member rejoin timer changed from %v to %v",
+			startedAt,
+			decision.Operation.MemberRejoinStartedAt,
+		)
+	}
+
+	policy := testRecoveryPolicy()
+	policy.MemberRejoinTimeout = 30 * time.Second
+	decision = EvaluateRecovery(
+		decision.Operation,
+		observation,
+		policy,
+		startedAt.Add(30*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonMemberRejoinTimedOut {
+		t.Fatalf(
+			"reason = %q, want MemberRejoinTimedOut",
+			decision.Operation.Reason,
+		)
+	}
+}
+
 func authorizedRecoveryOperation(now time.Time) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
 	operation := StartReplacement(
 		"operation-1",

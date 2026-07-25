@@ -495,6 +495,78 @@ func TestRollingUpdateControllerBlocksFailedReplacementWithoutAdvancing(t *testi
 	}
 }
 
+func TestRollingUpdateControllerHoldsPartitionWhileMemberCannotRejoinCaptain(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-2"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	rejoinStartedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:             "pod-update-2",
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:         "revision-2",
+		TargetPod:               statefulSet.GetName() + "-2",
+		TargetOrdinal:           &target,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+		Reason:                  enterpriseApi.SearchHeadClusterLifecycleReasonMemberNotRegistered,
+		ReplacementAuthorizedAt: &authorizedAt,
+		MemberRejoinStartedAt:   &rejoinStartedAt,
+	}
+	client.ResetCalls()
+
+	for observation := 1; observation <= 3; observation++ {
+		phase, err := mgr.updateRollingStatefulSetPods(
+			context.Background(),
+			statefulSet,
+			3,
+		)
+		if err != nil {
+			t.Fatalf(
+				"member-rejoin observation %d returned error: %v",
+				observation,
+				err,
+			)
+		}
+		if phase != enterpriseApi.PhaseUpdating {
+			t.Fatalf(
+				"member-rejoin observation %d phase = %q, want Updating",
+				observation,
+				phase,
+			)
+		}
+		assertRollingUpdatePartition(
+			t,
+			statefulSet.Spec.UpdateStrategy,
+			target,
+		)
+		if len(client.Calls["Update"]) != 0 {
+			t.Fatalf(
+				"member-rejoin observation %d changed Kubernetes state: %v",
+				observation,
+				client.Calls["Update"],
+			)
+		}
+		assertNoRollingUpdatePodDelete(t, client)
+		operation := mgr.cr.Status.LifecycleOperation
+		if operation == nil ||
+			operation.TargetOrdinal == nil ||
+			*operation.TargetOrdinal != target ||
+			operation.Stage !=
+				enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin {
+			t.Fatalf(
+				"member-rejoin operation = %#v, want retained ordinal 2",
+				operation,
+			)
+		}
+	}
+}
+
 func TestRollingUpdateControllerBlocksAuthorizedTargetAfterManualPodDeletion(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(
