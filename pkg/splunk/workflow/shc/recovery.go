@@ -267,8 +267,27 @@ func validateReplacementIdentity(
 	if !observation.MemberObserved || !observation.CaptainMemberObserved {
 		return Decision{}, false
 	}
-	if operation.TargetMemberID != "" &&
-		observation.CaptainMemberID != operation.TargetMemberID {
+	if operation.TargetMemberID == "" {
+		transition(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			enterpriseApi.SearchHeadClusterLifecycleReasonMemberIdentityMismatch,
+			"retained member identity was not captured before replacement",
+			now,
+		)
+		return Decision{Operation: operation}, true
+	}
+	if observation.CaptainMemberID == "" {
+		transition(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			enterpriseApi.SearchHeadClusterLifecycleReasonMemberIdentityMismatch,
+			"replacement member identity is missing from the captain view",
+			now,
+		)
+		return Decision{Operation: operation}, true
+	}
+	if observation.CaptainMemberID != operation.TargetMemberID {
 		transition(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,

@@ -15,6 +15,7 @@
 package shc
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +99,73 @@ func TestRecoveryBlocksChangedPersistentMemberIdentity(t *testing.T) {
 	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageBlocked, ActionNone)
 	if decision.Operation.Reason != enterpriseApi.SearchHeadClusterLifecycleReasonMemberIdentityMismatch {
 		t.Fatalf("reason = %q, want MemberIdentityMismatch", decision.Operation.Reason)
+	}
+}
+
+func TestRecoveryBlocksMissingPersistentMemberIdentity(t *testing.T) {
+	tests := []struct {
+		name                string
+		targetMemberID      string
+		replacementMemberID string
+		wantMessageFragment string
+	}{
+		{
+			name:                "original identity was not captured",
+			replacementMemberID: "member-guid-2",
+			wantMessageFragment: "retained member identity was not captured",
+		},
+		{
+			name:                "replacement identity is missing",
+			targetMemberID:      "member-guid-2",
+			wantMessageFragment: "replacement member identity is missing",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+			operation := authorizedRecoveryOperation(now)
+			operation.TargetMemberID = test.targetMemberID
+			observation := recoveredPodObservation()
+			observation.CaptainMemberID = test.replacementMemberID
+
+			decision := EvaluateRecovery(
+				operation,
+				observation,
+				testRecoveryPolicy(),
+				now.Add(time.Second),
+			)
+
+			assertDecision(
+				t,
+				decision,
+				enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+				ActionNone,
+			)
+			if decision.Operation.Reason !=
+				enterpriseApi.SearchHeadClusterLifecycleReasonMemberIdentityMismatch {
+				t.Fatalf(
+					"reason = %q, want MemberIdentityMismatch",
+					decision.Operation.Reason,
+				)
+			}
+			if !strings.Contains(
+				decision.Operation.Message,
+				test.wantMessageFragment,
+			) {
+				t.Fatalf(
+					"message = %q, want fragment %q",
+					decision.Operation.Message,
+					test.wantMessageFragment,
+				)
+			}
+			if decision.Operation.ReplacementMemberID != "" {
+				t.Fatalf(
+					"missing identity accepted replacement ID %q",
+					decision.Operation.ReplacementMemberID,
+				)
+			}
+		})
 	}
 }
 

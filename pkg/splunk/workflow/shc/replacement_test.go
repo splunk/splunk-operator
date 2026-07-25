@@ -183,6 +183,41 @@ func TestConflictingCaptainObservationBlocksReplacement(t *testing.T) {
 	}
 }
 
+func TestReplacementCannotAuthorizeWithoutPersistentMemberIdentity(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	observation := safeObservation(now)
+	observation.TargetMemberID = ""
+	observation.TargetMemberStatus = "ManualDetention"
+
+	decision := EvaluateReplacement(
+		operation,
+		observation,
+		testPolicy(),
+		now,
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingCluster,
+		ActionObserveCluster,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonClusterNotSafe {
+		t.Fatalf(
+			"reason = %q, want ClusterNotSafe",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.TargetMemberID != "" {
+		t.Fatalf(
+			"missing persistent identity was recorded as %q",
+			decision.Operation.TargetMemberID,
+		)
+	}
+}
+
 func TestCaptainChangeDuringDrainIsReobserved(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	operation := newTestOperation(now)
