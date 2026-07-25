@@ -292,6 +292,136 @@ func TestRollingUpdateControllerWaitsForKubernetesWithoutDeletingPod(t *testing.
 	}
 }
 
+func TestRollingUpdateControllerBlocksFailedReplacementWithoutAdvancing(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-2"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:             "pod-update-2",
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:         "revision-2",
+		TargetPod:               statefulSet.GetName() + "-2",
+		TargetOrdinal:           &target,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+		ReplacementAuthorizedAt: &authorizedAt,
+	}
+	setRollingUpdateFixturePodReady(t, client, statefulSet, target, false)
+	client.ResetCalls()
+
+	for observation := 1; observation <= 3; observation++ {
+		phase, err := mgr.updateRollingStatefulSetPods(
+			context.Background(),
+			statefulSet,
+			3,
+		)
+		if err != nil {
+			t.Fatalf(
+				"waiting observation %d returned error: %v",
+				observation,
+				err,
+			)
+		}
+		if phase != enterpriseApi.PhaseUpdating {
+			t.Fatalf(
+				"waiting observation %d phase = %q, want Updating",
+				observation,
+				phase,
+			)
+		}
+		if len(client.Calls["Update"]) != 0 {
+			t.Fatalf(
+				"waiting observation %d changed Kubernetes state: %v",
+				observation,
+				client.Calls["Update"],
+			)
+		}
+		assertRollingUpdatePartition(
+			t,
+			statefulSet.Spec.UpdateStrategy,
+			target,
+		)
+		assertNoRollingUpdatePodDelete(t, client)
+		if !strings.Contains(
+			mgr.cr.Status.Message,
+			string(upgrade.SHCRolloutReasonWaitingForKubernetes),
+		) {
+			t.Fatalf(
+				"waiting status = %q, want %s",
+				mgr.cr.Status.Message,
+				upgrade.SHCRolloutReasonWaitingForKubernetes,
+			)
+		}
+		if operation := mgr.cr.Status.LifecycleOperation; operation == nil ||
+			operation.TargetOrdinal == nil ||
+			*operation.TargetOrdinal != target ||
+			operation.Stage !=
+				enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer {
+			t.Fatalf(
+				"waiting operation = %#v, want ordinal 2 container wait",
+				operation,
+			)
+		}
+	}
+
+	operation := mgr.cr.Status.LifecycleOperation
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageBlocked
+	operation.Reason =
+		enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed
+	operation.Message = "replacement Splunk process did not become ready"
+	recorder := &mockEventRecorder{}
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		&K8EventPublisher{recorder: recorder, instance: mgr.cr},
+	)
+	client.ResetCalls()
+
+	phase, err := mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+	if err == nil {
+		t.Fatal("expected terminal replacement failure to block rollout")
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Fatalf("blocked replacement phase = %q, want %q", phase, enterpriseApi.PhaseError)
+	}
+	if !strings.Contains(
+		err.Error(),
+		string(upgrade.SHCRolloutReasonLifecycleBlocked),
+	) {
+		t.Fatalf("blocked replacement error = %q, want lifecycle reason", err)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("blocked replacement changed Kubernetes state: %v", client.Calls["Update"])
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, target)
+	assertNoRollingUpdatePodDelete(t, client)
+	assertRolloutEvent(
+		t,
+		recorder,
+		EventReasonSHCRolloutBlocked,
+		corev1.EventTypeWarning,
+	)
+
+	operation = mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != target ||
+		operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageBlocked ||
+		operation.Reason !=
+			enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed {
+		t.Fatalf(
+			"blocked operation = %#v, want classified ordinal 2 startup failure",
+			operation,
+		)
+	}
+}
+
 func TestRollingUpdateRecoveryObservationProjectsWaitingStateReadOnly(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(
@@ -958,6 +1088,35 @@ func setRollingUpdateFixturePodRevision(
 	pod.Labels["controller-revision-hash"] = revision
 	if err := client.Update(context.Background(), pod); err != nil {
 		t.Fatalf("update Pod %d revision: %v", ordinal, err)
+	}
+}
+
+func setRollingUpdateFixturePodReady(
+	t *testing.T,
+	client *spltest.MockClient,
+	statefulSet *appsv1.StatefulSet,
+	ordinal int32,
+	ready bool,
+) {
+	t.Helper()
+	pod := &corev1.Pod{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Namespace: statefulSet.GetNamespace(),
+		Name:      fmt.Sprintf("%s-%d", statefulSet.GetName(), ordinal),
+	}, pod); err != nil {
+		t.Fatalf("get Pod %d: %v", ordinal, err)
+	}
+	status := corev1.ConditionFalse
+	if ready {
+		status = corev1.ConditionTrue
+	}
+	for index := range pod.Status.Conditions {
+		if pod.Status.Conditions[index].Type == corev1.PodReady {
+			pod.Status.Conditions[index].Status = status
+		}
+	}
+	if err := client.Update(context.Background(), pod); err != nil {
+		t.Fatalf("update Pod %d readiness: %v", ordinal, err)
 	}
 }
 
