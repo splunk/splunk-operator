@@ -20,8 +20,128 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestValidateSearchHeadClusterLifecyclePolicy(t *testing.T) {
+	validPolicy := func() *enterpriseApi.SearchHeadClusterLifecyclePolicy {
+		return &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+			PodUpdateStrategy:             enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+			SearchDrainTimeoutSeconds:     int64Pointer(10),
+			CaptainTransferTimeoutSeconds: int64Pointer(20),
+			MemberRejoinTimeoutSeconds:    int64Pointer(30),
+		}
+	}
+
+	tests := []struct {
+		name         string
+		podGate      bool
+		shcGate      bool
+		policy       *enterpriseApi.SearchHeadClusterLifecyclePolicy
+		wantErrField string
+	}{
+		{name: "omitted with gates disabled"},
+		{
+			name:         "policy rejected with gates disabled",
+			policy:       validPolicy(),
+			wantErrField: "spec.lifecyclePolicy",
+		},
+		{
+			name:         "SHC gate requires pod gate",
+			shcGate:      true,
+			policy:       validPolicy(),
+			wantErrField: "spec.lifecyclePolicy",
+		},
+		{
+			name:    "valid distinct values",
+			podGate: true,
+			shcGate: true,
+			policy:  validPolicy(),
+		},
+		{
+			name:    "empty policy resolves defaults",
+			podGate: true,
+			shcGate: true,
+			policy:  &enterpriseApi.SearchHeadClusterLifecyclePolicy{},
+		},
+		{
+			name:    "unknown strategy",
+			podGate: true,
+			shcGate: true,
+			policy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				PodUpdateStrategy: "ReplaceEverything",
+			},
+			wantErrField: "spec.lifecyclePolicy.podUpdateStrategy",
+		},
+		{
+			name:    "invalid drain timeout",
+			podGate: true,
+			shcGate: true,
+			policy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				SearchDrainTimeoutSeconds: int64Pointer(0),
+			},
+			wantErrField: "spec.lifecyclePolicy.searchDrainTimeoutSeconds",
+		},
+		{
+			name:    "invalid captain timeout",
+			podGate: true,
+			shcGate: true,
+			policy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				CaptainTransferTimeoutSeconds: int64Pointer(86401),
+			},
+			wantErrField: "spec.lifecyclePolicy.captainTransferTimeoutSeconds",
+		},
+		{
+			name:    "invalid rejoin timeout",
+			podGate: true,
+			shcGate: true,
+			policy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				MemberRejoinTimeoutSeconds: int64Pointer(-1),
+			},
+			wantErrField: "spec.lifecyclePolicy.memberRejoinTimeoutSeconds",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setLifecycleFeatureGatesForTest(t, tt.podGate, tt.shcGate)
+			obj := &enterpriseApi.SearchHeadCluster{
+				Spec: enterpriseApi.SearchHeadClusterSpec{
+					Replicas:        3,
+					LifecyclePolicy: tt.policy,
+				},
+			}
+			errs := ValidateSearchHeadClusterCreate(obj)
+			if tt.wantErrField == "" {
+				assert.Empty(t, errs)
+				return
+			}
+			if assert.NotEmpty(t, errs) {
+				assert.Equal(t, tt.wantErrField, errs[0].Field)
+			}
+		})
+	}
+
+	t.Run("termination grace and policy validate together", func(t *testing.T) {
+		setLifecycleFeatureGatesForTest(t, true, true)
+		obj := &enterpriseApi.SearchHeadCluster{
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					TerminationGracePeriodSeconds: int64Pointer(1200),
+				},
+				Replicas:        3,
+				LifecyclePolicy: validPolicy(),
+			},
+		}
+		assert.Empty(t, ValidateSearchHeadClusterCreate(obj))
+	})
+
+	t.Run("feature gate names remain stable", func(t *testing.T) {
+		assert.Equal(t, "SplunkPodLifecycle", string(config.SplunkPodLifecycle))
+		assert.Equal(t, "SearchHeadClusterLifecycle", string(config.SearchHeadClusterLifecycle))
+	})
+}
 
 func TestValidateSearchHeadClusterCreate(t *testing.T) {
 	tests := []struct {

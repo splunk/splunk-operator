@@ -30,6 +30,11 @@ import (
 // storageCapacityRegex validates storage capacity format (e.g., "10Gi", "100Gi")
 var storageCapacityRegex = regexp.MustCompile(`^[0-9]+Gi$`)
 
+const (
+	minLifecycleTimeoutSeconds int64 = 1
+	maxLifecycleTimeoutSeconds int64 = 86400
+)
+
 // validateCommonSplunkSpec validates fields common to all Splunk CRDs
 func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
@@ -44,6 +49,19 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 	if len(spec.Certs) > 0 && !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
 		allErrs = append(allErrs, field.Forbidden(fldPath.Child("certs"),
 			"the CertManagement feature is not enabled; set --feature-gates=CertManagement=true to activate"))
+	}
+
+	if spec.TerminationGracePeriodSeconds != nil {
+		gracePath := fldPath.Child("terminationGracePeriodSeconds")
+		if !config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle) {
+			allErrs = append(allErrs, field.Forbidden(gracePath,
+				"the SplunkPodLifecycle feature is not enabled; set --feature-gates=SplunkPodLifecycle=true to activate"))
+		} else {
+			allErrs = append(allErrs, validateLifecycleSeconds(
+				*spec.TerminationGracePeriodSeconds,
+				gracePath,
+			)...)
+		}
 	}
 
 	// Validate EtcVolumeStorageConfig
@@ -91,6 +109,17 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 	allErrs = append(allErrs, validateResourceRequirements(&spec.Resources, fldPath.Child("resources"))...)
 
 	return allErrs
+}
+
+func validateLifecycleSeconds(value int64, fldPath *field.Path) field.ErrorList {
+	if value < minLifecycleTimeoutSeconds || value > maxLifecycleTimeoutSeconds {
+		return field.ErrorList{field.Invalid(
+			fldPath,
+			value,
+			fmt.Sprintf("must be between %d and %d seconds", minLifecycleTimeoutSeconds, maxLifecycleTimeoutSeconds),
+		)}
+	}
+	return nil
 }
 
 // validateProbe validates probe configuration

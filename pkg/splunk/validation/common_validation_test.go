@@ -24,7 +24,63 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 )
+
+func int64Pointer(value int64) *int64 {
+	return &value
+}
+
+func setLifecycleFeatureGatesForTest(t *testing.T, podLifecycle, shcLifecycle bool) {
+	t.Helper()
+	oldPodLifecycle := config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle)
+	oldSHCLifecycle := config.DefaultMutableFeatureGate.Enabled(config.SearchHeadClusterLifecycle)
+	if err := config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{
+		string(config.SplunkPodLifecycle):         podLifecycle,
+		string(config.SearchHeadClusterLifecycle): shcLifecycle,
+	}); err != nil {
+		t.Fatalf("set lifecycle feature gates: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{
+			string(config.SplunkPodLifecycle):         oldPodLifecycle,
+			string(config.SearchHeadClusterLifecycle): oldSHCLifecycle,
+		}); err != nil {
+			t.Errorf("restore lifecycle feature gates: %v", err)
+		}
+	})
+}
+
+func TestValidateCommonSplunkSpecTerminationGrace(t *testing.T) {
+	tests := []struct {
+		name      string
+		enabled   bool
+		value     *int64
+		wantError bool
+	}{
+		{name: "omitted while disabled"},
+		{name: "explicit while disabled", value: int64Pointer(1200), wantError: true},
+		{name: "minimum", enabled: true, value: int64Pointer(1)},
+		{name: "maximum", enabled: true, value: int64Pointer(86400)},
+		{name: "below minimum", enabled: true, value: int64Pointer(0), wantError: true},
+		{name: "above maximum", enabled: true, value: int64Pointer(86401), wantError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setLifecycleFeatureGatesForTest(t, tt.enabled, false)
+			errs := validateCommonSplunkSpec(&enterpriseApi.CommonSplunkSpec{
+				TerminationGracePeriodSeconds: tt.value,
+			}, field.NewPath("spec"))
+			if tt.wantError && len(errs) == 0 {
+				t.Fatal("expected validation error")
+			}
+			if !tt.wantError && len(errs) != 0 {
+				t.Fatalf("unexpected validation errors: %v", errs)
+			}
+		})
+	}
+}
 
 func TestValidateCommonSplunkSpec(t *testing.T) {
 	// Note: The following fields are validated via kubebuilder annotations, not webhook:

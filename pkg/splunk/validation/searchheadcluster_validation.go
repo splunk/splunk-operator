@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 )
 
 // validateSHCEsAutoSslNotAllowed rejects ES premium-app sources on SearchHeadCluster
@@ -59,6 +60,52 @@ func validateSHCEsAutoSslNotAllowed(appConfig *enterpriseApi.AppFrameworkSpec, f
 	return allErrs
 }
 
+func validateSearchHeadClusterLifecyclePolicy(policy *enterpriseApi.SearchHeadClusterLifecyclePolicy, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	if policy == nil {
+		return allErrs
+	}
+
+	if !config.DefaultMutableFeatureGate.Enabled(config.SearchHeadClusterLifecycle) {
+		return field.ErrorList{field.Forbidden(fldPath,
+			"the SearchHeadClusterLifecycle feature is not enabled; set --feature-gates=SearchHeadClusterLifecycle=true to activate")}
+	}
+	if !config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle) {
+		return field.ErrorList{field.Forbidden(fldPath,
+			"SearchHeadClusterLifecycle requires SplunkPodLifecycle=true")}
+	}
+
+	switch policy.PodUpdateStrategy {
+	case "", enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete,
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate:
+	default:
+		allErrs = append(allErrs, field.NotSupported(
+			fldPath.Child("podUpdateStrategy"),
+			policy.PodUpdateStrategy,
+			[]string{
+				string(enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete),
+				string(enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate),
+			},
+		))
+	}
+
+	timeouts := []struct {
+		name  string
+		value *int64
+	}{
+		{name: "searchDrainTimeoutSeconds", value: policy.SearchDrainTimeoutSeconds},
+		{name: "captainTransferTimeoutSeconds", value: policy.CaptainTransferTimeoutSeconds},
+		{name: "memberRejoinTimeoutSeconds", value: policy.MemberRejoinTimeoutSeconds},
+	}
+	for _, timeout := range timeouts {
+		if timeout.value != nil {
+			allErrs = append(allErrs, validateLifecycleSeconds(*timeout.value, fldPath.Child(timeout.name))...)
+		}
+	}
+
+	return allErrs
+}
+
 // ValidateSearchHeadClusterCreate validates a SearchHeadCluster on CREATE
 func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field.ErrorList {
 	var allErrs field.ErrorList
@@ -73,6 +120,10 @@ func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field
 
 	// Validate common spec
 	allErrs = append(allErrs, validateCommonSplunkSpec(&obj.Spec.CommonSplunkSpec, field.NewPath("spec"))...)
+	allErrs = append(allErrs, validateSearchHeadClusterLifecyclePolicy(
+		obj.Spec.LifecyclePolicy,
+		field.NewPath("spec").Child("lifecyclePolicy"),
+	)...)
 
 	// Validate AppFramework only if user provided config
 	if len(obj.Spec.AppFrameworkConfig.VolList) > 0 || len(obj.Spec.AppFrameworkConfig.AppSources) > 0 {
