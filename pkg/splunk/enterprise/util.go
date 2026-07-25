@@ -38,6 +38,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -2376,6 +2377,13 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
+		if err = validateSearchHeadClusterImageUpgradeStatusMerge(
+			latestCR.Status.ImageUpgrade,
+			cr.Status.ImageUpgrade,
+			cr.GetName(),
+		); err != nil {
+			return nil, err
+		}
 		if (crError != nil) && ((*crError) != nil) {
 			cr.Status.Message = (*crError).Error()
 		} else if !strings.HasPrefix(cr.Status.Message, shcRollingUpdateStatusPrefix) {
@@ -2490,6 +2498,47 @@ func setProbeLevelOnCRPods(ctx context.Context, cr splcommon.MetaObject, replica
 		}
 	}
 	return err
+}
+
+func validateSearchHeadClusterImageUpgradeStatusMerge(
+	latest *enterpriseApi.SearchHeadClusterImageUpgradeStatus,
+	reconciled *enterpriseApi.SearchHeadClusterImageUpgradeStatus,
+	name string,
+) error {
+	if latest == nil {
+		return nil
+	}
+	if reconciled != nil &&
+		reconciled.OperationID == latest.OperationID {
+		return nil
+	}
+	if latest.Phase ==
+		enterpriseApi.SearchHeadClusterImageUpgradePhaseCompleted &&
+		latest.CompletedAt != nil &&
+		reconciled != nil &&
+		reconciled.StartedAt != nil &&
+		reconciled.StartedAt.After(latest.CompletedAt.Time) {
+		// A completed operation may be replaced only by a workflow whose
+		// durable start time proves it was created after that completion.
+		return nil
+	}
+
+	reconciledOperationID := ""
+	if reconciled != nil {
+		reconciledOperationID = reconciled.OperationID
+	}
+	return k8serrors.NewConflict(
+		schema.GroupResource{
+			Group:    enterpriseApi.GroupVersion.Group,
+			Resource: "searchheadclusters",
+		},
+		name,
+		fmt.Errorf(
+			"refusing to replace image upgrade operation %q with stale operation %q",
+			latest.OperationID,
+			reconciledOperationID,
+		),
+	)
 }
 
 // getApplicablePodNameForK8Probes gets the Pod name relevant for the CR under work

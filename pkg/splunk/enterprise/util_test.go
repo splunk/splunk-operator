@@ -30,6 +30,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -2678,6 +2679,158 @@ func TestUpdateCRStatus(t *testing.T) {
 	}
 	standalone.Status.ReadyReplicas = 3
 	updateCRStatus(ctx, c, standalone, &err)
+}
+
+func TestFetchCurrentSearchHeadClusterStatusRejectsStaleImageUpgradeOperation(
+	t *testing.T,
+) {
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	current := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "example",
+			Namespace: "default",
+		},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			ImageUpgrade: &enterpriseApi.
+				SearchHeadClusterImageUpgradeStatus{
+				OperationID: "image-upgrade:new-revision",
+			},
+		},
+	}
+	c := newFakeClientBuilder(sch).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		WithObjects(current).
+		Build()
+
+	for _, reconciledOperation := range []*enterpriseApi.
+		SearchHeadClusterImageUpgradeStatus{
+		nil,
+		{OperationID: "image-upgrade:old-revision"},
+	} {
+		stale := current.DeepCopy()
+		stale.Status.ImageUpgrade = reconciledOperation
+
+		merged, err := fetchCurrentCRWithStatusUpdate(
+			context.Background(),
+			c,
+			stale,
+			nil,
+		)
+		if !k8serrors.IsConflict(err) || merged != nil {
+			t.Fatalf(
+				"stale operation %#v merged=%#v error=%v, want conflict",
+				reconciledOperation,
+				merged,
+				err,
+			)
+		}
+	}
+
+	endpointSucceededAt := metav1.Now()
+	staleAfterEndpoint := current.DeepCopy()
+	staleAfterEndpoint.Status.ImageUpgrade =
+		&enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+			OperationID: "image-upgrade:old-revision",
+			Phase: enterpriseApi.
+				SearchHeadClusterImageUpgradePhaseFinalizing,
+			FinalizationSucceededAt: &endpointSucceededAt,
+		}
+	updateCRStatus(
+		context.Background(),
+		c,
+		staleAfterEndpoint,
+		nil,
+	)
+	stored := &enterpriseApi.SearchHeadCluster{}
+	if err := c.Get(
+		context.Background(),
+		types.NamespacedName{
+			Name:      current.GetName(),
+			Namespace: current.GetNamespace(),
+		},
+		stored,
+	); err != nil {
+		t.Fatalf("get current operation after stale status retries: %v", err)
+	}
+	if stored.Status.ImageUpgrade.OperationID !=
+		"image-upgrade:new-revision" {
+		t.Fatalf(
+			"stale endpoint result replaced current operation: %#v",
+			stored.Status.ImageUpgrade,
+		)
+	}
+
+	sameOperation := current.DeepCopy()
+	sameOperation.Status.ImageUpgrade.Reason =
+		enterpriseApi.SearchHeadClusterImageUpgradeReasonWorkflowRecorded
+	merged, err := fetchCurrentCRWithStatusUpdate(
+		context.Background(),
+		c,
+		sameOperation,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("merge same operation: %v", err)
+	}
+	got := merged.(*enterpriseApi.SearchHeadCluster)
+	if got.Status.ImageUpgrade.OperationID !=
+		"image-upgrade:new-revision" ||
+		got.Status.ImageUpgrade.Reason !=
+			enterpriseApi.SearchHeadClusterImageUpgradeReasonWorkflowRecorded {
+		t.Fatalf("same-operation merge = %#v", got.Status.ImageUpgrade)
+	}
+}
+
+func TestSearchHeadClusterImageUpgradeStatusMergeAllowsOnlyNewerCompletedReplacement(
+	t *testing.T,
+) {
+	completedAt := metav1.NewTime(
+		time.Date(2026, 7, 25, 19, 0, 0, 0, time.UTC),
+	)
+	latest := &enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+		OperationID: "image-upgrade:revision-1",
+		Phase: enterpriseApi.
+			SearchHeadClusterImageUpgradePhaseCompleted,
+		CompletedAt: &completedAt,
+	}
+
+	for _, test := range []struct {
+		name         string
+		startedAt    time.Time
+		wantConflict bool
+	}{
+		{
+			name:         "older stale operation",
+			startedAt:    completedAt.Add(-time.Minute),
+			wantConflict: true,
+		},
+		{
+			name:      "new operation after completion",
+			startedAt: completedAt.Add(time.Minute),
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			startedAt := metav1.NewTime(test.startedAt)
+			err := validateSearchHeadClusterImageUpgradeStatusMerge(
+				latest,
+				&enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+					OperationID: "image-upgrade:revision-2",
+					StartedAt:   &startedAt,
+				},
+				"example",
+			)
+			if k8serrors.IsConflict(err) != test.wantConflict {
+				t.Fatalf(
+					"merge error = %v, wantConflict=%t",
+					err,
+					test.wantConflict,
+				)
+			}
+		})
+	}
 }
 
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {

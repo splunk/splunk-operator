@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1030,6 +1031,252 @@ func TestRollingUpdateControllerFinalizationBarriersRetryAndReplay(t *testing.T)
 	}
 	if len(client.Calls["Update"]) != 0 {
 		t.Fatalf("finalization changed StatefulSet: %v", client.Calls["Update"])
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
+func TestRollingUpdateControllerCompletesThreeMemberImageUpgradeAcrossRestarts(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	configureImageUpgradeControllerFixture(
+		mgr,
+		statefulSet,
+		"splunk/splunk:9.4.0",
+		"splunk/splunk:10.0.0",
+	)
+	// Exercise classification as part of the complete scenario.
+	mgr.cr.Status.ImageUpgrade = nil
+
+	now := time.Date(2026, 7, 25, 20, 0, 0, 0, time.UTC)
+	oldNow := searchHeadClusterImageUpgradeNow
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	oldInitiate := initiateSearchHeadClusterUpgrade
+	oldFinalize := finalizeSearchHeadClusterUpgrade
+	t.Cleanup(func() {
+		searchHeadClusterImageUpgradeNow = oldNow
+		validateSearchHeadClusterImageUpgradePath = oldValidate
+		initiateSearchHeadClusterUpgrade = oldInitiate
+		finalizeSearchHeadClusterUpgrade = oldFinalize
+	})
+	searchHeadClusterImageUpgradeNow = func() time.Time {
+		now = now.Add(time.Second)
+		return now
+	}
+	validateSearchHeadClusterImageUpgradePath = func(
+		context.Context,
+		string,
+		string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		return upgrade.SHCImageUpgradePathSupported, nil
+	}
+	initializationCalls := 0
+	initiateSearchHeadClusterUpgrade = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) error {
+		initializationCalls++
+		return nil
+	}
+	finalizationCalls := 0
+	finalizeSearchHeadClusterUpgrade = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) error {
+		finalizationCalls++
+		return nil
+	}
+
+	ctx := context.Background()
+	reconcile := func(wantPhase enterpriseApi.Phase, step string) {
+		t.Helper()
+		phase, err := mgr.updateRollingStatefulSetPods(
+			ctx,
+			statefulSet,
+			3,
+		)
+		if err != nil || phase != wantPhase {
+			t.Fatalf("%s phase=%q error=%v", step, phase, err)
+		}
+	}
+	operationID := ""
+	restart := func(step string) {
+		t.Helper()
+		if mgr.cr.Status.ImageUpgrade == nil {
+			t.Fatalf("%s has no durable image-upgrade operation", step)
+		}
+		if operationID == "" {
+			operationID = mgr.cr.Status.ImageUpgrade.OperationID
+		} else if mgr.cr.Status.ImageUpgrade.OperationID != operationID {
+			t.Fatalf(
+				"%s operation ID = %q, want %q",
+				step,
+				mgr.cr.Status.ImageUpgrade.OperationID,
+				operationID,
+			)
+		}
+		mgr = restartRollingUpdateController(
+			mgr,
+			statefulSet,
+			client,
+		)
+	}
+
+	reconcile(enterpriseApi.PhaseUpdating, "classify image upgrade")
+	if mgr.cr.Status.ImageUpgrade == nil ||
+		mgr.cr.Status.ImageUpgrade.Phase != enterpriseApi.
+			SearchHeadClusterImageUpgradePhasePendingInitialization {
+		t.Fatalf("classification status = %#v", mgr.cr.Status.ImageUpgrade)
+	}
+	restart("after classification")
+
+	reconcile(enterpriseApi.PhaseUpdating, "persist initialization intent")
+	restart("after initialization intent")
+	reconcile(enterpriseApi.PhaseUpdating, "call initialization endpoint")
+	if initializationCalls != 1 ||
+		mgr.cr.Status.ImageUpgrade.InitializationSucceededAt == nil {
+		t.Fatalf(
+			"initialization calls=%d status=%#v",
+			initializationCalls,
+			mgr.cr.Status.ImageUpgrade,
+		)
+	}
+	restart("after initialization endpoint")
+	reconcile(enterpriseApi.PhaseUpdating, "persist member-roll phase")
+	restart("after member-roll phase")
+	reconcile(enterpriseApi.PhaseUpdating, "prepare ordinal 2")
+
+	observedPartitions := make([]int32, 0, 4)
+	for target := int32(2); target >= 0; target-- {
+		operation := mgr.cr.Status.LifecycleOperation
+		if operation == nil ||
+			operation.TargetOrdinal == nil ||
+			*operation.TargetOrdinal != target {
+			t.Fatalf(
+				"ordinal %d lifecycle = %#v",
+				target,
+				operation,
+			)
+		}
+
+		authorizedAt := metav1.NewTime(now.Add(time.Second))
+		operation.Stage =
+			enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement
+		operation.ReplacementAuthorizedAt = &authorizedAt
+		reconcile(
+			enterpriseApi.PhaseUpdating,
+			fmt.Sprintf("authorize ordinal %d", target),
+		)
+		statefulSet = getRollingUpdateFixtureStatefulSet(
+			t,
+			client,
+			statefulSet,
+		)
+		mgr.statefulSet = statefulSet
+		assertRollingUpdatePartition(
+			t,
+			statefulSet.Spec.UpdateStrategy,
+			target,
+		)
+		observedPartitions = append(observedPartitions, target)
+
+		setRollingUpdateFixturePodRevision(
+			t,
+			client,
+			statefulSet,
+			target,
+			"revision-2",
+		)
+		setRollingUpdateFixturePodImage(
+			t,
+			client,
+			statefulSet,
+			target,
+			"splunk/splunk:10.0.0",
+		)
+		mgr.cr.Status.LifecycleOperation.Stage =
+			enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+		restart(fmt.Sprintf("before recording ordinal %d", target))
+		reconcile(
+			enterpriseApi.PhaseUpdating,
+			fmt.Sprintf("record ordinal %d", target),
+		)
+		if !slices.Contains(
+			mgr.cr.Status.ImageUpgrade.CompletedOrdinals,
+			target,
+		) {
+			t.Fatalf(
+				"ordinal %d not recorded: %v",
+				target,
+				mgr.cr.Status.ImageUpgrade.CompletedOrdinals,
+			)
+		}
+		restart(fmt.Sprintf("after recording ordinal %d", target))
+		if target > 0 {
+			reconcile(
+				enterpriseApi.PhaseUpdating,
+				fmt.Sprintf("prepare ordinal %d", target-1),
+			)
+		}
+	}
+
+	reconcile(enterpriseApi.PhaseUpdating, "reset fail-closed partition")
+	statefulSet = getRollingUpdateFixtureStatefulSet(
+		t,
+		client,
+		statefulSet,
+	)
+	mgr.statefulSet = statefulSet
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	observedPartitions = append(observedPartitions, 3)
+	statefulSet.Status.CurrentRevision = statefulSet.Status.UpdateRevision
+	restart("after StatefulSet convergence")
+
+	reconcile(enterpriseApi.PhaseUpdating, "persist finalization eligibility")
+	restart("after finalization eligibility")
+	reconcile(enterpriseApi.PhaseUpdating, "persist finalization intent")
+	restart("after finalization intent")
+	reconcile(enterpriseApi.PhaseUpdating, "call finalization endpoint")
+	if finalizationCalls != 1 ||
+		mgr.cr.Status.ImageUpgrade.FinalizationSucceededAt == nil {
+		t.Fatalf(
+			"finalization calls=%d status=%#v",
+			finalizationCalls,
+			mgr.cr.Status.ImageUpgrade,
+		)
+	}
+	restart("after finalization endpoint")
+	reconcile(enterpriseApi.PhaseUpdating, "persist workflow completion")
+	restart("after workflow completion")
+	reconcile(enterpriseApi.PhaseReady, "observe durable completion")
+
+	if initializationCalls != 1 ||
+		finalizationCalls != 1 ||
+		!reflect.DeepEqual(
+			mgr.cr.Status.ImageUpgrade.CompletedOrdinals,
+			[]int32{0, 1, 2},
+		) ||
+		!reflect.DeepEqual(
+			observedPartitions,
+			[]int32{2, 1, 0, 3},
+		) {
+		t.Fatalf(
+			"completed scenario init=%d finalize=%d ordinals=%v partitions=%v status=%#v",
+			initializationCalls,
+			finalizationCalls,
+			mgr.cr.Status.ImageUpgrade.CompletedOrdinals,
+			observedPartitions,
+			mgr.cr.Status.ImageUpgrade,
+		)
 	}
 	assertNoRollingUpdatePodDelete(t, client)
 }
@@ -2946,6 +3193,18 @@ func getRollingUpdateFixtureStatefulSet(
 		t.Fatalf("get StatefulSet: %v", err)
 	}
 	return stored
+}
+
+func restartRollingUpdateController(
+	mgr *searchHeadClusterPodManager,
+	statefulSet *appsv1.StatefulSet,
+	client *spltest.MockClient,
+) *searchHeadClusterPodManager {
+	return &searchHeadClusterPodManager{
+		c:           client,
+		cr:          mgr.cr.DeepCopy(),
+		statefulSet: statefulSet,
+	}
 }
 
 func setRollingUpdateFixturePodRevision(
