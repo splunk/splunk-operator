@@ -19,6 +19,8 @@ import (
 	"fmt"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
+	splmetrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
@@ -27,6 +29,8 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+const shcRollingUpdateStatusPrefix = "SHC RollingUpdate "
 
 // updateRollingStatefulSetPods adapts Kubernetes and durable SHC observations
 // to the pure rollout coordinator. It never deletes a Pod. Replica-count
@@ -64,6 +68,7 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		return enterpriseApi.PhaseError, err
 	}
 	decision := upgrade.EvaluateSHCRollout(state)
+	mgr.recordRollingUpdateDecision(ctx, state, decision)
 
 	switch decision.Action {
 	case upgrade.SHCRolloutActionPrepareTarget:
@@ -73,9 +78,27 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 				decision.Message,
 			)
 		}
+		operationBefore := mgr.cr.Status.LifecycleOperation
+		startingTarget := !rolloutOperationMatches(
+			operationBefore,
+			statefulSet.Status.UpdateRevision,
+			*decision.TargetOrdinal,
+		)
 		_, err := mgr.PrepareRecycle(ctx, *decision.TargetOrdinal)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
+		}
+		if startingTarget {
+			eventPublisher := GetEventPublisher(ctx, mgr.cr)
+			eventPublisher.Normal(
+				ctx,
+				EventReasonSHCRolloutTargetStarted,
+				fmt.Sprintf(
+					"Preparing Search Head ordinal %d for revision %s",
+					*decision.TargetOrdinal,
+					statefulSet.Status.UpdateRevision,
+				),
+			)
 		}
 		return enterpriseApi.PhaseUpdating, nil
 
@@ -92,6 +115,15 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		if err := splutil.UpdateResource(ctx, mgr.c, statefulSet); err != nil {
 			return enterpriseApi.PhaseError, err
 		}
+		splmetrics.SHCRolloutPartitionAdvanceCounter.Inc()
+		GetEventPublisher(ctx, mgr.cr).Normal(
+			ctx,
+			EventReasonSHCRolloutAdvanced,
+			fmt.Sprintf(
+				"Authorized StatefulSet partition advancement to ordinal %d",
+				partition,
+			),
+		)
 		return enterpriseApi.PhaseUpdating, nil
 
 	case upgrade.SHCRolloutActionWait, upgrade.SHCRolloutActionNone:
@@ -111,6 +143,15 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 			if err := splutil.UpdateResource(ctx, mgr.c, statefulSet); err != nil {
 				return enterpriseApi.PhaseError, err
 			}
+			splmetrics.SHCRolloutPartitionAdvanceCounter.Inc()
+			GetEventPublisher(ctx, mgr.cr).Normal(
+				ctx,
+				EventReasonSHCRolloutCompleted,
+				fmt.Sprintf(
+					"Search Head rollout recovered; reset StatefulSet partition to %d",
+					partition,
+				),
+			)
 			return enterpriseApi.PhaseUpdating, nil
 		}
 		if err := mgr.FinishUpgrade(ctx, 0); err != nil {
@@ -156,6 +197,84 @@ func lifecycleRecoveryActiveForStatefulSet(
 
 	return *statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition ==
 		*operation.TargetOrdinal
+}
+
+// recordRollingUpdateObservation projects a coordinator decision without
+// executing it. Recovery orchestration uses this on its early-return path so
+// waiting and blocked time remains visible without creating a second actor.
+func (mgr *searchHeadClusterPodManager) recordRollingUpdateObservation(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+) error {
+	state, err := mgr.observeRollingStatefulSet(ctx, statefulSet)
+	if err != nil {
+		return err
+	}
+	decision := upgrade.EvaluateSHCRollout(state)
+	mgr.recordRollingUpdateDecision(ctx, state, decision)
+	return nil
+}
+
+func (mgr *searchHeadClusterPodManager) recordRollingUpdateDecision(
+	ctx context.Context,
+	state upgrade.SHCRolloutState,
+	decision upgrade.SHCRolloutDecision,
+) {
+	stable := decision.Action == upgrade.SHCRolloutActionComplete &&
+		state.Partition == state.Replicas &&
+		state.CurrentRevision == state.UpdateRevision
+	if stable {
+		mgr.cr.Status.Message = ""
+		return
+	}
+
+	splmetrics.SHCRolloutDecisionCounters.WithLabelValues(
+		string(decision.Action),
+		string(decision.Reason),
+	).Inc()
+	mgr.cr.Status.Message = fmt.Sprintf(
+		"%s%s: %s",
+		shcRollingUpdateStatusPrefix,
+		decision.Reason,
+		decision.Message,
+	)
+
+	target := int32(-1)
+	if decision.TargetOrdinal != nil {
+		target = *decision.TargetOrdinal
+	}
+	logging.FromContext(ctx).InfoContext(
+		ctx,
+		"Search Head rollout decision",
+		"action", decision.Action,
+		"reason", decision.Reason,
+		"message", decision.Message,
+		"partition", state.Partition,
+		"replicas", state.Replicas,
+		"targetOrdinal", target,
+		"currentRevision", state.CurrentRevision,
+		"updateRevision", state.UpdateRevision,
+		"lifecycleStage", state.Lifecycle.Stage,
+	)
+	if decision.Action == upgrade.SHCRolloutActionBlock {
+		GetEventPublisher(ctx, mgr.cr).Warning(
+			ctx,
+			EventReasonSHCRolloutBlocked,
+			fmt.Sprintf("%s: %s", decision.Reason, decision.Message),
+		)
+	}
+}
+
+func rolloutOperationMatches(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	desiredRevision string,
+	targetOrdinal int32,
+) bool {
+	return operation != nil &&
+		operation.Intent == enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+		operation.DesiredRevision == desiredRevision &&
+		operation.TargetOrdinal != nil &&
+		*operation.TargetOrdinal == targetOrdinal
 }
 
 func (mgr *searchHeadClusterPodManager) observeRollingStatefulSet(

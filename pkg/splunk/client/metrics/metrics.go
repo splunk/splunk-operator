@@ -16,6 +16,8 @@ const (
 	LabelMethodName      = "api"
 	LabelModuleName      = "module"
 	LabelResourceVersion = "resource_version"
+	LabelAction          = "action"
+	LabelReason          = "reason"
 )
 
 var (
@@ -65,6 +67,21 @@ var ActiveRealtimeSearchCount = prometheus.NewGaugeVec(
 		Help: "Total number of active realtime search count",
 	}, []string{"sh_name"})
 
+var SHCRolloutDecisionCounters = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "splunk_operator_shc_rollout_decision_total",
+		Help: "The number of bounded Search Head Cluster rollout decisions",
+	},
+	[]string{LabelAction, LabelReason},
+)
+
+var SHCRolloutPartitionAdvanceCounter = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "splunk_operator_shc_rollout_partition_advance_total",
+		Help: "The number of authorized Search Head Cluster partition changes",
+	},
+)
+
 func GetPrometheusLabels(request reconcile.Request, kind string) prometheus.Labels {
 	return prometheus.Labels{
 		LabelNamespace: request.Namespace,
@@ -93,5 +110,7 @@ func init() {
 		UpgradeEndTime,
 		ActiveHistoricalSearchCount,
 		ActiveRealtimeSearchCount,
+		SHCRolloutDecisionCounters,
+		SHCRolloutPartitionAdvanceCounter,
 	)
 }

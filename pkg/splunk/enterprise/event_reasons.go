@@ -19,12 +19,15 @@ import "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 
 const (
 	// Normal event reasons
-	EventReasonScaledUp              = "ScaledUp"
-	EventReasonScaledDown            = "ScaledDown"
-	EventReasonClusterInitialized    = "ClusterInitialized"
-	EventReasonClusterQuorumLost     = "ClusterQuorumLost"
-	EventReasonClusterQuorumRestored = "ClusterQuorumRestored"
-	EventReasonPasswordSyncCompleted = "PasswordSyncCompleted"
+	EventReasonScaledUp                = "ScaledUp"
+	EventReasonScaledDown              = "ScaledDown"
+	EventReasonClusterInitialized      = "ClusterInitialized"
+	EventReasonClusterQuorumLost       = "ClusterQuorumLost"
+	EventReasonClusterQuorumRestored   = "ClusterQuorumRestored"
+	EventReasonPasswordSyncCompleted   = "PasswordSyncCompleted"
+	EventReasonSHCRolloutTargetStarted = "SHCRolloutTargetStarted"
+	EventReasonSHCRolloutAdvanced      = "SHCRolloutAdvanced"
+	EventReasonSHCRolloutCompleted     = "SHCRolloutCompleted"
 
 	// Warning event reasons — spec & config
 	EventReasonValidateSpecFailed      = "ValidateSpecFailed"
@@ -75,4 +78,5 @@ const (
 	// Warning event reasons — upgrade
 	EventReasonUpgradeCheckFailed            = "UpgradeCheckFailed"
 	EventReasonUpgradeBlockedVersionMismatch = "UpgradeBlockedVersionMismatch"
+	EventReasonSHCRolloutBlocked             = "SHCRolloutBlocked"
 )

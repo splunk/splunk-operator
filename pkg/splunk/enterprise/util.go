@@ -2376,9 +2376,10 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
 			cr.Status.Message = (*crError).Error()
+		} else if !strings.HasPrefix(cr.Status.Message, shcRollingUpdateStatusPrefix) {
+			cr.Status.Message = ""
 		}
 		cr.Status.DeepCopyInto(&latestCR.Status)
 		return latestCR, nil

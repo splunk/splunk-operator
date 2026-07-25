@@ -226,10 +226,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Search Head pods")
+		message := cr.Status.Message
+		if message == "" {
+			message = "Failed to update Search Head pods"
+		}
+		setPhaseAndConditions(enterpriseApi.PhaseError, message)
 		return result, err
 	}
-	setPhaseAndConditions(phase, "")
+	setPhaseAndConditions(phase, cr.Status.Message)
 
 	var finalResult *reconcile.Result
 	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {

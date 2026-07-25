@@ -83,6 +83,15 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			return enterpriseApi.PhaseError, lifecycleErr
 		}
 		if !recoveryComplete {
+			if statefulSet.Spec.UpdateStrategy.Type ==
+				appsv1.RollingUpdateStatefulSetStrategyType {
+				if observeErr := mgr.recordRollingUpdateObservation(
+					ctx,
+					statefulSet,
+				); observeErr != nil {
+					return enterpriseApi.PhaseError, observeErr
+				}
+			}
 			return enterpriseApi.PhaseUpdating, nil
 		}
 	}
@@ -125,6 +134,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	if statefulSet.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType {
 		phase, err = mgr.updateRollingStatefulSetPods(ctx, statefulSet, desiredReplicas)
 	} else {
+		mgr.cr.Status.Message = ""
 		phase, err = splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
 	}
 	if err != nil {

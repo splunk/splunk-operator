@@ -17,10 +17,15 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splmetrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -82,9 +87,27 @@ func TestRollingUpdateControllerAdvancesOnlyAfterPersistedAuthorization(t *testi
 		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
 		ReplacementAuthorizedAt: &authorizedAt,
 	}
+	recorder := &mockEventRecorder{}
+	eventPublisher := &K8EventPublisher{
+		recorder: recorder,
+		instance: mgr.cr,
+	}
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		eventPublisher,
+	)
+	decisionMetric := splmetrics.SHCRolloutDecisionCounters.WithLabelValues(
+		string(upgrade.SHCRolloutActionSetPartition),
+		string(upgrade.SHCRolloutReasonPartitionAdvanceAuthorized),
+	)
+	decisionBefore := testutil.ToFloat64(decisionMetric)
+	partitionBefore := testutil.ToFloat64(
+		splmetrics.SHCRolloutPartitionAdvanceCounter,
+	)
 
 	phase, err := mgr.updateRollingStatefulSetPods(
-		context.Background(),
+		ctx,
 		statefulSet,
 		3,
 	)
@@ -98,6 +121,21 @@ func TestRollingUpdateControllerAdvancesOnlyAfterPersistedAuthorization(t *testi
 		t.Fatalf("Kubernetes updates = %d, want one partition update", len(client.Calls["Update"]))
 	}
 	assertNoRollingUpdatePodDelete(t, client)
+	if got := testutil.ToFloat64(decisionMetric); got != decisionBefore+1 {
+		t.Fatalf("decision metric = %f, want %f", got, decisionBefore+1)
+	}
+	if got := testutil.ToFloat64(
+		splmetrics.SHCRolloutPartitionAdvanceCounter,
+	); got != partitionBefore+1 {
+		t.Fatalf("partition metric = %f, want %f", got, partitionBefore+1)
+	}
+	if !strings.Contains(
+		mgr.cr.Status.Message,
+		string(upgrade.SHCRolloutReasonPartitionAdvanceAuthorized),
+	) {
+		t.Fatalf("status message = %q, want rollout reason", mgr.cr.Status.Message)
+	}
+	assertRolloutEvent(t, recorder, EventReasonSHCRolloutAdvanced, corev1.EventTypeNormal)
 
 	stored := &appsv1.StatefulSet{}
 	if err := client.Get(context.Background(), types.NamespacedName{
@@ -150,6 +188,52 @@ func TestRollingUpdateControllerWaitsForKubernetesWithoutDeletingPod(t *testing.
 	if len(client.Calls["Update"]) != 0 {
 		t.Fatalf("unexpected update while waiting for Kubernetes: %v", client.Calls["Update"])
 	}
+}
+
+func TestRollingUpdateRecoveryObservationProjectsWaitingStateReadOnly(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:             "pod-update-2",
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:         "revision-2",
+		TargetPod:               statefulSet.GetName() + "-2",
+		TargetOrdinal:           &target,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageWaitingForTermination,
+		TargetPodUID:            "original-pod-uid",
+		ReplacementAuthorizedAt: &authorizedAt,
+	}
+	decisionMetric := splmetrics.SHCRolloutDecisionCounters.WithLabelValues(
+		string(upgrade.SHCRolloutActionWait),
+		string(upgrade.SHCRolloutReasonWaitingForKubernetes),
+	)
+	metricBefore := testutil.ToFloat64(decisionMetric)
+
+	err := mgr.recordRollingUpdateObservation(context.Background(), statefulSet)
+	if err != nil {
+		t.Fatalf("record recovery observation: %v", err)
+	}
+	if got := testutil.ToFloat64(decisionMetric); got != metricBefore+1 {
+		t.Fatalf("waiting metric = %f, want %f", got, metricBefore+1)
+	}
+	if !strings.Contains(
+		mgr.cr.Status.Message,
+		string(upgrade.SHCRolloutReasonWaitingForKubernetes),
+	) {
+		t.Fatalf("status message = %q, want Kubernetes wait reason", mgr.cr.Status.Message)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("read-only observation mutated Kubernetes state: %v", client.Calls["Update"])
+	}
+	assertNoRollingUpdatePodDelete(t, client)
 }
 
 func TestRollingUpdateControllerReportsStableRevisionReady(t *testing.T) {
@@ -224,6 +308,91 @@ func TestLifecycleRecoveryPreservesOnDeleteOrdering(t *testing.T) {
 
 	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
 		t.Fatal("OnDelete recovery ordering changed")
+	}
+}
+
+func TestRollingUpdateControllerBlockedDecisionEmitsWarning(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	for _, ordinal := range []int32{1, 2} {
+		pod := &corev1.Pod{}
+		if err := client.Get(context.Background(), types.NamespacedName{
+			Namespace: statefulSet.GetNamespace(),
+			Name:      fmt.Sprintf("%s-%d", statefulSet.GetName(), ordinal),
+		}, pod); err != nil {
+			t.Fatalf("get Pod %d: %v", ordinal, err)
+		}
+		pod.Status.Conditions[0].Status = corev1.ConditionFalse
+		if err := client.Update(context.Background(), pod); err != nil {
+			t.Fatalf("update Pod %d: %v", ordinal, err)
+		}
+	}
+	client.ResetCalls()
+
+	recorder := &mockEventRecorder{}
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		&K8EventPublisher{recorder: recorder, instance: mgr.cr},
+	)
+	decisionMetric := splmetrics.SHCRolloutDecisionCounters.WithLabelValues(
+		string(upgrade.SHCRolloutActionBlock),
+		string(upgrade.SHCRolloutReasonTooManyUnavailable),
+	)
+	metricBefore := testutil.ToFloat64(decisionMetric)
+
+	phase, err := mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+	if err == nil {
+		t.Fatal("expected blocked rollout error")
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Fatalf("phase = %q, want %q", phase, enterpriseApi.PhaseError)
+	}
+	if got := testutil.ToFloat64(decisionMetric); got != metricBefore+1 {
+		t.Fatalf("blocked metric = %f, want %f", got, metricBefore+1)
+	}
+	if !strings.Contains(
+		mgr.cr.Status.Message,
+		string(upgrade.SHCRolloutReasonTooManyUnavailable),
+	) {
+		t.Fatalf("status message = %q, want blocked reason", mgr.cr.Status.Message)
+	}
+	assertRolloutEvent(t, recorder, EventReasonSHCRolloutBlocked, corev1.EventTypeWarning)
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
+func TestRollingUpdateStatusProjectionPersistsWithoutReconcileError(t *testing.T) {
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	cr.Status.Message = shcRollingUpdateStatusPrefix +
+		"WaitingForKubernetes: waiting for ordinal 2"
+	client := spltest.NewMockClient()
+	if err := client.Create(context.Background(), cr); err != nil {
+		t.Fatalf("create SearchHeadCluster: %v", err)
+	}
+
+	current, err := fetchCurrentCRWithStatusUpdate(
+		context.Background(),
+		client,
+		cr,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("fetch SearchHeadCluster status: %v", err)
+	}
+	got := current.(*enterpriseApi.SearchHeadCluster).Status.Message
+	if got != cr.Status.Message {
+		t.Fatalf("status message = %q, want %q", got, cr.Status.Message)
 	}
 }
 
@@ -478,4 +647,22 @@ func assertNoRollingUpdatePodDelete(t *testing.T, client *spltest.MockClient) {
 	if len(client.Calls["Delete"]) != 0 {
 		t.Fatalf("RollingUpdate controller called Delete: %v", client.Calls["Delete"])
 	}
+}
+
+func assertRolloutEvent(
+	t *testing.T,
+	recorder *mockEventRecorder,
+	reason string,
+	eventType string,
+) {
+	t.Helper()
+	for _, event := range recorder.events {
+		if event.reason == reason {
+			if event.eventType != eventType {
+				t.Fatalf("event %s type = %q, want %q", reason, event.eventType, eventType)
+			}
+			return
+		}
+	}
+	t.Fatalf("event %s not found in %#v", reason, recorder.events)
 }
