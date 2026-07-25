@@ -1791,6 +1791,88 @@ func TestSearchHeadScaleUpAddsOneNewOrdinalWithoutRecyclingMembers(t *testing.T)
 	}
 }
 
+func TestRollingUpdateControllerHoldsAuthorizedTargetDuringCaptainNodeLoss(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:     "pod-update-2",
+			Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision: "revision-2",
+			TargetPod:       statefulSet.GetName() + "-2",
+			TargetOrdinal:   &target,
+			Stage: enterpriseApi.
+				SearchHeadClusterLifecycleStageAuthorizingReplacement,
+			ReplacementAuthorizedAt: &authorizedAt,
+		}
+
+	captainPod := &corev1.Pod{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Namespace: statefulSet.GetNamespace(),
+		Name:      statefulSet.GetName() + "-0",
+	}, captainPod); err != nil {
+		t.Fatalf("get captain Pod: %v", err)
+	}
+	if err := client.Delete(context.Background(), captainPod); err != nil {
+		t.Fatalf("simulate captain node loss: %v", err)
+	}
+	mgr.cr.Status.Captain = ""
+	mgr.cr.Status.CaptainReady = false
+	client.ResetCalls()
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+
+	if err != nil {
+		t.Fatalf("captain node-loss wait: %v", err)
+	}
+	if phase != enterpriseApi.PhasePending {
+		t.Fatalf(
+			"captain node-loss phase = %q, want %q",
+			phase,
+			enterpriseApi.PhasePending,
+		)
+	}
+	if !strings.Contains(
+		mgr.cr.Status.Message,
+		string(upgrade.SHCRolloutReasonCaptainUnavailable),
+	) {
+		t.Fatalf(
+			"captain node-loss status = %q, want %s",
+			mgr.cr.Status.Message,
+			upgrade.SHCRolloutReasonCaptainUnavailable,
+		)
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("captain node loss changed Kubernetes state: %v", client.Calls["Update"])
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != target ||
+		operation.ReplacementAuthorizedAt == nil {
+		t.Fatalf(
+			"captain node loss replaced durable operation: %#v",
+			operation,
+		)
+	}
+}
+
 func TestSearchHeadScaleUpWaitsForCurrentOrdinalBeforeAddingNext(t *testing.T) {
 	replicas := int32(4)
 	statefulSet := &appsv1.StatefulSet{
@@ -3111,6 +3193,7 @@ func rollingUpdateControllerFixture(
 		Status: enterpriseApi.SearchHeadClusterStatus{
 			Initialized:    true,
 			MinPeersJoined: true,
+			Captain:        "splunk-stack1-search-head-0",
 			CaptainReady:   true,
 			Members: make([]enterpriseApi.SearchHeadClusterMemberStatus,
 				replicas),

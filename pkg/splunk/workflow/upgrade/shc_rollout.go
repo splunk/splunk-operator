@@ -40,6 +40,7 @@ const (
 	SHCRolloutReasonStable                        SHCRolloutReason = "Stable"
 	SHCRolloutReasonPaused                        SHCRolloutReason = "Paused"
 	SHCRolloutReasonInitialFormationPending       SHCRolloutReason = "InitialFormationPending"
+	SHCRolloutReasonCaptainUnavailable            SHCRolloutReason = "CaptainUnavailable"
 	SHCRolloutReasonRollbackPending               SHCRolloutReason = "RollbackPending"
 	SHCRolloutReasonWaitingForRevision            SHCRolloutReason = "WaitingForRevision"
 	SHCRolloutReasonPrepareTarget                 SHCRolloutReason = "PrepareTarget"

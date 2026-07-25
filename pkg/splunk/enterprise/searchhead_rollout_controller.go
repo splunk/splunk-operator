@@ -120,12 +120,20 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		return enterpriseApi.PhaseUpdating, nil
 	}
 	if !mgr.cr.Status.Initialized ||
-		!mgr.cr.Status.MinPeersJoined ||
-		!mgr.cr.Status.CaptainReady {
+		!mgr.cr.Status.MinPeersJoined {
 		decision := upgrade.SHCRolloutDecision{
 			Action:  upgrade.SHCRolloutActionWait,
 			Reason:  upgrade.SHCRolloutReasonInitialFormationPending,
-			Message: "wait for initialized SHC, minimum joined peers, and a service-ready captain before rollout management",
+			Message: "wait for initialized SHC and minimum joined peers before rollout management",
+		}
+		mgr.recordRollingUpdateDecision(ctx, state, decision)
+		return enterpriseApi.PhasePending, nil
+	}
+	if mgr.cr.Status.Captain == "" || !mgr.cr.Status.CaptainReady {
+		decision := upgrade.SHCRolloutDecision{
+			Action:  upgrade.SHCRolloutActionWait,
+			Reason:  upgrade.SHCRolloutReasonCaptainUnavailable,
+			Message: "wait for one authoritative service-ready captain before rollout management",
 		}
 		mgr.recordRollingUpdateDecision(ctx, state, decision)
 		return enterpriseApi.PhasePending, nil
