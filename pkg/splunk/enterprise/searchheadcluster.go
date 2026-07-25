@@ -31,6 +31,7 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -125,6 +126,13 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		if searchHeadClusterLifecycleEnabled() {
+			cr.Status.LifecycleOperation = shcworkflow.StartClusterDeletion(
+				cr.Status.LifecycleOperation,
+				cr.GetName(),
+				searchHeadClusterLifecycleNow(),
+			)
+		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), false)
 			if err != nil {

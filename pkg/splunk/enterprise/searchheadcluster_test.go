@@ -1602,6 +1602,43 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 }
 
 func TestApplySearchHeadClusterDeletion(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	oldRequestDetention := requestSearchHeadDetention
+	oldTransferCaptain := transferSearchHeadCaptain
+	oldRemoveMember := removeSearchHeadClusterMember
+	t.Cleanup(func() {
+		requestSearchHeadDetention = oldRequestDetention
+		transferSearchHeadCaptain = oldTransferCaptain
+		removeSearchHeadClusterMember = oldRemoveMember
+	})
+	detentionCalls := 0
+	requestSearchHeadDetention = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) error {
+		detentionCalls++
+		return nil
+	}
+	transferCalls := 0
+	transferSearchHeadCaptain = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+		string,
+	) error {
+		transferCalls++
+		return nil
+	}
+	membershipRemovalCalls := 0
+	removeSearchHeadClusterMember = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) error {
+		membershipRemovalCalls++
+		return nil
+	}
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
 	shc := enterpriseApi.SearchHeadCluster{
@@ -1670,6 +1707,15 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 	currentTime := metav1.NewTime(time.Now())
 	shc.ObjectMeta.DeletionTimestamp = &currentTime
 	shc.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	target := int32(2)
+	shc.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:   "PodUpdate:splunk-stack1-search-head-2:revision-2",
+		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		TargetPod:     "splunk-stack1-search-head-2",
+		TargetOrdinal: &target,
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageDrainingSearches,
+	}
 
 	pvclist := corev1.PersistentVolumeClaimList{
 		Items: []corev1.PersistentVolumeClaim{
@@ -1694,6 +1740,33 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 	_, err = ApplySearchHeadCluster(ctx, c, &shc)
 	if err != nil {
 		t.Errorf("ApplySearchHeadCluster should not have returned error here.")
+	}
+	operation := shc.Status.LifecycleOperation
+	if operation == nil ||
+		operation.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentClusterDeletion ||
+		operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageFinalizingClusterDeletion {
+		t.Fatalf(
+			"deletion lifecycle = %#v, want explicit ClusterDeletion finalization",
+			operation,
+		)
+	}
+	if operation.TargetPod != "" || operation.TargetOrdinal != nil ||
+		operation.MembershipRemovalRequestedAt != nil {
+		t.Fatalf(
+			"complete deletion retained per-member lifecycle state: %#v",
+			operation,
+		)
+	}
+	if detentionCalls != 0 || transferCalls != 0 ||
+		membershipRemovalCalls != 0 {
+		t.Fatalf(
+			"complete deletion ran member lifecycle actions: detention=%d transfer=%d removal=%d",
+			detentionCalls,
+			transferCalls,
+			membershipRemovalCalls,
+		)
 	}
 }
 

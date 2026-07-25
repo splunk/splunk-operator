@@ -140,20 +140,21 @@ const (
 type SearchHeadClusterLifecycleStage string
 
 const (
-	SearchHeadClusterLifecycleStageValidatingCluster      SearchHeadClusterLifecycleStage = "ValidatingCluster"
-	SearchHeadClusterLifecycleStageDetainingTarget        SearchHeadClusterLifecycleStage = "DetainingTarget"
-	SearchHeadClusterLifecycleStageDrainingSearches       SearchHeadClusterLifecycleStage = "DrainingSearches"
-	SearchHeadClusterLifecycleStageTransferringCaptain    SearchHeadClusterLifecycleStage = "TransferringCaptain"
-	SearchHeadClusterLifecycleStageAuthorizingReplacement SearchHeadClusterLifecycleStage = "AuthorizingReplacement"
-	SearchHeadClusterLifecycleStageWaitingForTermination  SearchHeadClusterLifecycleStage = "WaitingForTermination"
-	SearchHeadClusterLifecycleStageWaitingForScheduling   SearchHeadClusterLifecycleStage = "WaitingForScheduling"
-	SearchHeadClusterLifecycleStageWaitingForStorage      SearchHeadClusterLifecycleStage = "WaitingForStorage"
-	SearchHeadClusterLifecycleStageWaitingForContainer    SearchHeadClusterLifecycleStage = "WaitingForContainer"
-	SearchHeadClusterLifecycleStageWaitingForMemberRejoin SearchHeadClusterLifecycleStage = "WaitingForMemberRejoin"
-	SearchHeadClusterLifecycleStageValidatingRecovery     SearchHeadClusterLifecycleStage = "ValidatingRecovery"
-	SearchHeadClusterLifecycleStageCompleted              SearchHeadClusterLifecycleStage = "Completed"
-	SearchHeadClusterLifecycleStageBlocked                SearchHeadClusterLifecycleStage = "Blocked"
-	SearchHeadClusterLifecycleStageFailed                 SearchHeadClusterLifecycleStage = "Failed"
+	SearchHeadClusterLifecycleStageValidatingCluster         SearchHeadClusterLifecycleStage = "ValidatingCluster"
+	SearchHeadClusterLifecycleStageDetainingTarget           SearchHeadClusterLifecycleStage = "DetainingTarget"
+	SearchHeadClusterLifecycleStageDrainingSearches          SearchHeadClusterLifecycleStage = "DrainingSearches"
+	SearchHeadClusterLifecycleStageTransferringCaptain       SearchHeadClusterLifecycleStage = "TransferringCaptain"
+	SearchHeadClusterLifecycleStageAuthorizingReplacement    SearchHeadClusterLifecycleStage = "AuthorizingReplacement"
+	SearchHeadClusterLifecycleStageWaitingForTermination     SearchHeadClusterLifecycleStage = "WaitingForTermination"
+	SearchHeadClusterLifecycleStageWaitingForScheduling      SearchHeadClusterLifecycleStage = "WaitingForScheduling"
+	SearchHeadClusterLifecycleStageWaitingForStorage         SearchHeadClusterLifecycleStage = "WaitingForStorage"
+	SearchHeadClusterLifecycleStageWaitingForContainer       SearchHeadClusterLifecycleStage = "WaitingForContainer"
+	SearchHeadClusterLifecycleStageWaitingForMemberRejoin    SearchHeadClusterLifecycleStage = "WaitingForMemberRejoin"
+	SearchHeadClusterLifecycleStageValidatingRecovery        SearchHeadClusterLifecycleStage = "ValidatingRecovery"
+	SearchHeadClusterLifecycleStageFinalizingClusterDeletion SearchHeadClusterLifecycleStage = "FinalizingClusterDeletion"
+	SearchHeadClusterLifecycleStageCompleted                 SearchHeadClusterLifecycleStage = "Completed"
+	SearchHeadClusterLifecycleStageBlocked                   SearchHeadClusterLifecycleStage = "Blocked"
+	SearchHeadClusterLifecycleStageFailed                    SearchHeadClusterLifecycleStage = "Failed"
 )
 
 // SearchHeadClusterLifecycleReason is a bounded, machine-readable explanation
@@ -183,6 +184,7 @@ const (
 	SearchHeadClusterLifecycleReasonMemberSynchronizationPending  SearchHeadClusterLifecycleReason = "MemberSynchronizationPending"
 	SearchHeadClusterLifecycleReasonMemberRejoinTimedOut          SearchHeadClusterLifecycleReason = "MemberRejoinTimedOut"
 	SearchHeadClusterLifecycleReasonRecoveryValidated             SearchHeadClusterLifecycleReason = "RecoveryValidated"
+	SearchHeadClusterLifecycleReasonClusterDeletionRequested      SearchHeadClusterLifecycleReason = "ClusterDeletionRequested"
 	SearchHeadClusterLifecycleReasonOperationCompleted            SearchHeadClusterLifecycleReason = "OperationCompleted"
 	SearchHeadClusterLifecycleReasonUnsupportedRuntimeContract    SearchHeadClusterLifecycleReason = "UnsupportedRuntimeContract"
 )
