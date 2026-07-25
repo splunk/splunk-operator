@@ -51,6 +51,13 @@ func TestGetSearchHeadStatefulSetRendersRollingUpdateStrategy(t *testing.T) {
 		statefulSet.Spec.UpdateStrategy,
 		cr.Spec.Replicas,
 	)
+	if statefulSet.Spec.PodManagementPolicy != appsv1.ParallelPodManagement {
+		t.Fatalf(
+			"Pod management policy = %q, want %q for initial formation",
+			statefulSet.Spec.PodManagementPolicy,
+			appsv1.ParallelPodManagement,
+		)
+	}
 }
 
 func TestSearchHeadStatefulSetUpdateStrategyDefaultsToOnDelete(t *testing.T) {

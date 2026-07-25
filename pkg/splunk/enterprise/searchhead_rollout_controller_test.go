@@ -70,6 +70,79 @@ func TestRollingUpdateControllerStartsDurablePreparationWithoutDeletingPod(t *te
 	}
 }
 
+func TestRollingUpdateControllerWaitsForParallelInitialFormation(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	statefulSet.Spec.PodManagementPolicy = appsv1.ParallelPodManagement
+	mgr.cr.Status.MinPeersJoined = false
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("wait for initial SHC formation: %v", err)
+	}
+	if phase != enterpriseApi.PhasePending {
+		t.Fatalf("initial formation phase = %q, want %q", phase, enterpriseApi.PhasePending)
+	}
+	if mgr.cr.Status.LifecycleOperation != nil {
+		t.Fatalf(
+			"initial formation started lifecycle operation: %#v",
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("initial formation changed partition: %v", client.Calls["Update"])
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	assertNoRollingUpdatePodDelete(t, client)
+	if !strings.Contains(
+		mgr.cr.Status.Message,
+		string(upgrade.SHCRolloutReasonInitialFormationPending),
+	) {
+		t.Fatalf(
+			"initial formation status = %q, want %s",
+			mgr.cr.Status.Message,
+			upgrade.SHCRolloutReasonInitialFormationPending,
+		)
+	}
+
+	mgr.cr.Status.MinPeersJoined = true
+	phase, err = mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("start rollout after initial formation: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("post-formation phase = %q, want %q", phase, enterpriseApi.PhaseUpdating)
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != 2 {
+		t.Fatalf(
+			"post-formation operation = %#v, want preparation for ordinal 2",
+			operation,
+		)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("post-formation preparation changed partition: %v", client.Calls["Update"])
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
 func TestRollingUpdateControllerAdvancesOnlyAfterPersistedAuthorization(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(
@@ -1134,6 +1207,11 @@ func rollingUpdateControllerFixture(
 			LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
 				PodUpdateStrategy: enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
 			},
+		},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Initialized:    true,
+			MinPeersJoined: true,
+			CaptainReady:   true,
 		},
 	}
 	statefulSet := &appsv1.StatefulSet{
