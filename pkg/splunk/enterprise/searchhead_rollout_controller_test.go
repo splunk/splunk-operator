@@ -36,6 +36,160 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+func TestRollingUpdateControllerLetsDurableAppWorkFinishFirst(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+
+	tests := []struct {
+		name                 string
+		deploymentInProgress bool
+		bundleStage          enterpriseApi.BundlePushStageType
+	}{
+		{
+			name:                 "App Framework deployment",
+			deploymentInProgress: true,
+			bundleStage:          enterpriseApi.BundlePushComplete,
+		},
+		{
+			name:        "pending bundle",
+			bundleStage: enterpriseApi.BundlePushPending,
+		},
+		{
+			name:        "in-progress bundle",
+			bundleStage: enterpriseApi.BundlePushInProgress,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mgr, statefulSet, client := rollingUpdateControllerFixture(
+				t,
+				3,
+				"revision-1",
+				"revision-2",
+				[]string{"revision-1", "revision-1", "revision-1"},
+			)
+			mgr.cr.Status.AppContext.IsDeploymentInProgress =
+				test.deploymentInProgress
+			mgr.cr.Status.AppContext.BundlePushStatus.BundlePushStage =
+				test.bundleStage
+
+			phase, err := mgr.updateRollingStatefulSetPods(
+				context.Background(),
+				statefulSet,
+				3,
+			)
+			if err != nil {
+				t.Fatalf("coordinate rollout with App Framework: %v", err)
+			}
+			if phase != enterpriseApi.PhaseReady {
+				t.Fatalf("phase = %q, want %q", phase, enterpriseApi.PhaseReady)
+			}
+			if mgr.cr.Status.LifecycleOperation != nil {
+				t.Fatalf(
+					"App Framework hold started lifecycle operation: %#v",
+					mgr.cr.Status.LifecycleOperation,
+				)
+			}
+			if !strings.Contains(
+				mgr.cr.Status.Message,
+				"AppFrameworkOperationActive",
+			) {
+				t.Fatalf(
+					"status message = %q, want App Framework hold reason",
+					mgr.cr.Status.Message,
+				)
+			}
+			assertRollingUpdatePartition(
+				t,
+				statefulSet.Spec.UpdateStrategy,
+				3,
+			)
+			if len(client.Calls["Update"]) != 0 {
+				t.Fatalf(
+					"App Framework hold changed Kubernetes state: %v",
+					client.Calls["Update"],
+				)
+			}
+			assertNoRollingUpdatePodDelete(t, client)
+
+			mgr.cr.Status.AppContext.IsDeploymentInProgress = false
+			mgr.cr.Status.AppContext.BundlePushStatus.BundlePushStage =
+				enterpriseApi.BundlePushComplete
+			phase, err = mgr.updateRollingStatefulSetPods(
+				context.Background(),
+				statefulSet,
+				3,
+			)
+			if err != nil {
+				t.Fatalf("start rollout after App Framework completion: %v", err)
+			}
+			if phase != enterpriseApi.PhaseUpdating {
+				t.Fatalf(
+					"post-App Framework phase = %q, want %q",
+					phase,
+					enterpriseApi.PhaseUpdating,
+				)
+			}
+			operation := mgr.cr.Status.LifecycleOperation
+			if operation == nil ||
+				operation.TargetOrdinal == nil ||
+				*operation.TargetOrdinal != 2 {
+				t.Fatalf(
+					"post-App Framework operation = %#v, want ordinal 2",
+					operation,
+				)
+			}
+		})
+	}
+}
+
+func TestRollingUpdateControllerDoesNotYieldBlockedOwnerToPendingBundle(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	target := int32(2)
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:     "PodUpdate:splunk-stack1-search-head-2:revision-2",
+			Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision: "revision-2",
+			TargetPod:       "splunk-stack1-search-head-2",
+			TargetOrdinal:   &target,
+			Stage:           enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		}
+	mgr.cr.Status.AppContext.BundlePushStatus.BundlePushStage =
+		enterpriseApi.BundlePushPending
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err == nil || !strings.Contains(err.Error(), "LifecycleBlocked") {
+		t.Fatalf(
+			"active blocked rollout returned phase=%q error=%v, want LifecycleBlocked",
+			phase,
+			err,
+		)
+	}
+	if mgr.cr.Status.LifecycleOperation.OperationID !=
+		"PodUpdate:splunk-stack1-search-head-2:revision-2" {
+		t.Fatalf(
+			"bundle work replaced rollout owner: %#v",
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("blocked rollout changed partition: %v", client.Calls["Update"])
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
 func TestRollingUpdateControllerStartsDurablePreparationWithoutDeletingPod(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(

@@ -99,6 +99,15 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		mgr.recordRollingUpdateDecision(ctx, state, decision)
 		return enterpriseApi.PhasePending, nil
 	}
+	if !shcPodRolloutActive(mgr.cr.Status.LifecycleOperation) &&
+		shcAppFrameworkWorkActive(&mgr.cr.Status.AppContext) {
+		// App Framework acquired the durable operation first. Keep the SHC
+		// Ready so its playbook can finish a pending or in-progress bundle
+		// push, while retaining the fail-closed partition.
+		mgr.cr.Status.Message = shcRollingUpdateStatusPrefix +
+			"AppFrameworkOperationActive: wait for App Framework work to complete before starting a Pod rollout"
+		return enterpriseApi.PhaseReady, nil
+	}
 	decision := upgrade.EvaluateSHCRollout(state)
 	mgr.recordRollingUpdateDecision(ctx, state, decision)
 

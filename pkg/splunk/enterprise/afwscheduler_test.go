@@ -4542,6 +4542,11 @@ func TestSHCBundlePushUsesReachableMemberWhenOrdinalZeroIsUnavailable(t *testing
 		Status: enterpriseApi.SearchHeadClusterStatus{
 			Captain:      "splunk-stack1-search-head-2",
 			CaptainReady: true,
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				OperationID: "completed-rollout",
+				Intent:      enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+				Stage:       enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+			},
 			Members: []enterpriseApi.SearchHeadClusterMemberStatus{
 				{
 					Name:       "splunk-stack1-search-head-0",
@@ -4662,6 +4667,67 @@ func TestSHCBundlePushUsesReachableMemberWhenOrdinalZeroIsUnavailable(t *testing
 			playbook.searchHeadTargetURL,
 			targetURL,
 		)
+	}
+}
+
+func TestSHCBundleSideEffectsRejectActivePodRollout(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+
+	stages := []enterpriseApi.SearchHeadClusterLifecycleStage{
+		enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		enterpriseApi.SearchHeadClusterLifecycleStageFailed,
+	}
+	for _, stage := range stages {
+		t.Run(string(stage), func(t *testing.T) {
+			ctx := context.Background()
+			mockClient := spltest.NewMockClient()
+			if _, err := splutil.ApplyNamespaceScopedSecretObject(
+				ctx,
+				mockClient,
+				"test",
+			); err != nil {
+				t.Fatalf("create namespace-scoped secret: %v", err)
+			}
+			shc := &enterpriseApi.SearchHeadCluster{
+				TypeMeta: metav1.TypeMeta{Kind: "SearchHeadCluster"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "stack1",
+					Namespace: "test",
+				},
+				Status: enterpriseApi.SearchHeadClusterStatus{
+					LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+						OperationID: "rollout-1",
+						Intent:      enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+						Stage:       stage,
+					},
+				},
+			}
+			podExecClient := &spltest.MockPodExecClient{
+				Cr:     shc,
+				Client: mockClient,
+			}
+
+			playbook := &SHCPlaybookContext{
+				client:        mockClient,
+				cr:            shc,
+				podExecClient: podExecClient,
+			}
+			if err := playbook.triggerBundlePush(ctx); err == nil ||
+				!strings.Contains(err.Error(), "blocked while Pod rollout") {
+				t.Fatalf(
+					"App Framework bundle push error = %v, want active rollout rejection",
+					err,
+				)
+			}
+			if err := addTelApp(ctx, podExecClient, 1, shc); err == nil ||
+				!strings.Contains(err.Error(), "blocked while Pod rollout") {
+				t.Fatalf(
+					"telemetry bundle push error = %v, want active rollout rejection",
+					err,
+				)
+			}
+		})
 	}
 }
 

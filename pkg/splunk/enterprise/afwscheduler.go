@@ -1653,6 +1653,13 @@ func resolveSHCBundlePushTarget(
 	if !ok {
 		return "", fmt.Errorf("SHC bundle target requires a SearchHeadCluster")
 	}
+	if shcPodRolloutActive(shc.Status.LifecycleOperation) {
+		return "", fmt.Errorf(
+			"SHC bundle push is blocked while Pod rollout operation %q is in stage %q",
+			shc.Status.LifecycleOperation.OperationID,
+			shc.Status.LifecycleOperation.Stage,
+		)
+	}
 	if shc.Status.Captain == "" || !shc.Status.CaptainReady {
 		return "", fmt.Errorf("SHC bundle target requires a ready captain")
 	}
