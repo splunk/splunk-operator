@@ -26,6 +26,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,7 +49,7 @@ var requestSearchHeadDetention = func(
 	n int32,
 ) error {
 	client := mgr.getClient(ctx, n)
-	if !shcImageUpgradeInitializationOwnsLifecycle(mgr) {
+	if !shcRollingUpdateOwnsClusterUpgradeLifecycle(mgr) {
 		if err := client.InitiateUpgrade(); err != nil {
 			return err
 		}
@@ -63,19 +64,16 @@ var requestSearchHeadDetention = func(
 	return client.SetSearchHeadDetention(true)
 }
 
-func shcImageUpgradeInitializationOwnsLifecycle(
+func shcRollingUpdateOwnsClusterUpgradeLifecycle(
 	mgr *searchHeadClusterPodManager,
 ) bool {
-	imageUpgrade := mgr.cr.Status.ImageUpgrade
 	lifecycle := mgr.cr.Status.LifecycleOperation
-	return imageUpgrade != nil &&
-		imageUpgrade.Phase ==
-			enterpriseApi.SearchHeadClusterImageUpgradePhaseRollingMembers &&
-		imageUpgrade.InitializationSucceededAt != nil &&
+	return mgr.statefulSet != nil &&
+		mgr.statefulSet.Spec.UpdateStrategy.Type ==
+			appsv1.RollingUpdateStatefulSetStrategyType &&
 		lifecycle != nil &&
 		lifecycle.Intent ==
-			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
-		lifecycle.DesiredRevision == imageUpgrade.DesiredRevision
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate
 }
 
 var transferSearchHeadCaptain = func(

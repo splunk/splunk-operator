@@ -28,17 +28,18 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func TestClusterImageInitializationOwnsMatchingMemberLifecycle(t *testing.T) {
-	succeededAt := metav1.Now()
+func TestRollingUpdateOwnsClusterUpgradeLifecycle(t *testing.T) {
 	target := int32(2)
 	mgr := &searchHeadClusterPodManager{
+		statefulSet: &appsv1.StatefulSet{
+			Spec: appsv1.StatefulSetSpec{
+				UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+					Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				},
+			},
+		},
 		cr: &enterpriseApi.SearchHeadCluster{
 			Status: enterpriseApi.SearchHeadClusterStatus{
-				ImageUpgrade: &enterpriseApi.SearchHeadClusterImageUpgradeStatus{
-					DesiredRevision:           "revision-2",
-					Phase:                     enterpriseApi.SearchHeadClusterImageUpgradePhaseRollingMembers,
-					InitializationSucceededAt: &succeededAt,
-				},
 				LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
 					Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
 					DesiredRevision: "revision-2",
@@ -48,8 +49,8 @@ func TestClusterImageInitializationOwnsMatchingMemberLifecycle(t *testing.T) {
 		},
 	}
 
-	if !shcImageUpgradeInitializationOwnsLifecycle(mgr) {
-		t.Fatal("persisted cluster initialization did not own matching member lifecycle")
+	if !shcRollingUpdateOwnsClusterUpgradeLifecycle(mgr) {
+		t.Fatal("RollingUpdate did not own its cluster upgrade lifecycle")
 	}
 
 	tests := []struct {
@@ -57,22 +58,22 @@ func TestClusterImageInitializationOwnsMatchingMemberLifecycle(t *testing.T) {
 		mutate func(*searchHeadClusterPodManager)
 	}{
 		{
-			name: "initialization success not persisted",
+			name: "missing StatefulSet",
 			mutate: func(mgr *searchHeadClusterPodManager) {
-				mgr.cr.Status.ImageUpgrade.InitializationSucceededAt = nil
+				mgr.statefulSet = nil
 			},
 		},
 		{
-			name: "cluster phase not RollingMembers",
+			name: "OnDelete compatibility",
 			mutate: func(mgr *searchHeadClusterPodManager) {
-				mgr.cr.Status.ImageUpgrade.Phase =
-					enterpriseApi.SearchHeadClusterImageUpgradePhaseInitializing
+				mgr.statefulSet.Spec.UpdateStrategy.Type =
+					appsv1.OnDeleteStatefulSetStrategyType
 			},
 		},
 		{
-			name: "member revision differs",
+			name: "missing lifecycle",
 			mutate: func(mgr *searchHeadClusterPodManager) {
-				mgr.cr.Status.LifecycleOperation.DesiredRevision = "revision-3"
+				mgr.cr.Status.LifecycleOperation = nil
 			},
 		},
 		{
@@ -86,10 +87,13 @@ func TestClusterImageInitializationOwnsMatchingMemberLifecycle(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			copy := mgr.cr.DeepCopy()
-			testManager := &searchHeadClusterPodManager{cr: copy}
+			testManager := &searchHeadClusterPodManager{
+				cr:          copy,
+				statefulSet: mgr.statefulSet.DeepCopy(),
+			}
 			test.mutate(testManager)
-			if shcImageUpgradeInitializationOwnsLifecycle(testManager) {
-				t.Fatal("cluster initialization owned a mismatched member lifecycle")
+			if shcRollingUpdateOwnsClusterUpgradeLifecycle(testManager) {
+				t.Fatal("legacy path was incorrectly treated as RollingUpdate-owned")
 			}
 		})
 	}

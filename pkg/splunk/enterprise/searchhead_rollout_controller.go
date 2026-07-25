@@ -45,6 +45,14 @@ var initiateSearchHeadClusterUpgrade = func(
 	return mgr.getClient(ctx, ordinal).InitiateUpgrade()
 }
 
+var finalizeSearchHeadClusterUpgrade = func(
+	ctx context.Context,
+	mgr *searchHeadClusterPodManager,
+	ordinal int32,
+) error {
+	return mgr.getClient(ctx, ordinal).FinalizeUpgrade()
+}
+
 var validateSearchHeadClusterImageUpgradePath = func(
 	context.Context,
 	string,
@@ -131,6 +139,15 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		mgr.cr.Status.Message = shcRollingUpdateStatusPrefix +
 			"AppFrameworkOperationActive: wait for App Framework work to complete before starting a Pod rollout"
 		return enterpriseApi.PhaseReady, nil
+	}
+	completionRecorded, err := mgr.reconcileImageUpgradeMemberCompletion(state)
+	if err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+	if completionRecorded {
+		// Persist the recovered ordinal before the rollout evaluator can
+		// prepare the next member.
+		return enterpriseApi.PhaseUpdating, nil
 	}
 	decision := upgrade.EvaluateSHCRollout(state)
 	mgr.recordRollingUpdateDecision(ctx, state, decision)
@@ -230,10 +247,16 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 			)
 			return enterpriseApi.PhaseUpdating, nil
 		}
-		if err := mgr.FinishUpgrade(ctx, 0); err != nil {
-			return enterpriseApi.PhaseError, err
+		if mgr.cr.Status.ImageUpgrade == nil {
+			// An ordinary RollingUpdate does not use Splunk's cluster image
+			// upgrade endpoints.
+			return enterpriseApi.PhaseReady, nil
 		}
-		return enterpriseApi.PhaseReady, nil
+		return mgr.reconcileImageUpgradeFinalization(
+			ctx,
+			statefulSet,
+			state,
+		)
 
 	case upgrade.SHCRolloutActionBlock:
 		return enterpriseApi.PhaseError, fmt.Errorf(
@@ -273,6 +296,240 @@ func lifecycleRecoveryActiveForStatefulSet(
 
 	return *statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition ==
 		*operation.TargetOrdinal
+}
+
+func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeMemberCompletion(
+	state upgrade.SHCRolloutState,
+) (bool, error) {
+	imageUpgrade := mgr.cr.Status.ImageUpgrade
+	lifecycle := mgr.cr.Status.LifecycleOperation
+	if imageUpgrade == nil ||
+		imageUpgrade.Phase !=
+			enterpriseApi.SearchHeadClusterImageUpgradePhaseRollingMembers ||
+		lifecycle == nil ||
+		lifecycle.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageCompleted ||
+		lifecycle.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		lifecycle.DesiredRevision != imageUpgrade.DesiredRevision ||
+		lifecycle.TargetOrdinal == nil {
+		return false, nil
+	}
+	ordinal := *lifecycle.TargetOrdinal
+	if ordinal < 0 ||
+		ordinal >= int32(len(state.Pods)) ||
+		ordinal >= int32(len(mgr.cr.Status.Members)) {
+		return false, fmt.Errorf(
+			"completed SHC image-upgrade lifecycle has invalid ordinal %d",
+			ordinal,
+		)
+	}
+	var observedPod *upgrade.SHCRolloutPod
+	for index := range state.Pods {
+		if state.Pods[index].Ordinal == ordinal {
+			observedPod = &state.Pods[index]
+			break
+		}
+	}
+	member := mgr.cr.Status.Members[ordinal]
+	if observedPod == nil ||
+		!observedPod.Exists ||
+		!observedPod.Ready ||
+		observedPod.Deleting ||
+		observedPod.Revision != imageUpgrade.DesiredRevision ||
+		observedPod.Image != imageUpgrade.TargetImage ||
+		!member.Registered ||
+		member.Status != "Up" {
+		return false, nil
+	}
+
+	decision := upgrade.RecordSHCImageUpgradeCompletedOrdinal(
+		imageUpgrade,
+		ordinal,
+		searchHeadClusterImageUpgradeNow(),
+	)
+	if decision.Operation != nil {
+		mgr.cr.Status.ImageUpgrade = decision.Operation
+	}
+	mgr.recordImageUpgradeStatus(decision.Reason, decision.Message)
+	switch decision.Action {
+	case upgrade.SHCImageUpgradeOrdinalPersist:
+		return true, nil
+	case upgrade.SHCImageUpgradeOrdinalWait:
+		return false, nil
+	case upgrade.SHCImageUpgradeOrdinalBlock:
+		return false, fmt.Errorf(
+			"record SHC image-upgrade member %d (%s): %s",
+			ordinal,
+			decision.Reason,
+			decision.Message,
+		)
+	default:
+		return false, fmt.Errorf(
+			"unsupported SHC image-upgrade ordinal action %q",
+			decision.Action,
+		)
+	}
+}
+
+func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeFinalization(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+	state upgrade.SHCRolloutState,
+) (enterpriseApi.Phase, error) {
+	imageUpgrade := mgr.cr.Status.ImageUpgrade
+	if imageUpgrade == nil {
+		return enterpriseApi.PhaseReady, nil
+	}
+	targetImage, err := statefulSetSplunkImage(statefulSet)
+	if err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+	conflictingOperation := shcAppFrameworkWorkActive(
+		&mgr.cr.Status.AppContext,
+	) || shcImageUpgradeHasConflictingLifecycle(
+		imageUpgrade,
+		mgr.cr.Status.LifecycleOperation,
+	)
+	targetOrdinal := int32(-1)
+	targetEligible := false
+	if imageUpgrade.Phase ==
+		enterpriseApi.SearchHeadClusterImageUpgradePhaseFinalizing &&
+		imageUpgrade.FinalizationIntentAt != nil &&
+		imageUpgrade.FinalizationSucceededAt == nil &&
+		!conflictingOperation {
+		targetOrdinal, targetEligible =
+			mgr.selectImageUpgradeManagementTarget(ctx)
+	}
+	now := searchHeadClusterImageUpgradeNow()
+	decision := upgrade.EvaluateSHCImageUpgradeFinalization(
+		upgrade.SHCImageUpgradeFinalizationInput{
+			Current:                    imageUpgrade,
+			Pods:                       mgr.imageUpgradeFinalizationPods(state),
+			StatefulSetReplicas:        state.Replicas,
+			StatefulSetPartition:       state.Partition,
+			StatefulSetCurrentRevision: state.CurrentRevision,
+			StatefulSetUpdateRevision:  state.UpdateRevision,
+			StatefulSetTargetImage:     targetImage,
+			LatestMemberLifecycleDone: shcImageUpgradeLatestLifecycleComplete(
+				imageUpgrade,
+				mgr.cr.Status.LifecycleOperation,
+			),
+			Initialized:                 mgr.cr.Status.Initialized,
+			MinPeersJoined:              mgr.cr.Status.MinPeersJoined,
+			CaptainReady:                mgr.cr.Status.CaptainReady,
+			CoordinationOwned:           !conflictingOperation,
+			ConflictingPlannedOperation: conflictingOperation,
+			ManagementTargetEligible:    targetEligible,
+			Now:                         now,
+		},
+	)
+	if decision.Operation != nil {
+		mgr.cr.Status.ImageUpgrade = decision.Operation
+	}
+	mgr.recordImageUpgradeStatus(decision.Reason, decision.Message)
+
+	switch decision.Action {
+	case upgrade.SHCImageUpgradeFinalizationPersist,
+		upgrade.SHCImageUpgradeFinalizationWait:
+		return enterpriseApi.PhaseUpdating, nil
+
+	case upgrade.SHCImageUpgradeFinalizationCall:
+		if !targetEligible {
+			return enterpriseApi.PhaseError, fmt.Errorf(
+				"SHC image-upgrade finalization authorized without an eligible management target",
+			)
+		}
+		endpointErr := finalizeSearchHeadClusterUpgrade(
+			ctx,
+			mgr,
+			targetOrdinal,
+		)
+		attemptedAt := searchHeadClusterImageUpgradeNow()
+		attempt := upgrade.RecordSHCImageUpgradeFinalizationAttempt(
+			mgr.cr.Status.ImageUpgrade,
+			endpointErr == nil,
+			attemptedAt,
+		)
+		if attempt.Operation != nil {
+			mgr.cr.Status.ImageUpgrade = attempt.Operation
+		}
+		mgr.recordImageUpgradeStatus(attempt.Reason, attempt.Message)
+		if endpointErr != nil {
+			return enterpriseApi.PhaseError, fmt.Errorf(
+				"finalize Search Head Cluster image upgrade: %w",
+				endpointErr,
+			)
+		}
+		mgr.projectImageUpgradeFinalizationEnd(attemptedAt)
+		return enterpriseApi.PhaseUpdating, nil
+
+	case upgrade.SHCImageUpgradeFinalizationFinished:
+		return enterpriseApi.PhaseReady, nil
+
+	case upgrade.SHCImageUpgradeFinalizationBlock:
+		return enterpriseApi.PhaseError, fmt.Errorf(
+			"SHC image-upgrade finalization blocked (%s): %s",
+			decision.Reason,
+			decision.Message,
+		)
+
+	default:
+		return enterpriseApi.PhaseError, fmt.Errorf(
+			"unsupported SHC image-upgrade finalization action %q",
+			decision.Action,
+		)
+	}
+}
+
+func (mgr *searchHeadClusterPodManager) imageUpgradeFinalizationPods(
+	state upgrade.SHCRolloutState,
+) []upgrade.SHCImageUpgradeFinalizationPod {
+	pods := make(
+		[]upgrade.SHCImageUpgradeFinalizationPod,
+		0,
+		len(state.Pods),
+	)
+	for _, pod := range state.Pods {
+		observation := upgrade.SHCImageUpgradeFinalizationPod{
+			Ordinal:  pod.Ordinal,
+			Exists:   pod.Exists,
+			Ready:    pod.Ready,
+			Deleting: pod.Deleting,
+			Revision: pod.Revision,
+			Image:    pod.Image,
+		}
+		if pod.Ordinal >= 0 &&
+			pod.Ordinal < int32(len(mgr.cr.Status.Members)) {
+			member := mgr.cr.Status.Members[pod.Ordinal]
+			observation.MemberRegistered = member.Registered
+			observation.MemberStatus = member.Status
+		}
+		pods = append(pods, observation)
+	}
+	return pods
+}
+
+func (mgr *searchHeadClusterPodManager) projectImageUpgradeFinalizationEnd(
+	now time.Time,
+) {
+	completedAt := now.Unix()
+	mgr.cr.Status.UpgradeEndTimestamp = completedAt
+	mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgraded
+	splmetrics.UpgradeEndTime.Set(float64(completedAt))
+}
+
+func shcImageUpgradeLatestLifecycleComplete(
+	imageUpgrade *enterpriseApi.SearchHeadClusterImageUpgradeStatus,
+	lifecycle *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+) bool {
+	return imageUpgrade != nil &&
+		lifecycle != nil &&
+		lifecycle.Intent ==
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+		lifecycle.DesiredRevision == imageUpgrade.DesiredRevision &&
+		lifecycle.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageCompleted
 }
 
 // reconcileImageUpgradeInitialization gates only a previously recorded image
