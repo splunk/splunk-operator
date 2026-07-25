@@ -136,6 +136,14 @@ rules:
   - update
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - get
+  - update
+- apiGroups:
   - postgresql.cnpg.io
   resources:
   - backups

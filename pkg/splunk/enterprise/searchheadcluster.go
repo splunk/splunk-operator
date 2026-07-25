@@ -243,6 +243,12 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head StatefulSet")
 		return result, err
 	}
+	if searchHeadClusterLifecycleEnabled() {
+		if err = applySearchHeadPodDisruptionBudget(ctx, client, cr, statefulSet); err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply Search Head PodDisruptionBudget")
+			return result, err
+		}
+	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getSearchHeadEnv(cr))
