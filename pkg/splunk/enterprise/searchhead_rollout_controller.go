@@ -1004,6 +1004,12 @@ func (mgr *searchHeadClusterPodManager) observeRollingStatefulSet(
 			Revision: pod.GetLabels()["controller-revision-hash"],
 			Image:    podSplunkImage(pod),
 		})
+		if ordinal < int32(len(mgr.cr.Status.Members)) {
+			member := mgr.cr.Status.Members[ordinal]
+			state.Pods[len(state.Pods)-1].MemberRegistered =
+				member.Registered
+			state.Pods[len(state.Pods)-1].MemberStatus = member.Status
+		}
 	}
 
 	return state, nil

@@ -155,6 +155,38 @@ func TestSHCRolloutBlocksPartitionAdvanceWhenAnotherPodIsUnavailable(t *testing.
 	}
 }
 
+func TestSHCRolloutBlocksKubernetesReadyUnplannedMemberUntilSHCRecovery(
+	t *testing.T,
+) {
+	state := pendingSHCRolloutState()
+	state.Pods[1].MemberRegistered = false
+	state.Pods[1].MemberStatus = ""
+
+	decision := EvaluateSHCRollout(state)
+
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionBlock,
+		SHCRolloutReasonMemberRecoveryPending,
+		1,
+	)
+	if decision.DesiredPartition != nil {
+		t.Fatalf("member-recovery block changed partition: %#v", decision)
+	}
+
+	state.Pods[1].MemberRegistered = true
+	state.Pods[1].MemberStatus = "Up"
+	decision = EvaluateSHCRollout(state)
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionPrepareTarget,
+		SHCRolloutReasonPrepareTarget,
+		2,
+	)
+}
+
 func TestSHCRolloutBlocksNextTargetWhenUnrelatedPodBecomesUnavailable(t *testing.T) {
 	state := pendingSHCRolloutState()
 	state.Partition = 2
@@ -242,6 +274,28 @@ func TestSHCRolloutStableWithoutTemplateChange(t *testing.T) {
 	}
 }
 
+func TestSHCRolloutDoesNotReportStableWhileMemberRecoveryIsPending(
+	t *testing.T,
+) {
+	state := pendingSHCRolloutState()
+	state.CurrentRevision = state.UpdateRevision
+	for ordinal := range state.Pods {
+		state.Pods[ordinal].Revision = state.UpdateRevision
+	}
+	state.Pods[1].MemberRegistered = false
+	state.Pods[1].MemberStatus = ""
+
+	decision := EvaluateSHCRollout(state)
+
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionWait,
+		SHCRolloutReasonWaitingForRecovery,
+		1,
+	)
+}
+
 func TestSHCRolloutDoesNotCompleteBeforeFinalSHCRecovery(t *testing.T) {
 	state := pendingSHCRolloutState()
 	state.Partition = 0
@@ -294,9 +348,9 @@ func pendingSHCRolloutState() SHCRolloutState {
 		CurrentRevision: "revision-1",
 		UpdateRevision:  "revision-2",
 		Pods: []SHCRolloutPod{
-			{Ordinal: 0, Exists: true, Ready: true, Revision: "revision-1"},
-			{Ordinal: 1, Exists: true, Ready: true, Revision: "revision-1"},
-			{Ordinal: 2, Exists: true, Ready: true, Revision: "revision-1"},
+			{Ordinal: 0, Exists: true, Ready: true, Revision: "revision-1", MemberRegistered: true, MemberStatus: "Up"},
+			{Ordinal: 1, Exists: true, Ready: true, Revision: "revision-1", MemberRegistered: true, MemberStatus: "Up"},
+			{Ordinal: 2, Exists: true, Ready: true, Revision: "revision-1", MemberRegistered: true, MemberStatus: "Up"},
 		},
 	}
 }

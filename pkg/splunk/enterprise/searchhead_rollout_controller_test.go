@@ -610,7 +610,7 @@ func TestRollingUpdateControllerPersistsImageInitializationBeforeMemberLifecycle
 		"splunk/splunk:10.0.0",
 	)
 	// Prove target selection does not depend on ordinal zero.
-	mgr.cr.Status.Members[0].Registered = false
+	mgr.cr.Status.Members[0].Name = ""
 
 	now := time.Date(2026, 7, 25, 14, 0, 0, 0, time.UTC)
 	oldNow := searchHeadClusterImageUpgradeNow
@@ -1440,7 +1440,7 @@ func TestRollingUpdateControllerWaitsWithoutEligibleImageManagementTarget(t *tes
 		"splunk/splunk:10.0.0",
 	)
 	for ordinal := range mgr.cr.Status.Members {
-		mgr.cr.Status.Members[ordinal].Registered = false
+		mgr.cr.Status.Members[ordinal].Name = ""
 	}
 
 	oldInitiate := initiateSearchHeadClusterUpgrade
@@ -2417,6 +2417,64 @@ func TestRollingUpdateControllerBlocksAuthorizedTargetAfterManualPodDeletion(t *
 	}
 }
 
+func TestRollingUpdateControllerBlocksKubernetesReadyUnplannedMemberRecovery(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:     "pod-update-2",
+			Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision: "revision-2",
+			TargetPod:       statefulSet.GetName() + "-2",
+			TargetOrdinal:   &target,
+			Stage: enterpriseApi.
+				SearchHeadClusterLifecycleStageAuthorizingReplacement,
+			ReplacementAuthorizedAt: &authorizedAt,
+		}
+	mgr.cr.Status.Members[1].Registered = false
+	mgr.cr.Status.Members[1].Status = ""
+	client.ResetCalls()
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+
+	if err == nil ||
+		!strings.Contains(
+			err.Error(),
+			string(upgrade.SHCRolloutReasonMemberRecoveryPending),
+		) {
+		t.Fatalf("member-recovery error = %v", err)
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Fatalf(
+			"member-recovery phase = %q, want %q",
+			phase,
+			enterpriseApi.PhaseError,
+		)
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf(
+			"Kubernetes-ready member recovery advanced partition: %v",
+			client.Calls["Update"],
+		)
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
 func TestRollingUpdateRecoveryObservationProjectsWaitingStateReadOnly(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(
@@ -3054,7 +3112,20 @@ func rollingUpdateControllerFixture(
 			Initialized:    true,
 			MinPeersJoined: true,
 			CaptainReady:   true,
+			Members: make([]enterpriseApi.SearchHeadClusterMemberStatus,
+				replicas),
 		},
+	}
+	for ordinal := range cr.Status.Members {
+		cr.Status.Members[ordinal] =
+			enterpriseApi.SearchHeadClusterMemberStatus{
+				Name: fmt.Sprintf(
+					"splunk-stack1-search-head-%d",
+					ordinal,
+				),
+				Status:     "Up",
+				Registered: true,
+			}
 	}
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{

@@ -48,6 +48,7 @@ const (
 	SHCRolloutReasonWaitingForRecovery            SHCRolloutReason = "WaitingForRecovery"
 	SHCRolloutReasonTooManyUnavailable            SHCRolloutReason = "TooManyUnavailable"
 	SHCRolloutReasonExistingUnavailablePod        SHCRolloutReason = "ExistingUnavailablePod"
+	SHCRolloutReasonMemberRecoveryPending         SHCRolloutReason = "MemberRecoveryPending"
 	SHCRolloutReasonOutOfOrderRevision            SHCRolloutReason = "OutOfOrderRevision"
 	SHCRolloutReasonConflictingLifecycleOperation SHCRolloutReason = "ConflictingLifecycleOperation"
 	SHCRolloutReasonLifecycleBlocked              SHCRolloutReason = "LifecycleBlocked"
@@ -63,6 +64,11 @@ type SHCRolloutPod struct {
 	Deleting bool
 	Revision string
 	Image    string
+	// MemberRegistered and MemberStatus are the current Splunk observation
+	// for this ordinal. Kubernetes readiness alone cannot prove that an
+	// unplanned replacement has recovered into the SHC.
+	MemberRegistered bool
+	MemberStatus     string
 }
 
 // SHCRolloutLifecycle is the durable lifecycle observation consumed by the
@@ -121,10 +127,22 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 	if allSHCPodsAtRevision(pods, state.UpdateRevision) {
 		for ordinal := int32(0); ordinal < state.Replicas; ordinal++ {
 			pod := pods[ordinal]
-			if !pod.Exists || !pod.Ready || pod.Deleting {
+			if !shcRolloutPodAvailable(pod) {
+				reason := SHCRolloutReasonWaitingForKubernetes
+				message := fmt.Sprintf(
+					"Pod ordinal %d is not stably ready in Kubernetes",
+					ordinal,
+				)
+				if shcRolloutPodKubernetesReady(pod) {
+					reason = SHCRolloutReasonWaitingForRecovery
+					message = fmt.Sprintf(
+						"Pod ordinal %d is Kubernetes-ready but has not recovered as a registered Up SHC member",
+						ordinal,
+					)
+				}
 				return waitSHCRollout(
-					SHCRolloutReasonWaitingForKubernetes,
-					fmt.Sprintf("Pod ordinal %d is not stably ready", ordinal),
+					reason,
+					message,
 					ordinalPointer(ordinal),
 				)
 			}
@@ -151,7 +169,7 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 	unavailableOrdinal := int32(-1)
 	for ordinal := int32(0); ordinal < state.Replicas; ordinal++ {
 		pod := pods[ordinal]
-		if !pod.Exists || !pod.Ready || pod.Deleting {
+		if !shcRolloutPodAvailable(pod) {
 			unavailable++
 			unavailableOrdinal = ordinal
 		}
@@ -164,12 +182,21 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 		)
 	}
 	if unavailable > 0 && state.Partition == state.Replicas {
-		return blockSHCRollout(
-			SHCRolloutReasonExistingUnavailablePod,
-			fmt.Sprintf(
-				"Pod ordinal %d is already unavailable; refusing a new planned disruption",
+		reason := SHCRolloutReasonExistingUnavailablePod
+		message := fmt.Sprintf(
+			"Pod ordinal %d is already unavailable; refusing a new planned disruption",
+			unavailableOrdinal,
+		)
+		if shcRolloutPodKubernetesReady(pods[unavailableOrdinal]) {
+			reason = SHCRolloutReasonMemberRecoveryPending
+			message = fmt.Sprintf(
+				"Pod ordinal %d is Kubernetes-ready but has not recovered as a registered Up SHC member",
 				unavailableOrdinal,
-			),
+			)
+		}
+		return blockSHCRollout(
+			reason,
+			message,
 			ordinalPointer(unavailableOrdinal),
 		)
 	}
@@ -178,7 +205,8 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 		activeOrdinal := state.Partition
 		for ordinal := activeOrdinal + 1; ordinal < state.Replicas; ordinal++ {
 			pod := pods[ordinal]
-			if !pod.Exists || pod.Revision != state.UpdateRevision || !pod.Ready || pod.Deleting {
+			if !shcRolloutPodAvailable(pod) ||
+				pod.Revision != state.UpdateRevision {
 				return blockSHCRollout(
 					SHCRolloutReasonOutOfOrderRevision,
 					fmt.Sprintf("higher ordinal %d is not recovered at update revision", ordinal),
@@ -265,12 +293,21 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 			}
 		}
 		if unavailable > 0 {
-			return blockSHCRollout(
-				SHCRolloutReasonExistingUnavailablePod,
-				fmt.Sprintf(
-					"unrelated Pod ordinal %d is unavailable; refusing the next planned disruption",
+			reason := SHCRolloutReasonExistingUnavailablePod
+			message := fmt.Sprintf(
+				"unrelated Pod ordinal %d is unavailable; refusing the next planned disruption",
+				unavailableOrdinal,
+			)
+			if shcRolloutPodKubernetesReady(pods[unavailableOrdinal]) {
+				reason = SHCRolloutReasonMemberRecoveryPending
+				message = fmt.Sprintf(
+					"unrelated Pod ordinal %d is Kubernetes-ready but has not recovered as a registered Up SHC member",
 					unavailableOrdinal,
-				),
+				)
+			}
+			return blockSHCRollout(
+				reason,
+				message,
 				ordinalPointer(unavailableOrdinal),
 			)
 		}
@@ -286,10 +323,10 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 
 	target := state.Partition - 1
 	targetPod := pods[target]
-	if !targetPod.Exists || !targetPod.Ready || targetPod.Deleting {
+	if !shcRolloutPodAvailable(targetPod) {
 		return blockSHCRollout(
 			SHCRolloutReasonOutOfOrderRevision,
-			fmt.Sprintf("next target ordinal %d is not stably ready before preparation", target),
+			fmt.Sprintf("next target ordinal %d is not stably ready in Kubernetes and the SHC before preparation", target),
 			ordinalPointer(target),
 		)
 	}
@@ -332,6 +369,16 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 		Message:       fmt.Sprintf("prepare ordinal %d before lowering partition", target),
 		TargetOrdinal: ordinalPointer(target),
 	}
+}
+
+func shcRolloutPodKubernetesReady(pod SHCRolloutPod) bool {
+	return pod.Exists && pod.Ready && !pod.Deleting
+}
+
+func shcRolloutPodAvailable(pod SHCRolloutPod) bool {
+	return shcRolloutPodKubernetesReady(pod) &&
+		pod.MemberRegistered &&
+		pod.MemberStatus == "Up"
 }
 
 func validateSHCRolloutState(
