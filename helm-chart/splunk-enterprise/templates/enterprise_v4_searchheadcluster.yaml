@@ -25,6 +25,13 @@ items:
   {{- if $.Values.searchHeadCluster.replicaCount }}
     replicas: {{ $.Values.searchHeadCluster.replicaCount }}
   {{- end }}
+  {{- if $.Values.searchHeadCluster.terminationGracePeriodSeconds }}
+    terminationGracePeriodSeconds: {{ $.Values.searchHeadCluster.terminationGracePeriodSeconds }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.lifecyclePolicy }}
+    lifecyclePolicy:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   {{- with $.Values.searchHeadCluster.appRepo }}
     appRepo: 
 {{ toYaml . | indent 6 }}

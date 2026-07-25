@@ -390,6 +390,18 @@ searchHeadCluster:
 
   replicaCount: 1
 
+  # Optional Pod termination grace used when the Operator's
+  # SplunkPodLifecycle feature gate is enabled.
+  terminationGracePeriodSeconds:
+
+  # Optional Search Head lifecycle policy used when the Operator's
+  # SearchHeadClusterLifecycle feature gate is enabled.
+  lifecyclePolicy: {}
+    # podUpdateStrategy: OnDelete
+    # searchDrainTimeoutSeconds: 180
+    # captainTransferTimeoutSeconds: 180
+    # memberRejoinTimeoutSeconds: 1800
+
   appRepo: {}
     # appsRepoPollIntervalSeconds:
     # defaults:
