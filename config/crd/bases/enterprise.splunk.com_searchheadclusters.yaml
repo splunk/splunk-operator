@@ -2375,6 +2375,15 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              terminationGracePeriodSeconds:
+                description: |-
+                  TerminationGracePeriodSeconds is the time Kubernetes gives a Splunk Pod
+                  to terminate before forceful removal. It is active only when the
+                  SplunkPodLifecycle feature gate is enabled.
+                format: int64
+                maximum: 86400
+                minimum: 1
+                type: integer
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
@@ -6822,6 +6831,44 @@ spec:
               licenseUrl:
                 description: Full path or URL for a Splunk Enterprise license file
                 type: string
+              lifecyclePolicy:
+                description: |-
+                  LifecyclePolicy configures Kubernetes lifecycle orchestration for the
+                  Search Head Cluster. It is active only when the
+                  SearchHeadClusterLifecycle feature gate is enabled.
+                properties:
+                  captainTransferTimeoutSeconds:
+                    description: |-
+                      CaptainTransferTimeoutSeconds bounds the supported captain-transfer
+                      workflow when the target member is the active captain.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                  memberRejoinTimeoutSeconds:
+                    description: |-
+                      MemberRejoinTimeoutSeconds bounds the wait for a replaced member to
+                      register, become up, and synchronize with the cluster.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                  podUpdateStrategy:
+                    description: |-
+                      PodUpdateStrategy selects the Pod replacement owner. Empty resolves to
+                      OnDelete.
+                    enum:
+                    - OnDelete
+                    - RollingUpdate
+                    type: string
+                  searchDrainTimeoutSeconds:
+                    description: SearchDrainTimeoutSeconds bounds the wait for active
+                      searches to drain.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                type: object
               livenessInitialDelaySeconds:
                 description: |-
                   LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
@@ -7564,6 +7611,15 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              terminationGracePeriodSeconds:
+                description: |-
+                  TerminationGracePeriodSeconds is the time Kubernetes gives a Splunk Pod
+                  to terminate before forceful removal. It is active only when the
+                  SplunkPodLifecycle feature gate is enabled.
+                format: int64
+                maximum: 86400
+                minimum: 1
+                type: integer
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
@@ -10115,6 +10171,68 @@ spec:
               initialized:
                 description: true if the search head cluster has finished initialization
                 type: boolean
+              lifecycleOperation:
+                description: |-
+                  LifecycleOperation is the current operation or most recent terminal
+                  result. It is not an unbounded history.
+                properties:
+                  activeHistoricalSearches:
+                    format: int32
+                    type: integer
+                  activeRealtimeSearches:
+                    format: int32
+                    type: integer
+                  captain:
+                    type: string
+                  captainReady:
+                    type: boolean
+                  completedOrdinals:
+                    items:
+                      format: int32
+                      type: integer
+                    type: array
+                  desiredRevision:
+                    type: string
+                  intent:
+                    description: |-
+                      SearchHeadClusterLifecycleIntent identifies why a durable lifecycle
+                      operation exists.
+                    type: string
+                  lastSuccessfulSHCObservation:
+                    format: date-time
+                    type: string
+                  lastTransitionTime:
+                    format: date-time
+                    type: string
+                  message:
+                    type: string
+                  operationID:
+                    type: string
+                  reason:
+                    description: |-
+                      SearchHeadClusterLifecycleReason is a bounded, machine-readable explanation
+                      for the current lifecycle operation state.
+                    type: string
+                  retryCount:
+                    format: int32
+                    type: integer
+                  stage:
+                    description: |-
+                      SearchHeadClusterLifecycleStage identifies the durable stage of a lifecycle
+                      operation.
+                    type: string
+                  stageStartedAt:
+                    format: date-time
+                    type: string
+                  startedAt:
+                    format: date-time
+                    type: string
+                  targetOrdinal:
+                    format: int32
+                    type: integer
+                  targetPod:
+                    type: string
+                type: object
               maintenanceMode:
                 description: true if the search head cluster is in maintenance mode
                 type: boolean

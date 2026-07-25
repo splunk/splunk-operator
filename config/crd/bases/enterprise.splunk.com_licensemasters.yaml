@@ -2357,6 +2357,15 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              terminationGracePeriodSeconds:
+                description: |-
+                  TerminationGracePeriodSeconds is the time Kubernetes gives a Splunk Pod
+                  to terminate before forceful removal. It is active only when the
+                  SplunkPodLifecycle feature gate is enabled.
+                format: int64
+                maximum: 86400
+                minimum: 1
+                type: integer
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
