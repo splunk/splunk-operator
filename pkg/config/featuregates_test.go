@@ -42,6 +42,58 @@ func TestValidationWebhookOffByDefault(t *testing.T) {
 	}
 }
 
+func TestLifecycleFeatureGatesRegisteredOffByDefault(t *testing.T) {
+	all := DefaultMutableFeatureGate.GetAll()
+	for _, gate := range []featuregate.Feature{SplunkPodLifecycle, SearchHeadClusterLifecycle} {
+		spec, ok := all[gate]
+		if !ok {
+			t.Fatalf("%s gate not registered", gate)
+		}
+		if spec.Default {
+			t.Errorf("%s should be disabled by default", gate)
+		}
+		if spec.PreRelease != featuregate.Alpha {
+			t.Errorf("%s prerelease: got %v, want Alpha", gate, spec.PreRelease)
+		}
+	}
+}
+
+func TestValidateFeatureGateDependencies(t *testing.T) {
+	tests := []struct {
+		name    string
+		podGate bool
+		shcGate bool
+		wantErr bool
+	}{
+		{name: "both disabled"},
+		{name: "pod lifecycle only", podGate: true},
+		{name: "both enabled", podGate: true, shcGate: true},
+		{name: "SHC lifecycle without pod lifecycle", shcGate: true, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fg := featuregate.NewFeatureGate()
+			if err := fg.Add(defaultFeatureGates); err != nil {
+				t.Fatalf("Add: %v", err)
+			}
+			if err := fg.SetFromMap(map[string]bool{
+				string(SplunkPodLifecycle):         tt.podGate,
+				string(SearchHeadClusterLifecycle): tt.shcGate,
+			}); err != nil {
+				t.Fatalf("SetFromMap: %v", err)
+			}
+			err := ValidateFeatureGateDependencies(fg)
+			if tt.wantErr && err == nil {
+				t.Fatal("expected dependency error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected dependency error: %v", err)
+			}
+		})
+	}
+}
+
 func TestLegacyEnvVarEnablesGate(t *testing.T) {
 	fg := featuregate.NewFeatureGate()
 	if err := fg.Add(map[featuregate.Feature]featuregate.FeatureSpec{

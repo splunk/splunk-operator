@@ -133,6 +133,11 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	if err := config.ValidateFeatureGateDependencies(config.DefaultMutableFeatureGate); err != nil {
+		setupLog.Error(err, "invalid feature gate configuration")
+		os.Exit(1)
+	}
+
 	if allGates := config.DefaultMutableFeatureGate.GetAll(); len(allGates) > 0 {
 		effectiveStates := make(map[string]bool, len(allGates))
 		for gate := range allGates {

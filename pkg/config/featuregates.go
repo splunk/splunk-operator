@@ -41,6 +41,12 @@ const (
 	// Enterprise CR types (ReconcileCerts + the cert-secret watch mapper).
 	// When disabled, spec.certs[] is ignored and no cert volumes are mounted.
 	CertManagement featuregate.Feature = "CertManagement"
+	// SplunkPodLifecycle gates the common Splunk workload lifecycle contract,
+	// beginning with configurable Pod termination grace.
+	SplunkPodLifecycle featuregate.Feature = "SplunkPodLifecycle"
+	// SearchHeadClusterLifecycle gates durable Search Head Cluster lifecycle
+	// orchestration and its customer-facing policy.
+	SearchHeadClusterLifecycle featuregate.Feature = "SearchHeadClusterLifecycle"
 )
 
 // defaultFeatureGates is the authoritative registry of all feature gates and
@@ -50,6 +56,11 @@ var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	ValidationWebhook:  {Default: false, PreRelease: featuregate.Alpha},
 	PostgresController: {Default: false, PreRelease: featuregate.Alpha},
 	CertManagement:     {Default: true, PreRelease: featuregate.Beta},
+	SplunkPodLifecycle: {Default: false, PreRelease: featuregate.Alpha},
+	SearchHeadClusterLifecycle: {
+		Default:    false,
+		PreRelease: featuregate.Alpha,
+	},
 }
 
 var DefaultMutableFeatureGate featuregate.MutableFeatureGate = featuregate.NewFeatureGate()
@@ -83,4 +94,13 @@ func EnableFeatureGate(gates ...featuregate.Feature) {
 	if err := DefaultMutableFeatureGate.SetFromMap(enabled); err != nil {
 		panic(err)
 	}
+}
+
+// ValidateFeatureGateDependencies verifies combinations that cannot operate
+// safely. It is called after command-line feature-gate parsing.
+func ValidateFeatureGateDependencies(fg featuregate.FeatureGate) error {
+	if fg.Enabled(SearchHeadClusterLifecycle) && !fg.Enabled(SplunkPodLifecycle) {
+		return fmt.Errorf("%s requires %s=true", SearchHeadClusterLifecycle, SplunkPodLifecycle)
+	}
+	return nil
 }

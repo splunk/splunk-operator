@@ -47,10 +47,16 @@ When running the operator binary directly, pass feature gates at startup:
 
 ## Current Feature Gates
 
-| Gate                  | Default | Stage | Since   | Description                                              |
-|-----------------------|---------|-------|---------|----------------------------------------------------------|
-| `ValidationWebhook`   | `false` | Alpha | v3.2.0  | Centralized validation webhook server for CR admission   |
-| `PostgresController`  | `false` | Alpha | ?       | PostgresCluster, PostgresClusterClass, and PostgresDatabase controllers and CRDs |
+| Gate                         | Default | Stage | Since        | Description                                                               |
+|------------------------------|---------|-------|--------------|---------------------------------------------------------------------------|
+| `ValidationWebhook`          | `false` | Alpha | v3.2.0       | Centralized validation webhook server for CR admission                    |
+| `PostgresController`         | `false` | Alpha | ?            | PostgresCluster, PostgresClusterClass, and PostgresDatabase controllers and CRDs |
+| `SplunkPodLifecycle`         | `false` | Alpha | Wave 0 spike | Common Splunk workload Pod lifecycle contract                             |
+| `SearchHeadClusterLifecycle` | `false` | Alpha | Wave 0 spike | Durable Search Head Cluster lifecycle policy and orchestration contract   |
+
+`SearchHeadClusterLifecycle=true` requires
+`SplunkPodLifecycle=true`. The Operator rejects this invalid combination at
+startup.
 
 ## Adding a New Feature Gate
 
