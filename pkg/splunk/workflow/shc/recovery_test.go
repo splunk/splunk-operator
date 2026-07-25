@@ -153,6 +153,45 @@ func TestRecoveryAttributesUnschedulableReplacementToKubernetes(t *testing.T) {
 	}
 }
 
+func TestRecoveryAttributesStoragePendingReplacementToKubernetes(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := RecoveryObservation{
+		PodExists:      true,
+		PodUID:         "new-pod-uid",
+		PodRevision:    "revision-2",
+		PodScheduled:   true,
+		StoragePending: true,
+	}
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonVolumeAttachmentPending {
+		t.Fatalf(
+			"reason = %q, want VolumeAttachmentPending",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.MemberRejoinStartedAt != nil {
+		t.Fatalf(
+			"storage-pending Pod started Splunk rejoin timer at %v",
+			decision.Operation.MemberRejoinStartedAt,
+		)
+	}
+}
+
 func TestRecoveryTimeoutContinuesWithoutPodOrSplunkObservation(t *testing.T) {
 	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
 	operation := authorizedRecoveryOperation(now)

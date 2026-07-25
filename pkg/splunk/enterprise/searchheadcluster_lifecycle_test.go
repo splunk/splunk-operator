@@ -360,6 +360,80 @@ func TestLifecycleAdapterObservesUnschedulableReplacementPod(t *testing.T) {
 	}
 }
 
+func TestLifecycleAdapterObservesReplacementWaitingForStorage(t *testing.T) {
+	target := int32(2)
+	targetPod := "splunk-example-search-head-2"
+	cr := &enterpriseApi.SearchHeadCluster{
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				TargetPod:     targetPod,
+				TargetOrdinal: &target,
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
+	t.Cleanup(func() { getSearchHeadLifecyclePod = oldGetLifecyclePod })
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				UID:    types.UID("new-pod-uid"),
+				Labels: map[string]string{"controller-revision-hash": "revision-2"},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodPending,
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodScheduled,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   corev1.PodReady,
+						Status: corev1.ConditionFalse,
+					},
+				},
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name: "splunk",
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{
+								Reason:  "ContainerCreating",
+								Message: "MountVolume.SetUp failed for volume \"etc\"",
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	observation, err := mgr.observeLifecycleRecovery(
+		context.Background(),
+		target,
+	)
+	if err != nil {
+		t.Fatalf("observe storage-pending replacement: %v", err)
+	}
+	if !observation.PodExists ||
+		!observation.PodScheduled ||
+		observation.PodReady {
+		t.Fatalf("replacement Pod observation = %#v", observation)
+	}
+	if !observation.StoragePending {
+		t.Fatalf("storage wait was not classified: %#v", observation)
+	}
+	if observation.ImagePullFailed ||
+		observation.ContainerStartupFailed ||
+		observation.MemberObserved {
+		t.Fatalf("storage wait was misclassified: %#v", observation)
+	}
+}
+
 func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 
