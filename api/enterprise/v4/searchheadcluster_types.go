@@ -35,6 +35,49 @@ const (
 	SearchHeadClusterPausedAnnotation = "searchheadcluster.enterprise.splunk.com/paused"
 )
 
+// SearchHeadClusterPodUpdateStrategy identifies which system owns Pod
+// replacement for a Search Head Cluster.
+// +kubebuilder:validation:Enum=OnDelete;RollingUpdate
+type SearchHeadClusterPodUpdateStrategy string
+
+const (
+	// SearchHeadClusterPodUpdateStrategyOnDelete preserves the existing
+	// Operator-owned Pod replacement behavior.
+	SearchHeadClusterPodUpdateStrategyOnDelete SearchHeadClusterPodUpdateStrategy = "OnDelete"
+	// SearchHeadClusterPodUpdateStrategyRollingUpdate requests the future
+	// partition-gated Kubernetes StatefulSet rollout behavior.
+	SearchHeadClusterPodUpdateStrategyRollingUpdate SearchHeadClusterPodUpdateStrategy = "RollingUpdate"
+)
+
+// SearchHeadClusterLifecyclePolicy configures lifecycle timing and rollout
+// ownership for a Search Head Cluster.
+type SearchHeadClusterLifecyclePolicy struct {
+	// PodUpdateStrategy selects the Pod replacement owner. Empty resolves to
+	// OnDelete.
+	// +optional
+	PodUpdateStrategy SearchHeadClusterPodUpdateStrategy `json:"podUpdateStrategy,omitempty"`
+
+	// SearchDrainTimeoutSeconds bounds the wait for active searches to drain.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=86400
+	SearchDrainTimeoutSeconds *int64 `json:"searchDrainTimeoutSeconds,omitempty"`
+
+	// CaptainTransferTimeoutSeconds bounds the supported captain-transfer
+	// workflow when the target member is the active captain.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=86400
+	CaptainTransferTimeoutSeconds *int64 `json:"captainTransferTimeoutSeconds,omitempty"`
+
+	// MemberRejoinTimeoutSeconds bounds the wait for a replaced member to
+	// register, become up, and synchronize with the cluster.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=86400
+	MemberRejoinTimeoutSeconds *int64 `json:"memberRejoinTimeoutSeconds,omitempty"`
+}
+
 // SearchHeadClusterSpec defines the desired state of a Splunk Enterprise search head cluster
 type SearchHeadClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
@@ -52,6 +95,12 @@ type SearchHeadClusterSpec struct {
 
 	// Splunk Deployer Node Affinity
 	DeployerNodeAffinity *corev1.NodeAffinity `json:"deployerNodeAffinity,omitempty"`
+
+	// LifecyclePolicy configures Kubernetes lifecycle orchestration for the
+	// Search Head Cluster. It is active only when the
+	// SearchHeadClusterLifecycle feature gate is enabled.
+	// +optional
+	LifecyclePolicy *SearchHeadClusterLifecyclePolicy `json:"lifecyclePolicy,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -73,6 +122,91 @@ type SearchHeadClusterMemberStatus struct {
 
 	// Number of currently running realtime searches.
 	ActiveRealtimeSearchCount int `json:"active_realtime_search_count"`
+}
+
+// SearchHeadClusterLifecycleIntent identifies why a durable lifecycle
+// operation exists.
+type SearchHeadClusterLifecycleIntent string
+
+const (
+	SearchHeadClusterLifecycleIntentPodUpdate       SearchHeadClusterLifecycleIntent = "PodUpdate"
+	SearchHeadClusterLifecycleIntentScaleDown       SearchHeadClusterLifecycleIntent = "ScaleDown"
+	SearchHeadClusterLifecycleIntentClusterDeletion SearchHeadClusterLifecycleIntent = "ClusterDeletion"
+	SearchHeadClusterLifecycleIntentRecovery        SearchHeadClusterLifecycleIntent = "Recovery"
+)
+
+// SearchHeadClusterLifecycleStage identifies the durable stage of a lifecycle
+// operation.
+type SearchHeadClusterLifecycleStage string
+
+const (
+	SearchHeadClusterLifecycleStageValidatingCluster      SearchHeadClusterLifecycleStage = "ValidatingCluster"
+	SearchHeadClusterLifecycleStageDetainingTarget        SearchHeadClusterLifecycleStage = "DetainingTarget"
+	SearchHeadClusterLifecycleStageDrainingSearches       SearchHeadClusterLifecycleStage = "DrainingSearches"
+	SearchHeadClusterLifecycleStageTransferringCaptain    SearchHeadClusterLifecycleStage = "TransferringCaptain"
+	SearchHeadClusterLifecycleStageAuthorizingReplacement SearchHeadClusterLifecycleStage = "AuthorizingReplacement"
+	SearchHeadClusterLifecycleStageWaitingForTermination  SearchHeadClusterLifecycleStage = "WaitingForTermination"
+	SearchHeadClusterLifecycleStageWaitingForScheduling   SearchHeadClusterLifecycleStage = "WaitingForScheduling"
+	SearchHeadClusterLifecycleStageWaitingForStorage      SearchHeadClusterLifecycleStage = "WaitingForStorage"
+	SearchHeadClusterLifecycleStageWaitingForContainer    SearchHeadClusterLifecycleStage = "WaitingForContainer"
+	SearchHeadClusterLifecycleStageWaitingForMemberRejoin SearchHeadClusterLifecycleStage = "WaitingForMemberRejoin"
+	SearchHeadClusterLifecycleStageValidatingRecovery     SearchHeadClusterLifecycleStage = "ValidatingRecovery"
+	SearchHeadClusterLifecycleStageCompleted              SearchHeadClusterLifecycleStage = "Completed"
+	SearchHeadClusterLifecycleStageBlocked                SearchHeadClusterLifecycleStage = "Blocked"
+	SearchHeadClusterLifecycleStageFailed                 SearchHeadClusterLifecycleStage = "Failed"
+)
+
+// SearchHeadClusterLifecycleReason is a bounded, machine-readable explanation
+// for the current lifecycle operation state.
+type SearchHeadClusterLifecycleReason string
+
+const (
+	SearchHeadClusterLifecycleReasonOperationStarted              SearchHeadClusterLifecycleReason = "OperationStarted"
+	SearchHeadClusterLifecycleReasonClusterNotSafe                SearchHeadClusterLifecycleReason = "ClusterNotSafe"
+	SearchHeadClusterLifecycleReasonObservationStale              SearchHeadClusterLifecycleReason = "ObservationStale"
+	SearchHeadClusterLifecycleReasonConflictingCaptainObservation SearchHeadClusterLifecycleReason = "ConflictingCaptainObservation"
+	SearchHeadClusterLifecycleReasonDetentionRequested            SearchHeadClusterLifecycleReason = "DetentionRequested"
+	SearchHeadClusterLifecycleReasonSearchesActive                SearchHeadClusterLifecycleReason = "SearchesActive"
+	SearchHeadClusterLifecycleReasonSearchDrainTimedOut           SearchHeadClusterLifecycleReason = "SearchDrainTimedOut"
+	SearchHeadClusterLifecycleReasonCaptainTransferRequired       SearchHeadClusterLifecycleReason = "CaptainTransferRequired"
+	SearchHeadClusterLifecycleReasonCaptainTransferTimedOut       SearchHeadClusterLifecycleReason = "CaptainTransferTimedOut"
+	SearchHeadClusterLifecycleReasonReplacementAuthorized         SearchHeadClusterLifecycleReason = "ReplacementAuthorized"
+	SearchHeadClusterLifecycleReasonPodTerminationTimedOut        SearchHeadClusterLifecycleReason = "PodTerminationTimedOut"
+	SearchHeadClusterLifecycleReasonPodUnschedulable              SearchHeadClusterLifecycleReason = "PodUnschedulable"
+	SearchHeadClusterLifecycleReasonVolumeAttachmentPending       SearchHeadClusterLifecycleReason = "VolumeAttachmentPending"
+	SearchHeadClusterLifecycleReasonImagePullFailed               SearchHeadClusterLifecycleReason = "ImagePullFailed"
+	SearchHeadClusterLifecycleReasonSplunkStartupFailed           SearchHeadClusterLifecycleReason = "SplunkStartupFailed"
+	SearchHeadClusterLifecycleReasonMemberNotRegistered           SearchHeadClusterLifecycleReason = "MemberNotRegistered"
+	SearchHeadClusterLifecycleReasonMemberNotUp                   SearchHeadClusterLifecycleReason = "MemberNotUp"
+	SearchHeadClusterLifecycleReasonMemberIdentityMismatch        SearchHeadClusterLifecycleReason = "MemberIdentityMismatch"
+	SearchHeadClusterLifecycleReasonMemberSynchronizationPending  SearchHeadClusterLifecycleReason = "MemberSynchronizationPending"
+	SearchHeadClusterLifecycleReasonMemberRejoinTimedOut          SearchHeadClusterLifecycleReason = "MemberRejoinTimedOut"
+	SearchHeadClusterLifecycleReasonRecoveryValidated             SearchHeadClusterLifecycleReason = "RecoveryValidated"
+	SearchHeadClusterLifecycleReasonOperationCompleted            SearchHeadClusterLifecycleReason = "OperationCompleted"
+	SearchHeadClusterLifecycleReasonUnsupportedRuntimeContract    SearchHeadClusterLifecycleReason = "UnsupportedRuntimeContract"
+)
+
+// SearchHeadClusterLifecycleOperationStatus records enough information to
+// resume and diagnose one lifecycle operation across reconciliations.
+type SearchHeadClusterLifecycleOperationStatus struct {
+	OperationID                  string                           `json:"operationID"`
+	Intent                       SearchHeadClusterLifecycleIntent `json:"intent"`
+	DesiredRevision              string                           `json:"desiredRevision,omitempty"`
+	TargetPod                    string                           `json:"targetPod,omitempty"`
+	TargetOrdinal                *int32                           `json:"targetOrdinal,omitempty"`
+	Stage                        SearchHeadClusterLifecycleStage  `json:"stage"`
+	StartedAt                    *metav1.Time                     `json:"startedAt,omitempty"`
+	StageStartedAt               *metav1.Time                     `json:"stageStartedAt,omitempty"`
+	LastTransitionTime           *metav1.Time                     `json:"lastTransitionTime,omitempty"`
+	CompletedOrdinals            []int32                          `json:"completedOrdinals,omitempty"`
+	RetryCount                   int32                            `json:"retryCount,omitempty"`
+	Reason                       SearchHeadClusterLifecycleReason `json:"reason,omitempty"`
+	Message                      string                           `json:"message,omitempty"`
+	Captain                      string                           `json:"captain,omitempty"`
+	CaptainReady                 bool                             `json:"captainReady,omitempty"`
+	ActiveHistoricalSearches     int32                            `json:"activeHistoricalSearches,omitempty"`
+	ActiveRealtimeSearches       int32                            `json:"activeRealtimeSearches,omitempty"`
+	LastSuccessfulSHCObservation *metav1.Time                     `json:"lastSuccessfulSHCObservation,omitempty"`
 }
 
 // SearchHeadClusterStatus defines the observed state of a Splunk Enterprise search head cluster
@@ -150,6 +284,11 @@ type SearchHeadClusterStatus struct {
 	UpgradeStartTimestamp int64 `json:"upgradeStartTimestamp"`
 
 	UpgradeEndTimestamp int64 `json:"upgradeEndTimestamp"`
+
+	// LifecycleOperation is the current operation or most recent terminal
+	// result. It is not an unbounded history.
+	// +optional
+	LifecycleOperation *SearchHeadClusterLifecycleOperationStatus `json:"lifecycleOperation,omitempty"`
 }
 
 type UpgradePhase string

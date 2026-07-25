@@ -307,6 +307,14 @@ type CommonSplunkSpec struct {
 	// +kubebuilder:default:={"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12}
 	StartupProbe *Probe `json:"startupProbe,omitempty"`
 
+	// TerminationGracePeriodSeconds is the time Kubernetes gives a Splunk Pod
+	// to terminate before forceful removal. It is active only when the
+	// SplunkPodLifecycle feature gate is enabled.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=86400
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
+
 	// Sets imagePullSecrets if image is being pulled from a private registry.
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 	// +optional
