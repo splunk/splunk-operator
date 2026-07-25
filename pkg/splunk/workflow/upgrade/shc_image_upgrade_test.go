@@ -55,6 +55,33 @@ func TestSupportedSHCImageDifferenceRecordsDurableWorkflow(t *testing.T) {
 	}
 }
 
+func TestPrivateRegistrySHCImageDifferencePreservesOpaqueImageReferences(
+	t *testing.T,
+) {
+	input := supportedImageUpgradeInput()
+	sourceImage := "registry.airgap.example:5000/splunk/splunk@sha256:source"
+	targetImage := "registry.airgap.example:5000/splunk/splunk@sha256:target"
+	for index := range input.Pods {
+		input.Pods[index].Image = sourceImage
+	}
+	input.TargetImage = targetImage
+
+	decision := ClassifySHCImageUpgrade(input)
+
+	if decision.Classification != SHCImageUpgradeRecord ||
+		decision.Operation == nil {
+		t.Fatalf("decision = %#v, want recorded private-registry image upgrade", decision)
+	}
+	if decision.Operation.SourceImage != sourceImage ||
+		decision.Operation.TargetImage != targetImage {
+		t.Fatalf(
+			"image references changed: source=%q target=%q",
+			decision.Operation.SourceImage,
+			decision.Operation.TargetImage,
+		)
+	}
+}
+
 func TestUnchangedSHCImageIsOrdinaryTemplateRollout(t *testing.T) {
 	input := supportedImageUpgradeInput()
 	input.TargetImage = input.Pods[0].Image
