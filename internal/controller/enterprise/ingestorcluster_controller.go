@@ -231,6 +231,33 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IngestorCluster{},
 			)).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				cm, ok := obj.(*corev1.ConfigMap)
+				if !ok {
+					return nil
+				}
+				var list enterpriseApi.IngestorClusterList
+				if err := r.Client.List(ctx, &list, client.InNamespace(cm.Namespace)); err != nil {
+					return nil
+				}
+				var reqs []reconcile.Request
+				for _, cr := range list.Items {
+					for _, vol := range cr.Spec.Volumes {
+						if common.VolumeReferencesConfigMap(vol, cm.Name) {
+							reqs = append(reqs, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Name:      cr.Name,
+									Namespace: cr.Namespace,
+								},
+							})
+							break
+						}
+					}
+				}
+				return reqs
+			}),
+		).
 		Watches(&enterpriseApi.Queue{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				queue, ok := obj.(*enterpriseApi.Queue)

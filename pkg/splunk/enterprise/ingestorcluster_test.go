@@ -25,6 +25,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/stretchr/testify/assert"
@@ -452,6 +453,71 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
 	test(loadFixture(t, "statefulset_ingestor_with_labels.json"))
+}
+
+// TestGetIngestorStatefulSet_ConfigMapVolAnnotation reproduces CSPL-4611 CI failure locally:
+// a user-supplied ConfigMap volume in spec.Volumes should stamp a
+// splcommon.ConfigMapRevAnnotationPrefix+<vol-name> annotation on the IngestorCluster pod
+// template, mirroring TestConfigMapVolAnnotationStamped for Standalone.
+func TestGetIngestorStatefulSet_ConfigMapVolAnnotation(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.IngestorCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IngestorCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas: 1,
+			QueueRef: corev1.ObjectReference{
+				Name: "queue",
+			},
+			ObjectStorageRef: corev1.ObjectReference{
+				Name: "objectstorage",
+			},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "my-defaults",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "my-defaults-cm",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	cmData := map[string]string{"default.yml": "splunk:\n  conf: value1"}
+	cm := splctrl.PrepareConfigMap("my-defaults-cm", "test", cmData)
+	require.NoError(t, splutil.CreateResource(ctx, c, cm))
+
+	require.NoError(t, validateIngestorClusterSpec(ctx, c, &cr))
+
+	ss, err := getIngestorStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	annotations := ss.Spec.Template.ObjectMeta.Annotations
+	annotationKey := splcommon.ConfigMapRevAnnotationPrefix + "my-defaults"
+	hash, ok := annotations[annotationKey]
+	if !ok {
+		t.Fatalf("expected annotation %q on IngestorCluster pod template, got annotations: %v", annotationKey, annotations)
+	}
+	if hash == "" {
+		t.Errorf("expected annotation %q to be non-empty, got empty string", annotationKey)
+	}
 }
 
 // newIngestorQueueOSFixture creates a Queue, ObjectStorage, and the referenced credentials

@@ -15,6 +15,7 @@ package indexingestionsep
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -26,6 +27,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -335,6 +338,146 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testenv.VerifyCRConditionsForPhase("IngestorCluster", ingest.Name, ingest.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "IngestorCluster conditions not met")
 		})
 	})
+
+	Context("Ingestor deployment with user-supplied ConfigMap volume", func() {
+		It("Operator rolls IngestorCluster pods when a user-supplied ConfigMap volume changes", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+			// Secret reference
+			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
+				"queue-secret-ref-volume",
+				testcaseEnvInst.GetIndexIngestSepSecretName(),
+			)}
+			queue.SQS.VolList = volumeSpec
+
+			// Deploy Queue and ObjectStorage using shared helper
+			testcaseEnvInst.Log.Info("Deploy Queue and ObjectStorage")
+			q, objStorage, err := testenv.DeployQueueAndObjectStorage(ctx, deployment, queue, objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy Queue and ObjectStorage")
+
+			// Create a user-supplied ConfigMap in spec.Volumes with initial default.yml content
+			cmName := "cspl4611-defaults-" + testenv.RandomDNSName(3)
+			cm := &v1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cmName,
+					Namespace: testcaseEnvInst.GetName(),
+				},
+				Data: map[string]string{
+					"default.yml": "[myapp]\nmax_connections = 10\n",
+				},
+			}
+			testcaseEnvInst.Log.Info("Create user-supplied ConfigMap", "name", cmName)
+			err = testcaseEnvInst.GetKubeClient().Create(ctx, cm)
+			Expect(err).To(Succeed(), "Unable to create user ConfigMap")
+
+			// Deploy IngestorCluster with the ConfigMap mounted as a volume in spec.Volumes
+			ingestName := deployment.GetName() + "-ingest"
+			ic := &enterpriseApi.IngestorCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       ingestName,
+					Namespace:  testcaseEnvInst.GetName(),
+					Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+				},
+				Spec: enterpriseApi.IngestorClusterSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []v1.Volume{
+							{
+								Name: cmName,
+								VolumeSource: v1.VolumeSource{
+									ConfigMap: &v1.ConfigMapVolumeSource{
+										LocalObjectReference: v1.LocalObjectReference{Name: cmName},
+									},
+								},
+							},
+						},
+					},
+					QueueRef:         v1.ObjectReference{Name: q.Name},
+					ObjectStorageRef: v1.ObjectReference{Name: objStorage.Name},
+					Replicas:         1,
+				},
+			}
+			testcaseEnvInst.Log.Info("Deploy IngestorCluster with user-supplied ConfigMap volume")
+			_, err = deployment.DeployIngestorClusterWithAdditionalConfiguration(ctx, ic)
+			Expect(err).To(Succeed(), "Unable to deploy IngestorCluster")
+
+			// Wait for IngestorCluster to be Ready
+			testcaseEnvInst.Log.Info("Wait for IngestorCluster to be Ready")
+			Expect(testcaseEnvInst.VerifyIngestorReady(ctx, deployment)).To(Succeed(), "Ingestor Cluster not ready")
+
+			// Get the StatefulSet name and namespace for annotation checks
+			stsName := enterprise.GetSplunkStatefulsetName(enterprise.SplunkIngestor, ingestName)
+			ns := testcaseEnvInst.GetName()
+			annotationKey := splcommon.ConfigMapRevAnnotationPrefix + cmName
+			// kubectl JSONPath bracket-notation treats unescaped dots as nested-field
+			// navigation, so the dotted annotation key (revision.configmap.enterprise.splunk.com/<vol>)
+			// must have its dots backslash-escaped or the lookup silently returns empty (CSPL-4611).
+			annotationKeyJSONPath := strings.ReplaceAll(annotationKey, ".", `\.`)
+
+			// Verify the configMapRev annotation is present on the StatefulSet pod template
+			testcaseEnvInst.Log.Info("Verify configMapRev annotation present on StatefulSet pod template")
+			Eventually(func() string {
+				out, _ := exec.Command("kubectl", "get", "sts", "-n", ns, stsName,
+					"-o", fmt.Sprintf("jsonpath={.spec.template.metadata.annotations['%s']}", annotationKeyJSONPath)).Output()
+				return strings.TrimSpace(string(out))
+			}, deployment.GetTimeout(), testenv.PollInterval).ShouldNot(BeEmpty(),
+				"configMapRev annotation should be stamped on pod template after initial deploy")
+
+			// Capture annotation value and pod ages before ConfigMap update
+			testcaseEnvInst.Log.Info("Capture pre-update annotation value and pod start times")
+			initialAnnotationOut, _ := exec.Command("kubectl", "get", "sts", "-n", ns, stsName,
+				"-o", fmt.Sprintf("jsonpath={.spec.template.metadata.annotations['%s']}", annotationKeyJSONPath)).Output()
+			initialAnnotationValue := strings.TrimSpace(string(initialAnnotationOut))
+			podAgeBeforeUpdate := testenv.GetPodsStartTime(ns)
+
+			// Patch the ConfigMap with new content to trigger rolling restart
+			testcaseEnvInst.Log.Info("Patch user-supplied ConfigMap to trigger rolling restart")
+			updatedCM, err := deployment.GetConfigMap(ctx, cmName)
+			Expect(err).To(Succeed(), "Unable to get ConfigMap before patch")
+			updatedCM.Data["default.yml"] = "[myapp]\nmax_connections = 50\n"
+			err = testcaseEnvInst.GetKubeClient().Update(ctx, updatedCM)
+			Expect(err).To(Succeed(), "Unable to update ConfigMap")
+
+			// Wait for the configMapRev annotation to change on the StatefulSet pod template
+			testcaseEnvInst.Log.Info("Wait for configMapRev annotation to reflect updated ConfigMap ResourceVersion")
+			Eventually(func() string {
+				out, _ := exec.Command("kubectl", "get", "sts", "-n", ns, stsName,
+					"-o", fmt.Sprintf("jsonpath={.spec.template.metadata.annotations['%s']}", annotationKeyJSONPath)).Output()
+				return strings.TrimSpace(string(out))
+			}, deployment.GetTimeout(), testenv.PollInterval).ShouldNot(Equal(initialAnnotationValue),
+				"configMapRev annotation should change after ConfigMap update")
+
+			// Wait for IngestorCluster to be Ready again after rolling restart
+			testcaseEnvInst.Log.Info("Wait for IngestorCluster to be Ready after rolling restart")
+			Expect(testcaseEnvInst.VerifyIngestorReady(ctx, deployment)).To(Succeed(), "Ingestor Cluster not ready after rolling restart")
+
+			// Verify pods were restarted (start times should be newer)
+			testcaseEnvInst.Log.Info("Verify pods rolled after ConfigMap update")
+			podAgeAfterUpdate := testenv.GetPodsStartTime(ns)
+			foundIngestPod := false
+			for podName, beforeTime := range podAgeBeforeUpdate {
+				if strings.Contains(podName, "ingest") {
+					foundIngestPod = true
+					afterTime, ok := podAgeAfterUpdate[podName]
+					Expect(ok).To(BeTrue(), "Pod %s should still exist after rolling restart", podName)
+					Expect(afterTime.After(beforeTime)).To(BeTrue(),
+						"Pod %s should have restarted: before=%v after=%v", podName, beforeTime, afterTime)
+				}
+			}
+			Expect(foundIngestPod).To(BeTrue(), "expected to capture at least one ingestor pod before update")
+
+			// Verify updated config content is accessible on disk inside the pod
+			testcaseEnvInst.Log.Info("Verify updated ConfigMap content is present in the IngestorCluster pod")
+			ingestorPodName := fmt.Sprintf(testenv.IngestorPod, ingestName, 0)
+			mountedFilePath := fmt.Sprintf("/mnt/%s/default.yml", cmName)
+			mountedContent, err := testenv.GetConfFile(ingestorPodName, mountedFilePath, ns)
+			Expect(err).To(Succeed(), "Unable to read mounted ConfigMap file from pod")
+			Expect(testenv.ValidateContent(mountedContent, []string{"max_connections = 50"}, true)).To(Succeed(),
+				"updated ConfigMap content should be visible in mounted volume")
+		})
+	})
+
 })
 
 // smartBusConfPath returns the on-pod path of a SmartBus conf file for the given pod.
