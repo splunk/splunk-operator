@@ -45,6 +45,16 @@ var initiateSearchHeadClusterUpgrade = func(
 	return mgr.getClient(ctx, ordinal).InitiateUpgrade()
 }
 
+var validateSearchHeadClusterImageUpgradePath = func(
+	context.Context,
+	string,
+	string,
+) (upgrade.SHCImageUpgradePathDecision, error) {
+	// Production enablement requires an approved authoritative compatibility
+	// source. Do not infer support from image tag syntax.
+	return upgrade.SHCImageUpgradePathUnknown, nil
+}
+
 // updateRollingStatefulSetPods adapts Kubernetes and durable SHC observations
 // to the pure rollout coordinator. It never deletes a Pod. Replica-count
 // changes remain on the existing lifecycle-aware scaling path.
@@ -113,6 +123,7 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		return enterpriseApi.PhasePending, nil
 	}
 	if !shcPodRolloutActive(mgr.cr.Status.LifecycleOperation) &&
+		!shcImageUpgradeActive(mgr.cr.Status.ImageUpgrade) &&
 		shcAppFrameworkWorkActive(&mgr.cr.Status.AppContext) {
 		// App Framework acquired the durable operation first. Keep the SHC
 		// Ready so its playbook can finish a pending or in-progress bundle
@@ -135,6 +146,7 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		membersAllowed, err := mgr.reconcileImageUpgradeInitialization(
 			ctx,
 			statefulSet,
+			state,
 		)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
@@ -269,17 +281,9 @@ func lifecycleRecoveryActiveForStatefulSet(
 func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeInitialization(
 	ctx context.Context,
 	statefulSet *appsv1.StatefulSet,
+	state upgrade.SHCRolloutState,
 ) (bool, error) {
 	current := mgr.cr.Status.ImageUpgrade
-	if current == nil {
-		return true, nil
-	}
-	if current.Phase ==
-		enterpriseApi.SearchHeadClusterImageUpgradePhaseCompleted {
-		// ImageUpgrade retains the most recent completed operation. A future
-		// template rollout must not be gated by that historical record.
-		return true, nil
-	}
 	if statefulSet.Spec.Replicas == nil {
 		return false, fmt.Errorf(
 			"SHC image upgrade StatefulSet %s has no replica count",
@@ -291,33 +295,96 @@ func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeInitialization(
 		return false, err
 	}
 	now := searchHeadClusterImageUpgradeNow()
+	pathDecision := upgrade.SHCImageUpgradePathUnknown
+	sourceImage := ""
+	uniformSourceImage := false
+	classifyingNewRequest := current == nil ||
+		(current.Phase ==
+			enterpriseApi.SearchHeadClusterImageUpgradePhaseCompleted &&
+			(current.DesiredRevision != statefulSet.Status.UpdateRevision ||
+				current.TargetImage != targetImage ||
+				current.TargetReplicas != *statefulSet.Spec.Replicas))
+	if classifyingNewRequest {
+		sourceImage, uniformSourceImage =
+			uniformSHCRolloutPodImage(state.Pods)
+		if uniformSourceImage &&
+			sourceImage != "" &&
+			sourceImage != targetImage {
+			pathDecision, err =
+				validateSearchHeadClusterImageUpgradePath(
+					ctx,
+					sourceImage,
+					targetImage,
+				)
+			if err != nil {
+				return false, fmt.Errorf(
+					"validate Search Head Cluster image upgrade path: %w",
+					err,
+				)
+			}
+		}
+	}
+	observedConflictingOperation := shcAppFrameworkWorkActive(
+		&mgr.cr.Status.AppContext,
+	) || shcImageUpgradeHasConflictingLifecycle(
+		current,
+		mgr.cr.Status.LifecycleOperation,
+	)
+	activeCurrent := current != nil &&
+		current.Phase !=
+			enterpriseApi.SearchHeadClusterImageUpgradePhaseCompleted
+	conflictingPlannedOperation := observedConflictingOperation &&
+		(activeCurrent ||
+			(uniformSourceImage && sourceImage != targetImage))
 	classification := upgrade.ClassifySHCImageUpgrade(
 		upgrade.SHCImageUpgradeClassificationInput{
-			StatefulSetName: statefulSet.GetName(),
-			DesiredRevision: statefulSet.Status.UpdateRevision,
-			TargetImage:     targetImage,
-			TargetReplicas:  *statefulSet.Spec.Replicas,
-			Current:         current,
-			Now:             now,
+			StatefulSetName:             statefulSet.GetName(),
+			DesiredRevision:             statefulSet.Status.UpdateRevision,
+			TargetImage:                 targetImage,
+			TargetReplicas:              *statefulSet.Spec.Replicas,
+			Pods:                        imageUpgradePodsFromRolloutState(state),
+			PathDecision:                pathDecision,
+			ConflictingPlannedOperation: conflictingPlannedOperation,
+			Current:                     current,
+			Now:                         now,
 		},
 	)
 	if classification.Operation != nil {
 		mgr.cr.Status.ImageUpgrade = classification.Operation
 		current = classification.Operation
 	}
-	if classification.Classification == upgrade.SHCImageUpgradeBlock {
-		mgr.recordImageUpgradeInitializationDecision(
-			upgrade.SHCImageUpgradeInitializationDecision{
-				Action:    upgrade.SHCImageUpgradeInitializationBlock,
-				Operation: current,
-				Reason:    classification.Reason,
-				Message:   classification.Message,
-			},
+	switch classification.Classification {
+	case upgrade.SHCImageUpgradeRecord:
+		mgr.recordImageUpgradeStatus(
+			classification.Reason,
+			classification.Message,
+		)
+		// Persist workflow identity before recording initialization intent.
+		return false, nil
+	case upgrade.SHCImageUpgradeOrdinaryRollout:
+		return true, nil
+	case upgrade.SHCImageUpgradeWait:
+		mgr.recordImageUpgradeStatus(
+			classification.Reason,
+			classification.Message,
+		)
+		return false, nil
+	case upgrade.SHCImageUpgradeBlock:
+		mgr.recordImageUpgradeStatus(
+			classification.Reason,
+			classification.Message,
 		)
 		return false, fmt.Errorf(
 			"SHC image upgrade blocked (%s): %s",
 			classification.Reason,
 			classification.Message,
+		)
+	case upgrade.SHCImageUpgradeResume:
+		// Continue into the initialization state machine.
+	default:
+		return false, fmt.Errorf(
+			"unsupported SHC image-upgrade classification %q",
+			classification.Classification,
 		)
 	}
 
@@ -458,11 +525,18 @@ func (mgr *searchHeadClusterPodManager) projectImageUpgradeInitializationStart(
 func (mgr *searchHeadClusterPodManager) recordImageUpgradeInitializationDecision(
 	decision upgrade.SHCImageUpgradeInitializationDecision,
 ) {
+	mgr.recordImageUpgradeStatus(decision.Reason, decision.Message)
+}
+
+func (mgr *searchHeadClusterPodManager) recordImageUpgradeStatus(
+	reason enterpriseApi.SearchHeadClusterImageUpgradeReason,
+	message string,
+) {
 	mgr.cr.Status.Message = fmt.Sprintf(
 		"%s%s: %s",
 		shcImageUpgradeStatusPrefix,
-		decision.Reason,
-		decision.Message,
+		reason,
+		message,
 	)
 }
 
@@ -476,6 +550,42 @@ func statefulSetSplunkImage(statefulSet *appsv1.StatefulSet) (string, error) {
 		"StatefulSet %s has no declared splunk container image",
 		statefulSet.GetName(),
 	)
+}
+
+func imageUpgradePodsFromRolloutState(
+	state upgrade.SHCRolloutState,
+) []upgrade.SHCImageUpgradePod {
+	pods := make([]upgrade.SHCImageUpgradePod, 0, len(state.Pods))
+	for _, pod := range state.Pods {
+		pods = append(pods, upgrade.SHCImageUpgradePod{
+			Ordinal:  pod.Ordinal,
+			Exists:   pod.Exists,
+			Ready:    pod.Ready,
+			Deleting: pod.Deleting,
+			Revision: pod.Revision,
+			Image:    pod.Image,
+		})
+	}
+	return pods
+}
+
+func uniformSHCRolloutPodImage(
+	pods []upgrade.SHCRolloutPod,
+) (string, bool) {
+	image := ""
+	for _, pod := range pods {
+		if !pod.Exists || pod.Image == "" {
+			return "", false
+		}
+		if image == "" {
+			image = pod.Image
+			continue
+		}
+		if image != pod.Image {
+			return "", false
+		}
+	}
+	return image, len(pods) > 0
 }
 
 func shcImageUpgradeHasConflictingLifecycle(
@@ -635,8 +745,18 @@ func (mgr *searchHeadClusterPodManager) observeRollingStatefulSet(
 			Ready:    ready,
 			Deleting: pod.DeletionTimestamp != nil,
 			Revision: pod.GetLabels()["controller-revision-hash"],
+			Image:    podSplunkImage(pod),
 		})
 	}
 
 	return state, nil
+}
+
+func podSplunkImage(pod *corev1.Pod) string {
+	for _, container := range pod.Spec.Containers {
+		if container.Name == "splunk" {
+			return container.Image
+		}
+	}
+	return ""
 }

@@ -15,6 +15,8 @@
 package enterprise
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -73,6 +75,82 @@ func TestSHCPodRolloutActiveFailsClosed(t *testing.T) {
 				t.Fatalf("shcPodRolloutActive() = %t, want %t", got, test.want)
 			}
 		})
+	}
+}
+
+func TestSHCImageUpgradeActiveFailsClosed(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation *enterpriseApi.SearchHeadClusterImageUpgradeStatus
+		want      bool
+	}{
+		{name: "no operation"},
+		{
+			name:      "empty stored operation",
+			operation: &enterpriseApi.SearchHeadClusterImageUpgradeStatus{},
+			want:      true,
+		},
+		{
+			name: "pending initialization",
+			operation: &enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+				Phase: enterpriseApi.
+					SearchHeadClusterImageUpgradePhasePendingInitialization,
+			},
+			want: true,
+		},
+		{
+			name: "blocked",
+			operation: &enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+				Phase: enterpriseApi.
+					SearchHeadClusterImageUpgradePhaseBlocked,
+			},
+			want: true,
+		},
+		{
+			name: "failed",
+			operation: &enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+				Phase: enterpriseApi.
+					SearchHeadClusterImageUpgradePhaseFailed,
+			},
+			want: true,
+		},
+		{
+			name: "completed",
+			operation: &enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+				Phase: enterpriseApi.
+					SearchHeadClusterImageUpgradePhaseCompleted,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := shcImageUpgradeActive(test.operation); got != test.want {
+				t.Fatalf("shcImageUpgradeActive() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestSHCBundleTargetRejectsActiveImageUpgradeOwner(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	cr := &enterpriseApi.SearchHeadCluster{
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			ImageUpgrade: &enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+				OperationID: "image-upgrade:search-head:revision-2",
+				Phase: enterpriseApi.
+					SearchHeadClusterImageUpgradePhasePendingInitialization,
+			},
+		},
+	}
+
+	_, err := resolveSHCBundlePushTarget(
+		context.Background(),
+		nil,
+		cr,
+	)
+	if err == nil || !strings.Contains(err.Error(), "image-upgrade operation") {
+		t.Fatalf("active image owner bundle target error = %v", err)
 	}
 }
 

@@ -24,6 +24,14 @@ func shcPodRolloutActive(
 		operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted
 }
 
+func shcImageUpgradeActive(
+	operation *enterpriseApi.SearchHeadClusterImageUpgradeStatus,
+) bool {
+	return operation != nil &&
+		operation.Phase !=
+			enterpriseApi.SearchHeadClusterImageUpgradePhaseCompleted
+}
+
 func shcAppFrameworkWorkActive(
 	appContext *enterpriseApi.AppDeploymentContext,
 ) bool {

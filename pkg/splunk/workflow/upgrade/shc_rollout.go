@@ -62,6 +62,7 @@ type SHCRolloutPod struct {
 	Ready    bool
 	Deleting bool
 	Revision string
+	Image    string
 }
 
 // SHCRolloutLifecycle is the durable lifecycle observation consumed by the

@@ -226,6 +226,373 @@ func TestRollingUpdateControllerStartsDurablePreparationWithoutDeletingPod(t *te
 	}
 }
 
+func TestRollingUpdateControllerRecordsSupportedImageWorkflowBeforeInitialization(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	statefulSet.Spec.Template.Spec.Containers[0].Image =
+		"splunk/splunk:10.0.0"
+
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	oldInitiate := initiateSearchHeadClusterUpgrade
+	t.Cleanup(func() {
+		validateSearchHeadClusterImageUpgradePath = oldValidate
+		initiateSearchHeadClusterUpgrade = oldInitiate
+	})
+	validations := 0
+	validateSearchHeadClusterImageUpgradePath = func(
+		_ context.Context,
+		sourceImage string,
+		targetImage string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		validations++
+		if sourceImage != "splunk/splunk:9.4.0" ||
+			targetImage != "splunk/splunk:10.0.0" {
+			t.Fatalf(
+				"validated path %q -> %q",
+				sourceImage,
+				targetImage,
+			)
+		}
+		return upgrade.SHCImageUpgradePathSupported, nil
+	}
+	initializationCalls := 0
+	initiateSearchHeadClusterUpgrade = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) error {
+		initializationCalls++
+		return nil
+	}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil || phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("record image workflow phase=%q error=%v", phase, err)
+	}
+	imageUpgrade := mgr.cr.Status.ImageUpgrade
+	if imageUpgrade == nil ||
+		imageUpgrade.Phase != enterpriseApi.
+			SearchHeadClusterImageUpgradePhasePendingInitialization ||
+		imageUpgrade.Reason != enterpriseApi.
+			SearchHeadClusterImageUpgradeReasonWorkflowRecorded ||
+		imageUpgrade.SourceImage != "splunk/splunk:9.4.0" ||
+		imageUpgrade.TargetImage != "splunk/splunk:10.0.0" ||
+		imageUpgrade.DesiredRevision != "revision-2" ||
+		imageUpgrade.InitializationIntentAt != nil ||
+		imageUpgrade.InitializationAttemptCount != 0 {
+		t.Fatalf("recorded image workflow = %#v", imageUpgrade)
+	}
+	if validations != 1 || initializationCalls != 0 ||
+		mgr.cr.Status.LifecycleOperation != nil {
+		t.Fatalf(
+			"identity barrier validations=%d init=%d lifecycle=%#v",
+			validations,
+			initializationCalls,
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("identity barrier changed Kubernetes state: %v", client.Calls["Update"])
+	}
+
+	// The durable image owner does not yield to App Framework work that
+	// appears after workflow creation, and it does not initialize concurrently.
+	mgr.cr.Status.AppContext.IsDeploymentInProgress = true
+	phase, err = mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil || phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("hold image owner phase=%q error=%v", phase, err)
+	}
+	if mgr.cr.Status.ImageUpgrade.Phase != enterpriseApi.
+		SearchHeadClusterImageUpgradePhasePendingInitialization ||
+		mgr.cr.Status.ImageUpgrade.InitializationIntentAt != nil ||
+		initializationCalls != 0 ||
+		mgr.cr.Status.LifecycleOperation != nil {
+		t.Fatalf(
+			"image owner overlap image=%#v init=%d lifecycle=%#v",
+			mgr.cr.Status.ImageUpgrade,
+			initializationCalls,
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
+	mgr.cr.Status.AppContext.IsDeploymentInProgress = false
+
+	// The next reconciliation records intent but still cannot call Splunk.
+	phase, err = mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil || phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("record image intent phase=%q error=%v", phase, err)
+	}
+	if mgr.cr.Status.ImageUpgrade.Phase !=
+		enterpriseApi.SearchHeadClusterImageUpgradePhaseInitializing ||
+		mgr.cr.Status.ImageUpgrade.InitializationIntentAt == nil ||
+		initializationCalls != 0 ||
+		mgr.cr.Status.LifecycleOperation != nil {
+		t.Fatalf(
+			"intent barrier image=%#v init=%d lifecycle=%#v",
+			mgr.cr.Status.ImageUpgrade,
+			initializationCalls,
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
+	// Validation belongs to workflow creation and is not repeated after the
+	// durable operation is recorded.
+	if validations != 1 {
+		t.Fatalf("path validations = %d, want one", validations)
+	}
+}
+
+func TestRollingUpdateControllerBlocksUnapprovedImagePath(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	tests := []struct {
+		name     string
+		decision upgrade.SHCImageUpgradePathDecision
+		reason   enterpriseApi.SearchHeadClusterImageUpgradeReason
+	}{
+		{
+			name:     "unknown",
+			decision: upgrade.SHCImageUpgradePathUnknown,
+			reason: enterpriseApi.
+				SearchHeadClusterImageUpgradeReasonUnknownUpgradePath,
+		},
+		{
+			name:     "unsupported",
+			decision: upgrade.SHCImageUpgradePathUnsupported,
+			reason: enterpriseApi.
+				SearchHeadClusterImageUpgradeReasonUnsupportedUpgradePath,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mgr, statefulSet, client := rollingUpdateControllerFixture(
+				t,
+				3,
+				"revision-1",
+				"revision-2",
+				[]string{"revision-1", "revision-1", "revision-1"},
+			)
+			statefulSet.Spec.Template.Spec.Containers[0].Image =
+				"splunk/splunk:10.0.0"
+
+			oldValidate := validateSearchHeadClusterImageUpgradePath
+			t.Cleanup(func() {
+				validateSearchHeadClusterImageUpgradePath = oldValidate
+			})
+			validateSearchHeadClusterImageUpgradePath = func(
+				context.Context,
+				string,
+				string,
+			) (upgrade.SHCImageUpgradePathDecision, error) {
+				return test.decision, nil
+			}
+
+			phase, err := mgr.updateRollingStatefulSetPods(
+				context.Background(),
+				statefulSet,
+				3,
+			)
+			if err == nil || phase != enterpriseApi.PhaseError {
+				t.Fatalf("unapproved path phase=%q error=%v", phase, err)
+			}
+			if mgr.cr.Status.ImageUpgrade != nil ||
+				mgr.cr.Status.LifecycleOperation != nil ||
+				!strings.Contains(
+					mgr.cr.Status.Message,
+					string(test.reason),
+				) {
+				t.Fatalf(
+					"unapproved path image=%#v lifecycle=%#v message=%q",
+					mgr.cr.Status.ImageUpgrade,
+					mgr.cr.Status.LifecycleOperation,
+					mgr.cr.Status.Message,
+				)
+			}
+			assertRollingUpdatePartition(
+				t,
+				statefulSet.Spec.UpdateStrategy,
+				3,
+			)
+			if len(client.Calls["Update"]) != 0 {
+				t.Fatalf(
+					"unapproved path changed Kubernetes state: %v",
+					client.Calls["Update"],
+				)
+			}
+		})
+	}
+}
+
+func TestRollingUpdateControllerLeavesValidatorErrorRetryable(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	statefulSet.Spec.Template.Spec.Containers[0].Image =
+		"splunk/splunk:10.0.0"
+
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	t.Cleanup(func() {
+		validateSearchHeadClusterImageUpgradePath = oldValidate
+	})
+	validateSearchHeadClusterImageUpgradePath = func(
+		context.Context,
+		string,
+		string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		return upgrade.SHCImageUpgradePathUnknown,
+			fmt.Errorf("compatibility source unavailable")
+	}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err == nil || phase != enterpriseApi.PhaseError {
+		t.Fatalf("validator error phase=%q error=%v", phase, err)
+	}
+	if mgr.cr.Status.ImageUpgrade != nil ||
+		mgr.cr.Status.LifecycleOperation != nil {
+		t.Fatalf(
+			"validator error changed ownership image=%#v lifecycle=%#v",
+			mgr.cr.Status.ImageUpgrade,
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("validator error changed Kubernetes state: %v", client.Calls["Update"])
+	}
+}
+
+func TestRollingUpdateControllerBlocksMixedImagesBeforeWorkflowCreation(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	statefulSet.Spec.Template.Spec.Containers[0].Image =
+		"splunk/splunk:10.0.0"
+	setRollingUpdateFixturePodImage(
+		t,
+		client,
+		statefulSet,
+		2,
+		"splunk/splunk:9.3.0",
+	)
+	client.ResetCalls()
+
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	t.Cleanup(func() {
+		validateSearchHeadClusterImageUpgradePath = oldValidate
+	})
+	validationCalls := 0
+	validateSearchHeadClusterImageUpgradePath = func(
+		context.Context,
+		string,
+		string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		validationCalls++
+		return upgrade.SHCImageUpgradePathSupported, nil
+	}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err == nil || phase != enterpriseApi.PhaseError {
+		t.Fatalf("mixed images phase=%q error=%v", phase, err)
+	}
+	if validationCalls != 0 ||
+		mgr.cr.Status.ImageUpgrade != nil ||
+		mgr.cr.Status.LifecycleOperation != nil ||
+		!strings.Contains(
+			mgr.cr.Status.Message,
+			string(enterpriseApi.
+				SearchHeadClusterImageUpgradeReasonMixedSourceImages),
+		) {
+		t.Fatalf(
+			"mixed image classification validations=%d image=%#v lifecycle=%#v message=%q",
+			validationCalls,
+			mgr.cr.Status.ImageUpgrade,
+			mgr.cr.Status.LifecycleOperation,
+			mgr.cr.Status.Message,
+		)
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("mixed images changed Kubernetes state: %v", client.Calls["Update"])
+	}
+}
+
+func TestRollingUpdateControllerTreatsSameImageAsOrdinaryRollout(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, _ := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	t.Cleanup(func() {
+		validateSearchHeadClusterImageUpgradePath = oldValidate
+	})
+	validationCalls := 0
+	validateSearchHeadClusterImageUpgradePath = func(
+		context.Context,
+		string,
+		string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		validationCalls++
+		return upgrade.SHCImageUpgradePathSupported, nil
+	}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil || phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("ordinary rollout phase=%q error=%v", phase, err)
+	}
+	if validationCalls != 0 ||
+		mgr.cr.Status.ImageUpgrade != nil ||
+		mgr.cr.Status.LifecycleOperation == nil {
+		t.Fatalf(
+			"ordinary rollout validations=%d image=%#v lifecycle=%#v",
+			validationCalls,
+			mgr.cr.Status.ImageUpgrade,
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
+}
+
 func TestRollingUpdateControllerPersistsImageInitializationBeforeMemberLifecycle(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(
@@ -591,14 +958,17 @@ func TestRollingUpdateControllerIgnoresHistoricalCompletedImageWorkflow(t *testi
 		"revision-2",
 		[]string{"revision-1", "revision-1", "revision-1"},
 	)
-	configureImageUpgradeControllerFixture(
-		mgr,
-		statefulSet,
-		"splunk/splunk:9.4.0",
-		"splunk/splunk:10.0.0",
-	)
-	mgr.cr.Status.ImageUpgrade.Phase =
-		enterpriseApi.SearchHeadClusterImageUpgradePhaseCompleted
+	mgr.cr.Status.ImageUpgrade =
+		&enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+			OperationID:     "image-upgrade:search-head:revision-0",
+			StatefulSetName: statefulSet.GetName(),
+			DesiredRevision: "revision-0",
+			SourceImage:     "splunk/splunk:9.3.0",
+			TargetImage:     "splunk/splunk:9.4.0",
+			TargetReplicas:  3,
+			Phase: enterpriseApi.
+				SearchHeadClusterImageUpgradePhaseCompleted,
+		}
 
 	phase, err := mgr.updateRollingStatefulSetPods(
 		context.Background(),
@@ -615,6 +985,59 @@ func TestRollingUpdateControllerIgnoresHistoricalCompletedImageWorkflow(t *testi
 			"historical workflow gated ordinary rollout: %#v",
 			mgr.cr.Status.LifecycleOperation,
 		)
+	}
+}
+
+func TestRollingUpdateControllerReplacesHistoricalWorkflowForNewSupportedImage(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, _ := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	statefulSet.Spec.Template.Spec.Containers[0].Image =
+		"splunk/splunk:10.0.0"
+	mgr.cr.Status.ImageUpgrade =
+		&enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+			OperationID:     "image-upgrade:search-head:revision-0",
+			StatefulSetName: statefulSet.GetName(),
+			DesiredRevision: "revision-0",
+			SourceImage:     "splunk/splunk:9.3.0",
+			TargetImage:     "splunk/splunk:9.4.0",
+			TargetReplicas:  3,
+			Phase: enterpriseApi.
+				SearchHeadClusterImageUpgradePhaseCompleted,
+		}
+
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	t.Cleanup(func() {
+		validateSearchHeadClusterImageUpgradePath = oldValidate
+	})
+	validateSearchHeadClusterImageUpgradePath = func(
+		context.Context,
+		string,
+		string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		return upgrade.SHCImageUpgradePathSupported, nil
+	}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil || phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("new image after completed phase=%q error=%v", phase, err)
+	}
+	if mgr.cr.Status.ImageUpgrade.OperationID !=
+		"image-upgrade:splunk-stack1-search-head:revision-2" ||
+		mgr.cr.Status.ImageUpgrade.Phase != enterpriseApi.
+			SearchHeadClusterImageUpgradePhasePendingInitialization ||
+		mgr.cr.Status.ImageUpgrade.SourceImage != "splunk/splunk:9.4.0" ||
+		mgr.cr.Status.ImageUpgrade.TargetImage != "splunk/splunk:10.0.0" {
+		t.Fatalf("new image workflow = %#v", mgr.cr.Status.ImageUpgrade)
 	}
 }
 
@@ -2060,6 +2483,13 @@ func rollingUpdateControllerFixture(
 					Partition: &partition,
 				},
 			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "splunk", Image: "splunk/splunk:9.4.0"},
+					},
+				},
+			},
 		},
 		Status: appsv1.StatefulSetStatus{
 			Replicas:        replicas,
@@ -2081,6 +2511,11 @@ func rollingUpdateControllerFixture(
 				Namespace: statefulSet.GetNamespace(),
 				Labels: map[string]string{
 					"controller-revision-hash": revision,
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{Name: "splunk", Image: "splunk/splunk:9.4.0"},
 				},
 			},
 			Status: corev1.PodStatus{
@@ -2221,6 +2656,31 @@ func setRollingUpdateFixturePodReady(
 	}
 	if err := client.Update(context.Background(), pod); err != nil {
 		t.Fatalf("update Pod %d readiness: %v", ordinal, err)
+	}
+}
+
+func setRollingUpdateFixturePodImage(
+	t *testing.T,
+	client *spltest.MockClient,
+	statefulSet *appsv1.StatefulSet,
+	ordinal int32,
+	image string,
+) {
+	t.Helper()
+	pod := &corev1.Pod{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Namespace: statefulSet.GetNamespace(),
+		Name:      fmt.Sprintf("%s-%d", statefulSet.GetName(), ordinal),
+	}, pod); err != nil {
+		t.Fatalf("get Pod %d: %v", ordinal, err)
+	}
+	for index := range pod.Spec.Containers {
+		if pod.Spec.Containers[index].Name == "splunk" {
+			pod.Spec.Containers[index].Image = image
+		}
+	}
+	if err := client.Update(context.Background(), pod); err != nil {
+		t.Fatalf("update Pod %d image: %v", ordinal, err)
 	}
 }
 

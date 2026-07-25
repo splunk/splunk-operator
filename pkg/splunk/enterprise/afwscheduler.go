@@ -1660,6 +1660,13 @@ func resolveSHCBundlePushTarget(
 			shc.Status.LifecycleOperation.Stage,
 		)
 	}
+	if shcImageUpgradeActive(shc.Status.ImageUpgrade) {
+		return "", fmt.Errorf(
+			"SHC bundle push is blocked while image-upgrade operation %q is in phase %q",
+			shc.Status.ImageUpgrade.OperationID,
+			shc.Status.ImageUpgrade.Phase,
+		)
+	}
 	if shc.Status.Captain == "" || !shc.Status.CaptainReady {
 		return "", fmt.Errorf("SHC bundle target requires a ready captain")
 	}
