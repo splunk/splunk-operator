@@ -581,6 +581,97 @@ func TestLifecycleAdapterRequiresCaptainToObserveReplacementMember(t *testing.T)
 	}
 }
 
+func TestLifecycleAdapterPreservesNonUpMemberViews(t *testing.T) {
+	target := int32(2)
+	targetPod := "splunk-example-search-head-2"
+	captainPod := "splunk-example-search-head-0"
+	cr := &enterpriseApi.SearchHeadCluster{
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Captain:      captainPod,
+			CaptainReady: true,
+			Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+				{Name: captainPod, Status: "Up", Registered: true},
+				{Name: "splunk-example-search-head-1", Status: "Up", Registered: true},
+				{Name: targetPod, Status: "Joining", Registered: true},
+			},
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				TargetPod:     targetPod,
+				TargetOrdinal: &target,
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
+	oldGetMembers := getSearchHeadCaptainMembers
+	t.Cleanup(func() {
+		getSearchHeadLifecyclePod = oldGetLifecyclePod
+		getSearchHeadCaptainMembers = oldGetMembers
+	})
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				UID: types.UID("new-pod-uid"),
+				Labels: map[string]string{
+					"controller-revision-hash": "revision-2",
+				},
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodScheduled, Status: corev1.ConditionTrue},
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		}, nil
+	}
+	getSearchHeadCaptainMembers = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+		return map[string]splclient.SearchHeadCaptainMemberInfo{
+			captainPod: {
+				Identifier: "member-guid-0",
+				Label:      captainPod,
+				Status:     "Up",
+				Captain:    true,
+			},
+			targetPod: {
+				Identifier: "member-guid-2",
+				Label:      targetPod,
+				Status:     "Syncing",
+			},
+		}, nil
+	}
+
+	observation, err := mgr.observeLifecycleRecovery(
+		context.Background(),
+		target,
+	)
+	if err != nil {
+		t.Fatalf("observe non-Up replacement: %v", err)
+	}
+	if !observation.PodReady ||
+		!observation.MemberObserved ||
+		!observation.MemberRegistered ||
+		!observation.CaptainMemberObserved ||
+		!observation.AuthoritativeCaptain {
+		t.Fatalf("non-Up replacement observation = %#v", observation)
+	}
+	if observation.MemberStatus != "Joining" ||
+		observation.CaptainMemberStatus != "Syncing" {
+		t.Fatalf(
+			"member statuses = local %q, captain %q",
+			observation.MemberStatus,
+			observation.CaptainMemberStatus,
+		)
+	}
+}
+
 func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 

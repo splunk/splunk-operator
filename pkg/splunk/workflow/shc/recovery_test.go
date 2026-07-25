@@ -385,6 +385,72 @@ func TestRecoveryWaitsWhenCaptainDoesNotObserveReplacementMember(t *testing.T) {
 	}
 }
 
+func TestRecoveryWaitsForUpStatusInMemberAndCaptainViews(t *testing.T) {
+	tests := []struct {
+		name          string
+		memberStatus  string
+		captainStatus string
+		wantReason    enterpriseApi.SearchHeadClusterLifecycleReason
+	}{
+		{
+			name:          "member view not up",
+			memberStatus:  "Joining",
+			captainStatus: "Up",
+			wantReason:    enterpriseApi.SearchHeadClusterLifecycleReasonMemberNotUp,
+		},
+		{
+			name:          "captain view not synchronized",
+			memberStatus:  "Up",
+			captainStatus: "Joining",
+			wantReason: enterpriseApi.
+				SearchHeadClusterLifecycleReasonMemberSynchronizationPending,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+			operation := authorizedRecoveryOperation(now)
+			observation := recoveredPodObservation()
+			observation.MemberStatus = test.memberStatus
+			observation.CaptainMemberStatus = test.captainStatus
+
+			decision := EvaluateRecovery(
+				operation,
+				observation,
+				testRecoveryPolicy(),
+				now.Add(time.Second),
+			)
+
+			assertDecision(
+				t,
+				decision,
+				enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+				ActionObserveCluster,
+			)
+			if decision.Operation.Reason != test.wantReason {
+				t.Fatalf(
+					"reason = %q, want %q",
+					decision.Operation.Reason,
+					test.wantReason,
+				)
+			}
+			if decision.Operation.DetentionReleaseRequestedAt != nil {
+				t.Fatalf(
+					"non-Up member requested detention release at %v",
+					decision.Operation.DetentionReleaseRequestedAt,
+				)
+			}
+			if len(decision.Operation.CompletedOrdinals) != 0 {
+				t.Fatalf(
+					"non-Up member completed ordinals %v",
+					decision.Operation.CompletedOrdinals,
+				)
+			}
+		})
+	}
+}
+
 func authorizedRecoveryOperation(now time.Time) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
 	operation := StartReplacement(
 		"operation-1",
