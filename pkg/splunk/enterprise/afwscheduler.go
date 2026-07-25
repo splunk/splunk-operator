@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,6 +33,7 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -200,7 +202,11 @@ var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImp
 		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer)
 
 		// Bundle push
-		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), shellQuote(adminPwd), "/tmp/status.txt")
+		targetURL, err := resolveSHCBundlePushTarget(ctx, podExecClient.GetClient(), cr)
+		if err != nil {
+			return err
+		}
+		command2 = fmt.Sprintf(applySHCBundleCmdStr, targetURL, shellQuote(adminPwd), "/tmp/status.txt")
 	}
 
 	// Run the commands on Splunk pods
@@ -1620,13 +1626,83 @@ func getIdxcPlaybookContext(ctx context.Context, client splcommon.ControllerClie
 // getSHCPlaybookContext returns the shc playbook context
 func getSHCPlaybookContext(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, podExecClient splutil.PodExecClientImpl) *SHCPlaybookContext {
 	return &SHCPlaybookContext{
-		client:               client,
-		cr:                   cr,
-		afwPipeline:          afwPipeline,
-		targetPodName:        podName,
-		searchHeadCaptainURL: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false),
-		podExecClient:        podExecClient,
+		client:        client,
+		cr:            cr,
+		afwPipeline:   afwPipeline,
+		targetPodName: podName,
+		podExecClient: podExecClient,
 	}
+}
+
+func resolveSHCBundlePushTarget(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr splcommon.MetaObject,
+) (string, error) {
+	if !searchHeadClusterLifecycleEnabled() {
+		return GetSplunkStatefulsetURL(
+			cr.GetNamespace(),
+			SplunkSearchHead,
+			cr.GetName(),
+			0,
+			false,
+		), nil
+	}
+
+	shc, ok := cr.(*enterpriseApi.SearchHeadCluster)
+	if !ok {
+		return "", fmt.Errorf("SHC bundle target requires a SearchHeadCluster")
+	}
+	if shc.Status.Captain == "" || !shc.Status.CaptainReady {
+		return "", fmt.Errorf("SHC bundle target requires a ready captain")
+	}
+
+	candidates := append(
+		[]enterpriseApi.SearchHeadClusterMemberStatus(nil),
+		shc.Status.Members...,
+	)
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Name < candidates[j].Name
+	})
+	for _, member := range candidates {
+		if member.Name == "" || !member.Registered || member.Status != "Up" {
+			continue
+		}
+		pod := &corev1.Pod{}
+		if err := client.Get(
+			ctx,
+			types.NamespacedName{
+				Namespace: shc.GetNamespace(),
+				Name:      member.Name,
+			},
+			pod,
+		); err != nil || pod.DeletionTimestamp != nil || !podIsReady(pod) {
+			continue
+		}
+		return splcommon.GetServiceFQDN(
+			shc.GetNamespace(),
+			fmt.Sprintf(
+				"%s.%s",
+				member.Name,
+				splcommon.GetSplunkServiceName(
+					SplunkSearchHead,
+					shc.GetName(),
+					true,
+				),
+			),
+		), nil
+	}
+
+	return "", fmt.Errorf("no registered, Up, Kubernetes-ready SHC member is available for bundle push")
+}
+
+func podIsReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
 }
 
 // getLocalScopePlaybookContext returns the local scoped app install playbook context
@@ -1779,9 +1855,18 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 
 // triggerBundlePush triggers the bundle push operation for SHC
 func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Context) error {
+	targetURL, err := resolveSHCBundlePushTarget(
+		ctx,
+		shcPlaybookContext.client,
+		shcPlaybookContext.cr,
+	)
+	if err != nil {
+		return err
+	}
+	shcPlaybookContext.searchHeadTargetURL = targetURL
 
 	scopedLog := logging.FromContext(ctx).With("func", "shcPlaybookContext.triggerBundlePush",
-		"shcCaptainUrl", shcPlaybookContext.searchHeadCaptainURL,
+		"shcTargetUrl", shcPlaybookContext.searchHeadTargetURL,
 		"cr", shcPlaybookContext.cr.GetName())
 
 	// Reduce the liveness probe level
@@ -1793,7 +1878,7 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 		scopedLog.ErrorContext(ctx, "failed to retrieve admin password", "error", err)
 		return err
 	}
-	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, shellQuote(adminPwd), shcBundlePushStatusCheckFile)
+	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadTargetURL, shellQuote(adminPwd), shcBundlePushStatusCheckFile)
 	scopedLog.Info("Triggering bundle push", "command", redactSplunkAuth(cmd, adminPwd))
 
 	streamOptions := splutil.NewStreamOptionsObject(cmd)

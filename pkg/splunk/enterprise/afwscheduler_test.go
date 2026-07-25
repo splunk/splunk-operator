@@ -2683,12 +2683,12 @@ func TestSetLivenessProbeLevelForSHC(t *testing.T) {
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	playbookContext := &SHCPlaybookContext{
-		client:               c,
-		cr:                   cr,
-		afwPipeline:          nil,
-		targetPodName:        targetPodName,
-		searchHeadCaptainURL: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false),
-		podExecClient:        mockPodExecClient,
+		client:              c,
+		cr:                  cr,
+		afwPipeline:         nil,
+		targetPodName:       targetPodName,
+		searchHeadTargetURL: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false),
+		podExecClient:       mockPodExecClient,
 	}
 
 	// Test: If the sts is not available, should return an error
@@ -4518,6 +4518,150 @@ func TestAddTelAppCMaster(t *testing.T) {
 	err = addTelApp(ctx, mockPodExecClientError4, 1, shcCr)
 	if err == nil {
 		t.Errorf("Expected error")
+	}
+}
+
+func TestSHCBundlePushUsesReachableMemberWhenOrdinalZeroIsUnavailable(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	ctx := context.Background()
+	mockClient := spltest.NewMockClient()
+	if _, err := splutil.ApplyNamespaceScopedSecretObject(
+		ctx,
+		mockClient,
+		"test",
+	); err != nil {
+		t.Fatalf("create namespace-scoped secret: %v", err)
+	}
+
+	shc := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{Kind: "SearchHeadCluster"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Captain:      "splunk-stack1-search-head-2",
+			CaptainReady: true,
+			Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+				{
+					Name:       "splunk-stack1-search-head-0",
+					Status:     "Up",
+					Registered: true,
+				},
+				{
+					Name:       "splunk-stack1-search-head-1",
+					Status:     "Up",
+					Registered: true,
+				},
+				{
+					Name:       "splunk-stack1-search-head-2",
+					Status:     "Up",
+					Registered: true,
+				},
+			},
+		},
+	}
+	for ordinal, ready := range []bool{false, true, true} {
+		conditionStatus := corev1.ConditionFalse
+		if ready {
+			conditionStatus = corev1.ConditionTrue
+		}
+		mockClient.AddObject(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: GetSplunkStatefulsetPodName(
+					SplunkSearchHead,
+					shc.GetName(),
+					int32(ordinal),
+				),
+				Namespace: shc.GetNamespace(),
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodReady,
+						Status: conditionStatus,
+					},
+				},
+			},
+		})
+	}
+
+	targetURL := GetSplunkStatefulsetURL(
+		shc.GetNamespace(),
+		SplunkSearchHead,
+		shc.GetName(),
+		1,
+		false,
+	)
+	podExecCommands := []string{
+		fmt.Sprintf(
+			createTelAppShcString,
+			shcAppsLocationOnDeployer,
+			shcAppsLocationOnDeployer,
+			telAppConfString,
+			shcAppsLocationOnDeployer,
+			telAppDefMetaConfString,
+			shcAppsLocationOnDeployer,
+		),
+		fmt.Sprintf(
+			"/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:",
+			targetURL,
+		),
+	}
+	mockPodExecClient := &spltest.MockPodExecClient{
+		Cr:     shc,
+		Client: mockClient,
+	}
+	mockPodExecClient.AddMockPodExecReturnContexts(
+		ctx,
+		podExecCommands,
+		&spltest.MockPodExecReturnContext{},
+		&spltest.MockPodExecReturnContext{},
+	)
+
+	if err := addTelApp(ctx, mockPodExecClient, 1, shc); err != nil {
+		t.Fatalf("bundle push through reachable member: %v", err)
+	}
+
+	replicas := int32(1)
+	mockClient.AddObject(&appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkSearchHead, shc.GetName()),
+			Namespace: shc.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{Replicas: &replicas},
+	})
+	appFrameworkExec := &spltest.MockPodExecClient{
+		Cr:     shc,
+		Client: mockClient,
+	}
+	appFrameworkExec.AddMockPodExecReturnContexts(
+		ctx,
+		[]string{
+			"mkdir -p /tmp/splunk_operator_k8s/probes/; echo \"export K8_OPERATOR_LIVENESS_LEVEL=1\" > /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh",
+			fmt.Sprintf(
+				"/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:",
+				targetURL,
+			),
+		},
+		&spltest.MockPodExecReturnContext{},
+		&spltest.MockPodExecReturnContext{},
+	)
+	playbook := &SHCPlaybookContext{
+		client:        mockClient,
+		cr:            shc,
+		targetPodName: getApplicablePodNameForAppFramework(shc, 0),
+		podExecClient: appFrameworkExec,
+	}
+	if err := playbook.triggerBundlePush(ctx); err != nil {
+		t.Fatalf("App Framework bundle push through reachable member: %v", err)
+	}
+	if playbook.searchHeadTargetURL != targetURL {
+		t.Fatalf(
+			"selected App Framework target = %q, want %q",
+			playbook.searchHeadTargetURL,
+			targetURL,
+		)
 	}
 }
 

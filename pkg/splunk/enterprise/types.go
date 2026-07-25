@@ -183,12 +183,12 @@ type IdxcPlaybookContext struct {
 
 // SHCPlaybookContext is used to implement playbook to push bundle to SHC members
 type SHCPlaybookContext struct {
-	client               splcommon.ControllerClient
-	cr                   splcommon.MetaObject
-	afwPipeline          *AppInstallPipeline
-	targetPodName        string
-	searchHeadCaptainURL string
-	podExecClient        splutil.PodExecClientImpl
+	client              splcommon.ControllerClient
+	cr                  splcommon.MetaObject
+	afwPipeline         *AppInstallPipeline
+	targetPodName       string
+	searchHeadTargetURL string
+	podExecClient       splutil.PodExecClientImpl
 }
 
 // premiumAppScopePlaybookContext is used to implement playbook to run special commands for premium apps installation
