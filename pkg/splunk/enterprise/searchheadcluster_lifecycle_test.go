@@ -255,6 +255,197 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 	assertLifecycleAdapterResult(t, ready, err, true)
 }
 
+func TestScaleDownCaptainTransferPrecedesMembershipRemoval(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+
+	now := time.Date(2026, 7, 25, 10, 0, 0, 0, time.UTC)
+	target := int32(2)
+	targetPod := "splunk-example-search-head-2"
+	preferredCaptain := "splunk-example-search-head-1"
+	stageStartedAt := metav1.NewTime(now)
+	cr := &enterpriseApi.SearchHeadCluster{}
+	cr.Name = "example"
+	cr.Status.Initialized = true
+	cr.Status.MinPeersJoined = true
+	cr.Status.CaptainReady = true
+	cr.Status.Captain = targetPod
+	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+		{Name: "splunk-example-search-head-0", Status: "Up", Registered: true},
+		{Name: preferredCaptain, Status: "Up", Registered: true},
+		{Name: targetPod, Status: "ManualDetention", Registered: true},
+	}
+	cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:    "ScaleDown:splunk-example-search-head-2:",
+		Intent:         enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown,
+		TargetPod:      targetPod,
+		TargetOrdinal:  &target,
+		TargetMemberID: "member-guid-2",
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageTransferringCaptain,
+		StageStartedAt:     &stageStartedAt,
+		LastTransitionTime: &stageStartedAt,
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	oldNow := searchHeadClusterLifecycleNow
+	oldGetMembers := getSearchHeadCaptainMembers
+	oldTransferCaptain := transferSearchHeadCaptain
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
+	oldRemoveMember := removeSearchHeadClusterMember
+	t.Cleanup(func() {
+		searchHeadClusterLifecycleNow = oldNow
+		getSearchHeadCaptainMembers = oldGetMembers
+		transferSearchHeadCaptain = oldTransferCaptain
+		getSearchHeadLifecyclePod = oldGetLifecyclePod
+		removeSearchHeadClusterMember = oldRemoveMember
+	})
+	searchHeadClusterLifecycleNow = func() time.Time {
+		now = now.Add(time.Second)
+		return now
+	}
+
+	captainMembers := map[string]splclient.SearchHeadCaptainMemberInfo{
+		"splunk-example-search-head-0": {
+			Identifier:    "member-guid-0",
+			Label:         "splunk-example-search-head-0",
+			Status:        "Up",
+			ManagementURI: "https://splunk-example-search-head-0:8089",
+		},
+		preferredCaptain: {
+			Identifier:       "member-guid-1",
+			Label:            preferredCaptain,
+			Status:           "Up",
+			ManagementURI:    "https://splunk-example-search-head-1:8089",
+			PreferredCaptain: true,
+		},
+		targetPod: {
+			Identifier:    "member-guid-2",
+			Label:         targetPod,
+			Status:        "ManualDetention",
+			Captain:       true,
+			ManagementURI: "https://splunk-example-search-head-2:8089",
+		},
+	}
+	getSearchHeadCaptainMembers = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+		return captainMembers, nil
+	}
+
+	transferCalls := 0
+	transferTarget := ""
+	transferSearchHeadCaptain = func(
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		_ int32,
+		managementURI string,
+	) error {
+		transferCalls++
+		transferTarget = managementURI
+		return nil
+	}
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{UID: types.UID("scale-down-pod-uid")},
+		}, nil
+	}
+	removeCalls := 0
+	removeSearchHeadClusterMember = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) error {
+		removeCalls++
+		return nil
+	}
+
+	// A persisted transfer stage submits exactly one transfer request. It
+	// cannot remove membership while the target remains the observed captain.
+	ready, err := mgr.PrepareScaleDown(context.Background(), target)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if transferCalls != 1 ||
+		transferTarget != "https://splunk-example-search-head-1:8089" {
+		t.Fatalf(
+			"transfer calls = %d, target = %q; want one request to preferred candidate",
+			transferCalls,
+			transferTarget,
+		)
+	}
+	if removeCalls != 0 {
+		t.Fatalf("membership removal calls before transfer confirmation = %d, want 0", removeCalls)
+	}
+
+	// A resumed reconcile only observes the submitted request.
+	ready, err = mgr.PrepareScaleDown(context.Background(), target)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if transferCalls != 1 || removeCalls != 0 {
+		t.Fatalf(
+			"calls while target remains captain: transfer=%d removal=%d; want 1 and 0",
+			transferCalls,
+			removeCalls,
+		)
+	}
+
+	// Authoritative agreement on a different ready captain persists the
+	// authorization stage without removing the member in the same reconcile.
+	cr.Status.Captain = preferredCaptain
+	targetInfo := captainMembers[targetPod]
+	targetInfo.Captain = false
+	captainMembers[targetPod] = targetInfo
+	preferredInfo := captainMembers[preferredCaptain]
+	preferredInfo.Captain = true
+	captainMembers[preferredCaptain] = preferredInfo
+
+	ready, err = mgr.PrepareScaleDown(context.Background(), target)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if cr.Status.LifecycleOperation.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement {
+		t.Fatalf(
+			"stage = %q, want AuthorizingReplacement",
+			cr.Status.LifecycleOperation.Stage,
+		)
+	}
+	if removeCalls != 0 {
+		t.Fatalf("membership removal calls during authorization transition = %d, want 0", removeCalls)
+	}
+
+	// A later reconcile authorizes replacement and requests membership
+	// removal, then persists another barrier before replica reduction.
+	ready, err = mgr.PrepareScaleDown(context.Background(), target)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if removeCalls != 1 ||
+		cr.Status.LifecycleOperation.MembershipRemovalRequestedAt == nil {
+		t.Fatalf(
+			"membership removal calls = %d, requestedAt = %v; want one durable request",
+			removeCalls,
+			cr.Status.LifecycleOperation.MembershipRemovalRequestedAt,
+		)
+	}
+	if cr.Status.LifecycleOperation.TargetPodUID != "scale-down-pod-uid" ||
+		cr.Status.LifecycleOperation.ReplacementAuthorizedAt == nil {
+		t.Fatalf(
+			"scale-down authorization = %#v, want captured Pod UID and timestamp",
+			cr.Status.LifecycleOperation,
+		)
+	}
+
+	ready, err = mgr.PrepareScaleDown(context.Background(), target)
+	assertLifecycleAdapterResult(t, ready, err, true)
+	if transferCalls != 1 || removeCalls != 1 {
+		t.Fatalf(
+			"calls after durable resume: transfer=%d removal=%d; want 1 and 1",
+			transferCalls,
+			removeCalls,
+		)
+	}
+}
+
 func TestLifecycleObservationRejectsCaptainDisagreement(t *testing.T) {
 	cr := &enterpriseApi.SearchHeadCluster{}
 	cr.Name = "example"
