@@ -296,6 +296,162 @@ func TestLifecycleObservationRejectsCaptainDisagreement(t *testing.T) {
 	}
 }
 
+func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	stageStartedAt := metav1.NewTime(now)
+	target := int32(0)
+	targetPod := "splunk-example-search-head-0"
+	captainPod := "splunk-example-search-head-1"
+	drainingStage :=
+		enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "example"},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Initialized:    true,
+			MinPeersJoined: true,
+			Captain:        captainPod,
+			CaptainReady:   true,
+			Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+				{
+					Name:       targetPod,
+					Status:     "ManualDetention",
+					Registered: true,
+				},
+				{
+					Name:       captainPod,
+					Status:     "Up",
+					Registered: true,
+				},
+				{
+					Name:       "splunk-example-search-head-2",
+					Status:     "Up",
+					Registered: true,
+				},
+			},
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				OperationID:        "pod-update-0",
+				Intent:             enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+				DesiredRevision:    "revision-2",
+				TargetPod:          targetPod,
+				TargetOrdinal:      &target,
+				Stage:              drainingStage,
+				StartedAt:          &stageStartedAt,
+				StageStartedAt:     &stageStartedAt,
+				LastTransitionTime: &stageStartedAt,
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{
+		cr: cr,
+		statefulSet: &appsv1.StatefulSet{
+			Status: appsv1.StatefulSetStatus{UpdateRevision: "revision-2"},
+		},
+	}
+
+	oldNow := searchHeadClusterLifecycleNow
+	oldGetMembers := getSearchHeadCaptainMembers
+	oldTransferCaptain := transferSearchHeadCaptain
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
+	t.Cleanup(func() {
+		searchHeadClusterLifecycleNow = oldNow
+		getSearchHeadCaptainMembers = oldGetMembers
+		transferSearchHeadCaptain = oldTransferCaptain
+		getSearchHeadLifecyclePod = oldGetLifecyclePod
+	})
+	searchHeadClusterLifecycleNow = func() time.Time {
+		now = now.Add(time.Second)
+		return now
+	}
+	getSearchHeadCaptainMembers = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+		return map[string]splclient.SearchHeadCaptainMemberInfo{
+			targetPod: {
+				Identifier: "member-guid-0",
+				Label:      targetPod,
+				Status:     "ManualDetention",
+			},
+			captainPod: {
+				Identifier: "member-guid-1",
+				Label:      captainPod,
+				Status:     "Up",
+				Captain:    true,
+			},
+			"splunk-example-search-head-2": {
+				Identifier: "member-guid-2",
+				Label:      "splunk-example-search-head-2",
+				Status:     "Up",
+			},
+		}, nil
+	}
+	transferCalls := 0
+	transferSearchHeadCaptain = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+		string,
+	) error {
+		transferCalls++
+		return nil
+	}
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: targetPod,
+				UID:  types.UID("ordinal-zero-pod-uid"),
+			},
+		}, nil
+	}
+
+	// Persist authorization as a separate stage before returning permission
+	// to replace ordinal zero.
+	ready, err := mgr.prepareLifecycleReplacement(
+		context.Background(),
+		target,
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+	)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	operation := cr.Status.LifecycleOperation
+	if operation.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement {
+		t.Fatalf("stage = %q, want AuthorizingReplacement", operation.Stage)
+	}
+	if operation.Captain != captainPod {
+		t.Fatalf("observed captain = %q, want %q", operation.Captain, captainPod)
+	}
+	if transferCalls != 0 {
+		t.Fatalf("captain transfer calls = %d, want zero", transferCalls)
+	}
+
+	ready, err = mgr.prepareLifecycleReplacement(
+		context.Background(),
+		target,
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+	)
+	assertLifecycleAdapterResult(t, ready, err, true)
+	if transferCalls != 0 {
+		t.Fatalf("captain transfer calls after authorization = %d, want zero", transferCalls)
+	}
+	operation = cr.Status.LifecycleOperation
+	if operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != target ||
+		operation.TargetPodUID != "ordinal-zero-pod-uid" ||
+		operation.ReplacementAuthorizedAt == nil {
+		t.Fatalf(
+			"ordinal-zero authorization = %#v, want authorized target with captured UID",
+			operation,
+		)
+	}
+}
+
 func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 
