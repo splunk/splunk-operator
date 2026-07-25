@@ -359,6 +359,10 @@ func evaluateMemberRejoin(
 		)
 		return Decision{Operation: operation, Action: Action{Type: ActionObserveCluster}}
 	}
+	// The current Splunk captain-members contract does not expose separate
+	// configuration-sync or KV-sync completion flags. Its member status is the
+	// supported cluster-side recovery gate; do not infer completion from Pod
+	// readiness, KVStoreHostPort, replication counts, or pending job counts.
 	if observation.CaptainMemberStatus != "Up" &&
 		observation.CaptainMemberStatus != "ManualDetention" {
 		setReason(

@@ -680,6 +680,67 @@ func TestRecoveryBlocksSuspectedConsensusCatchupWithoutDestructiveAction(t *test
 	}
 }
 
+func TestRecoverySeparatesPodReadinessFromCaptainSynchronization(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := recoveredPodObservation()
+	observation.PodReady = true
+	observation.MemberStatus = "Up"
+	observation.CaptainMemberStatus = "Syncing"
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+		ActionObserveCluster,
+	)
+	if decision.Operation.Reason != enterpriseApi.
+		SearchHeadClusterLifecycleReasonMemberSynchronizationPending {
+		t.Fatalf(
+			"reason = %q, want MemberSynchronizationPending",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.DetentionReleaseRequestedAt != nil ||
+		len(decision.Operation.CompletedOrdinals) != 0 {
+		t.Fatalf(
+			"local readiness bypassed synchronization gate: release=%v completed=%v",
+			decision.Operation.DetentionReleaseRequestedAt,
+			decision.Operation.CompletedOrdinals,
+		)
+	}
+	if decision.Operation.MemberRejoinStartedAt == nil {
+		t.Fatal("synchronization wait did not start the rejoin budget")
+	}
+
+	observation.CaptainMemberStatus = "Up"
+	decision = EvaluateRecovery(
+		decision.Operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(2*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+		ActionReleaseDetention,
+	)
+	if decision.Operation.ReplacementMemberID != "member-guid-2" {
+		t.Fatalf(
+			"synchronized replacement identity = %q, want member-guid-2",
+			decision.Operation.ReplacementMemberID,
+		)
+	}
+}
+
 func authorizedRecoveryOperation(now time.Time) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
 	operation := StartReplacement(
 		"operation-1",
