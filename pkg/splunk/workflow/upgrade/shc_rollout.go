@@ -45,6 +45,7 @@ const (
 	SHCRolloutReasonWaitingForKubernetes          SHCRolloutReason = "WaitingForKubernetes"
 	SHCRolloutReasonWaitingForRecovery            SHCRolloutReason = "WaitingForRecovery"
 	SHCRolloutReasonTooManyUnavailable            SHCRolloutReason = "TooManyUnavailable"
+	SHCRolloutReasonExistingUnavailablePod        SHCRolloutReason = "ExistingUnavailablePod"
 	SHCRolloutReasonOutOfOrderRevision            SHCRolloutReason = "OutOfOrderRevision"
 	SHCRolloutReasonConflictingLifecycleOperation SHCRolloutReason = "ConflictingLifecycleOperation"
 	SHCRolloutReasonLifecycleBlocked              SHCRolloutReason = "LifecycleBlocked"
@@ -144,10 +145,12 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 	}
 
 	unavailable := int32(0)
+	unavailableOrdinal := int32(-1)
 	for ordinal := int32(0); ordinal < state.Replicas; ordinal++ {
 		pod := pods[ordinal]
 		if !pod.Exists || !pod.Ready || pod.Deleting {
 			unavailable++
+			unavailableOrdinal = ordinal
 		}
 	}
 	if unavailable > 1 {
@@ -155,6 +158,16 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 			SHCRolloutReasonTooManyUnavailable,
 			fmt.Sprintf("%d Pods are unavailable; refusing partition advancement", unavailable),
 			nil,
+		)
+	}
+	if unavailable > 0 && state.Partition == state.Replicas {
+		return blockSHCRollout(
+			SHCRolloutReasonExistingUnavailablePod,
+			fmt.Sprintf(
+				"Pod ordinal %d is already unavailable; refusing a new planned disruption",
+				unavailableOrdinal,
+			),
+			ordinalPointer(unavailableOrdinal),
 		)
 	}
 
@@ -247,6 +260,16 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 					ordinalPointer(activeOrdinal),
 				)
 			}
+		}
+		if unavailable > 0 {
+			return blockSHCRollout(
+				SHCRolloutReasonExistingUnavailablePod,
+				fmt.Sprintf(
+					"unrelated Pod ordinal %d is unavailable; refusing the next planned disruption",
+					unavailableOrdinal,
+				),
+				ordinalPointer(unavailableOrdinal),
+			)
 		}
 	}
 

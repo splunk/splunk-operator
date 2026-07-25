@@ -131,6 +131,56 @@ func TestSHCRolloutBlocksMoreThanOneUnavailablePod(t *testing.T) {
 	}
 }
 
+func TestSHCRolloutBlocksPartitionAdvanceWhenAnotherPodIsUnavailable(t *testing.T) {
+	state := pendingSHCRolloutState()
+	state.Pods[1].Exists = false
+	state.Pods[1].Ready = false
+	state.Lifecycle = lifecycleForOrdinal(
+		2,
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		true,
+	)
+
+	decision := EvaluateSHCRollout(state)
+
+	if decision.Action != SHCRolloutActionBlock ||
+		decision.Reason != SHCRolloutReasonExistingUnavailablePod ||
+		decision.DesiredPartition != nil ||
+		decision.TargetOrdinal == nil ||
+		*decision.TargetOrdinal != 1 {
+		t.Fatalf(
+			"decision = %#v, want ExistingUnavailablePod block for ordinal 1 without partition",
+			decision,
+		)
+	}
+}
+
+func TestSHCRolloutBlocksNextTargetWhenUnrelatedPodBecomesUnavailable(t *testing.T) {
+	state := pendingSHCRolloutState()
+	state.Partition = 2
+	state.Pods[2].Revision = state.UpdateRevision
+	state.Pods[0].Exists = false
+	state.Pods[0].Ready = false
+	state.Lifecycle = lifecycleForOrdinal(
+		2,
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		true,
+	)
+
+	decision := EvaluateSHCRollout(state)
+
+	if decision.Action != SHCRolloutActionBlock ||
+		decision.Reason != SHCRolloutReasonExistingUnavailablePod ||
+		decision.DesiredPartition != nil ||
+		decision.TargetOrdinal == nil ||
+		*decision.TargetOrdinal != 0 {
+		t.Fatalf(
+			"decision = %#v, want ExistingUnavailablePod block for ordinal 0 before next target",
+			decision,
+		)
+	}
+}
+
 func TestSHCRolloutPauseNeverChangesPartition(t *testing.T) {
 	state := pendingSHCRolloutState()
 	state.Paused = true

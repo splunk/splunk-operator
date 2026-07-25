@@ -422,6 +422,86 @@ func TestRollingUpdateControllerBlocksFailedReplacementWithoutAdvancing(t *testi
 	}
 }
 
+func TestRollingUpdateControllerBlocksAuthorizedTargetAfterManualPodDeletion(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:             "pod-update-2",
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:         "revision-2",
+		TargetPod:               statefulSet.GetName() + "-2",
+		TargetOrdinal:           &target,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		ReplacementAuthorizedAt: &authorizedAt,
+	}
+
+	unplannedPod := &corev1.Pod{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Namespace: statefulSet.GetNamespace(),
+		Name:      statefulSet.GetName() + "-1",
+	}, unplannedPod); err != nil {
+		t.Fatalf("get manually deleted Pod: %v", err)
+	}
+	if err := client.Delete(context.Background(), unplannedPod); err != nil {
+		t.Fatalf("simulate manual Pod deletion: %v", err)
+	}
+	client.ResetCalls()
+
+	recorder := &mockEventRecorder{}
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		&K8EventPublisher{recorder: recorder, instance: mgr.cr},
+	)
+	phase, err := mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+	if err == nil {
+		t.Fatal("expected an existing unavailable Pod to block partition advancement")
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Fatalf("manual deletion phase = %q, want %q", phase, enterpriseApi.PhaseError)
+	}
+	if !strings.Contains(
+		err.Error(),
+		string(upgrade.SHCRolloutReasonExistingUnavailablePod),
+	) {
+		t.Fatalf(
+			"manual deletion error = %q, want %s",
+			err,
+			upgrade.SHCRolloutReasonExistingUnavailablePod,
+		)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("manual deletion advanced partition: %v", client.Calls["Update"])
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	assertNoRollingUpdatePodDelete(t, client)
+	assertRolloutEvent(
+		t,
+		recorder,
+		EventReasonSHCRolloutBlocked,
+		corev1.EventTypeWarning,
+	)
+
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != target ||
+		operation.ReplacementAuthorizedAt == nil {
+		t.Fatalf(
+			"operation after manual deletion = %#v, want retained ordinal 2 authorization",
+			operation,
+		)
+	}
+}
+
 func TestRollingUpdateRecoveryObservationProjectsWaitingStateReadOnly(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(
