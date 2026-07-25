@@ -28,6 +28,73 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+func TestClusterImageInitializationOwnsMatchingMemberLifecycle(t *testing.T) {
+	succeededAt := metav1.Now()
+	target := int32(2)
+	mgr := &searchHeadClusterPodManager{
+		cr: &enterpriseApi.SearchHeadCluster{
+			Status: enterpriseApi.SearchHeadClusterStatus{
+				ImageUpgrade: &enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+					DesiredRevision:           "revision-2",
+					Phase:                     enterpriseApi.SearchHeadClusterImageUpgradePhaseRollingMembers,
+					InitializationSucceededAt: &succeededAt,
+				},
+				LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+					Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+					DesiredRevision: "revision-2",
+					TargetOrdinal:   &target,
+				},
+			},
+		},
+	}
+
+	if !shcImageUpgradeInitializationOwnsLifecycle(mgr) {
+		t.Fatal("persisted cluster initialization did not own matching member lifecycle")
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*searchHeadClusterPodManager)
+	}{
+		{
+			name: "initialization success not persisted",
+			mutate: func(mgr *searchHeadClusterPodManager) {
+				mgr.cr.Status.ImageUpgrade.InitializationSucceededAt = nil
+			},
+		},
+		{
+			name: "cluster phase not RollingMembers",
+			mutate: func(mgr *searchHeadClusterPodManager) {
+				mgr.cr.Status.ImageUpgrade.Phase =
+					enterpriseApi.SearchHeadClusterImageUpgradePhaseInitializing
+			},
+		},
+		{
+			name: "member revision differs",
+			mutate: func(mgr *searchHeadClusterPodManager) {
+				mgr.cr.Status.LifecycleOperation.DesiredRevision = "revision-3"
+			},
+		},
+		{
+			name: "member intent differs",
+			mutate: func(mgr *searchHeadClusterPodManager) {
+				mgr.cr.Status.LifecycleOperation.Intent =
+					enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			copy := mgr.cr.DeepCopy()
+			testManager := &searchHeadClusterPodManager{cr: copy}
+			test.mutate(testManager)
+			if shcImageUpgradeInitializationOwnsLifecycle(testManager) {
+				t.Fatal("cluster initialization owned a mismatched member lifecycle")
+			}
+		})
+	}
+}
+
 func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 

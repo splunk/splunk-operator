@@ -48,17 +48,34 @@ var requestSearchHeadDetention = func(
 	n int32,
 ) error {
 	client := mgr.getClient(ctx, n)
-	if err := client.InitiateUpgrade(); err != nil {
-		return err
-	}
+	if !shcImageUpgradeInitializationOwnsLifecycle(mgr) {
+		if err := client.InitiateUpgrade(); err != nil {
+			return err
+		}
 
-	if mgr.cr.Status.UpgradeEndTimestamp >= mgr.cr.Status.UpgradeStartTimestamp {
-		currentTime := searchHeadClusterLifecycleNow().Unix()
-		mgr.cr.Status.UpgradeStartTimestamp = currentTime
-		mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgrading
-		metrics.UpgradeStartTime.Set(float64(currentTime))
+		if mgr.cr.Status.UpgradeEndTimestamp >= mgr.cr.Status.UpgradeStartTimestamp {
+			currentTime := searchHeadClusterLifecycleNow().Unix()
+			mgr.cr.Status.UpgradeStartTimestamp = currentTime
+			mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgrading
+			metrics.UpgradeStartTime.Set(float64(currentTime))
+		}
 	}
 	return client.SetSearchHeadDetention(true)
+}
+
+func shcImageUpgradeInitializationOwnsLifecycle(
+	mgr *searchHeadClusterPodManager,
+) bool {
+	imageUpgrade := mgr.cr.Status.ImageUpgrade
+	lifecycle := mgr.cr.Status.LifecycleOperation
+	return imageUpgrade != nil &&
+		imageUpgrade.Phase ==
+			enterpriseApi.SearchHeadClusterImageUpgradePhaseRollingMembers &&
+		imageUpgrade.InitializationSucceededAt != nil &&
+		lifecycle != nil &&
+		lifecycle.Intent ==
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+		lifecycle.DesiredRevision == imageUpgrade.DesiredRevision
 }
 
 var transferSearchHeadCaptain = func(

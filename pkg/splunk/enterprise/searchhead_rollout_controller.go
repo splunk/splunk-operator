@@ -17,6 +17,8 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"sort"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
@@ -31,6 +33,17 @@ import (
 )
 
 const shcRollingUpdateStatusPrefix = "SHC RollingUpdate "
+const shcImageUpgradeStatusPrefix = "SHC ImageUpgrade "
+
+var searchHeadClusterImageUpgradeNow = time.Now
+
+var initiateSearchHeadClusterUpgrade = func(
+	ctx context.Context,
+	mgr *searchHeadClusterPodManager,
+	ordinal int32,
+) error {
+	return mgr.getClient(ctx, ordinal).InitiateUpgrade()
+}
 
 // updateRollingStatefulSetPods adapts Kubernetes and durable SHC observations
 // to the pure rollout coordinator. It never deletes a Pod. Replica-count
@@ -119,13 +132,23 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 				decision.Message,
 			)
 		}
+		membersAllowed, err := mgr.reconcileImageUpgradeInitialization(
+			ctx,
+			statefulSet,
+		)
+		if err != nil {
+			return enterpriseApi.PhaseError, err
+		}
+		if !membersAllowed {
+			return enterpriseApi.PhaseUpdating, nil
+		}
 		operationBefore := mgr.cr.Status.LifecycleOperation
 		startingTarget := !rolloutOperationMatches(
 			operationBefore,
 			statefulSet.Status.UpdateRevision,
 			*decision.TargetOrdinal,
 		)
-		_, err := mgr.PrepareRecycle(ctx, *decision.TargetOrdinal)
+		_, err = mgr.PrepareRecycle(ctx, *decision.TargetOrdinal)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
 		}
@@ -238,6 +261,237 @@ func lifecycleRecoveryActiveForStatefulSet(
 
 	return *statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition ==
 		*operation.TargetOrdinal
+}
+
+// reconcileImageUpgradeInitialization gates only a previously recorded image
+// workflow. Image-change classification and workflow creation are a separate
+// adapter boundary; an ordinary template rollout is not inferred here.
+func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeInitialization(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+) (bool, error) {
+	current := mgr.cr.Status.ImageUpgrade
+	if current == nil {
+		return true, nil
+	}
+	if current.Phase ==
+		enterpriseApi.SearchHeadClusterImageUpgradePhaseCompleted {
+		// ImageUpgrade retains the most recent completed operation. A future
+		// template rollout must not be gated by that historical record.
+		return true, nil
+	}
+	if statefulSet.Spec.Replicas == nil {
+		return false, fmt.Errorf(
+			"SHC image upgrade StatefulSet %s has no replica count",
+			statefulSet.GetName(),
+		)
+	}
+	targetImage, err := statefulSetSplunkImage(statefulSet)
+	if err != nil {
+		return false, err
+	}
+	now := searchHeadClusterImageUpgradeNow()
+	classification := upgrade.ClassifySHCImageUpgrade(
+		upgrade.SHCImageUpgradeClassificationInput{
+			StatefulSetName: statefulSet.GetName(),
+			DesiredRevision: statefulSet.Status.UpdateRevision,
+			TargetImage:     targetImage,
+			TargetReplicas:  *statefulSet.Spec.Replicas,
+			Current:         current,
+			Now:             now,
+		},
+	)
+	if classification.Operation != nil {
+		mgr.cr.Status.ImageUpgrade = classification.Operation
+		current = classification.Operation
+	}
+	if classification.Classification == upgrade.SHCImageUpgradeBlock {
+		mgr.recordImageUpgradeInitializationDecision(
+			upgrade.SHCImageUpgradeInitializationDecision{
+				Action:    upgrade.SHCImageUpgradeInitializationBlock,
+				Operation: current,
+				Reason:    classification.Reason,
+				Message:   classification.Message,
+			},
+		)
+		return false, fmt.Errorf(
+			"SHC image upgrade blocked (%s): %s",
+			classification.Reason,
+			classification.Message,
+		)
+	}
+
+	conflictingOperation := shcImageUpgradeHasConflictingLifecycle(
+		current,
+		mgr.cr.Status.LifecycleOperation,
+	)
+	coordinationOwned := !conflictingOperation &&
+		!shcAppFrameworkWorkActive(&mgr.cr.Status.AppContext)
+	targetOrdinal := int32(-1)
+	targetEligible := false
+	if coordinationOwned &&
+		current.Phase ==
+			enterpriseApi.SearchHeadClusterImageUpgradePhaseInitializing &&
+		current.InitializationIntentAt != nil &&
+		current.InitializationSucceededAt == nil {
+		targetOrdinal, targetEligible = mgr.selectImageUpgradeManagementTarget(
+			ctx,
+		)
+	}
+
+	initialization := upgrade.EvaluateSHCImageUpgradeInitialization(
+		upgrade.SHCImageUpgradeInitializationInput{
+			Current:                     current,
+			CoordinationOwned:           coordinationOwned,
+			ConflictingPlannedOperation: conflictingOperation,
+			ManagementTargetEligible:    targetEligible,
+			Now:                         now,
+		},
+	)
+	if initialization.Operation != nil {
+		mgr.cr.Status.ImageUpgrade = initialization.Operation
+	}
+	mgr.recordImageUpgradeInitializationDecision(initialization)
+
+	switch initialization.Action {
+	case upgrade.SHCImageUpgradeInitializationPersist,
+		upgrade.SHCImageUpgradeInitializationWait:
+		return false, nil
+
+	case upgrade.SHCImageUpgradeInitializationCall:
+		if !targetEligible {
+			return false, fmt.Errorf(
+				"SHC image upgrade initialization authorized without an eligible management target",
+			)
+		}
+		endpointErr := initiateSearchHeadClusterUpgrade(
+			ctx,
+			mgr,
+			targetOrdinal,
+		)
+		attemptedAt := searchHeadClusterImageUpgradeNow()
+		attempt := upgrade.RecordSHCImageUpgradeInitializationAttempt(
+			mgr.cr.Status.ImageUpgrade,
+			endpointErr == nil,
+			attemptedAt,
+		)
+		if attempt.Operation != nil {
+			mgr.cr.Status.ImageUpgrade = attempt.Operation
+		}
+		mgr.recordImageUpgradeInitializationDecision(attempt)
+		if endpointErr != nil {
+			return false, fmt.Errorf(
+				"initialize Search Head Cluster image upgrade: %w",
+				endpointErr,
+			)
+		}
+		mgr.projectImageUpgradeInitializationStart(attemptedAt)
+		return false, nil
+
+	case upgrade.SHCImageUpgradeInitializationAllowMembers:
+		return true, nil
+
+	case upgrade.SHCImageUpgradeInitializationBlock:
+		return false, fmt.Errorf(
+			"SHC image upgrade initialization blocked (%s): %s",
+			initialization.Reason,
+			initialization.Message,
+		)
+
+	default:
+		return false, fmt.Errorf(
+			"unsupported SHC image-upgrade initialization action %q",
+			initialization.Action,
+		)
+	}
+}
+
+func (mgr *searchHeadClusterPodManager) selectImageUpgradeManagementTarget(
+	ctx context.Context,
+) (int32, bool) {
+	if !mgr.cr.Status.CaptainReady || mgr.cr.Status.Captain == "" {
+		return -1, false
+	}
+	type candidate struct {
+		ordinal int32
+		name    string
+	}
+	candidates := make([]candidate, 0, len(mgr.cr.Status.Members))
+	for ordinal, member := range mgr.cr.Status.Members {
+		if member.Name == "" || !member.Registered || member.Status != "Up" {
+			continue
+		}
+		candidates = append(candidates, candidate{
+			ordinal: int32(ordinal),
+			name:    member.Name,
+		})
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].name < candidates[j].name
+	})
+	for _, candidate := range candidates {
+		pod := &corev1.Pod{}
+		err := mgr.c.Get(ctx, types.NamespacedName{
+			Namespace: mgr.cr.GetNamespace(),
+			Name:      candidate.name,
+		}, pod)
+		if err != nil || pod.DeletionTimestamp != nil || !podIsReady(pod) {
+			continue
+		}
+		return candidate.ordinal, true
+	}
+	return -1, false
+}
+
+func (mgr *searchHeadClusterPodManager) projectImageUpgradeInitializationStart(
+	now time.Time,
+) {
+	if mgr.cr.Status.UpgradeEndTimestamp < mgr.cr.Status.UpgradeStartTimestamp {
+		return
+	}
+	startedAt := now.Unix()
+	mgr.cr.Status.UpgradeStartTimestamp = startedAt
+	mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgrading
+	splmetrics.UpgradeStartTime.Set(float64(startedAt))
+}
+
+func (mgr *searchHeadClusterPodManager) recordImageUpgradeInitializationDecision(
+	decision upgrade.SHCImageUpgradeInitializationDecision,
+) {
+	mgr.cr.Status.Message = fmt.Sprintf(
+		"%s%s: %s",
+		shcImageUpgradeStatusPrefix,
+		decision.Reason,
+		decision.Message,
+	)
+}
+
+func statefulSetSplunkImage(statefulSet *appsv1.StatefulSet) (string, error) {
+	for _, container := range statefulSet.Spec.Template.Spec.Containers {
+		if container.Name == "splunk" && container.Image != "" {
+			return container.Image, nil
+		}
+	}
+	return "", fmt.Errorf(
+		"StatefulSet %s has no declared splunk container image",
+		statefulSet.GetName(),
+	)
+}
+
+func shcImageUpgradeHasConflictingLifecycle(
+	imageUpgrade *enterpriseApi.SearchHeadClusterImageUpgradeStatus,
+	lifecycle *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+) bool {
+	if lifecycle == nil ||
+		lifecycle.Stage == enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
+		return false
+	}
+	return imageUpgrade == nil ||
+		imageUpgrade.Phase !=
+			enterpriseApi.SearchHeadClusterImageUpgradePhaseRollingMembers ||
+		lifecycle.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		lifecycle.DesiredRevision != imageUpgrade.DesiredRevision
 }
 
 // recordRollingUpdateObservation projects a coordinator decision without
