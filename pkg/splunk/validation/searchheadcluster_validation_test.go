@@ -440,6 +440,197 @@ func TestValidateSearchHeadClusterUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateSearchHeadClusterInlineDefaultsRestartSafety qualifies only the
+// admission portion of OPS-008. Controller-side enforcement and shc_secret
+// rotation guards are required before OPS-008 is complete.
+func TestValidateSearchHeadClusterInlineDefaultsRestartSafety(t *testing.T) {
+	const (
+		unsafeThree = `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          replication_factor: 3
+`
+		unsafeFive = `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          replication_factor: 5
+`
+		allowedOld = `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          captain_is_adhoc_searchhead: false
+          shcluster_label: old
+`
+		allowedNew = `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          captain_is_adhoc_searchhead: true
+          shcluster_label: new
+`
+	)
+
+	newSHC := func(defaults string, strategy enterpriseApi.SearchHeadClusterPodUpdateStrategy) *enterpriseApi.SearchHeadCluster {
+		obj := &enterpriseApi.SearchHeadCluster{
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Defaults: defaults,
+				},
+				Replicas: 3,
+			},
+		}
+		if strategy != "" {
+			obj.Spec.LifecyclePolicy = &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				PodUpdateStrategy: strategy,
+			}
+		}
+		return obj
+	}
+
+	tests := []struct {
+		name        string
+		oldDefaults string
+		defaults    string
+		strategy    enterpriseApi.SearchHeadClusterPodUpdateStrategy
+		wantError   bool
+	}{
+		{
+			name:        "unchanged unsafe stanza is allowed",
+			oldDefaults: unsafeThree,
+			defaults:    unsafeThree,
+		},
+		{
+			name:        "changing an unsafe setting is rejected",
+			oldDefaults: unsafeThree,
+			defaults:    unsafeFive,
+			wantError:   true,
+		},
+		{
+			name:      "adding an unsafe setting is rejected",
+			defaults:  unsafeThree,
+			wantError: true,
+		},
+		{
+			name:        "removing an unsafe setting is rejected",
+			oldDefaults: unsafeThree,
+			wantError:   true,
+		},
+		{
+			name:        "documented rolling compatible settings are allowed",
+			oldDefaults: allowedOld,
+			defaults:    allowedNew,
+		},
+		{
+			name: "adding only captain setting is allowed",
+			defaults: `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          captain_is_adhoc_searchhead: true
+`,
+		},
+		{
+			name: "adding only label is allowed",
+			defaults: `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          shcluster_label: production
+`,
+		},
+		{
+			name:        "unrelated defaults change with unchanged unsafe stanza is allowed",
+			oldDefaults: unsafeThree + "  http_enableSSL: false\n",
+			defaults:    unsafeThree + "  http_enableSSL: true\n",
+		},
+		{
+			name:        "malformed changed defaults fail closed",
+			oldDefaults: unsafeThree,
+			defaults:    "splunk: [",
+			wantError:   true,
+		},
+		{
+			name:        "unsupported shclustering value fails closed",
+			oldDefaults: unsafeThree,
+			defaults: `splunk:
+  conf:
+    server:
+      content:
+        shclustering:
+          - replication_factor: 5
+`,
+			wantError: true,
+		},
+		{
+			name:        "OnDelete cannot admit simultaneous restart setting",
+			oldDefaults: unsafeThree,
+			defaults:    unsafeFive,
+			strategy:    enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete,
+			wantError:   true,
+		},
+		{
+			name:        "RollingUpdate cannot admit simultaneous restart setting",
+			oldDefaults: unsafeThree,
+			defaults:    unsafeFive,
+			strategy:    enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+			wantError:   true,
+		},
+		{
+			name: "key value sequence form is classified",
+			oldDefaults: `splunk:
+  conf:
+    - key: server
+      value:
+        content:
+          shclustering:
+            captain_is_adhoc_searchhead: false
+`,
+			defaults: `splunk:
+  conf:
+    - key: server
+      value:
+        content:
+          shclustering:
+            captain_is_adhoc_searchhead: true
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setLifecycleFeatureGatesForTest(t, true, true)
+			obj := newSHC(tt.defaults, tt.strategy)
+			oldObj := newSHC(tt.oldDefaults, tt.strategy)
+
+			errs := ValidateSearchHeadClusterUpdate(obj, oldObj)
+			if tt.wantError {
+				if assert.NotEmpty(t, errs) {
+					assert.Equal(t, "spec.defaults", errs[len(errs)-1].Field)
+				}
+				return
+			}
+			assert.Empty(t, errs)
+		})
+	}
+
+	t.Run("create with unsafe inline setting remains allowed", func(t *testing.T) {
+		setLifecycleFeatureGatesForTest(t, true, true)
+		assert.Empty(t, ValidateSearchHeadClusterCreate(newSHC(
+			unsafeThree,
+			enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+		)))
+	})
+}
+
 func TestGetSearchHeadClusterWarningsOnCreate(t *testing.T) {
 	obj := &enterpriseApi.SearchHeadCluster{
 		Spec: enterpriseApi.SearchHeadClusterSpec{
