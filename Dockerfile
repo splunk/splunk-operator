@@ -93,9 +93,9 @@ RUN mkdir /licenses && \
 COPY --from=builder /workspace/manager .
 COPY tools/EULA_Red_Hat_Universal_Base_Image_English_20190422.pdf /licenses
 COPY LICENSE /licenses/LICENSE-2.0.txt
-COPY tools/k8_probes/livenessProbe.sh /tools/k8_probes/
-COPY tools/k8_probes/readinessProbe.sh /tools/k8_probes/
-COPY tools/k8_probes/startupProbe.sh /tools/k8_probes/
+COPY --chmod=0444 tools/k8_probes/livenessProbe.sh /tools/k8_probes/
+COPY --chmod=0444 tools/k8_probes/readinessProbe.sh /tools/k8_probes/
+COPY --chmod=0444 tools/k8_probes/startupProbe.sh /tools/k8_probes/
 
 # Set the user
 USER 1001
