@@ -158,7 +158,9 @@ rules:
   verbs:
   - create
   - get
+  - list
   - update
+  - watch
 - apiGroups:
   - postgresql.cnpg.io
   resources:
