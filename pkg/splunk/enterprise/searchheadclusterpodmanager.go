@@ -71,7 +71,10 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err == nil &&
 		searchHeadClusterLifecycleEnabled() &&
-		lifecycleRecoveryActive(mgr.cr.Status.LifecycleOperation) {
+		lifecycleRecoveryActiveForStatefulSet(
+			statefulSet,
+			mgr.cr.Status.LifecycleOperation,
+		) {
 		recoveryComplete, lifecycleErr := mgr.resumeLifecycleRecovery(
 			ctx,
 			*mgr.cr.Status.LifecycleOperation.TargetOrdinal,

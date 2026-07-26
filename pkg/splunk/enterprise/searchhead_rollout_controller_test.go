@@ -176,6 +176,57 @@ func TestRollingUpdateControllerReportsStableRevisionReady(t *testing.T) {
 	assertNoRollingUpdatePodDelete(t, client)
 }
 
+func TestLifecycleRecoveryWaitsForRollingPartitionAuthorization(t *testing.T) {
+	target := int32(2)
+	partition := int32(3)
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		TargetOrdinal: &target,
+		TargetPodUID:  "original-pod-uid",
+		Stage:         enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+	}
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+	}
+
+	if lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
+		t.Fatal("recovery became active before the partition authorized replacement")
+	}
+
+	partition = target
+	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
+		t.Fatal("recovery did not become active after the partition authorized replacement")
+	}
+}
+
+func TestLifecycleRecoveryPreservesOnDeleteOrdering(t *testing.T) {
+	target := int32(2)
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		TargetOrdinal: &target,
+		TargetPodUID:  "original-pod-uid",
+		Stage:         enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+	}
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
+		},
+	}
+
+	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
+		t.Fatal("OnDelete recovery ordering changed")
+	}
+}
+
 func rollingUpdateControllerFixture(
 	t *testing.T,
 	partition int32,

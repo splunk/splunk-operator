@@ -118,6 +118,31 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 	}
 }
 
+// lifecycleRecoveryActiveForStatefulSet prevents the recovery state machine
+// from waiting for termination before a partitioned RollingUpdate has made
+// the authorized target eligible for replacement. OnDelete retains the
+// existing Operator-owned replacement ordering.
+func lifecycleRecoveryActiveForStatefulSet(
+	statefulSet *appsv1.StatefulSet,
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+) bool {
+	if !lifecycleRecoveryActive(operation) {
+		return false
+	}
+	if statefulSet == nil ||
+		statefulSet.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType {
+		return true
+	}
+	if operation.TargetOrdinal == nil ||
+		statefulSet.Spec.UpdateStrategy.RollingUpdate == nil ||
+		statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition == nil {
+		return false
+	}
+
+	return *statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition ==
+		*operation.TargetOrdinal
+}
+
 func (mgr *searchHeadClusterPodManager) observeRollingStatefulSet(
 	ctx context.Context,
 	statefulSet *appsv1.StatefulSet,
