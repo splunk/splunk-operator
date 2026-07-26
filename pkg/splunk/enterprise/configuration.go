@@ -1206,6 +1206,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
+		applySearchHeadPodLifecycle(&podTemplateSpec.Spec.Containers[idx], instanceType)
 		podTemplateSpec.Spec.Containers[idx].Env = env
 		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
 			RunAsUser:                &runAsUser,
