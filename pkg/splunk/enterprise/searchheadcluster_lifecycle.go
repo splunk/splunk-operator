@@ -176,6 +176,15 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 	case shcworkflow.ActionNone, shcworkflow.ActionObserveCluster:
 		return false, nil
 	case shcworkflow.ActionRequestDetention:
+		if searchHeadServingReadinessGateConfigured(mgr.statefulSet) {
+			withdrawn, err := mgr.searchHeadServingWithdrawalObserved(ctx, n)
+			if err != nil {
+				return false, err
+			}
+			if !withdrawn {
+				return false, nil
+			}
+		}
 		return false, requestSearchHeadDetention(ctx, mgr, n)
 	case shcworkflow.ActionTransferCaptain:
 		if decision.Action.ManagementURI == "" {

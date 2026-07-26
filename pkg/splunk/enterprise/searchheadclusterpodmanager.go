@@ -21,11 +21,12 @@ import (
 
 // searchHeadClusterPodManager is used to manage the pods within a search head cluster
 type searchHeadClusterPodManager struct {
-	c               splcommon.ControllerClient
-	cr              *enterpriseApi.SearchHeadCluster
-	secrets         *corev1.Secret
-	statefulSet     *appsv1.StatefulSet
-	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+	c                       splcommon.ControllerClient
+	cr                      *enterpriseApi.SearchHeadCluster
+	secrets                 *corev1.Secret
+	statefulSet             *appsv1.StatefulSet
+	newSplunkClient         func(managementURI, username, password string) *splclient.SplunkClient
+	servingConditionChanged map[int32]bool
 }
 
 // newSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
@@ -71,6 +72,14 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
+	if err == nil {
+		if readinessErr := mgr.reconcileSearchHeadServingConditions(
+			ctx,
+			statefulSet,
+		); readinessErr != nil {
+			return enterpriseApi.PhaseError, readinessErr
+		}
+	}
 	if err == nil &&
 		mgr.cr.Status.LifecycleOperation != nil &&
 		mgr.cr.Status.LifecycleOperation.Intent ==
@@ -536,7 +545,8 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	mgr.cr.Status.Captain = ""
 	mgr.cr.Status.CaptainReady = false
 	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
-	if mgr.cr.Status.ReadyReplicas == 0 {
+	if mgr.cr.Status.ReadyReplicas == 0 &&
+		!searchHeadServingReadinessGateConfigured(statefulSet) {
 		return nil
 	}
 

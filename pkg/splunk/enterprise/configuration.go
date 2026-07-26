@@ -1200,6 +1200,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	privileged := false
+	applySearchHeadServingReadinessGate(&podTemplateSpec.Spec, instanceType)
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
