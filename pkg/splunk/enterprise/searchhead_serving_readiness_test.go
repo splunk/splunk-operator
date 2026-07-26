@@ -15,12 +15,19 @@
 package enterprise
 
 import (
+	"context"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
 func TestSearchHeadServingReadinessGateWiring(t *testing.T) {
@@ -87,4 +94,100 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, ordinal)
 	require.Equal(t, corev1.ConditionFalse, status)
 	require.Equal(t, "PodTerminating", reason)
+}
+
+func TestEndpointSlicesRoutePod(t *testing.T) {
+	ready := true
+	notReady := false
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "splunk-example-search-head-0",
+		UID:  types.UID("current-pod"),
+	}}
+	endpointFor := func(uid types.UID, ready *bool) discoveryv1.Endpoint {
+		return discoveryv1.Endpoint{
+			Conditions: discoveryv1.EndpointConditions{Ready: ready},
+			TargetRef: &corev1.ObjectReference{
+				Kind: "Pod",
+				Name: pod.Name,
+				UID:  uid,
+			},
+		}
+	}
+
+	require.True(t, endpointSlicesRoutePod([]discoveryv1.EndpointSlice{{
+		Endpoints: []discoveryv1.Endpoint{endpointFor(pod.UID, &ready)},
+	}}, pod))
+	require.True(t, endpointSlicesRoutePod([]discoveryv1.EndpointSlice{{
+		Endpoints: []discoveryv1.Endpoint{endpointFor(pod.UID, nil)},
+	}}, pod), "unknown readiness must fail closed")
+	require.False(t, endpointSlicesRoutePod([]discoveryv1.EndpointSlice{{
+		Endpoints: []discoveryv1.Endpoint{endpointFor(pod.UID, &notReady)},
+	}}, pod))
+	require.False(t, endpointSlicesRoutePod([]discoveryv1.EndpointSlice{{
+		Endpoints: []discoveryv1.Endpoint{endpointFor(types.UID("replaced-pod"), &ready)},
+	}}, pod), "an endpoint for an old Pod UID must not block the replacement")
+	require.False(t, endpointSlicesRoutePod(nil, pod))
+}
+
+func TestSearchHeadServingWithdrawalWaitsForClientServiceEndpointSlice(t *testing.T) {
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	const namespace = "test"
+	cr := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{
+		Name:      "example",
+		Namespace: namespace,
+	}}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-search-head-0",
+			Namespace: namespace,
+			UID:       types.UID("current-pod"),
+		},
+		Status: corev1.PodStatus{Conditions: []corev1.PodCondition{
+			{Type: searchHeadServingCondition, Status: corev1.ConditionFalse},
+			{Type: corev1.PodReady, Status: corev1.ConditionFalse},
+		}},
+	}
+	ready := true
+	endpointSlice := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-search-head",
+			Namespace: namespace,
+			Labels: map[string]string{
+				discoveryv1.LabelServiceName: splcommon.GetSplunkServiceName(
+					SplunkSearchHead,
+					cr.Name,
+					false,
+				),
+			},
+		},
+		Endpoints: []discoveryv1.Endpoint{{
+			Conditions: discoveryv1.EndpointConditions{Ready: &ready},
+			TargetRef: &corev1.ObjectReference{
+				Kind: "Pod",
+				Name: pod.Name,
+				UID:  pod.UID,
+			},
+		}},
+	}
+	k8sClient := newFakeClientBuilder(scheme).
+		WithObjects(pod, endpointSlice).
+		Build()
+	mgr := &searchHeadClusterPodManager{
+		c:                       k8sClient,
+		cr:                      cr,
+		servingConditionChanged: map[int32]bool{},
+	}
+
+	withdrawn, err := mgr.searchHeadServingWithdrawalObserved(context.Background(), 0)
+	require.NoError(t, err)
+	require.False(t, withdrawn)
+
+	ready = false
+	endpointSlice.Endpoints[0].Conditions.Ready = &ready
+	require.NoError(t, k8sClient.Update(context.Background(), endpointSlice))
+	withdrawn, err = mgr.searchHeadServingWithdrawalObserved(context.Background(), 0)
+	require.NoError(t, err)
+	require.True(t, withdrawn)
 }

@@ -19,8 +19,10 @@ import (
 	"fmt"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -194,6 +196,54 @@ func (mgr *searchHeadClusterPodManager) searchHeadServingWithdrawalObserved(
 	}, pod); err != nil {
 		return false, fmt.Errorf("get Search Head Pod %s before detention: %w", podName, err)
 	}
-	return podConditionStatus(pod, searchHeadServingCondition) == corev1.ConditionFalse &&
-		podConditionStatus(pod, corev1.PodReady) == corev1.ConditionFalse, nil
+	if podConditionStatus(pod, searchHeadServingCondition) != corev1.ConditionFalse ||
+		podConditionStatus(pod, corev1.PodReady) != corev1.ConditionFalse {
+		return false, nil
+	}
+
+	endpointSlices := &discoveryv1.EndpointSliceList{}
+	serviceName := splcommon.GetSplunkServiceName(
+		SplunkSearchHead,
+		mgr.cr.GetName(),
+		false,
+	)
+	if err := mgr.c.List(
+		ctx,
+		endpointSlices,
+		client.InNamespace(mgr.cr.GetNamespace()),
+		client.MatchingLabels{discoveryv1.LabelServiceName: serviceName},
+	); err != nil {
+		return false, fmt.Errorf(
+			"list EndpointSlices for Search Head Service %s before detention: %w",
+			serviceName,
+			err,
+		)
+	}
+	return !endpointSlicesRoutePod(endpointSlices.Items, pod), nil
+}
+
+// endpointSlicesRoutePod reports whether a Service EndpointSlice still makes
+// the Pod eligible for routing. A nil ready condition means "unknown" in the
+// API and is deliberately treated as routable so lifecycle actions fail
+// closed until withdrawal is explicit or the endpoint disappears.
+func endpointSlicesRoutePod(endpointSlices []discoveryv1.EndpointSlice, pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+	for sliceIndex := range endpointSlices {
+		for endpointIndex := range endpointSlices[sliceIndex].Endpoints {
+			endpoint := &endpointSlices[sliceIndex].Endpoints[endpointIndex]
+			target := endpoint.TargetRef
+			if target == nil || target.Name != pod.Name {
+				continue
+			}
+			if pod.UID != "" && target.UID != "" && target.UID != pod.UID {
+				continue
+			}
+			if endpoint.Conditions.Ready == nil || *endpoint.Conditions.Ready {
+				return true
+			}
+		}
+	}
+	return false
 }
