@@ -166,11 +166,17 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 		}
 	}
 
+	// A lifecycle operation deliberately withdraws its target from service
+	// before the StatefulSet partition is lowered. Do not mistake that owned
+	// unavailability for an unrelated disruption, or the durable operation
+	// cannot advance beyond detention. Every other unavailable Pod remains a
+	// safety block.
 	unavailable := int32(0)
 	unavailableOrdinal := int32(-1)
 	for ordinal := int32(0); ordinal < state.Replicas; ordinal++ {
 		pod := pods[ordinal]
-		if !shcRolloutPodAvailable(pod) {
+		if !shcRolloutPodAvailable(pod) &&
+			!lifecycleOwnsUnavailableOrdinal(state.Lifecycle, ordinal) {
 			unavailable++
 			unavailableOrdinal = ordinal
 		}
@@ -324,7 +330,8 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 
 	target := state.Partition - 1
 	targetPod := pods[target]
-	if !shcRolloutPodAvailable(targetPod) {
+	if !shcRolloutPodAvailable(targetPod) &&
+		!lifecycleOwnsUnavailableOrdinal(state.Lifecycle, target) {
 		return blockSHCRollout(
 			SHCRolloutReasonOutOfOrderRevision,
 			fmt.Sprintf("next target ordinal %d is not stably ready in Kubernetes and the SHC before preparation", target),
@@ -434,6 +441,15 @@ func allSHCPodsAtRevision(pods map[int32]SHCRolloutPod, revision string) bool {
 
 func lifecycleTargetsOrdinal(lifecycle SHCRolloutLifecycle, ordinal int32) bool {
 	return lifecycle.TargetOrdinal != nil && *lifecycle.TargetOrdinal == ordinal
+}
+
+func lifecycleOwnsUnavailableOrdinal(
+	lifecycle SHCRolloutLifecycle,
+	ordinal int32,
+) bool {
+	return lifecycleTargetsOrdinal(lifecycle, ordinal) &&
+		lifecycle.Stage != "" &&
+		lifecycle.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted
 }
 
 func lifecycleCompletedForOrdinal(lifecycle SHCRolloutLifecycle, ordinal int32) bool {

@@ -589,6 +589,21 @@ func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeInitialization(
 			}
 		}
 	}
+	lifecycle := mgr.cr.Status.LifecycleOperation
+	resumingOwnedOrdinaryRollout := current == nil &&
+		shcPodRolloutActive(lifecycle) &&
+		lifecycle.DesiredRevision == state.UpdateRevision &&
+		lifecycle.TargetOrdinal != nil &&
+		uniformSourceImage &&
+		sourceImage == targetImage
+	if resumingOwnedOrdinaryRollout {
+		// The image decision preceded the persisted member lifecycle. Once the
+		// lifecycle withdraws its target from service, readiness can no longer
+		// be used to repeat that classification. Uniform source and target
+		// images prove this is still an ordinary template rollout; an image
+		// change without its durable image-upgrade workflow remains fail-closed.
+		return true, nil
+	}
 	observedConflictingOperation := shcAppFrameworkWorkActive(
 		&mgr.cr.Status.AppContext,
 	) || shcImageUpgradeHasConflictingLifecycle(
