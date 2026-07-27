@@ -46,8 +46,8 @@ func TestRecoverySeparatesPodReadinessFromSHCCompletion(t *testing.T) {
 	decision = EvaluateRecovery(decision.Operation, replacement, policy, now.Add(3*time.Second))
 	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer, ActionNone)
 
-	// Kubernetes readiness is only the boundary to SHC rejoin validation.
-	replacement.PodReady = true
+	// Container readiness is only the boundary to SHC rejoin validation.
+	replacement.ContainersReady = true
 	decision = EvaluateRecovery(decision.Operation, replacement, policy, now.Add(4*time.Second))
 	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin, ActionObserveCluster)
 
@@ -85,6 +85,61 @@ func TestRecoverySeparatesPodReadinessFromSHCCompletion(t *testing.T) {
 	}
 	if decision.Operation.ReplacementMemberID != "member-guid-2" {
 		t.Fatalf("replacement member ID = %q, want member-guid-2", decision.Operation.ReplacementMemberID)
+	}
+}
+
+func TestRecoveryUsesContainerReadinessBeforeSHCServingGate(t *testing.T) {
+	now := time.Date(2026, 7, 26, 23, 55, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	policy := testRecoveryPolicy()
+
+	decision := EvaluateRecovery(operation, RecoveryObservation{
+		PodExists: true,
+		PodUID:    "old-pod-uid",
+	}, policy, now.Add(time.Second))
+	decision = EvaluateRecovery(
+		decision.Operation,
+		RecoveryObservation{},
+		policy,
+		now.Add(2*time.Second),
+	)
+	replacement := RecoveryObservation{
+		PodExists:    true,
+		PodUID:       "new-pod-uid",
+		PodScheduled: true,
+		PodRevision:  "revision-2",
+	}
+	decision = EvaluateRecovery(
+		decision.Operation,
+		replacement,
+		policy,
+		now.Add(3*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+		ActionNone,
+	)
+
+	// The Operator-managed SHC serving gate keeps PodReady false until SHC
+	// recovery completes. Kubernetes ContainersReady must start rejoin
+	// validation without waiting on that gate.
+	replacement.ContainersReady = true
+	decision = EvaluateRecovery(
+		decision.Operation,
+		replacement,
+		policy,
+		now.Add(4*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+		ActionObserveCluster,
+	)
+	if decision.Operation.MemberRejoinStartedAt == nil {
+		t.Fatal("member rejoin timer was not started after containers became ready")
 	}
 }
 
@@ -351,6 +406,7 @@ func TestRecoveryClassifiesImagePullFailure(t *testing.T) {
 	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
 	operation := authorizedRecoveryOperation(now)
 	observation := recoveredPodObservation()
+	observation.ContainersReady = false
 	observation.PodReady = false
 	observation.ImagePullFailed = true
 
@@ -372,6 +428,7 @@ func TestRecoveryWaitsForRecoverableContainerStartupFailure(t *testing.T) {
 	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
 	operation := authorizedRecoveryOperation(now)
 	observation := recoveredPodObservation()
+	observation.ContainersReady = false
 	observation.PodReady = false
 	observation.ContainerStartupFailed = true
 
@@ -407,6 +464,7 @@ func TestRecoveryBlocksTerminalContainerStartupFailure(t *testing.T) {
 	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
 	operation := authorizedRecoveryOperation(now)
 	observation := recoveredPodObservation()
+	observation.ContainersReady = false
 	observation.PodReady = false
 	observation.ContainerStartupFailed = true
 	observation.ContainerFailureTerminal = true
@@ -684,7 +742,7 @@ func TestRecoverySeparatesPodReadinessFromCaptainSynchronization(t *testing.T) {
 	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
 	operation := authorizedRecoveryOperation(now)
 	observation := recoveredPodObservation()
-	observation.PodReady = true
+	observation.ContainersReady = true
 	observation.MemberStatus = "Up"
 	observation.CaptainMemberStatus = "Syncing"
 
@@ -763,6 +821,7 @@ func recoveredPodObservation() RecoveryObservation {
 		PodExists:             true,
 		PodUID:                "new-pod-uid",
 		PodScheduled:          true,
+		ContainersReady:       true,
 		PodReady:              true,
 		PodRevision:           "revision-2",
 		MemberObserved:        true,

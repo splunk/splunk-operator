@@ -42,6 +42,7 @@ type RecoveryObservation struct {
 	ImagePullFailed          bool
 	ContainerStartupFailed   bool
 	ContainerFailureTerminal bool
+	ContainersReady          bool
 	PodReady                 bool
 	PodRevision              string
 	MemberObserved           bool
@@ -225,7 +226,11 @@ func classifyPodRecovery(
 		return Decision{Operation: operation}
 	}
 
-	if !observation.PodReady {
+	// PodReady includes custom readiness gates. The SHC serving gate is
+	// intentionally false until member rejoin has been validated, so waiting
+	// for PodReady here would deadlock recovery. ContainersReady is the
+	// Kubernetes boundary between local process startup and SHC validation.
+	if !observation.ContainersReady {
 		reason := enterpriseApi.SearchHeadClusterLifecycleReasonReplacementAuthorized
 		message := fmt.Sprintf("waiting for containers in replacement Pod %s", operation.TargetPod)
 		if observation.ContainerStartupFailed {
@@ -268,10 +273,11 @@ func recoveryTimeoutMessage(
 	captainMemberStatusAccepted := observation.CaptainMemberStatus == "Up" ||
 		observation.CaptainMemberStatus == "ManualDetention"
 	return fmt.Sprintf(
-		"member recovery timed out in stage %s: podExists=%t podScheduled=%t podReady=%t memberObserved=%t memberRegistered=%t memberStatusAccepted=%t authoritativeCaptain=%t captainReady=%t captainMemberObserved=%t captainMemberStatusAccepted=%t",
+		"member recovery timed out in stage %s: podExists=%t podScheduled=%t containersReady=%t podReady=%t memberObserved=%t memberRegistered=%t memberStatusAccepted=%t authoritativeCaptain=%t captainReady=%t captainMemberObserved=%t captainMemberStatusAccepted=%t",
 		operation.Stage,
 		observation.PodExists,
 		observation.PodScheduled,
+		observation.ContainersReady,
 		observation.PodReady,
 		observation.MemberObserved,
 		observation.MemberRegistered,

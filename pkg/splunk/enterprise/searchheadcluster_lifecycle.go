@@ -364,11 +364,14 @@ func (mgr *searchHeadClusterPodManager) observeLifecycleRecovery(
 			case corev1.PodScheduled:
 				observation.PodScheduled = condition.Status == corev1.ConditionTrue
 				observation.PodUnschedulable = condition.Reason == corev1.PodReasonUnschedulable
+			case corev1.ContainersReady:
+				observation.ContainersReady = condition.Status == corev1.ConditionTrue
 			case corev1.PodReady:
 				observation.PodReady = condition.Status == corev1.ConditionTrue
 			}
 		}
 		if observation.PodReady {
+			observation.ContainersReady = true
 			observation.PodScheduled = true
 		}
 		containerStatuses := append(
