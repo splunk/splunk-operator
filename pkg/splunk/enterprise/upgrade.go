@@ -80,10 +80,15 @@ LicenseManager:
 			logger.ErrorContext(ctx, "unable to get LicenseManager current image", "error", err)
 			return false, err
 		}
-		// if license manager status is ready and CR spec and current license manager image are not same
-		// then return with error
-		if licenseManager.Status.Phase != enterpriseApi.PhaseReady || lmImage != spec.Image {
-			return false, fmt.Errorf("license manager is not ready or license manager current image is different than CR image")
+		// an image mismatch is a genuine upgrade-safety block, so it's a hard error
+		if lmImage != spec.Image {
+			return false, fmt.Errorf("license manager current image (%s) is different than CR image (%s)", lmImage, spec.Image)
+		}
+		// license manager not yet Ready is expected during normal pod recycling (e.g.
+		// concurrent secret rotation or image upgrade); wait without erroring so this
+		// doesn't get surfaced as PhaseError and doesn't trigger reconcile backoff
+		if licenseManager.Status.Phase != enterpriseApi.PhaseReady {
+			return false, nil
 		}
 		goto ClusterManager
 	}
