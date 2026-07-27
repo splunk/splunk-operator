@@ -15,9 +15,7 @@ for the condensed problem/alternatives/chosen-approach narrative, see the
 
 > Diagrams below are authored as Mermaid, embedded directly in this page —
 > GitLab renders `` ```mermaid `` fences inline, so no separate build step or
-> PNG is needed. (Trial: PlantUML sources for these diagrams still exist under
-> [`docs/pictures/`](../pictures/); if the Mermaid rendering doesn't hold up,
-> revert to the PNG embeds.)
+> PNG is needed.
 
 ## The big picture
 
