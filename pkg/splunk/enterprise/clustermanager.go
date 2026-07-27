@@ -221,6 +221,10 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		if err != nil || !continueReconcile {
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
+			} else {
+				// waiting on a dependency (e.g. LicenseManager recycling) is not an error,
+				// so don't leave the earlier-staged PhaseError as the persisted status
+				setPhaseAndConditions(enterpriseApi.PhasePending, "Waiting for upgrade path dependency to become ready")
 			}
 			return result, err
 		}
