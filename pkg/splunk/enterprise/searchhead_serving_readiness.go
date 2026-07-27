@@ -89,18 +89,25 @@ func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 	if member.Status != "Up" {
 		return corev1.ConditionFalse, "MemberNotUp", fmt.Sprintf("SHC member status is %q", member.Status)
 	}
-	if !mgr.cr.Status.Initialized || !mgr.cr.Status.MinPeersJoined || !mgr.cr.Status.CaptainReady {
-		return corev1.ConditionFalse, "ClusterNotReady", "SHC formation or captain readiness is incomplete"
-	}
 	operation := mgr.cr.Status.LifecycleOperation
-	if operation != nil &&
+	lifecycleActive := operation != nil &&
 		operation.TargetOrdinal != nil &&
-		*operation.TargetOrdinal == ordinal &&
-		operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
+		operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+	if lifecycleActive && *operation.TargetOrdinal == ordinal {
 		return corev1.ConditionFalse, "LifecycleOperationActive", fmt.Sprintf(
 			"SHC lifecycle operation is in stage %s",
 			operation.Stage,
 		)
+	}
+	clusterReady := mgr.cr.Status.Initialized &&
+		mgr.cr.Status.MinPeersJoined &&
+		mgr.cr.Status.CaptainReady
+	if !clusterReady && !lifecycleActive {
+		return corev1.ConditionFalse, "ClusterNotReady", "SHC formation or captain readiness is incomplete"
+	}
+	if !clusterReady {
+		return corev1.ConditionTrue, "PeerServingDuringLifecycle",
+			"healthy non-target SHC member remains eligible during lifecycle orchestration"
 	}
 	return corev1.ConditionTrue, "MemberServing", "SHC member is eligible for Kubernetes Service traffic"
 }

@@ -84,6 +84,30 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	require.Equal(t, corev1.ConditionFalse, status)
 	require.Equal(t, "LifecycleOperationActive", reason)
 
+	peerOrdinal := int32(1)
+	mgr.cr.Status.Members = append(
+		mgr.cr.Status.Members,
+		enterpriseApi.SearchHeadClusterMemberStatus{
+			Name:       "splunk-example-search-head-1",
+			Status:     "Up",
+			Registered: true,
+		},
+	)
+	mgr.cr.Status.CaptainReady = false
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionTrue, status)
+	require.Equal(t, "PeerServingDuringLifecycle", reason)
+
+	mgr.cr.Status.LifecycleOperation = nil
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionFalse, status)
+	require.Equal(t, "ClusterNotReady", reason)
+
+	mgr.cr.Status.CaptainReady = true
+	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		TargetOrdinal: &ordinal,
+		Stage:         enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget,
+	}
 	mgr.cr.Status.LifecycleOperation.Stage =
 		enterpriseApi.SearchHeadClusterLifecycleStageCompleted
 	status, _, _ = mgr.desiredSearchHeadServingCondition(pod, ordinal)
