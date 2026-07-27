@@ -406,6 +406,13 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 	if detentionCalls != 1 {
 		t.Fatalf("detention calls = %d, want 1", detentionCalls)
 	}
+	if cr.Status.LifecycleOperation.DetentionRequestedAt == nil ||
+		cr.Status.LifecycleOperation.DetentionRequestAttemptCount != 1 {
+		t.Fatalf(
+			"detention request status = %#v, want first attempt recorded",
+			cr.Status.LifecycleOperation,
+		)
+	}
 
 	// Once detained and drained, the next reconcile persists
 	// TransferringCaptain but does not yet call the transfer endpoint.
@@ -1501,19 +1508,143 @@ func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
 	}
 }
 
-func TestDetentionReleaseOutcomeUnknownClassification(t *testing.T) {
+func TestLifecycleAdapterRetriesUnknownDetentionOutcome(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	oldNow := searchHeadClusterLifecycleNow
+	oldGetMembers := getSearchHeadCaptainMembers
+	oldRequestDetention := requestSearchHeadDetention
+	t.Cleanup(func() {
+		searchHeadClusterLifecycleNow = oldNow
+		getSearchHeadCaptainMembers = oldGetMembers
+		requestSearchHeadDetention = oldRequestDetention
+	})
+	searchHeadClusterLifecycleNow = func() time.Time {
+		now = now.Add(time.Second)
+		return now
+	}
+
+	ordinal := int32(2)
+	targetPod := "splunk-example-search-head-2"
+	operation := shcworkflow.StartReplacement(
+		"operation-1",
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		"revision-2",
+		targetPod,
+		ordinal,
+		now,
+	)
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget
+	stageStartedAt := metav1.NewTime(now)
+	operation.StageStartedAt = &stageStartedAt
+
+	cr := &enterpriseApi.SearchHeadCluster{}
+	cr.Name = "example"
+	cr.Status.Initialized = true
+	cr.Status.MinPeersJoined = true
+	cr.Status.CaptainReady = true
+	cr.Status.Captain = "splunk-example-search-head-0"
+	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+		{Name: "splunk-example-search-head-0", Status: "Up", Registered: true},
+		{Name: "splunk-example-search-head-1", Status: "Up", Registered: true},
+		{Name: targetPod, Status: "Up", Registered: true},
+	}
+	cr.Status.LifecycleOperation = operation
+	mgr := &searchHeadClusterPodManager{
+		cr: cr,
+		statefulSet: &appsv1.StatefulSet{
+			Status: appsv1.StatefulSetStatus{UpdateRevision: "revision-2"},
+		},
+	}
+
+	getSearchHeadCaptainMembers = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+		return map[string]splclient.SearchHeadCaptainMemberInfo{
+			"splunk-example-search-head-0": {
+				Identifier:    "member-guid-0",
+				Label:         "splunk-example-search-head-0",
+				Status:        "Up",
+				Captain:       true,
+				ManagementURI: "https://splunk-example-search-head-0:8089",
+			},
+			targetPod: {
+				Identifier:    "member-guid-2",
+				Label:         targetPod,
+				Status:        "Up",
+				ManagementURI: "https://splunk-example-search-head-2:8089",
+			},
+		}, nil
+	}
+
+	detentionCalls := 0
+	requestSearchHeadDetention = func(context.Context, *searchHeadClusterPodManager, int32) error {
+		detentionCalls++
+		if detentionCalls == 1 {
+			return &url.Error{
+				Op:  "Post",
+				URL: "https://splunk-example-search-head-2:8089/detention",
+				Err: context.DeadlineExceeded,
+			}
+		}
+		return nil
+	}
+
+	ready, err := mgr.prepareLifecycleReplacement(
+		context.Background(),
+		ordinal,
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+	)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if detentionCalls != 1 ||
+		cr.Status.LifecycleOperation.DetentionRequestedAt == nil ||
+		cr.Status.LifecycleOperation.DetentionRequestAttemptCount != 1 {
+		t.Fatalf(
+			"first uncertain attempt calls=%d status=%#v",
+			detentionCalls,
+			cr.Status.LifecycleOperation,
+		)
+	}
+
+	ready, err = mgr.prepareLifecycleReplacement(
+		context.Background(),
+		ordinal,
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+	)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if detentionCalls != 2 ||
+		cr.Status.LifecycleOperation.DetentionRequestAttemptCount != 2 {
+		t.Fatalf(
+			"retry calls=%d attemptCount=%d, want 2",
+			detentionCalls,
+			cr.Status.LifecycleOperation.DetentionRequestAttemptCount,
+		)
+	}
+	if cr.Status.LifecycleOperation.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget {
+		t.Fatalf(
+			"stage = %q, want DetainingTarget",
+			cr.Status.LifecycleOperation.Stage,
+		)
+	}
+}
+
+func TestDetentionOutcomeUnknownClassification(t *testing.T) {
 	timeout := &url.Error{
 		Op:  "Post",
 		URL: "https://splunk-example-search-head-2:8089/detention",
 		Err: context.DeadlineExceeded,
 	}
-	if !detentionReleaseOutcomeUnknown(timeout) {
-		t.Fatal("transport timeout must have unknown detention-release outcome")
+	if !detentionOutcomeUnknown(timeout) {
+		t.Fatal("transport timeout must have unknown detention outcome")
 	}
-	if detentionReleaseOutcomeUnknown(errors.New("known response failure")) {
+	if detentionOutcomeUnknown(errors.New("known response failure")) {
 		t.Fatal("non-transport failure must remain an adapter error")
 	}
-	if detentionReleaseOutcomeUnknown(nil) {
+	if detentionOutcomeUnknown(nil) {
 		t.Fatal("nil error cannot have an unknown outcome")
 	}
 }

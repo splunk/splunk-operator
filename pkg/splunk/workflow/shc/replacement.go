@@ -25,6 +25,7 @@ import (
 // ReplacementPolicy contains the time bounds used by the replacement
 // decision engine.
 type ReplacementPolicy struct {
+	DetentionTimeout       time.Duration
 	SearchDrainTimeout     time.Duration
 	CaptainTransferTimeout time.Duration
 }
@@ -163,6 +164,20 @@ func EvaluateReplacement(
 	// Deadline enforcement must not depend on Splunk remaining observable. An
 	// unavailable or unready captain is precisely when the controller must
 	// continue aging an in-flight operation instead of waiting forever.
+	if operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget &&
+		stageTimedOut(operation, policy.DetentionTimeout, now) {
+		transition(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			enterpriseApi.SearchHeadClusterLifecycleReasonDetentionTimedOut,
+			fmt.Sprintf(
+				"traffic withdrawal and manual detention were not confirmed for %s before the deadline",
+				operation.TargetPod,
+			),
+			now,
+		)
+		return Decision{Operation: operation}
+	}
 	if operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches &&
 		stageTimedOut(operation, policy.SearchDrainTimeout, now) {
 		transition(
@@ -514,6 +529,31 @@ func setReason(
 	operation.Reason = reason
 	operation.Message = message
 	operation.LastTransitionTime = &timestamp
+}
+
+// RecordDetentionRequestAttempt records an idempotent desired-state request
+// while authoritative SHC observations remain responsible for confirming
+// that the member entered manual detention.
+func RecordDetentionRequestAttempt(
+	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	now time.Time,
+) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
+	if current == nil {
+		return nil
+	}
+	operation := current.DeepCopy()
+	if operation.DetentionRequestedAt == nil {
+		requestedAt := metav1.NewTime(now)
+		operation.DetentionRequestedAt = &requestedAt
+	}
+	operation.DetentionRequestAttemptCount++
+	setReason(
+		operation,
+		enterpriseApi.SearchHeadClusterLifecycleReasonDetentionRequested,
+		"manual detention was requested; waiting for authoritative confirmation",
+		now,
+	)
+	return operation
 }
 
 func stageTimedOut(

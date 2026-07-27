@@ -404,6 +404,7 @@ searchHeadCluster:
   # SearchHeadClusterLifecycle feature gate is enabled.
   lifecyclePolicy: {}
     # podUpdateStrategy: OnDelete
+    # detentionTimeoutSeconds: 180
     # searchDrainTimeoutSeconds: 180
     # captainTransferTimeoutSeconds: 180
     # podStartupTimeoutSeconds: 1800

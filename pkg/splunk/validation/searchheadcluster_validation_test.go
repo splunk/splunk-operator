@@ -28,6 +28,7 @@ func TestValidateSearchHeadClusterLifecyclePolicy(t *testing.T) {
 	validPolicy := func() *enterpriseApi.SearchHeadClusterLifecyclePolicy {
 		return &enterpriseApi.SearchHeadClusterLifecyclePolicy{
 			PodUpdateStrategy:             enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+			DetentionTimeoutSeconds:       int64Pointer(50),
 			SearchDrainTimeoutSeconds:     int64Pointer(10),
 			CaptainTransferTimeoutSeconds: int64Pointer(20),
 			PodStartupTimeoutSeconds:      int64Pointer(30),
@@ -74,6 +75,15 @@ func TestValidateSearchHeadClusterLifecyclePolicy(t *testing.T) {
 				PodUpdateStrategy: "ReplaceEverything",
 			},
 			wantErrField: "spec.lifecyclePolicy.podUpdateStrategy",
+		},
+		{
+			name:    "invalid detention timeout",
+			podGate: true,
+			shcGate: true,
+			policy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				DetentionTimeoutSeconds: int64Pointer(0),
+			},
+			wantErrField: "spec.lifecyclePolicy.detentionTimeoutSeconds",
 		},
 		{
 			name:    "invalid drain timeout",

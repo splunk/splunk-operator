@@ -75,6 +75,7 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 		}
 		if got.TerminationGracePeriodSeconds != 1200 ||
 			got.PodUpdateStrategy != enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete ||
+			got.DetentionTimeoutSeconds != 180 ||
 			got.SearchDrainTimeoutSeconds != 180 ||
 			got.CaptainTransferTimeoutSeconds != 180 ||
 			got.PodStartupTimeoutSeconds != 1800 ||
@@ -91,6 +92,7 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 			},
 			LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
 				PodUpdateStrategy:             enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+				DetentionTimeoutSeconds:       lifecycleInt64Pointer(105),
 				SearchDrainTimeoutSeconds:     lifecycleInt64Pointer(101),
 				CaptainTransferTimeoutSeconds: lifecycleInt64Pointer(102),
 				PodStartupTimeoutSeconds:      lifecycleInt64Pointer(103),
@@ -103,6 +105,7 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 		}
 		if got.TerminationGracePeriodSeconds != 100 ||
 			got.PodUpdateStrategy != enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate ||
+			got.DetentionTimeoutSeconds != 105 ||
 			got.SearchDrainTimeoutSeconds != 101 ||
 			got.CaptainTransferTimeoutSeconds != 102 ||
 			got.PodStartupTimeoutSeconds != 103 ||

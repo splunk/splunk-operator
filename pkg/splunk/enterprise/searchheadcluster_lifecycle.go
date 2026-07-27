@@ -201,6 +201,7 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 		current,
 		observation,
 		shcworkflow.ReplacementPolicy{
+			DetentionTimeout:       time.Duration(policy.DetentionTimeoutSeconds) * time.Second,
 			SearchDrainTimeout:     time.Duration(policy.SearchDrainTimeoutSeconds) * time.Second,
 			CaptainTransferTimeout: time.Duration(policy.CaptainTransferTimeoutSeconds) * time.Second,
 		},
@@ -231,7 +232,28 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 				return false, nil
 			}
 		}
-		return false, requestSearchHeadDetention(ctx, mgr, n)
+		detentionErr := requestSearchHeadDetention(ctx, mgr, n)
+		if detentionErr != nil && !detentionOutcomeUnknown(detentionErr) {
+			return false, detentionErr
+		}
+		decision.Operation = shcworkflow.RecordDetentionRequestAttempt(
+			decision.Operation,
+			searchHeadClusterLifecycleNow(),
+		)
+		mgr.cr.Status.LifecycleOperation = decision.Operation
+		if detentionErr != nil {
+			logging.FromContext(ctx).WarnContext(
+				ctx,
+				"detention request outcome is unknown; retaining progressing state and retrying",
+				"targetPod",
+				decision.Operation.TargetPod,
+				"attemptCount",
+				decision.Operation.DetentionRequestAttemptCount,
+				"error",
+				detentionErr,
+			)
+		}
+		return false, nil
 	case shcworkflow.ActionTransferCaptain:
 		if decision.Action.ManagementURI == "" {
 			return false, fmt.Errorf("captain transfer target %s has no management URI", decision.Action.Target)
@@ -382,7 +404,7 @@ func (mgr *searchHeadClusterPodManager) resumeLifecycleRecovery(
 	case shcworkflow.ActionReleaseDetention:
 		releaseErr := releaseSearchHeadDetention(ctx, mgr, n)
 		if releaseErr != nil &&
-			!detentionReleaseOutcomeUnknown(releaseErr) {
+			!detentionOutcomeUnknown(releaseErr) {
 			return false, releaseErr
 		}
 		decision.Operation = shcworkflow.RecordDetentionReleaseAttempt(
@@ -408,7 +430,7 @@ func (mgr *searchHeadClusterPodManager) resumeLifecycleRecovery(
 	}
 }
 
-func detentionReleaseOutcomeUnknown(err error) bool {
+func detentionOutcomeUnknown(err error) bool {
 	if err == nil {
 		return false
 	}

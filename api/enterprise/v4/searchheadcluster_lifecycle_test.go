@@ -40,6 +40,7 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 			Replicas: 3,
 			LifecyclePolicy: &SearchHeadClusterLifecyclePolicy{
 				PodUpdateStrategy:             SearchHeadClusterPodUpdateStrategyRollingUpdate,
+				DetentionTimeoutSeconds:       lifecycleTestInt64Pointer(179),
 				SearchDrainTimeoutSeconds:     lifecycleTestInt64Pointer(180),
 				CaptainTransferTimeoutSeconds: lifecycleTestInt64Pointer(181),
 				PodStartupTimeoutSeconds:      lifecycleTestInt64Pointer(182),
@@ -84,6 +85,8 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 				ReplacementPodObservedAt:     &now,
 				CompletedOrdinals:            []int32{3},
 				RetryCount:                   1,
+				DetentionRequestedAt:         &now,
+				DetentionRequestAttemptCount: 2,
 				Reason:                       SearchHeadClusterLifecycleReasonSearchesActive,
 				Message:                      "waiting for active searches to drain",
 				Captain:                      "example-search-head-0",
@@ -120,12 +123,14 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 
 	copied := input.DeepCopy()
 	*copied.Spec.TerminationGracePeriodSeconds = 10
+	*copied.Spec.LifecyclePolicy.DetentionTimeoutSeconds = 19
 	*copied.Spec.LifecyclePolicy.SearchDrainTimeoutSeconds = 20
 	*copied.Spec.LifecyclePolicy.PodStartupTimeoutSeconds = 30
 	copied.Status.LifecycleOperation.ReplacementPodObservedAt = nil
 	copied.Status.ImageUpgrade.CompletedOrdinals[0] = 1
 	copied.Status.LifecycleOperation.CompletedOrdinals[0] = 1
 	if *input.Spec.TerminationGracePeriodSeconds != 1200 ||
+		*input.Spec.LifecyclePolicy.DetentionTimeoutSeconds != 179 ||
 		*input.Spec.LifecyclePolicy.SearchDrainTimeoutSeconds != 180 ||
 		*input.Spec.LifecyclePolicy.PodStartupTimeoutSeconds != 182 ||
 		input.Status.LifecycleOperation.ReplacementPodObservedAt == nil ||

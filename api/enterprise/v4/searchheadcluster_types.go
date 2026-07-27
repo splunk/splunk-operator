@@ -57,6 +57,13 @@ type SearchHeadClusterLifecyclePolicy struct {
 	// +optional
 	PodUpdateStrategy SearchHeadClusterPodUpdateStrategy `json:"podUpdateStrategy,omitempty"`
 
+	// DetentionTimeoutSeconds bounds the wait for traffic withdrawal and
+	// authoritative confirmation that the target entered manual detention.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=86400
+	DetentionTimeoutSeconds *int64 `json:"detentionTimeoutSeconds,omitempty"`
+
 	// SearchDrainTimeoutSeconds bounds the wait for active searches to drain.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
@@ -174,6 +181,7 @@ const (
 	SearchHeadClusterLifecycleReasonObservationStale              SearchHeadClusterLifecycleReason = "ObservationStale"
 	SearchHeadClusterLifecycleReasonConflictingCaptainObservation SearchHeadClusterLifecycleReason = "ConflictingCaptainObservation"
 	SearchHeadClusterLifecycleReasonDetentionRequested            SearchHeadClusterLifecycleReason = "DetentionRequested"
+	SearchHeadClusterLifecycleReasonDetentionTimedOut             SearchHeadClusterLifecycleReason = "DetentionTimedOut"
 	SearchHeadClusterLifecycleReasonDetentionReleasePending       SearchHeadClusterLifecycleReason = "DetentionReleasePending"
 	SearchHeadClusterLifecycleReasonDetentionReleaseTimedOut      SearchHeadClusterLifecycleReason = "DetentionReleaseTimedOut"
 	SearchHeadClusterLifecycleReasonSearchesActive                SearchHeadClusterLifecycleReason = "SearchesActive"
@@ -300,6 +308,8 @@ type SearchHeadClusterLifecycleOperationStatus struct {
 	ReplacementPodObservedAt     *metav1.Time                     `json:"replacementPodObservedAt,omitempty"`
 	MembershipRemovalRequestedAt *metav1.Time                     `json:"membershipRemovalRequestedAt,omitempty"`
 	MemberRejoinStartedAt        *metav1.Time                     `json:"memberRejoinStartedAt,omitempty"`
+	DetentionRequestedAt         *metav1.Time                     `json:"detentionRequestedAt,omitempty"`
+	DetentionRequestAttemptCount int32                            `json:"detentionRequestAttemptCount,omitempty"`
 	DetentionReleaseRequestedAt  *metav1.Time                     `json:"detentionReleaseRequestedAt,omitempty"`
 	ActiveHistoricalSearches     int32                            `json:"activeHistoricalSearches,omitempty"`
 	ActiveRealtimeSearches       int32                            `json:"activeRealtimeSearches,omitempty"`

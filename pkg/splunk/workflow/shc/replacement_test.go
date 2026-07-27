@@ -104,6 +104,67 @@ func TestSearchDrainTimeoutBlocksReplacement(t *testing.T) {
 	}
 }
 
+func TestDetentionTimeoutBlocksReplacementWithoutFreshObservation(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget
+	stageStartedAt := metav1.NewTime(now)
+	operation.StageStartedAt = &stageStartedAt
+
+	decision := EvaluateReplacement(
+		operation,
+		Observation{},
+		testPolicy(),
+		now.Add(30*time.Second),
+	)
+
+	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageBlocked, ActionNone)
+	if decision.Operation.Reason != enterpriseApi.SearchHeadClusterLifecycleReasonDetentionTimedOut {
+		t.Fatalf("reason = %q, want %q",
+			decision.Operation.Reason,
+			enterpriseApi.SearchHeadClusterLifecycleReasonDetentionTimedOut,
+		)
+	}
+	if decision.Operation.ReplacementAuthorizedAt != nil {
+		t.Fatal("detention timeout must not authorize replacement")
+	}
+}
+
+func TestRecordDetentionRequestAttemptPreservesFirstAttemptAndCountsRetries(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget
+
+	first := RecordDetentionRequestAttempt(operation, now.Add(time.Second))
+	second := RecordDetentionRequestAttempt(first, now.Add(2*time.Second))
+
+	if first.DetentionRequestedAt == nil ||
+		!first.DetentionRequestedAt.Time.Equal(now.Add(time.Second)) {
+		t.Fatalf("first requestedAt = %v, want %v",
+			first.DetentionRequestedAt,
+			now.Add(time.Second),
+		)
+	}
+	if second.DetentionRequestedAt == nil ||
+		!second.DetentionRequestedAt.Equal(first.DetentionRequestedAt) {
+		t.Fatalf("second requestedAt = %v, want preserved %v",
+			second.DetentionRequestedAt,
+			first.DetentionRequestedAt,
+		)
+	}
+	if first.DetentionRequestAttemptCount != 1 ||
+		second.DetentionRequestAttemptCount != 2 {
+		t.Fatalf("attempt counts = %d then %d, want 1 then 2",
+			first.DetentionRequestAttemptCount,
+			second.DetentionRequestAttemptCount,
+		)
+	}
+	if operation.DetentionRequestedAt != nil ||
+		operation.DetentionRequestAttemptCount != 0 {
+		t.Fatal("recording a detention request mutated the input operation")
+	}
+}
+
 func TestCaptainTransferTimeoutBlocksReplacement(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	operation := newTestOperation(now)
@@ -376,6 +437,7 @@ func safeObservation(now time.Time) Observation {
 
 func testPolicy() ReplacementPolicy {
 	return ReplacementPolicy{
+		DetentionTimeout:       30 * time.Second,
 		SearchDrainTimeout:     30 * time.Second,
 		CaptainTransferTimeout: 30 * time.Second,
 	}

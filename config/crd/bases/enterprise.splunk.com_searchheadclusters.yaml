@@ -6845,6 +6845,14 @@ spec:
                     maximum: 86400
                     minimum: 1
                     type: integer
+                  detentionTimeoutSeconds:
+                    description: |-
+                      DetentionTimeoutSeconds bounds the wait for traffic withdrawal and
+                      authoritative confirmation that the target entered manual detention.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
                   memberRejoinTimeoutSeconds:
                     description: |-
                       MemberRejoinTimeoutSeconds bounds the wait for a replaced member to
@@ -10280,6 +10288,12 @@ spec:
                   desiredRevision:
                     type: string
                   detentionReleaseRequestedAt:
+                    format: date-time
+                    type: string
+                  detentionRequestAttemptCount:
+                    format: int32
+                    type: integer
+                  detentionRequestedAt:
                     format: date-time
                     type: string
                   intent:

@@ -23,6 +23,7 @@ import (
 
 const (
 	DefaultTerminationGracePeriodSeconds int64 = 1200
+	DefaultDetentionTimeoutSeconds       int64 = 180
 	DefaultSearchDrainTimeoutSeconds     int64 = 180
 	DefaultCaptainTransferTimeoutSeconds int64 = 180
 	DefaultPodStartupTimeoutSeconds      int64 = 1800
@@ -35,6 +36,7 @@ const (
 type ResolvedSearchHeadClusterLifecyclePolicy struct {
 	TerminationGracePeriodSeconds int64
 	PodUpdateStrategy             enterpriseApi.SearchHeadClusterPodUpdateStrategy
+	DetentionTimeoutSeconds       int64
 	SearchDrainTimeoutSeconds     int64
 	CaptainTransferTimeoutSeconds int64
 	PodStartupTimeoutSeconds      int64
@@ -70,6 +72,7 @@ func ResolveSearchHeadClusterLifecyclePolicy(spec *enterpriseApi.SearchHeadClust
 
 	resolved := &ResolvedSearchHeadClusterLifecyclePolicy{
 		PodUpdateStrategy:             enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete,
+		DetentionTimeoutSeconds:       DefaultDetentionTimeoutSeconds,
 		SearchDrainTimeoutSeconds:     DefaultSearchDrainTimeoutSeconds,
 		CaptainTransferTimeoutSeconds: DefaultCaptainTransferTimeoutSeconds,
 		PodStartupTimeoutSeconds:      DefaultPodStartupTimeoutSeconds,
@@ -83,6 +86,9 @@ func ResolveSearchHeadClusterLifecyclePolicy(spec *enterpriseApi.SearchHeadClust
 	policy := spec.LifecyclePolicy
 	if policy.PodUpdateStrategy != "" {
 		resolved.PodUpdateStrategy = policy.PodUpdateStrategy
+	}
+	if policy.DetentionTimeoutSeconds != nil {
+		resolved.DetentionTimeoutSeconds = *policy.DetentionTimeoutSeconds
 	}
 	if policy.SearchDrainTimeoutSeconds != nil {
 		resolved.SearchDrainTimeoutSeconds = *policy.SearchDrainTimeoutSeconds

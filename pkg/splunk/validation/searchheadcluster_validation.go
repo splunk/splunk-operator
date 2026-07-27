@@ -132,6 +132,7 @@ func validateSearchHeadClusterLifecyclePolicy(policy *enterpriseApi.SearchHeadCl
 		name  string
 		value *int64
 	}{
+		{name: "detentionTimeoutSeconds", value: policy.DetentionTimeoutSeconds},
 		{name: "searchDrainTimeoutSeconds", value: policy.SearchDrainTimeoutSeconds},
 		{name: "captainTransferTimeoutSeconds", value: policy.CaptainTransferTimeoutSeconds},
 		{name: "podStartupTimeoutSeconds", value: policy.PodStartupTimeoutSeconds},
