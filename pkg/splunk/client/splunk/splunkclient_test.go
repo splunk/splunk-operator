@@ -263,6 +263,41 @@ func TestGetSearchHeadCaptainMembers(t *testing.T) {
 	splunkClientTester(t, "TestGetSearchHeadCaptainMembers", 503, "", wantRequest, test)
 }
 
+func TestGetKVStoreStatus(t *testing.T) {
+	wantRequest, _ := http.NewRequest(
+		"GET",
+		"https://localhost:8089/services/kvstore/status?count=0&output_mode=json",
+		nil,
+	)
+	test := func(c splunk.SplunkClient) error {
+		status, err := c.GetKVStoreStatus()
+		if err != nil {
+			return err
+		}
+		if status.Current.Status != "ready" {
+			t.Errorf("KV Store status=%q; want ready", status.Current.Status)
+		}
+		return nil
+	}
+	body := `{"entry":[{"content":{"current":{"status":"ready"}}}]}`
+	splunkClientTester(t, "TestGetKVStoreStatus", 200, body, wantRequest, test)
+
+	test = func(c splunk.SplunkClient) error {
+		_, err := c.GetKVStoreStatus()
+		if err == nil {
+			t.Error("GetKVStoreStatus returned nil; want invalid response error")
+		}
+		return nil
+	}
+	splunkClientTester(t, "TestGetKVStoreStatus", 200, `{"entry":[]}`, wantRequest, test)
+	splunkClientTester(t, "TestGetKVStoreStatus", 200, `{"entry":[{"content":{"current":{}}}]}`, wantRequest, test)
+	splunkClientTester(t, "TestGetKVStoreStatus", 503, "", wantRequest, test)
+	splunkClientErrorTester(t, func(c splunk.SplunkClient) error {
+		_, err := c.GetKVStoreStatus()
+		return err
+	})
+}
+
 func TestSetSearchHeadDetention(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/shcluster/member/control/control/set_manual_detention?manual_detention=on", nil)
 	test := func(c splunk.SplunkClient) error {

@@ -47,6 +47,115 @@ var getSearchHeadCaptainMembers = func(
 	return mgr.getClient(ctx, n).GetSearchHeadCaptainMembers()
 }
 
+var getSearchHeadKVStoreStatus = func(
+	ctx context.Context,
+	mgr *searchHeadClusterPodManager,
+	n int32,
+) (string, error) {
+	status, err := mgr.getClient(ctx, n).GetKVStoreStatus()
+	if err != nil {
+		return "", err
+	}
+	return status.Current.Status, nil
+}
+
+type searchHeadKVStoreObservation struct {
+	Available          bool
+	Statuses           map[int32]string
+	NotReadyMembers    []string
+	UnavailableMembers []string
+}
+
+func (mgr *searchHeadClusterPodManager) observeSearchHeadKVStores(
+	ctx context.Context,
+	ordinals []int32,
+) searchHeadKVStoreObservation {
+	observation := searchHeadKVStoreObservation{
+		Available: true,
+		Statuses:  make(map[int32]string, len(ordinals)),
+	}
+	if len(ordinals) == 0 {
+		observation.Available = false
+		return observation
+	}
+
+	type result struct {
+		ordinal int32
+		name    string
+		status  string
+		err     error
+	}
+	results := make(chan result, len(ordinals))
+	for _, ordinal := range ordinals {
+		name := fmt.Sprintf("search-head-ordinal-%d", ordinal)
+		if ordinal >= 0 && ordinal < int32(len(mgr.cr.Status.Members)) &&
+			mgr.cr.Status.Members[ordinal].Name != "" {
+			name = mgr.cr.Status.Members[ordinal].Name
+		}
+		go func(ordinal int32, name string) {
+			status, err := getSearchHeadKVStoreStatus(ctx, mgr, ordinal)
+			results <- result{
+				ordinal: ordinal,
+				name:    name,
+				status:  strings.TrimSpace(status),
+				err:     err,
+			}
+		}(ordinal, name)
+	}
+
+	for range ordinals {
+		result := <-results
+		if result.err != nil || result.status == "" {
+			observation.Available = false
+			observation.UnavailableMembers = append(
+				observation.UnavailableMembers,
+				result.name,
+			)
+			continue
+		}
+		observation.Statuses[result.ordinal] = result.status
+		if result.status != "ready" {
+			observation.NotReadyMembers = append(
+				observation.NotReadyMembers,
+				fmt.Sprintf("%s=%s", result.name, result.status),
+			)
+		}
+	}
+	sort.Strings(observation.NotReadyMembers)
+	sort.Strings(observation.UnavailableMembers)
+	return observation
+}
+
+func (mgr *searchHeadClusterPodManager) searchHeadMemberOrdinals() []int32 {
+	count := len(mgr.cr.Status.Members)
+	if int(mgr.cr.Spec.Replicas) > count {
+		count = int(mgr.cr.Spec.Replicas)
+	}
+	ordinals := make([]int32, count)
+	for ordinal := range count {
+		ordinals[ordinal] = int32(ordinal)
+	}
+	return ordinals
+}
+
+func kvStorePreflightMessage(
+	observation searchHeadKVStoreObservation,
+) string {
+	if !observation.Available {
+		return fmt.Sprintf(
+			"wait for KV Store status from every Search Head member: unavailable=%s",
+			strings.Join(observation.UnavailableMembers, ", "),
+		)
+	}
+	if len(observation.NotReadyMembers) > 0 {
+		return fmt.Sprintf(
+			"wait for every Search Head KV Store to report ready: %s",
+			strings.Join(observation.NotReadyMembers, ", "),
+		)
+	}
+	return ""
+}
+
 var requestSearchHeadDetention = func(
 	ctx context.Context,
 	mgr *searchHeadClusterPodManager,
@@ -352,6 +461,41 @@ func (mgr *searchHeadClusterPodManager) observeLifecycleReplacement(
 	if len(candidates) > 0 {
 		observation.CaptainTransferTarget = candidates[0].Label
 		observation.CaptainTransferTargetManagementURI = candidates[0].ManagementURI
+	}
+
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation != nil {
+		kvStoreOrdinals := []int32(nil)
+		switch {
+		case operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageValidatingCluster:
+			kvStoreOrdinals = mgr.searchHeadMemberOrdinals()
+		case operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget &&
+			target.Status == "ManualDetention",
+			operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches,
+			operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain,
+			operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement:
+			kvStoreOrdinals = []int32{n}
+		}
+		if len(kvStoreOrdinals) > 0 {
+			kvStoreObservation := mgr.observeSearchHeadKVStores(
+				ctx,
+				kvStoreOrdinals,
+			)
+			observation.KVStoreObservationRequired = true
+			observation.KVStoreObservationAvailable =
+				kvStoreObservation.Available
+			observation.KVStoreNotReadyMembers = append(
+				[]string(nil),
+				kvStoreObservation.NotReadyMembers...,
+			)
+			observation.TargetKVStoreReady =
+				kvStoreObservation.Statuses[n] == "ready"
+		}
 	}
 	observation.Available = true
 	observation.Fresh = true

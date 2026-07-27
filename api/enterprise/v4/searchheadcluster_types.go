@@ -182,6 +182,7 @@ const (
 	SearchHeadClusterLifecycleReasonConflictingCaptainObservation SearchHeadClusterLifecycleReason = "ConflictingCaptainObservation"
 	SearchHeadClusterLifecycleReasonDetentionRequested            SearchHeadClusterLifecycleReason = "DetentionRequested"
 	SearchHeadClusterLifecycleReasonDetentionTimedOut             SearchHeadClusterLifecycleReason = "DetentionTimedOut"
+	SearchHeadClusterLifecycleReasonKVStoreNotReady               SearchHeadClusterLifecycleReason = "KVStoreNotReady"
 	SearchHeadClusterLifecycleReasonDetentionReleasePending       SearchHeadClusterLifecycleReason = "DetentionReleasePending"
 	SearchHeadClusterLifecycleReasonDetentionReleaseTimedOut      SearchHeadClusterLifecycleReason = "DetentionReleaseTimedOut"
 	SearchHeadClusterLifecycleReasonSearchesActive                SearchHeadClusterLifecycleReason = "SearchesActive"
@@ -311,9 +312,13 @@ type SearchHeadClusterLifecycleOperationStatus struct {
 	DetentionRequestedAt         *metav1.Time                     `json:"detentionRequestedAt,omitempty"`
 	DetentionRequestAttemptCount int32                            `json:"detentionRequestAttemptCount,omitempty"`
 	DetentionReleaseRequestedAt  *metav1.Time                     `json:"detentionReleaseRequestedAt,omitempty"`
-	ActiveHistoricalSearches     int32                            `json:"activeHistoricalSearches,omitempty"`
-	ActiveRealtimeSearches       int32                            `json:"activeRealtimeSearches,omitempty"`
-	LastSuccessfulSHCObservation *metav1.Time                     `json:"lastSuccessfulSHCObservation,omitempty"`
+	// KVStoreNotReadyMembers contains bounded member=status observations from
+	// the most recent successful KV Store lifecycle preflight.
+	KVStoreNotReadyMembers           []string     `json:"kvStoreNotReadyMembers,omitempty"`
+	LastSuccessfulKVStoreObservation *metav1.Time `json:"lastSuccessfulKVStoreObservation,omitempty"`
+	ActiveHistoricalSearches         int32        `json:"activeHistoricalSearches,omitempty"`
+	ActiveRealtimeSearches           int32        `json:"activeRealtimeSearches,omitempty"`
+	LastSuccessfulSHCObservation     *metav1.Time `json:"lastSuccessfulSHCObservation,omitempty"`
 }
 
 // SearchHeadClusterStatus defines the observed state of a Splunk Enterprise search head cluster

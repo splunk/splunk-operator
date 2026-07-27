@@ -738,6 +738,78 @@ func TestRollingUpdateControllerPersistsImageInitializationBeforeMemberLifecycle
 	assertNoRollingUpdatePodDelete(t, client)
 }
 
+func TestRollingUpdateControllerWaitsForKVStoreBeforeUpgradeInitialization(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, _ := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	configureImageUpgradeControllerFixture(
+		mgr,
+		statefulSet,
+		"splunk/splunk:9.4.0",
+		"splunk/splunk:10.0.0",
+	)
+
+	oldInitiate := initiateSearchHeadClusterUpgrade
+	t.Cleanup(func() {
+		initiateSearchHeadClusterUpgrade = oldInitiate
+	})
+	initializationCalls := 0
+	initiateSearchHeadClusterUpgrade = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) error {
+		initializationCalls++
+		return nil
+	}
+	getSearchHeadKVStoreStatus = func(
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		ordinal int32,
+	) (string, error) {
+		if ordinal == 1 {
+			return "starting", nil
+		}
+		return "ready", nil
+	}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil || phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("persist initialization intent phase=%q error=%v", phase, err)
+	}
+	phase, err = mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil || phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("KV Store preflight phase=%q error=%v", phase, err)
+	}
+	if initializationCalls != 0 ||
+		mgr.cr.Status.ImageUpgrade.InitializationAttemptCount != 0 ||
+		!strings.Contains(mgr.cr.Status.Message, "KV Store") ||
+		!strings.Contains(
+			mgr.cr.Status.Message,
+			"splunk-stack1-search-head-1=starting",
+		) {
+		t.Fatalf(
+			"KV Store preflight calls=%d status=%#v message=%q",
+			initializationCalls,
+			mgr.cr.Status.ImageUpgrade,
+			mgr.cr.Status.Message,
+		)
+	}
+}
+
 func TestRollingUpdateControllerPersistsRecoveredOrdinalBeforeNextMember(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(
@@ -3201,6 +3273,17 @@ func rollingUpdateControllerFixture(
 	podRevisions []string,
 ) (*searchHeadClusterPodManager, *appsv1.StatefulSet, *spltest.MockClient) {
 	t.Helper()
+	oldGetKVStoreStatus := getSearchHeadKVStoreStatus
+	t.Cleanup(func() {
+		getSearchHeadKVStoreStatus = oldGetKVStoreStatus
+	})
+	getSearchHeadKVStoreStatus = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (string, error) {
+		return "ready", nil
+	}
 	replicas := int32(len(podRevisions))
 	cr := &enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{

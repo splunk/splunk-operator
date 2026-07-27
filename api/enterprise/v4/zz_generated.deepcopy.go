@@ -2712,6 +2712,15 @@ func (in *SearchHeadClusterLifecycleOperationStatus) DeepCopyInto(out *SearchHea
 		in, out := &in.DetentionReleaseRequestedAt, &out.DetentionReleaseRequestedAt
 		*out = (*in).DeepCopy()
 	}
+	if in.KVStoreNotReadyMembers != nil {
+		in, out := &in.KVStoreNotReadyMembers, &out.KVStoreNotReadyMembers
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.LastSuccessfulKVStoreObservation != nil {
+		in, out := &in.LastSuccessfulKVStoreObservation, &out.LastSuccessfulKVStoreObservation
+		*out = (*in).DeepCopy()
+	}
 	if in.LastSuccessfulSHCObservation != nil {
 		in, out := &in.LastSuccessfulSHCObservation, &out.LastSuccessfulSHCObservation
 		*out = (*in).DeepCopy()

@@ -48,6 +48,8 @@ type SHCImageUpgradeInitializationInput struct {
 	CoordinationOwned           bool
 	ConflictingPlannedOperation bool
 	ManagementTargetEligible    bool
+	KVStoreReady                bool
+	KVStoreMessage              string
 	Now                         time.Time
 }
 
@@ -143,6 +145,13 @@ func EvaluateSHCImageUpgradeInitialization(
 				operation,
 				"wait for an eligible Search Head management target and service-ready captain",
 			)
+		}
+		if !input.KVStoreReady {
+			message := input.KVStoreMessage
+			if message == "" {
+				message = "wait for every Search Head KV Store to report ready"
+			}
+			return initializationWaitForOperation(operation, message)
 		}
 		return initializationDecision(
 			SHCImageUpgradeInitializationCall,

@@ -676,6 +676,8 @@ func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeInitialization(
 		!shcAppFrameworkWorkActive(&mgr.cr.Status.AppContext)
 	targetOrdinal := int32(-1)
 	targetEligible := false
+	kvStoreReady := false
+	kvStoreMessage := ""
 	if coordinationOwned &&
 		current.Phase ==
 			enterpriseApi.SearchHeadClusterImageUpgradePhaseInitializing &&
@@ -684,6 +686,15 @@ func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeInitialization(
 		targetOrdinal, targetEligible = mgr.selectImageUpgradeManagementTarget(
 			ctx,
 		)
+		if targetEligible {
+			kvStoreObservation := mgr.observeSearchHeadKVStores(
+				ctx,
+				mgr.searchHeadMemberOrdinals(),
+			)
+			kvStoreReady = kvStoreObservation.Available &&
+				len(kvStoreObservation.NotReadyMembers) == 0
+			kvStoreMessage = kvStorePreflightMessage(kvStoreObservation)
+		}
 	}
 
 	initialization := upgrade.EvaluateSHCImageUpgradeInitialization(
@@ -692,6 +703,8 @@ func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeInitialization(
 			CoordinationOwned:           coordinationOwned,
 			ConflictingPlannedOperation: conflictingOperation,
 			ManagementTargetEligible:    targetEligible,
+			KVStoreReady:                kvStoreReady,
+			KVStoreMessage:              kvStoreMessage,
 			Now:                         now,
 		},
 	)

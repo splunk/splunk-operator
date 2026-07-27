@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -267,12 +268,14 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	oldNow := searchHeadClusterLifecycleNow
 	oldGetMembers := getSearchHeadCaptainMembers
+	oldGetKVStoreStatus := getSearchHeadKVStoreStatus
 	oldRequestDetention := requestSearchHeadDetention
 	oldTransferCaptain := transferSearchHeadCaptain
 	oldGetLifecyclePod := getSearchHeadLifecyclePod
 	t.Cleanup(func() {
 		searchHeadClusterLifecycleNow = oldNow
 		getSearchHeadCaptainMembers = oldGetMembers
+		getSearchHeadKVStoreStatus = oldGetKVStoreStatus
 		requestSearchHeadDetention = oldRequestDetention
 		transferSearchHeadCaptain = oldTransferCaptain
 		getSearchHeadLifecyclePod = oldGetLifecyclePod
@@ -340,6 +343,13 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 		int32,
 	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
 		return captainMembers, nil
+	}
+	getSearchHeadKVStoreStatus = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (string, error) {
+		return "ready", nil
 	}
 
 	detentionCalls := 0
@@ -495,8 +505,112 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 	assertLifecycleAdapterResult(t, ready, err, true)
 }
 
+func TestLifecycleAdapterRequiresKVStorePreflightBeforeDetention(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	oldGetMembers := getSearchHeadCaptainMembers
+	oldGetKVStoreStatus := getSearchHeadKVStoreStatus
+	t.Cleanup(func() {
+		getSearchHeadCaptainMembers = oldGetMembers
+		getSearchHeadKVStoreStatus = oldGetKVStoreStatus
+	})
+
+	target := int32(2)
+	targetPod := "splunk-example-search-head-2"
+	cr := &enterpriseApi.SearchHeadCluster{}
+	cr.Name = "example"
+	cr.Spec.Replicas = 3
+	cr.Status.Initialized = true
+	cr.Status.MinPeersJoined = true
+	cr.Status.CaptainReady = true
+	cr.Status.Captain = "splunk-example-search-head-0"
+	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+		{Name: "splunk-example-search-head-0", Status: "Up", Registered: true},
+		{Name: "splunk-example-search-head-1", Status: "Up", Registered: true},
+		{Name: targetPod, Status: "Up", Registered: true},
+	}
+	cr.Status.LifecycleOperation = shcworkflow.StartReplacement(
+		"operation-1",
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		"revision-2",
+		targetPod,
+		target,
+		now,
+	)
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	getSearchHeadCaptainMembers = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+		return map[string]splclient.SearchHeadCaptainMemberInfo{
+			"splunk-example-search-head-0": {
+				Identifier: "member-guid-0",
+				Label:      "splunk-example-search-head-0",
+				Status:     "Up",
+				Captain:    true,
+			},
+			"splunk-example-search-head-1": {
+				Identifier: "member-guid-1",
+				Label:      "splunk-example-search-head-1",
+				Status:     "Up",
+			},
+			targetPod: {
+				Identifier: "member-guid-2",
+				Label:      targetPod,
+				Status:     "Up",
+			},
+		}, nil
+	}
+	getSearchHeadKVStoreStatus = func(
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		ordinal int32,
+	) (string, error) {
+		if ordinal == 1 {
+			return "starting", nil
+		}
+		return "ready", nil
+	}
+
+	observation := mgr.observeLifecycleReplacement(
+		context.Background(),
+		target,
+		now,
+	)
+	decision := shcworkflow.EvaluateReplacement(
+		cr.Status.LifecycleOperation,
+		observation,
+		shcworkflow.ReplacementPolicy{
+			DetentionTimeout:       30 * time.Second,
+			SearchDrainTimeout:     30 * time.Second,
+			CaptainTransferTimeout: 30 * time.Second,
+		},
+		now,
+	)
+
+	if decision.Action.Type != shcworkflow.ActionObserveCluster ||
+		decision.Operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageValidatingCluster ||
+		decision.Operation.Reason !=
+			enterpriseApi.SearchHeadClusterLifecycleReasonKVStoreNotReady ||
+		!reflect.DeepEqual(
+			decision.Operation.KVStoreNotReadyMembers,
+			[]string{"splunk-example-search-head-1=starting"},
+		) {
+		t.Fatalf(
+			"KV Store preflight decision=%#v observation=%#v",
+			decision,
+			observation,
+		)
+	}
+}
+
 func TestScaleDownCaptainTransferPrecedesMembershipRemoval(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
+	stubReadySearchHeadKVStore(t)
 
 	now := time.Date(2026, 7, 25, 10, 0, 0, 0, time.UTC)
 	target := int32(2)
@@ -1204,6 +1318,7 @@ func TestLifecycleAdapterPreservesNonUpMemberViews(t *testing.T) {
 
 func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
+	stubReadySearchHeadKVStore(t)
 
 	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
 	stageStartedAt := metav1.NewTime(now)
@@ -1743,6 +1858,21 @@ func assertLifecycleAdapterResult(t *testing.T, got bool, err error, want bool) 
 	}
 	if got != want {
 		t.Fatalf("ready = %t, want %t", got, want)
+	}
+}
+
+func stubReadySearchHeadKVStore(t *testing.T) {
+	t.Helper()
+	oldGetKVStoreStatus := getSearchHeadKVStoreStatus
+	t.Cleanup(func() {
+		getSearchHeadKVStoreStatus = oldGetKVStoreStatus
+	})
+	getSearchHeadKVStoreStatus = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (string, error) {
+		return "ready", nil
 	}
 }
 

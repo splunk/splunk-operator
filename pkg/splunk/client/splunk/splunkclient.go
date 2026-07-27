@@ -324,6 +324,39 @@ func (c *SplunkClient) GetSearchHeadClusterMemberInfo() (*SearchHeadClusterMembe
 	return &apiResponse.Entry[0].Content, nil
 }
 
+// KVStoreStatus represents the current local KV Store state reported by a
+// Search Head member.
+type KVStoreStatus struct {
+	Current KVStoreCurrentStatus `json:"current"`
+}
+
+// KVStoreCurrentStatus is the active KV Store process state.
+type KVStoreCurrentStatus struct {
+	Status string `json:"status"`
+}
+
+// GetKVStoreStatus queries the local KV Store state for one Search Head.
+func (c *SplunkClient) GetKVStoreStatus() (*KVStoreStatus, error) {
+	apiResponse := struct {
+		Entry []struct {
+			Content KVStoreStatus `json:"content"`
+		} `json:"entry"`
+	}{}
+	path := "/services/kvstore/status"
+	if err := c.Get(path, &apiResponse); err != nil {
+		return nil, err
+	}
+	if len(apiResponse.Entry) < 1 ||
+		strings.TrimSpace(apiResponse.Entry[0].Content.Current.Status) == "" {
+		return nil, fmt.Errorf(
+			"invalid response from %s%s",
+			c.ManagementURI,
+			path,
+		)
+	}
+	return &apiResponse.Entry[0].Content, nil
+}
+
 // SetSearchHeadDetention enables or disables detention of a search head cluster member.
 // You can use this on any member of a search head cluster.
 // See https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/SHdetention

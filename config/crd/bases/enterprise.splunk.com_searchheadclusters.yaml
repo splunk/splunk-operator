@@ -10301,6 +10301,16 @@ spec:
                       SearchHeadClusterLifecycleIntent identifies why a durable lifecycle
                       operation exists.
                     type: string
+                  kvStoreNotReadyMembers:
+                    description: |-
+                      KVStoreNotReadyMembers contains bounded member=status observations from
+                      the most recent successful KV Store lifecycle preflight.
+                    items:
+                      type: string
+                    type: array
+                  lastSuccessfulKVStoreObservation:
+                    format: date-time
+                    type: string
                   lastSuccessfulSHCObservation:
                     format: date-time
                     type: string

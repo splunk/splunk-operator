@@ -49,6 +49,130 @@ func TestNonCaptainReplacementRequiresDetentionAndDrain(t *testing.T) {
 	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement, ActionAuthorizeReplacement)
 }
 
+func TestReplacementWaitsForAllKVStoresBeforeDetention(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	observation := safeObservation(now)
+	observation.KVStoreNotReadyMembers = []string{
+		"example-search-head-1=starting",
+	}
+
+	decision := EvaluateReplacement(operation, observation, testPolicy(), now)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingCluster,
+		ActionObserveCluster,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonKVStoreNotReady {
+		t.Fatalf(
+			"reason = %q, want KVStoreNotReady",
+			decision.Operation.Reason,
+		)
+	}
+	if len(decision.Operation.KVStoreNotReadyMembers) != 1 {
+		t.Fatalf(
+			"KV Store status = %v, want one not-ready member",
+			decision.Operation.KVStoreNotReadyMembers,
+		)
+	}
+}
+
+func TestReplacementWaitsForKVStoreObservationBeforeDetention(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	observation := safeObservation(now)
+	observation.KVStoreObservationAvailable = false
+
+	decision := EvaluateReplacement(operation, observation, testPolicy(), now)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingCluster,
+		ActionObserveCluster,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonObservationStale {
+		t.Fatalf(
+			"reason = %q, want ObservationStale",
+			decision.Operation.Reason,
+		)
+	}
+}
+
+func TestDetainedTargetWaitsForReadyKVStore(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget
+	stageStartedAt := metav1.NewTime(now)
+	operation.StageStartedAt = &stageStartedAt
+	observation := safeObservation(now)
+	observation.TargetMemberStatus = "ManualDetention"
+	observation.TargetKVStoreReady = false
+	observation.KVStoreNotReadyMembers = []string{
+		operation.TargetPod + "=starting",
+	}
+
+	decision := EvaluateReplacement(
+		operation,
+		observation,
+		testPolicy(),
+		now.Add(time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget,
+		ActionObserveCluster,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonKVStoreNotReady {
+		t.Fatalf(
+			"reason = %q, want KVStoreNotReady",
+			decision.Operation.Reason,
+		)
+	}
+}
+
+func TestDrainedTargetRechecksKVStoreBeforeAuthorization(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches
+	stageStartedAt := metav1.NewTime(now)
+	operation.StageStartedAt = &stageStartedAt
+	observation := safeObservation(now)
+	observation.TargetMemberStatus = "ManualDetention"
+	observation.TargetKVStoreReady = false
+	observation.KVStoreNotReadyMembers = []string{
+		operation.TargetPod + "=starting",
+	}
+
+	decision := EvaluateReplacement(
+		operation,
+		observation,
+		testPolicy(),
+		now.Add(time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches,
+		ActionObserveCluster,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonKVStoreNotReady {
+		t.Fatalf(
+			"reason = %q, want KVStoreNotReady",
+			decision.Operation.Reason,
+		)
+	}
+}
+
 func TestCaptainReplacementRequiresConfirmedTransfer(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	operation := newTestOperation(now)
@@ -421,17 +545,20 @@ func newTestOperation(now time.Time) *enterpriseApi.SearchHeadClusterLifecycleOp
 
 func safeObservation(now time.Time) Observation {
 	return Observation{
-		ObservedAt:             now,
-		Available:              true,
-		Fresh:                  true,
-		Initialized:            true,
-		MinPeersJoined:         true,
-		Captain:                "example-search-head-0",
-		CaptainReady:           true,
-		TargetMemberObserved:   true,
-		TargetMemberID:         "member-guid-2",
-		TargetMemberStatus:     "Up",
-		TargetMemberRegistered: true,
+		ObservedAt:                  now,
+		Available:                   true,
+		Fresh:                       true,
+		Initialized:                 true,
+		MinPeersJoined:              true,
+		Captain:                     "example-search-head-0",
+		CaptainReady:                true,
+		TargetMemberObserved:        true,
+		TargetMemberID:              "member-guid-2",
+		TargetMemberStatus:          "Up",
+		TargetMemberRegistered:      true,
+		KVStoreObservationRequired:  true,
+		KVStoreObservationAvailable: true,
+		TargetKVStoreReady:          true,
 	}
 }
 

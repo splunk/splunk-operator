@@ -87,13 +87,17 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 				RetryCount:                   1,
 				DetentionRequestedAt:         &now,
 				DetentionRequestAttemptCount: 2,
-				Reason:                       SearchHeadClusterLifecycleReasonSearchesActive,
-				Message:                      "waiting for active searches to drain",
-				Captain:                      "example-search-head-0",
-				CaptainReady:                 true,
-				ActiveHistoricalSearches:     2,
-				ActiveRealtimeSearches:       1,
-				LastSuccessfulSHCObservation: &now,
+				KVStoreNotReadyMembers: []string{
+					"example-search-head-1=starting",
+				},
+				LastSuccessfulKVStoreObservation: &now,
+				Reason:                           SearchHeadClusterLifecycleReasonSearchesActive,
+				Message:                          "waiting for active searches to drain",
+				Captain:                          "example-search-head-0",
+				CaptainReady:                     true,
+				ActiveHistoricalSearches:         2,
+				ActiveRealtimeSearches:           1,
+				LastSuccessfulSHCObservation:     &now,
 			},
 		},
 	}
@@ -127,6 +131,8 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 	*copied.Spec.LifecyclePolicy.SearchDrainTimeoutSeconds = 20
 	*copied.Spec.LifecyclePolicy.PodStartupTimeoutSeconds = 30
 	copied.Status.LifecycleOperation.ReplacementPodObservedAt = nil
+	copied.Status.LifecycleOperation.KVStoreNotReadyMembers[0] =
+		"example-search-head-2=failed"
 	copied.Status.ImageUpgrade.CompletedOrdinals[0] = 1
 	copied.Status.LifecycleOperation.CompletedOrdinals[0] = 1
 	if *input.Spec.TerminationGracePeriodSeconds != 1200 ||
@@ -134,6 +140,8 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 		*input.Spec.LifecyclePolicy.SearchDrainTimeoutSeconds != 180 ||
 		*input.Spec.LifecyclePolicy.PodStartupTimeoutSeconds != 182 ||
 		input.Status.LifecycleOperation.ReplacementPodObservedAt == nil ||
+		input.Status.LifecycleOperation.KVStoreNotReadyMembers[0] !=
+			"example-search-head-1=starting" ||
 		input.Status.ImageUpgrade.CompletedOrdinals[0] != 2 ||
 		input.Status.LifecycleOperation.CompletedOrdinals[0] != 3 {
 		t.Fatal("DeepCopy shares lifecycle pointer or slice storage")

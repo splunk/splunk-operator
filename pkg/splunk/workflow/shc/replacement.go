@@ -16,6 +16,7 @@ package shc
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -47,6 +48,10 @@ type Observation struct {
 	TargetMemberID                     string
 	TargetMemberStatus                 string
 	TargetMemberRegistered             bool
+	KVStoreObservationRequired         bool
+	KVStoreObservationAvailable        bool
+	KVStoreNotReadyMembers             []string
+	TargetKVStoreReady                 bool
 	ActiveHistoricalSearches           int32
 	ActiveRealtimeSearches             int32
 	CaptainTransferTarget              string
@@ -481,7 +486,89 @@ func validateObservation(
 		}, true
 	}
 
+	if operation.Stage ==
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingCluster &&
+		observation.KVStoreObservationRequired {
+		if !observation.KVStoreObservationAvailable {
+			setReason(
+				operation,
+				enterpriseApi.SearchHeadClusterLifecycleReasonObservationStale,
+				"a fresh KV Store status observation is required for every Search Head member",
+				now,
+			)
+			return Decision{
+				Operation: operation,
+				Action:    Action{Type: ActionObserveCluster},
+			}, true
+		}
+		if len(observation.KVStoreNotReadyMembers) > 0 {
+			setReason(
+				operation,
+				enterpriseApi.SearchHeadClusterLifecycleReasonKVStoreNotReady,
+				fmt.Sprintf(
+					"wait for every Search Head KV Store to report ready: %s",
+					strings.Join(observation.KVStoreNotReadyMembers, ", "),
+				),
+				now,
+			)
+			return Decision{
+				Operation: operation,
+				Action:    Action{Type: ActionObserveCluster},
+			}, true
+		}
+	}
+
+	if targetKVStoreRequired(operation, observation) &&
+		observation.KVStoreObservationRequired {
+		if !observation.KVStoreObservationAvailable {
+			setReason(
+				operation,
+				enterpriseApi.SearchHeadClusterLifecycleReasonObservationStale,
+				fmt.Sprintf(
+					"a fresh KV Store status observation is required for detained member %s",
+					operation.TargetPod,
+				),
+				now,
+			)
+			return Decision{
+				Operation: operation,
+				Action:    Action{Type: ActionObserveCluster},
+			}, true
+		}
+		if !observation.TargetKVStoreReady {
+			setReason(
+				operation,
+				enterpriseApi.SearchHeadClusterLifecycleReasonKVStoreNotReady,
+				fmt.Sprintf(
+					"wait for detained member KV Store to report ready: %s",
+					strings.Join(observation.KVStoreNotReadyMembers, ", "),
+				),
+				now,
+			)
+			return Decision{
+				Operation: operation,
+				Action:    Action{Type: ActionObserveCluster},
+			}, true
+		}
+	}
+
 	return Decision{Operation: operation}, false
+}
+
+func targetKVStoreRequired(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	observation Observation,
+) bool {
+	switch operation.Stage {
+	case enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget:
+		return observation.TargetMemberStatus == "ManualDetention"
+	case enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches,
+		enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain,
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement:
+		return true
+	default:
+		return false
+	}
 }
 
 func recordObservation(
@@ -492,6 +579,17 @@ func recordObservation(
 	operation.CaptainReady = observation.CaptainReady
 	operation.ActiveHistoricalSearches = observation.ActiveHistoricalSearches
 	operation.ActiveRealtimeSearches = observation.ActiveRealtimeSearches
+	if observation.KVStoreObservationRequired &&
+		observation.KVStoreObservationAvailable {
+		operation.KVStoreNotReadyMembers = append(
+			[]string(nil),
+			observation.KVStoreNotReadyMembers...,
+		)
+		if !observation.ObservedAt.IsZero() {
+			observedAt := metav1.NewTime(observation.ObservedAt)
+			operation.LastSuccessfulKVStoreObservation = &observedAt
+		}
+	}
 	if operation.TargetMemberID == "" && observation.TargetMemberID != "" {
 		operation.TargetMemberID = observation.TargetMemberID
 	}

@@ -31,6 +31,7 @@ func TestSHCImageUpgradeInitializationRequiresPersistenceBarriers(t *testing.T) 
 			Current:                  operation,
 			CoordinationOwned:        true,
 			ManagementTargetEligible: true,
+			KVStoreReady:             true,
 			Now:                      now,
 		},
 	)
@@ -56,6 +57,7 @@ func TestSHCImageUpgradeInitializationRequiresPersistenceBarriers(t *testing.T) 
 			Current:                  intent.Operation,
 			CoordinationOwned:        true,
 			ManagementTargetEligible: true,
+			KVStoreReady:             true,
 			Now:                      now.Add(time.Second),
 		},
 	)
@@ -83,6 +85,7 @@ func TestSHCImageUpgradeInitializationRequiresPersistenceBarriers(t *testing.T) 
 			Current:                  success.Operation,
 			CoordinationOwned:        true,
 			ManagementTargetEligible: true,
+			KVStoreReady:             true,
 			Now:                      now.Add(3 * time.Second),
 		},
 	)
@@ -101,6 +104,7 @@ func TestSHCImageUpgradeInitializationRequiresPersistenceBarriers(t *testing.T) 
 			Current:                  advance.Operation,
 			CoordinationOwned:        true,
 			ManagementTargetEligible: true,
+			KVStoreReady:             true,
 			Now:                      now.Add(4 * time.Second),
 		},
 	)
@@ -212,6 +216,42 @@ func TestSHCImageUpgradeInitializationRequiresEligibleTargetForCall(t *testing.T
 	}
 }
 
+func TestSHCImageUpgradeInitializationWaitsForKVStorePreflight(t *testing.T) {
+	now := time.Date(2026, 7, 25, 13, 0, 0, 0, time.UTC)
+	operation := initializingImageUpgrade(now.Add(-time.Minute))
+
+	decision := EvaluateSHCImageUpgradeInitialization(
+		SHCImageUpgradeInitializationInput{
+			Current:                  operation,
+			CoordinationOwned:        true,
+			ManagementTargetEligible: true,
+			KVStoreReady:             false,
+			KVStoreMessage: "wait for every Search Head KV Store to report " +
+				"ready: example-search-head-1=starting",
+			Now: now,
+		},
+	)
+
+	assertInitializationAction(
+		t,
+		decision,
+		SHCImageUpgradeInitializationWait,
+	)
+	if decision.Reason !=
+		enterpriseApi.SearchHeadClusterImageUpgradeReasonClusterNotReady ||
+		decision.Message !=
+			"wait for every Search Head KV Store to report ready: example-search-head-1=starting" {
+		t.Fatalf("KV Store preflight decision = %#v", decision)
+	}
+	if decision.Operation.InitializationAttemptCount != 0 ||
+		decision.Operation.InitializationLastAttemptAt != nil {
+		t.Fatalf(
+			"KV Store preflight wait recorded an endpoint attempt: %#v",
+			decision.Operation,
+		)
+	}
+}
+
 func TestSHCImageUpgradeInitializationFailureRemainsRetryable(t *testing.T) {
 	now := time.Date(2026, 7, 25, 13, 0, 0, 0, time.UTC)
 	operation := initializingImageUpgrade(now.Add(-time.Minute))
@@ -238,6 +278,7 @@ func TestSHCImageUpgradeInitializationFailureRemainsRetryable(t *testing.T) {
 			Current:                  failed.Operation,
 			CoordinationOwned:        true,
 			ManagementTargetEligible: true,
+			KVStoreReady:             true,
 			Now:                      now.Add(time.Second),
 		},
 	)
