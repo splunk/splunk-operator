@@ -75,8 +75,8 @@ CNPG can't express.
 **Full-object drift comparison against the live CNPG spec.** Rejected. CNPG
 mutates its own spec with defaults and runtime fields, so a full comparison
 drifts every reconcile and fights CNPG. We chose to compare only a **normalized,
-operator-owned subset** of fields, and to use SSA field managers where the
-operator co-owns an object (e.g. `postgresql.parameters`, `managed.roles`).
+operator-owned subset** of fields, and to use an SSA field manager where the
+operator co-owns a field with CNPG (`postgresql.parameters`).
 
 **Self-managed / sidecar PgBouncer.** Rejected. CNPG's `Pooler` CR is
 first-class and integrates with CNPG's TLS and service discovery. We chose CNPG
@@ -106,8 +106,8 @@ through three CRDs on the existing `enterprise.splunk.com/v4` group:
    CNPG's cluster phase.
 3. **`PostgresDatabase`** (namespaced) provisions logical databases, roles, and
    credentials on a referenced cluster through a **linear condition pipeline**,
-   patching CNPG `managed.roles` via SSA and using direct SQL only for privilege
-   grants.
+   declaring role intent for the cluster controller to arbitrate and merge-patch
+   into CNPG `managed.roles`, and using direct SQL only for privilege grants.
 
 Drift is healed via owner references and `Owns()` watches, comparing only a
 normalized operator-owned subset so the operator never fights CNPG over its own
