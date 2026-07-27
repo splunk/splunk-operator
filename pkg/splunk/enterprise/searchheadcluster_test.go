@@ -492,6 +492,7 @@ func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
 			c := splclient.NewSplunkClient(managementURI, username, password)
 			c.Client = mockSplunkClient
+			c.SearchHeadClusterUpgradeClient = mockSplunkClient
 			return c
 		},
 	}
@@ -814,6 +815,7 @@ func TestApplyShcSecret(t *testing.T) {
 				password,
 			)
 			result.Client = mockSplunkClient
+			result.SearchHeadClusterUpgradeClient = mockSplunkClient
 			return result
 		},
 	}
@@ -1093,6 +1095,7 @@ func TestApplyShcSecretAdminPasswordNotStarvedByShcSecretAlreadyChanged(t *testi
 		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
 			c := splclient.NewSplunkClient(managementURI, username, password)
 			c.Client = mockSplunkClient
+			c.SearchHeadClusterUpgradeClient = mockSplunkClient
 			return c
 		},
 	}
@@ -2267,6 +2270,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 			newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
 				c := splclient.NewSplunkClient(managementURI, username, password)
 				c.Client = mclient
+				c.SearchHeadClusterUpgradeClient = mclient
 				return c
 			},
 		}

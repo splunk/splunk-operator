@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	splunk "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -37,6 +38,7 @@ func splunkClientErrorTester(t *testing.T, test func(splunk.SplunkClient) error)
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
+	c.SearchHeadClusterUpgradeClient = mockSplunkClient
 	err := test(*c)
 	if err == nil {
 		t.Errorf("Expected error, err = %v", err)
@@ -48,6 +50,7 @@ func splunkClientTester(t *testing.T, testMethod string, status int, body string
 	mockSplunkClient.AddHandler(wantRequest, status, body, nil)
 	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
+	c.SearchHeadClusterUpgradeClient = mockSplunkClient
 	err := test(*c)
 	if err != nil {
 		t.Errorf("%s err = %v", testMethod, err)
@@ -62,6 +65,7 @@ func splunkClientMultipleRequestTester(t *testing.T, testMethod string, status [
 	}
 	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
+	c.SearchHeadClusterUpgradeClient = mockSplunkClient
 	err := test(*c)
 	if err != nil {
 		t.Errorf("%s err = %v", testMethod, err)
@@ -81,6 +85,60 @@ func TestSplunkClientDo(t *testing.T) {
 	}
 	c.Do(&hreq, []int{200}, nil)
 }
+
+func TestNewSplunkClientRequestTimeouts(t *testing.T) {
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+
+	defaultClient, ok := c.Client.(*http.Client)
+	if !ok {
+		t.Fatalf("Client type=%T; want *http.Client", c.Client)
+	}
+	if defaultClient.Timeout != 5*time.Second {
+		t.Errorf("Client.Timeout=%s; want %s", defaultClient.Timeout, 5*time.Second)
+	}
+
+	upgradeClient, ok := c.SearchHeadClusterUpgradeClient.(*http.Client)
+	if !ok {
+		t.Fatalf("SearchHeadClusterUpgradeClient type=%T; want *http.Client", c.SearchHeadClusterUpgradeClient)
+	}
+	if upgradeClient.Timeout != 60*time.Second {
+		t.Errorf("SearchHeadClusterUpgradeClient.Timeout=%s; want %s", upgradeClient.Timeout, 60*time.Second)
+	}
+}
+
+func TestSearchHeadClusterUpgradeUsesSpecializedClient(t *testing.T) {
+	upgradeClient := &spltest.MockHTTPClient{}
+	initRequest, _ := http.NewRequest(
+		"POST",
+		"https://localhost:8089/services/shcluster/captain/control/control/upgrade-init",
+		nil,
+	)
+	finalizeRequest, _ := http.NewRequest(
+		"POST",
+		"https://localhost:8089/services/shcluster/captain/control/control/upgrade-finalize",
+		nil,
+	)
+	upgradeClient.AddHandler(initRequest, http.StatusOK, "", nil)
+	upgradeClient.AddHandler(finalizeRequest, http.StatusOK, "", nil)
+
+	defaultClient := &spltest.MockHTTPClient{}
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c.Client = defaultClient
+	c.SearchHeadClusterUpgradeClient = upgradeClient
+
+	if err := c.InitiateUpgrade(); err != nil {
+		t.Fatalf("InitiateUpgrade() error=%v", err)
+	}
+	if err := c.FinalizeUpgrade(); err != nil {
+		t.Fatalf("FinalizeUpgrade() error=%v", err)
+	}
+
+	upgradeClient.CheckRequests(t, "TestSearchHeadClusterUpgradeUsesSpecializedClient")
+	if len(defaultClient.GotRequests) != 0 {
+		t.Fatalf("default client received %d requests; want 0", len(defaultClient.GotRequests))
+	}
+}
+
 func TestGetSearchHeadCaptainInfo(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/shcluster/captain/info?count=0&output_mode=json", nil)
 	wantCaptainLabel := "splunk-s2-search-head-0"

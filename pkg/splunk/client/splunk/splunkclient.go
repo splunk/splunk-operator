@@ -39,6 +39,11 @@ type SplunkHTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+const (
+	defaultSplunkRequestTimeout            = 5 * time.Second
+	searchHeadClusterUpgradeRequestTimeout = 60 * time.Second
+)
+
 // SplunkClient is a simple object used to send HTTP REST API requests
 type SplunkClient struct {
 	// https endpoint for management interface (e.g. "https://server:8089")
@@ -52,28 +57,44 @@ type SplunkClient struct {
 
 	// HTTP client used to process requests
 	Client SplunkHTTPClient
+
+	// HTTP client used only for synchronous search head cluster upgrade
+	// control requests. Splunk can hold these requests while it coordinates
+	// cluster-wide state, so they need a larger bound than routine observations.
+	SearchHeadClusterUpgradeClient SplunkHTTPClient
 }
 
 // NewSplunkClient returns a new SplunkClient object initialized with a username and password.
 func NewSplunkClient(managementURI, username, password string) *SplunkClient {
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
+	}
 	return &SplunkClient{
 		ManagementURI: managementURI,
 		Username:      username,
 		Password:      password,
 		Client: &http.Client{
-			Timeout: 5 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
-			},
+			Timeout:   defaultSplunkRequestTimeout,
+			Transport: transport,
+		},
+		SearchHeadClusterUpgradeClient: &http.Client{
+			Timeout:   searchHeadClusterUpgradeRequestTimeout,
+			Transport: transport,
 		},
 	}
 }
 
 // Do processes a Splunk REST API request and unmarshals response into obj, if not nil.
 func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj interface{}) error {
+	return c.doWithClient(c.Client, request, expectedStatus, obj)
+}
+
+// doWithClient processes a Splunk REST API request using the selected HTTP
+// client and unmarshals the response into obj, if not nil.
+func (c *SplunkClient) doWithClient(client SplunkHTTPClient, request *http.Request, expectedStatus []int, obj interface{}) error {
 	// send HTTP response and check status
 	request.SetBasicAuth(c.Username, c.Password)
-	response, err := c.Client.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		return err
 	}
@@ -346,7 +367,11 @@ func (c *SplunkClient) InitiateUpgrade() error {
 		return err
 	}
 	expectedStatus := []int{200}
-	return c.Do(request, expectedStatus, nil)
+	client := c.SearchHeadClusterUpgradeClient
+	if client == nil {
+		client = c.Client
+	}
+	return c.doWithClient(client, request, expectedStatus, nil)
 }
 
 // FinalizeUpgrade finalizes rolling upgrade process for a search head cluster
@@ -358,7 +383,11 @@ func (c *SplunkClient) FinalizeUpgrade() error {
 		return err
 	}
 	expectedStatus := []int{200}
-	return c.Do(request, expectedStatus, nil)
+	client := c.SearchHeadClusterUpgradeClient
+	if client == nil {
+		client = c.Client
+	}
+	return c.doWithClient(client, request, expectedStatus, nil)
 }
 
 // RemoveSearchHeadClusterMember removes a search head cluster member.
