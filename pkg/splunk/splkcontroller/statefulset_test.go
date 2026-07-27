@@ -18,6 +18,7 @@ package splkcontroller
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -178,6 +179,92 @@ func TestApplyStatefulSetPersistsUpdateStrategyChanges(t *testing.T) {
 		*stored.Spec.UpdateStrategy.RollingUpdate.Partition != partition {
 		t.Fatalf("stored strategy = %#v, want RollingUpdate partition %d",
 			stored.Spec.UpdateStrategy, partition)
+	}
+}
+
+func TestApplyStatefulSetCanonicalizesTemplateBeforePartitionAdvance(
+	t *testing.T,
+) {
+	ctx := context.Background()
+	replicas := int32(3)
+	partition := replicas
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-search-head",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name: "splunk",
+						Env: []corev1.EnvVar{
+							{Name: "A", Value: "one"},
+							{Name: "B", Value: "two"},
+						},
+					}},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+		{Name: "Z", Value: "new"},
+		{Name: "A", Value: "one"},
+		{Name: "B", Value: "two"},
+	}
+	c := spltest.NewMockClient()
+	if err := c.Create(ctx, current); err != nil {
+		t.Fatalf("create StatefulSet: %v", err)
+	}
+
+	if _, err := ApplyStatefulSet(ctx, c, revised); err != nil {
+		t.Fatalf("apply template update: %v", err)
+	}
+	afterTemplateUpdate := &appsv1.StatefulSet{}
+	key := types.NamespacedName{
+		Name:      current.GetName(),
+		Namespace: current.GetNamespace(),
+	}
+	if err := c.Get(ctx, key, afterTemplateUpdate); err != nil {
+		t.Fatalf("get StatefulSet after template update: %v", err)
+	}
+	gotEnv := afterTemplateUpdate.Spec.Template.Spec.Containers[0].Env
+	wantEnv := []corev1.EnvVar{
+		{Name: "A", Value: "one"},
+		{Name: "B", Value: "two"},
+		{Name: "Z", Value: "new"},
+	}
+	if !reflect.DeepEqual(gotEnv, wantEnv) {
+		t.Fatalf("stored env = %#v, want canonical order %#v", gotEnv, wantEnv)
+	}
+
+	nextPartition := int32(2)
+	revisedPartition := revised.DeepCopy()
+	revisedPartition.Spec.UpdateStrategy.RollingUpdate.Partition = &nextPartition
+	if _, err := ApplyStatefulSet(ctx, c, revisedPartition); err != nil {
+		t.Fatalf("apply partition update: %v", err)
+	}
+	afterPartitionUpdate := &appsv1.StatefulSet{}
+	if err := c.Get(ctx, key, afterPartitionUpdate); err != nil {
+		t.Fatalf("get StatefulSet after partition update: %v", err)
+	}
+	if !reflect.DeepEqual(
+		afterTemplateUpdate.Spec.Template,
+		afterPartitionUpdate.Spec.Template,
+	) {
+		t.Fatalf(
+			"partition-only update changed Pod template:\nbefore=%#v\nafter=%#v",
+			afterTemplateUpdate.Spec.Template,
+			afterPartitionUpdate.Spec.Template,
+		)
 	}
 }
 

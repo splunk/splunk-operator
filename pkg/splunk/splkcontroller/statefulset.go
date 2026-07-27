@@ -153,6 +153,20 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 
 	// found an existing StatefulSet
 
+	// Canonicalize the desired Pod template before computing or persisting any
+	// material update. The slice comparison helpers sort equal-length slices
+	// in place, but return early when lengths differ. Without this step, adding
+	// an environment variable can persist an unsorted template revision; a
+	// later strategy-only partition update then persists the sorted order as a
+	// second, unintended Pod revision after rollout authorization.
+	if err := SortStatefulSetSlices(
+		ctx,
+		&revised.Spec.Template.Spec,
+		revised.GetObjectMeta().GetName(),
+	); err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+
 	// check for changes in Pod template
 	desiredUpdateStrategy := revised.Spec.UpdateStrategy
 	hasUpdateStrategyChanges := !reflect.DeepEqual(
