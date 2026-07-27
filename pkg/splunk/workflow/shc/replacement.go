@@ -418,6 +418,24 @@ func validateObservation(
 	}
 
 	if observation.ConflictingCaptain {
+		// A captain transfer is not observed atomically across Splunk's
+		// captain-info and captain-members endpoints. After the transfer
+		// request has been accepted, allow the two authoritative views to
+		// converge while the existing captain-transfer deadline continues
+		// to age. Replacement remains unauthorized until they agree.
+		if operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain &&
+			operation.CaptainTransferRequestedAt != nil {
+			setReason(
+				operation,
+				enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferRequired,
+				"waiting for authoritative captain observations to converge after transfer request",
+				now,
+			)
+			return Decision{
+				Operation: operation,
+				Action:    Action{Type: ActionObserveCluster},
+			}, true
+		}
 		transition(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,

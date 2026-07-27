@@ -183,6 +183,54 @@ func TestConflictingCaptainObservationBlocksReplacement(t *testing.T) {
 	}
 }
 
+func TestPostTransferCaptainDisagreementWaitsForConvergence(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain
+	stageStartedAt := metav1.NewTime(now)
+	operation.StageStartedAt = &stageStartedAt
+	requestedAt := metav1.NewTime(now.Add(time.Second))
+	operation.CaptainTransferRequestedAt = &requestedAt
+
+	observation := safeObservation(now.Add(2 * time.Second))
+	observation.Captain = operation.TargetPod
+	observation.ConflictingCaptain = true
+
+	decision := EvaluateReplacement(
+		operation,
+		observation,
+		testPolicy(),
+		now.Add(2*time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain,
+		ActionObserveCluster,
+	)
+	if decision.Operation.Reason != enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferRequired {
+		t.Fatalf("reason = %q, want %q",
+			decision.Operation.Reason,
+			enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferRequired,
+		)
+	}
+
+	decision = EvaluateReplacement(
+		decision.Operation,
+		observation,
+		testPolicy(),
+		now.Add(31*time.Second),
+	)
+	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageBlocked, ActionNone)
+	if decision.Operation.Reason != enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferTimedOut {
+		t.Fatalf("reason = %q, want %q",
+			decision.Operation.Reason,
+			enterpriseApi.SearchHeadClusterLifecycleReasonCaptainTransferTimedOut,
+		)
+	}
+}
+
 func TestReplacementCannotAuthorizeWithoutPersistentMemberIdentity(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	operation := newTestOperation(now)
