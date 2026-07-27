@@ -52,9 +52,16 @@ var requestSearchHeadDetention = func(
 	mgr *searchHeadClusterPodManager,
 	n int32,
 ) error {
-	client := mgr.getClient(ctx, n)
 	if !shcRollingUpdateOwnsClusterUpgradeLifecycle(mgr) {
-		if err := client.InitiateUpgrade(); err != nil {
+		captainOrdinal, err := observedReadyCaptainOrdinal(mgr)
+		if err != nil {
+			return err
+		}
+		if err := initiateSearchHeadClusterUpgrade(
+			ctx,
+			mgr,
+			captainOrdinal,
+		); err != nil {
 			return err
 		}
 
@@ -65,7 +72,33 @@ var requestSearchHeadDetention = func(
 			metrics.UpgradeStartTime.Set(float64(currentTime))
 		}
 	}
-	return client.SetSearchHeadDetention(true)
+	return setSearchHeadDetention(ctx, mgr, n, true)
+}
+
+func observedReadyCaptainOrdinal(
+	mgr *searchHeadClusterPodManager,
+) (int32, error) {
+	if mgr == nil || mgr.cr == nil ||
+		!mgr.cr.Status.CaptainReady ||
+		mgr.cr.Status.Captain == "" {
+		return -1, fmt.Errorf("SHC has no observed ready captain")
+	}
+	for ordinal, member := range mgr.cr.Status.Members {
+		if member.Name != mgr.cr.Status.Captain {
+			continue
+		}
+		if !member.Registered || member.Status != "Up" {
+			return -1, fmt.Errorf(
+				"observed SHC captain %s is not a registered Up member",
+				mgr.cr.Status.Captain,
+			)
+		}
+		return int32(ordinal), nil
+	}
+	return -1, fmt.Errorf(
+		"observed SHC captain %s is missing from member status",
+		mgr.cr.Status.Captain,
+	)
 }
 
 func shcRollingUpdateOwnsClusterUpgradeLifecycle(
@@ -89,12 +122,21 @@ var transferSearchHeadCaptain = func(
 	return mgr.getClient(ctx, n).TransferSearchHeadCaptain(managementURI)
 }
 
+var setSearchHeadDetention = func(
+	ctx context.Context,
+	mgr *searchHeadClusterPodManager,
+	n int32,
+	detain bool,
+) error {
+	return mgr.getClient(ctx, n).SetSearchHeadDetention(detain)
+}
+
 var releaseSearchHeadDetention = func(
 	ctx context.Context,
 	mgr *searchHeadClusterPodManager,
 	n int32,
 ) error {
-	return mgr.getClient(ctx, n).SetSearchHeadDetention(false)
+	return setSearchHeadDetention(ctx, mgr, n, false)
 }
 
 var getSearchHeadLifecyclePod = func(

@@ -185,6 +185,82 @@ func TestRollingUpdateOwnsClusterUpgradeLifecycle(t *testing.T) {
 	}
 }
 
+func TestOnDeleteUpgradeInitializationUsesObservedCaptain(t *testing.T) {
+	target := int32(2)
+	mgr := &searchHeadClusterPodManager{
+		statefulSet: &appsv1.StatefulSet{
+			Spec: appsv1.StatefulSetSpec{
+				UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+					Type: appsv1.OnDeleteStatefulSetStrategyType,
+				},
+			},
+		},
+		cr: &enterpriseApi.SearchHeadCluster{
+			Status: enterpriseApi.SearchHeadClusterStatus{
+				Captain:      "splunk-example-search-head-1",
+				CaptainReady: true,
+				Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+					{Name: "splunk-example-search-head-0", Status: "Up", Registered: true},
+					{Name: "splunk-example-search-head-1", Status: "Up", Registered: true},
+					{Name: "splunk-example-search-head-2", Status: "Up", Registered: true},
+				},
+				LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+					Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+					TargetOrdinal: &target,
+				},
+			},
+		},
+	}
+
+	oldInitiateUpgrade := initiateSearchHeadClusterUpgrade
+	oldSetDetention := setSearchHeadDetention
+	t.Cleanup(func() {
+		initiateSearchHeadClusterUpgrade = oldInitiateUpgrade
+		setSearchHeadDetention = oldSetDetention
+	})
+
+	initOrdinal := int32(-1)
+	initiateSearchHeadClusterUpgrade = func(
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		ordinal int32,
+	) error {
+		initOrdinal = ordinal
+		return nil
+	}
+	detentionOrdinal := int32(-1)
+	detain := false
+	setSearchHeadDetention = func(
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		ordinal int32,
+		requested bool,
+	) error {
+		detentionOrdinal = ordinal
+		detain = requested
+		return nil
+	}
+
+	if err := requestSearchHeadDetention(
+		context.Background(),
+		mgr,
+		target,
+	); err != nil {
+		t.Fatalf("request detention: %v", err)
+	}
+	if initOrdinal != 1 {
+		t.Fatalf("upgrade initialization ordinal = %d, want captain ordinal 1", initOrdinal)
+	}
+	if detentionOrdinal != target || !detain {
+		t.Fatalf(
+			"detention target ordinal = %d detain = %t, want ordinal %d on",
+			detentionOrdinal,
+			detain,
+			target,
+		)
+	}
+}
+
 func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 
