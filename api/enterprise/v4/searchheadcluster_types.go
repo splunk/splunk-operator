@@ -174,6 +174,8 @@ const (
 	SearchHeadClusterLifecycleReasonObservationStale              SearchHeadClusterLifecycleReason = "ObservationStale"
 	SearchHeadClusterLifecycleReasonConflictingCaptainObservation SearchHeadClusterLifecycleReason = "ConflictingCaptainObservation"
 	SearchHeadClusterLifecycleReasonDetentionRequested            SearchHeadClusterLifecycleReason = "DetentionRequested"
+	SearchHeadClusterLifecycleReasonDetentionReleasePending       SearchHeadClusterLifecycleReason = "DetentionReleasePending"
+	SearchHeadClusterLifecycleReasonDetentionReleaseTimedOut      SearchHeadClusterLifecycleReason = "DetentionReleaseTimedOut"
 	SearchHeadClusterLifecycleReasonSearchesActive                SearchHeadClusterLifecycleReason = "SearchesActive"
 	SearchHeadClusterLifecycleReasonSearchDrainTimedOut           SearchHeadClusterLifecycleReason = "SearchDrainTimedOut"
 	SearchHeadClusterLifecycleReasonCaptainTransferRequired       SearchHeadClusterLifecycleReason = "CaptainTransferRequired"

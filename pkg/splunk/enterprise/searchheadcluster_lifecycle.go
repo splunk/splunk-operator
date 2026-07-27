@@ -16,13 +16,16 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	"github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -335,15 +338,44 @@ func (mgr *searchHeadClusterPodManager) resumeLifecycleRecovery(
 	case shcworkflow.ActionNone, shcworkflow.ActionObserveCluster:
 		return false, nil
 	case shcworkflow.ActionReleaseDetention:
-		if err := releaseSearchHeadDetention(ctx, mgr, n); err != nil {
-			return false, err
+		releaseErr := releaseSearchHeadDetention(ctx, mgr, n)
+		if releaseErr != nil &&
+			!detentionReleaseOutcomeUnknown(releaseErr) {
+			return false, releaseErr
 		}
-		releasedAt := metav1.NewTime(searchHeadClusterLifecycleNow())
-		decision.Operation.DetentionReleaseRequestedAt = &releasedAt
+		decision.Operation = shcworkflow.RecordDetentionReleaseAttempt(
+			decision.Operation,
+			searchHeadClusterLifecycleNow(),
+		)
+		mgr.cr.Status.LifecycleOperation = decision.Operation
+		if releaseErr != nil {
+			logging.FromContext(ctx).WarnContext(
+				ctx,
+				"detention release outcome is unknown; retaining progressing state and retrying",
+				"targetPod",
+				decision.Operation.TargetPod,
+				"retryCount",
+				decision.Operation.RetryCount,
+				"error",
+				releaseErr,
+			)
+		}
 		return false, nil
 	default:
 		return false, fmt.Errorf("unsupported SHC recovery action %q", decision.Action.Type)
 	}
+}
+
+func detentionReleaseOutcomeUnknown(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, context.Canceled) {
+		return true
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr)
 }
 
 func (mgr *searchHeadClusterPodManager) lifecycleBlockedError(

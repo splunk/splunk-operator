@@ -70,7 +70,14 @@ func TestRecoverySeparatesPodReadinessFromSHCCompletion(t *testing.T) {
 
 	// A submitted release is not completion until both Splunk views report Up.
 	decision = EvaluateRecovery(decision.Operation, replacement, policy, now.Add(7*time.Second))
-	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery, ActionObserveCluster)
+	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery, ActionReleaseDetention)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonDetentionReleasePending {
+		t.Fatalf(
+			"reason = %q, want DetentionReleasePending",
+			decision.Operation.Reason,
+		)
+	}
 
 	replacement.MemberStatus = "Up"
 	replacement.CaptainMemberStatus = "Up"
@@ -85,6 +92,44 @@ func TestRecoverySeparatesPodReadinessFromSHCCompletion(t *testing.T) {
 	}
 	if decision.Operation.ReplacementMemberID != "member-guid-2" {
 		t.Fatalf("replacement member ID = %q, want member-guid-2", decision.Operation.ReplacementMemberID)
+	}
+}
+
+func TestRecoveryClassifiesDetentionReleaseTimeout(t *testing.T) {
+	now := time.Date(2026, 7, 27, 18, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery
+	rejoinStartedAt := metav1.NewTime(now)
+	releaseRequestedAt := metav1.NewTime(now.Add(5 * time.Second))
+	operation.MemberRejoinStartedAt = &rejoinStartedAt
+	operation.DetentionReleaseRequestedAt = &releaseRequestedAt
+
+	observation := recoveredPodObservation()
+	observation.MemberStatus = "ManualDetention"
+	observation.CaptainMemberStatus = "ManualDetention"
+	policy := testRecoveryPolicy()
+	policy.MemberRejoinTimeout = 30 * time.Second
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		policy,
+		now.Add(30*time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonDetentionReleaseTimedOut {
+		t.Fatalf(
+			"reason = %q, want DetentionReleaseTimedOut",
+			decision.Operation.Reason,
+		)
 	}
 }
 

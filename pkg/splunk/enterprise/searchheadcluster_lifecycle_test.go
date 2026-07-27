@@ -16,6 +16,8 @@ package enterprise
 
 import (
 	"context"
+	"errors"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -1360,6 +1362,13 @@ func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
 	releaseCalls := 0
 	releaseSearchHeadDetention = func(context.Context, *searchHeadClusterPodManager, int32) error {
 		releaseCalls++
+		if releaseCalls == 1 {
+			return &url.Error{
+				Op:  "Post",
+				URL: "https://splunk-example-search-head-2:8089/detention",
+				Err: context.DeadlineExceeded,
+			}
+		}
 		return nil
 	}
 
@@ -1376,17 +1385,31 @@ func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
 	complete, err = mgr.resumeLifecycleRecovery(context.Background(), ordinal)
 	assertLifecycleAdapterResult(t, complete, err, false)
 	if releaseCalls != 1 || cr.Status.LifecycleOperation.DetentionReleaseRequestedAt == nil {
-		t.Fatalf("release calls = %d, requestedAt = %v; want one durable request",
+		t.Fatalf("release calls = %d, requestedAt = %v; want one durable unknown-outcome request",
 			releaseCalls,
 			cr.Status.LifecycleOperation.DetentionReleaseRequestedAt,
 		)
 	}
+	if cr.Status.LifecycleOperation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonDetentionReleasePending ||
+		cr.Status.LifecycleOperation.RetryCount != 1 {
+		t.Fatalf(
+			"unknown-outcome status = %#v, want pending with one attempt",
+			cr.Status.LifecycleOperation,
+		)
+	}
 
-	// Restart/resume observes the durable request without calling it again.
+	// A restart/resume retries the idempotent desired state while both Splunk
+	// views still report ManualDetention.
 	complete, err = mgr.resumeLifecycleRecovery(context.Background(), ordinal)
 	assertLifecycleAdapterResult(t, complete, err, false)
-	if releaseCalls != 1 {
-		t.Fatalf("release calls after resume = %d, want 1", releaseCalls)
+	if releaseCalls != 2 ||
+		cr.Status.LifecycleOperation.RetryCount != 2 {
+		t.Fatalf(
+			"release calls after resume = %d, retry count = %d; want 2",
+			releaseCalls,
+			cr.Status.LifecycleOperation.RetryCount,
+		)
 	}
 
 	cr.Status.Members[2].Status = "Up"
@@ -1399,6 +1422,23 @@ func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
 	assertLifecycleAdapterResult(t, complete, err, true)
 	if cr.Status.LifecycleOperation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
 		t.Fatalf("stage = %q, want Completed", cr.Status.LifecycleOperation.Stage)
+	}
+}
+
+func TestDetentionReleaseOutcomeUnknownClassification(t *testing.T) {
+	timeout := &url.Error{
+		Op:  "Post",
+		URL: "https://splunk-example-search-head-2:8089/detention",
+		Err: context.DeadlineExceeded,
+	}
+	if !detentionReleaseOutcomeUnknown(timeout) {
+		t.Fatal("transport timeout must have unknown detention-release outcome")
+	}
+	if detentionReleaseOutcomeUnknown(errors.New("known response failure")) {
+		t.Fatal("non-transport failure must remain an adapter error")
+	}
+	if detentionReleaseOutcomeUnknown(nil) {
+		t.Fatal("nil error cannot have an unknown outcome")
 	}
 }
 

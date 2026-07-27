@@ -102,11 +102,24 @@ func EvaluateRecovery(
 	}
 
 	if recoveryTimedOut(operation, policy.MemberRejoinTimeout, now) {
+		reason := enterpriseApi.SearchHeadClusterLifecycleReasonMemberRejoinTimedOut
+		message := recoveryTimeoutMessage(operation, observation)
+		if operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery &&
+			operation.DetentionReleaseRequestedAt != nil &&
+			(observation.MemberStatus == "ManualDetention" ||
+				observation.CaptainMemberStatus == "ManualDetention") {
+			reason = enterpriseApi.SearchHeadClusterLifecycleReasonDetentionReleaseTimedOut
+			message = fmt.Sprintf(
+				"manual detention on %s was not released within the member recovery budget",
+				operation.TargetPod,
+			)
+		}
 		transition(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
-			enterpriseApi.SearchHeadClusterLifecycleReasonMemberRejoinTimedOut,
-			recoveryTimeoutMessage(operation, observation),
+			reason,
+			message,
 			now,
 		)
 		return Decision{Operation: operation}
@@ -452,11 +465,10 @@ func validateRecoveredMember(
 		if operation.DetentionReleaseRequestedAt != nil {
 			setReason(
 				operation,
-				enterpriseApi.SearchHeadClusterLifecycleReasonRecoveryValidated,
+				enterpriseApi.SearchHeadClusterLifecycleReasonDetentionReleasePending,
 				"detention release was requested; waiting for member and captain views to report Up",
 				now,
 			)
-			return Decision{Operation: operation, Action: Action{Type: ActionObserveCluster}}
 		}
 		return Decision{
 			Operation: operation,
@@ -495,6 +507,31 @@ func validateRecoveredMember(
 		operation.CompletedOrdinals = append(operation.CompletedOrdinals, *operation.TargetOrdinal)
 	}
 	return Decision{Operation: operation}
+}
+
+// RecordDetentionReleaseAttempt records the idempotent desired-state request
+// before the controller waits for both Splunk views to report Up. RetryCount
+// counts external release attempts for the current lifecycle operation.
+func RecordDetentionReleaseAttempt(
+	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	now time.Time,
+) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
+	if current == nil {
+		return nil
+	}
+	operation := current.DeepCopy()
+	if operation.DetentionReleaseRequestedAt == nil {
+		requestedAt := metav1.NewTime(now)
+		operation.DetentionReleaseRequestedAt = &requestedAt
+	}
+	operation.RetryCount++
+	setReason(
+		operation,
+		enterpriseApi.SearchHeadClusterLifecycleReasonDetentionReleasePending,
+		"detention release was requested; waiting for member and captain views to report Up",
+		now,
+	)
+	return operation
 }
 
 func recoveryTimedOut(
