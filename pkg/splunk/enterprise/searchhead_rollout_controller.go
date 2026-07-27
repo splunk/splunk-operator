@@ -913,10 +913,6 @@ func (mgr *searchHeadClusterPodManager) recordRollingUpdateDecision(
 		return
 	}
 
-	splmetrics.SHCRolloutDecisionCounters.WithLabelValues(
-		string(decision.Action),
-		string(decision.Reason),
-	).Inc()
 	statusMessage := fmt.Sprintf(
 		"%s%s: %s",
 		shcRollingUpdateStatusPrefix,
@@ -925,6 +921,12 @@ func (mgr *searchHeadClusterPodManager) recordRollingUpdateDecision(
 	)
 	statusChanged := mgr.cr.Status.Message != statusMessage
 	mgr.cr.Status.Message = statusMessage
+	if statusChanged {
+		splmetrics.SHCRolloutDecisionCounters.WithLabelValues(
+			string(decision.Action),
+			string(decision.Reason),
+		).Inc()
+	}
 
 	target := int32(-1)
 	if decision.TargetOrdinal != nil {

@@ -70,7 +70,7 @@ var ActiveRealtimeSearchCount = prometheus.NewGaugeVec(
 var SHCRolloutDecisionCounters = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "splunk_operator_shc_rollout_decision_total",
-		Help: "The number of bounded Search Head Cluster rollout decisions",
+		Help: "The number of transitions between bounded Search Head Cluster rollout decisions",
 	},
 	[]string{LabelAction, LabelReason},
 )

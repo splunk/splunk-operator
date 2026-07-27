@@ -2748,6 +2748,13 @@ func TestRollingUpdateControllerBlockedDecisionEmitsWarning(t *testing.T) {
 			len(recorder.events)-eventsBefore,
 		)
 	}
+	if got := testutil.ToFloat64(decisionMetric); got != metricBefore+1 {
+		t.Fatalf(
+			"repeated blocked observation changed transition metric to %f, want %f",
+			got,
+			metricBefore+1,
+		)
+	}
 }
 
 func TestRollingUpdateStatusProjectionPersistsWithoutReconcileError(t *testing.T) {
