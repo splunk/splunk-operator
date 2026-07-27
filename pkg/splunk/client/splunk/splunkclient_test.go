@@ -175,6 +175,10 @@ func TestGetSearchHeadCaptainMembers(t *testing.T) {
 			if member.Identifier == "" {
 				t.Errorf("member %s has empty persistent identifier", wantMembers[n])
 			}
+			wantManagementURI := fmt.Sprintf("https://%s.splunk-s2-search-head-headless.splunk.svc.cluster.local:8089", wantMembers[n])
+			if member.ManagementURI != wantManagementURI {
+				t.Errorf("member %s want ManagementURI=%s: got %s", wantMembers[n], wantManagementURI, member.ManagementURI)
+			}
 			if member.Captain {
 				if wantMembers[n] != wantCaptain {
 					t.Errorf("member %s want Captain=%t: got %t", wantMembers[n], false, true)

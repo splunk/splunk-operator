@@ -199,7 +199,7 @@ type SearchHeadCaptainMemberInfo struct {
 	LastHeartbeat int64 `json:"last_heartbeat"`
 
 	// REST API endpoint for management
-	ManagementURI string `json:"mgmt_url"`
+	ManagementURI string `json:"mgmt_uri"`
 
 	// URI of the current captain.
 	PeerSchemeHostPort string `json:"peer_scheme_host_port"`
