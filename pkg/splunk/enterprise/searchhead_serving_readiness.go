@@ -69,6 +69,27 @@ func podConditionStatus(pod *corev1.Pod, conditionType corev1.PodConditionType) 
 	return corev1.ConditionUnknown
 }
 
+// searchHeadRollingUpdatePending reports the interval after an existing SHC
+// StatefulSet's Pod template changes but before the durable per-Pod lifecycle
+// operation is recorded. The partition prevents Kubernetes from replacing a
+// member during this interval, so healthy members must remain eligible for
+// Service traffic even if the cluster-wide captain observation is transiently
+// unavailable while the new revision is being established.
+func (mgr *searchHeadClusterPodManager) searchHeadRollingUpdatePending() bool {
+	statefulSet := mgr.statefulSet
+	if statefulSet == nil ||
+		statefulSet.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType ||
+		statefulSet.Status.CurrentRevision == "" {
+		return false
+	}
+	if mgr.statefulSetUpdatePending ||
+		statefulSet.Generation > statefulSet.Status.ObservedGeneration {
+		return true
+	}
+	return statefulSet.Status.UpdateRevision != "" &&
+		statefulSet.Status.CurrentRevision != statefulSet.Status.UpdateRevision
+}
+
 func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 	pod *corev1.Pod,
 	ordinal int32,
@@ -103,6 +124,10 @@ func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 		mgr.cr.Status.MinPeersJoined &&
 		mgr.cr.Status.CaptainReady
 	if !clusterReady && !lifecycleActive {
+		if mgr.searchHeadRollingUpdatePending() {
+			return corev1.ConditionTrue, "PeerServingDuringRolloutPlanning",
+				"healthy SHC member remains eligible while the coordinated rolling revision is established"
+		}
 		return corev1.ConditionFalse, "ClusterNotReady", "SHC formation or captain readiness is incomplete"
 	}
 	if !clusterReady {

@@ -21,12 +21,13 @@ import (
 
 // searchHeadClusterPodManager is used to manage the pods within a search head cluster
 type searchHeadClusterPodManager struct {
-	c                       splcommon.ControllerClient
-	cr                      *enterpriseApi.SearchHeadCluster
-	secrets                 *corev1.Secret
-	statefulSet             *appsv1.StatefulSet
-	newSplunkClient         func(managementURI, username, password string) *splclient.SplunkClient
-	servingConditionChanged map[int32]bool
+	c                        splcommon.ControllerClient
+	cr                       *enterpriseApi.SearchHeadCluster
+	secrets                  *corev1.Secret
+	statefulSet              *appsv1.StatefulSet
+	newSplunkClient          func(managementURI, username, password string) *splclient.SplunkClient
+	servingConditionChanged  map[int32]bool
+	statefulSetUpdatePending bool
 }
 
 // newSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
@@ -56,10 +57,11 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	previousReadyReplicas := mgr.cr.Status.ReadyReplicas
 
 	// update statefulset, if necessary
-	_, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
+	statefulSetPhase, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
 	if err != nil {
 		return enterpriseApi.PhaseError, err
 	}
+	mgr.statefulSetUpdatePending = statefulSetPhase == enterpriseApi.PhaseUpdating
 
 	// for now pass the targetPodName as empty since we are going to fill it in ApplyShcSecret
 	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")

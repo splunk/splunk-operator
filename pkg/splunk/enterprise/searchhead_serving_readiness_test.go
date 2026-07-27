@@ -21,6 +21,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -102,6 +103,50 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
 	require.Equal(t, corev1.ConditionFalse, status)
 	require.Equal(t, "ClusterNotReady", reason)
+
+	mgr.statefulSet = &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Generation: 2,
+		},
+		Spec: appsv1.StatefulSetSpec{
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			ObservedGeneration: 1,
+			CurrentRevision:    "current",
+			UpdateRevision:     "current",
+		},
+	}
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionTrue, status)
+	require.Equal(t, "PeerServingDuringRolloutPlanning", reason)
+
+	mgr.statefulSet.Status.ObservedGeneration = 2
+	mgr.statefulSet.Status.UpdateRevision = "updated"
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionTrue, status)
+	require.Equal(t, "PeerServingDuringRolloutPlanning", reason)
+
+	mgr.statefulSet.Status.CurrentRevision = "updated"
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionFalse, status)
+	require.Equal(t, "ClusterNotReady", reason)
+
+	mgr.statefulSet.Status.CurrentRevision = ""
+	mgr.statefulSet.Status.ObservedGeneration = 0
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionFalse, status, "fresh formation must fail closed")
+	require.Equal(t, "ClusterNotReady", reason)
+
+	mgr.statefulSet.Status.CurrentRevision = "current"
+	mgr.statefulSet.Status.ObservedGeneration = 2
+	mgr.statefulSetUpdatePending = true
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionTrue, status)
+	require.Equal(t, "PeerServingDuringRolloutPlanning", reason)
+	mgr.statefulSetUpdatePending = false
 
 	mgr.cr.Status.CaptainReady = true
 	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
