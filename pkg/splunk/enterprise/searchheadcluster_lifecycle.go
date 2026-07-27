@@ -387,7 +387,7 @@ func (mgr *searchHeadClusterPodManager) lifecycleBlockedError(
 		)
 	}
 	return splcommon.NewTerminalError(
-		EventReasonSHCRolloutBlocked,
+		string(reason),
 		message,
 		fmt.Errorf(
 			"SHC lifecycle operation %s is %s (%s)",

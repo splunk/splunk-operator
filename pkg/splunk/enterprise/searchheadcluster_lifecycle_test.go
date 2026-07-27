@@ -67,6 +67,19 @@ func TestLifecycleBlockedErrorIsTerminalAndEmitsOnce(t *testing.T) {
 			err,
 		)
 	}
+	reason, terminal := splcommon.TerminalReason(err)
+	if !terminal ||
+		reason != string(
+			enterpriseApi.
+				SearchHeadClusterLifecycleReasonSplunkStartupFailed,
+		) {
+		t.Fatalf(
+			"terminal error reason=%q terminal=%t error=%v",
+			reason,
+			terminal,
+			err,
+		)
+	}
 	if !strings.Contains(
 		cr.Status.Message,
 		string(

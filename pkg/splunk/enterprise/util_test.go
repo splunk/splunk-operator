@@ -3086,6 +3086,21 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("Failed to update error message")
 	}
 
+	// SearchHeadCluster terminal errors expose the bounded user-facing message
+	// in status while retaining the underlying cause for operator logs.
+	err = splcommon.NewTerminalError(
+		"SHCRolloutBlocked",
+		"replacement Pod startup timed out",
+		errors.New("internal lifecycle detail"),
+	)
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, &err)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if message := receivedCR.(*enterpriseApi.SearchHeadCluster).
+		Status.Message; message != "replacement Pod startup timed out" {
+		t.Errorf("terminal status message = %q, want sanitized message", message)
+	}
+
 	// IngestorCluster: should return a valid CR
 	ic := enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{

@@ -268,6 +268,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			message = "Failed to update Search Head pods"
 		}
 		setPhaseAndConditions(enterpriseApi.PhaseError, message)
+		if _, terminal := splcommon.TerminalMessage(err); terminal {
+			return reconcile.Result{}, err
+		}
 		return result, err
 	}
 	setPhaseAndConditions(phase, cr.Status.Message)

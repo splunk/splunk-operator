@@ -2398,7 +2398,12 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 			return nil, err
 		}
 		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
+			if terminalMessage, terminal :=
+				splcommon.TerminalMessage(*crError); terminal {
+				cr.Status.Message = terminalMessage
+			} else {
+				cr.Status.Message = (*crError).Error()
+			}
 		} else if !strings.HasPrefix(cr.Status.Message, shcRollingUpdateStatusPrefix) {
 			cr.Status.Message = ""
 		}
