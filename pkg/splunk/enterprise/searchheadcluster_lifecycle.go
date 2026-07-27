@@ -25,6 +25,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -345,6 +346,58 @@ func (mgr *searchHeadClusterPodManager) resumeLifecycleRecovery(
 	}
 }
 
+func (mgr *searchHeadClusterPodManager) lifecycleBlockedError(
+	ctx context.Context,
+	previousStage enterpriseApi.SearchHeadClusterLifecycleStage,
+) error {
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		(operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked &&
+			operation.Stage !=
+				enterpriseApi.SearchHeadClusterLifecycleStageFailed) {
+		return nil
+	}
+
+	reason := operation.Reason
+	if reason == "" {
+		reason = enterpriseApi.SearchHeadClusterLifecycleReasonClusterNotSafe
+	}
+	message := operation.Message
+	if message == "" {
+		message = fmt.Sprintf(
+			"lifecycle operation %s for %s is %s",
+			operation.OperationID,
+			operation.TargetPod,
+			operation.Stage,
+		)
+	}
+	mgr.cr.Status.Message = fmt.Sprintf(
+		"%s%s: %s",
+		shcRollingUpdateStatusPrefix,
+		reason,
+		message,
+	)
+
+	if previousStage != operation.Stage {
+		GetEventPublisher(ctx, mgr.cr).Warning(
+			ctx,
+			EventReasonSHCRolloutBlocked,
+			fmt.Sprintf("%s: %s", reason, message),
+		)
+	}
+	return splcommon.NewTerminalError(
+		EventReasonSHCRolloutBlocked,
+		message,
+		fmt.Errorf(
+			"SHC lifecycle operation %s is %s (%s)",
+			operation.OperationID,
+			operation.Stage,
+			reason,
+		),
+	)
+}
+
 func (mgr *searchHeadClusterPodManager) observeLifecycleRecovery(
 	ctx context.Context,
 	n int32,
@@ -380,6 +433,17 @@ func (mgr *searchHeadClusterPodManager) observeLifecycleRecovery(
 			pod.Status.ContainerStatuses...,
 		)
 		for _, status := range containerStatuses {
+			if !observation.ContainersReady {
+				if status.State.Terminated != nil &&
+					status.State.Terminated.ExitCode != 0 {
+					observation.ContainerStartupFailed = true
+				}
+				if status.RestartCount > 0 &&
+					status.LastTerminationState.Terminated != nil &&
+					status.LastTerminationState.Terminated.ExitCode != 0 {
+					observation.ContainerStartupFailed = true
+				}
+			}
 			if status.State.Waiting == nil {
 				continue
 			}

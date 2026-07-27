@@ -917,12 +917,14 @@ func (mgr *searchHeadClusterPodManager) recordRollingUpdateDecision(
 		string(decision.Action),
 		string(decision.Reason),
 	).Inc()
-	mgr.cr.Status.Message = fmt.Sprintf(
+	statusMessage := fmt.Sprintf(
 		"%s%s: %s",
 		shcRollingUpdateStatusPrefix,
 		decision.Reason,
 		decision.Message,
 	)
+	statusChanged := mgr.cr.Status.Message != statusMessage
+	mgr.cr.Status.Message = statusMessage
 
 	target := int32(-1)
 	if decision.TargetOrdinal != nil {
@@ -941,7 +943,7 @@ func (mgr *searchHeadClusterPodManager) recordRollingUpdateDecision(
 		"updateRevision", state.UpdateRevision,
 		"lifecycleStage", state.Lifecycle.Stage,
 	)
-	if decision.Action == upgrade.SHCRolloutActionBlock {
+	if decision.Action == upgrade.SHCRolloutActionBlock && statusChanged {
 		GetEventPublisher(ctx, mgr.cr).Warning(
 			ctx,
 			EventReasonSHCRolloutBlocked,

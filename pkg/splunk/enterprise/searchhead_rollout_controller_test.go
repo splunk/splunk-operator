@@ -2732,6 +2732,22 @@ func TestRollingUpdateControllerBlockedDecisionEmitsWarning(t *testing.T) {
 	}
 	assertRolloutEvent(t, recorder, EventReasonSHCRolloutBlocked, corev1.EventTypeWarning)
 	assertNoRollingUpdatePodDelete(t, client)
+
+	eventsBefore := len(recorder.events)
+	phase, err = mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+	if err == nil || phase != enterpriseApi.PhaseError {
+		t.Fatalf(
+			"repeated blocked decision phase=%q error=%v, want PhaseError",
+			phase,
+			err,
+		)
+	}
+	if len(recorder.events) != eventsBefore {
+		t.Fatalf(
+			"repeated blocked decision emitted %d additional events",
+			len(recorder.events)-eventsBefore,
+		)
+	}
 }
 
 func TestRollingUpdateStatusProjectionPersistsWithoutReconcileError(t *testing.T) {

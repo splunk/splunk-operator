@@ -96,12 +96,19 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			statefulSet,
 			mgr.cr.Status.LifecycleOperation,
 		) {
+		stageBeforeRecovery := mgr.cr.Status.LifecycleOperation.Stage
 		recoveryComplete, lifecycleErr := mgr.resumeLifecycleRecovery(
 			ctx,
 			*mgr.cr.Status.LifecycleOperation.TargetOrdinal,
 		)
 		if lifecycleErr != nil {
 			return enterpriseApi.PhaseError, lifecycleErr
+		}
+		if blockedErr := mgr.lifecycleBlockedError(
+			ctx,
+			stageBeforeRecovery,
+		); blockedErr != nil {
+			return enterpriseApi.PhaseError, blockedErr
 		}
 		if !recoveryComplete {
 			if statefulSet.Spec.UpdateStrategy.Type ==

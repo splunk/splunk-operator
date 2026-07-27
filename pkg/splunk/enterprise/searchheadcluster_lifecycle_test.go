@@ -16,17 +16,88 @@ package enterprise
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
+
+func TestLifecycleBlockedErrorIsTerminalAndEmitsOnce(t *testing.T) {
+	target := int32(2)
+	cr := &enterpriseApi.SearchHeadCluster{
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				OperationID:   "pod-update-2",
+				TargetPod:     "splunk-example-search-head-2",
+				TargetOrdinal: &target,
+				Stage: enterpriseApi.
+					SearchHeadClusterLifecycleStageBlocked,
+				Reason: enterpriseApi.
+					SearchHeadClusterLifecycleReasonSplunkStartupFailed,
+				Message: "replacement Pod startup timed out",
+			},
+		},
+	}
+	recorder := &mockEventRecorder{}
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		&K8EventPublisher{recorder: recorder, instance: cr},
+	)
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	err := mgr.lifecycleBlockedError(
+		ctx,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+	)
+	message, terminal := splcommon.TerminalMessage(err)
+	if !terminal || message != "replacement Pod startup timed out" {
+		t.Fatalf(
+			"terminal error message=%q terminal=%t error=%v",
+			message,
+			terminal,
+			err,
+		)
+	}
+	if !strings.Contains(
+		cr.Status.Message,
+		string(
+			enterpriseApi.
+				SearchHeadClusterLifecycleReasonSplunkStartupFailed,
+		),
+	) {
+		t.Fatalf("status message = %q, want startup reason", cr.Status.Message)
+	}
+	assertRolloutEvent(
+		t,
+		recorder,
+		EventReasonSHCRolloutBlocked,
+		corev1.EventTypeWarning,
+	)
+
+	eventsBefore := len(recorder.events)
+	err = mgr.lifecycleBlockedError(
+		ctx,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+	)
+	if _, terminal = splcommon.TerminalMessage(err); !terminal {
+		t.Fatalf("persisted blocked operation lost terminal error: %v", err)
+	}
+	if len(recorder.events) != eventsBefore {
+		t.Fatalf(
+			"persisted blocked operation emitted %d additional events",
+			len(recorder.events)-eventsBefore,
+		)
+	}
+}
 
 func TestRollingUpdateOwnsClusterUpgradeLifecycle(t *testing.T) {
 	target := int32(2)
@@ -755,6 +826,49 @@ func TestLifecycleAdapterClassifiesContainerStartupFailures(t *testing.T) {
 	}
 }
 
+func TestLifecycleAdapterClassifiesNonzeroContainerTermination(t *testing.T) {
+	observation := observeLifecyclePodWithContainerStatus(
+		t,
+		corev1.ContainerStatus{
+			Name: "splunk",
+			State: corev1.ContainerState{
+				Terminated: &corev1.ContainerStateTerminated{
+					ExitCode: 2,
+					Reason:   "Error",
+				},
+			},
+		},
+	)
+	if !observation.ContainerStartupFailed ||
+		observation.ContainerFailureTerminal {
+		t.Fatalf(
+			"nonzero current termination observation = %#v",
+			observation,
+		)
+	}
+
+	observation = observeLifecyclePodWithContainerStatus(
+		t,
+		corev1.ContainerStatus{
+			Name:         "splunk",
+			RestartCount: 4,
+			LastTerminationState: corev1.ContainerState{
+				Terminated: &corev1.ContainerStateTerminated{
+					ExitCode: 1,
+					Reason:   "Error",
+				},
+			},
+		},
+	)
+	if !observation.ContainerStartupFailed ||
+		observation.ContainerFailureTerminal {
+		t.Fatalf(
+			"nonzero previous termination observation = %#v",
+			observation,
+		)
+	}
+}
+
 func TestLifecycleAdapterObservesContainersReadyBeforePodReady(t *testing.T) {
 	target := int32(2)
 	targetPod := "splunk-example-search-head-2"
@@ -1376,6 +1490,24 @@ func observeWaitingLifecyclePod(
 	t *testing.T,
 	reason string,
 ) shcworkflow.RecoveryObservation {
+	return observeLifecyclePodWithContainerStatus(
+		t,
+		corev1.ContainerStatus{
+			Name: "splunk",
+			State: corev1.ContainerState{
+				Waiting: &corev1.ContainerStateWaiting{
+					Reason:  reason,
+					Message: "container startup failed",
+				},
+			},
+		},
+	)
+}
+
+func observeLifecyclePodWithContainerStatus(
+	t *testing.T,
+	containerStatus corev1.ContainerStatus,
+) shcworkflow.RecoveryObservation {
 	t.Helper()
 	target := int32(2)
 	targetPod := "splunk-example-search-head-2"
@@ -1412,15 +1544,7 @@ func observeWaitingLifecyclePod(
 					},
 				},
 				ContainerStatuses: []corev1.ContainerStatus{
-					{
-						Name: "splunk",
-						State: corev1.ContainerState{
-							Waiting: &corev1.ContainerStateWaiting{
-								Reason:  reason,
-								Message: "container startup failed",
-							},
-						},
-					},
+					containerStatus,
 				},
 			},
 		}, nil
