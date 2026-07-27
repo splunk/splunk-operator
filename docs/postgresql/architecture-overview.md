@@ -13,9 +13,11 @@ decision, follow the linked [Architecture Decision Records](adr/README.md);
 for the condensed problem/alternatives/chosen-approach narrative, see the
 [RFC summary](rfc-summary.md).
 
-> Diagrams are authored in PlantUML under [`docs/pictures/`](../pictures/) and
-> rendered to PNG. To regenerate after editing a `.puml` source:
-> `java -jar plantuml.jar -tpng docs/pictures/<name>.puml`.
+> Diagrams below are authored as Mermaid, embedded directly in this page —
+> GitLab renders `` ```mermaid `` fences inline, so no separate build step or
+> PNG is needed. (Trial: PlantUML sources for these diagrams still exist under
+> [`docs/pictures/`](../pictures/); if the Mermaid rendering doesn't hold up,
+> revert to the PNG embeds.)
 
 ## The big picture
 
@@ -34,7 +36,61 @@ resources into CNPG objects, credentials, and connection metadata:
 - **`PostgresDatabase`** — the logical databases, roles, extensions, and
   credentials a service consumes on a referenced cluster (same namespace).
 
-![PostgreSQL component overview](../pictures/postgres-component-overview.png)
+```mermaid
+C4Container
+    title Splunk Operator — Managed PostgreSQL: Component Overview
+
+    Person(platform, "Platform team", "Owns cluster-scoped policy")
+    Person(service, "Service team", "Owns cluster + database instances")
+
+    System_Boundary(operator_boundary, "Splunk Operator") {
+        Container(pcc_ctrl, "PostgresClusterClass", "CRD (cluster-scoped)", "Immutable template + platform policy")
+        Container(pc_ctrl, "PostgresCluster controller", "controller-runtime", "Component pipeline: secret, objectStore, cluster, roles, pooler, backup, configMap")
+        Container(pdb_ctrl, "PostgresDatabase controller", "controller-runtime", "Linear pipeline: cluster to secrets to configMaps to roles to databases to privileges")
+    }
+
+    System_Boundary(cnpg_boundary, "CloudNativePG") {
+        Container(cnpg_op, "CNPG operator", "postgresql.cnpg.io", "Provisions and manages PostgreSQL")
+        Container(cnpg_cluster, "CNPG Cluster", "Cluster CR", "Primary + replicas, managed.roles")
+        Container(pooler, "PgBouncer Poolers", "Pooler CR (RW / RO)", "Connection pooling")
+        Container(scheduled_backup, "ScheduledBackup / ObjectStore", "Barman plugin", "Backup to object storage")
+        ContainerDb(pg, "PostgreSQL", "Pods + PVCs", "Databases, roles, WAL")
+    }
+
+    Container(eso, "External Secrets Operator", "ESO (optional)", "Materializes external superuser secret")
+    Container(superuser_secret, "superuser Secret", "Kubernetes Secret", "Cluster admin credential")
+    Container(role_secrets, "per-database role Secrets", "Kubernetes Secret", "App credentials (_rw etc.)")
+    Container(conn_configmap, "connection-info ConfigMap", "Kubernetes ConfigMap", "Host/port/pooler endpoints")
+    Container(consumer, "Consumer service", "Splunk service", "Reads ConfigMap + Secret to connect")
+
+    Rel(platform, pcc_ctrl, "Defines classes")
+    Rel(service, pc_ctrl, "Creates PostgresCluster")
+    Rel(service, pdb_ctrl, "Creates PostgresDatabase")
+
+    Rel(pc_ctrl, pcc_ctrl, "Resolves + merges class")
+    Rel(pc_ctrl, cnpg_cluster, "Owns / drift-reconciles")
+    Rel(pc_ctrl, pooler, "Owns")
+    Rel(pc_ctrl, scheduled_backup, "Owns")
+    Rel(pc_ctrl, superuser_secret, "Owns / reads")
+    Rel(pc_ctrl, conn_configmap, "Owns (cluster endpoints)")
+    Rel(eso, superuser_secret, "Materializes (external mode)")
+
+    Rel(cnpg_op, cnpg_cluster, "Reconciles")
+    Rel(cnpg_cluster, pg, "Runs")
+    Rel(pooler, pg, "Pools connections to")
+    Rel(scheduled_backup, pg, "Backs up")
+
+    Rel(pdb_ctrl, pc_ctrl, "clusterRef (same namespace); watches status")
+    Rel(pdb_ctrl, cnpg_cluster, "Patches managed.roles (merge patch); SQL grants")
+    Rel(pdb_ctrl, role_secrets, "Owns")
+    Rel(pdb_ctrl, conn_configmap, "Owns (per-database endpoints)")
+
+    Rel(consumer, conn_configmap, "Reads endpoints")
+    Rel(consumer, role_secrets, "Reads credentials")
+    Rel(consumer, pooler, "Connects via PostgreSQL/TLS")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
+```
 
 Key relationships (see [ADR-0003](adr/0003-cnpg-integration-and-drift-reconciliation.md)):
 
@@ -75,7 +131,54 @@ CPI-1961):
   `ClusterValidation → CredentialProvisioning → ConnectionMetadata → Roles →
   DatabaseProvisioning → RWRolePrivileges`, persisting status between steps.
 
-![PostgreSQL reconcile flows](../pictures/postgres-reconcile-flow.png)
+**PostgresCluster controller**
+
+```mermaid
+flowchart TD
+    A[start] --> B["handleFinalizer (Delete / Retain on deletion)"]
+    NoteB["Note: finalizer handling comes before class/config\nresolution, so a missing class or invalid config\nnever blocks cleanup"]
+    NoteB -.- B
+    B --> C{deleted?}
+    C -->|yes| Z1[stop]
+    C -->|no| D[add finalizer if absent]
+    D --> E[Resolve PostgresClusterClass]
+    E --> F["GetMergedConfig (class defaults <- cluster overrides)"]
+    F --> G[ValidateMergedConfig + ValidateCrossResource]
+    G --> H{config valid?}
+    H -->|no| I["set Failed (InvalidConfiguration)"] --> Z2[stop]
+    H -->|yes| J["Component pipeline (ordered):\nsecret -> objectStore -> cluster\n-> managedRoles -> pooler\n-> backup -> configMap"]
+    J --> K["CheckContracts() - inputs present?"]
+    K --> L["Reconcile() - actuate desired state"]
+    L --> M["Observe() - classify componentHealth"]
+    M --> N{health}
+    N -->|"intermediate\nPending/Provisioning/Configuring"| O[write component status] --> P["requeue (early return)"] --> Z3[stop]
+    N -->|Ready| Q{more components?}
+    Q -->|yes| K
+    Q -->|no| R[all components Ready]
+    R --> S[project phase from CNPG cluster phase]
+    S --> T["set top-level phase = Ready\n(only owner sets Ready)"]
+    T --> Z4[stop]
+```
+
+**PostgresDatabase controller**
+
+```mermaid
+flowchart TD
+    A[start] --> B[add finalizer]
+    B --> C["Phase ClusterValidation\n- resolve clusterRef (same ns), check Ready"]
+    C --> D{cluster ready?}
+    D -->|no| E["ClusterReady=False, phase Pending"] --> F[requeue] --> Z1[stop]
+    D -->|yes| G["Phase CredentialProvisioning\n- reconcile role Secrets (SecretsReady)"]
+    G --> H["Phase ConnectionMetadata\n- reconcile ConfigMaps (ConfigMapsReady)"]
+    H --> I["Phase Roles\n- gate on cluster's managed.roles status\n(desired roles declared in spec, applied by the cluster controller)"]
+    I --> J{role gate}
+    J -->|"conflict/failed"| K["RolesReady=False, phase Failed"] --> Z2[stop]
+    J -->|"waiting for CNPG (pending)"| L["RolesReady=False, phase Provisioning"] --> M[requeue] --> Z3[stop]
+    J -->|ok| N["Phase DatabaseProvisioning\n- reconcile CNPG Database CRs (DatabasesReady)"]
+    N --> O["Phase RWRolePrivileges\n- SQL grants for _rw role (PrivilegesReady)"]
+    O --> P[set phase = Ready]
+    P --> Z4[stop]
+```
 
 ## Lifecycle state machines
 
@@ -89,7 +192,68 @@ condition pipeline and enters `Deleting` when a deletion timestamp is set —
 where the per-database deletion policy (`Delete` vs `Retain`) decides whether
 the underlying database is dropped or orphaned.
 
-![PostgreSQL lifecycle state machines](../pictures/postgres-lifecycle-state-machines.png)
+**PostgresCluster phase**
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending
+
+    Pending: upstream inputs not yet present (class, secret, empty CNPG phase); CNPG FailOver in progress
+    Provisioning: CNPG FirstPrimary / CreatingReplica; component still creating (e.g. pooler)
+    Configuring: CNPG Switchover / Upgrade / ApplyingConfiguration / Restart / Promotion
+    Ready: all components Ready + CNPG Healthy
+    Failed: CNPG Unrecoverable / WaitingForUser / plugin or image error; build/patch failed
+
+    Pending --> Provisioning: inputs published
+    Provisioning --> Configuring: CNPG applies change
+    Provisioning --> Ready: all components converge
+    Configuring --> Ready: change complete
+    Ready --> Configuring: spec change / CNPG switchover
+    Ready --> Provisioning: replica rebuild
+    Provisioning --> Failed: unrecoverable
+    Configuring --> Failed: unrecoverable
+    Ready --> Failed: CNPG regresses
+    Failed --> Configuring: manual intervention resolves
+
+    note right of Ready
+        Phase is projected from the CNPG Cluster phase; only the
+        top-level reconciler declares Ready, and only once every
+        component observes Ready.
+    end note
+```
+
+**PostgresDatabase phase**
+
+```mermaid
+stateDiagram-v2
+    [*] --> PendingDB
+
+    PendingDB: cluster not found / not Ready (ClusterReady=False)
+    ProvisioningDB: secrets, configMaps, roles, databases being reconciled
+    ReadyDB: phase set once DatabasesReady=True; privilege grants run after, can leave PrivilegesReady=False while still ReadyDB
+    FailedDB: role conflict / role reconcile failed
+    DeletingDB: deletion in progress (finalizer draining)
+
+    PendingDB --> ProvisioningDB: cluster Ready
+    ProvisioningDB --> ReadyDB: DatabasesReady=True (privilege grants follow, may lag)
+    ProvisioningDB --> FailedDB: role conflict / failure
+    ProvisioningDB --> PendingDB: cluster regresses
+    ReadyDB --> ProvisioningDB: spec change / drift
+    ReadyDB --> PendingDB: cluster regresses
+    FailedDB --> ProvisioningDB: conflict resolved
+    ReadyDB --> DeletingDB: deletionTimestamp set
+    ProvisioningDB --> DeletingDB: deletionTimestamp set
+    DeletingDB --> [*]: finalizer removed (Delete drops, Retain orphans)
+
+    note right of ReadyDB
+        Linear pipeline accumulates conditions: ClusterReady ->
+        SecretsReady -> ConfigMapsReady -> RolesReady ->
+        DatabasesReady -> PrivilegesReady. Phase is set to ReadyDB
+        at the DatabasesReady step, one step before PrivilegesReady
+        - a superuser secret fetch failure in that last step can
+        leave phase ReadyDB with PrivilegesReady still False.
+    end note
+```
 
 ## Where to go next
 
