@@ -42,6 +42,19 @@ const (
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
 type DefaultStatefulSetPodManager struct{}
 
+// statefulSetPodUpdateReadinessManager is an optional contract for a
+// StatefulSetPodManager that deliberately makes one Pod not ready before an
+// Operator-owned OnDelete replacement. Implementations must fail closed and
+// allow progress only when the not-ready state is part of the active,
+// persisted Pod update operation.
+type statefulSetPodUpdateReadinessManager interface {
+	CanProceedWithPodUpdateDespiteNotReadyReplicas(
+		context.Context,
+		*appsv1.StatefulSet,
+		int32,
+	) (bool, error)
+}
+
 // Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
 func (mgr *DefaultStatefulSetPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	phase, err := ApplyStatefulSet(ctx, client, statefulSet)
@@ -219,8 +232,37 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	// wait for all replicas ready
 	replicas := *statefulSet.Spec.Replicas
 	readyReplicas := statefulSet.Status.ReadyReplicas
+	canProceedWithPodUpdate := false
 	if readyReplicas < replicas {
-		scopedLog.InfoContext(ctx, "waiting for pods to become ready")
+		if readinessManager, ok := mgr.(statefulSetPodUpdateReadinessManager); ok {
+			canProceedWithPodUpdate, err =
+				readinessManager.CanProceedWithPodUpdateDespiteNotReadyReplicas(
+					ctx,
+					statefulSet,
+					desiredReplicas,
+				)
+			if err != nil {
+				scopedLog.ErrorContext(
+					ctx,
+					"unable to validate intentional Pod readiness withdrawal",
+					"error",
+					err,
+				)
+				return enterpriseApi.PhaseError, err
+			}
+		}
+		if canProceedWithPodUpdate {
+			scopedLog.InfoContext(
+				ctx,
+				"continuing Operator-owned Pod update after verified readiness withdrawal",
+				"readyReplicas",
+				readyReplicas,
+				"replicas",
+				replicas,
+			)
+		} else {
+			scopedLog.InfoContext(ctx, "waiting for pods to become ready")
+		}
 		// Detect terminal container states (wrong image, inaccessible registry, missing
 		// ConfigMap/Secret key) that will never self-heal. Surface them as PhaseError
 		// immediately rather than waiting for the full reconcile timeout.
@@ -228,10 +270,12 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			scopedLog.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
 			return enterpriseApi.PhaseError, splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr)
 		}
-		if readyReplicas > 0 {
-			return enterpriseApi.PhaseScalingUp, nil
+		if !canProceedWithPodUpdate {
+			if readyReplicas > 0 {
+				return enterpriseApi.PhaseScalingUp, nil
+			}
+			return enterpriseApi.PhasePending, nil
 		}
-		return enterpriseApi.PhasePending, nil
 	} else if readyReplicas > replicas {
 		scopedLog.InfoContext(ctx, "waiting for scale down to complete")
 		return enterpriseApi.PhaseScalingDown, nil
@@ -240,7 +284,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	// readyReplicas == replicas
 
 	// check for scaling up
-	if readyReplicas < desiredReplicas {
+	if readyReplicas < desiredReplicas && !canProceedWithPodUpdate {
 		// scale up StatefulSet to match desiredReplicas
 		scopedLog.InfoContext(ctx, "scaling replicas up", "replicas", desiredReplicas)
 		*statefulSet.Spec.Replicas = desiredReplicas
@@ -301,7 +345,13 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	// readyReplicas == desiredReplicas
 
 	// check existing pods for desired updates
-	for n := readyReplicas - 1; n >= 0; n-- {
+	podTraversalReplicas := readyReplicas
+	if canProceedWithPodUpdate {
+		// The one intentionally withdrawn target still exists and must remain
+		// part of the highest-to-lowest OnDelete traversal.
+		podTraversalReplicas = replicas
+	}
+	for n := podTraversalReplicas - 1; n >= 0; n-- {
 		// get Pod
 		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
 		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}

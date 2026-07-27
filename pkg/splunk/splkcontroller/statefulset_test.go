@@ -42,6 +42,29 @@ type errTestPodManager struct {
 	c splcommon.ControllerClient
 }
 
+type readinessWithdrawalTestPodManager struct {
+	DefaultStatefulSetPodManager
+	allow         bool
+	validationErr error
+	prepareCalls  []int32
+}
+
+func (mgr *readinessWithdrawalTestPodManager) CanProceedWithPodUpdateDespiteNotReadyReplicas(
+	context.Context,
+	*appsv1.StatefulSet,
+	int32,
+) (bool, error) {
+	return mgr.allow, mgr.validationErr
+}
+
+func (mgr *readinessWithdrawalTestPodManager) PrepareRecycle(
+	_ context.Context,
+	ordinal int32,
+) (bool, error) {
+	mgr.prepareCalls = append(mgr.prepareCalls, ordinal)
+	return false, nil
+}
+
 // Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
 func (mgr *errTestPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	return enterpriseApi.PhaseInstall, nil
@@ -483,6 +506,129 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	newCtx := context.WithValue(context.TODO(), "errVal", "newVal")
 	_, err = UpdateStatefulSetPods(newCtx, c, statefulSet, &mgr, 3)
 
+}
+
+func TestUpdateStatefulSetPodsAllowsVerifiedReadinessWithdrawal(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(3)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-search-head",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        replicas,
+			ReadyReplicas:   replicas - 1,
+			CurrentRevision: "old",
+			UpdateRevision:  "new",
+		},
+	}
+	target := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-search-head-2",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "old",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Ready: true,
+			}},
+		},
+	}
+	peerZero := target.DeepCopy()
+	peerZero.Name = "splunk-example-search-head-0"
+	peerOne := target.DeepCopy()
+	peerOne.Name = "splunk-example-search-head-1"
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, peerZero, peerOne, target})
+	stored := &appsv1.StatefulSet{}
+	if err := c.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      statefulSet.Name,
+			Namespace: statefulSet.Namespace,
+		},
+		stored,
+	); err != nil {
+		t.Fatalf("get stored StatefulSet: %v", err)
+	}
+	if stored.Status.CurrentRevision != "old" ||
+		stored.Status.UpdateRevision != "new" {
+		t.Fatalf(
+			"stored revisions = %s -> %s, want old -> new",
+			stored.Status.CurrentRevision,
+			stored.Status.UpdateRevision,
+		)
+	}
+	mgr := &readinessWithdrawalTestPodManager{allow: true}
+
+	phase, err := UpdateStatefulSetPods(
+		ctx,
+		c,
+		statefulSet,
+		mgr,
+		replicas,
+	)
+	if err != nil {
+		t.Fatalf("UpdateStatefulSetPods returned error: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("phase = %s, want %s", phase, enterpriseApi.PhaseUpdating)
+	}
+	if !reflect.DeepEqual(mgr.prepareCalls, []int32{2}) {
+		t.Fatalf("PrepareRecycle calls = %v, want [2]", mgr.prepareCalls)
+	}
+}
+
+func TestUpdateStatefulSetPodsRejectsReadinessWithdrawalValidationError(
+	t *testing.T,
+) {
+	ctx := context.Background()
+	replicas := int32(3)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-search-head",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: replicas - 1,
+		},
+	}
+	c := spltest.NewMockClient()
+	c.AddObject(statefulSet)
+	validationErr := errors.New("readiness validation failed")
+	mgr := &readinessWithdrawalTestPodManager{
+		allow:         true,
+		validationErr: validationErr,
+	}
+
+	phase, err := UpdateStatefulSetPods(
+		ctx,
+		c,
+		statefulSet,
+		mgr,
+		replicas,
+	)
+	if !errors.Is(err, validationErr) {
+		t.Fatalf("error = %v, want %v", err, validationErr)
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Fatalf("phase = %s, want %s", phase, enterpriseApi.PhaseError)
+	}
+	if len(mgr.prepareCalls) != 0 {
+		t.Fatalf("PrepareRecycle calls = %v, want none", mgr.prepareCalls)
+	}
 }
 
 func TestScaleDownPVCDeletionIsIdempotentWhenClaimIsAlreadyGone(t *testing.T) {

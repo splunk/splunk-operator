@@ -16,10 +16,12 @@ package enterprise
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -163,6 +165,193 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, ordinal)
 	require.Equal(t, corev1.ConditionFalse, status)
 	require.Equal(t, "PodTerminating", reason)
+}
+
+func TestCanProceedWithPodUpdateDespiteNotReadyReplicas(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	const namespace = "test"
+	const clusterName = "example"
+	replicas := int32(3)
+	targetOrdinal := int32(2)
+
+	build := func() (
+		*searchHeadClusterPodManager,
+		*appsv1.StatefulSet,
+		[]*corev1.Pod,
+	) {
+		cr := &enterpriseApi.SearchHeadCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName,
+				Namespace: namespace,
+			},
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				Replicas: replicas,
+			},
+			Status: enterpriseApi.SearchHeadClusterStatus{
+				LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+					Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+					DesiredRevision: "new",
+					TargetPod:       "splunk-example-search-head-2",
+					TargetOrdinal:   &targetOrdinal,
+					Stage: enterpriseApi.
+						SearchHeadClusterLifecycleStageDetainingTarget,
+				},
+			},
+		}
+		statefulSet := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-example-search-head",
+				Namespace: namespace,
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: &replicas,
+				UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+					Type: appsv1.OnDeleteStatefulSetStrategyType,
+				},
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						ReadinessGates: []corev1.PodReadinessGate{{
+							ConditionType: searchHeadServingCondition,
+						}},
+					},
+				},
+			},
+			Status: appsv1.StatefulSetStatus{
+				Replicas:        replicas,
+				ReadyReplicas:   replicas - 1,
+				CurrentRevision: "old",
+				UpdateRevision:  "new",
+			},
+		}
+		pods := make([]*corev1.Pod, 0, replicas)
+		for ordinal := int32(0); ordinal < replicas; ordinal++ {
+			ready := corev1.ConditionTrue
+			servingStatus := corev1.ConditionTrue
+			servingReason := "MemberServing"
+			if ordinal == targetOrdinal {
+				ready = corev1.ConditionFalse
+				servingStatus = corev1.ConditionFalse
+				servingReason = "LifecycleOperationActive"
+			}
+			pods = append(pods, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: fmt.Sprintf(
+						"splunk-%s-search-head-%d",
+						clusterName,
+						ordinal,
+					),
+					Namespace: namespace,
+					UID:       types.UID(fmt.Sprintf("pod-%d", ordinal)),
+				},
+				Status: corev1.PodStatus{Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.ContainersReady,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   corev1.PodReady,
+						Status: ready,
+					},
+					{
+						Type:   searchHeadServingCondition,
+						Status: servingStatus,
+						Reason: servingReason,
+					},
+				}},
+			})
+		}
+		c := spltest.NewMockClient()
+		for _, pod := range pods {
+			c.AddObject(pod)
+		}
+		return &searchHeadClusterPodManager{c: c, cr: cr}, statefulSet, pods
+	}
+
+	t.Run("matching durable withdrawal", func(t *testing.T) {
+		mgr, statefulSet, _ := build()
+		allowed, err := mgr.CanProceedWithPodUpdateDespiteNotReadyReplicas(
+			context.Background(),
+			statefulSet,
+			replicas,
+		)
+		require.NoError(t, err)
+		require.True(t, allowed)
+	})
+
+	t.Run("unready peer fails closed", func(t *testing.T) {
+		mgr, statefulSet, pods := build()
+		for index := range pods[0].Status.Conditions {
+			if pods[0].Status.Conditions[index].Type == corev1.PodReady {
+				pods[0].Status.Conditions[index].Status = corev1.ConditionFalse
+			}
+		}
+		require.NoError(t, mgr.c.Status().Update(context.Background(), pods[0]))
+		allowed, err := mgr.CanProceedWithPodUpdateDespiteNotReadyReplicas(
+			context.Background(),
+			statefulSet,
+			replicas,
+		)
+		require.NoError(t, err)
+		require.False(t, allowed)
+	})
+
+	t.Run("unrelated target readiness failure fails closed", func(t *testing.T) {
+		mgr, statefulSet, pods := build()
+		for index := range pods[2].Status.Conditions {
+			condition := &pods[2].Status.Conditions[index]
+			if condition.Type == searchHeadServingCondition {
+				condition.Reason = "MemberNotUp"
+			}
+		}
+		require.NoError(t, mgr.c.Status().Update(context.Background(), pods[2]))
+		allowed, err := mgr.CanProceedWithPodUpdateDespiteNotReadyReplicas(
+			context.Background(),
+			statefulSet,
+			replicas,
+		)
+		require.NoError(t, err)
+		require.False(t, allowed)
+	})
+
+	t.Run("replacement Pod UID fails closed", func(t *testing.T) {
+		mgr, statefulSet, _ := build()
+		mgr.cr.Status.LifecycleOperation.TargetPodUID = "old-pod"
+		allowed, err := mgr.CanProceedWithPodUpdateDespiteNotReadyReplicas(
+			context.Background(),
+			statefulSet,
+			replicas,
+		)
+		require.NoError(t, err)
+		require.False(t, allowed)
+	})
+
+	t.Run("RollingUpdate strategy does not use compatibility bypass", func(t *testing.T) {
+		mgr, statefulSet, _ := build()
+		statefulSet.Spec.UpdateStrategy.Type =
+			appsv1.RollingUpdateStatefulSetStrategyType
+		allowed, err := mgr.CanProceedWithPodUpdateDespiteNotReadyReplicas(
+			context.Background(),
+			statefulSet,
+			replicas,
+		)
+		require.NoError(t, err)
+		require.False(t, allowed)
+	})
+
+	t.Run("insufficient peer set fails closed", func(t *testing.T) {
+		mgr, statefulSet, _ := build()
+		twoReplicas := int32(2)
+		statefulSet.Spec.Replicas = &twoReplicas
+		statefulSet.Status.Replicas = twoReplicas
+		statefulSet.Status.ReadyReplicas = twoReplicas - 1
+		allowed, err := mgr.CanProceedWithPodUpdateDespiteNotReadyReplicas(
+			context.Background(),
+			statefulSet,
+			twoReplicas,
+		)
+		require.NoError(t, err)
+		require.False(t, allowed)
+	})
 }
 
 func TestEndpointSlicesRoutePod(t *testing.T) {

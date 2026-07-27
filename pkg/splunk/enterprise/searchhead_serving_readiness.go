@@ -172,6 +172,102 @@ func (mgr *searchHeadClusterPodManager) reconcileSearchHeadServingConditions(
 	return nil
 }
 
+// CanProceedWithPodUpdateDespiteNotReadyReplicas allows the legacy OnDelete
+// replacement loop to continue after the lifecycle controller intentionally
+// withdraws exactly one target from Service traffic. Every durable operation,
+// revision, target, Pod UID, container, serving-gate, and healthy-peer
+// invariant is revalidated. Any unrelated unready Pod keeps the StatefulSet
+// fail closed.
+func (mgr *searchHeadClusterPodManager) CanProceedWithPodUpdateDespiteNotReadyReplicas(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32,
+) (bool, error) {
+	if !searchHeadClusterLifecycleEnabled() ||
+		statefulSet == nil ||
+		statefulSet.Spec.UpdateStrategy.Type != appsv1.OnDeleteStatefulSetStrategyType ||
+		!searchHeadServingReadinessGateConfigured(statefulSet) ||
+		statefulSet.Spec.Replicas == nil {
+		return false, nil
+	}
+	replicas := *statefulSet.Spec.Replicas
+	if replicas < 3 ||
+		desiredReplicas != replicas ||
+		statefulSet.Status.Replicas != replicas ||
+		statefulSet.Status.ReadyReplicas != replicas-1 {
+		return false, nil
+	}
+
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.Intent != enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		operation.TargetOrdinal == nil ||
+		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageCompleted ||
+		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageBlocked ||
+		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageFailed ||
+		operation.DesiredRevision == "" ||
+		operation.DesiredRevision != statefulSet.Status.UpdateRevision {
+		return false, nil
+	}
+	targetOrdinal := *operation.TargetOrdinal
+	if targetOrdinal < 0 || targetOrdinal >= replicas {
+		return false, nil
+	}
+
+	for ordinal := int32(0); ordinal < replicas; ordinal++ {
+		podName := GetSplunkStatefulsetPodName(
+			SplunkSearchHead,
+			mgr.cr.GetName(),
+			ordinal,
+		)
+		pod := &corev1.Pod{}
+		if err := mgr.c.Get(ctx, types.NamespacedName{
+			Namespace: mgr.cr.GetNamespace(),
+			Name:      podName,
+		}, pod); err != nil {
+			if k8serrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, fmt.Errorf(
+				"get Search Head Pod %s while validating readiness withdrawal: %w",
+				podName,
+				err,
+			)
+		}
+		if pod.DeletionTimestamp != nil ||
+			podConditionStatus(pod, corev1.ContainersReady) != corev1.ConditionTrue {
+			return false, nil
+		}
+		if ordinal != targetOrdinal {
+			if podConditionStatus(pod, corev1.PodReady) != corev1.ConditionTrue {
+				return false, nil
+			}
+			continue
+		}
+		if operation.TargetPod != "" && operation.TargetPod != pod.Name {
+			return false, nil
+		}
+		if operation.TargetPodUID != "" &&
+			operation.TargetPodUID != string(pod.UID) {
+			return false, nil
+		}
+		servingConditionMatched := false
+		for _, condition := range pod.Status.Conditions {
+			if condition.Type == searchHeadServingCondition &&
+				condition.Status == corev1.ConditionFalse &&
+				condition.Reason == "LifecycleOperationActive" {
+				servingConditionMatched = true
+				break
+			}
+		}
+		if !servingConditionMatched ||
+			podConditionStatus(pod, corev1.PodReady) != corev1.ConditionFalse {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 func (mgr *searchHeadClusterPodManager) setSearchHeadServingCondition(
 	ctx context.Context,
 	pod *corev1.Pod,
