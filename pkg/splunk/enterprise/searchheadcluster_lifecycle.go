@@ -317,6 +317,7 @@ func (mgr *searchHeadClusterPodManager) resumeLifecycleRecovery(
 		observation,
 		shcworkflow.RecoveryPolicy{
 			TerminationTimeout:  time.Duration(policy.TerminationGracePeriodSeconds) * time.Second,
+			PodStartupTimeout:   time.Duration(policy.PodStartupTimeoutSeconds) * time.Second,
 			MemberRejoinTimeout: time.Duration(policy.MemberRejoinTimeoutSeconds) * time.Second,
 		},
 		now,

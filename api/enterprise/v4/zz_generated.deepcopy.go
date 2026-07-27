@@ -2692,6 +2692,10 @@ func (in *SearchHeadClusterLifecycleOperationStatus) DeepCopyInto(out *SearchHea
 		in, out := &in.ReplacementAuthorizedAt, &out.ReplacementAuthorizedAt
 		*out = (*in).DeepCopy()
 	}
+	if in.ReplacementPodObservedAt != nil {
+		in, out := &in.ReplacementPodObservedAt, &out.ReplacementPodObservedAt
+		*out = (*in).DeepCopy()
+	}
 	if in.MembershipRemovalRequestedAt != nil {
 		in, out := &in.MembershipRemovalRequestedAt, &out.MembershipRemovalRequestedAt
 		*out = (*in).DeepCopy()
@@ -2730,6 +2734,11 @@ func (in *SearchHeadClusterLifecyclePolicy) DeepCopyInto(out *SearchHeadClusterL
 	}
 	if in.CaptainTransferTimeoutSeconds != nil {
 		in, out := &in.CaptainTransferTimeoutSeconds, &out.CaptainTransferTimeoutSeconds
+		*out = new(int64)
+		**out = **in
+	}
+	if in.PodStartupTimeoutSeconds != nil {
+		in, out := &in.PodStartupTimeoutSeconds, &out.PodStartupTimeoutSeconds
 		*out = new(int64)
 		**out = **in
 	}

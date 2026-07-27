@@ -6853,6 +6853,14 @@ spec:
                     maximum: 86400
                     minimum: 1
                     type: integer
+                  podStartupTimeoutSeconds:
+                    description: |-
+                      PodStartupTimeoutSeconds bounds the wait for a replacement Pod to
+                      schedule, attach storage, and reach local container readiness.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
                   podUpdateStrategy:
                     description: |-
                       PodUpdateStrategy selects the Pod replacement owner. Empty resolves to
@@ -10304,6 +10312,9 @@ spec:
                     format: date-time
                     type: string
                   replacementMemberID:
+                    type: string
+                  replacementPodObservedAt:
+                    format: date-time
                     type: string
                   replacementPodUID:
                     type: string

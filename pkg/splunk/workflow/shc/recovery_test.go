@@ -270,9 +270,12 @@ func TestRecoveryAttributesUnschedulableReplacementToKubernetes(t *testing.T) {
 	}
 	if decision.Operation.MemberRejoinStartedAt != nil {
 		t.Fatalf(
-			"unscheduled Pod started Splunk rejoin timer at %v",
+			"unscheduled replacement started member rejoin at %v",
 			decision.Operation.MemberRejoinStartedAt,
 		)
+	}
+	if decision.Operation.ReplacementPodObservedAt == nil {
+		t.Fatal("unscheduled replacement did not start the Pod startup timer")
 	}
 }
 
@@ -309,9 +312,12 @@ func TestRecoveryAttributesStoragePendingReplacementToKubernetes(t *testing.T) {
 	}
 	if decision.Operation.MemberRejoinStartedAt != nil {
 		t.Fatalf(
-			"storage-pending Pod started Splunk rejoin timer at %v",
+			"storage-pending replacement started member rejoin at %v",
 			decision.Operation.MemberRejoinStartedAt,
 		)
+	}
+	if decision.Operation.ReplacementPodObservedAt == nil {
+		t.Fatal("storage-pending replacement did not start the Pod startup timer")
 	}
 }
 
@@ -454,8 +460,107 @@ func TestRecoveryWaitsForRecoverableContainerStartupFailure(t *testing.T) {
 	}
 	if decision.Operation.MemberRejoinStartedAt != nil {
 		t.Fatalf(
-			"container startup failure started Splunk rejoin timer at %v",
+			"container startup failure started member rejoin at %v",
 			decision.Operation.MemberRejoinStartedAt,
+		)
+	}
+	if decision.Operation.ReplacementPodObservedAt == nil {
+		t.Fatal("container startup failure did not start the Pod startup timer")
+	}
+}
+
+func TestRecoveryBlocksRecoverableContainerStartupFailureAfterBudget(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := recoveredPodObservation()
+	observation.ContainersReady = false
+	observation.PodReady = false
+	observation.ContainerStartupFailed = true
+	policy := testRecoveryPolicy()
+	policy.PodStartupTimeout = 30 * time.Second
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		policy,
+		now.Add(time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+		ActionNone,
+	)
+	if decision.Operation.ReplacementPodObservedAt == nil {
+		t.Fatal("container startup failure did not start the Pod startup timer")
+	}
+
+	decision = EvaluateRecovery(
+		decision.Operation,
+		observation,
+		policy,
+		decision.Operation.ReplacementPodObservedAt.Add(policy.PodStartupTimeout),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed {
+		t.Fatalf(
+			"reason = %q, want SplunkStartupFailed",
+			decision.Operation.Reason,
+		)
+	}
+	if !strings.Contains(
+		decision.Operation.Message,
+		"stage WaitingForContainer",
+	) {
+		t.Fatalf(
+			"timeout message = %q, want container-stage attribution",
+			decision.Operation.Message,
+		)
+	}
+}
+
+func TestRecoveryBackfillsReplacementStartupBudgetAfterOperatorUpgrade(t *testing.T) {
+	now := time.Date(2026, 7, 24, 14, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now.Add(-2 * time.Hour))
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer
+	stageStartedAt := metav1.NewTime(now.Add(-time.Hour))
+	operation.StageStartedAt = &stageStartedAt
+	operation.ReplacementPodUID = "new-pod-uid"
+	observation := recoveredPodObservation()
+	observation.ContainersReady = false
+	observation.PodReady = false
+	observation.ContainerStartupFailed = true
+	policy := testRecoveryPolicy()
+	policy.PodStartupTimeout = 30 * time.Minute
+
+	decision := EvaluateRecovery(operation, observation, policy, now)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed {
+		t.Fatalf(
+			"reason = %q, want SplunkStartupFailed",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.ReplacementPodObservedAt == nil ||
+		!decision.Operation.ReplacementPodObservedAt.Equal(&stageStartedAt) {
+		t.Fatalf(
+			"backfilled startup time = %v, want %v",
+			decision.Operation.ReplacementPodObservedAt,
+			stageStartedAt,
 		)
 	}
 }
@@ -838,6 +943,7 @@ func recoveredPodObservation() RecoveryObservation {
 func testRecoveryPolicy() RecoveryPolicy {
 	return RecoveryPolicy{
 		TerminationTimeout:  20 * time.Second,
+		PodStartupTimeout:   5 * time.Minute,
 		MemberRejoinTimeout: 5 * time.Minute,
 	}
 }

@@ -30,7 +30,8 @@ func TestValidateSearchHeadClusterLifecyclePolicy(t *testing.T) {
 			PodUpdateStrategy:             enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
 			SearchDrainTimeoutSeconds:     int64Pointer(10),
 			CaptainTransferTimeoutSeconds: int64Pointer(20),
-			MemberRejoinTimeoutSeconds:    int64Pointer(30),
+			PodStartupTimeoutSeconds:      int64Pointer(30),
+			MemberRejoinTimeoutSeconds:    int64Pointer(40),
 		}
 	}
 
@@ -91,6 +92,15 @@ func TestValidateSearchHeadClusterLifecyclePolicy(t *testing.T) {
 				CaptainTransferTimeoutSeconds: int64Pointer(86401),
 			},
 			wantErrField: "spec.lifecyclePolicy.captainTransferTimeoutSeconds",
+		},
+		{
+			name:    "invalid Pod startup timeout",
+			podGate: true,
+			shcGate: true,
+			policy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				PodStartupTimeoutSeconds: int64Pointer(0),
+			},
+			wantErrField: "spec.lifecyclePolicy.podStartupTimeoutSeconds",
 		},
 		{
 			name:    "invalid rejoin timeout",

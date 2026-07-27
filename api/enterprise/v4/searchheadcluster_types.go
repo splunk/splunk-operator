@@ -70,6 +70,13 @@ type SearchHeadClusterLifecyclePolicy struct {
 	// +kubebuilder:validation:Maximum=86400
 	CaptainTransferTimeoutSeconds *int64 `json:"captainTransferTimeoutSeconds,omitempty"`
 
+	// PodStartupTimeoutSeconds bounds the wait for a replacement Pod to
+	// schedule, attach storage, and reach local container readiness.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=86400
+	PodStartupTimeoutSeconds *int64 `json:"podStartupTimeoutSeconds,omitempty"`
+
 	// MemberRejoinTimeoutSeconds bounds the wait for a replaced member to
 	// register, become up, and synchronize with the cluster.
 	// +optional
@@ -177,6 +184,7 @@ const (
 	SearchHeadClusterLifecycleReasonPodRevisionMismatch           SearchHeadClusterLifecycleReason = "PodRevisionMismatch"
 	SearchHeadClusterLifecycleReasonVolumeAttachmentPending       SearchHeadClusterLifecycleReason = "VolumeAttachmentPending"
 	SearchHeadClusterLifecycleReasonImagePullFailed               SearchHeadClusterLifecycleReason = "ImagePullFailed"
+	SearchHeadClusterLifecycleReasonPodStartupTimedOut            SearchHeadClusterLifecycleReason = "PodStartupTimedOut"
 	SearchHeadClusterLifecycleReasonSplunkStartupFailed           SearchHeadClusterLifecycleReason = "SplunkStartupFailed"
 	SearchHeadClusterLifecycleReasonMemberNotRegistered           SearchHeadClusterLifecycleReason = "MemberNotRegistered"
 	SearchHeadClusterLifecycleReasonMemberNotUp                   SearchHeadClusterLifecycleReason = "MemberNotUp"
@@ -287,6 +295,7 @@ type SearchHeadClusterLifecycleOperationStatus struct {
 	ReplacementPodUID            string                           `json:"replacementPodUID,omitempty"`
 	ReplacementMemberID          string                           `json:"replacementMemberID,omitempty"`
 	ReplacementAuthorizedAt      *metav1.Time                     `json:"replacementAuthorizedAt,omitempty"`
+	ReplacementPodObservedAt     *metav1.Time                     `json:"replacementPodObservedAt,omitempty"`
 	MembershipRemovalRequestedAt *metav1.Time                     `json:"membershipRemovalRequestedAt,omitempty"`
 	MemberRejoinStartedAt        *metav1.Time                     `json:"memberRejoinStartedAt,omitempty"`
 	DetentionReleaseRequestedAt  *metav1.Time                     `json:"detentionReleaseRequestedAt,omitempty"`

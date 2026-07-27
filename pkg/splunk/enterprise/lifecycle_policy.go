@@ -25,6 +25,7 @@ const (
 	DefaultTerminationGracePeriodSeconds int64 = 1200
 	DefaultSearchDrainTimeoutSeconds     int64 = 180
 	DefaultCaptainTransferTimeoutSeconds int64 = 180
+	DefaultPodStartupTimeoutSeconds      int64 = 1800
 	DefaultMemberRejoinTimeoutSeconds    int64 = 1800
 )
 
@@ -36,6 +37,7 @@ type ResolvedSearchHeadClusterLifecyclePolicy struct {
 	PodUpdateStrategy             enterpriseApi.SearchHeadClusterPodUpdateStrategy
 	SearchDrainTimeoutSeconds     int64
 	CaptainTransferTimeoutSeconds int64
+	PodStartupTimeoutSeconds      int64
 	MemberRejoinTimeoutSeconds    int64
 }
 
@@ -70,6 +72,7 @@ func ResolveSearchHeadClusterLifecyclePolicy(spec *enterpriseApi.SearchHeadClust
 		PodUpdateStrategy:             enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete,
 		SearchDrainTimeoutSeconds:     DefaultSearchDrainTimeoutSeconds,
 		CaptainTransferTimeoutSeconds: DefaultCaptainTransferTimeoutSeconds,
+		PodStartupTimeoutSeconds:      DefaultPodStartupTimeoutSeconds,
 		MemberRejoinTimeoutSeconds:    DefaultMemberRejoinTimeoutSeconds,
 	}
 	resolved.TerminationGracePeriodSeconds = *ResolveTerminationGracePeriodSeconds(&spec.CommonSplunkSpec)
@@ -86,6 +89,9 @@ func ResolveSearchHeadClusterLifecyclePolicy(spec *enterpriseApi.SearchHeadClust
 	}
 	if policy.CaptainTransferTimeoutSeconds != nil {
 		resolved.CaptainTransferTimeoutSeconds = *policy.CaptainTransferTimeoutSeconds
+	}
+	if policy.PodStartupTimeoutSeconds != nil {
+		resolved.PodStartupTimeoutSeconds = *policy.PodStartupTimeoutSeconds
 	}
 	if policy.MemberRejoinTimeoutSeconds != nil {
 		resolved.MemberRejoinTimeoutSeconds = *policy.MemberRejoinTimeoutSeconds

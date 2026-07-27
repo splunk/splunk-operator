@@ -134,6 +134,7 @@ func validateSearchHeadClusterLifecyclePolicy(policy *enterpriseApi.SearchHeadCl
 	}{
 		{name: "searchDrainTimeoutSeconds", value: policy.SearchDrainTimeoutSeconds},
 		{name: "captainTransferTimeoutSeconds", value: policy.CaptainTransferTimeoutSeconds},
+		{name: "podStartupTimeoutSeconds", value: policy.PodStartupTimeoutSeconds},
 		{name: "memberRejoinTimeoutSeconds", value: policy.MemberRejoinTimeoutSeconds},
 	}
 	for _, timeout := range timeouts {

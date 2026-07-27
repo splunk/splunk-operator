@@ -27,6 +27,7 @@ import (
 // member recovery.
 type RecoveryPolicy struct {
 	TerminationTimeout  time.Duration
+	PodStartupTimeout   time.Duration
 	MemberRejoinTimeout time.Duration
 }
 
@@ -70,6 +71,33 @@ func EvaluateRecovery(
 	if operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageBlocked ||
 		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageFailed ||
 		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
+		return Decision{Operation: operation}
+	}
+
+	if operation.ReplacementPodObservedAt == nil &&
+		operation.ReplacementPodUID != "" &&
+		observation.PodExists &&
+		observation.PodUID == operation.ReplacementPodUID {
+		ensureReplacementPodObserved(operation, now, true)
+	}
+	if replacementPodStartupTimedOut(
+		operation,
+		policy.PodStartupTimeout,
+		now,
+	) {
+		reason := enterpriseApi.SearchHeadClusterLifecycleReasonPodStartupTimedOut
+		if operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer &&
+			observation.ContainerStartupFailed {
+			reason = enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed
+		}
+		transition(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			reason,
+			replacementStartupTimeoutMessage(operation, observation),
+			now,
+		)
 		return Decision{Operation: operation}
 	}
 
@@ -162,6 +190,7 @@ func classifyPodRecovery(
 	}
 
 	operation.ReplacementPodUID = observation.PodUID
+	ensureReplacementPodObserved(operation, now, false)
 	if observation.PodRevision != operation.DesiredRevision {
 		transition(
 			operation,
@@ -286,6 +315,23 @@ func recoveryTimeoutMessage(
 		observation.CaptainReady,
 		observation.CaptainMemberObserved,
 		captainMemberStatusAccepted,
+	)
+}
+
+func replacementStartupTimeoutMessage(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	observation RecoveryObservation,
+) string {
+	return fmt.Sprintf(
+		"replacement Pod startup timed out in stage %s: podExists=%t podScheduled=%t podUnschedulable=%t storagePending=%t imagePullFailed=%t containerStartupFailed=%t containersReady=%t",
+		operation.Stage,
+		observation.PodExists,
+		observation.PodScheduled,
+		observation.PodUnschedulable,
+		observation.StoragePending,
+		observation.ImagePullFailed,
+		observation.ContainerStartupFailed,
+		observation.ContainersReady,
 	)
 }
 
@@ -459,6 +505,47 @@ func recoveryTimedOut(
 	return timeout > 0 &&
 		operation.MemberRejoinStartedAt != nil &&
 		!now.Before(operation.MemberRejoinStartedAt.Add(timeout))
+}
+
+func replacementPodStartupTimedOut(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	timeout time.Duration,
+	now time.Time,
+) bool {
+	if operation.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling &&
+		operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage &&
+		operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer {
+		return false
+	}
+	return timeout > 0 &&
+		operation.ReplacementPodObservedAt != nil &&
+		!now.Before(operation.ReplacementPodObservedAt.Add(timeout))
+}
+
+func ensureReplacementPodObserved(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	now time.Time,
+	backfill bool,
+) {
+	if operation.ReplacementPodObservedAt != nil {
+		return
+	}
+	startedAt := now
+	if backfill &&
+		operation.StageStartedAt != nil &&
+		(operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling ||
+			operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage ||
+			operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer) {
+		startedAt = operation.StageStartedAt.Time
+	}
+	timestamp := metav1.NewTime(startedAt)
+	operation.ReplacementPodObservedAt = &timestamp
 }
 
 func transitionIfNeeded(

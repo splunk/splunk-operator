@@ -77,6 +77,7 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 			got.PodUpdateStrategy != enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete ||
 			got.SearchDrainTimeoutSeconds != 180 ||
 			got.CaptainTransferTimeoutSeconds != 180 ||
+			got.PodStartupTimeoutSeconds != 1800 ||
 			got.MemberRejoinTimeoutSeconds != 1800 {
 			t.Fatalf("unexpected defaults: %#v", got)
 		}
@@ -92,7 +93,8 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 				PodUpdateStrategy:             enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
 				SearchDrainTimeoutSeconds:     lifecycleInt64Pointer(101),
 				CaptainTransferTimeoutSeconds: lifecycleInt64Pointer(102),
-				MemberRejoinTimeoutSeconds:    lifecycleInt64Pointer(103),
+				PodStartupTimeoutSeconds:      lifecycleInt64Pointer(103),
+				MemberRejoinTimeoutSeconds:    lifecycleInt64Pointer(104),
 			},
 		}
 		got, err := ResolveSearchHeadClusterLifecyclePolicy(spec)
@@ -103,7 +105,8 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 			got.PodUpdateStrategy != enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate ||
 			got.SearchDrainTimeoutSeconds != 101 ||
 			got.CaptainTransferTimeoutSeconds != 102 ||
-			got.MemberRejoinTimeoutSeconds != 103 {
+			got.PodStartupTimeoutSeconds != 103 ||
+			got.MemberRejoinTimeoutSeconds != 104 {
 			t.Fatalf("unexpected explicit policy: %#v", got)
 		}
 	})

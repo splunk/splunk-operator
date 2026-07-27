@@ -406,6 +406,7 @@ searchHeadCluster:
     # podUpdateStrategy: OnDelete
     # searchDrainTimeoutSeconds: 180
     # captainTransferTimeoutSeconds: 180
+    # podStartupTimeoutSeconds: 1800
     # memberRejoinTimeoutSeconds: 1800
 
   appRepo: {}
