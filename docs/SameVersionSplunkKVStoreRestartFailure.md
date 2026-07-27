@@ -92,6 +92,58 @@ The recovery message asks for the previous Splunk version to be reinstalled.
 That guidance does not fit this case because the Pod replacement did not change
 the Splunk version or build.
 
+## Source-confirmed cause
+
+The observed state is explained by the current Splunk launcher sequence:
+
+1. The migration path in `src/launcher/migrate.cpp` creates
+   `versionFile42` when no KV Store version marker exists.
+2. A first start can be interrupted after that marker is persisted but before
+   MongoDB creates its database and current-version marker.
+3. On the next start, `splunk-preinstall` sees a non-empty marker directory.
+4. The current preinstall check accepts `versionFile70` or `versionFile80`, but
+   not `versionFile42`, so it stops Splunk before runtime initialization can
+   select the supported MongoDB version.
+
+This is a persisted partial-initialization state produced by Splunk itself. A
+Kubernetes Pod replacement exposes it because the replacement correctly
+reattaches the same persistent volume.
+
+Read-only inspection of the preserved test volumes confirmed the same state on
+the deployer and all three Search Heads:
+
+| Instance | Marker directory | KV Store database |
+| --- | --- | --- |
+| Deployer | `versionFile42` only | Missing |
+| Search Head 0 | `versionFile42` only | Missing |
+| Search Head 1 | `versionFile42` only | Missing |
+| Search Head 2 | `versionFile42` only | Missing |
+
+## Narrow Splunkd recovery spike
+
+A Splunkd spike is being validated to address both production and recovery of
+this state:
+
+- migration no longer creates an unsupported `versionFile42` for a fresh KV
+  Store;
+- preinstall removes `versionFile42` only when KV Store is enabled, its
+  database path is known, no MongoDB database directory exists, and
+  `versionFile42` is the only entry in the marker directory;
+- a legacy marker is preserved and startup continues to fail closed if MongoDB
+  data exists, another directory entry exists, the database path cannot be
+  resolved, or the state is otherwise ambiguous; and
+- when a supported `versionFile70` or `versionFile80` exists, migration may
+  remove duplicate obsolete markers without changing the supported selection.
+
+The recovery does not fabricate `versionFile70` or `versionFile80`. After the
+verified stale marker is removed, normal KV Store initialization remains
+responsible for selecting and recording the supported MongoDB version.
+
+The spike is isolated on `codex/kvstore-same-version-restart`. It is not yet a
+product-approved or merged fix. Qualification must use the package built from
+the exact reviewed commit and must demonstrate both recovery and fail-closed
+behavior.
+
 ## Kubernetes impact
 
 The member is correctly removed from serving endpoints before replacement, but
@@ -102,20 +154,19 @@ with reduced redundancy and the rolling operation cannot safely continue.
 Increasing readiness, liveness, or startup-probe thresholds cannot resolve this
 failure because the Splunk process exits on its own.
 
-## Questions for the KV Store team
+## Product review questions
 
-1. Is `versionFile42` expected after a fresh start of this 10.6 development
-   build? If not, which component should create the 7.0 or 8.0 marker?
-2. Why does a same-version, same-build restart enter the KV Store upgrade
-   precheck?
-3. When no KV Store database directory exists, should the active-version
-   upgrade precheck fail, or should it treat the instance as not yet
-   initialized?
-4. Should the precheck recognize that the persisted
-   `/opt/splunk/etc/splunk.version` already matches the running binary and avoid
-   treating this as a cross-version migration?
-5. What is the supported, non-destructive recovery for this state? We do not
-   want to fabricate marker files, bypass the precheck, or delete customer PVCs.
+1. Is any supported customer state expected to contain only `versionFile42`
+   while the configured MongoDB database directory is absent?
+2. Are the proposed recovery predicates sufficient to prove that removing the
+   marker cannot disconnect it from real MongoDB data?
+3. Should preinstall distinguish same-build restart from cross-version upgrade
+   in its diagnostics even when both use the migration path?
+4. What additional upgrade-path coverage is required before this guarded
+   recovery can be productized?
+5. Which diagnostics should be retained so Support can distinguish an
+   automatically repaired interrupted initialization from a preserved,
+   ambiguous legacy state?
 
 ## Expected behavior
 
@@ -124,6 +175,8 @@ PVCs, start idempotently, and rejoin the Search Head Cluster. If the persisted
 KV Store state is invalid, Splunk should report the specific state that is
 invalid and provide a recovery path that is valid for a same-version restart.
 
-No splunkd change or precheck bypass is proposed in the current Operator work.
-The immediate request is for the KV Store team to confirm the intended marker
-lifecycle, explain why this state is produced, and identify the supported fix.
+The Operator and Docker-Splunk must not fabricate version markers or bypass
+Splunk preinstall checks. Their responsibility is to preserve storage, provide
+sufficient startup time, report the Splunk exit reason, and stop a rollout when
+the replacement cannot become healthy. The marker lifecycle and guarded
+recovery belong in Splunkd and require KV Store product review.
