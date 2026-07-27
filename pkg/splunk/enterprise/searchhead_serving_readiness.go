@@ -253,12 +253,22 @@ func (mgr *searchHeadClusterPodManager) CanProceedWithPodUpdateDespiteNotReadyRe
 		}
 		servingConditionMatched := false
 		for _, condition := range pod.Status.Conditions {
-			if condition.Type == searchHeadServingCondition &&
-				condition.Status == corev1.ConditionFalse &&
-				condition.Reason == "LifecycleOperationActive" {
-				servingConditionMatched = true
-				break
+			if condition.Type != searchHeadServingCondition ||
+				condition.Status != corev1.ConditionFalse {
+				continue
 			}
+			servingConditionMatched =
+				condition.Reason == "LifecycleOperationActive"
+			if !servingConditionMatched &&
+				condition.Reason == "MemberNotUp" &&
+				targetOrdinal < int32(len(mgr.cr.Status.Members)) {
+				targetMember := mgr.cr.Status.Members[targetOrdinal]
+				servingConditionMatched =
+					targetMember.Name == pod.Name &&
+						targetMember.Registered &&
+						targetMember.Status == "ManualDetention"
+			}
+			break
 		}
 		if !servingConditionMatched ||
 			podConditionStatus(pod, corev1.PodReady) != corev1.ConditionFalse {

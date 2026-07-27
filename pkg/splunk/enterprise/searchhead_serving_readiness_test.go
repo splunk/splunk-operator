@@ -196,6 +196,10 @@ func TestCanProceedWithPodUpdateDespiteNotReadyReplicas(t *testing.T) {
 					Stage: enterpriseApi.
 						SearchHeadClusterLifecycleStageDetainingTarget,
 				},
+				Members: make(
+					[]enterpriseApi.SearchHeadClusterMemberStatus,
+					replicas,
+				),
 			},
 		}
 		statefulSet := &appsv1.StatefulSet{
@@ -225,6 +229,16 @@ func TestCanProceedWithPodUpdateDespiteNotReadyReplicas(t *testing.T) {
 		}
 		pods := make([]*corev1.Pod, 0, replicas)
 		for ordinal := int32(0); ordinal < replicas; ordinal++ {
+			cr.Status.Members[ordinal] =
+				enterpriseApi.SearchHeadClusterMemberStatus{
+					Name: fmt.Sprintf(
+						"splunk-%s-search-head-%d",
+						clusterName,
+						ordinal,
+					),
+					Status:     "Up",
+					Registered: true,
+				}
 			ready := corev1.ConditionTrue
 			servingStatus := corev1.ConditionTrue
 			servingReason := "MemberServing"
@@ -311,6 +325,27 @@ func TestCanProceedWithPodUpdateDespiteNotReadyReplicas(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.False(t, allowed)
+	})
+
+	t.Run("registered manually detained target is intentional", func(t *testing.T) {
+		mgr, statefulSet, pods := build()
+		mgr.cr.Status.LifecycleOperation.Stage =
+			enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement
+		mgr.cr.Status.Members[2].Status = "ManualDetention"
+		for index := range pods[2].Status.Conditions {
+			condition := &pods[2].Status.Conditions[index]
+			if condition.Type == searchHeadServingCondition {
+				condition.Reason = "MemberNotUp"
+			}
+		}
+		require.NoError(t, mgr.c.Status().Update(context.Background(), pods[2]))
+		allowed, err := mgr.CanProceedWithPodUpdateDespiteNotReadyReplicas(
+			context.Background(),
+			statefulSet,
+			replicas,
+		)
+		require.NoError(t, err)
+		require.True(t, allowed)
 	})
 
 	t.Run("replacement Pod UID fails closed", func(t *testing.T) {
