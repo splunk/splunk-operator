@@ -680,7 +680,7 @@ func TestRecoveryTimeoutRecordsBoundedGateSnapshot(t *testing.T) {
 	}
 }
 
-func TestRecoveryClassifiesImagePullFailure(t *testing.T) {
+func TestRecoveryWaitsForRetryableImagePullFailure(t *testing.T) {
 	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
 	operation := authorizedRecoveryOperation(now)
 	observation := recoveredPodObservation()
@@ -690,7 +690,12 @@ func TestRecoveryClassifiesImagePullFailure(t *testing.T) {
 
 	decision := EvaluateRecovery(operation, observation, testRecoveryPolicy(), now.Add(time.Second))
 
-	assertDecision(t, decision, enterpriseApi.SearchHeadClusterLifecycleStageBlocked, ActionNone)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+		ActionNone,
+	)
 	if decision.Operation.Reason != enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed {
 		t.Fatalf("reason = %q, want ImagePullFailed", decision.Operation.Reason)
 	}
@@ -699,6 +704,93 @@ func TestRecoveryClassifiesImagePullFailure(t *testing.T) {
 			"image-pull failure started Splunk rejoin timer at %v",
 			decision.Operation.MemberRejoinStartedAt,
 		)
+	}
+	if decision.Operation.ReplacementPodObservedAt == nil {
+		t.Fatal("image-pull failure did not start the Pod startup timer")
+	}
+}
+
+func TestRecoveryBlocksRetryableImagePullFailureAfterBudget(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := recoveredPodObservation()
+	observation.ContainersReady = false
+	observation.PodReady = false
+	observation.ImagePullFailed = true
+	policy := testRecoveryPolicy()
+	policy.PodStartupTimeout = 30 * time.Second
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		policy,
+		now.Add(time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+		ActionNone,
+	)
+
+	decision = EvaluateRecovery(
+		decision.Operation,
+		observation,
+		policy,
+		decision.Operation.ReplacementPodObservedAt.Add(policy.PodStartupTimeout),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed {
+		t.Fatalf(
+			"reason = %q, want ImagePullFailed",
+			decision.Operation.Reason,
+		)
+	}
+	if !strings.Contains(decision.Operation.Message, "imagePullFailed=true") {
+		t.Fatalf(
+			"timeout message = %q, want image-pull attribution",
+			decision.Operation.Message,
+		)
+	}
+}
+
+func TestRecoveryBlocksTerminalImagePullFailureImmediately(t *testing.T) {
+	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := recoveredPodObservation()
+	observation.ContainersReady = false
+	observation.PodReady = false
+	observation.ImagePullFailed = true
+	observation.ImagePullFailureTerminal = true
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed {
+		t.Fatalf(
+			"reason = %q, want ImagePullFailed",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.ReplacementPodObservedAt == nil {
+		t.Fatal("terminal image-pull failure did not record replacement observation")
 	}
 }
 

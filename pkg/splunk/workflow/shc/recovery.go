@@ -41,6 +41,7 @@ type RecoveryObservation struct {
 	PodUnschedulable         bool
 	StoragePending           bool
 	ImagePullFailed          bool
+	ImagePullFailureTerminal bool
 	ContainerStartupFailed   bool
 	ContainerFailureTerminal bool
 	ContainersReady          bool
@@ -93,7 +94,9 @@ func EvaluateRecovery(
 		now,
 	) {
 		reason := enterpriseApi.SearchHeadClusterLifecycleReasonPodStartupTimedOut
-		if operation.Stage ==
+		if observation.ImagePullFailed {
+			reason = enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed
+		} else if operation.Stage ==
 			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer &&
 			observation.ContainerStartupFailed {
 			reason = enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed
@@ -333,7 +336,7 @@ func classifyPodRecovery(
 		return Decision{Operation: operation}
 	}
 
-	if observation.ImagePullFailed {
+	if observation.ImagePullFailureTerminal {
 		transition(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
@@ -362,7 +365,10 @@ func classifyPodRecovery(
 	if !observation.ContainersReady {
 		reason := enterpriseApi.SearchHeadClusterLifecycleReasonReplacementAuthorized
 		message := fmt.Sprintf("waiting for containers in replacement Pod %s", operation.TargetPod)
-		if observation.ContainerStartupFailed {
+		if observation.ImagePullFailed {
+			reason = enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed
+			message = fmt.Sprintf("waiting for image pull retry for replacement Pod %s", operation.TargetPod)
+		} else if observation.ContainerStartupFailed {
 			reason = enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed
 			message = fmt.Sprintf("splunkd has not started in replacement Pod %s", operation.TargetPod)
 		}
@@ -423,13 +429,14 @@ func replacementStartupTimeoutMessage(
 	observation RecoveryObservation,
 ) string {
 	return fmt.Sprintf(
-		"replacement Pod startup timed out in stage %s: podExists=%t podScheduled=%t podUnschedulable=%t storagePending=%t imagePullFailed=%t containerStartupFailed=%t containersReady=%t",
+		"replacement Pod startup timed out in stage %s: podExists=%t podScheduled=%t podUnschedulable=%t storagePending=%t imagePullFailed=%t imagePullFailureTerminal=%t containerStartupFailed=%t containersReady=%t",
 		operation.Stage,
 		observation.PodExists,
 		observation.PodScheduled,
 		observation.PodUnschedulable,
 		observation.StoragePending,
 		observation.ImagePullFailed,
+		observation.ImagePullFailureTerminal,
 		observation.ContainerStartupFailed,
 		observation.ContainersReady,
 	)

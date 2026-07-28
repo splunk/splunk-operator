@@ -1489,12 +1489,10 @@ func TestLifecycleAdapterObservesReplacementWaitingForStorage(t *testing.T) {
 	}
 }
 
-func TestLifecycleAdapterObservesTerminalImagePullFailure(t *testing.T) {
+func TestLifecycleAdapterObservesRetryableImagePullFailure(t *testing.T) {
 	for _, reason := range []string{
 		"ErrImagePull",
 		"ImagePullBackOff",
-		"InvalidImageName",
-		"ErrInvalidImage",
 	} {
 		t.Run(reason, func(t *testing.T) {
 			observation := observeWaitingLifecyclePod(t, reason)
@@ -1502,6 +1500,29 @@ func TestLifecycleAdapterObservesTerminalImagePullFailure(t *testing.T) {
 				!observation.PodScheduled ||
 				!observation.ImagePullFailed {
 				t.Fatalf("image-pull observation = %#v", observation)
+			}
+			if observation.StoragePending ||
+				observation.ContainerStartupFailed ||
+				observation.ImagePullFailureTerminal ||
+				observation.MemberObserved {
+				t.Fatalf("image-pull failure was misclassified: %#v", observation)
+			}
+		})
+	}
+}
+
+func TestLifecycleAdapterObservesTerminalImagePullFailure(t *testing.T) {
+	for _, reason := range []string{
+		"InvalidImageName",
+		"ErrInvalidImage",
+	} {
+		t.Run(reason, func(t *testing.T) {
+			observation := observeWaitingLifecyclePod(t, reason)
+			if !observation.PodExists ||
+				!observation.PodScheduled ||
+				!observation.ImagePullFailed ||
+				!observation.ImagePullFailureTerminal {
+				t.Fatalf("terminal image-pull observation = %#v", observation)
 			}
 			if observation.StoragePending ||
 				observation.ContainerStartupFailed ||
