@@ -349,6 +349,10 @@ type SearchHeadClusterStatus struct {
 	// current number of ready search head cluster members
 	ReadyReplicas int32 `json:"readyReplicas"`
 
+	// last desired replica count for which the search head cluster reached Ready
+	// +optional
+	LastStableReplicas *int32 `json:"lastStableReplicas,omitempty"`
+
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
 

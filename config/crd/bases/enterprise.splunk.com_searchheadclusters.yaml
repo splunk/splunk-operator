@@ -10260,6 +10260,11 @@ spec:
               initialized:
                 description: true if the search head cluster has finished initialization
                 type: boolean
+              lastStableReplicas:
+                description: last desired replica count for which the search head
+                  cluster reached Ready
+                format: int32
+                type: integer
               lifecycleOperation:
                 description: |-
                   LifecycleOperation is the current operation or most recent terminal

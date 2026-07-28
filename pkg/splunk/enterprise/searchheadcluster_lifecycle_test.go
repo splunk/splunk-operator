@@ -115,6 +115,223 @@ func TestLifecycleBlockedErrorIsTerminalAndEmitsOnce(t *testing.T) {
 	}
 }
 
+func TestNormalizeSearchHeadClusterPodUpdatePhase(t *testing.T) {
+	target := int32(2)
+	active := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		Intent: enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageWaitingForContainer,
+		TargetOrdinal: &target,
+	}
+	completed := active.DeepCopy()
+	completed.Stage = enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+	scaleDown := active.DeepCopy()
+	scaleDown.Intent = enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown
+
+	tests := []struct {
+		name              string
+		phase             enterpriseApi.Phase
+		operation         *enterpriseApi.SearchHeadClusterLifecycleOperationStatus
+		recoveryCompleted bool
+		want              enterpriseApi.Phase
+	}{
+		{
+			name:      "active pod update is not scale up",
+			phase:     enterpriseApi.PhaseScalingUp,
+			operation: active,
+			want:      enterpriseApi.PhaseUpdating,
+		},
+		{
+			name:              "recovery completed in this reconcile is still updating",
+			phase:             enterpriseApi.PhaseScalingUp,
+			operation:         completed,
+			recoveryCompleted: true,
+			want:              enterpriseApi.PhaseUpdating,
+		},
+		{
+			name:      "stale completed operation does not hide later scale up",
+			phase:     enterpriseApi.PhaseScalingUp,
+			operation: completed,
+			want:      enterpriseApi.PhaseScalingUp,
+		},
+		{
+			name:      "scale down lifecycle does not change scale up phase",
+			phase:     enterpriseApi.PhaseScalingUp,
+			operation: scaleDown,
+			want:      enterpriseApi.PhaseScalingUp,
+		},
+		{
+			name:      "ready phase remains ready",
+			phase:     enterpriseApi.PhaseReady,
+			operation: active,
+			want:      enterpriseApi.PhaseReady,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := normalizeSearchHeadClusterPodUpdatePhase(
+				test.phase,
+				test.operation,
+				test.recoveryCompleted,
+			)
+			if got != test.want {
+				t.Fatalf("phase = %s, want %s", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRecordStableReplicaCountEmitsOnlyDesiredScaleEvents(t *testing.T) {
+	newManager := func(
+		stable *int32,
+		ready int32,
+	) (*searchHeadClusterPodManager, *mockEventRecorder, context.Context) {
+		cr := &enterpriseApi.SearchHeadCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "example",
+				Namespace: "test",
+			},
+			Status: enterpriseApi.SearchHeadClusterStatus{
+				ReadyReplicas:      ready,
+				LastStableReplicas: stable,
+			},
+		}
+		recorder := &mockEventRecorder{}
+		publisher := &K8EventPublisher{recorder: recorder, instance: cr}
+		ctx := context.WithValue(
+			context.Background(),
+			splcommon.EventPublisherKey,
+			publisher,
+		)
+		return &searchHeadClusterPodManager{cr: cr}, recorder, ctx
+	}
+
+	t.Run("initializes migration baseline without scale event", func(t *testing.T) {
+		mgr, recorder, ctx := newManager(nil, 3)
+		mgr.recordStableReplicaCount(
+			ctx,
+			GetEventPublisher(ctx, mgr.cr),
+			enterpriseApi.PhaseReady,
+			3,
+		)
+		if mgr.cr.Status.LastStableReplicas == nil ||
+			*mgr.cr.Status.LastStableReplicas != 3 {
+			t.Fatalf(
+				"last stable replicas = %v, want 3",
+				mgr.cr.Status.LastStableReplicas,
+			)
+		}
+		if len(recorder.events) != 0 {
+			t.Fatalf("migration baseline emitted %d events", len(recorder.events))
+		}
+	})
+
+	t.Run("pod readiness recovery does not emit scale event", func(t *testing.T) {
+		stable := int32(3)
+		mgr, recorder, ctx := newManager(&stable, 3)
+		mgr.recordStableReplicaCount(
+			ctx,
+			GetEventPublisher(ctx, mgr.cr),
+			enterpriseApi.PhaseReady,
+			3,
+		)
+		if len(recorder.events) != 0 {
+			t.Fatalf("readiness recovery emitted %d events", len(recorder.events))
+		}
+	})
+
+	t.Run("desired scale up emits once and advances baseline", func(t *testing.T) {
+		stable := int32(3)
+		mgr, recorder, ctx := newManager(&stable, 5)
+		mgr.recordStableReplicaCount(
+			ctx,
+			GetEventPublisher(ctx, mgr.cr),
+			enterpriseApi.PhaseReady,
+			5,
+		)
+		assertRolloutEvent(
+			t,
+			recorder,
+			EventReasonScaledUp,
+			corev1.EventTypeNormal,
+		)
+		if *mgr.cr.Status.LastStableReplicas != 5 {
+			t.Fatalf(
+				"last stable replicas = %d, want 5",
+				*mgr.cr.Status.LastStableReplicas,
+			)
+		}
+	})
+
+	t.Run("desired scale down emits once and advances baseline", func(t *testing.T) {
+		stable := int32(5)
+		mgr, recorder, ctx := newManager(&stable, 3)
+		mgr.recordStableReplicaCount(
+			ctx,
+			GetEventPublisher(ctx, mgr.cr),
+			enterpriseApi.PhaseReady,
+			3,
+		)
+		assertRolloutEvent(
+			t,
+			recorder,
+			EventReasonScaledDown,
+			corev1.EventTypeNormal,
+		)
+		if *mgr.cr.Status.LastStableReplicas != 3 {
+			t.Fatalf(
+				"last stable replicas = %d, want 3",
+				*mgr.cr.Status.LastStableReplicas,
+			)
+		}
+	})
+
+	t.Run("non-ready phase preserves baseline", func(t *testing.T) {
+		stable := int32(3)
+		mgr, recorder, ctx := newManager(&stable, 2)
+		mgr.recordStableReplicaCount(
+			ctx,
+			GetEventPublisher(ctx, mgr.cr),
+			enterpriseApi.PhaseUpdating,
+			3,
+		)
+		if *mgr.cr.Status.LastStableReplicas != 3 {
+			t.Fatalf(
+				"last stable replicas = %d, want 3",
+				*mgr.cr.Status.LastStableReplicas,
+			)
+		}
+		if len(recorder.events) != 0 {
+			t.Fatalf("non-ready phase emitted %d events", len(recorder.events))
+		}
+	})
+}
+
+func TestLifecycleMemberObservationExpectedUnavailable(t *testing.T) {
+	target := int32(1)
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		TargetOrdinal: &target,
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageWaitingForContainer,
+	}
+	if !lifecycleMemberObservationExpectedUnavailable(operation, target) {
+		t.Fatal("target container wait should be expected unavailable")
+	}
+	if lifecycleMemberObservationExpectedUnavailable(operation, 0) {
+		t.Fatal("non-target unavailability must remain unexpected")
+	}
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget
+	if lifecycleMemberObservationExpectedUnavailable(operation, target) {
+		t.Fatal("detention-stage target must still be observable")
+	}
+	operation.Stage = enterpriseApi.
+		SearchHeadClusterLifecycleStageValidatingRecovery
+	if !lifecycleMemberObservationExpectedUnavailable(operation, target) {
+		t.Fatal("recovery validation can observe bounded target unavailability")
+	}
+}
+
 func TestRollingUpdateOwnsClusterUpgradeLifecycle(t *testing.T) {
 	target := int32(2)
 	mgr := &searchHeadClusterPodManager{

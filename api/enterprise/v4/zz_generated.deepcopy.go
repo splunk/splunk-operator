@@ -2862,6 +2862,11 @@ func (in *SearchHeadClusterStatus) DeepCopyInto(out *SearchHeadClusterStatus) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.LastStableReplicas != nil {
+		in, out := &in.LastStableReplicas, &out.LastStableReplicas
+		*out = new(int32)
+		**out = **in
+	}
 	if in.ShcSecretChanged != nil {
 		in, out := &in.ShcSecretChanged, &out.ShcSecretChanged
 		*out = make([]bool, len(*in))

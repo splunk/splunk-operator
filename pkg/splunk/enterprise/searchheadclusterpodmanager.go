@@ -43,6 +43,7 @@ var newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, cr 
 // Update for searchHeadClusterPodManager handles all updates for a statefulset of search heads
 func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	logger := logging.FromContext(ctx).With("func", "searchHeadClusterPodManager.Update")
+	podUpdateRecoveryCompleted := false
 
 	// Assign client
 	if mgr.c == nil {
@@ -52,9 +53,6 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, mgr.cr)
-
-	// Track last successful replica count to emit scale events after completion
-	previousReadyReplicas := mgr.cr.Status.ReadyReplicas
 
 	// update statefulset, if necessary
 	statefulSetPhase, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
@@ -106,6 +104,11 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 		if lifecycleErr != nil {
 			return enterpriseApi.PhaseError, lifecycleErr
 		}
+		if recoveryComplete &&
+			mgr.cr.Status.LifecycleOperation.Intent ==
+				enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate {
+			podUpdateRecoveryCompleted = true
+		}
 		if blockedErr := mgr.lifecycleBlockedError(
 			ctx,
 			stageBeforeRecovery,
@@ -154,7 +157,11 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			return enterpriseApi.PhaseScalingDown, nil
 		}
 		if mgr.cr.Status.ReadyReplicas > 0 && mgr.cr.Status.ReadyReplicas < desiredReplicas {
-			return enterpriseApi.PhaseScalingUp, nil
+			return normalizeSearchHeadClusterPodUpdatePhase(
+				enterpriseApi.PhaseScalingUp,
+				mgr.cr.Status.LifecycleOperation,
+				podUpdateRecoveryCompleted,
+			), nil
 		}
 		return enterpriseApi.PhasePending, nil
 	}
@@ -168,23 +175,89 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	if err != nil {
 		return phase, err
 	}
+	phase = normalizeSearchHeadClusterPodUpdatePhase(
+		phase,
+		mgr.cr.Status.LifecycleOperation,
+		podUpdateRecoveryCompleted,
+	)
 
-	// Emit scale events when phase is ready and ready replicas changed to match desired
-	if phase == enterpriseApi.PhaseReady {
-		if desiredReplicas > previousReadyReplicas && mgr.cr.Status.ReadyReplicas == desiredReplicas {
-			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, EventReasonScaledUp,
-					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
-			}
-		} else if desiredReplicas < previousReadyReplicas && mgr.cr.Status.ReadyReplicas == desiredReplicas {
-			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, EventReasonScaledDown,
-					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
-			}
+	mgr.recordStableReplicaCount(
+		ctx,
+		eventPublisher,
+		phase,
+		desiredReplicas,
+	)
+
+	return phase, nil
+}
+
+func normalizeSearchHeadClusterPodUpdatePhase(
+	phase enterpriseApi.Phase,
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	recoveryCompleted bool,
+) enterpriseApi.Phase {
+	if phase != enterpriseApi.PhaseScalingUp ||
+		operation == nil ||
+		operation.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate {
+		return phase
+	}
+
+	switch operation.Stage {
+	case enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		enterpriseApi.SearchHeadClusterLifecycleStageFailed:
+		if !recoveryCompleted {
+			return phase
 		}
 	}
 
-	return phase, nil
+	return enterpriseApi.PhaseUpdating
+}
+
+func (mgr *searchHeadClusterPodManager) recordStableReplicaCount(
+	ctx context.Context,
+	eventPublisher *K8EventPublisher,
+	phase enterpriseApi.Phase,
+	desiredReplicas int32,
+) {
+	if phase != enterpriseApi.PhaseReady ||
+		mgr.cr.Status.ReadyReplicas != desiredReplicas {
+		return
+	}
+
+	previous := mgr.cr.Status.LastStableReplicas
+	current := desiredReplicas
+	mgr.cr.Status.LastStableReplicas = &current
+	if previous == nil || *previous == desiredReplicas ||
+		eventPublisher == nil {
+		return
+	}
+
+	if desiredReplicas > *previous {
+		eventPublisher.Normal(
+			ctx,
+			EventReasonScaledUp,
+			fmt.Sprintf(
+				"Successfully scaled %s up from %d to %d replicas",
+				mgr.cr.GetName(),
+				*previous,
+				desiredReplicas,
+			),
+		)
+		return
+	}
+
+	eventPublisher.Normal(
+		ctx,
+		EventReasonScaledDown,
+		fmt.Sprintf(
+			"Successfully scaled %s down from %d to %d replicas",
+			mgr.cr.GetName(),
+			*previous,
+			desiredReplicas,
+		),
+	)
 }
 
 func (mgr *searchHeadClusterPodManager) updateStatefulSetPods(
@@ -572,6 +645,22 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			memberStatus.Registered = memberInfo.Registered
 			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
 			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
+		} else if lifecycleMemberObservationExpectedUnavailable(
+			mgr.cr.Status.LifecycleOperation,
+			n,
+		) {
+			shcLogger.InfoContext(
+				ctx,
+				"SearchHeadCluster lifecycle target is temporarily unavailable",
+				"memberName",
+				memberName,
+				"operationID",
+				mgr.cr.Status.LifecycleOperation.OperationID,
+				"stage",
+				mgr.cr.Status.LifecycleOperation.Stage,
+				"error",
+				err,
+			)
 		} else {
 			shcLogger.ErrorContext(ctx, "unable to retrieve SearchHeadCluster member info", "memberName", memberName, "error", err)
 		}
@@ -624,4 +713,27 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 
 	return nil
+}
+
+func lifecycleMemberObservationExpectedUnavailable(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	ordinal int32,
+) bool {
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != ordinal {
+		return false
+	}
+
+	switch operation.Stage {
+	case enterpriseApi.SearchHeadClusterLifecycleStageWaitingForTermination,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery:
+		return true
+	default:
+		return false
+	}
 }
