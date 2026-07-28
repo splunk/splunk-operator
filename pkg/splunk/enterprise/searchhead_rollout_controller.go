@@ -1059,13 +1059,20 @@ func (mgr *searchHeadClusterPodManager) observeRollingStatefulSet(
 	}
 
 	operation := mgr.cr.Status.LifecycleOperation
+	inPlaceRecovery := shcInPlaceLifecycleRecovery(
+		operation,
+		statefulSet.Status.UpdateRevision,
+	)
 	if operation != nil &&
-		operation.Intent == enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
-		operation.DesiredRevision == statefulSet.Status.UpdateRevision {
+		((operation.Intent ==
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+			operation.DesiredRevision == statefulSet.Status.UpdateRevision) ||
+			inPlaceRecovery) {
 		state.Lifecycle = upgrade.SHCRolloutLifecycle{
 			TargetOrdinal:         operation.TargetOrdinal,
 			Stage:                 operation.Stage,
 			ReplacementAuthorized: operation.ReplacementAuthorizedAt != nil,
+			InPlaceRecovery:       inPlaceRecovery,
 		}
 	}
 
@@ -1109,6 +1116,35 @@ func (mgr *searchHeadClusterPodManager) observeRollingStatefulSet(
 	}
 
 	return state, nil
+}
+
+func shcInPlaceLifecycleRecovery(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	updateRevision string,
+) bool {
+	if operation == nil || operation.TargetOrdinal == nil {
+		return false
+	}
+	switch operation.Intent {
+	case enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate:
+		return operation.TargetPodUID != "" &&
+			operation.ReplacementAuthorizedAt == nil &&
+			operation.DesiredRevision != "" &&
+			updateRevision != "" &&
+			operation.DesiredRevision != updateRevision
+	case enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown:
+		return operation.MembershipRemovalRequestedAt == nil &&
+			(operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery ||
+				operation.Stage ==
+					enterpriseApi.SearchHeadClusterLifecycleStageCompleted ||
+				operation.Stage ==
+					enterpriseApi.SearchHeadClusterLifecycleStageBlocked ||
+				operation.Stage ==
+					enterpriseApi.SearchHeadClusterLifecycleStageFailed)
+	default:
+		return false
+	}
 }
 
 func podSplunkImage(pod *corev1.Pod) string {

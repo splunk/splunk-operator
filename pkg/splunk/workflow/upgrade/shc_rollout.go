@@ -80,6 +80,12 @@ type SHCRolloutLifecycle struct {
 	TargetOrdinal         *int32
 	Stage                 enterpriseApi.SearchHeadClusterLifecycleStage
 	ReplacementAuthorized bool
+	// InPlaceRecovery identifies a withdrawn operation whose original Pod
+	// remains the lifecycle target. The completed workflow continues to own
+	// the short readiness-gate handoff until Kubernetes reports that retained
+	// Pod ready again; it must not authorize another disruption during that
+	// interval.
+	InPlaceRecovery bool
 }
 
 // SHCRolloutState is a point-in-time view of StatefulSet and lifecycle state.
@@ -129,6 +135,66 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 			"StatefulSet update revision has not been observed",
 			nil,
 		)
+	}
+	if state.Lifecycle.InPlaceRecovery {
+		if state.Lifecycle.TargetOrdinal == nil {
+			return blockSHCRollout(
+				SHCRolloutReasonInvalidState,
+				"in-place lifecycle recovery has no target ordinal",
+				nil,
+			)
+		}
+		target := *state.Lifecycle.TargetOrdinal
+		if target < 0 || target >= state.Replicas {
+			return blockSHCRollout(
+				SHCRolloutReasonInvalidState,
+				fmt.Sprintf(
+					"in-place lifecycle recovery target ordinal %d is outside replica range",
+					target,
+				),
+				ordinalPointer(target),
+			)
+		}
+		if lifecycleBlocked(state.Lifecycle) {
+			return blockSHCRollout(
+				SHCRolloutReasonLifecycleBlocked,
+				fmt.Sprintf(
+					"in-place lifecycle recovery for ordinal %d is %s",
+					target,
+					state.Lifecycle.Stage,
+				),
+				ordinalPointer(target),
+			)
+		}
+		if !lifecycleCompletedForOrdinal(state.Lifecycle, target) {
+			return waitSHCRollout(
+				SHCRolloutReasonWaitingForRecovery,
+				fmt.Sprintf(
+					"waiting for in-place lifecycle recovery of ordinal %d",
+					target,
+				),
+				ordinalPointer(target),
+			)
+		}
+		if !shcRolloutPodAvailable(pods[target]) {
+			reason := SHCRolloutReasonWaitingForKubernetes
+			message := fmt.Sprintf(
+				"ordinal %d completed in-place recovery; waiting for Kubernetes readiness to be restored",
+				target,
+			)
+			if shcRolloutPodKubernetesReady(pods[target]) {
+				reason = SHCRolloutReasonWaitingForRecovery
+				message = fmt.Sprintf(
+					"ordinal %d completed in-place recovery; waiting for registered Up SHC status",
+					target,
+				)
+			}
+			return waitSHCRollout(
+				reason,
+				message,
+				ordinalPointer(target),
+			)
+		}
 	}
 
 	if allSHCPodsAtRevision(pods, state.UpdateRevision) {

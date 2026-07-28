@@ -2910,6 +2910,88 @@ func TestLifecycleRecoveryDoesNotRequirePartitionForPodUpdateCancellation(
 	}
 }
 
+func TestRollingUpdateControllerWaitsForCompletedCancellationReadinessHandoff(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-1",
+		[]string{"revision-1", "revision-2", "revision-2"},
+	)
+	target := int32(0)
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:     "PodUpdate:example-search-head-0:revision-2:0",
+			Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision: "revision-2",
+			TargetPod:       statefulSet.GetName() + "-0",
+			TargetOrdinal:   &target,
+			TargetPodUID:    "original-pod-uid",
+			Stage: enterpriseApi.
+				SearchHeadClusterLifecycleStageCompleted,
+		}
+	pod := &corev1.Pod{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Namespace: statefulSet.GetNamespace(),
+		Name:      statefulSet.GetName() + "-0",
+	}, pod); err != nil {
+		t.Fatalf("get cancellation target Pod: %v", err)
+	}
+	pod.Status.Conditions[0].Status = corev1.ConditionFalse
+	if err := client.Update(context.Background(), pod); err != nil {
+		t.Fatalf("make cancellation target temporarily unavailable: %v", err)
+	}
+	client.ResetCalls()
+
+	recorder := &mockEventRecorder{}
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		&K8EventPublisher{recorder: recorder, instance: mgr.cr},
+	)
+	phase, err := mgr.updateRollingStatefulSetPods(ctx, statefulSet, 3)
+	if err != nil {
+		t.Fatalf("completed cancellation readiness handoff returned error: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf(
+			"readiness handoff phase = %q, want %q",
+			phase,
+			enterpriseApi.PhaseUpdating,
+		)
+	}
+	if !strings.Contains(
+		mgr.cr.Status.Message,
+		string(upgrade.SHCRolloutReasonWaitingForKubernetes),
+	) {
+		t.Fatalf(
+			"readiness handoff status = %q, want Kubernetes wait",
+			mgr.cr.Status.Message,
+		)
+	}
+	if len(recorder.events) != 0 {
+		t.Fatalf(
+			"readiness handoff emitted %d warning events",
+			len(recorder.events),
+		)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf(
+			"readiness handoff changed StatefulSet partition: %v",
+			client.Calls["Update"],
+		)
+	}
+	assertRollingUpdatePartition(
+		t,
+		statefulSet.Spec.UpdateStrategy,
+		3,
+	)
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
 func TestRollingUpdateObservationDoesNotRepeatDurableLifecycleBlockedEvent(
 	t *testing.T,
 ) {

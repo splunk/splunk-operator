@@ -143,6 +143,53 @@ func TestSHCRolloutContinuesRollbackWhenUntouchedLowerOrdinalMatches(t *testing.
 	)
 }
 
+func TestSHCRolloutWaitsForInPlaceCancellationReadinessHandoff(t *testing.T) {
+	state := pendingSHCRolloutState()
+	state.Partition = 3
+	state.CurrentRevision = "revision-1"
+	state.UpdateRevision = "revision-1"
+	state.Pods[0].Revision = "revision-1"
+	state.Pods[0].Ready = false
+	state.Pods[1].Revision = "revision-2"
+	state.Pods[2].Revision = "revision-2"
+	state.Lifecycle = lifecycleForOrdinal(
+		0,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+		false,
+	)
+	state.Lifecycle.InPlaceRecovery = true
+
+	decision := EvaluateSHCRollout(state)
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionWait,
+		SHCRolloutReasonWaitingForRecovery,
+		0,
+	)
+
+	state.Lifecycle.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+	decision = EvaluateSHCRollout(state)
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionWait,
+		SHCRolloutReasonWaitingForKubernetes,
+		0,
+	)
+
+	state.Pods[0].Ready = true
+	decision = EvaluateSHCRollout(state)
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionPrepareTarget,
+		SHCRolloutReasonPrepareTarget,
+		2,
+	)
+}
+
 func TestSHCRolloutBlocksMoreThanOneUnavailablePod(t *testing.T) {
 	state := pendingSHCRolloutState()
 	state.Pods[2].Ready = false
