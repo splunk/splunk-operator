@@ -620,10 +620,12 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 // target, changing the StatefulSet template can make Kubernetes replace that
 // same ordinal again or create its replacement at a revision different from
 // the durable lifecycle authorization. Keep the current template until the
-// active operation recovers. Blocked or failed lifecycle work remains
-// fail-closed and continues to hold the template. The CR remains the source of
-// the queued desired template, so a later reconcile applies it behind the
-// fail-closed partition as the next rollout.
+// active operation recovers. A Splunk-side Completed stage does not release
+// the queued revision until Kubernetes has also observed the replacement Pod
+// at the authorized revision as Ready and serving. Blocked or failed lifecycle
+// work remains fail-closed and continues to hold the template. The CR remains
+// the source of the queued desired template, so a later reconcile applies it
+// behind the fail-closed partition as the next rollout.
 func holdSearchHeadStatefulSetTemplateForActiveReplacement(
 	ctx context.Context,
 	client splcommon.ControllerClient,
@@ -631,8 +633,11 @@ func holdSearchHeadStatefulSetTemplateForActiveReplacement(
 	desiredTemplate *corev1.PodTemplateSpec,
 ) error {
 	operation := cr.Status.LifecycleOperation
+	replacementCompleted := operation != nil &&
+		operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageCompleted
 	if desiredTemplate == nil ||
-		!lifecycleRecoveryActive(operation) ||
+		(!lifecycleRecoveryActive(operation) && !replacementCompleted) ||
 		operation.Intent !=
 			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
 		operation.ReplacementAuthorizedAt == nil ||
@@ -658,6 +663,28 @@ func holdSearchHeadStatefulSetTemplateForActiveReplacement(
 		*current.Spec.UpdateStrategy.RollingUpdate.Partition !=
 			*operation.TargetOrdinal {
 		return nil
+	}
+
+	if replacementCompleted && operation.TargetPod != "" {
+		target := &corev1.Pod{}
+		err = client.Get(ctx, types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      operation.TargetPod,
+		}, target)
+		if err == nil &&
+			target.DeletionTimestamp == nil &&
+			string(target.UID) != operation.TargetPodUID &&
+			target.GetLabels()["controller-revision-hash"] ==
+				operation.DesiredRevision &&
+			podConditionStatus(target, corev1.PodReady) ==
+				corev1.ConditionTrue &&
+			podConditionStatus(target, searchHeadServingCondition) ==
+				corev1.ConditionTrue {
+			return nil
+		}
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return err
+		}
 	}
 
 	*desiredTemplate = *current.Spec.Template.DeepCopy()

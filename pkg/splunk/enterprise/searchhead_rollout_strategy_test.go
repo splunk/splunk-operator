@@ -24,6 +24,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestGetSearchHeadStatefulSetRendersRollingUpdateStrategy(t *testing.T) {
@@ -413,11 +414,79 @@ func TestSearchHeadStatefulSetRollingUpdateRetainsAuthorizedTargetForNewTemplate
 		cr,
 		desiredTemplate,
 	); err != nil {
-		t.Fatalf("release completed authorized template: %v", err)
+		t.Fatalf("hold completed replacement before Kubernetes readiness: %v", err)
+	}
+	if desiredTemplate.Labels["revision-input"] != "" {
+		t.Fatalf(
+			"completed but unready replacement template = %#v, want current template retained",
+			desiredTemplate.Labels,
+		)
+	}
+
+	replacementPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Status.LifecycleOperation.TargetPod,
+			Namespace: cr.GetNamespace(),
+			UID:       types.UID("replacement-pod-uid"),
+			Labels: map[string]string{
+				"controller-revision-hash": "revision-2",
+			},
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{
+					Type:   corev1.PodReady,
+					Status: corev1.ConditionFalse,
+				},
+				{
+					Type:   searchHeadServingCondition,
+					Status: corev1.ConditionFalse,
+				},
+			},
+		},
+	}
+	if err := client.Create(context.Background(), replacementPod); err != nil {
+		t.Fatalf("create unready replacement Pod: %v", err)
+	}
+	desiredTemplate = current.Spec.Template.DeepCopy()
+	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
+	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+		context.Background(),
+		client,
+		cr,
+		desiredTemplate,
+	); err != nil {
+		t.Fatalf("hold completed but unready replacement template: %v", err)
+	}
+	if desiredTemplate.Labels["revision-input"] != "" {
+		t.Fatalf(
+			"unready replacement template = %#v, want current template retained",
+			desiredTemplate.Labels,
+		)
+	}
+
+	for index := range replacementPod.Status.Conditions {
+		replacementPod.Status.Conditions[index].Status = corev1.ConditionTrue
+	}
+	if err := client.Status().Update(
+		context.Background(),
+		replacementPod,
+	); err != nil {
+		t.Fatalf("mark replacement Pod ready and serving: %v", err)
+	}
+	desiredTemplate = current.Spec.Template.DeepCopy()
+	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
+	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+		context.Background(),
+		client,
+		cr,
+		desiredTemplate,
+	); err != nil {
+		t.Fatalf("release Kubernetes-ready replacement template: %v", err)
 	}
 	if desiredTemplate.Labels["revision-input"] != "changed" {
 		t.Fatalf(
-			"completed replacement template = %#v, want queued template released",
+			"ready replacement template = %#v, want queued template released",
 			desiredTemplate.Labels,
 		)
 	}
