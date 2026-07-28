@@ -1,0 +1,52 @@
+schemaVersion: shc-runtime-build/v1
+createdAt: "<RFC3339 timestamp>"
+
+sources:
+  splunkOperator:
+    repository: "<pushed repository URL>"
+    commit: "<full commit SHA>"
+  dockerSplunk:
+    repository: "<pushed repository URL>"
+    commit: "<full commit SHA>"
+  splunkAnsible:
+    repository: "<pushed repository URL>"
+    commit: "<full commit SHA selected through SPLUNK_ANSIBLE_REF>"
+
+splunk:
+  version: "<Splunk Enterprise version>"
+  build: "<Splunk Enterprise build identifier>"
+  artifactSha256: "<SHA-256 of the build artifact>"
+
+buildRequest:
+  operatingSystem: linux
+  architecture: amd64
+  target: splunk-redhat-8
+  imageName: "<registry>/<repository>:shc-lifecycle-<source-sha>"
+  buildArguments: {}
+  requiredScenarioIds:
+    - RUN-001
+    - RUN-002
+    - RUN-003
+    - RUN-004
+    - RUN-005
+    - RUN-006
+    - RUN-007
+    - RUN-008
+    - RUN-009
+    - STS-012
+    - OPS-005
+
+builderResult:
+  status: pending
+  builderIdentity: "<CI job URL or controlled Linux builder identifier>"
+  operatingSystem: "<distribution and version>"
+  architecture: "<reported architecture>"
+  containerEngine: "<name and version>"
+  startedAt: "<RFC3339 timestamp>"
+  completedAt: "<RFC3339 timestamp>"
+  resolvedSplunkAnsibleCommit: "<full commit SHA>"
+  imageDigest: "<immutable sha256 digest>"
+  buildLog: "<artifact path or durable URL>"
+  testResults: "<artifact path or durable URL>"
+  evidenceManifest: "<artifact path or durable URL>"
+  notes: ""

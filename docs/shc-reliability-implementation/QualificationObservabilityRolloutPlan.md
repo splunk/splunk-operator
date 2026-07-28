@@ -1,0 +1,721 @@
+# Prove Search Head Cluster Lifecycle Reliability Before Enabling RollingUpdate
+
+This ExecPlan is a living document. The sections `Progress`, `Surprises &
+Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to
+date as work proceeds.
+
+## Purpose / Big Picture
+
+This plan proves that the proposed Search Head lifecycle preserves useful
+service during planned Kubernetes replacement, safely handles the captain,
+resumes after controller interruption, and exposes where time or failure
+occurred. A reviewer can see it working by following one operation from
+detention through replacement and rejoin while independent probes continuously
+measure member traffic, captain availability, search completion, StatefulSet
+revision, and lifecycle evidence.
+
+The test program first validates the new lifecycle using the current
+`OnDelete` StatefulSet strategy. Only after that gate passes does it enable an
+Operator-managed `RollingUpdate` partition and repeat the same tests. This
+separates Splunk lifecycle correctness from the change in Kubernetes rollout
+ownership.
+
+## Progress
+
+- [x] (2026-07-24) Refreshed and inspected the GitLab Operator development
+  baseline at `39316c19fb990f1af84966d5269a8f4116550dbb`.
+- [x] (2026-07-24) Identified reusable Operator unit, envtest, Ginkgo,
+  KUTTL, search, scale, and upgrade test infrastructure.
+- [x] (2026-07-24) Identified existing Docker-Splunk distributed-image tests
+  and splunkd SHC unit-test targets.
+- [x] (2026-07-24) Defined branch ownership and dependency waves in
+  `ParallelWorkstreamPlan.md`.
+- [x] (2026-07-24) Defined stable scenarios and priorities in
+  `SHCTestScenarioMatrix.md`.
+- [x] (2026-07-25) Added branch-local unit contracts for ordinal-zero
+  preferred-captain behavior, bootstrap versus rejoin, every three-member
+  parallel startup ordering, persistent cold restart, and dynamic bundle
+  targeting when the seed is unavailable.
+- [x] (2026-07-28) Integrated and published the Splunk Ansible startup work,
+  selected its immutable ref from Docker-Splunk, and built the resulting
+  runtime image on the Linux vWorkstation.
+- [ ] Refresh all three repository baselines and record immutable commits.
+- [x] (2026-07-25) Audited current local heads and baseline ancestry. All three
+  worktrees are clean, but no fetched remote-tracking ref contains the current
+  heads; Linux-builder dispatch is therefore not authorized yet.
+- [ ] Approve lifecycle invariants, test reason codes, and evidence schema.
+- [ ] Implement branch-local test doubles and contract tests.
+- [x] (2026-07-28) Established a reproducible three-member EKS SHC integration
+  environment using pinned Operator, Docker-Splunk, Splunk Ansible, and Splunk
+  Enterprise inputs.
+- [ ] Capture current-behavior baselines before enabling spike behavior.
+- [ ] Pass the health, API, state-machine, and runtime branch gates.
+- [ ] Pass the complete integrated `OnDelete` lifecycle gate. One full
+  three-member happy-path rollout, including captain replacement and retained
+  identity, passed on 2026-07-28; failure injection, active-search policy,
+  repetition, and soak requirements remain.
+- [ ] Pass the complete opt-in partition-gated `RollingUpdate` gate. Safe
+  migration, one full `3 -> 2 -> 1 -> 0 -> 3` rollout, and controller restart
+  during `WaitingForTermination` passed on 2026-07-28; rollback and remaining
+  failure scenarios remain.
+- [ ] Complete disruption, version-skew, upgrade, and rollback qualification.
+- [ ] Complete cloud-provider qualification and release-readiness review.
+
+## Surprises & Discoveries
+
+- Observation: the Operator already has label-driven test entry points:
+  `make test-unit`, `make test-integration`, `make test-e2e-pr`, and
+  `make test-e2e-full`.
+  Evidence: the current `sok/develop` Makefile.
+  Consequence: add an SHC lifecycle label and suite rather than creating a
+  separate test runner.
+
+- Observation: existing in-cluster helpers can issue searches and inspect
+  search jobs, but the current ingest/search suite covers Standalone, not SHC.
+  Evidence: `test/testenv/search_utils.go` and
+  `test/ingest_search/ingest_search_test.go`.
+  Consequence: reuse the helpers and add SHC-specific availability and
+  long-running-search fixtures.
+
+- Observation: existing deployer verification in
+  `test/testenv/search_head_cluster_utils.go` addresses ordinal zero directly.
+  Consequence: the test harness itself must stop encoding the static-captain
+  assumption before it can verify dynamic healthy-member selection.
+
+- Observation: Docker-Splunk has a distributed three-Search-Head pytest, but
+  its current test assumes `sh1` is preferred captain and the checkout has
+  unrelated local modifications.
+  Consequence: use a clean worktree and add focused lifecycle tests; do not use
+  this dirty checkout as the spike baseline.
+
+- Observation: the local splunkd checkout is more than eleven thousand commits
+  behind its remote development branch.
+  Consequence: source references remain useful for orientation, but any
+  splunkd implementation or qualification baseline must be freshly fetched and
+  pinned by the Search Head team.
+
+- Observation: a simultaneous persistent restart can temporarily make both
+  local member and captain APIs inconclusive on every Pod. Because the
+  Docker-Splunk entrypoint uses `set -e`, a fatal Ansible classification would
+  exit every container and can create a restart loop.
+  Consequence: STS-012 must prove that this state runs no formation commands,
+  leaves splunkd alive, keeps readiness false until recovery, and is eventually
+  classified by the Operator if recovery does not complete.
+
+- Observation: there are two bundle paths to qualify. Operator App Framework
+  scheduling and image-owned deployer startup historically had independent
+  ordinal-zero coupling.
+  Consequence: OPS-005 does not pass until both paths succeed through a
+  non-zero healthy member with ordinal zero unavailable.
+
+- Observation: the compatibility variable named as a captain URL is also a
+  bootstrap seed. Its name cannot be treated as proof of runtime captaincy.
+  Consequence: tests must independently observe the elected captain from
+  Splunk and verify that Kubernetes SHCs do not prefer ordinal zero by default.
+
+- Observation: the current workstation is macOS, and the Docker-Splunk
+  Makefile does not provide a supported local build path for the target
+  enterprise Linux image.
+  Consequence: local success is limited to source preparation, exact-ref
+  verification, unit contracts, lint, syntax, and manifest generation. Image
+  build, container execution, and distributed-image tests require a separate
+  Linux builder.
+
+- Observation: clean local commits are insufficient for a remote Linux build.
+  The current Operator, Docker-Splunk, and Splunk Ansible heads have no
+  containing fetched remote-tracking refs.
+  Consequence: the pre-dispatch gate must verify each full SHA from the
+  approved remote, not merely from a local branch or worktree.
+
+- Observation: an `OnDelete` rollout can leave StatefulSet
+  `currentRevision` on the old ControllerRevision even when every Pod carries
+  the new revision.
+  Evidence: the integrated three-member campaign observed exactly that state.
+  Consequence: the migration assertion checks Pod revisions independently,
+  applies `RollingUpdate` with partition equal to replicas, and requires
+  current/update revision convergence without a Pod UID change.
+
+- Observation: the first stable SHC formation may be followed by a
+  Splunk-managed rolling restart.
+  Evidence: the deployer initiated this internal operation before the test
+  lifecycle campaign.
+  Consequence: the fixture is ready only after the captain reports service
+  ready, no rolling restart, no maintenance, and all expected members Up.
+
+- Observation: `member/info` can return HTTP 503 during a legitimate rejoin
+  window before captain communication and minimum peer state are restored.
+  Consequence: tests must prove readiness remains false and partition does not
+  advance until the bounded rejoin observation succeeds; the transient 503 is
+  neither ignored nor treated as an immediate terminal error.
+
+- Observation: broad Pod-template inputs such as `extraEnv` also revise the
+  deployer.
+  Consequence: evidence collection watches both StatefulSets so an SHC result
+  does not hide an unintended deployer replacement or overlapping operation.
+
+## Decision Log
+
+- Decision: a scenario passes only when service, Splunk cluster, Kubernetes
+  rollout, and diagnostic invariants all pass.
+  Rationale: Pod phase alone cannot distinguish a safe rejoin from a running
+  but detained, unregistered, stale, or wrong-revision member.
+  Date/Author: 2026-07-24, planning team.
+
+- Decision: validate the new orchestrator under `OnDelete` before testing
+  `RollingUpdate`.
+  Rationale: changing lifecycle semantics and rollout ownership in one step
+  makes failures difficult to attribute and rollback.
+  Date/Author: 2026-07-24, planning team.
+
+- Decision: real-time and historical search drain are separate assertions.
+  Rationale: they have different lifetime semantics and must not be hidden
+  behind one combined zero count.
+  Date/Author: 2026-07-24, planning team.
+
+- Decision: test forced deletion and node loss as recovery, not graceful
+  shutdown.
+  Rationale: Kubernetes does not guarantee `preStop` on those paths.
+  Date/Author: 2026-07-24, planning team.
+
+- Decision: the spike uses a three-member SHC as the minimum HA topology and
+  adds a five-member run for concurrency and scale confidence.
+  Rationale: three members exercise majority and captain movement economically;
+  five members catch assumptions tied to a fixed three-ordinal layout.
+  Date/Author: 2026-07-24, planning team.
+
+- Decision: test `Parallel` first formation and simultaneous persistent cold
+  restart as separate scenarios.
+  Rationale: first formation requires exactly one bootstrap action, while cold
+  restart requires zero cluster-forming actions and must leave existing
+  splunkd processes alive.
+  Date/Author: 2026-07-25, planning team.
+
+- Decision: final manual qualification uses one immutable Operator feature
+  branch and one immutable Docker-Splunk feature branch whose build resolves
+  the integrated Splunk Ansible commit through an exact source ref.
+  Rationale: a test result is not reproducible if its runtime behavior depends
+  on unrecorded child branches or a dirty nested checkout.
+  Date/Author: 2026-07-25, planning team.
+
+- Decision: build and qualify the Docker-Splunk runtime image on a supported
+  Linux builder, not on the macOS source workstation.
+  Rationale: the existing Makefile target and container runtime assumptions
+  are Linux-specific. Treating a Mac-side source check as an image result would
+  create false evidence.
+  Date/Author: 2026-07-25, planning team.
+
+- Decision: store each concrete freeze manifest with the test artifacts after
+  the source commits are final, rather than committing it into a source branch.
+  Rationale: committing a manifest that names its own repository HEAD
+  immediately invalidates that recorded SHA.
+  Date/Author: 2026-07-25, planning team.
+
+- Decision: the first strategy migration sets `RollingUpdate.partition` equal
+  to replicas and makes no simultaneous Pod-template change.
+  Rationale: migration must prove that Kubernetes rollout ownership can change
+  without authorizing replacement.
+  Date/Author: 2026-07-28, qualification team.
+
+- Decision: a controller-restart test passes only if operation ID, target
+  ordinal, target Pod UID, desired revision, and durable stage are identical
+  before and after the restart.
+  Rationale: completion alone cannot rule out duplicate lifecycle intent.
+  Date/Author: 2026-07-28, qualification team.
+
+- Decision: cluster identity and member identity are separate assertions.
+  Rationale: the shared `[shclustering] id` must remain stable across the
+  campaign, and each retained ordinal must also return with its original
+  `instance.cfg` GUID.
+  Date/Author: 2026-07-28, qualification team.
+
+## Outcomes & Retrospective
+
+The first integrated positive-path campaign is complete on EKS. A pinned Linux
+runtime image formed a three-member SHC, completed an Operator-managed
+`OnDelete` rollout, migrated safely to partition-gated `RollingUpdate`,
+completed the reverse-ordinal rollout, transferred captaincy before captain
+replacement, preserved all retained member identities, and resumed the same
+durable operation after the Operator Pod was deleted.
+
+The complete `OnDelete` and `RollingUpdate` gates remain open because the
+required repetitions, soak, active historical and real-time searches, timeout
+policies, failed transfer, forced disruption, scheduling/storage/network
+faults, version skew, and rollback have not passed. The campaign establishes
+that the integrated components can execute the intended happy path; it is not
+evidence for default enablement.
+
+## Context and Orientation
+
+The Splunk Operator creates a Kubernetes StatefulSet for Search Heads. A
+StatefulSet gives each Pod a stable ordinal and persistent-volume identity.
+The current Operator uses `OnDelete`, meaning Kubernetes records a new
+StatefulSet revision but waits for the Operator to delete each old Pod. The
+target design eventually uses `RollingUpdate` with a `partition`, an ordinal
+boundary controlled by the Operator. Lowering the partition authorizes
+Kubernetes to replace the next Pod; therefore the Operator must not lower it
+until Splunk-specific safety work is complete.
+
+A captain is the Search Head member currently coordinating cluster work.
+Captaincy is dynamic and is not permanently assigned to ordinal zero.
+Detention prevents a member from accepting new search work. Rejoin means a
+restarted member with retained storage returns using its existing identity;
+ordinary rejoin is not new-member bootstrap and must not remove and recreate
+consensus membership.
+
+Relevant Operator paths at the observed baseline are:
+
+- `api/enterprise/v4/common_types.go` and
+  `api/enterprise/v4/searchheadcluster_types.go`;
+- `pkg/splunk/enterprise/configuration.go`;
+- `pkg/splunk/enterprise/searchheadclusterpodmanager.go`;
+- `pkg/splunk/splkcontroller/statefulset.go`;
+- `pkg/splunk/client/splunk/splunkclient.go`;
+- `pkg/splunk/client/metrics/metrics.go`;
+- `tools/k8_probes/`;
+- `internal/controller/enterprise/searchheadcluster_controller_test.go`;
+- `pkg/splunk/enterprise/searchheadcluster_test.go`;
+- `pkg/splunk/splkcontroller/statefulset_test.go`;
+- `test/testenv/search_utils.go`;
+- `test/testenv/search_head_cluster_utils.go`;
+- `test/smoke/`; and
+- `kuttl/tests/upgrade/c3-with-operator/`.
+
+The current Docker-Splunk checkout contains
+`splunk/common-files/entrypoint.sh` and
+`tests/test_distributed_splunk_image.py`. The current splunkd checkout contains
+the SHC unit-test definitions in `src/shpooling/tests/CMakeLists.txt`, including
+manual detention, captain, member, Raft configuration, and searchable rolling
+restart tests.
+
+## Test Architecture
+
+### Layer 0: static and generated artifacts
+
+Run on every implementation branch. It proves formatting, generated CRDs,
+deep-copy code, Helm rendering, validation schemas, shell syntax, and metric
+label policy. It must detect generated-file drift and unintentional API
+changes.
+
+### Layer 1: isolated unit and contract tests
+
+Run on every implementation branch. The Operator uses fake Kubernetes clients,
+fake clocks, and scripted Splunk API responses. The runtime repository invokes
+lifecycle scripts with a fake `splunk` executable so signal, lock, timeout, and
+state-file behavior can be tested without a full image. splunkd changes, if
+required, extend the existing SHC C++ suites.
+
+Every state-machine transition gets success, transient failure, terminal
+failure, timeout, retry, stale observation, and Operator-restart cases.
+
+### Layer 2: controller integration with envtest
+
+Run on every Operator merge request into the integration branch. Envtest starts
+a real Kubernetes API server and etcd without kubelet Pods. It proves CR
+validation, reconciliation, StatefulSet rendering, durable status, conditions,
+partition changes, and resume after a new reconciler instance.
+
+It cannot prove kubelet probes, container signals, storage attachment, Service
+traffic, or actual Splunk behavior.
+
+### Layer 3: runtime image contract
+
+Run when the runtime branch changes on a supported Linux builder with a Linux
+container engine and access to the pinned Splunk artifact. Build the selected
+image with a pinned Splunk Ansible commit and Splunk build. Test direct TERM,
+hook-then-TERM,
+concurrent triggers, stopping-state transitions, failure, timeout, and
+persistent restart. Then run a three-Search-Head distributed image scenario
+that covers all fresh-start orderings, interrupted formation, single retained
+member restart, simultaneous retained-member cold restart, ordinal-zero
+unavailability, and dynamic deployer targeting. A persistent member with
+inconclusive runtime APIs must leave splunkd running and execute no
+cluster-forming command.
+
+### Layer 4: Kubernetes integration with a real SHC
+
+Run on the Operator integration branch. Deploy one Cluster Manager, an Indexer
+Cluster sufficient to execute searches, one deployer, and a three-member SHC
+with persistent volumes. Use the feature gate to run the same lifecycle suite
+first under `OnDelete`, then under partition-gated `RollingUpdate`.
+
+Continuous observers run independently from the controller:
+
+- local readiness for every member;
+- Service-selected traffic;
+- captain identity and service readiness;
+- member identity, registration, status, and detention;
+- historical and real-time active search counts;
+- search job completion and results;
+- StatefulSet current/update revisions and partition;
+- Pod UID, revision, readiness, node, and restart count;
+- PVC identity and attachment;
+- CR operation stage and conditions;
+- Kubernetes Events;
+- Operator/runtime logs; and
+- Prometheus metrics.
+
+### Layer 5: disruption and cloud qualification
+
+Run after Layer 4 passes. Exercise Eviction, direct and forced deletion, node
+loss, network partitions, scheduler pressure, image-pull failure, volume delay,
+Operator loss, service mesh, TLS, and provider-specific behavior. Execute the
+P2 matrix on supported EKS, AKS, GKE, OpenShift, and the minimum and latest
+qualified Kubernetes versions.
+
+## Plan of Work
+
+First, create clean worktrees and record immutable baseline commits. The
+Operator branch follows `ParallelWorkstreamPlan.md`. Do not reuse the current
+dirty Operator or Docker-Splunk worktree for builds.
+
+Second, add a new Ginkgo suite at `test/shc_lifecycle/`. Label the branch-gate
+subset `tier:e2e-pr && feature:shc-lifecycle` and the full suite
+`tier:e2e-full && feature:shc-lifecycle`. Extend `test/testenv/` with helpers
+that discover a reachable member dynamically, create historical and real-time
+search jobs, inspect captain/member endpoints, watch EndpointSlices, record
+StatefulSet revisions/partition, and collect sanitized lifecycle evidence.
+
+Third, add fake-clock and fake-Splunk-response tests around the new SHC workflow
+package. Avoid wall-clock sleeps in unit and envtest tests. Timeouts advance the
+fake clock and assert the durable stage/reason result.
+
+Fourth, add runtime script tests. Extract shutdown behavior from the entrypoint
+into a focused script with an explicit interface. Test it with a temporary
+state directory and fake Splunk command on the source workstation before
+building an image. Transfer only pushed commits and a manifest of immutable
+inputs to the Linux builder. The distributed-image test there proves that a
+retained Search Head restart does not repeat initial cluster formation. It must
+also stop or delay the bootstrap seed to vary first-start ordering, restart all
+retained members together, inspect the Ansible task/action evidence, and prove
+splunkd stays alive when captain and member APIs are temporarily inconclusive.
+
+Fifth, capture a current-behavior baseline with the feature disabled. Record
+current readiness during detention, captain replacement behavior, 30-second
+default termination behavior where applicable, shutdown duration, and current
+diagnostic gaps. Baseline failures are expected evidence, not release success.
+
+Sixth, qualify the feature-gated lifecycle under `OnDelete`. Execute all P0
+API, health, lifecycle, runtime, rejoin, StatefulSet baseline, and observability
+scenarios. Repeat each destructive scenario at least three times and run one
+twenty-cycle soak to reveal leaked detention, duplicate operations, or
+increasing duration.
+
+Seventh, enable partition-gated `RollingUpdate`. Begin with an existing
+`OnDelete` StatefulSet whose template revision is stable. Migrate strategy with
+a partition that prevents immediate replacement. Trigger an image-only revision
+and verify reverse-ordinal progression. Inject an Operator restart and a rejoin
+failure before partition advancement. Rehearse rollback before continuing.
+
+Eighth, run P1 disruptions, upgrade/version skew, scale, App Framework, and
+storage scenarios. Then run P2 provider qualification and five-member soak.
+
+Ninth, freeze integration inputs. Merge qualified Operator child work into one
+Operator feature branch. Merge runtime shutdown plus the qualified Splunk
+Ansible startup and deployer work into one Docker-Splunk feature branch, with
+the Splunk Ansible integration commit pushed and selected through an immutable
+Docker-Splunk source ref. On the Linux builder, build immutable images and
+record all source commits, builder identity, and image digests before the
+manual campaign.
+
+Finally, summarize measured stage-duration distributions and failure
+classifications. Use evidence—not the original proposed numbers—to recommend
+probe thresholds, drain timeout, captain-transfer timeout, rejoin timeout,
+termination grace, alert tolerance, and whether opt-in/default enablement is
+safe.
+
+## Concrete Steps
+
+Run Operator commands from a clean worktree rooted at the integration or child
+branch:
+
+    git fetch sok develop
+    git rev-parse sok/develop
+    make manifests
+    make generate
+    make fmt
+    make vet
+    make test-unit
+    make test-integration
+    make helm-test
+    make build
+
+Expected result: commands exit zero, generated files are clean, and JUnit plus
+coverage artifacts identify the exact commit.
+
+Run targeted Operator packages while developing:
+
+    go test ./pkg/splunk/enterprise/... -count=1
+    go test ./pkg/splunk/splkcontroller/... -count=1
+    go test ./pkg/splunk/client/splunk/... -count=1
+    go test ./pkg/splunk/workflow/shc/... -count=1
+
+The last command becomes valid when the workflow implementation and tests are
+added. Expect each command to exit zero without a live cluster.
+
+After deploying the pinned Operator and runtime images to the dedicated test
+cluster, run:
+
+    TEST_LABELS='tier:e2e-pr && feature:shc-lifecycle' test/run-tests.sh
+
+For the complete suite:
+
+    TEST_LABELS='tier:e2e-full && feature:shc-lifecycle' test/run-tests.sh
+
+The test runner must print the Operator digest, runtime digest, Splunk build,
+Kubernetes version, feature gates, namespace, scenario IDs, and artifact
+directory before changing the cluster.
+
+Do not run the Docker-Splunk image targets on the macOS source workstation.
+First create a handoff manifest containing the pushed Docker-Splunk commit,
+full Splunk Ansible commit, Splunk version/build, requested Linux architecture,
+image target, build arguments, and expected image name. Copy
+`RuntimeLinuxBuildHandoffManifest.example.yaml` into the run artifact directory
+and replace every placeholder before starting the Linux job.
+
+On a clean supported Linux builder, fetch those exact commits and verify the
+manifest before running Docker-Splunk. The builder must have a Linux container
+engine, access to the pinned Splunk artifact and required package repositories,
+and enough capacity for the distributed test. Exact platform and image target
+are pinned in the run manifest. Use the Red Hat 8 target for the initial spike
+because it matches the current enterprise-image family, then add other
+supported image families during compatibility qualification:
+
+    make splunk-redhat-8 IMAGE_VERSION=shc-lifecycle-<source-sha>
+    make test_setup
+    pytest -vv tests/test_shc_lifecycle.py
+    pytest -vv \
+      tests/test_distributed_splunk_image.py::TestDockerSplunk::test_compose_1idx3sh1cm1dep \
+      --platform=redhat-8
+
+The new focused test must run before the existing full distributed test.
+
+Before the Docker-Splunk image build, run from the clean integrated
+Splunk Ansible worktree:
+
+    python3 -m unittest tests.small.test_shc_lifecycle -v
+    python3 -m unittest tests.small.test_shc_ready -v
+    ansible-playbook --syntax-check site.yml
+    python3.11 -m venv <lint-venv>
+    <lint-venv>/bin/pip install -r tests/requirements-shc-lint.txt
+    ansible-lint -c tests/ansible-lint.cfg \
+      roles/splunk_search_head/tasks \
+      roles/splunk_deployer/tasks
+
+Run the lint command through `<lint-venv>/bin/ansible-lint`. The isolated
+requirements reproduce the repository's legacy numeric rules; current
+ansible-lint modernization is not part of the SHC qualification gate.
+
+The Docker-Splunk build manifest records the exact resolved Splunk Ansible
+commit. Source preparation fails if the ignored nested checkout contains local
+changes or the requested ref cannot be resolved.
+
+If splunkd code changes, start from a current build and run the affected SHC
+suites using the repository-supported runner:
+
+    python3 cmake/build_and_ctest.py -v -O \
+      '^(shc_test_manual_detention|shc_captain_test|SHPCaptainTest|SHPMemberTest|shc_test_searchable_rolling_restart)$'
+
+The Search Head team must confirm and record any additional suite required for
+the changed endpoint or consensus behavior.
+
+## Evidence and Artifact Layout
+
+Each test run writes:
+
+    artifacts/shc-lifecycle/<run-id>/
+      manifest.json
+      scenario-results.json
+      timeline.jsonl
+      kubernetes/
+      operator/
+      runtime/
+      splunk/
+      metrics/
+      searches/
+      redaction-report.json
+
+`manifest.json` contains immutable source commits, image digests, Splunk build,
+the resolved Splunk Ansible source commit, Kubernetes version, cluster
+provider, storage class, network mode, feature gates, test command, start/end
+time, scenario selection, builder operating system and architecture, container
+engine/version, and build-log location.
+
+`timeline.jsonl` records normalized observations with monotonic and wall-clock
+timestamps. It must be possible to calculate time spent in detention, drain,
+captain transfer, termination, scheduling, storage, container startup, member
+rejoin, and validation.
+
+For startup and rejoin scenarios, the runtime evidence records a sanitized
+classification and selected action for every member: fresh bootstrap seed,
+fresh joiner, established-member rejoin, interrupted-formation resume, or
+ambiguous-persistent await-rejoin. It also records whether any
+cluster-forming command was attempted and whether splunkd remained responsive.
+This evidence is required for STS-012 and must not include credentials, raw
+authentication material, or unredacted management API responses.
+
+Artifacts contain metadata and sanitized summaries, never Secret data,
+authorization headers, private keys, passwords, session tokens, or customer
+search text. The redaction test deliberately injects recognizable canary
+secrets and fails if they appear.
+
+## Validation and Acceptance
+
+The branch-local gate passes when Layer 0 through Layer 2 tests pass and the
+branch's owned P0 scenarios have deterministic automated coverage.
+
+The runtime gate passes when RUN-001 through RUN-009 pass, STS-012 proves
+fresh and persistent parallel startup, OPS-005 passes through the image-owned
+deployer path with ordinal zero unavailable, and a retained three-member
+restart uses rejoin or await-rejoin behavior without repeating formation.
+Mac-side source checks cannot satisfy this gate; its evidence must identify the
+Linux builder and immutable runtime image digest.
+
+The integrated `OnDelete` gate passes when all P0 scenarios except
+RollingUpdate-specific STS-005 through STS-010 pass three consecutive times,
+the twenty-cycle soak has no concurrent planned disruption or stuck detention,
+and every failure can be attributed to a stage.
+
+The `RollingUpdate` gate passes when STS-005 through STS-010 and the remaining
+P0 scenarios pass three consecutive times, partition history proves one
+authorized ordinal at a time, and rollback is successful.
+
+Production opt-in requires all P0 and P1 scenarios for supported version
+combinations. Default enablement additionally requires applicable P2 provider
+qualification, measured alert thresholds, published runbooks, and an approved
+list of known exclusions.
+
+Continuous ad-hoc search success, scheduled-search behavior, and searches
+already running on the target are reported separately. A good aggregate
+availability result cannot hide loss or duplication in one of those classes.
+
+No gate may waive a failed captain-transfer, persistent-identity,
+multiple-planned-unavailable, uncontrolled-partition, credential-leak, or
+ordinary-restart-membership-removal assertion.
+
+## Idempotence and Recovery
+
+Tests create a unique namespace and run ID. Re-running a scenario must either
+reuse its healthy fixture intentionally or create a new namespace. Fault
+injectors label every resource they change and record the original value before
+mutation.
+
+After each scenario, restore network policy, scheduling constraints, image,
+feature gates, replica count, StatefulSet strategy/partition, and any paused
+controller. Confirm all members are `Up`, detention is released, captain is
+ready, and no lifecycle operation remains active.
+
+If cleanup cannot prove cluster health, preserve the namespace and artifacts,
+mark the environment quarantined, and do not run the next destructive
+scenario. Never recover a test by deleting all Search Head Pods or removing
+consensus membership.
+
+Cloud resources are deleted only after artifacts are uploaded and the
+environment manifest confirms the exact cluster target.
+
+## Artifacts and Notes
+
+Record short evidence here as gates run. Include scenario IDs, run IDs, image
+digests, and links or paths to sanitized artifacts. Do not paste raw credentials
+or entire support bundles.
+
+2026-07-28 integrated EKS campaign:
+
+- Operator commit:
+  `22ab2ca0c50de8b0d727a301c3db0d39ab5b61bc`;
+- Docker-Splunk commit:
+  `6376b01116da5bb68ac1e4534cc60ea422bf94c7`;
+- Splunk Ansible commit:
+  `9954434703c776665713e9ed7d1a3d1d5dd1c77d`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-22ab2ca0c`;
+- runtime image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc-prestart-6376b01-ansible-9954434-splunk-10.6.0.0-d9be152689b7`;
+- runtime image digest:
+  `sha256:f2c8bc7aefd5d060ec396f2cbdd49d28dcdf04ce3d91ebeffc42caf069bbf955`;
+- feature gates:
+  `SplunkPodLifecycle=true,SearchHeadClusterLifecycle=true`;
+- `OnDelete` revision transition:
+  `splunk-shc-lifecycle-search-head-69b76b7f7` to
+  `splunk-shc-lifecycle-search-head-d8dfd64bb`;
+- `RollingUpdate` happy-path revision:
+  `splunk-shc-lifecycle-search-head-5455bd75c8`, with partition history
+  `3 -> 2 -> 1 -> 0 -> 3`;
+- controller-restart revision:
+  `splunk-shc-lifecycle-search-head-75456fb44f`;
+- interrupted ordinal-two operation:
+  `PodUpdate:splunk-shc-lifecycle-search-head-2:splunk-shc-lifecycle-search-head-75456fb44f`;
+- Operator Pod UID changed from
+  `dbf66ce1-b9b8-4138-8ef0-bc9c6de36bd7` to
+  `36882c35-9993-4ba0-a872-fb227afe5b40`; the operation ID, ordinal, target
+  Pod UID, desired revision, and `WaitingForTermination` stage were preserved;
+- shared SHC ID:
+  `0E720A3E-610C-4FFE-8765-3188DA79045E`;
+- retained member GUIDs for ordinals zero through two:
+  `74FEAA89-32D8-4A7E-B29B-15355A4A5D82`,
+  `CECD7C09-03D7-42B2-A88F-BB10142F783B`, and
+  `DFA6576A-540E-43E0-BCFB-E69157648CA9`;
+- final state: all three members Up, dynamic captain on ordinal one, service
+  ready, no cluster rolling restart, no KV Store maintenance, StatefulSet
+  current/update revisions equal, partition three, three ready/updated
+  replicas, and zero Pod restarts; and
+- final runtime log checks found zero repeated SHC initialization tasks, zero
+  restart-handler executions, and zero fatal Ansible results on every Search
+  Head. The test namespace and its PVCs were deleted after collection.
+
+## Interfaces and Dependencies
+
+The test harness requires stable adapters for:
+
+- local member readiness;
+- captain and member summaries;
+- search creation, status, and results;
+- detention and active-search counts;
+- captain transfer invocation and observation;
+- persistent member identity;
+- lifecycle operation/status and conditions;
+- StatefulSet revisions and partition;
+- Pod/PVC/EndpointSlice observations;
+- metrics scrape; and
+- sanitized evidence collection.
+
+The Operator suite uses the existing Ginkgo/Gomega test framework and
+`test/run-tests.sh`. Controller integration uses controller-runtime envtest.
+Runtime tests use the repository's pytest framework. splunkd tests use its
+CMake/CTest runner. Do not introduce a fourth general-purpose test framework
+for the spike.
+
+## Revision Note
+
+2026-07-24: Replaced the initial outline with a self-contained testing ExecPlan
+after reviewing current Operator, Docker-Splunk, and splunkd test
+infrastructure. Added layered gates, concrete commands, evidence schema,
+acceptance rules, recovery behavior, and explicit `OnDelete`-before-
+`RollingUpdate` sequencing.
+
+2026-07-25: Added the missing qualification for static ordinal-zero
+interpretation, deterministic `Parallel` formation, simultaneous persistent
+cold restart, fail-closed leave-running behavior, both bundle-target paths,
+internal management transport/proxy behavior, immutable Splunk Ansible source
+selection, and the final two-feature-branch manual campaign.
+
+2026-07-25: Corrected the runtime-source model after verifying that
+Docker-Splunk clones Splunk Ansible into an ignored build-context directory
+rather than using a Git submodule. Qualification now requires an immutable
+source ref, detached checkout, dirty-tree rejection, and recorded resolved SHA.
+
+2026-07-25: Corrected the execution environment after confirming that the
+current macOS workstation and Docker-Splunk Makefile do not provide the
+supported enterprise-image build path. Local work now ends at immutable source
+and manifest validation; image build and runtime qualification explicitly run
+on a separate Linux builder and must record its provenance.
+
+2026-07-25: Added the pre-dispatch freeze audit and remote-reachability gate.
+The current local heads are clean but not represented by fetched
+remote-tracking refs, so the Linux build remains blocked until publication and
+full-SHA verification.
+
+2026-07-28: Recorded the pinned Linux runtime build and first integrated EKS
+campaign. Safe `OnDelete`, migration, partition-gated `RollingUpdate`,
+captain-transfer, persistent-identity, and controller-restart paths passed.
+The document keeps the full gates open until failure injection, repetition,
+soak, version-skew, rollback, and operational-readiness work completes.
