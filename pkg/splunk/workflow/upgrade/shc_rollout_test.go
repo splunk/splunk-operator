@@ -118,6 +118,31 @@ func TestSHCRolloutBlocksOutOfOrderLowerOrdinalRevision(t *testing.T) {
 	assertSHCRolloutDecision(t, decision, SHCRolloutActionBlock, SHCRolloutReasonOutOfOrderRevision, 0)
 }
 
+func TestSHCRolloutContinuesRollbackWhenUntouchedLowerOrdinalMatches(t *testing.T) {
+	state := pendingSHCRolloutState()
+	state.Partition = 2
+	state.CurrentRevision = "revision-1"
+	state.UpdateRevision = "revision-1"
+	state.Pods[0].Revision = "revision-1"
+	state.Pods[1].Revision = "revision-2"
+	state.Pods[2].Revision = "revision-1"
+	state.Lifecycle = lifecycleForOrdinal(
+		2,
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		true,
+	)
+
+	decision := EvaluateSHCRollout(state)
+
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionPrepareTarget,
+		SHCRolloutReasonPrepareTarget,
+		1,
+	)
+}
+
 func TestSHCRolloutBlocksMoreThanOneUnavailablePod(t *testing.T) {
 	state := pendingSHCRolloutState()
 	state.Pods[2].Ready = false

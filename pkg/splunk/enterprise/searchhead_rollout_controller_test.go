@@ -3363,6 +3363,56 @@ func TestRollingUpdateControllerRollbackCompletionResetsPartition(t *testing.T) 
 	assertNoRollingUpdatePodDelete(t, client)
 }
 
+func TestRollingUpdateControllerContinuesRollbackOfSupersededOrdinal(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-1",
+		[]string{"revision-1", "revision-2", "revision-1"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:             "rollback-2",
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:         "revision-1",
+		TargetPod:               statefulSet.GetName() + "-2",
+		TargetOrdinal:           &target,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		ReplacementAuthorizedAt: &authorizedAt,
+	}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("continue rollback: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("rollback phase = %q, want %q", phase, enterpriseApi.PhaseUpdating)
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != 1 ||
+		operation.DesiredRevision != "revision-1" ||
+		operation.ReplacementAuthorizedAt != nil {
+		t.Fatalf(
+			"continued rollback operation = %#v, want unapproved ordinal 1",
+			operation,
+		)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("continued rollback changed partition: %v", client.Calls["Update"])
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 2)
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
 func TestRollingUpdateControllerHoldsPartitionDuringOnDeleteRollback(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(

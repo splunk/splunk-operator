@@ -230,8 +230,17 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 				)
 			}
 		}
+		// When a Pod-template change is withdrawn, Kubernetes can reuse the
+		// original ControllerRevision. CurrentRevision and UpdateRevision then
+		// become equal before every superseded Pod has rolled back. Untouched
+		// lower ordinals already matching that revision are correct, not
+		// out-of-order; the durable partition/lifecycle record still controls
+		// which mismatching ordinal may be prepared next.
+		restoringExistingRevision :=
+			state.CurrentRevision == state.UpdateRevision
 		for ordinal := int32(0); ordinal < activeOrdinal; ordinal++ {
-			if pods[ordinal].Revision == state.UpdateRevision {
+			if !restoringExistingRevision &&
+				pods[ordinal].Revision == state.UpdateRevision {
 				return blockSHCRollout(
 					SHCRolloutReasonOutOfOrderRevision,
 					fmt.Sprintf("lower ordinal %d changed before partition authorization", ordinal),
