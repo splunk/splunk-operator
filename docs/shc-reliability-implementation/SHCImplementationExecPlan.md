@@ -72,11 +72,38 @@ but it defines runtime contracts that can survive that transition.
   `RollbackPending`, restored `OnDelete` only after ordinal two completed, and
   then completed ordinals one and zero sequentially. Captaincy transferred
   from ordinal zero to ordinal one before the final replacement.
+- [x] (2026-07-28) Corrected scale-up and scale-down phase ownership, durable
+  stable-replica tracking, additive-member join validation, peer-list revision
+  coordination, and resumption of an Operator-owned scale-down after a
+  controller image change.
+- [x] (2026-07-28) Added fail-closed cancellation of a scale-down whose desired
+  replica count is restored before membership removal. The cancellation
+  persists recovery before releasing detention, verifies that the original
+  Pod and UID still exist, and waits for both member and captain views to
+  report the member `Up`.
+- [x] (2026-07-28) Corrected repeated scale-down after cancellation so a
+  completed historical record cannot suppress a later operation against the
+  same ordinal. New lifecycle operations now have generation-scoped
+  identities.
+- [x] (2026-07-28) Corrected lifecycle observation and support signals. An
+  intentionally removed scale-down target no longer produces an error, an
+  active lower-ordinal replacement no longer drops healthy higher ordinals
+  from SHC status, Pod updates no longer look like scale-up, and scale Events
+  follow changes in desired replicas.
+- [x] (2026-07-28) Passed final EKS scale cycles with the pinned final Operator
+  image: `3 -> 4` and `4 -> 3`, including peer-list revision rollouts, dynamic
+  captain transfer, one-member unavailability, persistent-volume policy, and
+  exactly one final scale-completion Event per desired-count change.
+- [x] (2026-07-28) Passed a 300-second post-scale stability gate over 17
+  consecutive samples. Kubernetes and Splunk continuously agreed on three
+  ready/serving/updated members, one ready captain, no rolling restart, no KV
+  Store maintenance, no pending configuration replication, and zero container
+  restarts.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
-  Docker-Splunk, and Splunk Ansible worktrees are clean and descend from their
-  recorded baselines. No fetched remote-tracking ref contains any current
-  integration head, so the Linux handoff remains blocked on remote publication
-  and reachability verification.
+  Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
+  their recorded baselines. The publication gap found by this audit was
+  cleared on 2026-07-28 by publishing immutable source commits and pinned
+  Linux images used by the EKS campaign.
 - [ ] Approve the capability/dependency map and assign technical owners.
 - [ ] Resolve the blocking API and lifecycle policy decisions.
 - [ ] Complete and approve the Operator lifecycle technical design.
@@ -87,8 +114,6 @@ but it defines runtime contracts that can survive that transition.
 - [ ] Implement and qualify Milestone 2.
 - [ ] Implement and qualify Milestone 3.
 - [ ] Implement and qualify Milestone 4.
-- [ ] Correct lifecycle-aware member-observation log severity, Pod-update phase
-  reporting, and scale-event accuracy exposed by the rollback campaign.
 - [ ] Complete release readiness, rollback rehearsal, and support enablement.
 
 ## Surprises & Discoveries
@@ -250,14 +275,47 @@ but it defines runtime contracts that can survive that transition.
   check. `OnDelete` qualification uses every Pod's
   `controller-revision-hash`, `updatedReplicas`, readiness, and SHC recovery.
 
-- Observation: the successful replacement campaign generated repeated
+- Observation: the earlier successful replacement campaign generated repeated
   error-level member-info connection failures for the intentionally unavailable
   target and emitted a false `ScaledUp 2 to 3` event when the last replacement
   returned.
-  Consequence: add a separate observability work item to classify expected
-  target unavailability by lifecycle stage, retain real failures as errors,
-  keep Pod-update phases distinct from scale phases, and emit scale events only
-  for a change in desired replica count.
+  Consequence: the follow-up classified expected target unavailability by
+  lifecycle stage, retained real failures as errors, kept Pod-update phases
+  distinct from scale phases, and tied scale events to changes in desired
+  replica count.
+
+- Observation: restoring the desired replica count while a scale-down was
+  blocked before membership removal left the member in manual detention unless
+  cancellation itself became a durable recovery workflow.
+  Evidence: the EKS operation remained blocked after ordinal three had been
+  withdrawn; restoring four replicas did not by itself return that member to
+  service.
+  Consequence: cancellation is allowed only while the same Pod UID still
+  exists and membership removal has not been requested. Detention release and
+  member recovery are observed and persisted before completion.
+
+- Observation: after cancellation completed, a later `4 -> 3` request targeted
+  the same Pod name and matched the historical completed operation identity.
+  Evidence: the CR reported `ScalingDown` while the old operation remained
+  `Completed` and no detention or membership action began.
+  Consequence: a completed scale-down is historical, not reusable active
+  state. A later request starts at `ValidatingCluster` with a
+  generation-scoped operation ID and no retained side-effect timestamps.
+
+- Observation: `StatefulSet.status.replicas` is a count, not the greatest
+  existing ordinal. During replacement of ordinal one, the count temporarily
+  fell even though ordinal two remained healthy.
+  Evidence: truncating SHC status to that count temporarily removed ordinal
+  two and emitted a false `OutOfOrderRevision` warning.
+  Consequence: while a durable Pod update is active, observe every desired
+  ordinal, retain higher-member status, and classify only the lifecycle target
+  as expected unavailable.
+
+- Observation: Kubernetes aggregates repeated Events with the same object,
+  reason, and message by increasing `count`.
+  Consequence: qualification correlates Event timestamps with the run window
+  and does not interpret an aggregated count across separate scale campaigns
+  as duplicate partition advancement within one campaign.
 
 ## Decision Log
 
@@ -367,25 +425,50 @@ but it defines runtime contracts that can survive that transition.
   advancement and returns subsequent replacements to controller ownership.
   Date: 2026-07-28.
 
+- Decision: cancel a requested scale-down only before membership removal and
+  only when the original target Pod identity is intact.
+  Rationale: releasing detention after consensus membership changed, or after
+  Kubernetes replaced the target, would conflate recovery with a new member
+  and could restore traffic to an unverified instance.
+  Date: 2026-07-28.
+
+- Decision: treat a completed scale-down operation as one historical desired
+  count change and assign a fresh, generation-scoped operation identity to a
+  later scale-down of the same ordinal.
+  Rationale: intent, Pod name, and empty desired revision are otherwise
+  identical across separate `4 -> 3` requests.
+  Date: 2026-07-28.
+
+- Decision: during an active Pod replacement, derive the SHC observation range
+  from desired ordinal slots rather than only
+  `StatefulSet.status.replicas`.
+  Rationale: a temporary decrease in the replica count must not erase a
+  healthy higher ordinal or create false rollout-block alerts.
+  Date: 2026-07-28.
+
 ## Outcomes & Retrospective
 
-The first integrated positive-path milestone and one active-strategy rollback
-rehearsal are complete for one pinned Operator/runtime/Splunk combination on
-EKS. Fresh formation, a complete three-member `OnDelete` rollout, safe strategy
-migration, a complete partition-gated `RollingUpdate`, captain replacement,
-persistent identity, controller restart recovery, TERM-driven PID 1 exit, and
-rollback from an active `RollingUpdate` target all passed. The StatefulSet
-never advanced more than one planned Search Head at a time.
+The first integrated positive-path milestone, active-strategy rollback, and
+scale lifecycle extension are complete for one pinned
+Operator/runtime/Splunk combination on EKS. Fresh formation, a complete
+three-member `OnDelete` rollout, safe strategy migration, complete
+partition-gated `RollingUpdate` rollouts, captain replacement, persistent
+identity, controller restart recovery, TERM-driven PID 1 exit, active
+`RollingUpdate` rollback, scale-down cancellation, repeated scale-down,
+`3 -> 4`, and `4 -> 3` all passed. The StatefulSet never advanced more than
+one planned Search Head at a time. The final five-minute stability window also
+kept every Kubernetes and Splunk health invariant continuously true.
 
 This is not production-readiness evidence. Active-search timeout behavior,
 failed captain transfer, forced deletion and node loss, storage and scheduling
 delay, network and TLS variants, version skew, rollback under failure, repeated
-runs, soak testing, and support/alert qualification remain open. Normal
-replacement also exposed noisy error-level member observations and a false
-scale event that require a separate observability fix. The current result
-proves the integrated architecture can execute its intended happy path, resume
-durable state, and cross the strategy rollback boundary; it does not yet
-justify default enablement.
+runs, soak testing, and support/alert qualification remain open. The
+lifecycle-aware log, phase, scale-event, and transient higher-ordinal
+observation defects exposed by the earlier campaign are corrected and passed
+the final scale cycles. The current result proves the integrated architecture
+can execute its intended happy path, resume durable state, cross the strategy
+rollback boundary, and safely coordinate replica-count changes; it does not
+yet justify default enablement.
 
 ## Context and Orientation
 
@@ -807,6 +890,51 @@ Integrated EKS evidence captured on 2026-07-28:
 - the completed namespace and its retained test PVCs were deleted after
   evidence collection.
 
+SHC scale-lifecycle extension captured on 2026-07-28:
+
+- final Operator source:
+  `ccab4fe332e8dfc4a3b14a8ead60d5fe46f323cd` on the SHC
+  lifecycle-observability branch;
+- relevant incremental Operator commits:
+  `255759009`, `e7b696f5e`, `b4d2af703`, `7e97936df`,
+  `6ebe009ad`, and `ccab4fe33`;
+- final Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-ccab4fe33`;
+- final Operator image digest:
+  `sha256:b79ae3f5d81ac1fcc48f998aad08ecda9c6d63fc68f30f745d4aa8c53c8ce96c`;
+- runtime source:
+  Docker-Splunk `7951d69f82b28d92b118432bea4a513a90a76749`
+  with Splunk Ansible
+  `9954434703c776665713e9ed7d1a3d1d5dd1c77d`;
+- runtime image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc-prestart-7951d69-ansible-9954434-splunk-10.6.0.0-d9be152689b7`;
+- runtime digest:
+  `sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547`;
+- restoring four replicas before membership removal emitted one
+  `SHCScaleDownCancelled` Event, retained the original ordinal-three Pod UID,
+  released detention only through durable recovery, and completed with all
+  four members `Up`;
+- a fresh repeated `4 -> 3` exposed and then verified the correction for a
+  completed historical scale-down record;
+- the final pinned image passed `3 -> 4` and `4 -> 3`. Each peer-list revision
+  progressed in reverse ordinal order, captain targets were transferred before
+  replacement, and no sample observed more than one withdrawn or deleting
+  member;
+- final run Events contained the expected rollout-target, partition-advance,
+  rollout-complete, and one scale-complete Event. No false
+  `OutOfOrderRevision`, false scale direction, or expected target
+  member-observation error was emitted;
+- the final StatefulSet converged on
+  `splunk-shc-rollback-search-head-6bbc69584b`, with current and update
+  revisions equal, partition three, and three ready/updated replicas;
+- retained PVCs existed only for ordinals zero through two; ordinal three's
+  `etc` and `var` PVCs were removed by the configured scale-down policy; and
+- a 300-second stability gate passed 17 consecutive samples with three ready
+  Kubernetes Pods, three serving readiness gates, three registered `Up`
+  members, a service-ready captain, complete configuration replication,
+  disabled KV Store maintenance, no Splunk rolling restart, and zero container
+  restarts.
+
 ## Interfaces and Dependencies
 
 The technical designs must define concrete interfaces for:
@@ -876,3 +1004,11 @@ version skew, rollback, repetition/soak, and production enablement open.
 post-action stability, operation continuity, one-member safety, captain
 transfer, retained identities, the `OnDelete` revision-status nuance, and the
 observability defects discovered during an otherwise successful campaign.
+
+2026-07-28: Recorded SHC scale-lifecycle implementation and EKS qualification.
+Added safe scale-down cancellation, repeated-operation identity, scale-up join
+coordination, scale-down resumption, desired-replica Event semantics, and
+desired-ordinal member observation. The final pinned image passed complete
+`3 -> 4` and `4 -> 3` cycles plus a 300-second stability gate without false
+rollout blocks, false scale Events, expected-lifecycle errors, concurrent
+planned disruptions, or container restarts.
