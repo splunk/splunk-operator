@@ -162,6 +162,11 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   The accepted run passed 127 uninterrupted searches with maximum
   unavailability one and zero restarts, followed by a 300-second, 37-sample
   stability gate.
+- [ ] (2026-07-28) SHC-77 is in progress on
+  `codex/shc-77-image-pull-classification`. Distinguish retryable Kubernetes
+  image-pull states from invalid image syntax, retain the authorized ordinal
+  under the replacement startup budget, and qualify that neither path
+  authorizes another SHC member.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -180,6 +185,15 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
 - [ ] Complete release readiness, rollback rehearsal, and support enablement.
 
 ## Surprises & Discoveries
+
+- (2026-07-28) The existing lifecycle adapter collapsed
+  `ErrImagePull`/`ImagePullBackOff` and
+  `InvalidImageName`/`ErrInvalidImage` into one immediately blocked
+  observation. Kubernetes retries the former states and can recover without a
+  new Pod or revision, while the latter identifies an image reference kubelet
+  cannot interpret. Treating both as terminal contradicted REJ-004 and could
+  convert a temporary registry interruption into an unnecessarily permanent
+  lifecycle block.
 
 - Observation: current `develop` already detains a member and polls historical
   plus real-time search counts during recycle.
@@ -462,6 +476,16 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   unauthenticated in-container scrape.
 
 ## Decision Log
+
+- Decision: SHC-77 classifies `ErrImagePull` and `ImagePullBackOff` as
+  retryable within the existing replacement Pod startup budget, while
+  `InvalidImageName` and `ErrInvalidImage` remain immediately terminal.
+  Rationale: kubelet already retries pull/backoff states, so the Operator must
+  preserve the same authorized target and let that retry recover. Invalid
+  image syntax cannot recover without desired-state correction and must remain
+  fail-closed. After the startup budget expires, a retryable pull becomes
+  `Blocked/ImagePullFailed`; no later ordinal is eligible in either path.
+  Date: 2026-07-28.
 
 - Decision: base implementation planning on the GitLab `sok/develop` branch,
   while pinning a commit for reproducible review.
