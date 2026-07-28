@@ -330,6 +330,163 @@ func TestLifecycleMemberObservationExpectedUnavailable(t *testing.T) {
 	if !lifecycleMemberObservationExpectedUnavailable(operation, target) {
 		t.Fatal("recovery validation can observe bounded target unavailability")
 	}
+	operation.Intent =
+		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement
+	requestedAt := metav1.Now()
+	operation.MembershipRemovalRequestedAt = &requestedAt
+	if !lifecycleMemberObservationExpectedUnavailable(operation, target) {
+		t.Fatal("removed scale-down target should be expected unavailable")
+	}
+	operation.MembershipRemovalRequestedAt = nil
+	if lifecycleMemberObservationExpectedUnavailable(operation, target) {
+		t.Fatal("scale-down target must remain observable before membership removal")
+	}
+}
+
+func TestSearchHeadClusterMemberObservationCountPreservesHigherOrdinals(
+	t *testing.T,
+) {
+	specReplicas := int32(3)
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{Replicas: &specReplicas},
+		Status: appsv1.StatefulSetStatus{
+			Replicas: 2,
+		},
+	}
+	target := int32(1)
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		TargetOrdinal: &target,
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageWaitingForTermination,
+	}
+
+	if got := searchHeadClusterMemberObservationCount(
+		statefulSet,
+		operation,
+	); got != 3 {
+		t.Fatalf(
+			"active Pod-update observation count = %d, want all 3 desired ordinals",
+			got,
+		)
+	}
+
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+	if got := searchHeadClusterMemberObservationCount(
+		statefulSet,
+		operation,
+	); got != 2 {
+		t.Fatalf(
+			"completed operation observation count = %d, want observed count 2",
+			got,
+		)
+	}
+
+	statefulSet.Status.Replicas = 4
+	if got := searchHeadClusterMemberObservationCount(
+		statefulSet,
+		operation,
+	); got != 4 {
+		t.Fatalf(
+			"scale-down observation count = %d, want observed count 4",
+			got,
+		)
+	}
+}
+
+func TestUpdateStatusPreservesHigherOrdinalDuringLowerOrdinalReplacement(
+	t *testing.T,
+) {
+	oldGetMemberInfo := GetSearchHeadClusterMemberInfo
+	oldGetCaptainInfo := GetSearchHeadCaptainInfo
+	t.Cleanup(func() {
+		GetSearchHeadClusterMemberInfo = oldGetMemberInfo
+		GetSearchHeadCaptainInfo = oldGetCaptainInfo
+	})
+
+	target := int32(1)
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "example"},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+				{
+					Name:       "splunk-example-search-head-0",
+					Status:     "Up",
+					Registered: true,
+				},
+				{
+					Name:       "splunk-example-search-head-1",
+					Status:     "Up",
+					Registered: true,
+				},
+				{
+					Name:       "splunk-example-search-head-2",
+					Status:     "Up",
+					Registered: true,
+				},
+			},
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+				TargetOrdinal: &target,
+				Stage: enterpriseApi.
+					SearchHeadClusterLifecycleStageWaitingForTermination,
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+	observedOrdinals := make(map[int32]bool)
+	GetSearchHeadClusterMemberInfo = func(
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		ordinal int32,
+	) (*splclient.SearchHeadClusterMemberInfo, error) {
+		observedOrdinals[ordinal] = true
+		if ordinal == target {
+			return nil, errors.New("target is terminating")
+		}
+		return &splclient.SearchHeadClusterMemberInfo{
+			Status:     "Up",
+			Registered: true,
+		}, nil
+	}
+	GetSearchHeadCaptainInfo = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (*splclient.SearchHeadCaptainInfo, error) {
+		return &splclient.SearchHeadCaptainInfo{
+			Label:          "splunk-example-search-head-0",
+			ServiceReady:   true,
+			Initialized:    true,
+			MinPeersJoined: true,
+		}, nil
+	}
+
+	specReplicas := int32(3)
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{Replicas: &specReplicas},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      2,
+			ReadyReplicas: 2,
+		},
+	}
+	if err := mgr.updateStatus(context.Background(), statefulSet); err != nil {
+		t.Fatalf("update status: %v", err)
+	}
+
+	if len(cr.Status.Members) != 3 ||
+		!observedOrdinals[2] ||
+		cr.Status.Members[2].Status != "Up" ||
+		!cr.Status.Members[2].Registered {
+		t.Fatalf(
+			"higher ordinal was not preserved: members=%#v observed=%v",
+			cr.Status.Members,
+			observedOrdinals,
+		)
+	}
 }
 
 func TestScaleUpMemberObservationExpectedUnavailable(t *testing.T) {

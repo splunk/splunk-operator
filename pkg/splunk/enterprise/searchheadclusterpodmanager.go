@@ -657,8 +657,12 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 	shcLogger := logging.FromContext(ctx)
 
+	memberObservationCount := searchHeadClusterMemberObservationCount(
+		statefulSet,
+		mgr.cr.Status.LifecycleOperation,
+	)
 	gotCaptainInfo := false
-	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
+	for n := int32(0); n < memberObservationCount; n++ {
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
 		memberInfo, err := GetSearchHeadClusterMemberInfo(ctx, mgr, n)
@@ -737,8 +741,8 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 
 	// truncate any extra members that we didn't check (leftover from scale down)
-	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Members)) {
-		mgr.cr.Status.Members = mgr.cr.Status.Members[:statefulSet.Status.Replicas]
+	if memberObservationCount < int32(len(mgr.cr.Status.Members)) {
+		mgr.cr.Status.Members = mgr.cr.Status.Members[:memberObservationCount]
 	}
 
 	newMemberCount := int32(len(mgr.cr.Status.Members))
@@ -755,6 +759,29 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	return nil
 }
 
+func searchHeadClusterMemberObservationCount(
+	statefulSet *appsv1.StatefulSet,
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+) int32 {
+	count := statefulSet.Status.Replicas
+	if statefulSet.Spec.Replicas == nil ||
+		*statefulSet.Spec.Replicas <= count ||
+		operation == nil ||
+		operation.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
+		return count
+	}
+
+	// StatefulSet status.replicas is a count, not the highest surviving
+	// ordinal. While a lower ordinal is being replaced it can temporarily
+	// decrease even though higher ordinals still exist. Observe every desired
+	// ordinal during the durable Pod-update workflow so those higher members
+	// are not dropped from SHC status and misclassified as out-of-order.
+	return *statefulSet.Spec.Replicas
+}
+
 func lifecycleMemberObservationExpectedUnavailable(
 	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
 	ordinal int32,
@@ -763,6 +790,13 @@ func lifecycleMemberObservationExpectedUnavailable(
 		operation.TargetOrdinal == nil ||
 		*operation.TargetOrdinal != ordinal {
 		return false
+	}
+	if operation.Intent ==
+		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown &&
+		operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement &&
+		operation.MembershipRemovalRequestedAt != nil {
+		return true
 	}
 
 	switch operation.Stage {
