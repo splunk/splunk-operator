@@ -412,9 +412,33 @@ Only then may it select a rollback target.
 Withdrawal after replacement authorization is not an in-place cancellation.
 The authorized target must first reach a known recovered or classified terminal
 state under its original durable operation. No second target may begin during
-that handoff. The subsequent desired revision is then rolled back or queued by
-a new deterministic planning decision. `STS-014` owns qualification of this
-separate path.
+that handoff.
+
+For a later CR-driven Pod-template revision, the Operator keeps the current
+StatefulSet template and update revision while the authorized operation is
+active and partition equals its target ordinal. The CR remains the source of
+the queued desired template. A Splunk-side `Completed` stage is necessary but
+does not by itself release that template. The Kubernetes handoff also verifies:
+
+- the target Pod exists and is not deleting;
+- its UID differs from the UID recorded before replacement authorization;
+- its `controller-revision-hash` equals the original operation's desired
+  revision;
+- Kubernetes Ready is true; and
+- `enterprise.splunk.com/shc-serving` is true.
+
+Only after those facts are observed may the Operator apply the queued template
+behind a fully closed partition. The resulting ControllerRevision is planned
+as a new rollout and receives a new durable lifecycle operation and replacement
+authorization before Kubernetes can replace a Pod. If the original operation
+becomes blocked or failed, the queued template remains held fail-closed. If an
+external actor mutates the generated StatefulSet directly and defeats the
+normal CR queue, revision or identity disagreement is classified and blocked;
+the controller does not infer a successful handoff.
+
+`STS-014` qualified this path with two distinct revisions, operation IDs, and
+replacement UIDs, maximum one unavailable Pod, and uninterrupted service
+searches.
 
 ## Kubernetes condition contract
 
@@ -554,3 +578,9 @@ The design now requires a generation-observation barrier, handles
 ControllerRevision reuse with per-Pod revision evidence, retains in-place
 cancellation ownership through Kubernetes readiness, and separates
 pre-authorization cancellation from post-authorization revision withdrawal.
+
+2026-07-28: Added the qualified SHC-76 post-authorization handoff. The design
+now retains the original lifecycle and StatefulSet revision through recovery,
+queues later CR-driven Pod templates, separates Splunk completion from
+Kubernetes Ready/serving release, and requires a new operation and
+authorization for the queued revision.

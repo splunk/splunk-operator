@@ -19,6 +19,24 @@ separate:
 3. design decisions that still require agreement; and
 4. implementation and qualification work that remains.
 
+## Latest bounded qualification
+
+SHC-76 qualified `STS-014`, the CR-driven case where a later desired
+StatefulSet revision arrives after Kubernetes replacement authorization. The
+already-authorized revision retains lifecycle and partition ownership until
+its replacement is recovered, Kubernetes Ready, and SHC-serving. The later
+template is then released behind a closed partition and receives a separate
+operation and authorization.
+
+The accepted three-member EKS run completed the queued revision in
+reverse-ordinal order, including dynamic captain transfer. It recorded 127
+uninterrupted service searches, maximum one unavailable Pod, zero restarts,
+healthy final Splunk and KV Store status, and a separate 300-second stability
+gate. This is bounded spike evidence; it is not a declaration that every
+scenario in the matrix is complete or that the feature is ready for default
+enablement. Exact source, image, and evidence details are in
+`SHCWorkItemIndex.md` and `QualificationObservabilityRolloutPlan.md`.
+
 ## Review order
 
 1. `CurrentDevelopBaseline.md` establishes what exists now.

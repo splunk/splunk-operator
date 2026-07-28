@@ -143,6 +143,25 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Captain transfer timed out fail closed, the captain Pod was not replaced,
   revision withdrawal recovered the same Pod in place, rollback completed
   ordinals `2 -> 1`, and a 321-second stability gate passed.
+- [x] (2026-07-28) Implemented SHC-76 post-authorization revision ownership
+  and queueing at `24eea3f37`, `243f7a5d2`, and `50eb10514`. An authorized
+  target keeps its original durable operation and StatefulSet revision while a
+  later CR revision remains queued. The queue releases only after the
+  replacement has the authorized revision and a new UID and is both
+  Kubernetes Ready and SHC-serving.
+- [x] (2026-07-28) Passed the complete Linux source gate for SHC-76:
+  `make fmt`, `make vet`, `make build`, and `make test`. All 41 Ginkgo suites
+  passed, including 154 controller envtest specifications, with 78.5 percent
+  composite coverage.
+- [x] (2026-07-28) Qualified STS-014 on EKS cluster
+  `vivek-spl-301372` with Operator source `50eb10514` and image digest
+  `sha256:62e450584a9788cd9b0f2959164bdcef2c75608c66bb468cc572e887712d7624`.
+  A later revision was queued during ordinal-two replacement, received a
+  separate authorization only after the first replacement was Ready and
+  serving, and then completed `2 -> 1 -> 0` with dynamic captain transfer.
+  The accepted run passed 127 uninterrupted searches with maximum
+  unavailability one and zero restarts, followed by a 300-second, 37-sample
+  stability gate.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -317,6 +336,26 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Consequence: rollback acceptance distinguishes stopping Kubernetes partition
   advancement from abandoning the requested revision. The current target must
   reach a known state, and later work remains one-member-at-a-time.
+
+- Observation: Splunk-side lifecycle completion can become durable before the
+  replacement Pod is Kubernetes Ready and present in Service endpoints.
+  Evidence: the first STS-014 EKS run observed `Completed` while ordinal two
+  was still `Ready=False` and `shc-serving=False`; releasing the queued
+  StatefulSet template then started a second operation too early.
+  Consequence: the Splunk recovery state machine continues to use supported
+  member and captain observations, while the Kubernetes revision handoff has a
+  separate final barrier requiring the expected replacement UID/revision,
+  Pod Ready, and SHC serving readiness.
+
+- Observation: one healthy sample immediately after fresh formation is not a
+  sufficient qualification baseline.
+  Evidence: an excluded STS-014 run saw ordinal two transiently lose
+  management and Pod readiness after the first Ready observation. The
+  Operator held partition three and emitted `ExistingUnavailablePod` without
+  authorizing replacement.
+  Consequence: destructive qualification begins only after a sustained
+  combined Kubernetes and Splunk health window; fail-closed precondition
+  events are classified separately from scenario failures.
 
 - Observation: after the rollback completed under `OnDelete`, all three Pods
   carried `updateRevision` and StatefulSet `updatedReplicas` was three while

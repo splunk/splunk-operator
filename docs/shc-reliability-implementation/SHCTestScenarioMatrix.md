@@ -167,6 +167,49 @@ Store upgrade or backup, and zero container restarts.
 | STS-013 | P1 | Search Head preferred-captain configuration | Kubernetes default does not prefer ordinal zero; an explicit customer override is preserved |
 | STS-014 | P0 | Desired revision is withdrawn after replacement authorization | The already-authorized target completes to a known recovered or classified terminal state under the original durable operation; the controller does not claim in-place cancellation for a replaced Pod, does not authorize a second disruption, and then deterministically rolls back or queues the new desired revision |
 
+### STS-014 qualification evidence
+
+On 2026-07-28, a three-member EKS SHC passed the supported CR-driven
+post-authorization handoff. Revision A received durable authorization for
+ordinal two and lowered the StatefulSet partition from three to two. Revision B
+was submitted while the replacement was starting. During that interval:
+
+- the revision-A lifecycle operation retained ownership;
+- the StatefulSet template and `status.updateRevision` remained revision A;
+- partition remained two;
+- the first replacement Pod kept one stable new UID; and
+- the other two members remained Ready and serving.
+
+The initial EKS attempt found that Splunk-side lifecycle `Completed` could be
+observed before the Pod's Kubernetes Ready and `shc-serving` conditions became
+true. Releasing the queued Pod template at that point was unsafe because
+Kubernetes could begin another replacement before traffic eligibility was
+restored. The handoff was corrected so Splunk completion remains a cluster-side
+fact while release of the queued Kubernetes revision additionally requires:
+
+- the authorized target Pod exists and is not deleting;
+- its UID differs from the pre-replacement UID;
+- its `controller-revision-hash` matches the original authorization;
+- Kubernetes Ready is true; and
+- the SHC serving readiness gate is true.
+
+The accepted run used a separate revision-B lifecycle operation and
+authorization after that boundary. The complete revision-B rollout then
+advanced in reverse ordinal order `2 -> 1 -> 0`; ordinal zero was the active
+captain at its turn and captaincy moved to ordinal one before replacement.
+Across 127 service-search probes, there were zero failures, at least two Ready
+endpoints, no more than one unavailable Pod, no container restarts, and no
+run-window `ConflictingLifecycleOperation`, `OutOfOrderRevision`,
+`TooManyUnavailable`, or `ExistingUnavailablePod` warning. Final Splunk status
+reported all members `Up`, dynamic captaincy, and service readiness. KV Store
+reported `ready`, three members, no version upgrade, and no backup. A subsequent
+300-second gate passed 37 searches with three Ready endpoints throughout.
+
+This evidence covers revisions submitted through the SearchHeadCluster
+contract. Direct external mutation of the generated StatefulSet is not a
+supported revision-submission path; revision or identity disagreement there
+remains fail-closed rather than being treated as a successful handoff.
+
 ## Rejoin, membership, and storage scenarios
 
 | ID | Priority | Scenario | Required proof |

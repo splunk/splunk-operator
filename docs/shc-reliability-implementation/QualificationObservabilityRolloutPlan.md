@@ -1089,6 +1089,65 @@ or entire support bundles.
   Pods, KV Store `ready`, no KV Store version upgrade or backup, and zero
   container restarts.
 
+2026-07-28 STS-014 post-authorization revision-handoff qualification:
+
+- Operator source commits were
+  `24eea3f37ddb95032cb495dc0b422e8ca3cf9116`,
+  `243f7a5d295196e1003ea70a37947bb04bed681c`, and
+  `50eb10514a550d67652663cd7ab6644313681dcc`. The final image was
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-50eb10514`
+  at digest
+  `sha256:62e450584a9788cd9b0f2959164bdcef2c75608c66bb468cc572e887712d7624`;
+- Linux `make fmt`, `make vet`, `make build`, and `make test` passed. All 41
+  Ginkgo suites and 154 controller specifications passed with 78.5 percent
+  composite coverage;
+- the accepted run used EKS cluster `vivek-spl-301372`, namespace
+  `shc76-revision-withdrawal`, the pinned SHC runtime image, and both lifecycle
+  feature gates;
+- before mutation, 25 consecutive samples covered 180 seconds with three
+  Ready and serving Pods, three registered `Up` members, authoritative dynamic
+  captain readiness, matching StatefulSet revisions, partition three, and zero
+  restarts;
+- revision A changed the StatefulSet from
+  `splunk-shc76-search-head-548ff7f745` to
+  `splunk-shc76-search-head-86557c5445`. Its durable ordinal-two operation was
+  `PodUpdate:splunk-shc76-search-head-2:splunk-shc76-search-head-86557c5445:2`;
+- revision B was submitted after revision A lowered partition to two and
+  persisted replacement authorization. While ordinal two terminated, started,
+  and rejoined, the StatefulSet continued to expose revision A, partition two,
+  and one stable replacement UID;
+- the first attempt exposed an unsafe boundary: Splunk lifecycle `Completed`
+  preceded Kubernetes Ready and serving readiness. The final source retains
+  the queued template until the replacement has the authorized
+  ControllerRevision, a new Pod UID, Ready true, and `shc-serving` true;
+- after that barrier, revision B became
+  `splunk-shc76-search-head-785987d79b`, partition returned to three, and a new
+  operation separately detained and authorized ordinal two. Its replacement
+  received a second new UID only after the new authorization;
+- revision B completed reverse-ordinal progression `2 -> 1 -> 0`. Ordinal zero
+  was the active captain at its turn; the workflow transferred captaincy to
+  ordinal one before replacement;
+- 127 continuous service searches had zero failures. Minimum Ready endpoints
+  were two, maximum unavailable Pods were one, maximum container restarts were
+  zero, and the run-window Event audit contained no
+  `ConflictingLifecycleOperation`, `OutOfOrderRevision`,
+  `TooManyUnavailable`, or `ExistingUnavailablePod`;
+- final Splunk status reported `dynamic_captain=1`, `initialized_flag=1`,
+  `min_peers_joined_flag=1`, `service_ready_flag=1`,
+  `rolling_restart_flag=0`, and three `Up` members. KV Store reported
+  `status=ready`, three members, `versionUpgradeInProgress=0`, and no backup in
+  progress; and
+- the independent post-convergence gate passed for 300 seconds over 37
+  samples. Every sample had three Ready endpoints, a successful search,
+  authoritative captain readiness, and zero restarts.
+
+Two non-accepted runs remain part of the engineering record. The first found
+the Ready/serving handoff defect and led to `50eb10514`. The second began too
+soon after fresh formation; ordinal two transiently lost readiness before any
+lifecycle operation. The Operator correctly held partition three and refused a
+planned disruption. That run was classified as an invalid precondition and led
+to the sustained pre-action gate used by the accepted run.
+
 ## Interfaces and Dependencies
 
 The test harness requires stable adapters for:
@@ -1178,3 +1237,10 @@ qualification. Added the 30-second fail-closed hold, exact Event deltas,
 per-Pod ControllerRevision rollback proof, in-place readiness restoration,
 bounded Operator-log audit, reverse-ordinal rollback, and the 321-second final
 stability gate.
+
+2026-07-28: Recorded STS-014 post-authorization revision handoff. Added durable
+ownership of the already-authorized target, CR-driven template queueing,
+separate Splunk-completion and Kubernetes Ready/serving barriers, two distinct
+revision authorizations and Pod identities, uninterrupted search evidence,
+dynamic captain transfer, final Splunk/KV validation, a sustained pre-action
+gate, and a passing 300-second post-convergence gate.
