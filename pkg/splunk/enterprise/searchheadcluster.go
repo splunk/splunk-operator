@@ -592,6 +592,15 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 		return nil, err
 	}
 
+	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+		ctx,
+		client,
+		cr,
+		&ss.Spec.Template,
+	); err != nil {
+		return nil, err
+	}
+
 	updateStrategy, err := getSearchHeadStatefulSetUpdateStrategy(
 		ctx,
 		client,
@@ -604,6 +613,55 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	ss.Spec.UpdateStrategy = updateStrategy
 
 	return ss, nil
+}
+
+// holdSearchHeadStatefulSetTemplateForActiveReplacement serializes desired
+// revisions at the Kubernetes boundary. Once the partition has released a
+// target, changing the StatefulSet template can make Kubernetes replace that
+// same ordinal again or create its replacement at a revision different from
+// the durable lifecycle authorization. Keep the current template until the
+// active operation recovers. Blocked or failed lifecycle work remains
+// fail-closed and continues to hold the template. The CR remains the source of
+// the queued desired template, so a later reconcile applies it behind the
+// fail-closed partition as the next rollout.
+func holdSearchHeadStatefulSetTemplateForActiveReplacement(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.SearchHeadCluster,
+	desiredTemplate *corev1.PodTemplateSpec,
+) error {
+	operation := cr.Status.LifecycleOperation
+	if desiredTemplate == nil ||
+		!lifecycleRecoveryActive(operation) ||
+		operation.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		operation.ReplacementAuthorizedAt == nil ||
+		operation.TargetOrdinal == nil {
+		return nil
+	}
+
+	current := &appsv1.StatefulSet{}
+	err := client.Get(ctx, types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+	}, current)
+	if k8serrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if current.Spec.UpdateStrategy.Type !=
+		appsv1.RollingUpdateStatefulSetStrategyType ||
+		current.Spec.UpdateStrategy.RollingUpdate == nil ||
+		current.Spec.UpdateStrategy.RollingUpdate.Partition == nil ||
+		*current.Spec.UpdateStrategy.RollingUpdate.Partition !=
+			*operation.TargetOrdinal {
+		return nil
+	}
+
+	*desiredTemplate = *current.Spec.Template.DeepCopy()
+	return nil
 }
 
 // getSearchHeadStatefulSetUpdateStrategy keeps OnDelete as the compatibility

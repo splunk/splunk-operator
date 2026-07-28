@@ -334,6 +334,165 @@ func TestSearchHeadStatefulSetRollingUpdateResetsPartitionForNewTemplate(t *test
 	assertRollingUpdatePartition(t, strategy, cr.Spec.Replicas)
 }
 
+func TestSearchHeadStatefulSetRollingUpdateRetainsAuthorizedTargetForNewTemplate(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	cr := searchHeadRolloutStrategyTestCR()
+	cr.Spec.LifecyclePolicy.PodUpdateStrategy =
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate
+	replicas := int32(3)
+	partition := int32(2)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:             "pod-update-2",
+			Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:         "revision-2",
+			TargetPod:               GetSplunkStatefulsetPodName(SplunkSearchHead, cr.GetName(), target),
+			TargetOrdinal:           &target,
+			TargetPodUID:            "original-pod-uid",
+			Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+			ReplacementAuthorizedAt: &authorizedAt,
+		}
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+			Namespace: cr.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+	}
+	client := spltest.NewMockClient()
+	if err := client.Create(context.Background(), current); err != nil {
+		t.Fatalf("create StatefulSet: %v", err)
+	}
+	desiredTemplate := current.Spec.Template.DeepCopy()
+	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
+
+	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+		context.Background(),
+		client,
+		cr,
+		desiredTemplate,
+	); err != nil {
+		t.Fatalf("hold active authorized template: %v", err)
+	}
+	if desiredTemplate.Labels["revision-input"] != "" {
+		t.Fatalf(
+			"active replacement template = %#v, want current template retained",
+			desiredTemplate.Labels,
+		)
+	}
+	strategy, err := getSearchHeadStatefulSetUpdateStrategy(
+		context.Background(),
+		client,
+		cr,
+		desiredTemplate,
+	)
+	if err != nil {
+		t.Fatalf("resolve active authorized strategy: %v", err)
+	}
+	assertRollingUpdatePartition(t, strategy, target)
+
+	cr.Status.LifecycleOperation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+	desiredTemplate = current.Spec.Template.DeepCopy()
+	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
+	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+		context.Background(),
+		client,
+		cr,
+		desiredTemplate,
+	); err != nil {
+		t.Fatalf("release completed authorized template: %v", err)
+	}
+	if desiredTemplate.Labels["revision-input"] != "changed" {
+		t.Fatalf(
+			"completed replacement template = %#v, want queued template released",
+			desiredTemplate.Labels,
+		)
+	}
+	strategy, err = getSearchHeadStatefulSetUpdateStrategy(
+		context.Background(),
+		client,
+		cr,
+		desiredTemplate,
+	)
+	if err != nil {
+		t.Fatalf("resolve completed authorized strategy: %v", err)
+	}
+	assertRollingUpdatePartition(t, strategy, replicas)
+}
+
+func TestSearchHeadStatefulSetDoesNotQueueTemplateBeforePartitionAuthorization(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	cr := searchHeadRolloutStrategyTestCR()
+	cr.Spec.LifecyclePolicy.PodUpdateStrategy =
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate
+	replicas := int32(3)
+	partition := replicas
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:             "pod-update-2",
+			Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:         "revision-2",
+			TargetPod:               GetSplunkStatefulsetPodName(SplunkSearchHead, cr.GetName(), target),
+			TargetOrdinal:           &target,
+			TargetPodUID:            "original-pod-uid",
+			Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+			ReplacementAuthorizedAt: &authorizedAt,
+		}
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+			Namespace: cr.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+	}
+	client := spltest.NewMockClient()
+	if err := client.Create(context.Background(), current); err != nil {
+		t.Fatalf("create StatefulSet: %v", err)
+	}
+	desiredTemplate := current.Spec.Template.DeepCopy()
+	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
+
+	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+		context.Background(),
+		client,
+		cr,
+		desiredTemplate,
+	); err != nil {
+		t.Fatalf("evaluate pre-partition template: %v", err)
+	}
+	if desiredTemplate.Labels["revision-input"] != "changed" {
+		t.Fatalf(
+			"pre-partition template = %#v, want superseding template available",
+			desiredTemplate.Labels,
+		)
+	}
+}
+
 func TestSearchHeadStatefulSetScaleDownKeepsCurrentReplicasFullyPartitioned(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	cr := searchHeadRolloutStrategyTestCR()
