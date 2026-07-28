@@ -28,6 +28,7 @@ const (
 	EventReasonSHCRolloutTargetStarted = "SHCRolloutTargetStarted"
 	EventReasonSHCRolloutAdvanced      = "SHCRolloutAdvanced"
 	EventReasonSHCRolloutCompleted     = "SHCRolloutCompleted"
+	EventReasonSHCScaleDownCancelled   = "SHCScaleDownCancelled"
 
 	// Warning event reasons — spec & config
 	EventReasonValidateSpecFailed      = "ValidateSpecFailed"

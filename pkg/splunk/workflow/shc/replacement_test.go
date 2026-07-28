@@ -498,6 +498,64 @@ func TestScaleDownCompletesOnlyAfterRemovedOrdinalIsObservedGone(t *testing.T) {
 	}
 }
 
+func TestScaleDownCancellationRequiresIntactMembershipAndTarget(t *testing.T) {
+	now := time.Date(2026, 7, 28, 4, 35, 0, 0, time.UTC)
+	target := int32(3)
+	operation := StartReplacement(
+		"scale-down:example-search-head-3",
+		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown,
+		"",
+		"example-search-head-3",
+		target,
+		now.Add(-time.Minute),
+	)
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageBlocked
+
+	cancelled, started := StartScaleDownCancellation(
+		operation,
+		4,
+		4,
+		now,
+	)
+	if !started {
+		t.Fatal("restored replica intent did not start scale-down cancellation")
+	}
+	if cancelled.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery ||
+		cancelled.Reason !=
+			enterpriseApi.SearchHeadClusterLifecycleReasonScaleDownCancelled ||
+		cancelled.MemberRejoinStartedAt == nil {
+		t.Fatalf("scale-down cancellation = %#v", cancelled)
+	}
+	if operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
+		t.Fatal("scale-down cancellation mutated persisted input")
+	}
+
+	resumed, started := StartScaleDownCancellation(cancelled, 4, 4, now)
+	if started ||
+		resumed.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery {
+		t.Fatalf("durable cancellation did not resume idempotently: %#v", resumed)
+	}
+
+	removed := operation.DeepCopy()
+	requestedAt := metav1.NewTime(now)
+	removed.MembershipRemovalRequestedAt = &requestedAt
+	notCancelled, started := StartScaleDownCancellation(removed, 4, 4, now)
+	if started ||
+		notCancelled.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
+		t.Fatal("membership removal was incorrectly treated as cancellable")
+	}
+
+	notCancelled, started = StartScaleDownCancellation(operation, 3, 4, now)
+	if started ||
+		notCancelled.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
+		t.Fatal("missing target ordinal was incorrectly treated as cancellable")
+	}
+}
+
 func TestCaptainChangeDuringDrainIsReobserved(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	operation := newTestOperation(now)

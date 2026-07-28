@@ -156,8 +156,45 @@ func EvaluateRecovery(
 		return evaluateMemberRejoin(operation, observation, now)
 
 	case enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery:
-		if decision, stop := validateReplacementIdentity(operation, observation, now); stop {
-			return decision
+		scaleDownCancellation :=
+			operation.Intent ==
+				enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown &&
+				operation.MembershipRemovalRequestedAt == nil
+		if scaleDownCancellation {
+			if !observation.PodExists || observation.PodDeleting {
+				transition(
+					operation,
+					enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+					enterpriseApi.SearchHeadClusterLifecycleReasonClusterNotSafe,
+					fmt.Sprintf(
+						"cannot cancel scale down for %s because the original Pod is missing or terminating",
+						operation.TargetPod,
+					),
+					now,
+				)
+				return Decision{Operation: operation}
+			}
+			if operation.TargetPodUID == "" {
+				operation.TargetPodUID = observation.PodUID
+			} else if observation.PodUID != operation.TargetPodUID {
+				transition(
+					operation,
+					enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+					enterpriseApi.SearchHeadClusterLifecycleReasonMemberIdentityMismatch,
+					fmt.Sprintf(
+						"cannot cancel scale down for %s because Pod UID %q does not match the original UID %q",
+						operation.TargetPod,
+						observation.PodUID,
+						operation.TargetPodUID,
+					),
+					now,
+				)
+				return Decision{Operation: operation}
+			}
+		} else {
+			if decision, stop := validateReplacementIdentity(operation, observation, now); stop {
+				return decision
+			}
 		}
 		return validateRecoveredMember(operation, observation, now)
 	}
@@ -495,14 +532,28 @@ func validateRecoveredMember(
 		return Decision{Operation: operation, Action: Action{Type: ActionObserveCluster}}
 	}
 
+	completionMessage := fmt.Sprintf(
+		"%s replacement and SHC recovery completed",
+		operation.TargetPod,
+	)
+	if operation.Intent ==
+		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown &&
+		operation.MembershipRemovalRequestedAt == nil {
+		completionMessage = fmt.Sprintf(
+			"scale-down cancellation completed; %s is registered, Up, and restored to service",
+			operation.TargetPod,
+		)
+	}
 	transition(
 		operation,
 		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
 		enterpriseApi.SearchHeadClusterLifecycleReasonOperationCompleted,
-		fmt.Sprintf("%s replacement and SHC recovery completed", operation.TargetPod),
+		completionMessage,
 		now,
 	)
-	if operation.TargetOrdinal != nil &&
+	if operation.Intent ==
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+		operation.TargetOrdinal != nil &&
 		!slices.Contains(operation.CompletedOrdinals, *operation.TargetOrdinal) {
 		operation.CompletedOrdinals = append(operation.CompletedOrdinals, *operation.TargetOrdinal)
 	}

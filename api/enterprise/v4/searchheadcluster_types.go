@@ -203,6 +203,7 @@ const (
 	SearchHeadClusterLifecycleReasonMemberSynchronizationPending  SearchHeadClusterLifecycleReason = "MemberSynchronizationPending"
 	SearchHeadClusterLifecycleReasonMemberRejoinTimedOut          SearchHeadClusterLifecycleReason = "MemberRejoinTimedOut"
 	SearchHeadClusterLifecycleReasonRecoveryValidated             SearchHeadClusterLifecycleReason = "RecoveryValidated"
+	SearchHeadClusterLifecycleReasonScaleDownCancelled            SearchHeadClusterLifecycleReason = "ScaleDownCancelled"
 	SearchHeadClusterLifecycleReasonClusterDeletionRequested      SearchHeadClusterLifecycleReason = "ClusterDeletionRequested"
 	SearchHeadClusterLifecycleReasonOperationCompleted            SearchHeadClusterLifecycleReason = "OperationCompleted"
 	SearchHeadClusterLifecycleReasonUnsupportedRuntimeContract    SearchHeadClusterLifecycleReason = "UnsupportedRuntimeContract"

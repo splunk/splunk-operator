@@ -299,6 +299,12 @@ func lifecycleRecoveryActiveForStatefulSet(
 		statefulSet.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType {
 		return true
 	}
+	if operation.Intent ==
+		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown {
+		// A cancelled scale-down restores the existing target in place. No
+		// partition change or Pod replacement is being authorized.
+		return true
+	}
 	if operation.TargetOrdinal == nil ||
 		statefulSet.Spec.UpdateStrategy.RollingUpdate == nil ||
 		statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition == nil {

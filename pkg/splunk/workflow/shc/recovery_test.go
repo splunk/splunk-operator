@@ -95,6 +95,140 @@ func TestRecoverySeparatesPodReadinessFromSHCCompletion(t *testing.T) {
 	}
 }
 
+func TestScaleDownCancellationReleasesDetentionWithoutReplacement(t *testing.T) {
+	now := time.Date(2026, 7, 28, 4, 35, 0, 0, time.UTC)
+	target := int32(3)
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:   "ScaleDown:example-search-head-3:",
+		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown,
+		TargetPod:     "example-search-head-3",
+		TargetOrdinal: &target,
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageValidatingRecovery,
+		Reason: enterpriseApi.
+			SearchHeadClusterLifecycleReasonScaleDownCancelled,
+	}
+	startedAt := metav1.NewTime(now)
+	operation.MemberRejoinStartedAt = &startedAt
+	observation := recoveredPodObservation()
+	observation.PodUID = "original-pod-uid"
+	observation.MemberStatus = "ManualDetention"
+	observation.CaptainMemberStatus = "ManualDetention"
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+		ActionReleaseDetention,
+	)
+	if decision.Operation.TargetPodUID != "original-pod-uid" {
+		t.Fatalf(
+			"cancelled scale-down Pod UID = %q, want original-pod-uid",
+			decision.Operation.TargetPodUID,
+		)
+	}
+	decision.Operation = RecordDetentionReleaseAttempt(
+		decision.Operation,
+		now.Add(2*time.Second),
+	)
+
+	observation.MemberStatus = "Up"
+	observation.CaptainMemberStatus = "Up"
+	decision = EvaluateRecovery(
+		decision.Operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(3*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		ActionNone,
+	)
+	if len(decision.Operation.CompletedOrdinals) != 0 {
+		t.Fatalf(
+			"cancelled scale down recorded replacement ordinals %v",
+			decision.Operation.CompletedOrdinals,
+		)
+	}
+	if !strings.Contains(
+		decision.Operation.Message,
+		"scale-down cancellation completed",
+	) {
+		t.Fatalf(
+			"completion message = %q, want cancellation evidence",
+			decision.Operation.Message,
+		)
+	}
+}
+
+func TestScaleDownCancellationBlocksWhenOriginalPodIsNotIntact(t *testing.T) {
+	now := time.Date(2026, 7, 28, 4, 35, 0, 0, time.UTC)
+	target := int32(3)
+	newOperation := func() *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
+		startedAt := metav1.NewTime(now)
+		return &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:           "ScaleDown:example-search-head-3:",
+			Intent:                enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown,
+			TargetPod:             "example-search-head-3",
+			TargetOrdinal:         &target,
+			TargetPodUID:          "original-pod-uid",
+			Stage:                 enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+			Reason:                enterpriseApi.SearchHeadClusterLifecycleReasonScaleDownCancelled,
+			MemberRejoinStartedAt: &startedAt,
+		}
+	}
+
+	tests := []struct {
+		name        string
+		observation RecoveryObservation
+	}{
+		{
+			name:        "missing Pod",
+			observation: RecoveryObservation{},
+		},
+		{
+			name: "terminating Pod",
+			observation: RecoveryObservation{
+				PodExists:   true,
+				PodUID:      "original-pod-uid",
+				PodDeleting: true,
+			},
+		},
+		{
+			name: "changed Pod identity",
+			observation: RecoveryObservation{
+				PodExists: true,
+				PodUID:    "replacement-pod-uid",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			decision := EvaluateRecovery(
+				newOperation(),
+				test.observation,
+				testRecoveryPolicy(),
+				now.Add(time.Second),
+			)
+			assertDecision(
+				t,
+				decision,
+				enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+				ActionNone,
+			)
+		})
+	}
+}
+
 func TestRecoveryClassifiesDetentionReleaseTimeout(t *testing.T) {
 	now := time.Date(2026, 7, 27, 18, 0, 0, 0, time.UTC)
 	operation := authorizedRecoveryOperation(now)

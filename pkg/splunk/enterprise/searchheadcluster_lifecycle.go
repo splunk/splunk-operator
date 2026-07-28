@@ -765,9 +765,18 @@ func lifecycleOperationMatches(
 func lifecycleRecoveryActive(
 	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
 ) bool {
-	return operation != nil &&
-		operation.Intent == enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
-		operation.TargetOrdinal != nil &&
-		operation.TargetPodUID != "" &&
-		operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
+		return false
+	}
+	if operation.Intent ==
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate {
+		return operation.TargetPodUID != ""
+	}
+	return operation.Intent ==
+		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown &&
+		operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery &&
+		operation.MembershipRemovalRequestedAt == nil
 }

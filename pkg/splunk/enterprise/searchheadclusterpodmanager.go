@@ -90,6 +90,29 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			searchHeadClusterLifecycleNow(),
 		)
 	}
+	if err == nil && searchHeadClusterLifecycleEnabled() {
+		var cancellationStarted bool
+		mgr.cr.Status.LifecycleOperation, cancellationStarted =
+			shcworkflow.StartScaleDownCancellation(
+				mgr.cr.Status.LifecycleOperation,
+				statefulSet.Status.Replicas,
+				desiredReplicas,
+				searchHeadClusterLifecycleNow(),
+			)
+		if cancellationStarted {
+			eventPublisher.Normal(
+				ctx,
+				EventReasonSHCScaleDownCancelled,
+				fmt.Sprintf(
+					"Scale down of %s was cancelled before membership removal; restoring the member to service",
+					mgr.cr.Status.LifecycleOperation.TargetPod,
+				),
+			)
+			// Persist the cancellation stage before issuing a detention
+			// release on a later reconciliation.
+			return enterpriseApi.PhaseUpdating, nil
+		}
+	}
 	if err == nil &&
 		searchHeadClusterLifecycleEnabled() &&
 		lifecycleRecoveryActiveForStatefulSet(

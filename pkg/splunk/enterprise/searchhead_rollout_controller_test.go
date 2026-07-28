@@ -2841,6 +2841,33 @@ func TestLifecycleRecoveryPreservesOnDeleteOrdering(t *testing.T) {
 	}
 }
 
+func TestLifecycleRecoveryDoesNotRequirePartitionForScaleDownCancellation(
+	t *testing.T,
+) {
+	target := int32(3)
+	partition := int32(4)
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown,
+		TargetOrdinal: &target,
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageValidatingRecovery,
+	}
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+	}
+
+	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
+		t.Fatal("cancelled scale down incorrectly waited for partition advancement")
+	}
+}
+
 func TestRollingUpdateControllerBlockedDecisionEmitsWarning(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(

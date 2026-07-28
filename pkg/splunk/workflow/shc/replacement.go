@@ -144,6 +144,51 @@ func CompleteScaleDown(
 	return operation
 }
 
+// StartScaleDownCancellation converts a scale-down that no longer matches the
+// desired replica count into a durable recovery operation. Cancellation is
+// safe only while Kubernetes still observes the target ordinal and Splunk
+// membership removal has not been requested. The returned boolean is true
+// only for the first transition so the adapter can persist the new stage
+// before releasing detention.
+func StartScaleDownCancellation(
+	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	observedReplicas int32,
+	desiredReplicas int32,
+	now time.Time,
+) (*enterpriseApi.SearchHeadClusterLifecycleOperationStatus, bool) {
+	if current == nil {
+		return nil, false
+	}
+	operation := current.DeepCopy()
+	if operation.Intent !=
+		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown ||
+		operation.TargetOrdinal == nil ||
+		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageCompleted ||
+		operation.MembershipRemovalRequestedAt != nil ||
+		observedReplicas <= *operation.TargetOrdinal ||
+		desiredReplicas <= *operation.TargetOrdinal {
+		return operation, false
+	}
+	if operation.Stage ==
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery {
+		return operation, false
+	}
+
+	startedAt := metav1.NewTime(now)
+	operation.MemberRejoinStartedAt = &startedAt
+	transition(
+		operation,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+		enterpriseApi.SearchHeadClusterLifecycleReasonScaleDownCancelled,
+		fmt.Sprintf(
+			"scale-down request was withdrawn; restoring %s to service",
+			operation.TargetPod,
+		),
+		now,
+	)
+	return operation, true
+}
+
 // EvaluateReplacement advances a durable replacement operation from an
 // authoritative observation. The input operation is never mutated.
 func EvaluateReplacement(
