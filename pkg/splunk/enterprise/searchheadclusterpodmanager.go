@@ -113,6 +113,30 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			return enterpriseApi.PhaseUpdating, nil
 		}
 	}
+	if err == nil && searchHeadClusterLifecycleEnabled() {
+		var cancellationStarted bool
+		mgr.cr.Status.LifecycleOperation, cancellationStarted =
+			shcworkflow.StartPodUpdateCancellation(
+				mgr.cr.Status.LifecycleOperation,
+				statefulSet.Status.UpdateRevision,
+				searchHeadClusterLifecycleNow(),
+			)
+		if cancellationStarted {
+			eventPublisher.Normal(
+				ctx,
+				EventReasonSHCPodUpdateCancelled,
+				fmt.Sprintf(
+					"Pod update of %s to revision %s was cancelled before replacement authorization; restoring the original member before revision %s",
+					mgr.cr.Status.LifecycleOperation.TargetPod,
+					mgr.cr.Status.LifecycleOperation.DesiredRevision,
+					statefulSet.Status.UpdateRevision,
+				),
+			)
+			// Persist the cancellation stage before releasing detention on a
+			// later reconciliation.
+			return enterpriseApi.PhaseUpdating, nil
+		}
+	}
 	if err == nil &&
 		searchHeadClusterLifecycleEnabled() &&
 		lifecycleRecoveryActiveForStatefulSet(

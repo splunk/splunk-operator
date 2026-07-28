@@ -189,6 +189,50 @@ func StartScaleDownCancellation(
 	return operation, true
 }
 
+// StartPodUpdateCancellation converts a Pod update whose desired revision was
+// superseded or withdrawn into an in-place recovery operation. Cancellation is
+// safe only before Kubernetes replacement was authorized and while the
+// original target Pod identity is still recorded. The recovery workflow
+// verifies that identity and releases detention before completing.
+func StartPodUpdateCancellation(
+	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	desiredRevision string,
+	now time.Time,
+) (*enterpriseApi.SearchHeadClusterLifecycleOperationStatus, bool) {
+	if current == nil {
+		return nil, false
+	}
+	operation := current.DeepCopy()
+	if operation.Intent !=
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageCompleted ||
+		operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery ||
+		operation.DesiredRevision == "" ||
+		desiredRevision == "" ||
+		operation.DesiredRevision == desiredRevision ||
+		operation.ReplacementAuthorizedAt != nil ||
+		operation.TargetPodUID == "" {
+		return operation, false
+	}
+
+	startedAt := metav1.NewTime(now)
+	operation.MemberRejoinStartedAt = &startedAt
+	transition(
+		operation,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+		enterpriseApi.SearchHeadClusterLifecycleReasonPodUpdateCancelled,
+		fmt.Sprintf(
+			"Pod update revision %s was withdrawn or superseded; restoring %s to service before revision %s",
+			operation.DesiredRevision,
+			operation.TargetPod,
+			desiredRevision,
+		),
+		now,
+	)
+	return operation, true
+}
+
 // EvaluateReplacement advances a durable replacement operation from an
 // authoritative observation. The input operation is never mutated.
 func EvaluateReplacement(
@@ -697,6 +741,44 @@ func RecordDetentionRequestAttempt(
 		now,
 	)
 	return operation
+}
+
+// RecordReplacementAuthorization records the Kubernetes replacement boundary
+// only when the Pod still has the identity captured before detention. A
+// changed or missing UID is an unplanned replacement and blocks this planned
+// operation instead of adopting the new Pod as its original target.
+func RecordReplacementAuthorization(
+	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	podUID string,
+	now time.Time,
+) (*enterpriseApi.SearchHeadClusterLifecycleOperationStatus, bool) {
+	if current == nil {
+		return nil, false
+	}
+	operation := current.DeepCopy()
+	if podUID == "" ||
+		(operation.TargetPodUID != "" &&
+			operation.TargetPodUID != podUID) {
+		transition(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			enterpriseApi.SearchHeadClusterLifecycleReasonMemberIdentityMismatch,
+			fmt.Sprintf(
+				"target Pod %s changed from UID %q to %q before replacement authorization",
+				operation.TargetPod,
+				operation.TargetPodUID,
+				podUID,
+			),
+			now,
+		)
+		return operation, false
+	}
+	operation.TargetPodUID = podUID
+	if operation.ReplacementAuthorizedAt == nil {
+		authorizedAt := metav1.NewTime(now)
+		operation.ReplacementAuthorizedAt = &authorizedAt
+	}
+	return operation, true
 }
 
 func stageTimedOut(

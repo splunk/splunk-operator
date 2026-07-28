@@ -169,6 +169,77 @@ func TestScaleDownCancellationReleasesDetentionWithoutReplacement(t *testing.T) 
 	}
 }
 
+func TestPodUpdateCancellationRestoresOriginalPodWithoutCompletingRevision(t *testing.T) {
+	now := time.Date(2026, 7, 28, 6, 45, 0, 0, time.UTC)
+	target := int32(2)
+	startedAt := metav1.NewTime(now)
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:     "PodUpdate:example-search-head-2:revision-2:2",
+		Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision: "revision-2",
+		TargetPod:       "example-search-head-2",
+		TargetOrdinal:   &target,
+		TargetPodUID:    "original-pod-uid",
+		TargetMemberID:  "member-guid-2",
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageValidatingRecovery,
+		Reason: enterpriseApi.
+			SearchHeadClusterLifecycleReasonPodUpdateCancelled,
+		MemberRejoinStartedAt: &startedAt,
+	}
+	observation := recoveredPodObservation()
+	observation.PodUID = "original-pod-uid"
+	observation.MemberStatus = "ManualDetention"
+	observation.CaptainMemberStatus = "ManualDetention"
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+		ActionReleaseDetention,
+	)
+	decision.Operation = RecordDetentionReleaseAttempt(
+		decision.Operation,
+		now.Add(2*time.Second),
+	)
+
+	observation.MemberStatus = "Up"
+	observation.CaptainMemberStatus = "Up"
+	decision = EvaluateRecovery(
+		decision.Operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(3*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		ActionNone,
+	)
+	if len(decision.Operation.CompletedOrdinals) != 0 {
+		t.Fatalf(
+			"cancelled Pod update recorded completed revision ordinals %v",
+			decision.Operation.CompletedOrdinals,
+		)
+	}
+	if !strings.Contains(
+		decision.Operation.Message,
+		"Pod-update cancellation completed",
+	) {
+		t.Fatalf(
+			"completion message = %q, want Pod-update cancellation evidence",
+			decision.Operation.Message,
+		)
+	}
+}
+
 func TestScaleDownCancellationBlocksWhenOriginalPodIsNotIntact(t *testing.T) {
 	now := time.Date(2026, 7, 28, 4, 35, 0, 0, time.UTC)
 	target := int32(3)

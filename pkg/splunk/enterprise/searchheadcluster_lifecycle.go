@@ -309,6 +309,20 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 		// executing any side effect.
 		return false, nil
 	}
+	if current.TargetPodUID == "" {
+		pod, err := getSearchHeadLifecyclePod(ctx, mgr, current.TargetPod)
+		if err != nil {
+			return false, err
+		}
+		// Capture the original Pod identity before detention or captain
+		// transfer. This makes a pre-authorization cancellation fail closed if
+		// an unplanned replacement races the requested rollout.
+		current.TargetPodUID = string(pod.UID)
+		// Persist the identity as its own durable barrier. No Splunk side
+		// effect or Kubernetes replacement authorization may run in the same
+		// reconciliation that first observes the original Pod UID.
+		return false, nil
+	}
 
 	observation := mgr.observeLifecycleReplacement(ctx, n, now)
 	beforeStage := current.Stage
@@ -328,10 +342,22 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 		return false, fmt.Errorf("SHC lifecycle decision did not return operation status")
 	}
 	if decision.Operation.Stage != beforeStage {
+		if blockedErr := mgr.lifecycleBlockedError(
+			ctx,
+			beforeStage,
+		); blockedErr != nil {
+			return false, blockedErr
+		}
 		// The controller's deferred status update creates a durable stage
 		// barrier. Execute the action only after this stage is observed on a
 		// later reconciliation.
 		return false, nil
+	}
+	if blockedErr := mgr.lifecycleBlockedError(
+		ctx,
+		beforeStage,
+	); blockedErr != nil {
+		return false, blockedErr
 	}
 
 	switch decision.Action.Type {
@@ -388,9 +414,20 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 		if err != nil {
 			return false, err
 		}
-		decision.Operation.TargetPodUID = string(pod.UID)
-		authorizedAt := metav1.NewTime(searchHeadClusterLifecycleNow())
-		decision.Operation.ReplacementAuthorizedAt = &authorizedAt
+		var authorized bool
+		decision.Operation, authorized =
+			shcworkflow.RecordReplacementAuthorization(
+				decision.Operation,
+				string(pod.UID),
+				searchHeadClusterLifecycleNow(),
+			)
+		mgr.cr.Status.LifecycleOperation = decision.Operation
+		if !authorized {
+			return false, mgr.lifecycleBlockedError(
+				ctx,
+				beforeStage,
+			)
+		}
 		return true, nil
 	default:
 		return false, fmt.Errorf("unsupported SHC lifecycle action %q", decision.Action.Type)

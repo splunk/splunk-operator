@@ -800,7 +800,28 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 		t.Fatal("adapter executed an action before operation identity was persisted")
 	}
 
-	// Reconcile 2 persists DetainingTarget; detention is still not called.
+	// Reconcile 2 persists the original Pod identity as its own barrier;
+	// detention is still not called.
+	ready, err = mgr.prepareLifecycleReplacement(
+		context.Background(),
+		2,
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+	)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if cr.Status.LifecycleOperation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageValidatingCluster {
+		t.Fatalf("stage = %q, want ValidatingCluster", cr.Status.LifecycleOperation.Stage)
+	}
+	if cr.Status.LifecycleOperation.TargetPodUID != "original-pod-uid" {
+		t.Fatalf(
+			"target Pod UID = %q, want original identity captured before detention",
+			cr.Status.LifecycleOperation.TargetPodUID,
+		)
+	}
+	if detentionCalls != 0 {
+		t.Fatal("detention executed in the same reconcile as its stage transition")
+	}
+
+	// Reconcile 3 persists DetainingTarget; detention is still not called.
 	ready, err = mgr.prepareLifecycleReplacement(
 		context.Background(),
 		2,
@@ -814,7 +835,7 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 		t.Fatal("detention executed in the same reconcile as its stage transition")
 	}
 
-	// Reconcile 3 observes the persisted stage and may request detention.
+	// Reconcile 4 observes the persisted stage and may request detention.
 	ready, err = mgr.prepareLifecycleReplacement(
 		context.Background(),
 		2,
@@ -1127,9 +1148,27 @@ func TestScaleDownCaptainTransferPrecedesMembershipRemoval(t *testing.T) {
 		return nil
 	}
 
-	// A persisted transfer stage submits exactly one transfer request. It
-	// cannot remove membership while the target remains the observed captain.
+	// First persist the original Pod identity. The transfer stage cannot
+	// submit its side effect in the same reconciliation.
 	ready, err := mgr.PrepareScaleDown(context.Background(), target)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if cr.Status.LifecycleOperation.TargetPodUID != "scale-down-pod-uid" {
+		t.Fatalf(
+			"scale-down target UID = %q, want durable original identity",
+			cr.Status.LifecycleOperation.TargetPodUID,
+		)
+	}
+	if transferCalls != 0 || removeCalls != 0 {
+		t.Fatalf(
+			"calls during identity barrier: transfer=%d removal=%d; want 0 and 0",
+			transferCalls,
+			removeCalls,
+		)
+	}
+
+	// A persisted transfer stage now submits exactly one transfer request. It
+	// cannot remove membership while the target remains the observed captain.
+	ready, err = mgr.PrepareScaleDown(context.Background(), target)
 	assertLifecycleAdapterResult(t, ready, err, false)
 	if transferCalls != 1 ||
 		transferTarget != "https://splunk-example-search-head-1:8089" {
@@ -1902,8 +1941,8 @@ func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *t
 		}, nil
 	}
 
-	// Persist authorization as a separate stage before returning permission
-	// to replace ordinal zero.
+	// Persist the original Pod identity before evaluating the durable drain
+	// stage or returning permission to replace ordinal zero.
 	ready, err := mgr.prepareLifecycleReplacement(
 		context.Background(),
 		target,
@@ -1912,14 +1951,42 @@ func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *t
 	assertLifecycleAdapterResult(t, ready, err, false)
 	operation := cr.Status.LifecycleOperation
 	if operation.Stage !=
-		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement {
-		t.Fatalf("stage = %q, want AuthorizingReplacement", operation.Stage)
+		enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches {
+		t.Fatalf("stage = %q, want DrainingSearches", operation.Stage)
 	}
-	if operation.Captain != captainPod {
-		t.Fatalf("observed captain = %q, want %q", operation.Captain, captainPod)
+	if operation.TargetPodUID != "ordinal-zero-pod-uid" ||
+		operation.ReplacementAuthorizedAt != nil {
+		t.Fatalf(
+			"ordinal-zero identity barrier = %#v, want captured but unauthorized target",
+			operation,
+		)
 	}
 	if transferCalls != 0 {
 		t.Fatalf("captain transfer calls = %d, want zero", transferCalls)
+	}
+
+	// A later reconciliation persists replacement authorization as a separate
+	// stage, without returning replacement permission.
+	ready, err = mgr.prepareLifecycleReplacement(
+		context.Background(),
+		target,
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+	)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if transferCalls != 0 {
+		t.Fatalf("captain transfer calls after authorization stage = %d, want zero", transferCalls)
+	}
+	operation = cr.Status.LifecycleOperation
+	if operation.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement ||
+		operation.ReplacementAuthorizedAt != nil {
+		t.Fatalf(
+			"ordinal-zero authorization barrier = %#v, want staged but unauthorized target",
+			operation,
+		)
+	}
+	if operation.Captain != captainPod {
+		t.Fatalf("observed captain = %q, want %q", operation.Captain, captainPod)
 	}
 
 	ready, err = mgr.prepareLifecycleReplacement(
@@ -2121,6 +2188,7 @@ func TestLifecycleAdapterRetriesUnknownDetentionOutcome(t *testing.T) {
 		now,
 	)
 	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget
+	operation.TargetPodUID = "original-pod-uid"
 	stageStartedAt := metav1.NewTime(now)
 	operation.StageStartedAt = &stageStartedAt
 

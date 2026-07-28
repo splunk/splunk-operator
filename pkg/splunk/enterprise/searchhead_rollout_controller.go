@@ -286,8 +286,10 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 
 // lifecycleRecoveryActiveForStatefulSet prevents the recovery state machine
 // from waiting for termination before a partitioned RollingUpdate has made
-// the authorized target eligible for replacement. OnDelete retains the
-// existing Operator-owned replacement ordering.
+// the authorized target eligible for replacement. In-place cancellation does
+// not need partition advancement because Kubernetes never received replacement
+// authorization. OnDelete retains the existing Operator-owned replacement
+// ordering.
 func lifecycleRecoveryActiveForStatefulSet(
 	statefulSet *appsv1.StatefulSet,
 	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
@@ -303,6 +305,16 @@ func lifecycleRecoveryActiveForStatefulSet(
 		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown {
 		// A cancelled scale-down restores the existing target in place. No
 		// partition change or Pod replacement is being authorized.
+		return true
+	}
+	if operation.Intent ==
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+		operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery &&
+		operation.ReplacementAuthorizedAt == nil {
+		// A withdrawn or superseded Pod update restores the original target in
+		// place. Its partition remains above the target ordinal because
+		// replacement was never authorized.
 		return true
 	}
 	if operation.TargetOrdinal == nil ||
@@ -941,6 +953,34 @@ func (mgr *searchHeadClusterPodManager) recordRollingUpdateDecision(
 		decision.Reason,
 		decision.Message,
 	)
+	lifecycleTerminal := false
+	if operation := mgr.cr.Status.LifecycleOperation; operation != nil &&
+		(operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked ||
+			operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageFailed) {
+		lifecycleTerminal = true
+		reason := operation.Reason
+		if reason == "" {
+			reason =
+				enterpriseApi.SearchHeadClusterLifecycleReasonClusterNotSafe
+		}
+		message := operation.Message
+		if message == "" {
+			message = fmt.Sprintf(
+				"lifecycle operation %s for %s is %s",
+				operation.OperationID,
+				operation.TargetPod,
+				operation.Stage,
+			)
+		}
+		statusMessage = fmt.Sprintf(
+			"%s%s: %s",
+			shcRollingUpdateStatusPrefix,
+			reason,
+			message,
+		)
+	}
 	statusChanged := mgr.cr.Status.Message != statusMessage
 	mgr.cr.Status.Message = statusMessage
 	if statusChanged {
@@ -967,7 +1007,9 @@ func (mgr *searchHeadClusterPodManager) recordRollingUpdateDecision(
 		"updateRevision", state.UpdateRevision,
 		"lifecycleStage", state.Lifecycle.Stage,
 	)
-	if decision.Action == upgrade.SHCRolloutActionBlock && statusChanged {
+	if decision.Action == upgrade.SHCRolloutActionBlock &&
+		statusChanged &&
+		!lifecycleTerminal {
 		GetEventPublisher(ctx, mgr.cr).Warning(
 			ctx,
 			EventReasonSHCRolloutBlocked,

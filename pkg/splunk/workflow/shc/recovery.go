@@ -160,14 +160,25 @@ func EvaluateRecovery(
 			operation.Intent ==
 				enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown &&
 				operation.MembershipRemovalRequestedAt == nil
-		if scaleDownCancellation {
+		podUpdateCancellation :=
+			operation.Intent ==
+				enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+				operation.ReplacementAuthorizedAt == nil
+		inPlaceCancellation :=
+			scaleDownCancellation || podUpdateCancellation
+		if inPlaceCancellation {
 			if !observation.PodExists || observation.PodDeleting {
+				intent := "scale down"
+				if podUpdateCancellation {
+					intent = "Pod update"
+				}
 				transition(
 					operation,
 					enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
 					enterpriseApi.SearchHeadClusterLifecycleReasonClusterNotSafe,
 					fmt.Sprintf(
-						"cannot cancel scale down for %s because the original Pod is missing or terminating",
+						"cannot cancel %s for %s because the original Pod is missing or terminating",
+						intent,
 						operation.TargetPod,
 					),
 					now,
@@ -177,12 +188,17 @@ func EvaluateRecovery(
 			if operation.TargetPodUID == "" {
 				operation.TargetPodUID = observation.PodUID
 			} else if observation.PodUID != operation.TargetPodUID {
+				intent := "scale down"
+				if podUpdateCancellation {
+					intent = "Pod update"
+				}
 				transition(
 					operation,
 					enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
 					enterpriseApi.SearchHeadClusterLifecycleReasonMemberIdentityMismatch,
 					fmt.Sprintf(
-						"cannot cancel scale down for %s because Pod UID %q does not match the original UID %q",
+						"cannot cancel %s for %s because Pod UID %q does not match the original UID %q",
+						intent,
 						operation.TargetPod,
 						observation.PodUID,
 						operation.TargetPodUID,
@@ -190,6 +206,33 @@ func EvaluateRecovery(
 					now,
 				)
 				return Decision{Operation: operation}
+			}
+			if podUpdateCancellation {
+				if decision, stop := validateReplacementIdentity(
+					operation,
+					observation,
+					now,
+				); stop {
+					return decision
+				}
+				if !observation.MemberObserved ||
+					!observation.CaptainMemberObserved {
+					setReason(
+						operation,
+						enterpriseApi.SearchHeadClusterLifecycleReasonMemberNotRegistered,
+						fmt.Sprintf(
+							"waiting to verify retained member identity for cancelled Pod update %s",
+							operation.TargetPod,
+						),
+						now,
+					)
+					return Decision{
+						Operation: operation,
+						Action: Action{
+							Type: ActionObserveCluster,
+						},
+					}
+				}
 			}
 		} else {
 			if decision, stop := validateReplacementIdentity(operation, observation, now); stop {
@@ -544,6 +587,16 @@ func validateRecoveredMember(
 			operation.TargetPod,
 		)
 	}
+	podUpdateCancellation :=
+		operation.Intent ==
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+			operation.ReplacementAuthorizedAt == nil
+	if podUpdateCancellation {
+		completionMessage = fmt.Sprintf(
+			"Pod-update cancellation completed; %s retained its identity and was restored to service",
+			operation.TargetPod,
+		)
+	}
 	transition(
 		operation,
 		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
@@ -553,6 +606,7 @@ func validateRecoveredMember(
 	)
 	if operation.Intent ==
 		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+		!podUpdateCancellation &&
 		operation.TargetOrdinal != nil &&
 		!slices.Contains(operation.CompletedOrdinals, *operation.TargetOrdinal) {
 		operation.CompletedOrdinals = append(operation.CompletedOrdinals, *operation.TargetOrdinal)

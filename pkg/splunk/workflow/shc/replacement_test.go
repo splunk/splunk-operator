@@ -289,6 +289,40 @@ func TestRecordDetentionRequestAttemptPreservesFirstAttemptAndCountsRetries(t *t
 	}
 }
 
+func TestReplacementAuthorizationRequiresCapturedPodIdentity(t *testing.T) {
+	now := time.Date(2026, 7, 28, 6, 45, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement
+	operation.TargetPodUID = "original-pod-uid"
+
+	authorized, ok := RecordReplacementAuthorization(
+		operation,
+		"original-pod-uid",
+		now.Add(time.Second),
+	)
+	if !ok || authorized.ReplacementAuthorizedAt == nil {
+		t.Fatalf("intact target was not authorized: %#v", authorized)
+	}
+	if operation.ReplacementAuthorizedAt != nil {
+		t.Fatal("replacement authorization mutated persisted input")
+	}
+
+	blocked, ok := RecordReplacementAuthorization(
+		operation,
+		"unplanned-replacement-uid",
+		now.Add(2*time.Second),
+	)
+	if ok ||
+		blocked.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked ||
+		blocked.Reason !=
+			enterpriseApi.SearchHeadClusterLifecycleReasonMemberIdentityMismatch ||
+		blocked.ReplacementAuthorizedAt != nil {
+		t.Fatalf("changed target identity was not blocked: %#v", blocked)
+	}
+}
+
 func TestCaptainTransferTimeoutBlocksReplacement(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	operation := newTestOperation(now)
@@ -553,6 +587,89 @@ func TestScaleDownCancellationRequiresIntactMembershipAndTarget(t *testing.T) {
 		notCancelled.Stage !=
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
 		t.Fatal("missing target ordinal was incorrectly treated as cancellable")
+	}
+}
+
+func TestPodUpdateCancellationRequiresSupersededRevisionAndOriginalPod(t *testing.T) {
+	now := time.Date(2026, 7, 28, 6, 45, 0, 0, time.UTC)
+	target := int32(2)
+	operation := StartReplacement(
+		"PodUpdate:example-search-head-2:revision-2:2",
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		"revision-2",
+		"example-search-head-2",
+		target,
+		now.Add(-time.Minute),
+	)
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageBlocked
+	operation.TargetPodUID = "original-pod-uid"
+
+	cancelled, started := StartPodUpdateCancellation(
+		operation,
+		"revision-1",
+		now,
+	)
+	if !started {
+		t.Fatal("withdrawn Pod revision did not start cancellation")
+	}
+	if cancelled.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery ||
+		cancelled.Reason !=
+			enterpriseApi.SearchHeadClusterLifecycleReasonPodUpdateCancelled ||
+		cancelled.MemberRejoinStartedAt == nil {
+		t.Fatalf("Pod-update cancellation = %#v", cancelled)
+	}
+	if operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
+		t.Fatal("Pod-update cancellation mutated persisted input")
+	}
+
+	resumed, started := StartPodUpdateCancellation(
+		cancelled,
+		"revision-1",
+		now,
+	)
+	if started ||
+		resumed.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery {
+		t.Fatalf("durable cancellation did not resume idempotently: %#v", resumed)
+	}
+
+	authorized := operation.DeepCopy()
+	authorizedAt := metav1.NewTime(now)
+	authorized.ReplacementAuthorizedAt = &authorizedAt
+	notCancelled, started := StartPodUpdateCancellation(
+		authorized,
+		"revision-1",
+		now,
+	)
+	if started ||
+		notCancelled.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
+		t.Fatal("authorized replacement was incorrectly treated as cancellable")
+	}
+
+	notCancelled, started = StartPodUpdateCancellation(
+		operation,
+		"revision-2",
+		now,
+	)
+	if started ||
+		notCancelled.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
+		t.Fatal("unchanged desired revision was incorrectly treated as cancellable")
+	}
+
+	identityMissing := operation.DeepCopy()
+	identityMissing.TargetPodUID = ""
+	notCancelled, started = StartPodUpdateCancellation(
+		identityMissing,
+		"revision-1",
+		now,
+	)
+	if started ||
+		notCancelled.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
+		t.Fatal("operation without original Pod identity was incorrectly cancelled")
 	}
 }
 

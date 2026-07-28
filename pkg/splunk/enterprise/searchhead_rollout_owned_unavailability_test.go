@@ -53,6 +53,7 @@ func TestRollingUpdateControllerContinuesOwnedTargetWithdrawal(t *testing.T) {
 	}, targetPod); err != nil {
 		t.Fatalf("get lifecycle target Pod: %v", err)
 	}
+	targetPod.UID = types.UID("owned-target-pod-uid")
 	for index := range targetPod.Status.Conditions {
 		if targetPod.Status.Conditions[index].Type == corev1.PodReady {
 			targetPod.Status.Conditions[index].Status = corev1.ConditionFalse
@@ -106,6 +107,8 @@ func TestRollingUpdateControllerContinuesOwnedTargetWithdrawal(t *testing.T) {
 		return nil
 	}
 
+	// First persist the original Pod identity. The owned-unavailability path
+	// must not perform detention in the same reconciliation.
 	phase, err := mgr.updateRollingStatefulSetPods(
 		context.Background(),
 		statefulSet,
@@ -117,8 +120,34 @@ func TestRollingUpdateControllerContinuesOwnedTargetWithdrawal(t *testing.T) {
 	if phase != enterpriseApi.PhaseUpdating {
 		t.Fatalf("phase = %q, want %q", phase, enterpriseApi.PhaseUpdating)
 	}
+	if detentionCalls != 0 {
+		t.Fatalf("detention calls during identity barrier = %d, want 0", detentionCalls)
+	}
+	if mgr.cr.Status.LifecycleOperation.TargetPodUID != "owned-target-pod-uid" {
+		t.Fatalf(
+			"owned lifecycle target Pod UID = %q, want durable fixture identity",
+			mgr.cr.Status.LifecycleOperation.TargetPodUID,
+		)
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("identity barrier changed Kubernetes state: %v", client.Calls["Update"])
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+
+	phase, err = mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("continue owned lifecycle target after identity barrier: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("phase = %q, want %q", phase, enterpriseApi.PhaseUpdating)
+	}
 	if detentionCalls != 1 {
-		t.Fatalf("detention calls = %d, want 1", detentionCalls)
+		t.Fatalf("detention calls after identity barrier = %d, want 1", detentionCalls)
 	}
 	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
 	if len(client.Calls["Update"]) != 0 {

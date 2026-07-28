@@ -2489,12 +2489,24 @@ func TestRollingUpdateControllerBlocksFailedReplacementWithoutAdvancing(t *testi
 	}
 	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, target)
 	assertNoRollingUpdatePodDelete(t, client)
-	assertRolloutEvent(
-		t,
-		recorder,
-		EventReasonSHCRolloutBlocked,
-		corev1.EventTypeWarning,
-	)
+	if len(recorder.events) != 0 {
+		t.Fatalf(
+			"observing a durable lifecycle failure emitted %d duplicate events",
+			len(recorder.events),
+		)
+	}
+	if !strings.Contains(
+		mgr.cr.Status.Message,
+		string(
+			enterpriseApi.
+				SearchHeadClusterLifecycleReasonSplunkStartupFailed,
+		),
+	) {
+		t.Fatalf(
+			"blocked status = %q, want durable lifecycle reason",
+			mgr.cr.Status.Message,
+		)
+	}
 
 	operation = mgr.cr.Status.LifecycleOperation
 	if operation == nil ||
@@ -2865,6 +2877,102 @@ func TestLifecycleRecoveryDoesNotRequirePartitionForScaleDownCancellation(
 
 	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
 		t.Fatal("cancelled scale down incorrectly waited for partition advancement")
+	}
+}
+
+func TestLifecycleRecoveryDoesNotRequirePartitionForPodUpdateCancellation(
+	t *testing.T,
+) {
+	target := int32(2)
+	partition := int32(3)
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		TargetOrdinal: &target,
+		TargetPodUID:  "original-pod-uid",
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageValidatingRecovery,
+		Reason: enterpriseApi.
+			SearchHeadClusterLifecycleReasonPodUpdateCancelled,
+	}
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+	}
+
+	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
+		t.Fatal("cancelled Pod update incorrectly waited for partition advancement")
+	}
+}
+
+func TestRollingUpdateObservationDoesNotRepeatDurableLifecycleBlockedEvent(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, _ := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	target := int32(2)
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:     "PodUpdate:example-search-head-2:revision-2:2",
+			Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision: "revision-2",
+			TargetPod:       statefulSet.GetName() + "-2",
+			TargetOrdinal:   &target,
+			TargetPodUID:    "original-pod-uid",
+			Stage: enterpriseApi.
+				SearchHeadClusterLifecycleStageBlocked,
+			Reason: enterpriseApi.
+				SearchHeadClusterLifecycleReasonSearchDrainTimedOut,
+			Message: "search drain timed out: historical=0 realtime=1",
+		}
+	recorder := &mockEventRecorder{}
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		&K8EventPublisher{recorder: recorder, instance: mgr.cr},
+	)
+	state, err := mgr.observeRollingStatefulSet(ctx, statefulSet)
+	if err != nil {
+		t.Fatalf("observe StatefulSet: %v", err)
+	}
+	decision := upgrade.EvaluateSHCRollout(state)
+	if decision.Action != upgrade.SHCRolloutActionBlock {
+		t.Fatalf(
+			"action = %q reason = %q, want Block",
+			decision.Action,
+			decision.Reason,
+		)
+	}
+
+	mgr.recordRollingUpdateDecision(ctx, state, decision)
+	if len(recorder.events) != 0 {
+		t.Fatalf(
+			"durable lifecycle block observation emitted %d duplicate events",
+			len(recorder.events),
+		)
+	}
+	if !strings.Contains(
+		mgr.cr.Status.Message,
+		string(
+			enterpriseApi.
+				SearchHeadClusterLifecycleReasonSearchDrainTimedOut,
+		),
+	) {
+		t.Fatalf(
+			"status message = %q, want durable lifecycle reason",
+			mgr.cr.Status.Message,
+		)
 	}
 }
 

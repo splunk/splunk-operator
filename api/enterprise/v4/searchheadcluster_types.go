@@ -204,6 +204,7 @@ const (
 	SearchHeadClusterLifecycleReasonMemberRejoinTimedOut          SearchHeadClusterLifecycleReason = "MemberRejoinTimedOut"
 	SearchHeadClusterLifecycleReasonRecoveryValidated             SearchHeadClusterLifecycleReason = "RecoveryValidated"
 	SearchHeadClusterLifecycleReasonScaleDownCancelled            SearchHeadClusterLifecycleReason = "ScaleDownCancelled"
+	SearchHeadClusterLifecycleReasonPodUpdateCancelled            SearchHeadClusterLifecycleReason = "PodUpdateCancelled"
 	SearchHeadClusterLifecycleReasonClusterDeletionRequested      SearchHeadClusterLifecycleReason = "ClusterDeletionRequested"
 	SearchHeadClusterLifecycleReasonOperationCompleted            SearchHeadClusterLifecycleReason = "OperationCompleted"
 	SearchHeadClusterLifecycleReasonUnsupportedRuntimeContract    SearchHeadClusterLifecycleReason = "UnsupportedRuntimeContract"
