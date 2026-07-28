@@ -252,9 +252,10 @@ gcp_auth_with_service_account_key() {
   return "${auth_rc}"
 }
 
-# creds-helper selects DOCKER_CONFIG. Configure source auth before GCP auth so
-# the GAR login is written to the same Docker config.
+# creds-helper selects DOCKER_CONFIG. Configure all source registries before
+# GCP auth so the GAR login is written to the same Docker config.
 login_enterprise_source_registry_if_needed "${enterprise_source_image}" >> "${run_log}" 2>&1
+login_source_registry_for_image "${source_operator_image}" >> "${build_log}" 2>&1
 
 log_step "gcp:auth:start" | tee -a "${run_log}" >/dev/null
 if [ "${gcp_auth_mode}" = "oidc" ]; then
@@ -298,7 +299,6 @@ append_context "${context_file}" "test_labels" "${TEST_LABELS}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 
 log_step "gcp:operator-image:promote:start source=${source_operator_image} target=${operator_image}" | tee -a "${build_log}" >/dev/null
-login_source_registry_for_image "${source_operator_image}" >> "${build_log}" 2>&1
 promote_image_to_private_registry "${source_operator_image}" "${operator_image}" >> "${build_log}" 2>&1
 printf '%s\n' "${operator_image}" > "${image_ref_file}"
 copy_if_exists "${build_image_digest_file}" "${digest_file}" >/dev/null 2>&1 || true
