@@ -99,6 +99,18 @@ but it defines runtime contracts that can survive that transition.
   ready/serving/updated members, one ready captain, no rolling restart, no KV
   Store maintenance, no pending configuration replication, and zero container
   restarts.
+- [x] (2026-07-28) Added durable cancellation and recovery for a Pod update
+  that is withdrawn before replacement authorization. The original Pod UID
+  must remain intact, detention is released only through observed recovery,
+  and the cancelled ordinal is not marked updated or allowed to advance the
+  StatefulSet partition.
+- [x] (2026-07-28) Passed targeted EKS search-drain qualification with the
+  final Operator image. A real-time search reached the configured timeout and
+  failed closed without replacing the Pod; withdrawing the revision restored
+  the same member to service. A bounded historical search delayed replacement
+  until its active count reached zero, after which all three ordinals completed
+  a partition-gated `RollingUpdate`, including dynamic captain transfer before
+  ordinal zero.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -230,10 +242,17 @@ but it defines runtime contracts that can survive that transition.
   active, a member reports `Restarting`, or the local management endpoint is
   temporarily unavailable.
   Evidence: the rollback fixture first reported three ready replicas while the
-  Splunk restart moved through ordinals one, two, and zero.
+  Splunk restart moved through ordinals one, two, and zero. The later
+  search-drain fixtures also reported the CR Ready before Docker-Splunk and
+  Splunk Ansible completed their final destructive synchronization; management
+  port 8089 then cycled sequentially across the three Pods without a
+  Kubernetes container restart.
   Consequence: qualification uses a continuous stability window over both
-  Kubernetes and Splunk-internal observations before authorizing a test
-  revision. A single Ready sample is not an acceptance gate.
+  Kubernetes, the local management endpoint, and Splunk-internal observations
+  before authorizing a test revision. A single Ready sample is not an
+  acceptance gate. The current runtime needs a separate startup-complete
+  contract so the Operator can make this distinction without a time-based
+  qualification soak.
 
 - Observation: during a legitimate member replacement, the local
   `/services/shcluster/member/info` endpoint can return HTTP 503 while the
@@ -430,6 +449,15 @@ but it defines runtime contracts that can survive that transition.
   Rationale: releasing detention after consensus membership changed, or after
   Kubernetes replaced the target, would conflate recovery with a new member
   and could restore traffic to an unverified instance.
+  Date: 2026-07-28.
+
+- Decision: cancel a requested Pod update only before replacement
+  authorization and only when the original target Pod UID remains present.
+  Rationale: a withdrawn or superseded revision can safely restore the
+  original member only while Kubernetes has not been authorized to replace
+  it. Recovery must release manual detention, verify the retained member in
+  both local and captain views, and refresh active-search counts before
+  completing.
   Date: 2026-07-28.
 
 - Decision: treat a completed scale-down operation as one historical desired
@@ -935,6 +963,47 @@ SHC scale-lifecycle extension captured on 2026-07-28:
   disabled KV Store maintenance, no Splunk rolling restart, and zero container
   restarts.
 
+SHC search-drain and Pod-update-cancellation extension captured on 2026-07-28:
+
+- Operator image source:
+  `5783e5b695d3912e6b0a82017947d432e87f7d10`, following the durable
+  cancellation change at
+  `23bdb631b423b38ec4ad835b1436947eb52cae26`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-5783e5b69`;
+- Operator image digest:
+  `sha256:986fc45f85ad073d6ac377a8c0b2becc1ebba6aad9620dc17017220dc3f574bf`;
+- the Linux repository gates `make fmt`, `make vet`, `make build`, and
+  `make test` passed. The test run completed all 41 Ginkgo suites, including
+  154 controller envtest cases, with no failures and 78.5 percent composite
+  coverage;
+- the real-time scenario observed one active real-time search in both the
+  durable operation and target-member status. The 30-second drain timeout
+  reached `Blocked/SearchDrainTimedOut`; the original Pod UID and revision
+  remained unchanged, partition remained three, the Pod readiness gate and
+  EndpointSlice became non-serving, and the search remained running;
+- the real-time timeout emitted exactly one `SHCRolloutBlocked` Event.
+  Cancelling the search and withdrawing the requested revision recovered the
+  same Pod in place, returned all search counts to zero, restored readiness and
+  serving, and emitted exactly one `SHCPodUpdateCancelled` Event;
+- the historical scenario used a bounded Splunk QA search command and observed
+  the original Pod and partition remain unchanged while the historical count
+  was active. Replacement was authorized only after that count reached zero;
+- the historical rollout completed ordinals `2 -> 1 -> 0`, never advanced
+  before the current target recovered, transferred captaincy from ordinal zero
+  to ordinal one before replacing ordinal zero, and ended with partition
+  three, three ready/updated replicas, matching current/update revisions, and
+  all members `Up` with zero active searches;
+- both fresh fixtures exposed a startup-readiness gap: the CR and Kubernetes
+  readiness could report Ready before final Docker-Splunk/Splunk Ansible
+  synchronization briefly cycled local management endpoints. The targeted
+  tests therefore required 120 continuous seconds of three-member management
+  reachability and zero container restarts before mutation. This proves the
+  scenarios but does not replace the five-minute pre- and post-action gate for
+  the complete release campaign; and
+- both namespaces, PVCs, and associated PVs were deleted after sanitized
+  evidence collection.
+
 ## Interfaces and Dependencies
 
 The technical designs must define concrete interfaces for:
@@ -1012,3 +1081,10 @@ desired-ordinal member observation. The final pinned image passed complete
 `3 -> 4` and `4 -> 3` cycles plus a 300-second stability gate without false
 rollout blocks, false scale Events, expected-lifecycle errors, concurrent
 planned disruptions, or container restarts.
+
+2026-07-28: Recorded durable Pod-update cancellation and targeted search-drain
+qualification. Added fail-closed real-time timeout recovery, fresh search-count
+observation during cancellation, bounded historical drain before replacement,
+complete reverse-ordinal `RollingUpdate`, dynamic captain transfer, exact
+Event-count assertions, and the startup-complete contract gap observed between
+reported readiness and final image-owned synchronization.

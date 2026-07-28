@@ -69,6 +69,14 @@ ownership.
   behavior on EKS.
 - [x] (2026-07-28) Passed a 300-second post-scale stability window over 17
   samples with all Kubernetes and Splunk health invariants continuously true.
+- [x] (2026-07-28) Qualified one real-time drain-timeout and cancellation
+  path on EKS. The operation failed closed before replacement, kept the
+  original Pod UID and StatefulSet partition, removed the target from service,
+  and recovered that same member when the requested revision was withdrawn.
+- [x] (2026-07-28) Qualified one bounded historical-search path on EKS. The
+  active historical count prevented replacement authorization, then all three
+  ordinals completed a native partition-gated `RollingUpdate` after the count
+  reached zero, including captain transfer before ordinal-zero replacement.
 - [ ] Complete cloud-provider qualification and release-readiness review.
 
 ## Surprises & Discoveries
@@ -156,9 +164,14 @@ ownership.
   that Splunk-managed rolling restart remains active.
   Evidence: the rollback fixture reported three ready replicas while Splunk
   reported `rolling_restart_flag=1`, moved `Restarting` through multiple
-  members, and briefly refused the local management connection.
-  Consequence: use a continuous pre-action and post-action stability window;
-  never authorize a lifecycle test from one Ready observation.
+  members, and briefly refused the local management connection. Both later
+  search-drain fixtures also reached CR Ready before final
+  Docker-Splunk/Splunk Ansible destructive synchronization cycled port 8089
+  sequentially across the three members without a container restart.
+  Consequence: use a continuous pre-action and post-action stability window
+  that includes local management reachability; never authorize a lifecycle
+  test from one Ready observation. Record the missing image-to-Operator
+  startup-complete signal as a runtime contract gap.
 
 - Observation: `member/info` can return HTTP 503 during a legitimate rejoin
   window before captain communication and minimum peer state are restored.
@@ -312,6 +325,14 @@ ownership.
   different recovery workflow and must fail closed.
   Date/Author: 2026-07-28, qualification team.
 
+- Decision: Pod-update cancellation passes only before replacement
+  authorization and only when the original Pod UID remains present.
+  Rationale: restoring service is safe only while Kubernetes has not replaced
+  the member. The test must prove durable detention release, retained identity,
+  recovery in local and captain views, unchanged partition, zero current search
+  counts, and exactly one cancellation Event.
+  Date/Author: 2026-07-28, qualification team.
+
 - Decision: final scale acceptance requires correct semantic signals in
   addition to successful convergence.
   Rationale: a false scale direction, expected-lifecycle error, or transient
@@ -321,9 +342,10 @@ ownership.
 
 ## Outcomes & Retrospective
 
-The first integrated positive-path campaign, one active-strategy rollback, and
-the scale lifecycle extension are complete on EKS. A pinned Linux runtime
-image formed a three-member SHC,
+The first integrated positive-path campaign, one active-strategy rollback, the
+scale lifecycle extension, and targeted real-time and historical search-drain
+scenarios are complete on EKS. A pinned Linux runtime image formed a
+three-member SHC,
 completed an Operator-managed `OnDelete` rollout, migrated safely to
 partition-gated `RollingUpdate`, completed the reverse-ordinal rollout,
 transferred captaincy before captain replacement, preserved all retained
@@ -333,16 +355,20 @@ recovering, cancelled a pre-membership-removal scale-down, repeated that
 scale-down with fresh identity, and completed final `3 -> 4` and `4 -> 3`
 cycles. The final image emitted no false rollout block, false scale direction,
 or expected-lifecycle error, and passed a five-minute combined Kubernetes and
-Splunk stability window.
+Splunk stability window. The later search-drain image also failed closed on a
+real-time timeout, recovered a cancelled Pod update in place, and delayed a
+historical-search replacement until the active count reached zero.
 
 The complete `OnDelete` and `RollingUpdate` gates remain open because the
-required repetitions, soak, active historical and real-time searches, timeout
-policies, failed transfer, forced disruption, scheduling/storage/network
-faults, version skew, and rollback-under-failure have not passed. The earlier
-log-severity, phase, scale-event, and higher-ordinal observation defects are
+required repetitions, full-campaign soak around the new search cases,
+additional timeout policies, failed transfer, forced disruption,
+scheduling/storage/network faults, version skew, and rollback-under-failure
+have not passed. The earlier log-severity, phase, scale-event, higher-ordinal
+observation, cancelled-update recovery, and stale search-count defects are
 corrected for the tested paths. The campaign establishes that the integrated
-components can execute the intended happy path, active-operation rollback, and
-replica-count lifecycle; it is not evidence for default enablement.
+components can execute the intended happy path, active-operation rollback,
+replica-count lifecycle, and single-run search-drain cases; it is not evidence
+for default enablement.
 
 ## Context and Orientation
 
@@ -840,6 +866,44 @@ or entire support bundles.
   members `Up`, no pending configuration replication, no Splunk rolling
   restart, disabled KV Store maintenance, and zero container restarts.
 
+2026-07-28 SHC search-drain and cancellation extension:
+
+- Operator image source:
+  `5783e5b695d3912e6b0a82017947d432e87f7d10`, following
+  `23bdb631b423b38ec4ad835b1436947eb52cae26`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-5783e5b69`;
+- Operator image digest:
+  `sha256:986fc45f85ad073d6ac377a8c0b2becc1ebba6aad9620dc17017220dc3f574bf`;
+- `make fmt`, `make vet`, `make build`, and `make test` passed on the Linux
+  builder. All 41 Ginkgo suites passed, including 154 controller envtest cases,
+  with 78.5 percent composite coverage;
+- in the real-time scenario, the durable operation and target-member status
+  both reported one active real-time search. The 30-second timeout reached
+  `Blocked/SearchDrainTimedOut` while the original Pod UID and revision
+  remained unchanged, StatefulSet partition remained three, the serving
+  readiness gate and EndpointSlice were false, and the search was still
+  running;
+- exactly one `SHCRolloutBlocked` Event described the real-time count. After
+  the search was cancelled and the requested revision withdrawn, the same Pod
+  returned to Ready and serving, both operation and member search counts were
+  zero, and exactly one `SHCPodUpdateCancelled` Event was present;
+- in the historical scenario, a bounded Splunk QA command produced one active
+  historical search. The original Pod and partition remained unchanged during
+  drain, and replacement authorization occurred only after the count reached
+  zero;
+- the resulting rollout replaced ordinals `2 -> 1 -> 0`, recovered each member
+  before advancing, transferred captaincy from ordinal zero to ordinal one
+  before the final replacement, and ended with all members `Up`, three
+  ready/updated replicas, matching StatefulSet revisions, and partition three;
+- both fixtures required a 120-second targeted runtime-stability gate after
+  reported readiness because final image-owned synchronization briefly cycled
+  management endpoints. That targeted gate detected the race and made the
+  scenario deterministic; the documented five-minute gate still applies to
+  complete campaign acceptance before release; and
+- test namespaces, PVCs, and associated PVs were removed after evidence
+  collection.
+
 ## Interfaces and Dependencies
 
 The test harness requires stable adapters for:
@@ -909,3 +973,10 @@ scale-down cancellation, repeated-operation identity, scale-direction and
 stable-replica assertions, desired-ordinal member observation, final
 `3 -> 4`/`4 -> 3` evidence, PVC-policy verification, semantic log/Event audit,
 and a passing 300-second post-scale stability gate.
+
+2026-07-28: Recorded the SHC search-drain and cancellation extension. Added
+real-time timeout fail-closed assertions, in-place restoration of the original
+member when an unauthorized revision is withdrawn, fresh recovery search
+counts, bounded historical drain before native replacement, dynamic captain
+transfer, exact Event-count checks, and the startup-complete signal gap exposed
+by final image-owned synchronization after reported readiness.
