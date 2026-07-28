@@ -290,7 +290,13 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 		desiredRevision = current.DesiredRevision
 	}
 	if !lifecycleOperationMatches(current, intent, desiredRevision, targetPod, n) {
-		operationID := fmt.Sprintf("%s:%s:%s", intent, targetPod, desiredRevision)
+		operationID := fmt.Sprintf(
+			"%s:%s:%s:%d",
+			intent,
+			targetPod,
+			desiredRevision,
+			mgr.cr.GetGeneration(),
+		)
 		mgr.cr.Status.LifecycleOperation = shcworkflow.StartReplacement(
 			operationID,
 			intent,
@@ -756,6 +762,15 @@ func lifecycleOperationMatches(
 ) bool {
 	return operation != nil &&
 		operation.Intent == intent &&
+		// A completed scale-down record describes one historical change in
+		// desired replica count. If that ordinal is added again and a later
+		// scale-down targets it, a new operation must be created even though
+		// the intent and Pod name are identical. Pod-update completion remains
+		// revision-scoped and is intentionally reusable by rollout recovery.
+		!(intent ==
+			enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown &&
+			operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageCompleted) &&
 		operation.DesiredRevision == desiredRevision &&
 		operation.TargetPod == targetPod &&
 		operation.TargetOrdinal != nil &&

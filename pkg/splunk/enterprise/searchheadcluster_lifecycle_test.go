@@ -1093,6 +1093,68 @@ func TestLifecycleObservationRejectsCaptainDisagreement(t *testing.T) {
 	}
 }
 
+func TestLifecycleStartsNewScaleDownAfterCompletedCancellation(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+
+	now := time.Date(2026, 7, 28, 5, 30, 0, 0, time.UTC)
+	oldNow := searchHeadClusterLifecycleNow
+	t.Cleanup(func() { searchHeadClusterLifecycleNow = oldNow })
+	searchHeadClusterLifecycleNow = func() time.Time { return now }
+
+	target := int32(3)
+	oldStartedAt := metav1.NewTime(now.Add(-time.Hour))
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "example",
+			Generation: 42,
+		},
+	}
+	cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:           "ScaleDown:splunk-example-search-head-3:",
+			Intent:                enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown,
+			TargetPod:             "splunk-example-search-head-3",
+			TargetOrdinal:         &target,
+			TargetPodUID:          "original-pod-uid",
+			Stage:                 enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+			Reason:                enterpriseApi.SearchHeadClusterLifecycleReasonOperationCompleted,
+			StartedAt:             &oldStartedAt,
+			MemberRejoinStartedAt: &oldStartedAt,
+		}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	ready, err := mgr.PrepareScaleDown(context.Background(), target)
+	assertLifecycleAdapterResult(t, ready, err, false)
+
+	operation := cr.Status.LifecycleOperation
+	if operation.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingCluster {
+		t.Fatalf(
+			"stage = %q, want a new ValidatingCluster operation",
+			operation.Stage,
+		)
+	}
+	if operation.OperationID !=
+		"ScaleDown:splunk-example-search-head-3::42" {
+		t.Fatalf(
+			"operation ID = %q, want generation-scoped identity",
+			operation.OperationID,
+		)
+	}
+	if operation.StartedAt == nil ||
+		!operation.StartedAt.Time.Equal(now) {
+		t.Fatalf("startedAt = %v, want %v", operation.StartedAt, now)
+	}
+	if operation.TargetPodUID != "" ||
+		operation.MemberRejoinStartedAt != nil ||
+		operation.MembershipRemovalRequestedAt != nil {
+		t.Fatalf(
+			"new scale-down retained historical state: %#v",
+			operation,
+		)
+	}
+}
+
 func TestLifecycleAdapterObservesUnschedulableReplacementPod(t *testing.T) {
 	target := int32(2)
 	targetPod := "splunk-example-search-head-2"
