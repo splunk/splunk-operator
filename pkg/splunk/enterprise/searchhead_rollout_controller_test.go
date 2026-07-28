@@ -2992,6 +2992,99 @@ func TestRollingUpdateControllerWaitsForCompletedCancellationReadinessHandoff(
 	assertNoRollingUpdatePodDelete(t, client)
 }
 
+func TestRollingUpdateControllerWaitsForStatefulSetRevisionObservation(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	for _, test := range []struct {
+		name         string
+		applyPending bool
+		generation   int64
+		observed     int64
+	}{
+		{
+			name:         "spec update persisted by this reconcile",
+			applyPending: true,
+			generation:   2,
+			observed:     2,
+		},
+		{
+			name:       "StatefulSet controller has not observed generation",
+			generation: 2,
+			observed:   1,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			mgr, statefulSet, client := rollingUpdateControllerFixture(
+				t,
+				3,
+				"revision-1",
+				"revision-1",
+				[]string{"revision-1", "revision-1", "revision-1"},
+			)
+			mgr.statefulSetUpdatePending = test.applyPending
+			statefulSet.Generation = test.generation
+			statefulSet.Status.ObservedGeneration = test.observed
+			client.ResetCalls()
+
+			recorder := &mockEventRecorder{}
+			ctx := context.WithValue(
+				context.Background(),
+				splcommon.EventPublisherKey,
+				&K8EventPublisher{recorder: recorder, instance: mgr.cr},
+			)
+			phase, err := mgr.updateRollingStatefulSetPods(
+				ctx,
+				statefulSet,
+				3,
+			)
+			if err != nil {
+				t.Fatalf("revision observation wait returned error: %v", err)
+			}
+			if phase != enterpriseApi.PhaseUpdating {
+				t.Fatalf(
+					"revision observation phase = %q, want %q",
+					phase,
+					enterpriseApi.PhaseUpdating,
+				)
+			}
+			if !strings.Contains(
+				mgr.cr.Status.Message,
+				string(upgrade.SHCRolloutReasonWaitingForRevision),
+			) {
+				t.Fatalf(
+					"revision observation status = %q, want revision wait",
+					mgr.cr.Status.Message,
+				)
+			}
+			if mgr.cr.Status.LifecycleOperation != nil {
+				t.Fatalf(
+					"revision observation started lifecycle %#v",
+					mgr.cr.Status.LifecycleOperation,
+				)
+			}
+			if len(recorder.events) != 0 {
+				t.Fatalf(
+					"revision observation emitted %d events",
+					len(recorder.events),
+				)
+			}
+			if len(client.Calls["Update"]) != 0 {
+				t.Fatalf(
+					"revision observation changed Kubernetes state: %v",
+					client.Calls["Update"],
+				)
+			}
+			assertRollingUpdatePartition(
+				t,
+				statefulSet.Spec.UpdateStrategy,
+				3,
+			)
+			assertNoRollingUpdatePodDelete(t, client)
+		})
+	}
+}
+
 func TestRollingUpdateObservationDoesNotRepeatDurableLifecycleBlockedEvent(
 	t *testing.T,
 ) {

@@ -93,6 +93,27 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		statefulSet.Status.CurrentRevision == statefulSet.Status.UpdateRevision {
 		return enterpriseApi.PhaseScalingUp, nil
 	}
+	if mgr.statefulSetUpdatePending ||
+		statefulSet.Generation > statefulSet.Status.ObservedGeneration {
+		state := upgrade.SHCRolloutState{
+			Replicas:        *statefulSet.Spec.Replicas,
+			CurrentRevision: statefulSet.Status.CurrentRevision,
+			UpdateRevision:  statefulSet.Status.UpdateRevision,
+		}
+		if statefulSet.Spec.UpdateStrategy.RollingUpdate != nil &&
+			statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
+			state.Partition =
+				*statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition
+		}
+		decision := upgrade.SHCRolloutDecision{
+			Action: upgrade.SHCRolloutActionWait,
+			Reason: upgrade.SHCRolloutReasonWaitingForRevision,
+			Message: "wait for the StatefulSet controller to observe the " +
+				"latest Pod template and publish its update revision",
+		}
+		mgr.recordRollingUpdateDecision(ctx, state, decision)
+		return enterpriseApi.PhaseUpdating, nil
+	}
 
 	state, err := mgr.observeRollingStatefulSet(ctx, statefulSet)
 	if err != nil {
