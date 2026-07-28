@@ -228,6 +228,9 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 		return enterpriseApi.PhaseUpdating, nil
 
 	case upgrade.SHCRolloutActionWait, upgrade.SHCRolloutActionNone:
+		if decision.Reason == upgrade.SHCRolloutReasonScaleUpMemberPending {
+			return enterpriseApi.PhaseScalingUp, nil
+		}
 		return enterpriseApi.PhaseUpdating, nil
 
 	case upgrade.SHCRolloutActionComplete:
@@ -1000,6 +1003,11 @@ func (mgr *searchHeadClusterPodManager) observeRollingStatefulSet(
 		UpdateRevision:  statefulSet.Status.UpdateRevision,
 		Paused:          mgr.cr.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true",
 		Pods:            make([]upgrade.SHCRolloutPod, 0, replicas),
+	}
+	if mgr.cr.Status.LastStableReplicas != nil &&
+		replicas > *mgr.cr.Status.LastStableReplicas {
+		baseline := *mgr.cr.Status.LastStableReplicas
+		state.ScaleUpFromReplicas = &baseline
 	}
 
 	operation := mgr.cr.Status.LifecycleOperation

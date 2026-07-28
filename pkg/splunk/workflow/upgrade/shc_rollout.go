@@ -42,6 +42,7 @@ const (
 	SHCRolloutReasonInitialFormationPending       SHCRolloutReason = "InitialFormationPending"
 	SHCRolloutReasonCaptainUnavailable            SHCRolloutReason = "CaptainUnavailable"
 	SHCRolloutReasonRollbackPending               SHCRolloutReason = "RollbackPending"
+	SHCRolloutReasonScaleUpMemberPending          SHCRolloutReason = "ScaleUpMemberPending"
 	SHCRolloutReasonWaitingForRevision            SHCRolloutReason = "WaitingForRevision"
 	SHCRolloutReasonPrepareTarget                 SHCRolloutReason = "PrepareTarget"
 	SHCRolloutReasonPartitionAdvanceAuthorized    SHCRolloutReason = "PartitionAdvanceAuthorized"
@@ -88,8 +89,13 @@ type SHCRolloutState struct {
 	CurrentRevision string
 	UpdateRevision  string
 	Paused          bool
-	Pods            []SHCRolloutPod
-	Lifecycle       SHCRolloutLifecycle
+	// ScaleUpFromReplicas identifies the last stable replica boundary while
+	// Kubernetes creates additive ordinals from a scale-up-induced revision.
+	// Those ordinals were not replacements and therefore have no destructive
+	// lifecycle authorization.
+	ScaleUpFromReplicas *int32
+	Pods                []SHCRolloutPod
+	Lifecycle           SHCRolloutLifecycle
 }
 
 // SHCRolloutDecision is a pure coordinator result. DesiredPartition is set
@@ -210,6 +216,9 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 
 	if state.Partition < state.Replicas {
 		activeOrdinal := state.Partition
+		activeOrdinalIsScaleUpAddition :=
+			state.ScaleUpFromReplicas != nil &&
+				activeOrdinal >= *state.ScaleUpFromReplicas
 		for ordinal := activeOrdinal + 1; ordinal < state.Replicas; ordinal++ {
 			pod := pods[ordinal]
 			if !shcRolloutPodAvailable(pod) ||
@@ -237,6 +246,16 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 			activePod.Ready &&
 			!activePod.Deleting
 		if !activePodRecoveredByKubernetes {
+			if activeOrdinalIsScaleUpAddition {
+				return waitSHCRollout(
+					SHCRolloutReasonScaleUpMemberPending,
+					fmt.Sprintf(
+						"waiting for additive scale-up ordinal %d to become ready",
+						activeOrdinal,
+					),
+					ordinalPointer(activeOrdinal),
+				)
+			}
 			if !lifecycleTargetsOrdinal(state.Lifecycle, activeOrdinal) {
 				return blockSHCRollout(
 					SHCRolloutReasonConflictingLifecycleOperation,
@@ -292,6 +311,21 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 			preparingNextOrdinal := activeOrdinal > 0 &&
 				lifecycleTargetsOrdinal(state.Lifecycle, nextOrdinal)
 			if !preparingNextOrdinal {
+				if activeOrdinalIsScaleUpAddition {
+					if activeOrdinal == 0 {
+						return SHCRolloutDecision{
+							Action:  SHCRolloutActionComplete,
+							Reason:  SHCRolloutReasonStable,
+							Message: "additive scale-up ordinal recovered",
+						}
+					}
+					return SHCRolloutDecision{
+						Action:        SHCRolloutActionPrepareTarget,
+						Reason:        SHCRolloutReasonPrepareTarget,
+						Message:       fmt.Sprintf("prepare ordinal %d after additive scale-up ordinal %d recovered", nextOrdinal, activeOrdinal),
+						TargetOrdinal: ordinalPointer(nextOrdinal),
+					}
+				}
 				return blockSHCRollout(
 					SHCRolloutReasonConflictingLifecycleOperation,
 					fmt.Sprintf("recovered ordinal %d has no completed lifecycle record or next-ordinal preparation", activeOrdinal),

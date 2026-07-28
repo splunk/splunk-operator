@@ -661,6 +661,23 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				"error",
 				err,
 			)
+		} else if scaleUpMemberObservationExpectedUnavailable(
+			mgr.cr.Status.LastStableReplicas,
+			statefulSet,
+			n,
+		) {
+			shcLogger.InfoContext(
+				ctx,
+				"SearchHeadCluster scale-up member is temporarily unavailable",
+				"memberName",
+				memberName,
+				"lastStableReplicas",
+				*mgr.cr.Status.LastStableReplicas,
+				"targetReplicas",
+				*statefulSet.Spec.Replicas,
+				"error",
+				err,
+			)
 		} else {
 			shcLogger.ErrorContext(ctx, "unable to retrieve SearchHeadCluster member info", "memberName", memberName, "error", err)
 		}
@@ -736,4 +753,17 @@ func lifecycleMemberObservationExpectedUnavailable(
 	default:
 		return false
 	}
+}
+
+func scaleUpMemberObservationExpectedUnavailable(
+	lastStableReplicas *int32,
+	statefulSet *appsv1.StatefulSet,
+	ordinal int32,
+) bool {
+	return lastStableReplicas != nil &&
+		statefulSet.Spec.Replicas != nil &&
+		*statefulSet.Spec.Replicas > *lastStableReplicas &&
+		statefulSet.Status.Replicas > *lastStableReplicas &&
+		statefulSet.Status.ReadyReplicas < statefulSet.Status.Replicas &&
+		ordinal >= *lastStableReplicas
 }

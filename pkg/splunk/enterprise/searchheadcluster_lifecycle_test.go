@@ -332,6 +332,40 @@ func TestLifecycleMemberObservationExpectedUnavailable(t *testing.T) {
 	}
 }
 
+func TestScaleUpMemberObservationExpectedUnavailable(t *testing.T) {
+	stable := int32(3)
+	replicas := int32(4)
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      4,
+			ReadyReplicas: 3,
+		},
+	}
+	if !scaleUpMemberObservationExpectedUnavailable(
+		&stable,
+		statefulSet,
+		3,
+	) {
+		t.Fatal("starting additive ordinal should be expected unavailable")
+	}
+	if scaleUpMemberObservationExpectedUnavailable(
+		&stable,
+		statefulSet,
+		2,
+	) {
+		t.Fatal("existing member unavailability must remain unexpected")
+	}
+	statefulSet.Status.ReadyReplicas = 4
+	if scaleUpMemberObservationExpectedUnavailable(
+		&stable,
+		statefulSet,
+		3,
+	) {
+		t.Fatal("stable additive member unavailability must be unexpected")
+	}
+}
+
 func TestRollingUpdateOwnsClusterUpgradeLifecycle(t *testing.T) {
 	target := int32(2)
 	mgr := &searchHeadClusterPodManager{

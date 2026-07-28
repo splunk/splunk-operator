@@ -246,6 +246,60 @@ func TestSHCRolloutBlocksPartitionWithoutMatchingAuthorization(t *testing.T) {
 	)
 }
 
+func TestSHCRolloutTreatsScaleUpOrdinalAsAdditiveBeforeRollingExistingMembers(
+	t *testing.T,
+) {
+	baseline := int32(3)
+	state := SHCRolloutState{
+		Replicas:            4,
+		Partition:           3,
+		CurrentRevision:     "revision-1",
+		UpdateRevision:      "revision-2",
+		ScaleUpFromReplicas: &baseline,
+		Pods: []SHCRolloutPod{
+			{Ordinal: 0, Exists: true, Ready: true, Revision: "revision-1", MemberRegistered: true, MemberStatus: "Up"},
+			{Ordinal: 1, Exists: true, Ready: true, Revision: "revision-1", MemberRegistered: true, MemberStatus: "Up"},
+			{Ordinal: 2, Exists: true, Ready: true, Revision: "revision-1", MemberRegistered: true, MemberStatus: "Up"},
+			{Ordinal: 3, Exists: true, Revision: "revision-2"},
+		},
+	}
+
+	decision := EvaluateSHCRollout(state)
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionWait,
+		SHCRolloutReasonScaleUpMemberPending,
+		3,
+	)
+
+	state.Pods[3].Ready = true
+	state.Pods[3].MemberRegistered = true
+	state.Pods[3].MemberStatus = "Up"
+	decision = EvaluateSHCRollout(state)
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionPrepareTarget,
+		SHCRolloutReasonPrepareTarget,
+		2,
+	)
+
+	state.Lifecycle = lifecycleForOrdinal(
+		2,
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		false,
+	)
+	decision = EvaluateSHCRollout(state)
+	assertSHCRolloutDecision(
+		t,
+		decision,
+		SHCRolloutActionPrepareTarget,
+		SHCRolloutReasonPrepareTarget,
+		2,
+	)
+}
+
 func TestSHCRolloutBlocksLifecycleFailure(t *testing.T) {
 	state := pendingSHCRolloutState()
 	state.Lifecycle = lifecycleForOrdinal(

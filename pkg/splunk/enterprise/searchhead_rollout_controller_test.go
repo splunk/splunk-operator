@@ -1863,6 +1863,97 @@ func TestSearchHeadScaleUpAddsOneNewOrdinalWithoutRecyclingMembers(t *testing.T)
 	}
 }
 
+func TestRollingUpdateScaleUpRevisionSkewWaitsForAdditiveOrdinalThenRollsExistingMembers(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1", "revision-2"},
+	)
+	stable := int32(3)
+	mgr.cr.Status.LastStableReplicas = &stable
+	statefulSet.Status.ReadyReplicas = 3
+	setRollingUpdateFixturePodReady(
+		t,
+		client,
+		statefulSet,
+		3,
+		false,
+	)
+	client.ResetCalls()
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		4,
+	)
+	if err != nil {
+		t.Fatalf("wait for additive scale-up ordinal: %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingUp {
+		t.Fatalf(
+			"additive ordinal phase = %q, want %q",
+			phase,
+			enterpriseApi.PhaseScalingUp,
+		)
+	}
+	if mgr.cr.Status.LifecycleOperation != nil {
+		t.Fatalf(
+			"unready additive ordinal started replacement lifecycle: %#v",
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	assertNoRollingUpdatePodDelete(t, client)
+
+	statefulSet.Status.ReadyReplicas = 4
+	setRollingUpdateFixturePodReady(
+		t,
+		client,
+		statefulSet,
+		3,
+		true,
+	)
+	client.ResetCalls()
+	phase, err = mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		4,
+	)
+	if err != nil {
+		t.Fatalf("continue after additive scale-up ordinal recovered: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf(
+			"post-scale rollout phase = %q, want %q",
+			phase,
+			enterpriseApi.PhaseUpdating,
+		)
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != 2 ||
+		operation.DesiredRevision != "revision-2" {
+		t.Fatalf(
+			"post-scale lifecycle = %#v, want ordinal 2 at revision-2",
+			operation,
+		)
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 3)
+	assertNoRollingUpdatePodDelete(t, client)
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf(
+			"post-scale preparation changed Kubernetes state: %v",
+			client.Calls["Update"],
+		)
+	}
+}
+
 func TestRollingUpdateControllerHoldsAuthorizedTargetDuringCaptainNodeLoss(
 	t *testing.T,
 ) {
