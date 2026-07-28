@@ -40,6 +40,75 @@ var newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, cr 
 	}
 }
 
+func (mgr *searchHeadClusterPodManager) reconcileSearchDrainContinuationApproval(
+	ctx context.Context,
+	eventPublisher *K8EventPublisher,
+) bool {
+	operation := mgr.cr.Status.LifecycleOperation
+	approval := mgr.cr.Spec.LifecycleApproval
+	if operation == nil || approval == nil {
+		return false
+	}
+
+	var activeHistoricalSearches int32
+	var activeRealtimeSearches int32
+	targetObserved := false
+	for i := range mgr.cr.Status.Members {
+		member := mgr.cr.Status.Members[i]
+		if member.Name != operation.TargetPod {
+			continue
+		}
+		activeHistoricalSearches = int32(member.ActiveHistoricalSearchCount)
+		activeRealtimeSearches = int32(member.ActiveRealtimeSearchCount)
+		targetObserved = true
+		break
+	}
+	if !targetObserved {
+		return false
+	}
+
+	approvedOperation, applied :=
+		shcworkflow.ApplySearchDrainContinuationApproval(
+			operation,
+			approval,
+			mgr.cr.GetGeneration(),
+			activeHistoricalSearches,
+			activeRealtimeSearches,
+			searchHeadClusterLifecycleNow(),
+		)
+	if !applied {
+		return false
+	}
+	mgr.cr.Status.LifecycleOperation = approvedOperation
+	metrics.SHCSearchDrainContinuationApprovalCounter.Inc()
+	eventPublisher.Normal(
+		ctx,
+		EventReasonSHCSearchDrainContinuationApproved,
+		fmt.Sprintf(
+			"Approved continuation of lifecycle operation %s for %s after search-drain timeout with historical=%d realtime=%d; cluster and captain safety will be revalidated before replacement",
+			approvedOperation.OperationID,
+			approvedOperation.TargetPod,
+			activeHistoricalSearches,
+			activeRealtimeSearches,
+		),
+	)
+	logging.FromContext(ctx).InfoContext(
+		ctx,
+		"Search Head search-drain continuation approval applied",
+		"operationID",
+		approvedOperation.OperationID,
+		"targetPod",
+		approvedOperation.TargetPod,
+		"approvalGeneration",
+		approvedOperation.SearchDrainContinuationApprovalGeneration,
+		"activeHistoricalSearches",
+		activeHistoricalSearches,
+		"activeRealtimeSearches",
+		activeRealtimeSearches,
+	)
+	return true
+}
+
 // Update for searchHeadClusterPodManager handles all updates for a statefulset of search heads
 func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	logger := logging.FromContext(ctx).With("func", "searchHeadClusterPodManager.Update")
@@ -136,6 +205,16 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			// later reconciliation.
 			return enterpriseApi.PhaseUpdating, nil
 		}
+	}
+	if err == nil &&
+		searchHeadClusterLifecycleEnabled() &&
+		mgr.reconcileSearchDrainContinuationApproval(
+			ctx,
+			eventPublisher,
+		) {
+		// Persist the approval and its current search-count snapshot before
+		// revalidating safety or authorizing replacement.
+		return enterpriseApi.PhaseUpdating, nil
 	}
 	if err == nil &&
 		searchHeadClusterLifecycleEnabled() &&

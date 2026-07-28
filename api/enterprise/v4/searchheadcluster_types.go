@@ -49,6 +49,35 @@ const (
 	SearchHeadClusterPodUpdateStrategyRollingUpdate SearchHeadClusterPodUpdateStrategy = "RollingUpdate"
 )
 
+// SearchHeadClusterLifecycleApprovalAction identifies one explicitly approved
+// exception to the default fail-closed lifecycle policy.
+// +kubebuilder:validation:Enum=ContinueAfterSearchDrainTimeout
+type SearchHeadClusterLifecycleApprovalAction string
+
+const (
+	// SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout
+	// permits one named operation to continue after its search-drain timeout.
+	SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout SearchHeadClusterLifecycleApprovalAction = "ContinueAfterSearchDrainTimeout"
+)
+
+// SearchHeadClusterLifecycleApproval records customer approval for one exact
+// blocked lifecycle operation. The token is issued only after the operation
+// reaches its fail-closed timeout, so an approval cannot be supplied in
+// advance or reused by another operation.
+type SearchHeadClusterLifecycleApproval struct {
+	// OperationID must equal status.lifecycleOperation.operationID.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1024
+	OperationID string `json:"operationID"`
+
+	// Token must equal status.lifecycleOperation.searchDrainContinuationToken.
+	// +kubebuilder:validation:Pattern=`^[a-f0-9]{64}$`
+	Token string `json:"token"`
+
+	// Action identifies the exception being approved.
+	Action SearchHeadClusterLifecycleApprovalAction `json:"action"`
+}
+
 // SearchHeadClusterLifecyclePolicy configures lifecycle timing and rollout
 // ownership for a Search Head Cluster.
 type SearchHeadClusterLifecyclePolicy struct {
@@ -115,6 +144,13 @@ type SearchHeadClusterSpec struct {
 	// SearchHeadClusterLifecycle feature gate is enabled.
 	// +optional
 	LifecyclePolicy *SearchHeadClusterLifecyclePolicy `json:"lifecyclePolicy,omitempty"`
+
+	// LifecycleApproval permits one exact blocked lifecycle operation to
+	// continue after an operator-issued token is copied from status. It is
+	// active only when the SearchHeadClusterLifecycle feature gate is enabled.
+	// Stale or non-matching approvals are ignored.
+	// +optional
+	LifecycleApproval *SearchHeadClusterLifecycleApproval `json:"lifecycleApproval,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -176,38 +212,39 @@ const (
 type SearchHeadClusterLifecycleReason string
 
 const (
-	SearchHeadClusterLifecycleReasonOperationStarted              SearchHeadClusterLifecycleReason = "OperationStarted"
-	SearchHeadClusterLifecycleReasonClusterNotSafe                SearchHeadClusterLifecycleReason = "ClusterNotSafe"
-	SearchHeadClusterLifecycleReasonObservationStale              SearchHeadClusterLifecycleReason = "ObservationStale"
-	SearchHeadClusterLifecycleReasonConflictingCaptainObservation SearchHeadClusterLifecycleReason = "ConflictingCaptainObservation"
-	SearchHeadClusterLifecycleReasonDetentionRequested            SearchHeadClusterLifecycleReason = "DetentionRequested"
-	SearchHeadClusterLifecycleReasonDetentionTimedOut             SearchHeadClusterLifecycleReason = "DetentionTimedOut"
-	SearchHeadClusterLifecycleReasonKVStoreNotReady               SearchHeadClusterLifecycleReason = "KVStoreNotReady"
-	SearchHeadClusterLifecycleReasonDetentionReleasePending       SearchHeadClusterLifecycleReason = "DetentionReleasePending"
-	SearchHeadClusterLifecycleReasonDetentionReleaseTimedOut      SearchHeadClusterLifecycleReason = "DetentionReleaseTimedOut"
-	SearchHeadClusterLifecycleReasonSearchesActive                SearchHeadClusterLifecycleReason = "SearchesActive"
-	SearchHeadClusterLifecycleReasonSearchDrainTimedOut           SearchHeadClusterLifecycleReason = "SearchDrainTimedOut"
-	SearchHeadClusterLifecycleReasonCaptainTransferRequired       SearchHeadClusterLifecycleReason = "CaptainTransferRequired"
-	SearchHeadClusterLifecycleReasonCaptainTransferTimedOut       SearchHeadClusterLifecycleReason = "CaptainTransferTimedOut"
-	SearchHeadClusterLifecycleReasonReplacementAuthorized         SearchHeadClusterLifecycleReason = "ReplacementAuthorized"
-	SearchHeadClusterLifecycleReasonPodTerminationTimedOut        SearchHeadClusterLifecycleReason = "PodTerminationTimedOut"
-	SearchHeadClusterLifecycleReasonPodUnschedulable              SearchHeadClusterLifecycleReason = "PodUnschedulable"
-	SearchHeadClusterLifecycleReasonPodRevisionMismatch           SearchHeadClusterLifecycleReason = "PodRevisionMismatch"
-	SearchHeadClusterLifecycleReasonVolumeAttachmentPending       SearchHeadClusterLifecycleReason = "VolumeAttachmentPending"
-	SearchHeadClusterLifecycleReasonImagePullFailed               SearchHeadClusterLifecycleReason = "ImagePullFailed"
-	SearchHeadClusterLifecycleReasonPodStartupTimedOut            SearchHeadClusterLifecycleReason = "PodStartupTimedOut"
-	SearchHeadClusterLifecycleReasonSplunkStartupFailed           SearchHeadClusterLifecycleReason = "SplunkStartupFailed"
-	SearchHeadClusterLifecycleReasonMemberNotRegistered           SearchHeadClusterLifecycleReason = "MemberNotRegistered"
-	SearchHeadClusterLifecycleReasonMemberNotUp                   SearchHeadClusterLifecycleReason = "MemberNotUp"
-	SearchHeadClusterLifecycleReasonMemberIdentityMismatch        SearchHeadClusterLifecycleReason = "MemberIdentityMismatch"
-	SearchHeadClusterLifecycleReasonMemberSynchronizationPending  SearchHeadClusterLifecycleReason = "MemberSynchronizationPending"
-	SearchHeadClusterLifecycleReasonMemberRejoinTimedOut          SearchHeadClusterLifecycleReason = "MemberRejoinTimedOut"
-	SearchHeadClusterLifecycleReasonRecoveryValidated             SearchHeadClusterLifecycleReason = "RecoveryValidated"
-	SearchHeadClusterLifecycleReasonScaleDownCancelled            SearchHeadClusterLifecycleReason = "ScaleDownCancelled"
-	SearchHeadClusterLifecycleReasonPodUpdateCancelled            SearchHeadClusterLifecycleReason = "PodUpdateCancelled"
-	SearchHeadClusterLifecycleReasonClusterDeletionRequested      SearchHeadClusterLifecycleReason = "ClusterDeletionRequested"
-	SearchHeadClusterLifecycleReasonOperationCompleted            SearchHeadClusterLifecycleReason = "OperationCompleted"
-	SearchHeadClusterLifecycleReasonUnsupportedRuntimeContract    SearchHeadClusterLifecycleReason = "UnsupportedRuntimeContract"
+	SearchHeadClusterLifecycleReasonOperationStarted                SearchHeadClusterLifecycleReason = "OperationStarted"
+	SearchHeadClusterLifecycleReasonClusterNotSafe                  SearchHeadClusterLifecycleReason = "ClusterNotSafe"
+	SearchHeadClusterLifecycleReasonObservationStale                SearchHeadClusterLifecycleReason = "ObservationStale"
+	SearchHeadClusterLifecycleReasonConflictingCaptainObservation   SearchHeadClusterLifecycleReason = "ConflictingCaptainObservation"
+	SearchHeadClusterLifecycleReasonDetentionRequested              SearchHeadClusterLifecycleReason = "DetentionRequested"
+	SearchHeadClusterLifecycleReasonDetentionTimedOut               SearchHeadClusterLifecycleReason = "DetentionTimedOut"
+	SearchHeadClusterLifecycleReasonKVStoreNotReady                 SearchHeadClusterLifecycleReason = "KVStoreNotReady"
+	SearchHeadClusterLifecycleReasonDetentionReleasePending         SearchHeadClusterLifecycleReason = "DetentionReleasePending"
+	SearchHeadClusterLifecycleReasonDetentionReleaseTimedOut        SearchHeadClusterLifecycleReason = "DetentionReleaseTimedOut"
+	SearchHeadClusterLifecycleReasonSearchesActive                  SearchHeadClusterLifecycleReason = "SearchesActive"
+	SearchHeadClusterLifecycleReasonSearchDrainTimedOut             SearchHeadClusterLifecycleReason = "SearchDrainTimedOut"
+	SearchHeadClusterLifecycleReasonSearchDrainContinuationApproved SearchHeadClusterLifecycleReason = "SearchDrainContinuationApproved"
+	SearchHeadClusterLifecycleReasonCaptainTransferRequired         SearchHeadClusterLifecycleReason = "CaptainTransferRequired"
+	SearchHeadClusterLifecycleReasonCaptainTransferTimedOut         SearchHeadClusterLifecycleReason = "CaptainTransferTimedOut"
+	SearchHeadClusterLifecycleReasonReplacementAuthorized           SearchHeadClusterLifecycleReason = "ReplacementAuthorized"
+	SearchHeadClusterLifecycleReasonPodTerminationTimedOut          SearchHeadClusterLifecycleReason = "PodTerminationTimedOut"
+	SearchHeadClusterLifecycleReasonPodUnschedulable                SearchHeadClusterLifecycleReason = "PodUnschedulable"
+	SearchHeadClusterLifecycleReasonPodRevisionMismatch             SearchHeadClusterLifecycleReason = "PodRevisionMismatch"
+	SearchHeadClusterLifecycleReasonVolumeAttachmentPending         SearchHeadClusterLifecycleReason = "VolumeAttachmentPending"
+	SearchHeadClusterLifecycleReasonImagePullFailed                 SearchHeadClusterLifecycleReason = "ImagePullFailed"
+	SearchHeadClusterLifecycleReasonPodStartupTimedOut              SearchHeadClusterLifecycleReason = "PodStartupTimedOut"
+	SearchHeadClusterLifecycleReasonSplunkStartupFailed             SearchHeadClusterLifecycleReason = "SplunkStartupFailed"
+	SearchHeadClusterLifecycleReasonMemberNotRegistered             SearchHeadClusterLifecycleReason = "MemberNotRegistered"
+	SearchHeadClusterLifecycleReasonMemberNotUp                     SearchHeadClusterLifecycleReason = "MemberNotUp"
+	SearchHeadClusterLifecycleReasonMemberIdentityMismatch          SearchHeadClusterLifecycleReason = "MemberIdentityMismatch"
+	SearchHeadClusterLifecycleReasonMemberSynchronizationPending    SearchHeadClusterLifecycleReason = "MemberSynchronizationPending"
+	SearchHeadClusterLifecycleReasonMemberRejoinTimedOut            SearchHeadClusterLifecycleReason = "MemberRejoinTimedOut"
+	SearchHeadClusterLifecycleReasonRecoveryValidated               SearchHeadClusterLifecycleReason = "RecoveryValidated"
+	SearchHeadClusterLifecycleReasonScaleDownCancelled              SearchHeadClusterLifecycleReason = "ScaleDownCancelled"
+	SearchHeadClusterLifecycleReasonPodUpdateCancelled              SearchHeadClusterLifecycleReason = "PodUpdateCancelled"
+	SearchHeadClusterLifecycleReasonClusterDeletionRequested        SearchHeadClusterLifecycleReason = "ClusterDeletionRequested"
+	SearchHeadClusterLifecycleReasonOperationCompleted              SearchHeadClusterLifecycleReason = "OperationCompleted"
+	SearchHeadClusterLifecycleReasonUnsupportedRuntimeContract      SearchHeadClusterLifecycleReason = "UnsupportedRuntimeContract"
 )
 
 // SearchHeadClusterImageUpgradePhase identifies the durable cluster-wide
@@ -314,6 +351,21 @@ type SearchHeadClusterLifecycleOperationStatus struct {
 	DetentionRequestedAt         *metav1.Time                     `json:"detentionRequestedAt,omitempty"`
 	DetentionRequestAttemptCount int32                            `json:"detentionRequestAttemptCount,omitempty"`
 	DetentionReleaseRequestedAt  *metav1.Time                     `json:"detentionReleaseRequestedAt,omitempty"`
+	// SearchDrainContinuationToken is issued only after this operation reaches
+	// a search-drain timeout and is required for an exact post-timeout approval.
+	SearchDrainContinuationToken string `json:"searchDrainContinuationToken,omitempty"`
+	// SearchDrainContinuationApprovedAt records when the controller accepted
+	// the matching operation-scoped approval.
+	SearchDrainContinuationApprovedAt *metav1.Time `json:"searchDrainContinuationApprovedAt,omitempty"`
+	// SearchDrainContinuationApprovalGeneration records the CR generation
+	// whose spec contained the accepted approval.
+	SearchDrainContinuationApprovalGeneration int64 `json:"searchDrainContinuationApprovalGeneration,omitempty"`
+	// ApprovedActiveHistoricalSearches preserves the historical-search count
+	// observed when continuation was approved.
+	ApprovedActiveHistoricalSearches int32 `json:"approvedActiveHistoricalSearches,omitempty"`
+	// ApprovedActiveRealtimeSearches preserves the real-time-search count
+	// observed when continuation was approved.
+	ApprovedActiveRealtimeSearches int32 `json:"approvedActiveRealtimeSearches,omitempty"`
 	// KVStoreNotReadyMembers contains bounded member=status observations from
 	// the most recent successful KV Store lifecycle preflight.
 	KVStoreNotReadyMembers           []string     `json:"kvStoreNotReadyMembers,omitempty"`

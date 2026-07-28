@@ -44,3 +44,19 @@ func TestSHCRolloutDecisionMetricHasOnlyBoundedLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestSHCSearchDrainContinuationApprovalMetricHasNoLabels(t *testing.T) {
+	descriptions := make(chan *prometheus.Desc, 1)
+	SHCSearchDrainContinuationApprovalCounter.Describe(descriptions)
+	description := (<-descriptions).String()
+
+	if !strings.Contains(
+		description,
+		"fqName: \"splunk_operator_shc_search_drain_continuation_approval_total\"",
+	) {
+		t.Fatalf("metric description = %q, want continuation approval counter", description)
+	}
+	if !strings.Contains(description, "variableLabels: {}") {
+		t.Fatalf("approval metric must not contain variable labels: %s", description)
+	}
+}

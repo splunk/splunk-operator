@@ -15,6 +15,7 @@
 package shc
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"time"
@@ -233,6 +234,61 @@ func StartPodUpdateCancellation(
 	return operation, true
 }
 
+// ApplySearchDrainContinuationApproval consumes one exact post-timeout
+// approval. The operation ID and controller-issued token must both match the
+// current fail-closed operation. The returned transition is a persistence
+// barrier: cluster safety, detention, captaincy, and replacement authorization
+// are re-evaluated on a later reconciliation.
+func ApplySearchDrainContinuationApproval(
+	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	approval *enterpriseApi.SearchHeadClusterLifecycleApproval,
+	approvalGeneration int64,
+	activeHistoricalSearches int32,
+	activeRealtimeSearches int32,
+	now time.Time,
+) (*enterpriseApi.SearchHeadClusterLifecycleOperationStatus, bool) {
+	if current == nil {
+		return nil, false
+	}
+	operation := current.DeepCopy()
+	if approval == nil ||
+		approval.Action != enterpriseApi.
+			SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout ||
+		approval.OperationID != operation.OperationID ||
+		approval.Token == "" ||
+		approval.Token != operation.SearchDrainContinuationToken ||
+		operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageBlocked ||
+		operation.Reason !=
+			enterpriseApi.SearchHeadClusterLifecycleReasonSearchDrainTimedOut ||
+		operation.SearchDrainContinuationApprovedAt != nil ||
+		operation.ReplacementAuthorizedAt != nil ||
+		operation.TargetPodUID == "" {
+		return operation, false
+	}
+
+	approvedAt := metav1.NewTime(now)
+	operation.SearchDrainContinuationApprovedAt = &approvedAt
+	operation.SearchDrainContinuationApprovalGeneration = approvalGeneration
+	operation.ApprovedActiveHistoricalSearches = activeHistoricalSearches
+	operation.ApprovedActiveRealtimeSearches = activeRealtimeSearches
+	operation.ActiveHistoricalSearches = activeHistoricalSearches
+	operation.ActiveRealtimeSearches = activeRealtimeSearches
+	transition(
+		operation,
+		enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches,
+		enterpriseApi.
+			SearchHeadClusterLifecycleReasonSearchDrainContinuationApproved,
+		fmt.Sprintf(
+			"approved continuation after search-drain timeout for %s: historical=%d realtime=%d; revalidating before replacement",
+			operation.TargetPod,
+			activeHistoricalSearches,
+			activeRealtimeSearches,
+		),
+		now,
+	)
+	return operation, true
+}
+
 // EvaluateReplacement advances a durable replacement operation from an
 // authoritative observation. The input operation is never mutated.
 func EvaluateReplacement(
@@ -273,6 +329,7 @@ func EvaluateReplacement(
 		return Decision{Operation: operation}
 	}
 	if operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches &&
+		operation.SearchDrainContinuationApprovedAt == nil &&
 		stageTimedOut(operation, policy.SearchDrainTimeout, now) {
 		transition(
 			operation,
@@ -285,6 +342,8 @@ func EvaluateReplacement(
 			),
 			now,
 		)
+		operation.SearchDrainContinuationToken =
+			newSearchDrainContinuationToken(operation)
 		return Decision{Operation: operation}
 	}
 	if operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain &&
@@ -394,7 +453,9 @@ func evaluateSearchDrain(
 	policy ReplacementPolicy,
 	now time.Time,
 ) Decision {
-	if observation.ActiveHistoricalSearches > 0 || observation.ActiveRealtimeSearches > 0 {
+	if (observation.ActiveHistoricalSearches > 0 ||
+		observation.ActiveRealtimeSearches > 0) &&
+		operation.SearchDrainContinuationApprovedAt == nil {
 		setReason(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleReasonSearchesActive,
@@ -796,5 +857,20 @@ func searchDrainMessage(observation Observation) string {
 		"waiting for active searches to drain: historical=%d realtime=%d",
 		observation.ActiveHistoricalSearches,
 		observation.ActiveRealtimeSearches,
+	)
+}
+
+func newSearchDrainContinuationToken(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+) string {
+	blockedAt := ""
+	if operation.StageStartedAt != nil {
+		blockedAt = operation.StageStartedAt.Time.UTC().Format(time.RFC3339Nano)
+	}
+	return fmt.Sprintf(
+		"%x",
+		sha256.Sum256(
+			[]byte(operation.OperationID+"\x00"+blockedAt),
+		),
 	)
 }

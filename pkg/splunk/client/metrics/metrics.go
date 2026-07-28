@@ -82,6 +82,13 @@ var SHCRolloutPartitionAdvanceCounter = prometheus.NewCounter(
 	},
 )
 
+var SHCSearchDrainContinuationApprovalCounter = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "splunk_operator_shc_search_drain_continuation_approval_total",
+		Help: "The number of operation-scoped approvals to continue after a Search Head Cluster search-drain timeout",
+	},
+)
+
 func GetPrometheusLabels(request reconcile.Request, kind string) prometheus.Labels {
 	return prometheus.Labels{
 		LabelNamespace: request.Namespace,
@@ -112,5 +119,6 @@ func init() {
 		ActiveRealtimeSearchCount,
 		SHCRolloutDecisionCounters,
 		SHCRolloutPartitionAdvanceCounter,
+		SHCSearchDrainContinuationApprovalCounter,
 	)
 }

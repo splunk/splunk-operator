@@ -17,6 +17,7 @@ limitations under the License.
 package validation
 
 import (
+	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -35,12 +36,21 @@ func TestValidateSearchHeadClusterLifecyclePolicy(t *testing.T) {
 			MemberRejoinTimeoutSeconds:    int64Pointer(40),
 		}
 	}
+	validApproval := func() *enterpriseApi.SearchHeadClusterLifecycleApproval {
+		return &enterpriseApi.SearchHeadClusterLifecycleApproval{
+			OperationID: "PodUpdate:example-search-head-2:revision-2:2",
+			Token:       strings.Repeat("a", 64),
+			Action: enterpriseApi.
+				SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout,
+		}
+	}
 
 	tests := []struct {
 		name         string
 		podGate      bool
 		shcGate      bool
 		policy       *enterpriseApi.SearchHeadClusterLifecyclePolicy
+		approval     *enterpriseApi.SearchHeadClusterLifecycleApproval
 		wantErrField string
 	}{
 		{name: "omitted with gates disabled"},
@@ -66,6 +76,51 @@ func TestValidateSearchHeadClusterLifecyclePolicy(t *testing.T) {
 			podGate: true,
 			shcGate: true,
 			policy:  &enterpriseApi.SearchHeadClusterLifecyclePolicy{},
+		},
+		{
+			name:     "valid operation-scoped approval",
+			podGate:  true,
+			shcGate:  true,
+			approval: validApproval(),
+		},
+		{
+			name:         "approval rejected with gates disabled",
+			approval:     validApproval(),
+			wantErrField: "spec.lifecycleApproval",
+		},
+		{
+			name:    "approval requires operation ID",
+			podGate: true,
+			shcGate: true,
+			approval: &enterpriseApi.SearchHeadClusterLifecycleApproval{
+				Token: strings.Repeat("a", 64),
+				Action: enterpriseApi.
+					SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout,
+			},
+			wantErrField: "spec.lifecycleApproval.operationID",
+		},
+		{
+			name:    "approval requires issued token",
+			podGate: true,
+			shcGate: true,
+			approval: &enterpriseApi.SearchHeadClusterLifecycleApproval{
+				OperationID: "operation-1",
+				Token:       "not-an-issued-token",
+				Action: enterpriseApi.
+					SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout,
+			},
+			wantErrField: "spec.lifecycleApproval.token",
+		},
+		{
+			name:    "approval rejects unsupported action",
+			podGate: true,
+			shcGate: true,
+			approval: &enterpriseApi.SearchHeadClusterLifecycleApproval{
+				OperationID: "operation-1",
+				Token:       strings.Repeat("a", 64),
+				Action:      "ContinueAfterAnyFailure",
+			},
+			wantErrField: "spec.lifecycleApproval.action",
 		},
 		{
 			name:    "unknown strategy",
@@ -128,8 +183,9 @@ func TestValidateSearchHeadClusterLifecyclePolicy(t *testing.T) {
 			setLifecycleFeatureGatesForTest(t, tt.podGate, tt.shcGate)
 			obj := &enterpriseApi.SearchHeadCluster{
 				Spec: enterpriseApi.SearchHeadClusterSpec{
-					Replicas:        3,
-					LifecyclePolicy: tt.policy,
+					Replicas:          3,
+					LifecyclePolicy:   tt.policy,
+					LifecycleApproval: tt.approval,
 				},
 			}
 			errs := ValidateSearchHeadClusterCreate(obj)

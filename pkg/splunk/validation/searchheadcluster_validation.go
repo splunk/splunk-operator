@@ -18,6 +18,7 @@ package validation
 
 import (
 	"fmt"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
@@ -147,6 +148,66 @@ func validateSearchHeadClusterLifecyclePolicy(policy *enterpriseApi.SearchHeadCl
 	return allErrs
 }
 
+func validateSearchHeadClusterLifecycleApproval(
+	approval *enterpriseApi.SearchHeadClusterLifecycleApproval,
+	fldPath *field.Path,
+) field.ErrorList {
+	if approval == nil {
+		return nil
+	}
+	if !config.DefaultMutableFeatureGate.Enabled(config.SearchHeadClusterLifecycle) {
+		return field.ErrorList{field.Forbidden(
+			fldPath,
+			"the SearchHeadClusterLifecycle feature is not enabled; set --feature-gates=SearchHeadClusterLifecycle=true to activate",
+		)}
+	}
+	if !config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle) {
+		return field.ErrorList{field.Forbidden(
+			fldPath,
+			"SearchHeadClusterLifecycle requires SplunkPodLifecycle=true",
+		)}
+	}
+
+	var allErrs field.ErrorList
+	if approval.OperationID == "" {
+		allErrs = append(
+			allErrs,
+			field.Required(
+				fldPath.Child("operationID"),
+				"operationID must identify the current blocked lifecycle operation",
+			),
+		)
+	}
+	if len(approval.Token) != 64 ||
+		strings.Trim(approval.Token, "0123456789abcdef") != "" {
+		allErrs = append(
+			allErrs,
+			field.Invalid(
+				fldPath.Child("token"),
+				"<redacted>",
+				"token must be the 64-character lowercase hexadecimal token issued in status.lifecycleOperation",
+			),
+		)
+	}
+	if approval.Action != enterpriseApi.
+		SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout {
+		allErrs = append(
+			allErrs,
+			field.NotSupported(
+				fldPath.Child("action"),
+				approval.Action,
+				[]string{
+					string(
+						enterpriseApi.
+							SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout,
+					),
+				},
+			),
+		)
+	}
+	return allErrs
+}
+
 // ValidateSearchHeadClusterCreate validates a SearchHeadCluster on CREATE
 func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field.ErrorList {
 	var allErrs field.ErrorList
@@ -164,6 +225,10 @@ func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field
 	allErrs = append(allErrs, validateSearchHeadClusterLifecyclePolicy(
 		obj.Spec.LifecyclePolicy,
 		field.NewPath("spec").Child("lifecyclePolicy"),
+	)...)
+	allErrs = append(allErrs, validateSearchHeadClusterLifecycleApproval(
+		obj.Spec.LifecycleApproval,
+		field.NewPath("spec").Child("lifecycleApproval"),
 	)...)
 
 	// Validate AppFramework only if user provided config

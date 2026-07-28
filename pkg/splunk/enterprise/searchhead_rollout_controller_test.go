@@ -2976,6 +2976,120 @@ func TestRollingUpdateObservationDoesNotRepeatDurableLifecycleBlockedEvent(
 	}
 }
 
+func TestSearchDrainContinuationApprovalIsAppliedAndEmittedOnce(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, _ := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	mgr.cr.Generation = 7
+	target := int32(2)
+	token := strings.Repeat("a", 64)
+	targetPod := statefulSet.GetName() + "-2"
+	mgr.cr.Spec.LifecycleApproval =
+		&enterpriseApi.SearchHeadClusterLifecycleApproval{
+			OperationID: "PodUpdate:example-search-head-2:revision-2:2",
+			Token:       token,
+			Action: enterpriseApi.
+				SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout,
+		}
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:     mgr.cr.Spec.LifecycleApproval.OperationID,
+			Intent:          enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision: "revision-2",
+			TargetPod:       targetPod,
+			TargetOrdinal:   &target,
+			TargetPodUID:    "original-pod-uid",
+			Stage: enterpriseApi.
+				SearchHeadClusterLifecycleStageBlocked,
+			Reason: enterpriseApi.
+				SearchHeadClusterLifecycleReasonSearchDrainTimedOut,
+			SearchDrainContinuationToken: token,
+		}
+	mgr.cr.Status.Members = nil
+
+	recorder := &mockEventRecorder{}
+	publisher := &K8EventPublisher{recorder: recorder, instance: mgr.cr}
+	metricBefore := testutil.ToFloat64(
+		splmetrics.SHCSearchDrainContinuationApprovalCounter,
+	)
+	if mgr.reconcileSearchDrainContinuationApproval(
+		context.Background(),
+		publisher,
+	) {
+		t.Fatal("approval was applied without a refreshed target-member observation")
+	}
+	if got := testutil.ToFloat64(
+		splmetrics.SHCSearchDrainContinuationApprovalCounter,
+	); got != metricBefore {
+		t.Fatalf("missing target-member observation changed approval metric to %v", got)
+	}
+	if len(recorder.events) != 0 {
+		t.Fatalf(
+			"missing target-member observation emitted %d events",
+			len(recorder.events),
+		)
+	}
+
+	mgr.cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{{
+		Name:                        targetPod,
+		Status:                      "ManualDetention",
+		ActiveHistoricalSearchCount: 2,
+		ActiveRealtimeSearchCount:   1,
+	}}
+
+	if !mgr.reconcileSearchDrainContinuationApproval(
+		context.Background(),
+		publisher,
+	) {
+		t.Fatal("matching continuation approval was not applied")
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches ||
+		operation.Reason !=
+			enterpriseApi.
+				SearchHeadClusterLifecycleReasonSearchDrainContinuationApproved ||
+		operation.SearchDrainContinuationApprovalGeneration != 7 ||
+		operation.ApprovedActiveHistoricalSearches != 2 ||
+		operation.ApprovedActiveRealtimeSearches != 1 {
+		t.Fatalf("approved operation = %#v", operation)
+	}
+	if got := testutil.ToFloat64(
+		splmetrics.SHCSearchDrainContinuationApprovalCounter,
+	); got != metricBefore+1 {
+		t.Fatalf("approval metric = %v, want %v", got, metricBefore+1)
+	}
+	if len(recorder.events) != 1 {
+		t.Fatalf("approval emitted %d events, want one", len(recorder.events))
+	}
+	assertRolloutEvent(
+		t,
+		recorder,
+		EventReasonSHCSearchDrainContinuationApproved,
+		corev1.EventTypeNormal,
+	)
+
+	if mgr.reconcileSearchDrainContinuationApproval(
+		context.Background(),
+		publisher,
+	) {
+		t.Fatal("persisted approval was applied more than once")
+	}
+	if got := testutil.ToFloat64(
+		splmetrics.SHCSearchDrainContinuationApprovalCounter,
+	); got != metricBefore+1 {
+		t.Fatalf("duplicate reconcile changed approval metric to %v", got)
+	}
+	if len(recorder.events) != 1 {
+		t.Fatalf("duplicate reconcile emitted %d events", len(recorder.events))
+	}
+}
+
 func TestRollingUpdateControllerBlockedDecisionEmitsWarning(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(

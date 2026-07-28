@@ -6831,6 +6831,28 @@ spec:
               licenseUrl:
                 description: Full path or URL for a Splunk Enterprise license file
                 type: string
+              lifecycleApproval:
+                description: |-
+                  LifecycleApproval permits one exact blocked lifecycle operation to
+                  continue after an operator-issued token is copied from status. It is
+                  active only when the SearchHeadClusterLifecycle feature gate is enabled.
+                  Stale or non-matching approvals are ignored.
+                properties:
+                  action:
+                    description: Action identifies the exception being approved.
+                    enum:
+                    - ContinueAfterSearchDrainTimeout
+                    type: string
+                  operationID:
+                    description: OperationID must equal status.lifecycleOperation.operationID.
+                    maxLength: 1024
+                    minLength: 1
+                    type: string
+                  token:
+                    description: Token must equal status.lifecycleOperation.searchDrainContinuationToken.
+                    pattern: ^[a-f0-9]{64}$
+                    type: string
+                type: object
               lifecyclePolicy:
                 description: |-
                   LifecyclePolicy configures Kubernetes lifecycle orchestration for the
@@ -10276,6 +10298,18 @@ spec:
                   activeRealtimeSearches:
                     format: int32
                     type: integer
+                  approvedActiveHistoricalSearches:
+                    description: |-
+                      ApprovedActiveHistoricalSearches preserves the historical-search count
+                      observed when continuation was approved.
+                    format: int32
+                    type: integer
+                  approvedActiveRealtimeSearches:
+                    description: |-
+                      ApprovedActiveRealtimeSearches preserves the real-time-search count
+                      observed when continuation was approved.
+                    format: int32
+                    type: integer
                   captain:
                     type: string
                   captainReady:
@@ -10350,6 +10384,23 @@ spec:
                   retryCount:
                     format: int32
                     type: integer
+                  searchDrainContinuationApprovalGeneration:
+                    description: |-
+                      SearchDrainContinuationApprovalGeneration records the CR generation
+                      whose spec contained the accepted approval.
+                    format: int64
+                    type: integer
+                  searchDrainContinuationApprovedAt:
+                    description: |-
+                      SearchDrainContinuationApprovedAt records when the controller accepted
+                      the matching operation-scoped approval.
+                    format: date-time
+                    type: string
+                  searchDrainContinuationToken:
+                    description: |-
+                      SearchDrainContinuationToken is issued only after this operation reaches
+                      a search-drain timeout and is required for an exact post-timeout approval.
+                    type: string
                   stage:
                     description: |-
                       SearchHeadClusterLifecycleStage identifies the durable stage of a lifecycle

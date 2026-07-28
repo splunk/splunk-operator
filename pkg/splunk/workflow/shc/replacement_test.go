@@ -252,6 +252,9 @@ func TestDetentionTimeoutBlocksReplacementWithoutFreshObservation(t *testing.T) 
 	if decision.Operation.ReplacementAuthorizedAt != nil {
 		t.Fatal("detention timeout must not authorize replacement")
 	}
+	if decision.Operation.SearchDrainContinuationToken != "" {
+		t.Fatal("detention timeout must not issue a search-drain approval token")
+	}
 }
 
 func TestRecordDetentionRequestAttemptPreservesFirstAttemptAndCountsRetries(t *testing.T) {
@@ -670,6 +673,146 @@ func TestPodUpdateCancellationRequiresSupersededRevisionAndOriginalPod(t *testin
 		notCancelled.Stage !=
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
 		t.Fatal("operation without original Pod identity was incorrectly cancelled")
+	}
+}
+
+func TestSearchDrainContinuationRequiresExactPostTimeoutApproval(t *testing.T) {
+	now := time.Date(2026, 7, 28, 9, 30, 0, 0, time.UTC)
+	operation := newTestOperation(now.Add(-time.Minute))
+	operation.TargetPodUID = "original-pod-uid"
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches
+	stageStartedAt := metav1.NewTime(now.Add(-31 * time.Second))
+	operation.StageStartedAt = &stageStartedAt
+	observation := safeObservation(now)
+	observation.TargetMemberStatus = "ManualDetention"
+	observation.ActiveHistoricalSearches = 2
+	observation.ActiveRealtimeSearches = 1
+
+	blocked := EvaluateReplacement(
+		operation,
+		observation,
+		testPolicy(),
+		now,
+	)
+	if blocked.Operation.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked ||
+		blocked.Operation.Reason !=
+			enterpriseApi.SearchHeadClusterLifecycleReasonSearchDrainTimedOut ||
+		len(blocked.Operation.SearchDrainContinuationToken) != 64 {
+		t.Fatalf("search-drain timeout = %#v", blocked.Operation)
+	}
+	if operation.SearchDrainContinuationToken != "" {
+		t.Fatal("timeout evaluation mutated persisted input")
+	}
+
+	wrongToken := &enterpriseApi.SearchHeadClusterLifecycleApproval{
+		OperationID: blocked.Operation.OperationID,
+		Token:       "wrong-token",
+		Action: enterpriseApi.
+			SearchHeadClusterLifecycleApprovalActionContinueAfterSearchDrainTimeout,
+	}
+	notApproved, applied := ApplySearchDrainContinuationApproval(
+		blocked.Operation,
+		wrongToken,
+		7,
+		2,
+		1,
+		now.Add(time.Second),
+	)
+	if applied ||
+		notApproved.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
+		t.Fatalf("mismatched token applied: %#v", notApproved)
+	}
+
+	wrongOperation := *wrongToken
+	wrongOperation.OperationID = "different-operation"
+	wrongOperation.Token = blocked.Operation.SearchDrainContinuationToken
+	notApproved, applied = ApplySearchDrainContinuationApproval(
+		blocked.Operation,
+		&wrongOperation,
+		7,
+		2,
+		1,
+		now.Add(time.Second),
+	)
+	if applied ||
+		notApproved.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageBlocked {
+		t.Fatalf("mismatched operation ID applied: %#v", notApproved)
+	}
+
+	approval := *wrongToken
+	approval.Token = blocked.Operation.SearchDrainContinuationToken
+	approved, applied := ApplySearchDrainContinuationApproval(
+		blocked.Operation,
+		&approval,
+		7,
+		2,
+		1,
+		now.Add(2*time.Second),
+	)
+	if !applied ||
+		approved.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches ||
+		approved.Reason !=
+			enterpriseApi.
+				SearchHeadClusterLifecycleReasonSearchDrainContinuationApproved ||
+		approved.SearchDrainContinuationApprovedAt == nil ||
+		approved.SearchDrainContinuationApprovalGeneration != 7 ||
+		approved.ApprovedActiveHistoricalSearches != 2 ||
+		approved.ApprovedActiveRealtimeSearches != 1 {
+		t.Fatalf("approved continuation = %#v", approved)
+	}
+	if blocked.Operation.SearchDrainContinuationApprovedAt != nil {
+		t.Fatal("approval mutated blocked input")
+	}
+
+	// Even after another full drain timeout, a persisted approval bypasses
+	// only the search-count wait and still re-evaluates cluster/captain safety.
+	observation.ObservedAt = now.Add(10 * time.Minute)
+	continued := EvaluateReplacement(
+		approved,
+		observation,
+		testPolicy(),
+		now.Add(10*time.Minute),
+	)
+	assertDecision(
+		t,
+		continued,
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		ActionAuthorizeReplacement,
+	)
+
+	duplicate, applied := ApplySearchDrainContinuationApproval(
+		approved,
+		&approval,
+		8,
+		2,
+		1,
+		now.Add(3*time.Second),
+	)
+	if applied ||
+		duplicate.SearchDrainContinuationApprovalGeneration != 7 {
+		t.Fatalf("approval was applied more than once: %#v", duplicate)
+	}
+
+	preTimeout := operation.DeepCopy()
+	preTimeout.SearchDrainContinuationToken =
+		blocked.Operation.SearchDrainContinuationToken
+	preApproved, applied := ApplySearchDrainContinuationApproval(
+		preTimeout,
+		&approval,
+		7,
+		2,
+		1,
+		now.Add(time.Second),
+	)
+	if applied ||
+		preApproved.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageDrainingSearches {
+		t.Fatalf("pre-timeout approval was accepted: %#v", preApproved)
 	}
 }
 
