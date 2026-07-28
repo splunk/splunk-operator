@@ -366,6 +366,56 @@ describes the partition decision made from Kubernetes and durable lifecycle
 observations, while the lifecycle reason describes the underlying Splunk
 operation.
 
+### StatefulSet observation, revision reuse, and cancellation handoff
+
+The StatefulSet API is asynchronous. After the Operator applies a Pod-template
+change, the desired spec can be visible before the StatefulSet controller has
+published the corresponding `status.updateRevision`. Rollout planning must not
+combine those two different observation times.
+
+Before selecting a target, changing a partition, or classifying Pod revisions,
+the controller checks both of these barriers:
+
+- no StatefulSet apply remains pending in the current reconciliation; and
+- `StatefulSet.metadata.generation` is not greater than
+  `StatefulSet.status.observedGeneration`.
+
+If either barrier is closed, the bounded rollout decision is
+`Wait/WaitingForRevision`. That decision starts no lifecycle operation, changes
+no partition, deletes no Pod, and emits no rollout-block warning. A later
+reconcile replans only after the StatefulSet controller has observed the
+generation.
+
+`currentRevision == updateRevision` means the StatefulSet controller has one
+current desired ControllerRevision. It does not prove that every Pod already
+carries that revision. Kubernetes can reuse a previous ControllerRevision when
+a Pod-template change is withdrawn. During that rollback, current and update
+revision can become equal while higher ordinals still carry the withdrawn
+revision. The coordinator therefore:
+
+- observes the `controller-revision-hash` on every desired ordinal;
+- keeps reverse-ordinal ordering and the one-unavailable invariant;
+- does not classify an untouched lower ordinal that already matches the
+  desired revision as out of order while a higher ordinal is still rolling
+  back; and
+- declares completion only after every required Pod revision and recovery
+  invariant is satisfied.
+
+A desired revision withdrawn before replacement authorization is an in-place
+cancellation only while the original target Pod UID still exists and is not
+deleting. The durable lifecycle continues to own that Pod through detention
+release, refreshed local and captain observations, and Splunk recovery.
+Lifecycle `Completed` alone does not release ownership: the controller waits
+until the same Pod is also Kubernetes Ready, serving, registered, and `Up`.
+Only then may it select a rollback target.
+
+Withdrawal after replacement authorization is not an in-place cancellation.
+The authorized target must first reach a known recovered or classified terminal
+state under its original durable operation. No second target may begin during
+that handoff. The subsequent desired revision is then rolled back or queued by
+a new deterministic planning decision. `STS-014` owns qualification of this
+separate path.
+
 ## Kubernetes condition contract
 
 Continue using the existing `[]metav1.Condition` list. Add condition types only
@@ -498,3 +548,9 @@ operation/token matching, the durable approval barrier, bounded audit fields,
 continued captain and cluster safety checks, revision isolation, one Event,
 one counter increment, stale-approval behavior, and the remaining production
 RBAC/governance decision.
+
+2026-07-28: Added the SHC-75 StatefulSet observation and rollback contract.
+The design now requires a generation-observation barrier, handles
+ControllerRevision reuse with per-Pod revision evidence, retains in-place
+cancellation ownership through Kubernetes readiness, and separates
+pre-authorization cancellation from post-authorization revision withdrawal.

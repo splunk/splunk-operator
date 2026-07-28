@@ -19,6 +19,9 @@ The program applies to the current Splunk compatibility architecture. It does
 not require the future distroless or service-decomposed Splunk architecture,
 but it defines runtime contracts that can survive that transition.
 
+Execution work-item identifiers and their relationship to stable test-scenario
+identifiers are recorded in `SHCWorkItemIndex.md`.
+
 ## Progress
 
 - [x] (2026-07-24) Refreshed the GitLab `sok/develop` baseline and recorded
@@ -124,6 +127,22 @@ but it defines runtime contracts that can survive that transition.
   rollout replaced `2 -> 1 -> 0`, captaincy moved from ordinal zero to ordinal
   one before the final replacement, and a 312-second post-action gate held all
   Kubernetes and Splunk health invariants with zero container restarts.
+- [x] (2026-07-28) Implemented SHC-75 rollback and cancellation corrections at
+  `eb6907ee5`, `44ccac31e`, and `3e9e735a7`. The changes distinguish valid
+  ControllerRevision reuse from out-of-order Pods, retain lifecycle ownership
+  while an in-place cancellation returns to Kubernetes readiness, and wait for
+  the StatefulSet controller to observe a newly applied generation before
+  planning another target.
+- [x] (2026-07-28) Passed the complete Linux source gate for SHC-75:
+  `make fmt`, `make vet`, `make build`, and `make test`. All 41 Ginkgo suites
+  passed, including 154 controller envtest specifications, with 78.5 percent
+  composite coverage.
+- [x] (2026-07-28) Qualified LFC-007 on EKS cluster
+  `vivek-spl-301372` with Operator source `3e9e735a7` and image digest
+  `sha256:98b71dbbb394d51abea5e79a9f63e4423f43ae3f623d5ed3d28cb9d55c0b6f72`.
+  Captain transfer timed out fail closed, the captain Pod was not replaced,
+  revision withdrawal recovered the same Pod in place, rollback completed
+  ordinals `2 -> 1`, and a 321-second stability gate passed.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -367,6 +386,34 @@ but it defines runtime contracts that can survive that transition.
   Consequence: lifecycle approval remains controller-only input and cannot
   create a Pod-template revision or restart.
 
+- Observation: Kubernetes may reuse an existing ControllerRevision when a
+  requested Pod-template change is withdrawn. During rollback,
+  `StatefulSet.status.currentRevision` can equal `updateRevision` before every
+  Pod has returned to that revision.
+  Evidence: LFC-007 reached the baseline ControllerRevision while ordinals one
+  and two still carried the withdrawn revision.
+  Consequence: rollout order and completion must be derived from every Pod's
+  revision and lifecycle position. An untouched lower ordinal already matching
+  the desired revision is valid while higher ordinals roll back.
+
+- Observation: Splunk recovery can complete before Kubernetes has recomputed
+  the retained Pod's Ready and serving conditions.
+  Evidence: captain-timeout cancellation released detention and completed the
+  Splunk recovery operation while the original captain Pod was still
+  temporarily non-ready.
+  Consequence: in-place cancellation retains ownership through the
+  Kubernetes-readiness handoff and cannot authorize another target merely
+  because the Splunk lifecycle stage reached `Completed`.
+
+- Observation: a CR Pod-template change and the StatefulSet controller's
+  `status.updateRevision` observation are asynchronous.
+  Evidence: revision withdrawal briefly exposed the new desired template with
+  the previous StatefulSet status revision and produced a false
+  `OutOfOrderRevision` diagnostic before SHC-75.
+  Consequence: an apply-pending or unobserved StatefulSet generation is a
+  bounded `WaitingForRevision` state. It must not start lifecycle work, change
+  the partition, delete a Pod, or emit a rollout-block warning.
+
 - Observation: the Operator metrics listener uses delegated Kubernetes
   authentication and authorization. The Operator service account could
   authenticate but did not have non-resource `/metrics` permission.
@@ -533,6 +580,26 @@ but it defines runtime contracts that can survive that transition.
   captain-transfer checks.
   Date: 2026-07-28.
 
+- Decision: retain in-place Pod-update cancellation ownership until the
+  original Pod is Ready, serving, registered, and `Up`.
+  Rationale: Splunk detention release and member validation can finish before
+  Kubernetes updates the readiness signals used for traffic and
+  one-member-at-a-time admission.
+  Date: 2026-07-28.
+
+- Decision: do not run rollout planning while a StatefulSet apply is pending or
+  `metadata.generation` is greater than `status.observedGeneration`.
+  Rationale: the planner must compare Pods with an observed controller
+  revision, not with a transient mixture of desired spec and stale status.
+  Date: 2026-07-28.
+
+- Decision: treat ControllerRevision equality as controller convergence
+  evidence, not as proof that every Pod has that revision.
+  Rationale: Kubernetes can reuse a prior ControllerRevision during rollback;
+  per-Pod labels and reverse-ordinal lifecycle state remain authoritative for
+  replacement order.
+  Date: 2026-07-28.
+
 ## Outcomes & Retrospective
 
 The first integrated positive-path milestone, active-strategy rollback, scale
@@ -545,20 +612,26 @@ TERM-driven PID 1 exit, active `RollingUpdate` rollback, scale-down
 cancellation, repeated scale-down, `3 -> 4`, `4 -> 3`, bounded historical
 drain, real-time timeout/cancellation, and exact post-timeout continuation all
 passed. The StatefulSet never advanced more than one planned Search Head at a
-time. The final continuation campaign also passed a 312-second stability
-window with every Kubernetes and Splunk health invariant continuously true.
+  time. The final continuation campaign also passed a 312-second stability
+  window with every Kubernetes and Splunk health invariant continuously true.
+  The SHC-75 campaign additionally proved the failed-captain-transfer path:
+  one exact timeout warning, no captain deletion or replacement authorization,
+  durable in-place recovery after revision withdrawal, deterministic
+  reverse-ordinal rollback, no false rollout diagnostics, and 321 continuous
+  seconds of final SHC, Kubernetes, management-endpoint, and KV Store health.
 
-This is not production-readiness evidence. Failed captain transfer, forced
-deletion and node loss, storage and scheduling delay, network and TLS variants,
-version skew, rollback under failure, repeated runs, soak testing, and
-support/alert qualification remain open. The lifecycle-aware log, phase,
-scale-event, transient higher-ordinal observation, cancellation, and
-continuation defects exposed by the campaigns are corrected and passed their
-targeted EKS cycles. The current result proves the integrated architecture can
-execute its intended happy path, resume durable state, cross the strategy
-rollback boundary, safely coordinate replica-count changes, fail closed on an
-active real-time search, and continue only through one audited exception; it
-does not yet justify default enablement.
+This is not production-readiness evidence. Forced deletion and node loss,
+storage and scheduling delay, network and TLS variants, version skew,
+withdrawal after replacement authorization, rollback under other injected
+failures, repeated runs, soak testing, and support/alert qualification remain
+open. The lifecycle-aware log, phase, scale-event, transient higher-ordinal
+observation, cancellation, continuation, failed-transfer, revision-reuse, and
+StatefulSet-observation defects exposed by the campaigns are corrected and
+passed their targeted EKS cycles. The current result proves the integrated
+architecture can execute its intended happy path, resume durable state, cross
+the strategy rollback boundary, safely coordinate replica-count changes, fail
+closed on active work or failed captain transfer, and continue only through
+one audited exception; it does not yet justify default enablement.
 
 ## Context and Orientation
 
@@ -1104,6 +1177,53 @@ SHC audited drain-continuation extension captured on 2026-07-28:
 - the qualification namespace, all PVCs, and all eight associated PVs were
   removed after evidence collection.
 
+SHC-75 captain-transfer-timeout and revision-withdrawal qualification captured
+on 2026-07-28:
+
+- Operator commits:
+  `eb6907ee51f0655742f2096f8137b55c484792d6`,
+  `44ccac31e9aaa0540678d090b3222a5e2a1df1ef`, and
+  `3e9e735a776eb90957a0d0d2722b28ce0da5baff`;
+- final Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-3e9e735a7`;
+- final Operator image digest:
+  `sha256:98b71dbbb394d51abea5e79a9f63e4423f43ae3f623d5ed3d28cb9d55c0b6f72`;
+- the Linux vWorkstation passed `make fmt`, `make vet`, `make build`, and
+  `make test`; all 41 Ginkgo suites and 154 controller specifications passed
+  with 78.5 percent composite coverage;
+- the test ran on EKS cluster `vivek-spl-301372`, namespace
+  `shc75-captain-timeout`, with
+  `SplunkPodLifecycle=true,SearchHeadClusterLifecycle=true`;
+- the captain-transfer policy was changed from 300 seconds to one second as a
+  controller-only policy edit. CR observation completed without changing any
+  Search Head Pod UID or StatefulSet revision;
+- the forward rollout replaced ordinals `2 -> 1`. The ordinal-zero captain
+  then reached `Blocked/CaptainTransferTimedOut`; partition remained one,
+  `replacementAuthorizedAt` remained unset, the original captain UID
+  `25230824-f9d8-40f7-8c46-1d4680ccc8b0` remained present and non-deleting,
+  and ordinals one and two remained Ready and serving;
+- the blocked state was held for 30 seconds and emitted exactly one additional
+  `SHCRolloutBlocked` warning for `CaptainTransferTimedOut`;
+- withdrawing the requested revision emitted exactly one additional
+  `SHCPodUpdateCancelled` Event, released detention through observed recovery,
+  restored the original captain Pod in place, and did not begin another target
+  before that Pod was Ready and serving;
+- rollback reused the baseline ControllerRevision and replaced ordinals
+  `2 -> 1`. No sample observed more than one unavailable member, and no
+  Search Head container restarted;
+- the bounded Event and Operator-log audit found no new
+  `OutOfOrderRevision`, `ExistingUnavailablePod`, or `TooManyUnavailable`;
+- final state had CR generation eight observed, phase `Ready`, three
+  registered `Up` members, ordinal-zero captain ready, StatefulSet generation
+  15 observed, matching current/update revisions
+  `splunk-shc75-search-head-84cfcdf94d`, partition three, and three
+  ready/updated replicas; and
+- the restored 300-second policy did not revise or replace a Pod. A final
+  321-second continuous gate observed three Ready/serving Pods, HTTP 401 from
+  each unauthenticated management check, SHC initialized/minimum peers
+  satisfied, three `Up` members, KV Store `ready`, no KV Store version upgrade
+  or backup, and zero container restarts.
+
 ## Interfaces and Dependencies
 
 The technical designs must define concrete interfaces for:
@@ -1195,3 +1315,9 @@ search-count snapshot, wrong-token and stale-operation fail-closed evidence,
 approval-only revision isolation, exact Event/log/metric audit signals,
 reverse-ordinal EKS rollout, captain transfer, 312-second post gate, and the
 external-observer timing and secure-metrics-access discoveries.
+
+2026-07-28: Recorded SHC-75 failed-captain-transfer and revision-withdrawal
+qualification. Added ControllerRevision-reuse handling, in-place cancellation
+ownership through Kubernetes readiness, the StatefulSet generation-observation
+barrier, exact warning/cancellation Event deltas, a clean bounded log audit,
+reverse-ordinal rollback, and the passing 321-second final stability gate.

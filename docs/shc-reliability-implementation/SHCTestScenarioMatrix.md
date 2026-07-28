@@ -67,7 +67,7 @@ Unless a scenario explicitly tests loss of majority, assert:
 | LFC-004 | P0 | Real-time search active | Real-time policy is applied and independently observable |
 | LFC-005 | P0 | Drain timeout, default policy | Operation blocks without deleting target |
 | LFC-006 | P1 | Audited continuation after timeout | Pre-timeout, wrong-token, and stale-operation approvals cannot advance; one exact post-timeout approval is durably recorded before later safety revalidation and advances only its named operation |
-| LFC-007 | P0 | Captain transfer fails | Target is not deleted and cluster remains diagnosable |
+| LFC-007 | P0 | Captain transfer fails | Operation fails closed with no replacement authorization; captain Pod UID/revision and partition remain unchanged, healthy peers remain serving, one deduplicated warning identifies the timeout, and revision withdrawal restores the retained target before any later rollback target begins |
 | LFC-008 | P0 | Captain observation is stale/conflicting | Destructive progression blocks |
 | LFC-009 | P1 | Captain changes independently during drain | Controller re-observes and follows the current authoritative state |
 | LFC-010 | P1 | Operator restarts during transfer | No duplicate transfer; state resumes |
@@ -101,6 +101,38 @@ restarts. A 312-second post-action stability gate remained continuously
 healthy. The namespace, PVCs, and all eight associated PVs were removed after
 evidence collection.
 
+### Qualified LFC-007 spike evidence
+
+On 2026-07-28, a three-member SHC on EKS cluster `vivek-spl-301372` passed
+LFC-007 with the final `3e9e735a7` Operator image. A forward
+partition-gated rollout replaced ordinals `2 -> 1`, with each replacement
+Ready, serving, registered, and `Up` before the next target began. Ordinal zero
+was the active captain. With a one-second test policy, it passed through
+detention and captain-transfer stages and then reached
+`Blocked/CaptainTransferTimedOut`.
+
+The timeout failed closed. StatefulSet partition remained one,
+`replacementAuthorizedAt` remained unset, the original captain Pod UID and
+baseline revision remained present without a deletion timestamp, and ordinals
+one and two remained Ready and serving. The harness held this state for 30
+seconds and observed exactly one additional `SHCRolloutBlocked` warning.
+
+Withdrawing the requested revision emitted exactly one additional
+`SHCPodUpdateCancelled` Event. The Operator released detention, recovered the
+same captain Pod in place, and waited for its Kubernetes Ready and serving
+conditions before beginning rollback. Kubernetes reused the baseline
+ControllerRevision; rollback still proceeded deterministically through
+ordinals `2 -> 1` by inspecting each Pod revision. Maximum unavailability was
+one in both directions and all container restart counts remained zero.
+
+The bounded run-window audit found no `OutOfOrderRevision`,
+`ExistingUnavailablePod`, or `TooManyUnavailable` Event or Operator log.
+After restoring the 300-second policy without a Pod or revision change, a
+321-second continuous gate observed three Ready/serving Pods, three registered
+`Up` members, a ready ordinal-zero captain, matching StatefulSet revisions and
+partition three, reachable local management endpoints, KV Store `ready`, no KV
+Store upgrade or backup, and zero container restarts.
+
 ## Runtime shutdown and restart scenarios
 
 | ID | Priority | Scenario | Required proof |
@@ -133,6 +165,7 @@ evidence collection.
 | STS-011 | P1 | Ordinal zero replaced while not captain | No static-captain assumption |
 | STS-012 | P0 | `Parallel` Pod management bootstrap and persistent cold restart (SHC-R24) | Every scheduling order selects exactly one stable bootstrap seed and join intent for all other members; a parallel persistent restart selects rejoin or await-rejoin only, runs no formation commands, leaves splunkd alive, and records each member's startup classification and selected action |
 | STS-013 | P1 | Search Head preferred-captain configuration | Kubernetes default does not prefer ordinal zero; an explicit customer override is preserved |
+| STS-014 | P0 | Desired revision is withdrawn after replacement authorization | The already-authorized target completes to a known recovered or classified terminal state under the original durable operation; the controller does not claim in-place cancellation for a replaced Pod, does not authorize a second disruption, and then deterministically rolls back or queues the new desired revision |
 
 ## Rejoin, membership, and storage scenarios
 

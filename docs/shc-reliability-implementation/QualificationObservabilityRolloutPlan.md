@@ -86,6 +86,16 @@ ownership.
   at most one unavailable Search Head, dynamic captain transfer, matching
   revisions, three ready and serving members, zero container restarts, and a
   312-second post-action stability gate.
+- [x] (2026-07-28) Qualified LFC-007 captain-transfer timeout on EKS with the
+  final `3e9e735a7` Operator image. The captain target failed closed without
+  deletion or replacement authorization, revision withdrawal recovered the
+  same Pod in place, and rollback completed ordinals `2 -> 1` with at most one
+  unavailable member.
+- [x] (2026-07-28) Audited the LFC-007 run window. It added exactly one
+  `CaptainTransferTimedOut` warning and one cancellation Event, emitted no
+  `OutOfOrderRevision`, `ExistingUnavailablePod`, or `TooManyUnavailable`
+  Event or log, and passed a 321-second final combined Kubernetes, SHC,
+  management, and KV Store stability gate.
 - [ ] Complete cloud-provider qualification and release-readiness review.
 
 ## Surprises & Discoveries
@@ -254,6 +264,26 @@ ownership.
   wrong-token, stale-operation, and exact approval patches leave the
   StatefulSet update revision unchanged.
 
+- Observation: withdrawal can cause Kubernetes to reuse a previous
+  ControllerRevision. StatefulSet current/update equality can therefore
+  precede completion of per-Pod rollback.
+  Consequence: LFC-007 records every Pod revision and UID continuously and
+  proves reverse-ordinal rollback independently of StatefulSet revision-field
+  equality.
+
+- Observation: in-place Splunk recovery and Kubernetes traffic readiness are
+  separate observations.
+  Consequence: the cancellation oracle does not allow the next rollback target
+  until the retained captain Pod is again Ready and serving, even after the
+  lifecycle operation reports completed recovery.
+
+- Observation: the StatefulSet desired generation and its observed
+  `status.updateRevision` can differ for a short interval after a CR template
+  change or withdrawal.
+  Consequence: qualification requires `WaitingForRevision` behavior with no
+  target start, partition mutation, Pod deletion, or rollout-block diagnostic
+  during that interval.
+
 - Observation: the secure Operator metrics endpoint requires delegated
   Kubernetes authorization for the non-resource `/metrics` path.
   Consequence: EKS qualification uses an authenticated port-forward and a
@@ -389,6 +419,24 @@ ownership.
   stability.
   Date/Author: 2026-07-28, qualification team.
 
+- Decision: failed captain transfer qualification holds the blocked state for
+  a bounded observation period before withdrawing the revision.
+  Rationale: an instantaneous observation cannot prove that the controller
+  remains fail closed or that warning Events are deduplicated.
+  Date/Author: 2026-07-28, qualification team.
+
+- Decision: revision-withdrawal evidence must include Event deltas and a
+  bounded Operator-log window, not only final convergence.
+  Rationale: a cluster can recover while transient false diagnostics still
+  mislead automation and Support.
+  Date/Author: 2026-07-28, qualification team.
+
+- Decision: ControllerRevision reuse is qualified with per-Pod revision and
+  reverse-ordinal assertions.
+  Rationale: StatefulSet status equality alone cannot prove that rollback
+  respected the one-member lifecycle.
+  Date/Author: 2026-07-28, qualification team.
+
 ## Outcomes & Retrospective
 
 The first integrated positive-path campaign, one active-strategy rollback, the
@@ -412,18 +460,24 @@ image rejected wrong-token and stale-operation approvals, accepted one exact
 post-timeout decision with a one-search audit snapshot, then completed
 ordinals `2 -> 1 -> 0`, transferred captaincy, and passed a 312-second
 post-action stability gate with zero container restarts.
+The SHC-75 image additionally failed closed on captain-transfer timeout,
+retained the original captain Pod, restored it in place after revision
+withdrawal, completed deterministic rollback, emitted only the expected
+warning and cancellation signals, and passed a 321-second final stability
+gate.
 
 The complete `OnDelete` and `RollingUpdate` gates remain open because the
 required repetitions, full-campaign soak around the new search cases,
-additional timeout classes, failed transfer, forced disruption,
-scheduling/storage/network faults, version skew, and rollback-under-failure
-have not passed. The earlier log-severity, phase, scale-event, higher-ordinal
-observation, cancelled-update recovery, stale search-count, and unaudited
-continuation defects are corrected for the tested paths. The campaign
-establishes that the integrated components can execute the intended happy
-path, active-operation rollback, replica-count lifecycle, fail-closed drain,
-and one explicitly audited interruption; it is not evidence for default
-enablement.
+additional timeout classes, forced disruption, scheduling/storage/network
+faults, version skew, revision withdrawal after replacement authorization, and
+other rollback-under-failure cases have not passed. The earlier log-severity,
+phase, scale-event, higher-ordinal observation, cancelled-update recovery,
+stale search-count, unaudited continuation, failed-transfer, revision-reuse,
+and stale-StatefulSet-observation defects are corrected for the tested paths.
+The campaign establishes that the integrated components can execute the
+intended happy path, active-operation rollback, replica-count lifecycle,
+fail-closed drain and captain transfer, and one explicitly audited
+interruption; it is not evidence for default enablement.
 
 ## Context and Orientation
 
@@ -994,6 +1048,47 @@ or entire support bundles.
 - the namespace, PVCs, and all eight associated PVs were deleted after
   sanitized evidence collection.
 
+2026-07-28 LFC-007 captain-transfer-timeout qualification:
+
+- Operator source commits were
+  `eb6907ee51f0655742f2096f8137b55c484792d6`,
+  `44ccac31e9aaa0540678d090b3222a5e2a1df1ef`, and
+  `3e9e735a776eb90957a0d0d2722b28ce0da5baff`.
+  The final image was
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-3e9e735a7`
+  at digest
+  `sha256:98b71dbbb394d51abea5e79a9f63e4423f43ae3f623d5ed3d28cb9d55c0b6f72`;
+- Linux `make fmt`, `make vet`, `make build`, and `make test` passed. All 41
+  Ginkgo suites and 154 controller specifications passed with 78.5 percent
+  composite coverage;
+- the run used EKS cluster `vivek-spl-301372`, namespace
+  `shc75-captain-timeout`, with both lifecycle feature gates enabled;
+- changing the captain-transfer policy from 300 seconds to one second changed
+  no Pod UID or StatefulSet revision. The forward rollout then replaced
+  ordinals `2 -> 1`;
+- the ordinal-zero captain reached `Blocked/CaptainTransferTimedOut` with its
+  original UID and baseline revision intact, no deletion timestamp, no
+  replacement authorization, partition one, and ordinals one and two Ready and
+  serving;
+- the harness held that blocked state for 30 seconds. Exactly one additional
+  timeout warning was emitted and no destructive progress occurred;
+- revision withdrawal emitted exactly one additional cancellation Event,
+  released detention, and restored the same captain Pod. No rollback target
+  began until that Pod was Ready, serving, registered, and `Up`;
+- rollback reused the baseline ControllerRevision, replaced ordinals
+  `2 -> 1`, observed maximum unavailability `1/1`, and recorded zero container
+  restarts;
+- the run-window Event and Operator-log audit contained no
+  `OutOfOrderRevision`, `ExistingUnavailablePod`, or `TooManyUnavailable`;
+- final CR and StatefulSet generations were observed, phase was `Ready`,
+  captain was ordinal zero and ready, all three members were `Up`, current and
+  update revisions matched, partition was three, and all three Pods were Ready
+  and serving; and
+- the restored 300-second policy changed no Pod identity or revision. The final
+  continuous gate passed at 321 seconds with management HTTP 401 on all three
+  Pods, KV Store `ready`, no KV Store version upgrade or backup, and zero
+  container restarts.
+
 ## Interfaces and Dependencies
 
 The test harness requires stable adapters for:
@@ -1077,3 +1172,9 @@ approval/authorization timestamp ordering, active-search audit snapshots,
 authenticated metrics evidence, exact Event/log/counter assertions, complete
 reverse-ordinal rollout and captain transfer, a 312-second post gate, and
 resource cleanup.
+
+2026-07-28: Recorded LFC-007 failed-captain-transfer and revision-withdrawal
+qualification. Added the 30-second fail-closed hold, exact Event deltas,
+per-Pod ControllerRevision rollback proof, in-place readiness restoration,
+bounded Operator-log audit, reverse-ordinal rollback, and the 321-second final
+stability gate.

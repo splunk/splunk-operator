@@ -24,20 +24,22 @@ separate:
 1. `CurrentDevelopBaseline.md` establishes what exists now.
 2. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
    acceptance evidence.
-3. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
+3. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
+   immutable commits and stable scenario identifiers.
+4. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
    machine, StatefulSet strategy, and durable status contract.
-4. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
+5. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
    cluster-wide image-upgrade workflow and its composition with per-member
    lifecycle orchestration.
-5. `RuntimeLifecycleContract.md` defines the contract between the Operator,
+6. `RuntimeLifecycleContract.md` defines the contract between the Operator,
    Pod lifecycle, probe scripts, Docker-Splunk/Splunk Ansible, and splunkd.
-6. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
+7. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
    integration rules, and conflict prevention.
-7. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
+8. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
    and common pass invariants.
-8. `QualificationObservabilityRolloutPlan.md` is the executable test,
+9. `QualificationObservabilityRolloutPlan.md` is the executable test,
    evidence, migration, release, and rollback plan.
-9. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
+10. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
    contract for Docker-Splunk image construction on a supported Linux host.
 
 The Operator design is a Wave 0 spike contract and the runtime design now
