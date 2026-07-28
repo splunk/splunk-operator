@@ -3474,6 +3474,283 @@ func TestRollingUpdateControllerSupersedingRevisionReplacesStaleOperation(t *tes
 	assertNoRollingUpdatePodDelete(t, client)
 }
 
+func TestRollingUpdateControllerRetainsAuthorizedOperationAfterRevisionWithdrawal(
+	t *testing.T,
+) {
+	testCases := []struct {
+		name       string
+		stage      enterpriseApi.SearchHeadClusterLifecycleStage
+		prepare    func(*testing.T, *searchHeadClusterPodManager, *appsv1.StatefulSet, *spltest.MockClient)
+		wantReason upgrade.SHCRolloutReason
+	}{
+		{
+			name:  "termination",
+			stage: enterpriseApi.SearchHeadClusterLifecycleStageWaitingForTermination,
+			prepare: func(
+				t *testing.T,
+				_ *searchHeadClusterPodManager,
+				statefulSet *appsv1.StatefulSet,
+				client *spltest.MockClient,
+			) {
+				t.Helper()
+				pod := &corev1.Pod{}
+				if err := client.Get(context.Background(), types.NamespacedName{
+					Namespace: statefulSet.GetNamespace(),
+					Name:      statefulSet.GetName() + "-2",
+				}, pod); err != nil {
+					t.Fatalf("get terminating target: %v", err)
+				}
+				if err := client.Delete(context.Background(), pod); err != nil {
+					t.Fatalf("remove terminating target: %v", err)
+				}
+			},
+			wantReason: upgrade.SHCRolloutReasonWaitingForKubernetes,
+		},
+		{
+			name:  "container startup",
+			stage: enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+			prepare: func(
+				t *testing.T,
+				_ *searchHeadClusterPodManager,
+				statefulSet *appsv1.StatefulSet,
+				client *spltest.MockClient,
+			) {
+				t.Helper()
+				setRollingUpdateFixturePodReady(
+					t,
+					client,
+					statefulSet,
+					2,
+					false,
+				)
+			},
+			wantReason: upgrade.SHCRolloutReasonWaitingForKubernetes,
+		},
+		{
+			name:  "member rejoin",
+			stage: enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+			prepare: func(
+				t *testing.T,
+				mgr *searchHeadClusterPodManager,
+				_ *appsv1.StatefulSet,
+				_ *spltest.MockClient,
+			) {
+				t.Helper()
+				mgr.cr.Status.Members[2].Registered = false
+				mgr.cr.Status.Members[2].Status = "Down"
+			},
+			wantReason: upgrade.SHCRolloutReasonWaitingForRecovery,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			setLifecyclePolicyTestGates(t, true, true)
+			mgr, statefulSet, client := rollingUpdateControllerFixture(
+				t,
+				2,
+				"revision-1",
+				"revision-1",
+				[]string{"revision-1", "revision-1", "revision-1"},
+			)
+			target := int32(2)
+			authorizedAt := metav1.Now()
+			mgr.cr.Status.LifecycleOperation =
+				&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+					OperationID:             "withdrawn-revision-operation",
+					Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+					DesiredRevision:         "revision-2",
+					TargetPod:               statefulSet.GetName() + "-2",
+					TargetOrdinal:           &target,
+					TargetPodUID:            "original-pod-uid",
+					Stage:                   testCase.stage,
+					ReplacementAuthorizedAt: &authorizedAt,
+				}
+			testCase.prepare(t, mgr, statefulSet, client)
+			client.ResetCalls()
+
+			state, err := mgr.observeRollingStatefulSet(
+				context.Background(),
+				statefulSet,
+			)
+			if err != nil {
+				t.Fatalf("observe withdrawn revision: %v", err)
+			}
+			if state.Lifecycle.TargetOrdinal == nil ||
+				*state.Lifecycle.TargetOrdinal != target ||
+				state.Lifecycle.Stage != testCase.stage ||
+				!state.Lifecycle.ReplacementAuthorized ||
+				!state.Lifecycle.RevisionSuperseded ||
+				state.Lifecycle.DesiredRevision != "revision-2" {
+				t.Fatalf(
+					"projected lifecycle = %#v, want authorized ordinal 2 at %s",
+					state.Lifecycle,
+					testCase.stage,
+				)
+			}
+			decision := upgrade.EvaluateSHCRollout(state)
+			if decision.Action != upgrade.SHCRolloutActionWait ||
+				decision.Reason != testCase.wantReason ||
+				decision.TargetOrdinal == nil ||
+				*decision.TargetOrdinal != target {
+				t.Fatalf(
+					"withdrawn revision decision = %#v, want Wait/%s for ordinal 2",
+					decision,
+					testCase.wantReason,
+				)
+			}
+
+			phase, err := mgr.updateRollingStatefulSetPods(
+				context.Background(),
+				statefulSet,
+				3,
+			)
+			if err != nil {
+				t.Fatalf("continue withdrawn revision recovery: %v", err)
+			}
+			if phase != enterpriseApi.PhaseUpdating {
+				t.Fatalf(
+					"withdrawn revision phase = %q, want %q",
+					phase,
+					enterpriseApi.PhaseUpdating,
+				)
+			}
+			if mgr.cr.Status.LifecycleOperation == nil ||
+				mgr.cr.Status.LifecycleOperation.OperationID !=
+					"withdrawn-revision-operation" {
+				t.Fatalf(
+					"durable lifecycle ownership changed: %#v",
+					mgr.cr.Status.LifecycleOperation,
+				)
+			}
+			if !strings.Contains(
+				mgr.cr.Status.Message,
+				string(testCase.wantReason),
+			) ||
+				!strings.Contains(
+					mgr.cr.Status.Message,
+					"superseded revision revision-2",
+				) ||
+				!strings.Contains(
+					mgr.cr.Status.Message,
+					"current revision revision-1",
+				) {
+				t.Fatalf(
+					"withdrawn revision status = %q, want bounded reason and revision handoff context",
+					mgr.cr.Status.Message,
+				)
+			}
+			if len(client.Calls["Update"]) != 0 {
+				t.Fatalf(
+					"withdrawn revision recovery changed Kubernetes state: %v",
+					client.Calls["Update"],
+				)
+			}
+			assertNoRollingUpdatePodDelete(t, client)
+		})
+	}
+}
+
+func TestRollingUpdateControllerCompletesAuthorizedRevisionWithdrawal(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-1",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:             "withdrawn-revision-operation",
+			Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:         "revision-2",
+			TargetPod:               statefulSet.GetName() + "-2",
+			TargetOrdinal:           &target,
+			TargetPodUID:            "original-pod-uid",
+			Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+			ReplacementAuthorizedAt: &authorizedAt,
+		}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("complete withdrawn revision recovery: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating ||
+		len(client.Calls["Update"]) != 1 {
+		t.Fatalf(
+			"completion phase=%q updates=%d, want partition reset",
+			phase,
+			len(client.Calls["Update"]),
+		)
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+	stored := getRollingUpdateFixtureStatefulSet(t, client, statefulSet)
+	assertRollingUpdatePartition(t, stored.Spec.UpdateStrategy, 3)
+}
+
+func TestRollingUpdateControllerHandsAuthorizedTargetToSupersedingRevision(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-3",
+		[]string{"revision-1", "revision-1", "revision-3"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:             "superseded-authorized-operation",
+			Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:         "revision-2",
+			TargetPod:               statefulSet.GetName() + "-2",
+			TargetOrdinal:           &target,
+			TargetPodUID:            "original-pod-uid",
+			Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+			ReplacementAuthorizedAt: &authorizedAt,
+		}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("handoff superseding revision: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("handoff phase = %q, want %q", phase, enterpriseApi.PhaseUpdating)
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != 1 ||
+		operation.DesiredRevision != "revision-3" ||
+		operation.ReplacementAuthorizedAt != nil {
+		t.Fatalf(
+			"handoff operation = %#v, want fresh revision-3 ordinal 1 preparation",
+			operation,
+		)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("handoff changed partition: %v", client.Calls["Update"])
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, 2)
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
 func TestRollingUpdateControllerRollbackCompletionResetsPartition(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(

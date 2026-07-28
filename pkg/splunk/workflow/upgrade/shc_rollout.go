@@ -80,6 +80,12 @@ type SHCRolloutLifecycle struct {
 	TargetOrdinal         *int32
 	Stage                 enterpriseApi.SearchHeadClusterLifecycleStage
 	ReplacementAuthorized bool
+	DesiredRevision       string
+	// RevisionSuperseded identifies an operation whose target was already
+	// released to Kubernetes before the StatefulSet desired revision changed.
+	// That operation retains ownership until its replacement is recovered;
+	// only then may the coordinator hand off to the current update revision.
+	RevisionSuperseded bool
 	// InPlaceRecovery identifies a withdrawn operation whose original Pod
 	// remains the lifecycle target. The completed workflow continues to own
 	// the short readiness-gate handoff until Kubernetes reports that retained
@@ -211,6 +217,15 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 					message = fmt.Sprintf(
 						"Pod ordinal %d is Kubernetes-ready but has not recovered as a registered Up SHC member",
 						ordinal,
+					)
+				}
+				if state.Lifecycle.RevisionSuperseded &&
+					lifecycleTargetsOrdinal(state.Lifecycle, ordinal) {
+					message = fmt.Sprintf(
+						"authorized ordinal %d for superseded revision %s retains lifecycle ownership; waiting for recovery at current revision %s",
+						ordinal,
+						state.Lifecycle.DesiredRevision,
+						state.UpdateRevision,
 					)
 				}
 				return waitSHCRollout(
@@ -352,9 +367,21 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 					ordinalPointer(activeOrdinal),
 				)
 			}
+			message := fmt.Sprintf(
+				"waiting for Kubernetes to replace ordinal %d",
+				activeOrdinal,
+			)
+			if state.Lifecycle.RevisionSuperseded {
+				message = fmt.Sprintf(
+					"authorized ordinal %d for superseded revision %s retains lifecycle ownership; waiting for Kubernetes recovery at current revision %s",
+					activeOrdinal,
+					state.Lifecycle.DesiredRevision,
+					state.UpdateRevision,
+				)
+			}
 			return waitSHCRollout(
 				SHCRolloutReasonWaitingForKubernetes,
-				fmt.Sprintf("waiting for Kubernetes to replace ordinal %d", activeOrdinal),
+				message,
 				ordinalPointer(activeOrdinal),
 			)
 		}
@@ -375,9 +402,21 @@ func EvaluateSHCRollout(state SHCRolloutState) SHCRolloutDecision {
 				)
 			}
 			if !lifecycleCompletedForOrdinal(state.Lifecycle, activeOrdinal) {
+				message := fmt.Sprintf(
+					"ordinal %d is locally ready but SHC recovery is incomplete",
+					activeOrdinal,
+				)
+				if state.Lifecycle.RevisionSuperseded {
+					message = fmt.Sprintf(
+						"authorized ordinal %d for superseded revision %s recovered in Kubernetes; waiting for SHC recovery before handoff to current revision %s",
+						activeOrdinal,
+						state.Lifecycle.DesiredRevision,
+						state.UpdateRevision,
+					)
+				}
 				return waitSHCRollout(
 					SHCRolloutReasonWaitingForRecovery,
-					fmt.Sprintf("ordinal %d is locally ready but SHC recovery is incomplete", activeOrdinal),
+					message,
 					ordinalPointer(activeOrdinal),
 				)
 			}

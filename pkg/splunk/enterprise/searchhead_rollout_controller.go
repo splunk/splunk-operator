@@ -1084,15 +1084,23 @@ func (mgr *searchHeadClusterPodManager) observeRollingStatefulSet(
 		operation,
 		statefulSet.Status.UpdateRevision,
 	)
+	authorizedRevisionHandoff := shcAuthorizedRevisionHandoff(
+		operation,
+		state.Partition,
+		statefulSet.Status.UpdateRevision,
+	)
 	if operation != nil &&
 		((operation.Intent ==
 			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
 			operation.DesiredRevision == statefulSet.Status.UpdateRevision) ||
-			inPlaceRecovery) {
+			inPlaceRecovery ||
+			authorizedRevisionHandoff) {
 		state.Lifecycle = upgrade.SHCRolloutLifecycle{
 			TargetOrdinal:         operation.TargetOrdinal,
 			Stage:                 operation.Stage,
 			ReplacementAuthorized: operation.ReplacementAuthorizedAt != nil,
+			DesiredRevision:       operation.DesiredRevision,
+			RevisionSuperseded:    authorizedRevisionHandoff,
 			InPlaceRecovery:       inPlaceRecovery,
 		}
 	}
@@ -1166,6 +1174,29 @@ func shcInPlaceLifecycleRecovery(
 	default:
 		return false
 	}
+}
+
+// shcAuthorizedRevisionHandoff distinguishes a replacement authorization
+// merely recorded in status from one already released to Kubernetes. Before
+// the partition reaches the target, a superseding revision can replace the
+// stale operation without disrupting a Pod. Once the partition reaches the
+// target, the original durable operation owns that replacement through
+// Kubernetes startup and SHC rejoin even if the desired revision changes.
+func shcAuthorizedRevisionHandoff(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	partition int32,
+	updateRevision string,
+) bool {
+	return operation != nil &&
+		operation.Intent ==
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+		operation.TargetOrdinal != nil &&
+		operation.TargetPodUID != "" &&
+		operation.ReplacementAuthorizedAt != nil &&
+		partition == *operation.TargetOrdinal &&
+		operation.DesiredRevision != "" &&
+		updateRevision != "" &&
+		operation.DesiredRevision != updateRevision
 }
 
 func podSplunkImage(pod *corev1.Pod) string {
