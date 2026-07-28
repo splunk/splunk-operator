@@ -2038,18 +2038,26 @@ func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
 	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
 		{Name: "splunk-example-search-head-0", Status: "Up", Registered: true},
 		{Name: "splunk-example-search-head-1", Status: "Up", Registered: true},
-		{Name: "splunk-example-search-head-2", Status: "ManualDetention", Registered: true},
+		{
+			Name:                        "splunk-example-search-head-2",
+			Status:                      "ManualDetention",
+			Registered:                  true,
+			ActiveHistoricalSearchCount: 1,
+			ActiveRealtimeSearchCount:   1,
+		},
 	}
 	cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
-		OperationID:             "operation-1",
-		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
-		DesiredRevision:         "revision-2",
-		TargetPod:               "splunk-example-search-head-2",
-		TargetOrdinal:           &ordinal,
-		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
-		TargetPodUID:            "old-pod-uid",
-		TargetMemberID:          "member-guid-2",
-		ReplacementAuthorizedAt: &authorizedAt,
+		OperationID:              "operation-1",
+		Intent:                   enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:          "revision-2",
+		TargetPod:                "splunk-example-search-head-2",
+		TargetOrdinal:            &ordinal,
+		Stage:                    enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		TargetPodUID:             "old-pod-uid",
+		TargetMemberID:           "member-guid-2",
+		ReplacementAuthorizedAt:  &authorizedAt,
+		ActiveHistoricalSearches: 2,
+		ActiveRealtimeSearches:   2,
 	}
 	mgr := &searchHeadClusterPodManager{cr: cr}
 
@@ -2116,6 +2124,14 @@ func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
 	if releaseCalls != 0 {
 		t.Fatal("detention release ran in the same reconcile as its stage transition")
 	}
+	if cr.Status.LifecycleOperation.ActiveHistoricalSearches != 1 ||
+		cr.Status.LifecycleOperation.ActiveRealtimeSearches != 1 {
+		t.Fatalf(
+			"adapter recovery counts = historical %d realtime %d, want current 1 and 1",
+			cr.Status.LifecycleOperation.ActiveHistoricalSearches,
+			cr.Status.LifecycleOperation.ActiveRealtimeSearches,
+		)
+	}
 
 	complete, err = mgr.resumeLifecycleRecovery(context.Background(), ordinal)
 	assertLifecycleAdapterResult(t, complete, err, false)
@@ -2148,6 +2164,8 @@ func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
 	}
 
 	cr.Status.Members[2].Status = "Up"
+	cr.Status.Members[2].ActiveHistoricalSearchCount = 0
+	cr.Status.Members[2].ActiveRealtimeSearchCount = 0
 	captainMembers["splunk-example-search-head-2"] = splclient.SearchHeadCaptainMemberInfo{
 		Identifier: "member-guid-2",
 		Label:      "splunk-example-search-head-2",
@@ -2157,6 +2175,14 @@ func TestLifecycleRecoveryAdapterReleasesDetentionAndCompletes(t *testing.T) {
 	assertLifecycleAdapterResult(t, complete, err, true)
 	if cr.Status.LifecycleOperation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
 		t.Fatalf("stage = %q, want Completed", cr.Status.LifecycleOperation.Stage)
+	}
+	if cr.Status.LifecycleOperation.ActiveHistoricalSearches != 0 ||
+		cr.Status.LifecycleOperation.ActiveRealtimeSearches != 0 {
+		t.Fatalf(
+			"completed adapter recovery retained stale search counts: historical %d realtime %d",
+			cr.Status.LifecycleOperation.ActiveHistoricalSearches,
+			cr.Status.LifecycleOperation.ActiveRealtimeSearches,
+		)
 	}
 }
 

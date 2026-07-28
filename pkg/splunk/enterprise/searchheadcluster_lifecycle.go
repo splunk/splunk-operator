@@ -758,6 +758,8 @@ func (mgr *searchHeadClusterPodManager) observeLifecycleRecovery(
 		target.Status != ""
 	observation.MemberStatus = target.Status
 	observation.MemberRegistered = target.Registered
+	observation.ActiveHistoricalSearches = int32(target.ActiveHistoricalSearchCount)
+	observation.ActiveRealtimeSearches = int32(target.ActiveRealtimeSearchCount)
 	observation.CaptainReady = mgr.cr.Status.CaptainReady
 
 	captainOrdinal := int32(-1)

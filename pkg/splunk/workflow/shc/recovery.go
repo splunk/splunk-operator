@@ -54,6 +54,8 @@ type RecoveryObservation struct {
 	CaptainMemberStatus      string
 	CaptainReady             bool
 	AuthoritativeCaptain     bool
+	ActiveHistoricalSearches int32
+	ActiveRealtimeSearches   int32
 }
 
 // EvaluateRecovery advances an authorized Pod replacement through Kubernetes
@@ -73,6 +75,11 @@ func EvaluateRecovery(
 		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
 		return Decision{Operation: operation}
 	}
+	// Recovery observations supersede the last drain observation. Keeping
+	// these counts current prevents a completed cancellation from reporting
+	// searches that were cancelled before the member was restored.
+	operation.ActiveHistoricalSearches = observation.ActiveHistoricalSearches
+	operation.ActiveRealtimeSearches = observation.ActiveRealtimeSearches
 
 	if operation.ReplacementPodObservedAt == nil &&
 		operation.ReplacementPodUID != "" &&

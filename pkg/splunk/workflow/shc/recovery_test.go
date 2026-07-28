@@ -185,12 +185,16 @@ func TestPodUpdateCancellationRestoresOriginalPodWithoutCompletingRevision(t *te
 			SearchHeadClusterLifecycleStageValidatingRecovery,
 		Reason: enterpriseApi.
 			SearchHeadClusterLifecycleReasonPodUpdateCancelled,
-		MemberRejoinStartedAt: &startedAt,
+		ActiveHistoricalSearches: 2,
+		ActiveRealtimeSearches:   1,
+		MemberRejoinStartedAt:    &startedAt,
 	}
 	observation := recoveredPodObservation()
 	observation.PodUID = "original-pod-uid"
 	observation.MemberStatus = "ManualDetention"
 	observation.CaptainMemberStatus = "ManualDetention"
+	observation.ActiveHistoricalSearches = 1
+	observation.ActiveRealtimeSearches = 1
 
 	decision := EvaluateRecovery(
 		operation,
@@ -204,6 +208,14 @@ func TestPodUpdateCancellationRestoresOriginalPodWithoutCompletingRevision(t *te
 		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
 		ActionReleaseDetention,
 	)
+	if decision.Operation.ActiveHistoricalSearches != 1 ||
+		decision.Operation.ActiveRealtimeSearches != 1 {
+		t.Fatalf(
+			"recovery search counts = historical %d realtime %d, want current 1 and 1",
+			decision.Operation.ActiveHistoricalSearches,
+			decision.Operation.ActiveRealtimeSearches,
+		)
+	}
 	decision.Operation = RecordDetentionReleaseAttempt(
 		decision.Operation,
 		now.Add(2*time.Second),
@@ -211,6 +223,8 @@ func TestPodUpdateCancellationRestoresOriginalPodWithoutCompletingRevision(t *te
 
 	observation.MemberStatus = "Up"
 	observation.CaptainMemberStatus = "Up"
+	observation.ActiveHistoricalSearches = 0
+	observation.ActiveRealtimeSearches = 0
 	decision = EvaluateRecovery(
 		decision.Operation,
 		observation,
@@ -236,6 +250,14 @@ func TestPodUpdateCancellationRestoresOriginalPodWithoutCompletingRevision(t *te
 		t.Fatalf(
 			"completion message = %q, want Pod-update cancellation evidence",
 			decision.Operation.Message,
+		)
+	}
+	if decision.Operation.ActiveHistoricalSearches != 0 ||
+		decision.Operation.ActiveRealtimeSearches != 0 {
+		t.Fatalf(
+			"completed recovery retained stale search counts: historical %d realtime %d",
+			decision.Operation.ActiveHistoricalSearches,
+			decision.Operation.ActiveRealtimeSearches,
 		)
 	}
 }
