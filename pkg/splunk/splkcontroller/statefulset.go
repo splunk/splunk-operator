@@ -55,6 +55,18 @@ type statefulSetPodUpdateReadinessManager interface {
 	) (bool, error)
 }
 
+// statefulSetScaleDownReadinessManager is an optional contract for a
+// StatefulSetPodManager that can prove one not-ready Pod is the highest
+// ordinal deliberately withdrawn by its active, durable scale-down operation.
+// Generic managers do not receive this exception and remain fail closed.
+type statefulSetScaleDownReadinessManager interface {
+	CanProceedWithScaleDownDespiteNotReadyReplicas(
+		context.Context,
+		*appsv1.StatefulSet,
+		int32,
+	) (bool, error)
+}
+
 // Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
 func (mgr *DefaultStatefulSetPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	phase, err := ApplyStatefulSet(ctx, client, statefulSet)
@@ -232,6 +244,119 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	// wait for all replicas ready
 	replicas := *statefulSet.Spec.Replicas
 	readyReplicas := statefulSet.Status.ReadyReplicas
+
+	// Scale-down preparation can intentionally withdraw the highest ordinal
+	// from readiness before StatefulSet.spec.replicas changes. Re-enter the
+	// durable preparation workflow before the generic readiness wait so that
+	// this owned withdrawal is not mistaken for scale-up. Managers that cannot
+	// prove the withdrawal is owned remain fail closed.
+	if replicas > desiredReplicas {
+		if readyReplicas > replicas {
+			scopedLog.InfoContext(ctx, "waiting for scale down to complete")
+			return enterpriseApi.PhaseScalingDown, nil
+		}
+		if readyReplicas < replicas {
+			canProceedWithScaleDown := false
+			if readinessManager, ok := mgr.(statefulSetScaleDownReadinessManager); ok {
+				canProceedWithScaleDown, err =
+					readinessManager.CanProceedWithScaleDownDespiteNotReadyReplicas(
+						ctx,
+						statefulSet,
+						desiredReplicas,
+					)
+				if err != nil {
+					scopedLog.ErrorContext(
+						ctx,
+						"unable to validate intentional scale-down readiness withdrawal",
+						"error",
+						err,
+					)
+					return enterpriseApi.PhaseError, err
+				}
+			}
+			if !canProceedWithScaleDown {
+				if termErr := checkPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
+					scopedLog.ErrorContext(ctx, "terminal pod failure detected during scale down; setting PhaseError", "error", termErr)
+					return enterpriseApi.PhaseError, splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr)
+				}
+				scopedLog.InfoContext(
+					ctx,
+					"waiting for pods before scale down",
+					"readyReplicas",
+					readyReplicas,
+					"replicas",
+					replicas,
+				)
+				return enterpriseApi.PhaseScalingDown, nil
+			}
+			scopedLog.InfoContext(
+				ctx,
+				"continuing Operator-owned scale down after verified readiness withdrawal",
+				"readyReplicas",
+				readyReplicas,
+				"replicas",
+				replicas,
+			)
+		}
+
+		// Prepare and remove one highest ordinal at a time even when the user
+		// requests a larger reduction. This preserves StatefulSet ordering and
+		// lets the manager durably coordinate each membership change.
+		n := replicas - 1
+		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
+		ready, err := mgr.PrepareScaleDown(ctx, n)
+		if err != nil {
+			scopedLog.ErrorContext(ctx, "unable to decommission Pod", "podName", podName, "error", err)
+			return enterpriseApi.PhaseError, err
+		}
+		if !ready {
+			return enterpriseApi.PhaseScalingDown, nil
+		}
+
+		scopedLog.InfoContext(ctx, "scaling replicas down", "replicas", n)
+		*statefulSet.Spec.Replicas = n
+		if statefulSet.Spec.UpdateStrategy.Type ==
+			appsv1.RollingUpdateStatefulSetStrategyType &&
+			statefulSet.Spec.UpdateStrategy.RollingUpdate != nil &&
+			statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition != nil &&
+			*statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition > n {
+			// Keep the partition within the new ordinal range in the same API
+			// update as replicas. Kubernetes must not gain permission to
+			// replace any lower ordinal during the scale-down transition.
+			*statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition = n
+		}
+		err = splutil.UpdateResource(ctx, c, statefulSet)
+		if err != nil {
+			scopedLog.ErrorContext(ctx, "scale down update failed for StatefulSet", "error", err)
+			return enterpriseApi.PhaseError, err
+		}
+
+		// delete PVCs used by the pod so that a future scale up will have clean state
+		for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
+			namespacedName := types.NamespacedName{
+				Namespace: vol.ObjectMeta.Namespace,
+				Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
+			}
+			var pvc corev1.PersistentVolumeClaim
+			err := c.Get(ctx, namespacedName, &pvc)
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					continue
+				}
+				scopedLog.ErrorContext(ctx, "unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name, "error", err)
+				return enterpriseApi.PhaseError, err
+			}
+			scopedLog.InfoContext(ctx, "deleting PVC", "pvcName", pvc.ObjectMeta.Name)
+			err = c.Delete(ctx, &pvc)
+			if err != nil {
+				scopedLog.ErrorContext(ctx, "unable to delete PVC", "pvcName", pvc.ObjectMeta.Name, "error", err)
+				return enterpriseApi.PhaseError, err
+			}
+		}
+
+		return enterpriseApi.PhaseScalingDown, nil
+	}
+
 	canProceedWithPodUpdate := false
 	if readyReplicas < replicas {
 		if readinessManager, ok := mgr.(statefulSetPodUpdateReadinessManager); ok {
@@ -289,56 +414,6 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		scopedLog.InfoContext(ctx, "scaling replicas up", "replicas", desiredReplicas)
 		*statefulSet.Spec.Replicas = desiredReplicas
 		return enterpriseApi.PhaseScalingUp, splutil.UpdateResource(ctx, c, statefulSet)
-	}
-
-	// check for scaling down
-	if readyReplicas > desiredReplicas {
-		// prepare pod for removal via scale down
-		n := readyReplicas - 1
-		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
-		ready, err := mgr.PrepareScaleDown(ctx, n)
-		if err != nil {
-			scopedLog.ErrorContext(ctx, "unable to decommission Pod", "podName", podName, "error", err)
-			return enterpriseApi.PhaseError, err
-		}
-		if !ready {
-			// wait until pod quarantine has completed before deleting it
-			return enterpriseApi.PhaseScalingDown, nil
-		}
-
-		// scale down statefulset to terminate pod
-		scopedLog.InfoContext(ctx, "scaling replicas down", "replicas", n)
-		*statefulSet.Spec.Replicas = n
-		err = splutil.UpdateResource(ctx, c, statefulSet)
-		if err != nil {
-			scopedLog.ErrorContext(ctx, "scale down update failed for StatefulSet", "error", err)
-			return enterpriseApi.PhaseError, err
-		}
-
-		// delete PVCs used by the pod so that a future scale up will have clean state
-		for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
-			namespacedName := types.NamespacedName{
-				Namespace: vol.ObjectMeta.Namespace,
-				Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
-			}
-			var pvc corev1.PersistentVolumeClaim
-			err := c.Get(ctx, namespacedName, &pvc)
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					continue
-				}
-				scopedLog.ErrorContext(ctx, "unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name, "error", err)
-				return enterpriseApi.PhaseError, err
-			}
-			scopedLog.InfoContext(ctx, "deleting PVC", "pvcName", pvc.ObjectMeta.Name)
-			err = c.Delete(ctx, &pvc)
-			if err != nil {
-				scopedLog.ErrorContext(ctx, "unable to delete PVC", "pvcName", pvc.ObjectMeta.Name, "error", err)
-				return enterpriseApi.PhaseError, err
-			}
-		}
-
-		return enterpriseApi.PhaseScalingDown, nil
 	}
 
 	// ready and no StatefulSet scaling is required

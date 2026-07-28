@@ -183,16 +183,46 @@ func (mgr *searchHeadClusterPodManager) CanProceedWithPodUpdateDespiteNotReadyRe
 	statefulSet *appsv1.StatefulSet,
 	desiredReplicas int32,
 ) (bool, error) {
+	return mgr.canProceedWithOwnedReadinessWithdrawal(
+		ctx,
+		statefulSet,
+		desiredReplicas,
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+	)
+}
+
+// CanProceedWithScaleDownDespiteNotReadyReplicas proves that exactly the
+// highest ordinal is not ready because the active durable SHC scale-down
+// operation withdrew it from Service traffic. This permits the generic
+// StatefulSet controller to re-enter PrepareScaleDown without weakening its
+// readiness checks for other workloads or unrelated failures.
+func (mgr *searchHeadClusterPodManager) CanProceedWithScaleDownDespiteNotReadyReplicas(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32,
+) (bool, error) {
+	return mgr.canProceedWithOwnedReadinessWithdrawal(
+		ctx,
+		statefulSet,
+		desiredReplicas,
+		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown,
+	)
+}
+
+func (mgr *searchHeadClusterPodManager) canProceedWithOwnedReadinessWithdrawal(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32,
+	intent enterpriseApi.SearchHeadClusterLifecycleIntent,
+) (bool, error) {
 	if !searchHeadClusterLifecycleEnabled() ||
 		statefulSet == nil ||
-		statefulSet.Spec.UpdateStrategy.Type != appsv1.OnDeleteStatefulSetStrategyType ||
 		!searchHeadServingReadinessGateConfigured(statefulSet) ||
 		statefulSet.Spec.Replicas == nil {
 		return false, nil
 	}
 	replicas := *statefulSet.Spec.Replicas
 	if replicas < 3 ||
-		desiredReplicas != replicas ||
 		statefulSet.Status.Replicas != replicas ||
 		statefulSet.Status.ReadyReplicas != replicas-1 {
 		return false, nil
@@ -200,17 +230,31 @@ func (mgr *searchHeadClusterPodManager) CanProceedWithPodUpdateDespiteNotReadyRe
 
 	operation := mgr.cr.Status.LifecycleOperation
 	if operation == nil ||
-		operation.Intent != enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		operation.Intent != intent ||
 		operation.TargetOrdinal == nil ||
 		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageCompleted ||
 		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageBlocked ||
-		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageFailed ||
-		operation.DesiredRevision == "" ||
-		operation.DesiredRevision != statefulSet.Status.UpdateRevision {
+		operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageFailed {
 		return false, nil
 	}
 	targetOrdinal := *operation.TargetOrdinal
 	if targetOrdinal < 0 || targetOrdinal >= replicas {
+		return false, nil
+	}
+	switch intent {
+	case enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate:
+		if statefulSet.Spec.UpdateStrategy.Type !=
+			appsv1.OnDeleteStatefulSetStrategyType ||
+			desiredReplicas != replicas ||
+			operation.DesiredRevision == "" ||
+			operation.DesiredRevision != statefulSet.Status.UpdateRevision {
+			return false, nil
+		}
+	case enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown:
+		if desiredReplicas >= replicas || targetOrdinal != replicas-1 {
+			return false, nil
+		}
+	default:
 		return false, nil
 	}
 

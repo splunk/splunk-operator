@@ -292,6 +292,40 @@ func TestCanProceedWithPodUpdateDespiteNotReadyReplicas(t *testing.T) {
 		require.True(t, allowed)
 	})
 
+	t.Run("matching durable scale-down withdrawal", func(t *testing.T) {
+		mgr, statefulSet, _ := build()
+		mgr.cr.Status.LifecycleOperation.Intent =
+			enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown
+		mgr.cr.Status.LifecycleOperation.DesiredRevision = ""
+		statefulSet.Spec.UpdateStrategy.Type =
+			appsv1.RollingUpdateStatefulSetStrategyType
+		allowed, err :=
+			mgr.CanProceedWithScaleDownDespiteNotReadyReplicas(
+				context.Background(),
+				statefulSet,
+				replicas-1,
+			)
+		require.NoError(t, err)
+		require.True(t, allowed)
+	})
+
+	t.Run("scale-down must target highest ordinal", func(t *testing.T) {
+		mgr, statefulSet, _ := build()
+		wrongTarget := int32(1)
+		mgr.cr.Status.LifecycleOperation.Intent =
+			enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown
+		mgr.cr.Status.LifecycleOperation.DesiredRevision = ""
+		mgr.cr.Status.LifecycleOperation.TargetOrdinal = &wrongTarget
+		allowed, err :=
+			mgr.CanProceedWithScaleDownDespiteNotReadyReplicas(
+				context.Background(),
+				statefulSet,
+				replicas-1,
+			)
+		require.NoError(t, err)
+		require.False(t, allowed)
+	})
+
 	t.Run("unready peer fails closed", func(t *testing.T) {
 		mgr, statefulSet, pods := build()
 		for index := range pods[0].Status.Conditions {

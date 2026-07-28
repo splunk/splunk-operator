@@ -44,9 +44,13 @@ type errTestPodManager struct {
 
 type readinessWithdrawalTestPodManager struct {
 	DefaultStatefulSetPodManager
-	allow         bool
-	validationErr error
-	prepareCalls  []int32
+	allow                  bool
+	validationErr          error
+	prepareCalls           []int32
+	scaleDownAllow         bool
+	scaleDownValidationErr error
+	scaleDownReady         bool
+	scaleDownPrepareCalls  []int32
 }
 
 func (mgr *readinessWithdrawalTestPodManager) CanProceedWithPodUpdateDespiteNotReadyReplicas(
@@ -63,6 +67,22 @@ func (mgr *readinessWithdrawalTestPodManager) PrepareRecycle(
 ) (bool, error) {
 	mgr.prepareCalls = append(mgr.prepareCalls, ordinal)
 	return false, nil
+}
+
+func (mgr *readinessWithdrawalTestPodManager) CanProceedWithScaleDownDespiteNotReadyReplicas(
+	context.Context,
+	*appsv1.StatefulSet,
+	int32,
+) (bool, error) {
+	return mgr.scaleDownAllow, mgr.scaleDownValidationErr
+}
+
+func (mgr *readinessWithdrawalTestPodManager) PrepareScaleDown(
+	_ context.Context,
+	ordinal int32,
+) (bool, error) {
+	mgr.scaleDownPrepareCalls = append(mgr.scaleDownPrepareCalls, ordinal)
+	return mgr.scaleDownReady, nil
 }
 
 // Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
@@ -361,11 +381,11 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 		t.Errorf("UpdateStatefulSetPods should not have returned error=%s with phase=%s", err, phase)
 	}
 
-	// CurrentRevision = UpdateRevision
+	// A requested reduction remains ScalingDown even when a Pod is not ready.
 	statefulSet.Status.CurrentRevision = "v1"
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != enterpriseApi.PhaseScalingUp {
-		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
+	if err == nil && phase != enterpriseApi.PhaseScalingDown {
+		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseScalingDown, but we got phase=%s", phase)
 	}
 
 	// readyReplicas > replicas
@@ -682,6 +702,191 @@ func TestScaleDownPVCDeletionIsIdempotentWhenClaimIsAlreadyGone(t *testing.T) {
 			"scale-down replicas = %v, want 2",
 			statefulSet.Spec.Replicas,
 		)
+	}
+}
+
+func TestScaleDownReentersPreparationAfterVerifiedReadinessWithdrawal(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(4)
+	partition := int32(4)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-search-head",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: replicas - 1,
+		},
+	}
+	client := spltest.NewMockClient()
+	client.AddObject(statefulSet)
+	mgr := &readinessWithdrawalTestPodManager{
+		scaleDownAllow: true,
+		scaleDownReady: false,
+	}
+
+	phase, err := UpdateStatefulSetPods(
+		ctx,
+		client,
+		statefulSet,
+		mgr,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("resume owned scale-down withdrawal: %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingDown {
+		t.Fatalf("phase = %q, want %q", phase, enterpriseApi.PhaseScalingDown)
+	}
+	if !reflect.DeepEqual(mgr.scaleDownPrepareCalls, []int32{3}) {
+		t.Fatalf(
+			"PrepareScaleDown calls = %v, want [3]",
+			mgr.scaleDownPrepareCalls,
+		)
+	}
+	if *statefulSet.Spec.Replicas != 4 ||
+		*statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition != 4 {
+		t.Fatalf(
+			"unready preparation changed StatefulSet to replicas=%d partition=%d",
+			*statefulSet.Spec.Replicas,
+			*statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition,
+		)
+	}
+}
+
+func TestScaleDownUpdatesReplicasAndPartitionTogether(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(4)
+	partition := int32(4)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-search-head",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: replicas - 1,
+		},
+	}
+	targetPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name:      "splunk-example-search-head-3",
+		Namespace: "test",
+	}}
+	fakeClient := spltest.NewMockClient()
+	fakeClient.AddObjects([]client.Object{statefulSet, targetPod})
+	mgr := &readinessWithdrawalTestPodManager{
+		scaleDownAllow: true,
+		scaleDownReady: true,
+	}
+
+	phase, err := UpdateStatefulSetPods(
+		ctx,
+		fakeClient,
+		statefulSet,
+		mgr,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("complete owned scale down: %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingDown {
+		t.Fatalf("phase = %q, want %q", phase, enterpriseApi.PhaseScalingDown)
+	}
+	stored := &appsv1.StatefulSet{}
+	if err := fakeClient.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      statefulSet.Name,
+			Namespace: statefulSet.Namespace,
+		},
+		stored,
+	); err != nil {
+		t.Fatalf("get scaled StatefulSet: %v", err)
+	}
+	if stored.Spec.Replicas == nil || *stored.Spec.Replicas != 3 {
+		t.Fatalf("stored replicas = %v, want 3", stored.Spec.Replicas)
+	}
+	if stored.Spec.UpdateStrategy.RollingUpdate == nil ||
+		stored.Spec.UpdateStrategy.RollingUpdate.Partition == nil ||
+		*stored.Spec.UpdateStrategy.RollingUpdate.Partition != 3 {
+		t.Fatalf(
+			"stored RollingUpdate strategy = %#v, want partition 3",
+			stored.Spec.UpdateStrategy.RollingUpdate,
+		)
+	}
+	if err := fakeClient.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      targetPod.Name,
+			Namespace: targetPod.Namespace,
+		},
+		&corev1.Pod{},
+	); err != nil {
+		t.Fatalf("StatefulSet controller path deleted target Pod directly: %v", err)
+	}
+}
+
+func TestScaleDownFailsClosedForUnverifiedReadinessLoss(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(4)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-search-head",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: replicas - 1,
+		},
+	}
+	client := spltest.NewMockClient()
+	client.AddObject(statefulSet)
+	mgr := &readinessWithdrawalTestPodManager{
+		scaleDownAllow: false,
+		scaleDownReady: true,
+	}
+
+	phase, err := UpdateStatefulSetPods(
+		ctx,
+		client,
+		statefulSet,
+		mgr,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("wait for unverified readiness loss: %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingDown {
+		t.Fatalf("phase = %q, want %q", phase, enterpriseApi.PhaseScalingDown)
+	}
+	if len(mgr.scaleDownPrepareCalls) != 0 {
+		t.Fatalf(
+			"PrepareScaleDown calls = %v, want none",
+			mgr.scaleDownPrepareCalls,
+		)
+	}
+	if *statefulSet.Spec.Replicas != 4 {
+		t.Fatalf("replicas = %d, want 4", *statefulSet.Spec.Replicas)
 	}
 }
 
