@@ -253,9 +253,12 @@ docker version
 aws --version
 log_step "versions:complete"
 
-# creds-helper selects DOCKER_CONFIG. Configure source auth first so the ECR
-# login below is written to the same Docker config.
+# creds-helper selects DOCKER_CONFIG. Configure all source registries first so
+# the ECR login below is written to the same Docker config.
 login_enterprise_source_registry_if_needed "${SPLUNK_ENTERPRISE_IMAGE}"
+if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
+  login_source_registry_for_image "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
+fi
 
 log_step "registry:ecr-login ${ECR_REGISTRY}"
 aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"

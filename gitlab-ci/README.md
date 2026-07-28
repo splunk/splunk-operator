@@ -158,7 +158,7 @@ Qualification inputs:
 - required trigger: `SOK_PIPELINE_MODE=qualification_lane`
 - required Splunk Enterprise runtime input: `PIPELINE_RUNTIME_ENTERPRISE_IMAGE=<repo:tag>`, for example `splunk/splunk:10.4.0`
 - optional qualification metadata: `PIPELINE_QUALIFICATION_PROFILE=<name>` (default `monthly`); it is recorded in the qualification manifest and report but does not change the job matrix
-- released SOK baseline: automatically resolved from the latest released `splunk-operator`
+- released SOK baseline: automatically resolved from the latest released `splunk-operator`; public operator images are pulled through the authenticated `docker-hub.repo.splunkdev.net` Artifactory cache
 - supported pipeline sources: manual GitLab UI (`web`), direct API (`api`), trigger token (`trigger`), multi-project downstream (`pipeline`), or child pipeline (`parent_pipeline`)
 - EKS runtime inputs: `PIPELINE_AWS_*`, `PIPELINE_EKS_VPC_PUBLIC_SUBNET_STRING`, `PIPELINE_EKS_VPC_PRIVATE_SUBNET_STRING`, `PIPELINE_TEST_BUCKET`, and `PIPELINE_TEST_INDEXES_S3_BUCKET`
 - FIPS existing-cluster input: `PIPELINE_FIPS_EKS_CLUSTER_NAME` when FIPS qualification is part of the cycle
@@ -183,6 +183,7 @@ The downstream contract is:
 
 When `PIPELINE_RUNTIME_ENTERPRISE_IMAGE` points at `docker.repo.splunkdev.net`, qualification jobs use the Vault-backed SOK Docker read role before mirroring the Enterprise image into the test registry's pre-provisioned `splunk/splunk:<source-tag>` repository.
 The `sok/splunk-operator` project ID `266994` belongs to the `sg-cloud-sok-developer-platform` vault-role-generator policy and already has protected and unprotected Docker read roles; otherwise Docker fails before test deployment with an unauthorized manifest error.
+The same roles include read access to the `docker-hub` Artifactory entry, so released public SOK operator images use `docker-hub.repo.splunkdev.net/splunk/splunk-operator:<tag>` instead of pulling anonymously from `docker.io`.
 For any new role grant, update the owning SOK policy rather than adding `project266994` to an unrelated Okta-group policy.
 
 Example upstream trigger job:

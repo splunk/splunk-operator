@@ -2,13 +2,21 @@ released-sok-contract:
   extends:
     - .python-venv-job
     - .rules-qualification-lane
+  id_tokens:
+    CI_JOB_JWT:
+      aud: $CICD_VAULT_ADDR
   # Qualification runtime jobs in image_scan/integration consume this contract,
   # so it must exist before those stages begin.
   stage: verify
   needs:
     - format-and-vet
   script:
-    - python3 gitlab-ci/released-sok-contract.py
+    - |
+      set -eu
+      . "${CI_PROJECT_DIR}/gitlab-ci/lib/pipeline-common.sh"
+      require_commands docker
+      ensure_artifactory_docker_reader_creds
+      python3 gitlab-ci/released-sok-contract.py
   artifacts:
     when: always
     expire_in: 90 days

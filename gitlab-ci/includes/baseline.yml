@@ -53,6 +53,7 @@ format-and-vet:
     - make vet
     - sh gitlab-ci/tests/pipeline-common-registry-auth-test.sh
     - bash gitlab-ci/tests/enterprise-image-mirror-test.sh
+    - python3 gitlab-ci/tests/released-sok-contract-test.py
     - git diff --exit-code
 
 unit-tests:
