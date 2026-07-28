@@ -1,6 +1,7 @@
 # Operator Lifecycle Contracts Technical Design
 
-Status: Wave 0 spike contract.
+Status: Wave 0 spike contract with audited search-drain continuation qualified
+on EKS.
 
 This document defines the API and status contracts that the parallel
 implementation branches consume. It intentionally does not select concrete
@@ -154,11 +155,55 @@ release recommendation without mutating stored customer objects. The
 qualification plan measures historical and real-time drain behavior
 separately.
 
-The timeout action is not customer-selectable in Wave 0. A timeout blocks
-destructive progression and records a durable reason. An audited,
-operation-scoped continuation mechanism can be added after its authorization
-and security contract is approved. This prevents a general `continueOnTimeout`
-boolean from weakening every future operation.
+The default timeout action remains fail closed. A search-drain timeout blocks
+destructive progression and records `Blocked/SearchDrainTimedOut`. It also
+publishes an opaque, operation-scoped continuation token in status. The token
+is not a credential and does not replace Kubernetes authorization. Permission
+to update the SearchHeadCluster remains the authority; the token prevents an
+approval from being supplied before the timeout or reused for another
+operation.
+
+### Audited search-drain continuation
+
+`SearchHeadClusterSpec` has one optional approval object:
+
+    LifecycleApproval *SearchHeadClusterLifecycleApproval `json:"lifecycleApproval,omitempty"`
+
+The object contains the exact blocked `operationID`, the 64-character
+lowercase hexadecimal token issued in
+`status.lifecycleOperation.searchDrainContinuationToken`, and the single
+supported action `ContinueAfterSearchDrainTimeout`. Admission validates the
+shape and feature-gate dependency. A structurally valid approval with the
+wrong operation ID or token is ignored by reconciliation and leaves the
+operation blocked.
+
+The controller accepts an approval only when all of the following facts are
+true:
+
+- the current operation is `Blocked/SearchDrainTimedOut`;
+- operation ID and token both match;
+- the target Pod UID has already been captured;
+- no approval or replacement authorization was previously recorded; and
+- the target member is present in the latest refreshed SHC observation.
+
+Acceptance is a durable persistence barrier. The controller records approval
+time, CR generation, and the active historical and real-time search counts
+observed at approval, emits one Normal
+`SHCSearchDrainContinuationApproved` Event, increments
+`splunk_operator_shc_search_drain_continuation_approval_total`, and returns
+without authorizing replacement. A later reconciliation may skip only the
+active-search count wait. It still refreshes and validates cluster health,
+KV Store state, detention, captain identity and readiness, target Pod
+identity, and captain transfer before it can advance the StatefulSet
+partition.
+
+The approval object is controller input, not Pod-template configuration.
+Adding, correcting, or leaving a stale approval must not create a StatefulSet
+revision. Lifecycle operation IDs include the CR generation when an operation
+starts, so an approval left in spec cannot match or authorize a later ordinal,
+revision, or scale operation. The same exact handshake applies to replacement
+intents that use the search-drain stage; it does not continue a different
+timeout class or the cluster-deletion workflow.
 
 ### Example opt-in
 
@@ -423,12 +468,12 @@ gate.
 
 The spike can proceed with the contracts above, but production enablement still
 requires measured timeout/default recommendations, the v3 compatibility
-decision, the authorization mechanism for one-time continuation, runtime
-capability discovery/version skew, and the final set of supported
-configuration changes eligible for rolling replacement. It must also decide
-whether preferred-captain policy needs a typed customer field, how the
-bootstrap-seed capability is versioned between Operator and image, and when the
-misleading compatibility variable can be renamed or retired.
+decision, product and RBAC governance for who may submit an operation-scoped
+continuation, runtime capability discovery/version skew, and the final set of
+supported configuration changes eligible for rolling replacement. It must
+also decide whether preferred-captain policy needs a typed customer field, how
+the bootstrap-seed capability is versioned between Operator and image, and
+when the misleading compatibility variable can be renamed or retired.
 
 ## Revision Note
 
@@ -446,3 +491,10 @@ decision; dynamic member targeting; and the `InitialFormationPending` and
 partition-decision vocabulary implemented by the rollout coordinator. These
 close contract gaps found while tracing the Operator and Splunk Ansible
 behavior together.
+
+2026-07-28: Replaced the unresolved continuation placeholder with the
+qualified two-part post-timeout contract. The design now defines exact
+operation/token matching, the durable approval barrier, bounded audit fields,
+continued captain and cluster safety checks, revision isolation, one Event,
+one counter increment, stale-approval behavior, and the remaining production
+RBAC/governance decision.

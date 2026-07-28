@@ -66,7 +66,7 @@ Unless a scenario explicitly tests loss of majority, assert:
 | LFC-003 | P0 | Historical search active | Target stays detained until completion or approved timeout policy |
 | LFC-004 | P0 | Real-time search active | Real-time policy is applied and independently observable |
 | LFC-005 | P0 | Drain timeout, default policy | Operation blocks without deleting target |
-| LFC-006 | P1 | Audited continuation after timeout | One operation-scoped approval advances and is recorded |
+| LFC-006 | P1 | Audited continuation after timeout | Pre-timeout, wrong-token, and stale-operation approvals cannot advance; one exact post-timeout approval is durably recorded before later safety revalidation and advances only its named operation |
 | LFC-007 | P0 | Captain transfer fails | Target is not deleted and cluster remains diagnosable |
 | LFC-008 | P0 | Captain observation is stale/conflicting | Destructive progression blocks |
 | LFC-009 | P1 | Captain changes independently during drain | Controller re-observes and follows the current authoritative state |
@@ -75,6 +75,31 @@ Unless a scenario explicitly tests loss of majority, assert:
 | LFC-012 | P0 | Continuous ad-hoc searches through rollout | Healthy members continue accepting and completing new searches |
 | LFC-013 | P1 | Scheduled searches through captain transition | Expected scheduled work is neither silently lost nor duplicated outside the documented product tolerance |
 | LFC-014 | P0 | Search already running on target | Completion, timeout, or interruption matches the selected drain policy and is recorded |
+
+### Qualified LFC-006 spike evidence
+
+On 2026-07-28, a fresh three-member EKS SHC passed LFC-004, LFC-005, and
+LFC-006 together. A real-time search on ordinal two remained running through
+the 30-second drain timeout. The operation reached
+`Blocked/SearchDrainTimedOut`, the original Pod UID and revision remained
+unchanged, StatefulSet partition remained three, and the Pod plus
+EndpointSlice were non-serving. A matching operation with the wrong token and
+the issued token with a stale operation ID both left the same operation
+blocked, produced no approval Event, did not change the approval counter, and
+did not change the StatefulSet update revision.
+
+The exact operation ID and issued token produced one durable approval with a
+snapshot of one active real-time search. Status recorded the approval at
+17:04:17Z and replacement authorization at 17:04:27Z, demonstrating that the
+approval was persisted before the later safety decision. The campaign emitted
+one `SHCSearchDrainContinuationApproved` Event and incremented the bounded
+approval counter once. The native rollout then replaced ordinals
+`2 -> 1 -> 0`, never observed more than one unavailable member, transferred
+captaincy from ordinal zero to ordinal one before replacing ordinal zero, and
+finished with three ready, serving, registered `Up` members and zero container
+restarts. A 312-second post-action stability gate remained continuously
+healthy. The namespace, PVCs, and all eight associated PVs were removed after
+evidence collection.
 
 ## Runtime shutdown and restart scenarios
 

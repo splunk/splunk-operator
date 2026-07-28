@@ -77,6 +77,15 @@ ownership.
   active historical count prevented replacement authorization, then all three
   ordinals completed a native partition-gated `RollingUpdate` after the count
   reached zero, including captain transfer before ordinal-zero replacement.
+- [x] (2026-07-28) Qualified LFC-006 audited continuation on a fresh EKS SHC.
+  Wrong-token and stale-operation approvals remained fail closed; the exact
+  post-timeout operation and token produced one durable approval, Event,
+  structured log, and counter increment before later replacement
+  authorization.
+- [x] (2026-07-28) Completed the approved rollout in reverse ordinal order with
+  at most one unavailable Search Head, dynamic captain transfer, matching
+  revisions, three ready and serving members, zero container restarts, and a
+  312-second post-action stability gate.
 - [ ] Complete cloud-provider qualification and release-readiness review.
 
 ## Surprises & Discoveries
@@ -230,6 +239,27 @@ ownership.
   any false `OutOfOrderRevision` warning caused by truncating SHC member status
   to that temporary count.
 
+- Observation: an external poll can miss the short state in which approval is
+  persisted but replacement is not yet authorized.
+  Evidence: the durable operation recorded approval at 17:04:17Z and
+  authorization at 17:04:27Z, while the first post-approval Pod read occurred
+  after replacement had begun.
+  Consequence: branch-local tests assert the immediate reconcile barrier; EKS
+  asserts timestamp ordering, exact audit signals, fresh safety observations,
+  and no authorization before the durable approval.
+
+- Observation: approval is a spec update and therefore increments CR
+  generation even though it must not revise the Pod template.
+  Consequence: LFC-006 records CR generation separately and asserts that
+  wrong-token, stale-operation, and exact approval patches leave the
+  StatefulSet update revision unchanged.
+
+- Observation: the secure Operator metrics endpoint requires delegated
+  Kubernetes authorization for the non-resource `/metrics` path.
+  Consequence: EKS qualification uses an authenticated port-forward and a
+  bounded test identity. Production monitoring must explicitly qualify its
+  scrape RBAC.
+
 ## Decision Log
 
 - Decision: a scenario passes only when service, Splunk cluster, Kubernetes
@@ -340,11 +370,31 @@ ownership.
   cluster eventually recovered.
   Date/Author: 2026-07-28, qualification team.
 
+- Decision: LFC-006 always tests wrong token and stale operation ID before the
+  exact approval.
+  Rationale: a successful exact path alone does not prove that the handshake
+  prevents preapproval or replay.
+  Date/Author: 2026-07-28, qualification team.
+
+- Decision: approval acceptance requires one status record, one Normal Event,
+  one structured log, and a counter delta of exactly one.
+  Rationale: the customer decision must be supportable after the transient Pod
+  and search state are gone, without unbounded metric labels.
+  Date/Author: 2026-07-28, qualification team.
+
+- Decision: continuation qualification keeps every non-search replacement
+  invariant active and completes the remaining reverse-ordinal rollout.
+  Rationale: approval to interrupt active work is not approval to bypass
+  captain transfer, target identity, one-member availability, rejoin, or final
+  stability.
+  Date/Author: 2026-07-28, qualification team.
+
 ## Outcomes & Retrospective
 
 The first integrated positive-path campaign, one active-strategy rollback, the
-scale lifecycle extension, and targeted real-time and historical search-drain
-scenarios are complete on EKS. A pinned Linux runtime image formed a
+scale lifecycle extension, targeted real-time and historical search-drain
+scenarios, and one audited continuation are complete on EKS. A pinned Linux
+runtime image formed a
 three-member SHC,
 completed an Operator-managed `OnDelete` rollout, migrated safely to
 partition-gated `RollingUpdate`, completed the reverse-ordinal rollout,
@@ -357,18 +407,23 @@ cycles. The final image emitted no false rollout block, false scale direction,
 or expected-lifecycle error, and passed a five-minute combined Kubernetes and
 Splunk stability window. The later search-drain image also failed closed on a
 real-time timeout, recovered a cancelled Pod update in place, and delayed a
-historical-search replacement until the active count reached zero.
+historical-search replacement until the active count reached zero. The SHC-74
+image rejected wrong-token and stale-operation approvals, accepted one exact
+post-timeout decision with a one-search audit snapshot, then completed
+ordinals `2 -> 1 -> 0`, transferred captaincy, and passed a 312-second
+post-action stability gate with zero container restarts.
 
 The complete `OnDelete` and `RollingUpdate` gates remain open because the
 required repetitions, full-campaign soak around the new search cases,
-additional timeout policies, failed transfer, forced disruption,
+additional timeout classes, failed transfer, forced disruption,
 scheduling/storage/network faults, version skew, and rollback-under-failure
 have not passed. The earlier log-severity, phase, scale-event, higher-ordinal
-observation, cancelled-update recovery, and stale search-count defects are
-corrected for the tested paths. The campaign establishes that the integrated
-components can execute the intended happy path, active-operation rollback,
-replica-count lifecycle, and single-run search-drain cases; it is not evidence
-for default enablement.
+observation, cancelled-update recovery, stale search-count, and unaudited
+continuation defects are corrected for the tested paths. The campaign
+establishes that the integrated components can execute the intended happy
+path, active-operation rollback, replica-count lifecycle, fail-closed drain,
+and one explicitly audited interruption; it is not evidence for default
+enablement.
 
 ## Context and Orientation
 
@@ -904,6 +959,41 @@ or entire support bundles.
 - test namespaces, PVCs, and associated PVs were removed after evidence
   collection.
 
+2026-07-28 audited search-drain continuation extension:
+
+- Operator source was
+  `54a5aae3cd5f0970daee7591c24704b4111a3282`; image tag was
+  `shc-reliability-54a5aae3c`; and ECR digest was
+  `sha256:f54427c0497edb09ba42f584641bb323a2f81b5874460f5ef04e2ac92d00bbcf`;
+- Linux `make fmt`, `make vet`, `make build`, and `make test` passed. The final
+  test run completed all 41 Ginkgo suites, including 154 controller envtest
+  cases, with 78.5 percent composite coverage;
+- a fresh three-member fixture passed a five-minute pre-action gate with
+  matching revisions, partition three, three `Up` members, a service-ready
+  captain, zero pending configuration replication, and zero container
+  restarts;
+- a real-time search remained active through the 30-second timeout. The
+  original target UID and revision remained intact, partition remained three,
+  Pod and EndpointSlice serving readiness were false, and exactly one
+  `SHCRolloutBlocked` Event described historical zero and real-time one;
+- the wrong-token and stale-operation approvals changed CR generation but
+  changed neither the blocked operation nor StatefulSet update revision. They
+  emitted no approval Event and did not increment the approval counter;
+- the exact operation and token recorded approval generation five, zero
+  historical and one real-time search, approval time 17:04:17Z, and later
+  replacement authorization time 17:04:27Z. Exactly one approval Event, one
+  bounded structured log, and one unlabelled counter increment were observed;
+- the rollout completed `2 -> 1 -> 0` with a maximum of one unavailable member,
+  three partition advances, three target starts, no container restart, and
+  captain transfer from ordinal zero to ordinal one before the last
+  replacement;
+- a 312-second post-action gate continuously observed three ready and serving
+  Pods, three registered `Up` members, initialized/service-ready SHC state,
+  matching current/update revisions, partition three, zero pending
+  configuration replication, and local management reachability; and
+- the namespace, PVCs, and all eight associated PVs were deleted after
+  sanitized evidence collection.
+
 ## Interfaces and Dependencies
 
 The test harness requires stable adapters for:
@@ -980,3 +1070,10 @@ member when an unauthorized revision is withdrawn, fresh recovery search
 counts, bounded historical drain before native replacement, dynamic captain
 transfer, exact Event-count checks, and the startup-complete signal gap exposed
 by final image-owned synchronization after reported readiness.
+
+2026-07-28: Recorded LFC-006 audited continuation. Added wrong-token and
+stale-operation negative paths, approval-only revision isolation, durable
+approval/authorization timestamp ordering, active-search audit snapshots,
+authenticated metrics evidence, exact Event/log/counter assertions, complete
+reverse-ordinal rollout and captain transfer, a 312-second post gate, and
+resource cleanup.

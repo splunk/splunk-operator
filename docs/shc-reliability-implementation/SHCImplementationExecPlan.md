@@ -111,6 +111,19 @@ but it defines runtime contracts that can survive that transition.
   until its active count reached zero, after which all three ordinals completed
   a partition-gated `RollingUpdate`, including dynamic captain transfer before
   ordinal zero.
+- [x] (2026-07-28) Implemented and qualified audited continuation after a
+  search-drain timeout. The Operator issues a post-timeout operation token,
+  rejects wrong-token and stale-operation approvals without changing the
+  StatefulSet revision, persists one exact approval with its search-count
+  snapshot before later authorization, and retains all cluster, detention,
+  Pod-identity, KV Store, and captain safety gates.
+- [x] (2026-07-28) Passed the SHC-74 EKS campaign with Operator source
+  `54a5aae3cd5f0970daee7591c24704b4111a3282` and image
+  `shc-reliability-54a5aae3c`. One active real-time search timed out
+  fail-closed, one exact continuation advanced only ordinal two, the complete
+  rollout replaced `2 -> 1 -> 0`, captaincy moved from ordinal zero to ordinal
+  one before the final replacement, and a 312-second post-action gate held all
+  Kubernetes and Splunk health invariants with zero container restarts.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -336,6 +349,32 @@ but it defines runtime contracts that can survive that transition.
   and does not interpret an aggregated count across separate scale campaigns
   as duplicate partition advancement within one campaign.
 
+- Observation: a correct one-reconcile persistence barrier can be too brief
+  for an independent polling client to observe before the next reconcile
+  begins.
+  Evidence: SHC-74 status recorded continuation approval at 17:04:17Z and
+  replacement authorization at 17:04:27Z, but the first external Pod read
+  occurred after ordinal two had already received a new UID.
+  Consequence: unit and envtest prove the immediate return before side effects;
+  EKS evidence proves durable timestamp ordering and later safety
+  revalidation. Qualification does not require an arbitrary wall-clock pause
+  between two valid reconciliations.
+
+- Observation: three approval-only spec patches changed CR generation from two
+  through five but did not change the StatefulSet update revision.
+  Evidence: wrong-token, stale-operation, and exact approval patches all left
+  `splunk-shc74-search-head-74fd56c498` as the update revision.
+  Consequence: lifecycle approval remains controller-only input and cannot
+  create a Pod-template revision or restart.
+
+- Observation: the Operator metrics listener uses delegated Kubernetes
+  authentication and authorization. The Operator service account could
+  authenticate but did not have non-resource `/metrics` permission.
+  Consequence: qualification scraped through an authenticated port-forward
+  using the EKS test identity. Production monitoring installation must include
+  explicit, least-privilege metrics access rather than assume an
+  unauthenticated in-container scrape.
+
 ## Decision Log
 
 - Decision: base implementation planning on the GitLab `sok/develop` branch,
@@ -474,29 +513,52 @@ but it defines runtime contracts that can survive that transition.
   healthy higher ordinal or create false rollout-block alerts.
   Date: 2026-07-28.
 
+- Decision: require a two-part, post-timeout continuation handshake containing
+  both the exact operation ID and a controller-issued token.
+  Rationale: Kubernetes RBAC remains the authority, while the post-timeout
+  nonce prevents preapproval and stale approval reuse without introducing a
+  general `continueOnTimeout` switch.
+  Date: 2026-07-28.
+
+- Decision: persist continuation approval and its active-search snapshot as a
+  reconcile barrier before considering replacement authorization.
+  Rationale: support evidence must distinguish customer-approved interruption
+  from an automatic timeout action, and a controller restart must not lose or
+  duplicate the decision.
+  Date: 2026-07-28.
+
+- Decision: continuation skips only the active-search count wait.
+  Rationale: an explicit decision to interrupt remaining searches does not
+  waive fresh cluster, KV Store, detention, Pod-identity, captain-readiness, or
+  captain-transfer checks.
+  Date: 2026-07-28.
+
 ## Outcomes & Retrospective
 
-The first integrated positive-path milestone, active-strategy rollback, and
-scale lifecycle extension are complete for one pinned
-Operator/runtime/Splunk combination on EKS. Fresh formation, a complete
-three-member `OnDelete` rollout, safe strategy migration, complete
-partition-gated `RollingUpdate` rollouts, captain replacement, persistent
-identity, controller restart recovery, TERM-driven PID 1 exit, active
-`RollingUpdate` rollback, scale-down cancellation, repeated scale-down,
-`3 -> 4`, and `4 -> 3` all passed. The StatefulSet never advanced more than
-one planned Search Head at a time. The final five-minute stability window also
-kept every Kubernetes and Splunk health invariant continuously true.
+The first integrated positive-path milestone, active-strategy rollback, scale
+lifecycle extension, fail-closed search drain, and audited timeout
+continuation are complete for one pinned Operator/runtime/Splunk combination
+on EKS. Fresh formation, a complete three-member `OnDelete` rollout, safe
+strategy migration, complete partition-gated `RollingUpdate` rollouts,
+captain replacement, persistent identity, controller restart recovery,
+TERM-driven PID 1 exit, active `RollingUpdate` rollback, scale-down
+cancellation, repeated scale-down, `3 -> 4`, `4 -> 3`, bounded historical
+drain, real-time timeout/cancellation, and exact post-timeout continuation all
+passed. The StatefulSet never advanced more than one planned Search Head at a
+time. The final continuation campaign also passed a 312-second stability
+window with every Kubernetes and Splunk health invariant continuously true.
 
-This is not production-readiness evidence. Active-search timeout behavior,
-failed captain transfer, forced deletion and node loss, storage and scheduling
-delay, network and TLS variants, version skew, rollback under failure, repeated
-runs, soak testing, and support/alert qualification remain open. The
-lifecycle-aware log, phase, scale-event, and transient higher-ordinal
-observation defects exposed by the earlier campaign are corrected and passed
-the final scale cycles. The current result proves the integrated architecture
-can execute its intended happy path, resume durable state, cross the strategy
-rollback boundary, and safely coordinate replica-count changes; it does not
-yet justify default enablement.
+This is not production-readiness evidence. Failed captain transfer, forced
+deletion and node loss, storage and scheduling delay, network and TLS variants,
+version skew, rollback under failure, repeated runs, soak testing, and
+support/alert qualification remain open. The lifecycle-aware log, phase,
+scale-event, transient higher-ordinal observation, cancellation, and
+continuation defects exposed by the campaigns are corrected and passed their
+targeted EKS cycles. The current result proves the integrated architecture can
+execute its intended happy path, resume durable state, cross the strategy
+rollback boundary, safely coordinate replica-count changes, fail closed on an
+active real-time search, and continue only through one audited exception; it
+does not yet justify default enablement.
 
 ## Context and Orientation
 
@@ -1004,6 +1066,44 @@ SHC search-drain and Pod-update-cancellation extension captured on 2026-07-28:
 - both namespaces, PVCs, and associated PVs were deleted after sanitized
   evidence collection.
 
+SHC audited drain-continuation extension captured on 2026-07-28:
+
+- Operator image source:
+  `54a5aae3cd5f0970daee7591c24704b4111a3282`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-54a5aae3c`;
+- Operator image digest:
+  `sha256:f54427c0497edb09ba42f584641bb323a2f81b5874460f5ef04e2ac92d00bbcf`;
+- `make fmt`, `make vet`, `make build`, and `make test` passed on the Linux
+  vWorkstation. The final test run passed all 41 Ginkgo suites, including
+  154 controller envtest cases, with 78.5 percent composite coverage;
+- a fresh fixture passed a five-minute pre-action stability gate only after
+  the initial image-owned synchronization cycle completed;
+- one active real-time search on ordinal two reached the 30-second drain
+  timeout. The operation became `Blocked/SearchDrainTimedOut`, issued a
+  64-character operation token, retained the original Pod UID and revision,
+  held partition three, withdrew Pod and EndpointSlice serving readiness, and
+  emitted one `SHCRolloutBlocked` Event;
+- a matching operation with a wrong token and the issued token with a stale
+  operation ID both remained blocked. Neither changed the Pod, partition,
+  StatefulSet update revision, approval Event count, nor approval metric;
+- the exact operation ID and token recorded approval generation five and a
+  snapshot of zero historical and one real-time search. Approval time was
+  17:04:17Z and replacement authorization time was 17:04:27Z. The run emitted
+  one `SHCSearchDrainContinuationApproved` Event, one bounded structured log,
+  and changed the unlabelled approval counter from zero to one;
+- the later safety decision replaced ordinals `2 -> 1 -> 0`, never observed
+  more than one unavailable Search Head, and recorded three target-start and
+  three partition-advance Events. Captaincy moved from ordinal zero to ordinal
+  one before ordinal-zero replacement authorization;
+- final state had matching StatefulSet revisions, partition three, three
+  ready, serving, registered `Up` members, no active searches, and zero
+  container restarts. A 312-second post-action gate continuously confirmed
+  initialized and service-ready SHC state, zero pending configuration
+  replication, and local management reachability; and
+- the qualification namespace, all PVCs, and all eight associated PVs were
+  removed after evidence collection.
+
 ## Interfaces and Dependencies
 
 The technical designs must define concrete interfaces for:
@@ -1088,3 +1188,10 @@ observation during cancellation, bounded historical drain before replacement,
 complete reverse-ordinal `RollingUpdate`, dynamic captain transfer, exact
 Event-count assertions, and the startup-complete contract gap observed between
 reported readiness and final image-owned synchronization.
+
+2026-07-28: Recorded the audited search-drain continuation milestone. Added the
+post-timeout operation/token handshake, durable approval barrier and
+search-count snapshot, wrong-token and stale-operation fail-closed evidence,
+approval-only revision isolation, exact Event/log/metric audit signals,
+reverse-ordinal EKS rollout, captain transfer, 312-second post gate, and the
+external-observer timing and secure-metrics-access discoveries.
