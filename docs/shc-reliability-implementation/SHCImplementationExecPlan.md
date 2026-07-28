@@ -61,6 +61,17 @@ but it defines runtime contracts that can survive that transition.
   `WaitingForTermination`. The new controller resumed the same operation ID,
   target ordinal, target Pod UID, desired revision, and stage, then completed
   the full rollout.
+- [x] (2026-07-28) Corrected Docker-Splunk TERM handling so PID 1 exits after
+  the shared shutdown helper completes. The source-level shutdown suite passed,
+  the corrected Linux image was published by immutable digest, and an EKS
+  termination smoke test completed in 16 seconds instead of consuming the
+  configured 1,200-second grace period.
+- [x] (2026-07-28) Rehearsed rollback from `RollingUpdate` to `OnDelete` during
+  an active ordinal-two replacement. The Operator held partition two,
+  preserved the same operation record through recovery, emitted
+  `RollbackPending`, restored `OnDelete` only after ordinal two completed, and
+  then completed ordinals one and zero sequentially. Captaincy transferred
+  from ordinal zero to ordinal one before the final replacement.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees are clean and descend from their
   recorded baselines. No fetched remote-tracking ref contains any current
@@ -76,6 +87,8 @@ but it defines runtime contracts that can survive that transition.
 - [ ] Implement and qualify Milestone 2.
 - [ ] Implement and qualify Milestone 3.
 - [ ] Implement and qualify Milestone 4.
+- [ ] Correct lifecycle-aware member-observation log severity, Pod-update phase
+  reporting, and scale-event accuracy exposed by the rollback campaign.
 - [ ] Complete release readiness, rollback rehearsal, and support enablement.
 
 ## Surprises & Discoveries
@@ -187,6 +200,16 @@ but it defines runtime contracts that can survive that transition.
   `service_ready_flag=1`, `rolling_restart_flag=0`, and KV Store maintenance
   disabled.
 
+- Observation: the SearchHeadCluster and all Kubernetes readiness conditions
+  can report Ready while the Splunk-managed initial rolling restart is still
+  active, a member reports `Restarting`, or the local management endpoint is
+  temporarily unavailable.
+  Evidence: the rollback fixture first reported three ready replicas while the
+  Splunk restart moved through ordinals one, two, and zero.
+  Consequence: qualification uses a continuous stability window over both
+  Kubernetes and Splunk-internal observations before authorizing a test
+  revision. A single Ready sample is not an acceptance gate.
+
 - Observation: during a legitimate member replacement, the local
   `/services/shcluster/member/info` endpoint can return HTTP 503 while the
   member has not yet restored captain communication or minimum peer state.
@@ -199,6 +222,42 @@ but it defines runtime contracts that can survive that transition.
   member's persistent identity is the separate `guid` in `instance.cfg`.
   Consequence: qualification records and compares both values and does not use
   the captain label or ordinal as an identity substitute.
+
+- Observation: the Docker-Splunk TERM trap could finish `splunk stop` and
+  return to the entrypoint's long-running `wait`, leaving PID 1 alive until the
+  entire Kubernetes termination grace period expired.
+  Evidence: a deleted deployer completed the shutdown helper but remained
+  Terminating with the entrypoint and log-streaming child alive.
+  Consequence: the TERM handler must reset its traps, invoke the shared
+  shutdown helper exactly once, and explicitly exit PID 1 with the helper
+  result.
+
+- Observation: rollback from `RollingUpdate` to `OnDelete` works as a
+  convergence boundary, not as cancellation of the desired Pod revision.
+  Evidence: partition stayed at two and the StatefulSet remained
+  `RollingUpdate` while ordinal two recovered; only after the durable operation
+  reached Completed did the StatefulSet return to `OnDelete`, after which the
+  Operator manually completed ordinals one and zero.
+  Consequence: rollback acceptance distinguishes stopping Kubernetes partition
+  advancement from abandoning the requested revision. The current target must
+  reach a known state, and later work remains one-member-at-a-time.
+
+- Observation: after the rollback completed under `OnDelete`, all three Pods
+  carried `updateRevision` and StatefulSet `updatedReplicas` was three while
+  `currentRevision` remained the old hash.
+  Consequence: `currentRevision == updateRevision` is a valid
+  `RollingUpdate` convergence check but is not a valid `OnDelete` completion
+  check. `OnDelete` qualification uses every Pod's
+  `controller-revision-hash`, `updatedReplicas`, readiness, and SHC recovery.
+
+- Observation: the successful replacement campaign generated repeated
+  error-level member-info connection failures for the intentionally unavailable
+  target and emitted a false `ScaledUp 2 to 3` event when the last replacement
+  returned.
+  Consequence: add a separate observability work item to classify expected
+  target unavailability by lifecycle stage, retain real failures as errors,
+  keep Pod-update phases distinct from scale phases, and emit scale events only
+  for a change in desired replica count.
 
 ## Decision Log
 
@@ -293,22 +352,40 @@ but it defines runtime contracts that can survive that transition.
   detention, captain-transfer, or replacement intent was avoided.
   Date: 2026-07-28.
 
+- Decision: require five continuous minutes of matching Kubernetes and
+  Splunk-internal health before starting a destructive qualification action and
+  again after final recovery.
+  Rationale: the initial cluster can appear Ready while a Splunk-managed
+  rolling restart is still moving between members.
+  Date: 2026-07-28.
+
+- Decision: an in-flight rollback first completes the already-authorized
+  ordinal, then restores `OnDelete`; it does not cancel the desired revision or
+  delete multiple Pods.
+  Rationale: completing the active recovery preserves durable operation
+  semantics, while restoring `OnDelete` stops further Kubernetes partition
+  advancement and returns subsequent replacements to controller ownership.
+  Date: 2026-07-28.
+
 ## Outcomes & Retrospective
 
-The first integrated positive-path milestone is complete for one pinned
-Operator/runtime/Splunk combination on EKS. Fresh formation, a complete
-three-member `OnDelete` rollout, safe strategy migration, a complete
-partition-gated `RollingUpdate`, captain replacement, persistent identity, and
-controller restart recovery all passed. The StatefulSet never advanced more
-than one planned Search Head at a time.
+The first integrated positive-path milestone and one active-strategy rollback
+rehearsal are complete for one pinned Operator/runtime/Splunk combination on
+EKS. Fresh formation, a complete three-member `OnDelete` rollout, safe strategy
+migration, a complete partition-gated `RollingUpdate`, captain replacement,
+persistent identity, controller restart recovery, TERM-driven PID 1 exit, and
+rollback from an active `RollingUpdate` target all passed. The StatefulSet
+never advanced more than one planned Search Head at a time.
 
 This is not production-readiness evidence. Active-search timeout behavior,
 failed captain transfer, forced deletion and node loss, storage and scheduling
-delay, network and TLS variants, version skew, rollback during an active
-operation, repeated runs, soak testing, and support/alert qualification remain
-open. The current result proves the integrated architecture can execute its
-intended happy path and resume durable state; it does not yet justify default
-enablement.
+delay, network and TLS variants, version skew, rollback under failure, repeated
+runs, soak testing, and support/alert qualification remain open. Normal
+replacement also exposed noisy error-level member observations and a false
+scale event that require a separate observability fix. The current result
+proves the integrated architecture can execute its intended happy path, resume
+durable state, and cross the strategy rollback boundary; it does not yet
+justify default enablement.
 
 ## Context and Orientation
 
@@ -793,3 +870,9 @@ qualification. Added the passing `OnDelete` rollout, safe strategy migration,
 partition-gated `RollingUpdate`, captain-transfer, persistent-identity, and
 controller-restart evidence. The plan intentionally leaves failure injection,
 version skew, rollback, repetition/soak, and production enablement open.
+
+2026-07-28: Added the corrected Docker-Splunk TERM/PID 1 contract and active
+`RollingUpdate` to `OnDelete` rollback rehearsal. Recorded sustained pre- and
+post-action stability, operation continuity, one-member safety, captain
+transfer, retained identities, the `OnDelete` revision-status nuance, and the
+observability defects discovered during an otherwise successful campaign.
