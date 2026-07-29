@@ -32,6 +32,7 @@ import (
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -259,6 +260,82 @@ var getSearchHeadLifecyclePod = func(
 		Name:      podName,
 	}, pod)
 	return pod, err
+}
+
+func searchHeadPodVolumeAttachmentPending(
+	ctx context.Context,
+	mgr *searchHeadClusterPodManager,
+	pod *corev1.Pod,
+) (bool, error) {
+	if pod.Spec.NodeName == "" {
+		return false, nil
+	}
+	// A namespace-scoped Role cannot grant access to cluster-scoped
+	// VolumeAttachments. Those installations still use the structured
+	// PodReadyToStartContainers condition for generic infrastructure
+	// attribution without requesting broader cluster access.
+	if len(config.GetWatchNamespaces()) > 0 {
+		return false, nil
+	}
+
+	persistentVolumeNames := make(map[string]struct{})
+	for _, volume := range pod.Spec.Volumes {
+		claimName := ""
+		switch {
+		case volume.PersistentVolumeClaim != nil:
+			claimName = volume.PersistentVolumeClaim.ClaimName
+		case volume.Ephemeral != nil:
+			claimName = fmt.Sprintf("%s-%s", pod.Name, volume.Name)
+		default:
+			continue
+		}
+		if claimName == "" {
+			continue
+		}
+
+		claim := &corev1.PersistentVolumeClaim{}
+		err := mgr.c.Get(ctx, types.NamespacedName{
+			Namespace: pod.Namespace,
+			Name:      claimName,
+		}, claim)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return false, fmt.Errorf(
+				"read persistent volume claim for replacement Pod: %w",
+				err,
+			)
+		}
+		if claim.Spec.VolumeName != "" {
+			persistentVolumeNames[claim.Spec.VolumeName] = struct{}{}
+		}
+	}
+	if len(persistentVolumeNames) == 0 {
+		return false, nil
+	}
+
+	attachments := &storagev1.VolumeAttachmentList{}
+	if err := mgr.c.List(ctx, attachments); err != nil {
+		return false, fmt.Errorf(
+			"list volume attachments for replacement Pod: %w",
+			err,
+		)
+	}
+	for i := range attachments.Items {
+		attachment := &attachments.Items[i]
+		persistentVolumeName :=
+			attachment.Spec.Source.PersistentVolumeName
+		if persistentVolumeName == nil ||
+			attachment.Spec.NodeName != pod.Spec.NodeName {
+			continue
+		}
+		if _, exists := persistentVolumeNames[*persistentVolumeName]; exists &&
+			!attachment.Status.Attached {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func searchHeadClusterLifecycleEnabled() bool {
@@ -701,6 +778,10 @@ func (mgr *searchHeadClusterPodManager) observeLifecycleRecovery(
 			case corev1.PodScheduled:
 				observation.PodScheduled = condition.Status == corev1.ConditionTrue
 				observation.PodUnschedulable = condition.Reason == corev1.PodReasonUnschedulable
+			case corev1.PodReadyToStartContainers:
+				observation.PodReadyToStartContainersObserved = true
+				observation.PodReadyToStartContainers =
+					condition.Status == corev1.ConditionTrue
 			case corev1.ContainersReady:
 				observation.ContainersReady = condition.Status == corev1.ConditionTrue
 			case corev1.PodReady:
@@ -731,7 +812,6 @@ func (mgr *searchHeadClusterPodManager) observeLifecycleRecovery(
 				continue
 			}
 			reason := status.State.Waiting.Reason
-			message := strings.ToLower(status.State.Waiting.Message)
 			switch reason {
 			case "ErrImagePull", "ImagePullBackOff":
 				observation.ImagePullFailed = true
@@ -743,12 +823,15 @@ func (mgr *searchHeadClusterPodManager) observeLifecycleRecovery(
 			case "CreateContainerConfigError", "CreateContainerError", "RunContainerError":
 				observation.ContainerStartupFailed = true
 				observation.ContainerFailureTerminal = true
-			case "ContainerCreating":
-				if strings.Contains(message, "volume") ||
-					strings.Contains(message, "attach") ||
-					strings.Contains(message, "mount") {
-					observation.StoragePending = true
-				}
+			}
+		}
+		if observation.PodScheduled &&
+			observation.PodReadyToStartContainersObserved &&
+			!observation.PodReadyToStartContainers {
+			observation.StoragePending, err =
+				searchHeadPodVolumeAttachmentPending(ctx, mgr, pod)
+			if err != nil {
+				return observation, err
 			}
 		}
 	}

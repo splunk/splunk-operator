@@ -34,29 +34,31 @@ type RecoveryPolicy struct {
 // RecoveryObservation separates Kubernetes Pod recovery from the stronger
 // Splunk member recovery contract.
 type RecoveryObservation struct {
-	PodExists                bool
-	PodUID                   string
-	PodDeleting              bool
-	PodScheduled             bool
-	PodUnschedulable         bool
-	StoragePending           bool
-	ImagePullFailed          bool
-	ImagePullFailureTerminal bool
-	ContainerStartupFailed   bool
-	ContainerFailureTerminal bool
-	ContainersReady          bool
-	PodReady                 bool
-	PodRevision              string
-	MemberObserved           bool
-	MemberStatus             string
-	MemberRegistered         bool
-	CaptainMemberObserved    bool
-	CaptainMemberID          string
-	CaptainMemberStatus      string
-	CaptainReady             bool
-	AuthoritativeCaptain     bool
-	ActiveHistoricalSearches int32
-	ActiveRealtimeSearches   int32
+	PodExists                         bool
+	PodUID                            string
+	PodDeleting                       bool
+	PodScheduled                      bool
+	PodUnschedulable                  bool
+	PodReadyToStartContainersObserved bool
+	PodReadyToStartContainers         bool
+	StoragePending                    bool
+	ImagePullFailed                   bool
+	ImagePullFailureTerminal          bool
+	ContainerStartupFailed            bool
+	ContainerFailureTerminal          bool
+	ContainersReady                   bool
+	PodReady                          bool
+	PodRevision                       string
+	MemberObserved                    bool
+	MemberStatus                      string
+	MemberRegistered                  bool
+	CaptainMemberObserved             bool
+	CaptainMemberID                   string
+	CaptainMemberStatus               string
+	CaptainReady                      bool
+	AuthoritativeCaptain              bool
+	ActiveHistoricalSearches          int32
+	ActiveRealtimeSearches            int32
 }
 
 // EvaluateRecovery advances an authorized Pod replacement through Kubernetes
@@ -155,6 +157,7 @@ func EvaluateRecovery(
 		return classifyPodRecovery(operation, observation, policy, now)
 
 	case enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForPodInfrastructure,
 		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage,
 		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer:
 		return classifyPodRecovery(operation, observation, policy, now)
@@ -336,6 +339,21 @@ func classifyPodRecovery(
 		return Decision{Operation: operation}
 	}
 
+	if observation.PodReadyToStartContainersObserved &&
+		!observation.PodReadyToStartContainers {
+		transitionIfNeeded(
+			operation,
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForPodInfrastructure,
+			enterpriseApi.SearchHeadClusterLifecycleReasonPodInfrastructurePending,
+			fmt.Sprintf(
+				"replacement Pod %s is waiting for Kubernetes Pod infrastructure",
+				operation.TargetPod,
+			),
+			now,
+		)
+		return Decision{Operation: operation}
+	}
+
 	if observation.ImagePullFailureTerminal {
 		transition(
 			operation,
@@ -429,11 +447,13 @@ func replacementStartupTimeoutMessage(
 	observation RecoveryObservation,
 ) string {
 	return fmt.Sprintf(
-		"replacement Pod startup timed out in stage %s: podExists=%t podScheduled=%t podUnschedulable=%t storagePending=%t imagePullFailed=%t imagePullFailureTerminal=%t containerStartupFailed=%t containersReady=%t",
+		"replacement Pod startup timed out in stage %s: podExists=%t podScheduled=%t podUnschedulable=%t podReadyToStartContainersObserved=%t podReadyToStartContainers=%t storagePending=%t imagePullFailed=%t imagePullFailureTerminal=%t containerStartupFailed=%t containersReady=%t",
 		operation.Stage,
 		observation.PodExists,
 		observation.PodScheduled,
 		observation.PodUnschedulable,
+		observation.PodReadyToStartContainersObserved,
+		observation.PodReadyToStartContainers,
 		observation.StoragePending,
 		observation.ImagePullFailed,
 		observation.ImagePullFailureTerminal,
@@ -671,6 +691,8 @@ func replacementPodStartupTimedOut(
 	if operation.Stage !=
 		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling &&
 		operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForPodInfrastructure &&
+		operation.Stage !=
 			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage &&
 		operation.Stage !=
 			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer {
@@ -694,6 +716,8 @@ func ensureReplacementPodObserved(
 		operation.StageStartedAt != nil &&
 		(operation.Stage ==
 			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling ||
+			operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageWaitingForPodInfrastructure ||
 			operation.Stage ==
 				enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage ||
 			operation.Stage ==

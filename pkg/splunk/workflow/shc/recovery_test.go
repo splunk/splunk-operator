@@ -555,11 +555,12 @@ func TestRecoveryAttributesStoragePendingReplacementToKubernetes(t *testing.T) {
 	now := time.Date(2026, 7, 24, 13, 0, 0, 0, time.UTC)
 	operation := authorizedRecoveryOperation(now)
 	observation := RecoveryObservation{
-		PodExists:      true,
-		PodUID:         "new-pod-uid",
-		PodRevision:    "revision-2",
-		PodScheduled:   true,
-		StoragePending: true,
+		PodExists:                         true,
+		PodUID:                            "new-pod-uid",
+		PodRevision:                       "revision-2",
+		PodScheduled:                      true,
+		PodReadyToStartContainersObserved: true,
+		StoragePending:                    true,
 	}
 
 	decision := EvaluateRecovery(
@@ -590,6 +591,108 @@ func TestRecoveryAttributesStoragePendingReplacementToKubernetes(t *testing.T) {
 	}
 	if decision.Operation.ReplacementPodObservedAt == nil {
 		t.Fatal("storage-pending replacement did not start the Pod startup timer")
+	}
+}
+
+func TestRecoveryAttributesGenericPodInfrastructurePendingToKubernetes(t *testing.T) {
+	now := time.Date(2026, 7, 29, 13, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := RecoveryObservation{
+		PodExists:                         true,
+		PodUID:                            "new-pod-uid",
+		PodRevision:                       "revision-2",
+		PodScheduled:                      true,
+		PodReadyToStartContainersObserved: true,
+	}
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		testRecoveryPolicy(),
+		now.Add(time.Second),
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForPodInfrastructure,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonPodInfrastructurePending {
+		t.Fatalf(
+			"reason = %q, want PodInfrastructurePending",
+			decision.Operation.Reason,
+		)
+	}
+	if decision.Operation.MemberRejoinStartedAt != nil {
+		t.Fatalf(
+			"Pod-infrastructure wait started member rejoin at %v",
+			decision.Operation.MemberRejoinStartedAt,
+		)
+	}
+	if decision.Operation.ReplacementPodObservedAt == nil {
+		t.Fatal("Pod-infrastructure wait did not start the Pod startup timer")
+	}
+}
+
+func TestRecoveryBlocksPodInfrastructureWaitAfterStartupBudget(t *testing.T) {
+	now := time.Date(2026, 7, 29, 14, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	observation := RecoveryObservation{
+		PodExists:                         true,
+		PodUID:                            "new-pod-uid",
+		PodRevision:                       "revision-2",
+		PodScheduled:                      true,
+		PodReadyToStartContainersObserved: true,
+	}
+	policy := testRecoveryPolicy()
+	policy.PodStartupTimeout = 30 * time.Second
+
+	decision := EvaluateRecovery(
+		operation,
+		observation,
+		policy,
+		now.Add(time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForPodInfrastructure,
+		ActionNone,
+	)
+
+	decision = EvaluateRecovery(
+		decision.Operation,
+		observation,
+		policy,
+		decision.Operation.ReplacementPodObservedAt.Add(policy.PodStartupTimeout),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+		ActionNone,
+	)
+	if decision.Operation.Reason !=
+		enterpriseApi.SearchHeadClusterLifecycleReasonPodStartupTimedOut {
+		t.Fatalf(
+			"reason = %q, want PodStartupTimedOut",
+			decision.Operation.Reason,
+		)
+	}
+	for _, fragment := range []string{
+		"stage WaitingForPodInfrastructure",
+		"podReadyToStartContainersObserved=true",
+		"podReadyToStartContainers=false",
+	} {
+		if !strings.Contains(decision.Operation.Message, fragment) {
+			t.Fatalf(
+				"timeout message = %q, want fragment %q",
+				decision.Operation.Message,
+				fragment,
+			)
+		}
 	}
 }
 
