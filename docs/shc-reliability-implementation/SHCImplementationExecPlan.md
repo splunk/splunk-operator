@@ -204,10 +204,27 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `make fmt`, `make vet`, `make build`, and `make test`. All 41 Ginkgo suites
   passed, including 154 controller envtest specifications, with 78.5 percent
   composite coverage.
-- [ ] Qualify SHC-78 on the EKS SHC for unschedulable recovery and a safe,
-  reversible storage-attachment delay, while preserving reverse-ordinal
-  ownership, minimum ready capacity, bounded startup timeout, and clean
-  recovery after the injected condition is removed.
+- [x] (2026-07-29) Qualified SHC-78 scheduler attribution on EKS. With all
+  workers cordoned, the replacement for ordinal two remained the sole target
+  at `WaitingForScheduling/PodUnschedulable`, partition two, for six hold
+  samples. Two unaffected endpoints remained Ready, every service search
+  returned HTTP 200, and uncordoning recovered the complete `2 -> 1 -> 0`
+  rollout with three Ready endpoints and zero container restarts.
+- [x] (2026-07-29) Qualified SHC-78 exact CSI attribution on EKS. A newly
+  provisioned target-Pod PVC was bound while workers were cordoned; after the
+  EBS CSI controller was scaled from two replicas to zero and workers were
+  uncordoned, the scheduled replacement reported
+  `PodReadyToStartContainers=False` and exactly one bound-PV/node
+  `VolumeAttachment` reported `attached=false`. The Operator durably reported
+  `WaitingForStorage/VolumeAttachmentPending` for six hold samples, never
+  advanced another ordinal, preserved two Ready endpoints and HTTP 200 search,
+  and recovered the same replacement through Pod infrastructure, container
+  startup, SHC registration, and ready KV Store after CSI returned to two
+  replicas.
+- [ ] Resolve the newly observed template-defaulting, authorized-revision
+  withdrawal, and deletion-finalization gaps as separate bounded work items
+  before treating the SHC-78 campaign as broader production-readiness
+  evidence.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -226,6 +243,54 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
 - [ ] Complete release readiness, rollback rehearsal, and support enablement.
 
 ## Surprises & Discoveries
+
+- (2026-07-29 UTC) Omitting `volumeMode` from a generic ephemeral
+  `volumeClaimTemplate` caused a render/observe loop. Kubernetes defaulted the
+  StatefulSet template to `Filesystem`, while the CR remained unset, so the
+  Operator repeatedly reported a Pod-volume difference and rewrote both
+  StatefulSets. Explicitly setting `volumeMode: Filesystem` stopped the loop.
+  Desired and observed Pod templates must be compared after normalizing
+  Kubernetes API defaults; customers should not have to repeat a Kubernetes
+  default to obtain a stable reconcile.
+
+- (2026-07-29 UTC) `Immediate` EBS provisioning can bind a generic ephemeral
+  volume in a zone that conflicts with the retained per-ordinal `etc` and
+  `var` volumes. Kubernetes then correctly leaves the Pod unschedulable with
+  volume node-affinity conflict. The accepted CSI qualification constrained
+  each test StorageClass to the existing target ordinal's zone. Production
+  design and tests must prefer topology-aware binding and must not interpret
+  this scheduler result as a Splunk failure.
+
+- (2026-07-29 UTC) Removing the newly requested Pod volume after ordinal two
+  was already authorized and unschedulable did not cancel or supersede the
+  active revision. The Deployer returned to the revised CR, but the Search Head
+  StatefulSet remained frozen on the active desired revision and the target
+  remained `WaitingForScheduling`. The existing post-authorization handoff
+  protects an in-flight replacement, but it does not provide a recovery path
+  when that authorized replacement cannot start and the desired template is
+  withdrawn. A separate policy and implementation must safely cancel, roll
+  back, or explicitly continue that operation without exposing a second
+  target.
+
+- (2026-07-29 UTC) Deleting the disposable qualification namespace exposed a
+  deletion-finalizer edge. The SHC finalizer attempted to recreate its Secret
+  after the namespace had entered termination, which Kubernetes rejected
+  because new content is forbidden. The exact test CR finalizer had to be
+  cleared after its remaining resources were verified. CR deletion must use a
+  termination-safe path that never creates namespace content and still
+  applies the declared PVC retention policy.
+
+- (2026-07-29 UTC) The Splunk 10.6 development runtime could not provide a
+  stable same-version restart baseline for this Operator-only qualification.
+  Its external KV Store process remained alive and logged successful database
+  pings, while Splunkd's supported `/services/kvstore/status` response remained
+  `starting` and `splunkd.log` repeatedly reported `KVStoreAdminHandler`
+  errors. The Operator correctly held
+  `ValidatingCluster/KVStoreNotReady`, kept all three members Up, retained a
+  ready captain, and preserved HTTP 200 search. The campaign therefore made no
+  Splunkd change and used a pinned Splunk 9.4.1 runtime only to isolate the
+  Kubernetes scheduling and CSI behaviors. The 10.6 behavior remains a
+  separate Splunk/KV Store investigation.
 
 - (2026-07-28/29 UTC) The live EKS 1.31 API disproved the current storage
   heuristic. During a real CSI attachment wait, the target Pod was scheduled
@@ -848,20 +913,24 @@ passed. The StatefulSet never advanced more than one planned Search Head at a
   `ImagePullBackOff` recovery without releasing the authorized ordinal, plus
   immediate fail-closed handling of `InvalidImageName`. The accepted campaign
   completed 131 uninterrupted service searches with at least two ready
-  endpoints and no more than one unavailable Search Head.
+  endpoints and no more than one unavailable Search Head. SHC-78 additionally
+  proved structured unschedulable attribution and exact EBS CSI attachment
+  attribution, including bounded holds, uninterrupted service through two
+  unaffected members, and recovery of the same authorized replacement.
 
 This is not production-readiness evidence. Forced deletion and node loss,
-storage and scheduling delay, network and TLS variants, version skew,
-withdrawal after replacement authorization, rollback under other injected
-failures, repeated runs, soak testing, and support/alert qualification remain
-open. The lifecycle-aware log, phase, scale-event, transient higher-ordinal
-observation, cancellation, continuation, failed-transfer, revision-reuse, and
-StatefulSet-observation defects exposed by the campaigns are corrected and
-passed their targeted EKS cycles. The current result proves the integrated
+additional storage providers and scheduling causes, network and TLS variants,
+version skew, safe withdrawal of an authorized replacement that cannot start,
+rollback under other injected failures, repeated runs, soak testing, and
+support/alert qualification remain open. The lifecycle-aware log, phase,
+scale-event, transient higher-ordinal observation, cancellation, continuation,
+failed-transfer, revision-reuse, StatefulSet-observation, image-pull, and
+infrastructure-attribution defects exposed by the campaigns are corrected and
+passed their targeted cycles. The current result proves the integrated
 architecture can execute its intended happy path, resume durable state, cross
-the strategy rollback boundary, safely coordinate replica-count changes, fail
-closed on active work or failed captain transfer, and continue only through
-one audited exception; it does not yet justify default enablement.
+the strategy rollback boundary, safely coordinate replica-count changes,
+fail closed on active work or failed captain transfer, and continue only
+through one audited exception; it does not yet justify default enablement.
 
 ## Context and Orientation
 
@@ -1454,6 +1523,55 @@ on 2026-07-28:
   satisfied, three `Up` members, KV Store `ready`, no KV Store version upgrade
   or backup, and zero container restarts.
 
+SHC-78 Pod-infrastructure-attribution qualification captured on 2026-07-29:
+
+- source branch:
+  `codex/shc-78-pod-infrastructure-attribution`;
+- Operator implementation commit:
+  `7b90da2694c1460b5e1522b5abb0a2d2151b190c`;
+- final source used for the EKS image:
+  `a5a41c07c9c7a9a1e1776f5cc41a146db6616da5`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-a5a41c07c`;
+- Operator image digest:
+  `sha256:e29ac1024865e4f676655c229b01b8ed2690abe5412a669df2d473f074f6207f`;
+- the Linux vWorkstation passed `make fmt`, `make vet`, `make build`, and
+  `make test`; all 41 Ginkgo suites and 154 controller specifications passed
+  with 78.5 percent composite coverage;
+- the test ran on EKS cluster `vivek-spl-301372` in `us-west-2`, namespace
+  `shc78-infrastructure`, with
+  `SplunkPodLifecycle=true,SearchHeadClusterLifecycle=true`;
+- the accepted Operator-only runtime was
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:9.4.1-jdk-11`
+  at digest
+  `sha256:e51312c90d8cd860065a0fcb887a50c3d227122477b2ca3f5a7336f93d9308cb`;
+- scheduler injection cordoned all three workers and produced an exact
+  `PodScheduled=False/Unschedulable` replacement for ordinal two. Six hold
+  samples retained partition two and unchanged ordinal-zero/one UIDs with two
+  Ready endpoints and HTTP 200 search. Uncordoning completed `2 -> 1 -> 0`,
+  including captain transfer before ordinal zero, with matching StatefulSet
+  revisions, partition three, three Ready endpoints, and zero restarts;
+- a topology-controlled generic ephemeral volume rollout established bound,
+  attached volumes for the Deployer and all three Search Heads. The target
+  ordinal and Deployer were in `us-west-2b`, ordinal one in `us-west-2c`, and
+  ordinal zero in `us-west-2a`;
+- CSI injection created a new bound ordinal-two PVC and Pod UID while all
+  workers were cordoned, then scaled `ebs-csi-controller` from two replicas to
+  zero before scheduling. The resulting PV/node pair had exactly one
+  `VolumeAttachment` with `attached=false`, and the Pod reported
+  `PodReadyToStartContainers=False`;
+- six storage hold samples reported
+  `WaitingForStorage/VolumeAttachmentPending`, retained ordinal zero/one UIDs,
+  kept two Ready endpoints, and returned HTTP 200 for every service search;
+- restoring CSI to two replicas progressed the same target through
+  `WaitingForPodInfrastructure`, `WaitingForContainer`, and
+  `ValidatingRecovery`; it became Kubernetes Ready, registered `Up`, reached
+  KV Store `ready`, and returned the Service to three endpoints before another
+  target was authorized; and
+- cleanup removed the disposable namespace, all PVCs and generated PVs, and
+  the test StorageClass. All three workers finished Ready and schedulable, and
+  the EBS CSI controller finished at two ready replicas.
+
 ## Interfaces and Dependencies
 
 The technical designs must define concrete interfaces for:
@@ -1551,3 +1669,10 @@ qualification. Added ControllerRevision-reuse handling, in-place cancellation
 ownership through Kubernetes readiness, the StatefulSet generation-observation
 barrier, exact warning/cancellation Event deltas, a clean bounded log audit,
 reverse-ordinal rollback, and the passing 321-second final stability gate.
+
+2026-07-29: Recorded SHC-78 source and EKS qualification for structured
+scheduler, generic Pod-infrastructure, and exact CSI attachment attribution.
+Added the complete scheduler recovery, bounded CSI hold and recovery, minimum
+service-capacity evidence, the Splunk 10.6 KV Store qualification boundary, and
+the newly identified template-defaulting, authorized-revision withdrawal, and
+deletion-finalization follow-up requirements.
