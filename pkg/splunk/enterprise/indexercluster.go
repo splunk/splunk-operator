@@ -181,7 +181,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
 		if apierrors.IsNotFound(err) {
-			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue or ObjectStorage CR not found", err)
+			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
 		}
 		return result, fmt.Errorf("ensure defaults: %w", err)
 	}
@@ -191,7 +191,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if err != nil {
 		eventPublisher.Warning(ctx, "GetIndexerStatefulSetFailed", "Get Indexer stateful set failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
-		return result, fmt.Errorf("get indexer statefulset: %w", err)
+		return result, err
 	}
 
 	// Note:
@@ -483,7 +483,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
 		if apierrors.IsNotFound(err) {
-			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue or ObjectStorage CR not found", err)
+			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
 		}
 		return result, fmt.Errorf("ensure defaults: %w", err)
 	}
@@ -492,7 +492,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption(), credentialsSecret.AsStatefulSetOption())
 	if err != nil {
 		eventPublisher.Warning(ctx, "GetIndexerStatefulSetFailed", "Get Indexer stateful set failed. Check operator logs for details.")
-		return result, fmt.Errorf("get indexer statefulset: %w", err)
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
+		return result, err
 	}
 
 	// Note:
@@ -1315,7 +1316,7 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 func getIndexerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	// Note: SPLUNK_INDEXER_URL is not used by the indexer pod containers,
 	// hence avoided the call to getIndexerExtraEnv.

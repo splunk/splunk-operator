@@ -15,64 +15,71 @@
 
 package enterprise
 
-import "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+import (
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+)
 
 const (
 	// Normal event reasons
-	EventReasonScaledUp              = "ScaledUp"
-	EventReasonScaledDown            = "ScaledDown"
-	EventReasonClusterInitialized    = "ClusterInitialized"
-	EventReasonClusterQuorumLost     = "ClusterQuorumLost"
-	EventReasonClusterQuorumRestored = "ClusterQuorumRestored"
-	EventReasonPasswordSyncCompleted = "PasswordSyncCompleted"
+	EventReasonScaledUp              splcommon.EventReason = "ScaledUp"
+	EventReasonScaledDown            splcommon.EventReason = "ScaledDown"
+	EventReasonClusterInitialized    splcommon.EventReason = "ClusterInitialized"
+	EventReasonClusterQuorumLost     splcommon.EventReason = "ClusterQuorumLost"
+	EventReasonClusterQuorumRestored splcommon.EventReason = "ClusterQuorumRestored"
+	EventReasonPasswordSyncCompleted splcommon.EventReason = "PasswordSyncCompleted"
 
 	// Warning event reasons — spec & config
-	EventReasonValidateSpecFailed      = "ValidateSpecFailed"
-	EventReasonApplySplunkConfigFailed = "ApplySplunkConfigFailed"
-	EventReasonAppFrameworkInitFailed  = "AppFrameworkInitFailed"
-	EventReasonAppRepoConnFailed       = "AppRepositoryConnectionFailed"
-	EventReasonSmartStoreConfigPending = "SmartStoreConfigPending"
+	EventReasonValidateSpecFailed      splcommon.EventReason = "ValidateSpecFailed"
+	EventReasonApplySplunkConfigFailed splcommon.EventReason = "ApplySplunkConfigFailed"
+	EventReasonAppFrameworkInitFailed  splcommon.EventReason = "AppFrameworkInitFailed"
+	EventReasonAppRepoConnFailed       splcommon.EventReason = "AppRepositoryConnectionFailed"
+	EventReasonSmartStoreConfigPending splcommon.EventReason = "SmartStoreConfigPending"
 
 	// Warning event reasons — services & statefulsets
-	EventReasonApplyServiceFailed      = "ApplyServiceFailed"
-	EventReasonStatefulSetFailed       = "StatefulSetFailed"
-	EventReasonStatefulSetUpdateFailed = "StatefulSetUpdateFailed"
-	EventReasonStatefulSetDeleteFailed = "StatefulSetDeleteFailed"
-	EventReasonOwnerRefFailed          = "OwnerRefFailed"
+	EventReasonApplyServiceFailed      splcommon.EventReason = "ApplyServiceFailed"
+	EventReasonStatefulSetFailed       splcommon.EventReason = "StatefulSetFailed"
+	EventReasonStatefulSetUpdateFailed splcommon.EventReason = "StatefulSetUpdateFailed"
+	EventReasonStatefulSetDeleteFailed splcommon.EventReason = "StatefulSetDeleteFailed"
+	EventReasonOwnerRefFailed          splcommon.EventReason = "OwnerRefFailed"
 
 	// Warning event reasons — deletion
-	EventReasonDeleteFailed = "DeleteFailed"
+	EventReasonDeleteFailed splcommon.EventReason = "DeleteFailed"
 
 	// Warning event reasons — secrets & credentials
-	EventReasonSecretMissing       = "SecretMissing"
-	EventReasonSecretInvalid       = "SecretInvalid"
-	EventReasonSecretAccessFailed  = "SecretAccessFailed"
-	EventReasonPasswordSyncFailed  = "PasswordSyncFailed"
-	EventReasonCertSecretMalformed = certs.EventReasonCertSecretMalformed
+	EventReasonSecretMissing       splcommon.EventReason = "SecretMissing"
+	EventReasonSecretInvalid       splcommon.EventReason = "SecretInvalid"
+	EventReasonSecretAccessFailed  splcommon.EventReason = "SecretAccessFailed"
+	EventReasonPasswordSyncFailed  splcommon.EventReason = "PasswordSyncFailed"
+	EventReasonCertSecretMalformed splcommon.EventReason = certs.EventReasonCertSecretMalformed
 
 	// Warning event reasons — monitoring console
-	EventReasonMonitoringConsoleConfigFailed  = "MonitoringConsoleConfigFailed"
-	EventReasonMonitoringConsoleRefFailed     = "MonitoringConsoleRefFailed"
-	EventReasonMonitoringConsoleCleanupFailed = "MonitoringConsoleCleanupFailed"
-	EventReasonMonitoringConsoleApplyFailed   = "MonitoringConsoleApplyFailed"
-	EventReasonAnnotationUpdateFailed         = "AnnotationUpdateFailed"
-	EventReasonImageGetFailed                 = "ImageGetFailed"
+	EventReasonMonitoringConsoleConfigFailed  splcommon.EventReason = "MonitoringConsoleConfigFailed"
+	EventReasonMonitoringConsoleRefFailed     splcommon.EventReason = "MonitoringConsoleRefFailed"
+	EventReasonMonitoringConsoleCleanupFailed splcommon.EventReason = "MonitoringConsoleCleanupFailed"
+	EventReasonMonitoringConsoleApplyFailed   splcommon.EventReason = "MonitoringConsoleApplyFailed"
+	EventReasonAnnotationUpdateFailed         splcommon.EventReason = "AnnotationUpdateFailed"
+	EventReasonImageGetFailed                 splcommon.EventReason = "ImageGetFailed"
 
 	// Warning event reasons — cluster operations
-	EventReasonResolveQueueObjectStorageFailed = "ResolveQueueObjectStorageFailed"
-	EventReasonImmutableRefsModified           = "ImmutableRefsModified"
-	EventReasonEmptyClusterManagerRef          = "EmptyClusterManagerRef"
-	EventReasonRemoteVolumeKeyCheckFailed      = "RemoteVolumeKeyCheckFailed"
-	EventReasonVerifyRFPeersFailed             = "VerifyRFPeersFailed"
-	EventReasonMaintenanceModeFailed           = "MaintenanceModeFailed"
-	EventReasonRetrieveCMSpecFailed            = "RetrieveCMSpecFailed"
-	EventReasonConfFileUpdateFailed            = "ConfFileUpdateFailed"
-	EventReasonBundlePushFailed                = "BundlePushFailed"
-	EventReasonPodExecFailed                   = "PodExecFailed"
-	EventReasonScalingBlockedRF                = "ScalingBlockedRF"
-	EventReasonLicenseExpired                  = "LicenseExpired"
+	EventReasonResolveQueueObjectStorageFailed splcommon.EventReason = "ResolveQueueObjectStorageFailed"
+	EventReasonImmutableRefsModified           splcommon.EventReason = "ImmutableRefsModified"
+	EventReasonEmptyClusterManagerRef          splcommon.EventReason = "EmptyClusterManagerRef"
+	EventReasonRemoteVolumeKeyCheckFailed      splcommon.EventReason = "RemoteVolumeKeyCheckFailed"
+	EventReasonVerifyRFPeersFailed             splcommon.EventReason = "VerifyRFPeersFailed"
+	EventReasonMaintenanceModeFailed           splcommon.EventReason = "MaintenanceModeFailed"
+	EventReasonRetrieveCMSpecFailed            splcommon.EventReason = "RetrieveCMSpecFailed"
+	EventReasonConfFileUpdateFailed            splcommon.EventReason = "ConfFileUpdateFailed"
+	EventReasonBundlePushFailed                splcommon.EventReason = "BundlePushFailed"
+	EventReasonPodExecFailed                   splcommon.EventReason = "PodExecFailed"
+	EventReasonScalingBlockedRF                splcommon.EventReason = "ScalingBlockedRF"
+	EventReasonLicenseExpired                  splcommon.EventReason = "LicenseExpired"
 
 	// Warning event reasons — upgrade
-	EventReasonUpgradeCheckFailed            = "UpgradeCheckFailed"
-	EventReasonUpgradeBlockedVersionMismatch = "UpgradeBlockedVersionMismatch"
+	EventReasonUpgradeCheckFailed            splcommon.EventReason = "UpgradeCheckFailed"
+	EventReasonUpgradeBlockedVersionMismatch splcommon.EventReason = "UpgradeBlockedVersionMismatch"
+
+	// Stalled condition transition events
+	EventReasonStalled         splcommon.EventReason = "Stalled"
+	EventReasonStalledResolved splcommon.EventReason = "StalledResolved"
 )

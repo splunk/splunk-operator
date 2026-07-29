@@ -14,6 +14,8 @@
 
 package certs
 
+import splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+
 const (
 	// CertMountRoot is the base directory under which all cert secrets are mounted.
 	CertMountRoot = "/mnt/tls"
@@ -33,7 +35,7 @@ const (
 
 	// EventReasonCertSecretMalformed is the machine-readable TerminalError reason used
 	// when a cert secret exists but is missing a required key (tls.crt or tls.key).
-	EventReasonCertSecretMalformed = "CertSecretMalformed"
+	EventReasonCertSecretMalformed splcommon.EventReason = "CertSecretMalformed"
 
 	// CertRevAnnotFmt is the pod annotation key format for cert rotation detection.
 	// Uses the enterprise.splunk.com prefix, consistent with other SOK annotations

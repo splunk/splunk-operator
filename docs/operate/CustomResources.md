@@ -634,6 +634,7 @@ kubectl describe standalone example
 - When an error occurs, the `Ready` condition's `message` field contains the specific error description
 - **`Stalled=True`** signals a non-recoverable failure: the operator has stopped requeueing the CR and will not retry until the user resolves the root cause. `Stalled` is always `False` when `phase` is not `Error` — `Ready=True` and `Stalled=True` can never coexist
 - Use `Stalled=True` in monitoring or alerting rules to page on failures that need human intervention, as opposed to transient errors that self-heal
+- A **Warning** event with reason `Stalled` is emitted on **every** reconcile where `Stalled=True` (not only on the initial flip); a **Normal** event with reason `StalledResolved` is emitted once when the condition clears from `True` to `False`. Both are visible via `kubectl describe`
 
 ## Troubleshooting
 
@@ -677,7 +678,7 @@ Some failure states are non-recoverable without external intervention. When the 
 
 **Detecting a terminal failure**
 
-When a terminal failure occurs, `status.phase` is `Error` and the `Stalled` condition flips to `True`. Check the conditions directly:
+When a terminal failure occurs, `status.phase` is `Error` and the `Stalled` condition flips to `True`. A Kubernetes **Warning** event with reason `Stalled` is also emitted and is visible in `kubectl describe`. Check the conditions directly:
 
 ```bash
 kubectl get standalone example -o jsonpath='{.status.conditions}' | jq .
@@ -696,6 +697,8 @@ kubectl describe pod <pod-name> -n <namespace>
 ```
 
 **Recovery**
+
+Once the root cause is resolved and the operator successfully reconciles the CR, the `Stalled` condition is cleared and a Kubernetes **Normal** event with reason `StalledResolved` is emitted.
 
 For a pod stuck in a terminal container state:
 1. Inspect the failing pod with `kubectl describe pod <pod-name> -n <namespace>` to read the `Waiting.Reason` and `Waiting.Message`.

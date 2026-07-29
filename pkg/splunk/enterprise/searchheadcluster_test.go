@@ -1131,7 +1131,7 @@ func TestApplySearchHeadClusterValidationFailure(t *testing.T) {
 	}
 }
 
-func TestApplySearchHeadClusterDeployerTerminalPodFailure(t *testing.T) {
+func TestApplySearchHeadClusterDeployerPodTerminalFailure(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
 

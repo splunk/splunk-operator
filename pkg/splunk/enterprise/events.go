@@ -17,9 +17,11 @@ package enterprise
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 )
@@ -71,6 +73,20 @@ func (k *K8EventPublisher) Normal(ctx context.Context, reason, message string) {
 // Warning publish warning events to k8s
 func (k *K8EventPublisher) Warning(ctx context.Context, reason, message string) {
 	k.publishEvent(ctx, "Warning", reason, message)
+}
+
+// EmitStalledTransitionEvents emits a Warning event on every reconcile where Stalled=True,
+// and a Normal event when the condition transitions from True→False (resolved).
+func EmitStalledTransitionEvents(ctx context.Context, ep *K8EventPublisher, crName string, oldConditions, newConditions []metav1.Condition) {
+	if ep == nil {
+		return
+	}
+	isNowStalled := splcommon.IsStalled(newConditions)
+	if isNowStalled {
+		ep.Warning(ctx, EventReasonStalled, fmt.Sprintf("%s reconciliation has stalled and requires manual intervention", crName))
+	} else if splcommon.IsStalled(oldConditions) {
+		ep.Normal(ctx, EventReasonStalledResolved, fmt.Sprintf("%s stall condition resolved", crName))
+	}
 }
 
 // GetEventPublisher returns an event publisher from context if available,

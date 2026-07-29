@@ -107,29 +107,44 @@ The `Apply*` functions in `pkg/splunk/enterprise/` wrap validation errors before
 validate clustermanager spec: license not accepted, please adjust SPLUNK_GENERAL_TERMS ...
 ```
 
-**Pattern:**
+There are two distinct error-return patterns depending on whether the failure is terminal (user-actionable, no requeue) or transient (retryable):
+
+**Terminal errors** (spec validation, missing required CRs, malformed secrets) — use `splcommon.NewTerminalError`:
 
 ```go
 err = validateClusterManagerSpec(ctx, client, cr)
 if err != nil {
     eventPublisher.Warning(ctx, EventReasonValidateSpecFailed,
         fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
-    return result, fmt.Errorf("validate clustermanager spec: %w", err)
+    setPhaseAndConditions(enterpriseApi.PhaseError, "Cluster Manager spec validation failed")
+    return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Cluster Manager spec validation failed", err)
+}
+```
+
+**Transient errors** (API blips, config apply failures) — use `fmt.Errorf` with `%w`:
+
+```go
+namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+if err != nil {
+    eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed,
+        fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
+    setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
+    return result, fmt.Errorf("apply splunk config: %w", err)
 }
 ```
 
 **Rules:**
 
-- Use `%w` (not `%v`) so callers can inspect the original error with `errors.Is` / `errors.Unwrap`.
-- The prefix should be lowercase and describe the operation that failed, e.g. `"validate standalone spec"`, `"apply splunk config"`.
+- Use `splcommon.NewTerminalError(reason, message, cause)` for failures that require user intervention and must not be retried automatically. The controller layer intercepts terminal errors and sets `Stalled=True` on the CR status automatically.
+- Use `fmt.Errorf("description: %w", err)` with `%w` (not `%v`) for transient failures so callers can inspect the error chain with `errors.Is` / `errors.Unwrap`. The prefix should be lowercase and describe the operation, e.g. `"apply splunk config"`, `"update monitoring console configmap"`.
 - Don't wrap and log the same error — pick one. Wrapping is preferred because it keeps context in the error chain and avoids double-logging.
 
 ```go
 // Good — wrap and return, no explicit log needed
-return result, fmt.Errorf("validate standalone spec: %w", err)
+return result, fmt.Errorf("apply splunk config: %w", err)
 
 // Bad — double-logged: once here, once by controller-runtime
-scopedLog.Error(err, "Failed to validate standalone spec")
+scopedLog.Error(err, "Failed to apply splunk config")
 return result, err
 ```
 
@@ -195,6 +210,7 @@ All event reasons are defined as constants in `pkg/splunk/enterprise/event_reaso
 | `EventReasonClusterInitialized` | `ClusterInitialized` | Cluster first becomes ready |
 | `EventReasonClusterQuorumRestored` | `ClusterQuorumRestored` | Quorum recovered |
 | `EventReasonPasswordSyncCompleted` | `PasswordSyncCompleted` | Secret sync finished |
+| `EventReasonStalledResolved` | `StalledResolved` | `Stalled` condition cleared — reconciliation has resumed |
 
 **Warning reasons (common):**
 
@@ -213,6 +229,7 @@ All event reasons are defined as constants in `pkg/splunk/enterprise/event_reaso
 | `EventReasonImmutableRefsModified` | `ImmutableRefsModified` | Defined for future use. Mutating `queueRef`/`objectStorageRef` after initial apply is currently rejected by the admission webhook; this event is not emitted at runtime |
 | `EventReasonEmptyClusterManagerRef` | `EmptyClusterManagerRef` | ClusterManagerRef is empty during reconciliation |
 | `EventReasonUpgradeCheckFailed` | `UpgradeCheckFailed` | Upgrade path validation errors |
+| `EventReasonStalled` | `Stalled` | `Stalled` condition onset — manual intervention required |
 
 See [`event_reasons.go`](https://github.com/splunk/splunk-operator/blob/main/pkg/splunk/enterprise/event_reasons.go) for the full list.
 
@@ -292,11 +309,61 @@ Terminal failures are surfaced to the user via the **`Stalled` status condition*
 
 Business logic signals a non-retriable failure by returning `splcommon.NewTerminalError(reason, message, cause)` directly — no event publisher helpers are needed. The **controller layer** intercepts any terminal error returned from `Reconcile()` and automatically calls `splcommon.UpsertStalledCondition` to set `Stalled=True` on the CR status.
 
+**Four-layer propagation pattern:**
+
+```go
+// Layer 1 — business logic (e.g. certs.ValidateCertSecret):
+//   returns splcommon.NewTerminalError(reason, message, cause) for user-actionable failures.
+
+// Layer 2 — getXxxStatefulSet:
+//   fmt.Errorf with %w preserves the TerminalError in the chain — no explicit check needed.
+certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
+if err != nil {
+    return nil, fmt.Errorf("reconcile certs: %w", err)
+}
+
+// Layer 3 — Apply* function:
+//   emits event and sets phase, then returns result + err; terminal vs transient is the controller's concern.
+statefulSet, err := getStandaloneStatefulSet(ctx, client, cr)
+if err != nil {
+    eventPublisher.Warning(ctx, EventReasonStatefulSetFailed, "get standalone statefulset failed — check operator logs")
+    setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
+    return result, err
+}
+
+// Layer 4 — controller Reconcile:
+//   returns reconcile.Result{} (no requeue) for terminal errors, result for transient ones.
+if _, ok := splcommon.TerminalMessage(err); ok {
+    return reconcile.Result{}, err
+}
+return result, err
+```
+
+**Layer responsibilities:**
+
+- **Business logic** (`certs.ValidateCertSecret`, etc.) — returns `splcommon.NewTerminalError` for non-retryable failures. The error's `Reason` and `Message` are structured for the `Stalled` condition; full detail lives in `Err` for operator logs.
+- **`getXxxStatefulSet`** — wraps errors with `fmt.Errorf("...: %w", err)`. No explicit terminal check needed: `%w` preserves the full error chain, so `TerminalError` remains detectable via `errors.As` / `splcommon.TerminalMessage` at any point up the stack.
+- **`Apply*`** — emits a `Warning` event, sets `phase=Error`, returns `result, err`. Does not inspect for terminal errors — that is the controller's responsibility.
+- **Controller `Reconcile`** — calls `splcommon.TerminalMessage(err)` to upsert the `Stalled` condition, then returns `reconcile.Result{}, err` for terminal errors (stops requeueing) or `result, err` for transient ones.
+
+Callers must **not** inspect specific sub-package error types (e.g. `certs.ErrCertSecretMalformed`) — the sub-package is responsible for returning a terminal error when appropriate.
+
 **Rules:**
 
 1. Return `splcommon.NewTerminalError(reason, message, cause)` from business logic — the controller sets `Stalled=True` automatically.
 2. Never return `reconcile.TerminalError` for transient failures (network blips, temporary API unavailability).
 3. Use `splcommon.IsStalled(cr.Status.Conditions)` to check programmatically whether a CR is currently stalled.
+
+**Stalled condition events**
+
+After computing the new `Stalled` condition (and before persisting it), every enterprise controller calls `enterprise.EmitStalledTransitionEvents`. A Warning event fires on **every** reconcile where `Stalled=True`; the Normal recovery event fires only when the condition transitions from `True→False`:
+
+| Condition | Event type | Reason constant |
+|---|---|---|
+| `Stalled=True` (every terminal reconcile) | `Warning` | `EventReasonStalled` |
+| `Stalled=True` → `Stalled=False` | `Normal` | `EventReasonStalledResolved` |
+
+These events are visible via `kubectl describe <cr-type> <name>` and can be used in alerting pipelines to detect stalls without polling the condition array. `EmitStalledTransitionEvents` is defined in `pkg/splunk/enterprise/events.go`.
 
 **Terminal container waiting states** detected by `splctrl.CheckPodsForTerminalFailures`:
 
