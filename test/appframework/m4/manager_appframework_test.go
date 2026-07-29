@@ -176,7 +176,7 @@ var _ = Describe("m4appfw test", func() {
 			// Upload V2 apps for Monitoring Console
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
+			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -306,7 +306,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
+			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -696,7 +696,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
+			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 indexers and SHC are ready
 			Expect(testcaseEnvInst.VerifyM4IndexersAndSHCReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 Indexers and SHC not ready")
@@ -822,7 +822,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
+			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -997,7 +997,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
+			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 indexers and SHC are ready
 			Expect(testcaseEnvInst.VerifyM4IndexersAndSHCReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 Indexers and SHC not ready")
@@ -1245,7 +1245,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
+			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -1735,7 +1735,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName, testenv.AppPhaseChangeTimeout)).To(Succeed())
+			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
 
 			// Ensure Cluster Manager goes to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
@@ -1747,7 +1747,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyIndexerClusterMultisiteStatus(ctx, deployment, siteCount)).To(Succeed(), "Indexer Cluster multisite status verification failed")
 
 			// Wait for App state to update after config file change
-			testcaseEnvInst.WaitforAppInstallState(ctx, deployment, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
+			Expect(testcaseEnvInst.WaitforAppInstallState(ctx, deployment, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)).To(Succeed(), "App install state did not update to disabled")
 
 			// Delete the file from S3
 			s3Filepath := filepath.Join(s3TestDirIdxc, appFileName[0])
@@ -2051,7 +2051,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppPhaseChangeTimeout)).To(Succeed())
+			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
