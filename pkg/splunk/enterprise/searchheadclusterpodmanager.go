@@ -905,6 +905,7 @@ func lifecycleMemberObservationExpectedUnavailable(
 	switch operation.Stage {
 	case enterpriseApi.SearchHeadClusterLifecycleStageWaitingForTermination,
 		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForPodInfrastructure,
 		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage,
 		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
 		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,

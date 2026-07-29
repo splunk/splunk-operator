@@ -24,12 +24,15 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -1418,7 +1421,134 @@ func TestLifecycleAdapterObservesUnschedulableReplacementPod(t *testing.T) {
 func TestLifecycleAdapterObservesReplacementWaitingForStorage(t *testing.T) {
 	target := int32(2)
 	targetPod := "splunk-example-search-head-2"
+	namespace := "example"
+	persistentVolumeName := "pvc-volume"
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core API to scheme: %v", err)
+	}
+	if err := storagev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add storage API to scheme: %v", err)
+	}
+	client := newFakeClientBuilder(scheme).WithObjects(
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "etc",
+				Namespace: namespace,
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				VolumeName: persistentVolumeName,
+			},
+		},
+		&storagev1.VolumeAttachment{
+			ObjectMeta: metav1.ObjectMeta{Name: "attachment"},
+			Spec: storagev1.VolumeAttachmentSpec{
+				Attacher: "test.csi.example",
+				Source: storagev1.VolumeAttachmentSource{
+					PersistentVolumeName: &persistentVolumeName,
+				},
+				NodeName: "worker-a",
+			},
+			Status: storagev1.VolumeAttachmentStatus{Attached: false},
+		},
+	).Build()
 	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				TargetPod:     targetPod,
+				TargetOrdinal: &target,
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{c: client, cr: cr}
+
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
+	t.Cleanup(func() { getSearchHeadLifecyclePod = oldGetLifecyclePod })
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      targetPod,
+				Namespace: namespace,
+				UID:       types.UID("new-pod-uid"),
+				Labels:    map[string]string{"controller-revision-hash": "revision-2"},
+			},
+			Spec: corev1.PodSpec{
+				NodeName: "worker-a",
+				Volumes: []corev1.Volume{
+					{
+						Name: "etc",
+						VolumeSource: corev1.VolumeSource{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: "etc",
+							},
+						},
+					},
+				},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodPending,
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodScheduled,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   corev1.PodReadyToStartContainers,
+						Status: corev1.ConditionFalse,
+					},
+					{
+						Type:   corev1.PodReady,
+						Status: corev1.ConditionFalse,
+					},
+				},
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name: "splunk",
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{
+								Reason: "ContainerCreating",
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	observation, err := mgr.observeLifecycleRecovery(
+		context.Background(),
+		target,
+	)
+	if err != nil {
+		t.Fatalf("observe storage-pending replacement: %v", err)
+	}
+	if !observation.PodExists ||
+		!observation.PodScheduled ||
+		!observation.PodReadyToStartContainersObserved ||
+		observation.PodReadyToStartContainers ||
+		observation.PodReady {
+		t.Fatalf("replacement Pod observation = %#v", observation)
+	}
+	if !observation.StoragePending {
+		t.Fatalf("storage wait was not classified: %#v", observation)
+	}
+	if observation.ImagePullFailed ||
+		observation.ContainerStartupFailed ||
+		observation.MemberObserved {
+		t.Fatalf("storage wait was misclassified: %#v", observation)
+	}
+}
+
+func TestLifecycleAdapterDoesNotInferStorageFromContainerMessage(t *testing.T) {
+	target := int32(2)
+	targetPod := "splunk-example-search-head-2"
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "example"},
 		Status: enterpriseApi.SearchHeadClusterStatus{
 			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
 				TargetPod:     targetPod,
@@ -1437,9 +1567,14 @@ func TestLifecycleAdapterObservesReplacementWaitingForStorage(t *testing.T) {
 	) (*corev1.Pod, error) {
 		return &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				UID:    types.UID("new-pod-uid"),
-				Labels: map[string]string{"controller-revision-hash": "revision-2"},
+				Name:      targetPod,
+				Namespace: "example",
+				UID:       types.UID("new-pod-uid"),
+				Labels: map[string]string{
+					"controller-revision-hash": "revision-2",
+				},
 			},
+			Spec: corev1.PodSpec{NodeName: "worker-a"},
 			Status: corev1.PodStatus{
 				Phase: corev1.PodPending,
 				Conditions: []corev1.PodCondition{
@@ -1448,7 +1583,7 @@ func TestLifecycleAdapterObservesReplacementWaitingForStorage(t *testing.T) {
 						Status: corev1.ConditionTrue,
 					},
 					{
-						Type:   corev1.PodReady,
+						Type:   corev1.PodReadyToStartContainers,
 						Status: corev1.ConditionFalse,
 					},
 				},
@@ -1472,20 +1607,198 @@ func TestLifecycleAdapterObservesReplacementWaitingForStorage(t *testing.T) {
 		target,
 	)
 	if err != nil {
-		t.Fatalf("observe storage-pending replacement: %v", err)
+		t.Fatalf("observe generic Pod-infrastructure wait: %v", err)
 	}
-	if !observation.PodExists ||
-		!observation.PodScheduled ||
-		observation.PodReady {
-		t.Fatalf("replacement Pod observation = %#v", observation)
+	if !observation.PodReadyToStartContainersObserved ||
+		observation.PodReadyToStartContainers {
+		t.Fatalf("Pod-infrastructure condition = %#v", observation)
 	}
-	if !observation.StoragePending {
-		t.Fatalf("storage wait was not classified: %#v", observation)
+	if observation.StoragePending {
+		t.Fatalf(
+			"free-form container message was treated as storage evidence: %#v",
+			observation,
+		)
 	}
-	if observation.ImagePullFailed ||
-		observation.ContainerStartupFailed ||
-		observation.MemberObserved {
-		t.Fatalf("storage wait was misclassified: %#v", observation)
+}
+
+func TestLifecycleAdapterNamespaceScopeUsesGenericInfrastructureAttribution(t *testing.T) {
+	t.Setenv(config.WatchNamespaceEnvVar, "example")
+	target := int32(2)
+	targetPod := "splunk-example-search-head-2"
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "example"},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			LifecycleOperation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				TargetPod:     targetPod,
+				TargetOrdinal: &target,
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+
+	oldGetLifecyclePod := getSearchHeadLifecyclePod
+	t.Cleanup(func() { getSearchHeadLifecyclePod = oldGetLifecyclePod })
+	getSearchHeadLifecyclePod = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		string,
+	) (*corev1.Pod, error) {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      targetPod,
+				Namespace: "example",
+				UID:       types.UID("new-pod-uid"),
+				Labels: map[string]string{
+					"controller-revision-hash": "revision-2",
+				},
+			},
+			Spec: corev1.PodSpec{
+				NodeName: "worker-a",
+				Volumes: []corev1.Volume{
+					{
+						Name: "etc",
+						VolumeSource: corev1.VolumeSource{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: "etc",
+							},
+						},
+					},
+				},
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodScheduled,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   corev1.PodReadyToStartContainers,
+						Status: corev1.ConditionFalse,
+					},
+				},
+			},
+		}, nil
+	}
+
+	observation, err := mgr.observeLifecycleRecovery(
+		context.Background(),
+		target,
+	)
+	if err != nil {
+		t.Fatalf("observe namespace-scoped Pod infrastructure: %v", err)
+	}
+	if !observation.PodReadyToStartContainersObserved ||
+		observation.PodReadyToStartContainers ||
+		observation.StoragePending {
+		t.Fatalf("namespace-scoped infrastructure observation = %#v", observation)
+	}
+}
+
+func TestSearchHeadPodVolumeAttachmentPendingMatchesBoundPVAndNode(t *testing.T) {
+	t.Setenv(config.WatchNamespaceEnvVar, "")
+	tests := []struct {
+		name            string
+		attachmentPV    string
+		attachmentNode  string
+		attachmentReady bool
+		wantPending     bool
+	}{
+		{
+			name:           "matching attachment pending",
+			attachmentPV:   "pvc-volume",
+			attachmentNode: "worker-a",
+			wantPending:    true,
+		},
+		{
+			name:            "matching attachment ready",
+			attachmentPV:    "pvc-volume",
+			attachmentNode:  "worker-a",
+			attachmentReady: true,
+		},
+		{
+			name:           "different scheduled node",
+			attachmentPV:   "pvc-volume",
+			attachmentNode: "worker-b",
+		},
+		{
+			name:           "different persistent volume",
+			attachmentPV:   "other-volume",
+			attachmentNode: "worker-a",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := corev1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add core API to scheme: %v", err)
+			}
+			if err := storagev1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add storage API to scheme: %v", err)
+			}
+			persistentVolumeName := "pvc-volume"
+			attachmentPV := test.attachmentPV
+			client := newFakeClientBuilder(scheme).WithObjects(
+				&corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "etc",
+						Namespace: "example",
+					},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						VolumeName: persistentVolumeName,
+					},
+				},
+				&storagev1.VolumeAttachment{
+					ObjectMeta: metav1.ObjectMeta{Name: "attachment"},
+					Spec: storagev1.VolumeAttachmentSpec{
+						Attacher: "test.csi.example",
+						Source: storagev1.VolumeAttachmentSource{
+							PersistentVolumeName: &attachmentPV,
+						},
+						NodeName: test.attachmentNode,
+					},
+					Status: storagev1.VolumeAttachmentStatus{
+						Attached: test.attachmentReady,
+					},
+				},
+			).Build()
+			mgr := &searchHeadClusterPodManager{c: client}
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-example-search-head-2",
+					Namespace: "example",
+				},
+				Spec: corev1.PodSpec{
+					NodeName: "worker-a",
+					Volumes: []corev1.Volume{
+						{
+							Name: "etc",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "etc",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			pending, err := searchHeadPodVolumeAttachmentPending(
+				context.Background(),
+				mgr,
+				pod,
+			)
+			if err != nil {
+				t.Fatalf("observe volume attachment: %v", err)
+			}
+			if pending != test.wantPending {
+				t.Fatalf(
+					"pending = %t, want %t",
+					pending,
+					test.wantPending,
+				)
+			}
+		})
 	}
 }
 

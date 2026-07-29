@@ -52,6 +52,10 @@ without duplicating their full content.
 | SHC-75 | Qualify failed captain transfer and pre-authorization revision withdrawal; handle ControllerRevision reuse, in-place readiness handoff, and StatefulSet generation observation | `eb6907ee5`, `44ccac31e`, `3e9e735a7` | LFC-007, OBS-001, OBS-002 | EKS-qualified for pre-authorization failure/cancellation, reverse-ordinal rollback, clean Event/log audit, and 321-second stability |
 | SHC-76 | Retain an already-authorized target across a superseding desired revision, queue the later Pod template, and release it only after Kubernetes traffic readiness | `24eea3f37`, `243f7a5d2`, `50eb10514` | STS-003, STS-014, OBS-001, OBS-002 | EKS-qualified for post-authorization revision handoff, two distinct target authorizations, complete reverse-ordinal convergence, 127 uninterrupted searches, and 300-second final stability |
 | SHC-77 | Distinguish retryable image-pull backoff from terminal invalid image syntax and retain the authorized ordinal under the replacement startup budget | `b3ae4b291`, `4710438a0` | STS-008, REJ-004, REJ-005, OBS-001, OBS-002 | EKS-qualified for a 60-second retryable pull hold and recovery, complete `2 -> 1 -> 0` convergence, immediate `InvalidImageName` block at ordinal two, 131 uninterrupted searches, minimum two Ready endpoints, and maximum unavailability one |
+| SHC-78 | Attribute scheduling, Pod-infrastructure, and CSI attachment waits without collapsing them into image-pull or container-startup time | `63714251f`, `7b90da269`, `a5a41c07c` | REJ-002, REJ-003, STS-008, OBS-001, OBS-002 | EKS-qualified for six-sample unschedulable and exact CSI-attachment holds, complete scheduler recovery, same-target storage recovery, minimum two Ready endpoints, uninterrupted HTTP 200 search, and zero restarts |
+| SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | Pending | API-005, STS-003, OBS-002 | Identified on EKS: omitted generic-ephemeral `volumeMode` defaulted to `Filesystem` and caused repeated false template drift; implementation and qualification pending |
+| SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | Pending | STS-003, STS-008, STS-014, OBS-001 | Identified on EKS: withdrawing the requested volume left the active Search Head revision frozen on an unschedulable authorized target; implementation and qualification pending |
+| SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | Pending | OPS-004, OBS-001, OBS-005 | Identified on EKS: finalization attempted to recreate a Secret in a terminating namespace and could not complete; implementation and qualification pending |
 
 ## SHC-75 immutable qualification inputs
 
@@ -165,10 +169,60 @@ an earlier non-accepted run showed that increasing the readiness failure
 window could leave a Pod in Service endpoints while its local management port
 was refusing connections.
 
+## SHC-78 immutable qualification inputs
+
+- source branch:
+  `codex/shc-78-pod-infrastructure-attribution`;
+- implementation commit:
+  `7b90da2694c1460b5e1522b5abb0a2d2151b190c`;
+- final source used for the qualification image:
+  `a5a41c07c9c7a9a1e1776f5cc41a146db6616da5`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-a5a41c07c`;
+- Operator image digest:
+  `sha256:e29ac1024865e4f676655c229b01b8ed2690abe5412a669df2d473f074f6207f`;
+- exact cluster-wide RBAC:
+  `get`, `list`, and `watch` on
+  `storage.k8s.io/volumeattachments`;
+- EKS cluster: `vivek-spl-301372` in `us-west-2`;
+- accepted qualification namespace: `shc78-infrastructure`;
+- accepted runtime image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:9.4.1-jdk-11`;
+- accepted runtime digest:
+  `sha256:e51312c90d8cd860065a0fcb887a50c3d227122477b2ca3f5a7336f93d9308cb`;
+- Linux gate: `make fmt vet build test`, 41 Ginkgo suites, 154 controller
+  specifications, zero failures, and 78.5 percent composite coverage;
+- scheduler result: all workers were cordoned, ordinal two remained the only
+  target at `WaitingForScheduling/PodUnschedulable` for six samples, and
+  uncordoning completed `2 -> 1 -> 0` with a captain transfer, three Ready
+  endpoints, HTTP 200 search, and zero restarts;
+- storage result: the newly bound ordinal-two PV and scheduled node matched
+  exactly one `VolumeAttachment` with `attached=false`; the target reported
+  `PodReadyToStartContainers=False`; six samples remained at
+  `WaitingForStorage/VolumeAttachmentPending`; ordinal-zero and ordinal-one
+  UIDs were unchanged; minimum Ready endpoints stayed at two; and every search
+  returned HTTP 200;
+- recovery result: restoring the EBS CSI controller from zero to two replicas
+  advanced the same target through generic Pod infrastructure and container
+  startup, then to Kubernetes Ready, registered `Up`, KV Store `ready`, and
+  three Service endpoints before another replacement began; and
+- cleanup result: the qualification namespace, all test PVCs/PVs, and the test
+  StorageClass were removed; all nodes finished Ready and schedulable; and EBS
+  CSI finished at two ready replicas.
+
+The original Splunk 10.6 development runtime was excluded from the accepted
+Operator-only result because same-version Pod restart left the supported KV
+Store status at `starting` even while the external database process remained
+alive and continued successful database pings. The Operator correctly held
+`ValidatingCluster/KVStoreNotReady` and preserved search availability. No
+Splunkd change or weakened KV gate is part of SHC-78.
+
 ## Next execution records
 
-The next work item must be assigned before implementation and added here in the
-same change that creates its branch.
+SHC-79 through SHC-81 record separate gaps discovered by the accepted SHC-78
+campaign. Each must use its own branch and immutable source commit; no entry is
+implemented merely because it is registered here. Select and create one branch
+from the current integrated feature baseline before changing source.
 
 Other remaining scenarios continue to be selected from
 `SHCTestScenarioMatrix.md`; the absence of a new `SHC-*` number does not make a
@@ -176,8 +230,10 @@ scenario complete.
 
 ## Revision Note
 
-2026-07-28/29 UTC: Extended the central SHC-60 through SHC-77 execution
-registry,
-linked implementation commits to stable scenario identifiers, recorded
-qualification scope without claiming production readiness, and recorded the
-retryable and terminal image-pull classification results.
+2026-07-29 UTC: Extended the central SHC-60 through SHC-81 execution
+registry, linked implementation commits to stable scenario identifiers,
+recorded qualification scope without claiming production readiness, recorded
+the retryable and terminal image-pull classification results, recorded SHC-78
+source and EKS qualification, and registered the independently bounded
+template-defaulting, authorized-revision-withdrawal, and deletion-finalization
+follow-up gaps without claiming them as implemented.
