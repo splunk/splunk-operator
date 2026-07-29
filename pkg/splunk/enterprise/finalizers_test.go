@@ -193,8 +193,6 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				mockCalls["Get"] = []spltest.MockFuncCall{
 					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
-					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
-					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 				}
 				mockCalls["Create"] = nil
 				mockCalls["Update"] = []spltest.MockFuncCall{

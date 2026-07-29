@@ -2002,6 +2002,18 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 	if len(c.Calls["Create"]) != 0 {
 		t.Fatalf("deletion attempted %d resource creates", len(c.Calls["Create"]))
 	}
+	statusRefreshCalls := 0
+	for _, call := range c.Calls["Get"] {
+		if _, ok := call.Obj.(*enterpriseApi.SearchHeadCluster); ok {
+			statusRefreshCalls++
+		}
+	}
+	if statusRefreshCalls != 0 {
+		t.Fatalf(
+			"successful deletion attempted %d post-finalization status refreshes",
+			statusRefreshCalls,
+		)
+	}
 	if len(shc.GetFinalizers()) != 0 {
 		t.Fatalf("deletion retained finalizers: %v", shc.GetFinalizers())
 	}

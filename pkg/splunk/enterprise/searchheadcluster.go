@@ -71,14 +71,19 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
+	updateStatusOnReturn := true
+	defer func() {
+		if updateStatusOnReturn {
+			updateCRStatus(ctx, client, cr, &err)
+		}
+	}()
 
 	// Deletion finalization must run before normal reconciliation. A namespace
 	// with a deletion timestamp rejects creation of new namespaced resources,
 	// so validation, migration, and ApplySplunkConfig cannot be prerequisites
 	// for removing the CR finalizer.
 	if cr.GetDeletionTimestamp() != nil {
-		return finalizeSearchHeadClusterDeletion(
+		result, err = finalizeSearchHeadClusterDeletion(
 			ctx,
 			client,
 			cr,
@@ -86,6 +91,15 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			setPhaseAndConditions,
 			result,
 		)
+		// Successful finalization removes the finalizer and allows the API
+		// server to delete the CR immediately. A deferred status update would
+		// race that deletion and produce a misleading precondition or NotFound
+		// error after cleanup already succeeded. Retain status reporting only
+		// when finalization itself failed and the CR remains actionable.
+		if err == nil {
+			updateStatusOnReturn = false
+		}
+		return result, err
 	}
 
 	// validate and updates defaults for CR
