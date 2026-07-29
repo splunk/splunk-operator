@@ -1148,6 +1148,61 @@ lifecycle operation. The Operator correctly held partition three and refused a
 planned disruption. That run was classified as an invalid precondition and led
 to the sustained pre-action gate used by the accepted run.
 
+2026-07-28/29 UTC REJ-004 image-pull classification qualification:
+
+- Operator source was `4710438a031e77f0906a4eaf26d5821ee70d0ed8`,
+  including classification commit
+  `b3ae4b291`. The image was
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-4710438a0`
+  at digest
+  `sha256:2d9af851e07bbf891b03ad07bec0c849f973280bb92cf03e344620ecbf6154b7`;
+- Linux `make fmt`, `make vet`, `make build`, and `make test` passed. All 41
+  Ginkgo suites and 154 controller specifications passed with 78.5 percent
+  composite coverage;
+- the accepted run used EKS cluster `vivek-spl-301372`, namespace
+  `shc77-image-pull`, both lifecycle feature gates, and a dedicated desired
+  runtime tag resolving to pinned digest
+  `sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547`;
+- the retryable operation was
+  `PodUpdate:splunk-shc77-search-head-2:splunk-shc77-search-head-68bf667f46:2`.
+  After replacement authorization and before its first container attempt, the
+  desired tag was temporarily removed. Kubelet reported `ErrImagePull` and
+  `ImagePullBackOff`; lifecycle status remained
+  `WaitingForContainer/ImagePullFailed` for 60 seconds, partition remained two,
+  and no later ordinal became eligible;
+- restoring the exact desired tag to the exact original digest recovered the
+  same operation. The rollout completed ordinals `2 -> 1 -> 0`, and captaincy
+  moved from ordinal zero to ordinal one before ordinal zero was replaced;
+- the terminal operation was
+  `PodUpdate:splunk-shc77-search-head-2:splunk-shc77-search-head-6df8487b99:3`.
+  Invalid image syntax produced kubelet `InvalidImageName` and immediate
+  lifecycle `Blocked/ImagePullFailed`. The target remained ordinal two,
+  partition remained two, and no later ordinal was authorized;
+- the 169-sample state timeline included attributable scheduling, container,
+  captain-transfer, and blocked stages. Across the accepted window, 131
+  Service searches succeeded with zero failures, minimum Ready endpoints were
+  two, and maximum unavailable Search Heads were one;
+- the Deployer did not change revision during either Search-Head-only
+  revision, remained Ready, and had zero restarts. The final CR phase was
+  `Error`, as expected for the intentionally terminal lifecycle block, while
+  both non-target members remained Ready;
+- the campaign used the Operator's default readiness timing. Earlier
+  non-accepted fixture work showed that a readiness threshold of 12 with a
+  10-second period could keep a member in Service endpoints while port 8089
+  was refusing connections. Startup and migration tolerance belongs in
+  startup/liveness budgets rather than a slower traffic-removal decision; and
+- the qualification namespace, PVCs, and associated PVs were deleted, all
+  workers were returned to schedulable state, and the temporary ECR tag was
+  removed after evidence collection.
+
+The accepted fault injection did not bypass the image-upgrade compatibility
+validator and did not leave an out-of-band Pod image alias. The SHC was formed
+with the dedicated desired tag, scheduling was held only long enough to inject
+the first-pull fault into the already-authorized replacement, and the exact tag
+and digest were restored for recovery. This avoided both a synthetic
+already-running-container restart artifact and mixed Pod/StatefulSet image
+desired state.
+
 ## Interfaces and Dependencies
 
 The test harness requires stable adapters for:
@@ -1244,3 +1299,9 @@ separate Splunk-completion and Kubernetes Ready/serving barriers, two distinct
 revision authorizations and Pod identities, uninterrupted search evidence,
 dynamic captain transfer, final Splunk/KV validation, a sustained pre-action
 gate, and a passing 300-second post-convergence gate.
+
+2026-07-28/29 UTC: Recorded REJ-004 image-pull classification. Added real
+first-pull `ErrImagePull`/`ImagePullBackOff` retry and recovery, immediate
+`InvalidImageName` blocking, authorized-ordinal and partition retention,
+Search-Head-only revision isolation, uninterrupted Service-search evidence,
+default-readiness findings, and full test-resource cleanup.

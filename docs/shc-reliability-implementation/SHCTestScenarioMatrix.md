@@ -226,6 +226,29 @@ remains fail-closed rather than being treated as a successful handoff.
 | REJ-010 | P1 | Suspected Raft catch-up limitation | Blocks and preserves evidence; no destructive automatic recovery |
 | REJ-011 | P1 | Configuration or KV synchronization delayed | Pod-local readiness and full recovery gate remain distinguishable |
 
+### REJ-004 qualification evidence
+
+On 2026-07-28/29 UTC, a three-member EKS SHC exercised both sides of the
+image-pull classification while the lifecycle controller owned ordinal two.
+For the retryable path, the desired image tag was removed before the authorized
+replacement's first container attempt. Kubelet reported `ErrImagePull` and
+`ImagePullBackOff`; the lifecycle remained
+`WaitingForContainer/ImagePullFailed` for 60 seconds, partition remained two,
+and no later ordinal became eligible. Restoring the same tag to the same digest
+recovered the operation and the rollout completed `2 -> 1 -> 0`.
+
+For the terminal path, invalid image syntax on a newly authorized ordinal-two
+replacement produced kubelet `InvalidImageName` and immediate
+`Blocked/ImagePullFailed`. Partition remained two and no later ordinal was
+authorized. Across the accepted campaign, all 131 Service searches succeeded,
+at least two Ready endpoints remained available, no more than one Search Head
+was unavailable, and the Deployer remained unchanged and Ready.
+
+This evidence is specific to real first-pull behavior. The test did not bypass
+the authoritative image-upgrade compatibility boundary, mutate a container
+that had already started, or leave a Pod image that disagreed with the
+StatefulSet template.
+
 ## Scale, delete, application, and upgrade scenarios
 
 | ID | Priority | Scenario | Required proof |
