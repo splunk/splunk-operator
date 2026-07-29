@@ -25,6 +25,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -191,17 +192,13 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			case "SearchHeadCluster":
 				mockCalls["Get"] = []spltest.MockFuncCall{
 					{MetaName: "*v1.Secret-test-splunk-test-secret"},
-					{MetaName: "*v1.Secret-test-splunk-test-secret"},
-					{MetaName: "*v1.Secret-test-splunk-test-secret"},
-					{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
-					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 				}
-				mockCalls["Create"] = []spltest.MockFuncCall{
-					{MetaName: "*v1.Secret-test-splunk-test-secret"},
-					{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
+				mockCalls["Create"] = nil
+				mockCalls["Update"] = []spltest.MockFuncCall{
+					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 				}
 
 			case "ClusterMaster":
@@ -496,6 +493,18 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 	err = DeleteSplunkPvc(ctx, &cr, c)
 	if err == nil {
 		t.Errorf("Expected error")
+	}
+
+	// The namespace controller may remove a listed PVC before the Operator's
+	// delete reaches the API server. That NotFound means cleanup succeeded.
+	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] =
+		k8serrors.NewNotFound(
+			schema.GroupResource{Resource: "persistentvolumeclaims"},
+			"splunk-pvc-stack1-sa-var",
+		)
+	err = DeleteSplunkPvc(ctx, &cr, c)
+	if err != nil {
+		t.Errorf("PVC NotFound during deletion should be ignored: %v", err)
 	}
 
 	// Different CR types

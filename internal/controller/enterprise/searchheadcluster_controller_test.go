@@ -77,6 +77,56 @@ var _ = Describe("SearchHeadCluster Controller", Label("integration"), func() {
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
+		It("routes a deleting paused SearchHeadCluster to finalization", func() {
+			ctx := context.Background()
+			now := metav1.Now()
+			searchHeadCluster := testutils.NewSearchHeadCluster(
+				"deleting-paused",
+				"ns-splunk-shc-deleting-paused",
+				"image",
+			)
+			searchHeadCluster.Annotations = map[string]string{
+				enterpriseApi.SearchHeadClusterPausedAnnotation: "true",
+			}
+			searchHeadCluster.DeletionTimestamp = &now
+			searchHeadCluster.Finalizers = []string{
+				"enterprise.splunk.com/delete-pvc",
+			}
+
+			isolatedClient := fake.NewClientBuilder().
+				WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+				WithObjects(searchHeadCluster).
+				Build()
+			reconciler := &SearchHeadClusterReconciler{
+				Client: isolatedClient,
+				Scheme: scheme.Scheme,
+			}
+
+			originalApplySearchHeadCluster := ApplySearchHeadCluster
+			DeferCleanup(func() {
+				ApplySearchHeadCluster = originalApplySearchHeadCluster
+			})
+			applyCalls := 0
+			ApplySearchHeadCluster = func(
+				context.Context,
+				client.Client,
+				*enterpriseApi.SearchHeadCluster,
+			) (reconcile.Result, error) {
+				applyCalls++
+				return reconcile.Result{}, nil
+			}
+
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      searchHeadCluster.Name,
+					Namespace: searchHeadCluster.Namespace,
+				},
+			}
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(applyCalls).To(Equal(1))
+		})
+
 		It("resumes a persisted authorized rolling partition after reconciler reconstruction", func() {
 			ctx := context.Background()
 			namespace := "ns-splunk-shc-rollout-resume"

@@ -30,8 +30,10 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -180,8 +182,9 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		Data: map[string]string{"a": "b"},
 	}
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-	//no configMap exist and try to do deletion then just create a empty configMap
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
+	// If the ConfigMap is already absent, deletion cleanup is complete and
+	// must not recreate namespace content.
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	newURLsAdded = false
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false)
@@ -294,6 +297,35 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	}
 	newURLsAdded = true
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+
+	// The namespace controller may remove the ConfigMap after Get and before
+	// the cleanup Update. That NotFound also means the reference is gone.
+	raceClient := spltest.NewMockClient()
+	raceConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+		Data: map[string]string{"A": "test-a"},
+	}
+	raceClient.AddObject(raceConfigMap)
+	raceClient.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] =
+		k8serrors.NewNotFound(
+			schema.GroupResource{Resource: "configmaps"},
+			raceConfigMap.Name,
+		)
+	_, err := ApplyMonitoringConsoleEnvConfigMap(
+		ctx,
+		raceClient,
+		"test",
+		"test",
+		monitoringConsoleRef,
+		[]corev1.EnvVar{{Name: "A", Value: "test-a"}},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("ConfigMap NotFound during deletion cleanup should be ignored: %v", err)
+	}
 }
 
 func TestAddURLsConfigMapMultipleEnvVars(t *testing.T) {

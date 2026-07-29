@@ -276,6 +276,9 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 			current.Data = revised.Data
 			err = splutil.UpdateResource(ctx, client, &current)
 			if err != nil {
+				if !addNewURLs && k8serrors.IsNotFound(err) {
+					return nil, nil
+				}
 				return nil, err
 			}
 		}
@@ -287,8 +290,13 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 		return nil, err
 	}
 
-	// case when resource not found
-	//If no configMap and deletion of CR is requested then create a empty configMap
+	// Removing a reference from an absent ConfigMap is already complete. In
+	// particular, do not create namespace content while a CR is finalizing.
+	if !addNewURLs {
+		return nil, nil
+	}
+
+	// Create the ConfigMap with the new entries.
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMap,
@@ -296,12 +304,8 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 		},
 		Data: make(map[string]string),
 	}
-	if addNewURLs {
-
-		//else create a new configMap with new entries
-		for _, url := range newURLs {
-			current.Data[url.Name] = url.Value
-		}
+	for _, url := range newURLs {
+		current.Data[url.Name] = url.Value
 	}
 
 	current.ObjectMeta = metav1.ObjectMeta{

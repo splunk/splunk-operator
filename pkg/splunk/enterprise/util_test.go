@@ -567,10 +567,11 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 		t.Errorf("Should report an error, when the secret object referenced in the volume config doesn't exist")
 	}
 
-	// Smartstore volume config with non-existing secret objects
+	// Missing shared resources are already clean during owner-reference
+	// removal and must not block finalization.
 	err = DeleteOwnerReferencesForResources(ctx, client, &cr, SplunkClusterMaster)
-	if err == nil {
-		t.Errorf("Should report an error, when the secret objects doesn't exist")
+	if err != nil {
+		t.Errorf("Missing shared resources should not block cleanup: %v", err)
 	}
 }
 
@@ -1604,10 +1605,11 @@ func TestUpdateOrRemoveEntryFromConfigMapLocked(t *testing.T) {
 
 	client := spltest.NewMockClient()
 
-	// To test the failure scenario, do not add the configMap to the client yet
+	// An absent shared ConfigMap is already clean and must not block
+	// finalization.
 	err := UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, SplunkStandalone)
-	if err == nil {
-		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should have returned error as there is no configMap yet")
+	if err != nil {
+		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should tolerate an absent configMap: %v", err)
 	}
 
 	kind := stand1.GetObjectKind().GroupVersionKind().Kind
@@ -1673,6 +1675,24 @@ refCount: 1`
 
 	if _, ok := configMap.Data[kind]; ok {
 		t.Errorf("There should not be any entry for this CR type in the configMap")
+	}
+
+	// The namespace controller may remove the shared ConfigMap between Get
+	// and Update. NotFound at that point is successful cleanup.
+	configMap.Data[kind] = configMapData
+	client.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] =
+		k8serrors.NewNotFound(
+			schema.GroupResource{Resource: "configmaps"},
+			configMapName,
+		)
+	err = UpdateOrRemoveEntryFromConfigMapLocked(
+		ctx,
+		client,
+		&stand1,
+		SplunkStandalone,
+	)
+	if err != nil {
+		t.Errorf("Concurrent ConfigMap deletion should not block cleanup: %v", err)
 	}
 }
 

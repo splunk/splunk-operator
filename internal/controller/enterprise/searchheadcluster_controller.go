@@ -106,25 +106,28 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, errors.Wrap(err, "could not load search head cluster data")
 	}
 
-	// If the reconciliation is paused, set the Paused condition and requeue
-	if instance.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true" {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
-		})
-		instance.Status.Conditions = result.Conditions
-		if err := r.Status().Update(ctx, instance); err != nil {
-			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
-	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
-		})
-		instance.Status.Conditions = result.Conditions
-		if err := r.Status().Update(ctx, instance); err != nil {
-			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
-			return ctrl.Result{}, err
+	// Pause applies only to ordinary reconciliation. A deleting resource must
+	// always reach ApplySearchHeadCluster so its finalizers can complete.
+	if instance.GetDeletionTimestamp() == nil {
+		if instance.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true" {
+			result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+				Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
+			})
+			instance.Status.Conditions = result.Conditions
+			if err := r.Status().Update(ctx, instance); err != nil {
+				logger.ErrorContext(ctx, "failed to update paused status", "error", err)
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+		} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
+			result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+				Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
+			})
+			instance.Status.Conditions = result.Conditions
+			if err := r.Status().Update(ctx, instance); err != nil {
+				logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
