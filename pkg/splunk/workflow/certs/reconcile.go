@@ -17,6 +17,7 @@ package certs
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -26,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/splunk/splunk-operator/pkg/config"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // CertEntry is a CR-agnostic description of a single cert to mount.
@@ -87,6 +89,10 @@ func ReconcileCerts(ctx context.Context, c client.Client, cr client.Object, user
 					logger.Info("operator-driven cert secret not found, skipping mount", "secret", secretName)
 					continue
 				}
+				var te *splcommon.TerminalError
+				if errors.As(err, &te) {
+					return nil, err
+				}
 				return nil, fmt.Errorf("reconciling operator-driven cert %s: %w", secretName, err)
 			}
 			addCertMount(mountConfig, secretName, asIsMountPath(secretName), certHash(secret))
@@ -107,6 +113,10 @@ func ReconcileCerts(ctx context.Context, c client.Client, cr client.Object, user
 					delete(seen, entry.SecretName)
 				}
 				continue
+			}
+			var te *splcommon.TerminalError
+			if errors.As(err, &te) {
+				return nil, err
 			}
 			return nil, fmt.Errorf("reconciling user-declared cert %s: %w", entry.SecretName, err)
 		}

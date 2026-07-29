@@ -222,7 +222,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// create or update statefulset
 	statefulSet, err := getStandaloneStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "getStandaloneStatefulSet", fmt.Sprintf("get standalone status set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonStatefulSetFailed, fmt.Sprintf("get standalone status set failed %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
 		return result, err
 	}
@@ -314,7 +314,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	// get generic statefulset for Splunk Enterprise objects
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{}, certMounts)
