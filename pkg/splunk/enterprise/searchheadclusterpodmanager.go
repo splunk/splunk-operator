@@ -158,6 +158,16 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			"SHC RollingUpdate AuthorizedRevisionWithdrawn: waiting for the StatefulSet controller to observe the last-known-good target recovery partition"
 		return enterpriseApi.PhaseUpdating, nil
 	}
+	if recoveryPending, recoveryErr :=
+		mgr.reconcileAuthorizedRevisionRecoveryPodDeletion(
+			ctx,
+			eventPublisher,
+			statefulSet,
+		); recoveryErr != nil {
+		return enterpriseApi.PhaseError, recoveryErr
+	} else if recoveryPending {
+		return enterpriseApi.PhaseUpdating, nil
+	}
 
 	// for now pass the targetPodName as empty since we are going to fill it in ApplyShcSecret
 	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")

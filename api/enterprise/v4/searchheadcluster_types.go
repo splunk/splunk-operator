@@ -355,7 +355,8 @@ type SearchHeadClusterLifecycleOperationStatus struct {
 	// authorization for auditability.
 	RecoveryRevision string `json:"recoveryRevision,omitempty"`
 	// RevisionWithdrawalStartedAt records the durable barrier before the
-	// StatefulSet partition is raised to recover the target at RecoveryRevision.
+	// StatefulSet partition is raised and the withdrawn target is gracefully
+	// recycled at RecoveryRevision.
 	RevisionWithdrawalStartedAt  *metav1.Time `json:"revisionWithdrawalStartedAt,omitempty"`
 	MembershipRemovalRequestedAt *metav1.Time `json:"membershipRemovalRequestedAt,omitempty"`
 	MemberRejoinStartedAt        *metav1.Time `json:"memberRejoinStartedAt,omitempty"`

@@ -237,7 +237,9 @@ func StartPodUpdateCancellation(
 // AuthorizedPodUpdateRevisionRecoveryEligible reports whether an authorized
 // replacement has reached a structured Kubernetes startup failure for which a
 // changed desired template may safely request recovery at a known-good
-// revision. It deliberately excludes generic startup waits and identity
+// revision. Recovery closes the partition before the withdrawn Pod is
+// gracefully recycled, as required by StatefulSet forced rollback semantics.
+// It deliberately excludes generic startup waits and identity
 // failures: those remain fail closed until their own policy is defined.
 func AuthorizedPodUpdateRevisionRecoveryEligible(
 	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
@@ -275,8 +277,9 @@ func AuthorizedPodUpdateRevisionRecoveryEligible(
 }
 
 // StartAuthorizedPodUpdateRevisionRecovery records a persistence barrier before
-// Kubernetes is asked to re-close the partition and restore the one unavailable
-// target at the StatefulSet's last known-good revision. The original
+// Kubernetes is asked to re-close the partition and the controller gracefully
+// recycles the one unavailable target at the StatefulSet's last known-good
+// revision. The original
 // DesiredRevision and operation identity remain immutable audit evidence. A
 // queued CR template is reconciled only after this recovery completes.
 func StartAuthorizedPodUpdateRevisionRecovery(

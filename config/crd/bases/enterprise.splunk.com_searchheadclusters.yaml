@@ -10394,7 +10394,8 @@ spec:
                   revisionWithdrawalStartedAt:
                     description: |-
                       RevisionWithdrawalStartedAt records the durable barrier before the
-                      StatefulSet partition is raised to recover the target at RecoveryRevision.
+                      StatefulSet partition is raised and the withdrawn target is gracefully
+                      recycled at RecoveryRevision.
                     format: date-time
                     type: string
                   searchDrainContinuationApprovalGeneration:
