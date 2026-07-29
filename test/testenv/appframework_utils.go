@@ -463,6 +463,21 @@ func (testenvInstance *TestCaseEnv) WaitForAppPhaseChange(ctx context.Context, d
 	})
 }
 
+// BestEffortWaitForAppPhaseChange is WaitForAppPhaseChange for callers that
+// only want a best-effort observation: for small app diffs the whole
+// download/install pipeline can finish within a single reconcile, so the
+// phase can cycle back to PhaseInstall before this ever observes the
+// transient change. A miss is only logged, never failed — callers pair this
+// with VerifyAppFrameworkState, which independently verifies the true final
+// install state.
+func (testenvInstance *TestCaseEnv) BestEffortWaitForAppPhaseChange(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, appList []string) {
+	phaseCtx, cancel := context.WithTimeout(ctx, BestEffortProbeTimeout)
+	defer cancel()
+	if err := testenvInstance.WaitForAppPhaseChange(phaseCtx, deployment, name, crKind, appSourceName, appList, BestEffortProbeTimeout); err != nil {
+		testenvInstance.Log.Info("App phase change not observed; app pipeline may have completed within a single reconcile", "crKind", crKind, "error", err)
+	}
+}
+
 // GetAppObjectHashes captures the durable object hashes currently recorded for
 // a list of apps. Tests that replace objects in remote storage should take this
 // snapshot before uploading the replacement files.
