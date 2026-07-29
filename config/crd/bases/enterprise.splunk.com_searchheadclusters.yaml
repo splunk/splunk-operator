@@ -10371,6 +10371,13 @@ spec:
                       SearchHeadClusterLifecycleReason is a bounded, machine-readable explanation
                       for the current lifecycle operation state.
                     type: string
+                  recoveryRevision:
+                    description: |-
+                      RecoveryRevision is the last known-good StatefulSet revision used to
+                      recover a single unavailable target after its authorized desired revision
+                      was withdrawn or superseded. DesiredRevision remains the failed
+                      authorization for auditability.
+                    type: string
                   replacementAuthorizedAt:
                     format: date-time
                     type: string
@@ -10384,6 +10391,12 @@ spec:
                   retryCount:
                     format: int32
                     type: integer
+                  revisionWithdrawalStartedAt:
+                    description: |-
+                      RevisionWithdrawalStartedAt records the durable barrier before the
+                      StatefulSet partition is raised to recover the target at RecoveryRevision.
+                    format: date-time
+                    type: string
                   searchDrainContinuationApprovalGeneration:
                     description: |-
                       SearchDrainContinuationApprovalGeneration records the CR generation

@@ -30,6 +30,8 @@ const (
 	EventReasonSHCRolloutCompleted                = "SHCRolloutCompleted"
 	EventReasonSHCScaleDownCancelled              = "SHCScaleDownCancelled"
 	EventReasonSHCPodUpdateCancelled              = "SHCPodUpdateCancelled"
+	EventReasonSHCAuthorizedRevisionWithdrawn     = "SHCAuthorizedRevisionWithdrawn"
+	EventReasonSHCAuthorizedRevisionRecovered     = "SHCAuthorizedRevisionRecovered"
 	EventReasonSHCSearchDrainContinuationApproved = "SHCSearchDrainContinuationApproved"
 
 	// Warning event reasons — spec & config

@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // searchHeadClusterPodManager is used to manage the pods within a search head cluster
@@ -28,6 +29,11 @@ type searchHeadClusterPodManager struct {
 	newSplunkClient          func(managementURI, username, password string) *splclient.SplunkClient
 	servingConditionChanged  map[int32]bool
 	statefulSetUpdatePending bool
+	// authorizedRevisionWithdrawalRequested is an in-memory signal from the
+	// desired StatefulSet renderer. It is never persisted in a Kubernetes
+	// object; Update converts it to durable lifecycle status before changing
+	// the StatefulSet partition.
+	authorizedRevisionWithdrawalRequested bool
 }
 
 // newSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
@@ -123,12 +129,35 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, mgr.cr)
 
+	if mgr.authorizedRevisionWithdrawalRequested {
+		started, err := mgr.startAuthorizedRevisionRecovery(
+			ctx,
+			eventPublisher,
+			statefulSet,
+		)
+		if err != nil {
+			return enterpriseApi.PhaseError, err
+		}
+		if started {
+			// Persist recovery intent before raising the StatefulSet partition on
+			// a later reconciliation.
+			return enterpriseApi.PhaseUpdating, nil
+		}
+	}
+
 	// update statefulset, if necessary
 	statefulSetPhase, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
 	if err != nil {
 		return enterpriseApi.PhaseError, err
 	}
 	mgr.statefulSetUpdatePending = statefulSetPhase == enterpriseApi.PhaseUpdating
+	if mgr.statefulSetUpdatePending &&
+		mgr.cr.Status.LifecycleOperation != nil &&
+		mgr.cr.Status.LifecycleOperation.RecoveryRevision != "" {
+		mgr.cr.Status.Message =
+			"SHC RollingUpdate AuthorizedRevisionWithdrawn: waiting for the StatefulSet controller to observe the last-known-good target recovery partition"
+		return enterpriseApi.PhaseUpdating, nil
+	}
 
 	// for now pass the targetPodName as empty since we are going to fill it in ApplyShcSecret
 	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
@@ -241,7 +270,37 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 		); blockedErr != nil {
 			return enterpriseApi.PhaseError, blockedErr
 		}
+		authorizedRevisionRecovery :=
+			mgr.cr.Status.LifecycleOperation.RecoveryRevision != ""
+		if authorizedRevisionRecoveryCompletedOnThisReconcile(
+			stageBeforeRecovery,
+			mgr.cr.Status.LifecycleOperation,
+		) {
+			eventPublisher.Normal(
+				ctx,
+				EventReasonSHCAuthorizedRevisionRecovered,
+				fmt.Sprintf(
+					"Search Head %s recovered from withdrawn authorized revision %s at last known-good revision %s; the queued desired template may now reconcile",
+					mgr.cr.Status.LifecycleOperation.TargetPod,
+					mgr.cr.Status.LifecycleOperation.DesiredRevision,
+					mgr.cr.Status.LifecycleOperation.RecoveryRevision,
+				),
+			)
+			metrics.SHCAuthorizedRevisionRecoveryCounter.Inc()
+			// The desired object was rendered before recovery completed and
+			// still holds the superseded template. Requeue before planning
+			// any further partition change.
+			return enterpriseApi.PhaseUpdating, nil
+		}
 		if !recoveryComplete {
+			if authorizedRevisionRecovery {
+				mgr.cr.Status.Message = fmt.Sprintf(
+					"SHC RollingUpdate AuthorizedRevisionWithdrawn: recovering %s at last known-good revision %s before reconciling the queued template",
+					mgr.cr.Status.LifecycleOperation.TargetPod,
+					mgr.cr.Status.LifecycleOperation.RecoveryRevision,
+				)
+				return enterpriseApi.PhaseUpdating, nil
+			}
 			if statefulSet.Spec.UpdateStrategy.Type ==
 				appsv1.RollingUpdateStatefulSetStrategyType {
 				if observeErr := mgr.recordRollingUpdateObservation(
@@ -315,6 +374,87 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	)
 
 	return phase, nil
+}
+
+func (mgr *searchHeadClusterPodManager) startAuthorizedRevisionRecovery(
+	ctx context.Context,
+	eventPublisher *K8EventPublisher,
+	desiredStatefulSet *appsv1.StatefulSet,
+) (bool, error) {
+	if desiredStatefulSet == nil {
+		return false, nil
+	}
+	current := &appsv1.StatefulSet{}
+	if err := mgr.c.Get(ctx, types.NamespacedName{
+		Namespace: desiredStatefulSet.GetNamespace(),
+		Name:      desiredStatefulSet.GetName(),
+	}, current); err != nil {
+		return false, err
+	}
+	safe, err := authorizedRevisionRecoverySafe(
+		ctx,
+		mgr.c,
+		mgr.cr,
+		current,
+	)
+	if err != nil || !safe {
+		return false, err
+	}
+	operation, started :=
+		shcworkflow.StartAuthorizedPodUpdateRevisionRecovery(
+			mgr.cr.Status.LifecycleOperation,
+			current.Status.CurrentRevision,
+			searchHeadClusterLifecycleNow(),
+		)
+	if !started {
+		return false, nil
+	}
+
+	mgr.cr.Status.LifecycleOperation = operation
+	mgr.cr.Status.Message = fmt.Sprintf(
+		"SHC RollingUpdate %s: %s",
+		operation.Reason,
+		operation.Message,
+	)
+	eventPublisher.Normal(
+		ctx,
+		EventReasonSHCAuthorizedRevisionWithdrawn,
+		fmt.Sprintf(
+			"Withdrawing authorized revision %s for %s after a startup failure; recover last known-good revision %s before reconciling the queued desired template",
+			operation.DesiredRevision,
+			operation.TargetPod,
+			operation.RecoveryRevision,
+		),
+	)
+	metrics.SHCAuthorizedRevisionWithdrawalCounter.Inc()
+	logging.FromContext(ctx).InfoContext(
+		ctx,
+		"Search Head authorized revision withdrawal recorded",
+		"operationID",
+		operation.OperationID,
+		"targetPod",
+		operation.TargetPod,
+		"withdrawnRevision",
+		operation.DesiredRevision,
+		"recoveryRevision",
+		operation.RecoveryRevision,
+	)
+	return true, nil
+}
+
+// authorizedRevisionRecoveryCompletedOnThisReconcile distinguishes the one
+// completion transition that must requeue from later reconciliations that see
+// the already-completed recovery. The next reconciliation is then free to
+// apply and plan the queued revision as a fresh operation.
+func authorizedRevisionRecoveryCompletedOnThisReconcile(
+	stageBefore enterpriseApi.SearchHeadClusterLifecycleStage,
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+) bool {
+	return operation != nil &&
+		operation.RecoveryRevision != "" &&
+		stageBefore != enterpriseApi.SearchHeadClusterLifecycleStageCompleted &&
+		operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageCompleted
 }
 
 func normalizeSearchHeadClusterPodUpdatePhase(

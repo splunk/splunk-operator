@@ -234,6 +234,89 @@ func StartPodUpdateCancellation(
 	return operation, true
 }
 
+// AuthorizedPodUpdateRevisionRecoveryEligible reports whether an authorized
+// replacement has reached a structured Kubernetes startup failure for which a
+// changed desired template may safely request recovery at a known-good
+// revision. It deliberately excludes generic startup waits and identity
+// failures: those remain fail closed until their own policy is defined.
+func AuthorizedPodUpdateRevisionRecoveryEligible(
+	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+) bool {
+	if current == nil ||
+		current.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		current.TargetOrdinal == nil ||
+		current.TargetPodUID == "" ||
+		current.DesiredRevision == "" ||
+		current.ReplacementAuthorizedAt == nil ||
+		current.RecoveryRevision != "" {
+		return false
+	}
+
+	switch current.Stage {
+	case enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling:
+		return current.Reason ==
+			enterpriseApi.SearchHeadClusterLifecycleReasonPodUnschedulable
+	case enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage:
+		return current.Reason ==
+			enterpriseApi.SearchHeadClusterLifecycleReasonVolumeAttachmentPending
+	case enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer:
+		return current.Reason ==
+			enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed
+	case enterpriseApi.SearchHeadClusterLifecycleStageBlocked:
+		switch current.Reason {
+		case enterpriseApi.SearchHeadClusterLifecycleReasonPodStartupTimedOut,
+			enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed,
+			enterpriseApi.SearchHeadClusterLifecycleReasonSplunkStartupFailed:
+			return true
+		}
+	}
+	return false
+}
+
+// StartAuthorizedPodUpdateRevisionRecovery records a persistence barrier before
+// Kubernetes is asked to re-close the partition and restore the one unavailable
+// target at the StatefulSet's last known-good revision. The original
+// DesiredRevision and operation identity remain immutable audit evidence. A
+// queued CR template is reconciled only after this recovery completes.
+func StartAuthorizedPodUpdateRevisionRecovery(
+	current *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	recoveryRevision string,
+	now time.Time,
+) (*enterpriseApi.SearchHeadClusterLifecycleOperationStatus, bool) {
+	if !AuthorizedPodUpdateRevisionRecoveryEligible(current) ||
+		recoveryRevision == "" ||
+		recoveryRevision == current.DesiredRevision {
+		if current == nil {
+			return nil, false
+		}
+		return current.DeepCopy(), false
+	}
+
+	operation := current.DeepCopy()
+	startedAt := metav1.NewTime(now)
+	operation.RecoveryRevision = recoveryRevision
+	operation.RevisionWithdrawalStartedAt = &startedAt
+	operation.ReplacementPodUID = ""
+	operation.ReplacementMemberID = ""
+	operation.ReplacementPodObservedAt = nil
+	operation.MemberRejoinStartedAt = nil
+	operation.DetentionReleaseRequestedAt = nil
+	transition(
+		operation,
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+		enterpriseApi.SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn,
+		fmt.Sprintf(
+			"authorized revision %s was withdrawn or superseded; recovering %s at last known-good revision %s before reconciling the queued template",
+			operation.DesiredRevision,
+			operation.TargetPod,
+			recoveryRevision,
+		),
+		now,
+	)
+	return operation, true
+}
+
 // ApplySearchDrainContinuationApproval consumes one exact post-timeout
 // approval. The operation ID and controller-issued token must both match the
 // current fail-closed operation. The returned transition is a persistence

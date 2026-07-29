@@ -60,3 +60,47 @@ func TestSHCSearchDrainContinuationApprovalMetricHasNoLabels(t *testing.T) {
 		t.Fatalf("approval metric must not contain variable labels: %s", description)
 	}
 }
+
+func TestSHCAuthorizedRevisionRecoveryMetricsHaveNoLabels(t *testing.T) {
+	testCases := []struct {
+		name       string
+		collector  prometheus.Collector
+		metricName string
+	}{
+		{
+			name:       "withdrawal",
+			collector:  SHCAuthorizedRevisionWithdrawalCounter,
+			metricName: "splunk_operator_shc_authorized_revision_withdrawal_total",
+		},
+		{
+			name:       "recovery",
+			collector:  SHCAuthorizedRevisionRecoveryCounter,
+			metricName: "splunk_operator_shc_authorized_revision_recovery_total",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			descriptions := make(chan *prometheus.Desc, 1)
+			testCase.collector.Describe(descriptions)
+			description := (<-descriptions).String()
+
+			if !strings.Contains(
+				description,
+				"fqName: \""+testCase.metricName+"\"",
+			) {
+				t.Fatalf(
+					"metric description = %q, want %s",
+					description,
+					testCase.metricName,
+				)
+			}
+			if !strings.Contains(description, "variableLabels: {}") {
+				t.Fatalf(
+					"authorized revision metric must not contain variable labels: %s",
+					description,
+				)
+			}
+		})
+	}
+}
