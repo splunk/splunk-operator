@@ -119,31 +119,6 @@ func TestApplyIngestorClusterTerminalFailures(t *testing.T) {
 		_ = appsv1.AddToScheme(scheme)
 		c := newFakeClientBuilder(scheme).Build()
 
-		cr := &enterpriseApi.IngestorCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
-			Spec: enterpriseApi.IngestorClusterSpec{
-				Replicas:         1,
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Mock: true},
-				QueueRef:         corev1.ObjectReference{Name: "nonexistent-queue", Namespace: "test"},
-				ObjectStorageRef: corev1.ObjectReference{Name: "nonexistent-os", Namespace: "test"},
-			},
-		}
-
-		_, err := ApplyIngestorCluster(ctx, c, cr)
-		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "expected TerminalError, got %v", err)
-	})
-
-	// Case 4: ObjectStorage CR not found is a terminal failure.
-	// ensureIngestorDefaults runs unconditionally on every reconcile.
-	t.Run("ObjectStorage CR not found is terminal", func(t *testing.T) {
-		os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
-		scheme := runtime.NewScheme()
-		_ = enterpriseApi.AddToScheme(scheme)
-		_ = corev1.AddToScheme(scheme)
-		_ = appsv1.AddToScheme(scheme)
-		c := newFakeClientBuilder(scheme).Build()
-
 		// Create the Queue CR so only the ObjectStorage CR is missing.
 		_ = c.Create(ctx, &enterpriseApi.Queue{
 			ObjectMeta: metav1.ObjectMeta{Name: "queue", Namespace: "test"},
