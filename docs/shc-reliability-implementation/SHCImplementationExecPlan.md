@@ -190,12 +190,24 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `ContainerCreating` with no message, and a matching VolumeAttachment with
   `attached=false`; `FailedAttachVolume` appeared later as a Pod Event. All
   spike resources were removed, including the generated VolumeAttachment.
-- [ ] Close the SHC-77 publication gap, create
+- [x] (2026-07-29) Closed the SHC-77 publication gap, created
   `codex/shc-78-pod-infrastructure-attribution` from the updated feature
-  branch, and add the assigned work item to `SHCWorkItemIndex.md`.
-- [ ] Implement and source-qualify SHC-78 so scheduling, volume attachment,
-  generic Pod infrastructure, image pull, container startup, and Splunk rejoin
-  remain separate durable observations under one replacement startup budget.
+  branch, and registered SHC-78 at `63714251f`.
+- [x] (2026-07-29) Implemented SHC-78 at `7b90da269`. The recovery workflow
+  now keeps scheduling, exact CSI attachment, generic Pod infrastructure,
+  image pull, container startup, and Splunk rejoin as separate durable
+  observations under one replacement startup budget. Storage attribution
+  requires a bound target-Pod PVC, the target Pod's scheduled node, and a
+  matching `VolumeAttachment` with `attached=false`; no free-form Event or
+  container message is persisted or parsed.
+- [x] (2026-07-29) Passed the complete Linux source gate for SHC-78:
+  `make fmt`, `make vet`, `make build`, and `make test`. All 41 Ginkgo suites
+  passed, including 154 controller envtest specifications, with 78.5 percent
+  composite coverage.
+- [ ] Qualify SHC-78 on the EKS SHC for unschedulable recovery and a safe,
+  reversible storage-attachment delay, while preserving reverse-ordinal
+  ownership, minimum ready capacity, bounded startup timeout, and clean
+  recovery after the injected condition is removed.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -603,6 +615,17 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   infrastructure details. Bounded reason codes and booleans provide useful
   attribution without expanding the diagnostic data surface.
   Date: 2026-07-28/29 UTC.
+
+- Decision: namespace-scoped Operator installations use the structured
+  `PodReadyToStartContainers=False` boundary for generic infrastructure
+  attribution and do not request `VolumeAttachment` access. Cluster-wide
+  installations may refine that generic state to `WaitingForStorage` using
+  the exact bound-PV and scheduled-node correlation.
+  Rationale: Kubernetes namespace Roles cannot grant access to the
+  cluster-scoped `VolumeAttachment` resource. The conservative fallback keeps
+  namespace-scoped operation least-privileged and accurate without blocking a
+  rollout on an unavailable cluster-scoped informer.
+  Date: 2026-07-29 UTC.
 
 - Decision: SHC-77 classifies `ErrImagePull` and `ImagePullBackOff` as
   retryable within the existing replacement Pod startup budget, while

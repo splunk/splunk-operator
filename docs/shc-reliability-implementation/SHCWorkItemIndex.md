@@ -52,7 +52,7 @@ without duplicating their full content.
 | SHC-75 | Qualify failed captain transfer and pre-authorization revision withdrawal; handle ControllerRevision reuse, in-place readiness handoff, and StatefulSet generation observation | `eb6907ee5`, `44ccac31e`, `3e9e735a7` | LFC-007, OBS-001, OBS-002 | EKS-qualified for pre-authorization failure/cancellation, reverse-ordinal rollback, clean Event/log audit, and 321-second stability |
 | SHC-76 | Retain an already-authorized target across a superseding desired revision, queue the later Pod template, and release it only after Kubernetes traffic readiness | `24eea3f37`, `243f7a5d2`, `50eb10514` | STS-003, STS-014, OBS-001, OBS-002 | EKS-qualified for post-authorization revision handoff, two distinct target authorizations, complete reverse-ordinal convergence, 127 uninterrupted searches, and 300-second final stability |
 | SHC-77 | Distinguish retryable image-pull backoff from terminal invalid image syntax and retain the authorized ordinal under the replacement startup budget | `b3ae4b291`, `4710438a0` | STS-008, REJ-004, REJ-005, OBS-001, OBS-002 | EKS-qualified for a 60-second retryable pull hold and recovery, complete `2 -> 1 -> 0` convergence, immediate `InvalidImageName` block at ordinal two, 131 uninterrupted searches, minimum two Ready endpoints, and maximum unavailability one |
-| SHC-78 | Attribute scheduling, Pod-infrastructure, and CSI attachment waits without collapsing them into image-pull or container-startup time | Pending | REJ-002, REJ-003, STS-008, OBS-001, OBS-002 | Assigned on `codex/shc-78-pod-infrastructure-attribution`; live Kubernetes observation spike complete; implementation and full SHC qualification pending |
+| SHC-78 | Attribute scheduling, Pod-infrastructure, and CSI attachment waits without collapsing them into image-pull or container-startup time | `63714251f`, `7b90da269` | REJ-002, REJ-003, STS-008, OBS-001, OBS-002 | Source-qualified with exact bound-PV/node `VolumeAttachment` correlation for cluster-wide installs and a least-privilege generic infrastructure fallback for namespace-scoped installs; EKS SHC qualification pending |
 
 ## SHC-75 immutable qualification inputs
 
@@ -180,5 +180,5 @@ scenario complete.
 2026-07-29 UTC: Extended the central SHC-60 through SHC-78 execution
 registry, linked implementation commits to stable scenario identifiers,
 recorded qualification scope without claiming production readiness, recorded
-the retryable and terminal image-pull classification results, and assigned the
-next bounded Pod-infrastructure attribution work item.
+the retryable and terminal image-pull classification results, and recorded
+SHC-78 source qualification while retaining EKS SHC qualification as open.
