@@ -11,6 +11,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -77,7 +78,7 @@ var _ = Describe("SearchHeadCluster Controller", Label("integration"), func() {
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("routes a deleting paused SearchHeadCluster to finalization", func() {
+		It("routes a deleting paused SearchHeadCluster to finalization without a status write", func() {
 			ctx := context.Background()
 			now := metav1.Now()
 			searchHeadCluster := testutils.NewSearchHeadCluster(
@@ -93,9 +94,22 @@ var _ = Describe("SearchHeadCluster Controller", Label("integration"), func() {
 				"enterprise.splunk.com/delete-pvc",
 			}
 
+			statusUpdates := 0
 			isolatedClient := fake.NewClientBuilder().
 				WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
 				WithObjects(searchHeadCluster).
+				WithInterceptorFuncs(interceptor.Funcs{
+					SubResourceUpdate: func(
+						ctx context.Context,
+						c client.Client,
+						subResourceName string,
+						obj client.Object,
+						opts ...client.SubResourceUpdateOption,
+					) error {
+						statusUpdates++
+						return c.SubResource(subResourceName).Update(ctx, obj, opts...)
+					},
+				}).
 				Build()
 			reconciler := &SearchHeadClusterReconciler{
 				Client: isolatedClient,
@@ -125,6 +139,7 @@ var _ = Describe("SearchHeadCluster Controller", Label("integration"), func() {
 			_, err := reconciler.Reconcile(ctx, request)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(applyCalls).To(Equal(1))
+			Expect(statusUpdates).To(BeZero())
 		})
 
 		It("resumes a persisted authorized rolling partition after reconciler reconstruction", func() {

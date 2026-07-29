@@ -140,6 +140,12 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
+	// Successful finalization may remove the object immediately. Do not race
+	// that deletion with the generic condition writer. Finalization failures
+	// still flow through the condition path so they remain observable.
+	if instance.GetDeletionTimestamp() != nil && err == nil {
+		return result, nil
+	}
 	fresh := &enterpriseApi.SearchHeadCluster{}
 	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr == nil {
 		if msg, ok := splcommon.TerminalMessage(err); ok {
