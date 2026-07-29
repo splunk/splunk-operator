@@ -78,8 +78,8 @@ C4Container
     Rel(pooler, pg, "Pools connections to")
     Rel(scheduled_backup, pg, "Backs up")
 
-    Rel(pdb_ctrl, pc_ctrl, "clusterRef (same namespace); watches status")
-    Rel(pdb_ctrl, cnpg_cluster, "Patches managed.roles (merge patch); SQL grants")
+    Rel(pdb_ctrl, pc_ctrl, "clusterRef (same namespace); declares role intent; watches status")
+    Rel(pdb_ctrl, pg, "SQL grants for privileges")
     Rel(pdb_ctrl, role_secrets, "Owns")
     Rel(pdb_ctrl, conn_configmap, "Owns (per-database endpoints)")
 
