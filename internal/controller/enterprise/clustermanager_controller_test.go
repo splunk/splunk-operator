@@ -22,6 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+
+	"github.com/pkg/errors"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 var _ = Describe("ClusterManager Controller", Label("integration"), func() {
@@ -137,6 +142,39 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 			ssSpec.DeletionTimestamp = &metav1.Time{}
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
+			namespace := "ns-splunk-cm-stalled"
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.ClusterManager{})
+			c := builder.Build()
+			recorder := record.NewFakeRecorder(10)
+			reconciler := ClusterManagerReconciler{
+				Client:   c,
+				Scheme:   scheme.Scheme,
+				Recorder: recorder,
+			}
+			ssSpec := testutils.NewClusterManager("test", namespace, "image")
+			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
+
+			ApplyClusterManager = func(ctx context.Context, cl client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
+				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
+			}
+
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "test", Namespace: namespace},
+			}
+
+			// First reconcile: Stalled=False → Stalled=True — Stalled event expected
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+
+			// Second reconcile: Stalled=True → Stalled=True — Warning fires on every stalled reconcile
+			_, err = reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
 		})
 
 	})

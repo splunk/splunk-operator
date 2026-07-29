@@ -36,7 +36,7 @@ import (
 const (
 	// ReasonPodTerminalFailure is the machine-readable reason used when a pod is
 	// stuck in a non-recoverable terminal state that requires manual remediation.
-	ReasonPodTerminalFailure = "PodTerminalFailure"
+	ReasonPodTerminalFailure splcommon.EventReason = "PodTerminalFailure"
 )
 
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing

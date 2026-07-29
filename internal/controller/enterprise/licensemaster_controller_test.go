@@ -145,13 +145,16 @@ func CreateLicenseMaster(name string, namespace string, annotations map[string]s
 
 	By("Expecting LicenseMaster custom resource to be created successfully")
 	ss := &enterpriseApiV3.LicenseMaster{}
-	Eventually(func() bool {
-		return k8sClient.Get(context.Background(), key, ss) == nil
-	}, timeout, interval).Should(BeTrue())
-	if status != "" {
-		ss.Status.Phase = status
-		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-	}
+	Eventually(func() error {
+		if err := k8sClient.Get(context.Background(), key, ss); err != nil {
+			return err
+		}
+		if status != "" {
+			ss.Status.Phase = status
+			return k8sClient.Status().Update(context.Background(), ss)
+		}
+		return nil
+	}, timeout, interval).Should(Succeed())
 
 	return ss
 }
@@ -168,13 +171,16 @@ func UpdateLicenseMaster(instance *enterpriseApiV3.LicenseMaster, status enterpr
 
 	By("Expecting LicenseMaster custom resource to be updated successfully")
 	ss := &enterpriseApiV3.LicenseMaster{}
-	Eventually(func() bool {
-		return k8sClient.Get(context.Background(), key, ss) == nil
-	}, timeout, interval).Should(BeTrue())
-	if status != "" {
-		ss.Status.Phase = status
-		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-	}
+	Eventually(func() error {
+		if err := k8sClient.Get(context.Background(), key, ss); err != nil {
+			return err
+		}
+		if status != "" {
+			ss.Status.Phase = status
+			return k8sClient.Status().Update(context.Background(), ss)
+		}
+		return nil
+	}, timeout, interval).Should(Succeed())
 
 	return ss
 }

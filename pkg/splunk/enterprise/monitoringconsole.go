@@ -201,7 +201,7 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	configMap := GetSplunkMonitoringconsoleConfigMapName(cr.GetName(), SplunkMonitoringConsole)
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, 1, []corev1.EnvVar{}, certMounts)
 	if err != nil {

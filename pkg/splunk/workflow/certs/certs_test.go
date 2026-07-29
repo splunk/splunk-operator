@@ -457,6 +457,44 @@ type certRequesterStandalone struct {
 
 func (c *certRequesterStandalone) Certificates() []string { return c.secrets }
 
+// TestReconcileCerts_MalformedSecret_ErrorChain verifies that when a cert secret
+// exists but is missing a required key, ReconcileCerts returns an error whose
+// chain satisfies BOTH splcommon.TerminalMessage (controller sets Stalled) AND
+// errors.Is(reconcile.TerminalError(nil)) (controller stops requeueing).
+//
+// Regression test: Apply* functions previously re-wrapped the ReconcileCerts
+// error as reconcile.TerminalError(err), stripping the *splcommon.TerminalError
+// from the chain. The controller tail's splcommon.TerminalMessage(err) then
+// returned ok=false, causing ClearStalledCondition to run and losing the signal.
+func TestReconcileCerts_MalformedSecret_ErrorChain(t *testing.T) {
+	config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true})
+
+	secret := makeSecret("ns", "my-cert", map[string][]byte{
+		CertTLSCRTKey: []byte("cert"), // tls.key missing → malformed
+	})
+	cr := standaloneWithCerts("ns", "s1", []enterpriseApi.CertSpec{
+		{SecretRef: corev1.LocalObjectReference{Name: "my-cert"}},
+	})
+	c := buildClient(cr, secret)
+
+	_, err := ReconcileCerts(context.Background(), c, cr, specToCertEntries(cr.Spec.Certs))
+	if err == nil {
+		t.Fatal("expected error for malformed cert secret, got nil")
+	}
+
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("errors.Is(err, reconcile.TerminalError(nil)) = false; controller would requeue a non-retryable failure: %v", err)
+	}
+
+	msg, ok := splcommon.TerminalMessage(err)
+	if !ok {
+		t.Errorf("splcommon.TerminalMessage returned ok=false; controller would call ClearStalledCondition and lose the Stalled signal: %v", err)
+	}
+	if msg == "" {
+		t.Error("splcommon.TerminalMessage returned empty message")
+	}
+}
+
 // TestValidateCertSecret_MissingKey_ErrorChain verifies that a missing-key error
 // satisfies both splcommon.TerminalMessage (so the controller can surface a
 // user-facing condition message) and errors.Is(reconcile.TerminalError(nil))
