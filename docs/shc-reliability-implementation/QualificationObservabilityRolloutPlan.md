@@ -103,6 +103,13 @@ ownership.
   restart retained identical workload Pod UIDs, zero restarts, unchanged
   StatefulSet generations and revisions, three endpoints, and successful
   searches without a volume-difference reconcile.
+- [ ] Qualify OPS-011/SHC-82 with a restart-required App Framework package on
+  both a three-member SHC and a replicated indexer cluster. Capture the
+  effective restart flags and exact peer/member order while continuous ingest,
+  real-time, historical, and scheduled searches verify availability and result
+  completeness. Repeat with an active Operator rollout and with replication or
+  search factor intentionally unmet; both cases must block rather than start a
+  conflicting or forced restart.
 - [ ] Complete cloud-provider qualification and release-readiness review.
 
 ## Surprises & Discoveries
@@ -151,6 +158,17 @@ ownership.
   ordinal-zero coupling.
   Consequence: OPS-005 does not pass until both paths succeed through a
   non-zero healthy member with ordinal zero unavailable.
+
+- Observation: a customer reported restart-required App Framework delivery on
+  both Search Heads and indexers. The supplied indexer record had
+  `searchable=0`, `force=0`, and a successful preflight with replication
+  factor, search factor, and all-data-searchable flags set.
+  Consequence: preserve that record as the reproduction signature, but do not
+  use it alone as an availability verdict. Qualification must correlate every
+  peer transition with the Cluster Manager's structured replication,
+  search-factor, searchable-bucket, and rolling-restart state and with
+  end-to-end searches. It must separately record what happens to searches that
+  were already running when each Search Head or indexer restarts.
 
 - Observation: the compatibility variable named as a captain URL is also a
   bootstrap seed. Its name cannot be treated as proof of runtime captaincy.
@@ -298,6 +316,18 @@ ownership.
   scrape RBAC.
 
 ## Decision Log
+
+- Decision: OPS-011 passes only with continuous customer-visible evidence, not
+  merely a successful bundle command or final healthy cluster.
+  Rationale: the reported concern is temporary service disruption. The test
+  must retain timestamped ingest acknowledgements and search job outcomes,
+  verify no silently partial result, track Ready service capacity and exact
+  member/peer restart order, and correlate those observations with replication
+  factor, search factor, all-data-searchable, captain, and rolling-restart
+  state. A concurrent Kubernetes rollout or insufficient redundancy must hold
+  the App Framework operation. A force mode is a separate explicit fault case,
+  not the default success path.
+  Date/Author: 2026-07-29, planning team.
 
 - Decision: a scenario passes only when service, Splunk cluster, Kubernetes
   rollout, and diagnostic invariants all pass.
@@ -1356,3 +1386,10 @@ Added immutable source and image provenance, exact CR-versus-StatefulSet
 defaulting evidence, a real Operator restart, six stable post-restart samples,
 unchanged StatefulSet and workload identities, successful searches, and zero
 false volume-difference reconciles.
+
+2026-07-29: Registered OPS-011/SHC-82 for the customer-reported App Framework
+restart-availability concern across Search Heads and indexers. Added the exact
+reproduction signature, required active-search and result-completeness
+evidence, redundancy and conflict negative cases, and the rule that
+`searchable=0` is an observation to explain rather than proof of the reported
+impact.

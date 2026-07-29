@@ -263,6 +263,7 @@ StatefulSet template.
 | OPS-008 | P1 | Unsupported simultaneous-restart configuration | Admission or controller blocks rolling treatment |
 | OPS-009 | P2 | TLS, ingress termination, and optional service mesh | No mesh is required; local readiness follows Splunkd TLS rather than ingress TLS, bypasses configured HTTP proxies, and management traffic remains valid in each qualified mesh mode |
 | OPS-010 | P2 | Private registry/air gap | Registry-qualified and digest-pinned image references plus all pull secrets survive rendering and rollout tracking unchanged; lifecycle and diagnostics add no helper image or undeclared external service |
+| OPS-011 | P1 | App Framework deploys an app whose bundle requires Search Head or indexer restart | The effective Splunk restart policy is observed and recorded; SHC and indexer restart work is serialized with every other planned disruption; insufficient redundancy fails closed; continuous ingest and representative real-time, historical, and scheduled searches prove that supported app deployment does not create a customer-visible search outage or silently incomplete result |
 
 ## Kubernetes disruption scenarios
 
