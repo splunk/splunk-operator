@@ -238,9 +238,18 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   difference was logged. After a real Operator restart, six samples retained
   a Ready SHC, four Ready Pods, three endpoints, zero restarts, and HTTP 200
   search.
-- [ ] Resolve the remaining authorized-revision withdrawal and
-  deletion-finalization gaps as separate bounded work items before treating
-  the SHC-78/79 campaigns as broader production-readiness evidence.
+- [x] (2026-07-29) Selected SHC-80 on isolated branch
+  `codex/shc-80-authorized-revision-recovery` from integrated feature baseline
+  `9eecde5d68e9dc889bb2b2f1913420396e00cb21`; this registration does not claim
+  implementation or qualification.
+- [ ] Implement and qualify SHC-80 as a durable, single-target withdrawal
+  barrier. Automatic recovery is limited to a failed authorized target that is
+  the only Pod on the failed revision while every peer remains Ready, serving,
+  and on the last known-good revision. A partially completed rollout or active
+  image upgrade remains fail closed.
+- [ ] Resolve the deletion-finalization gap as separate bounded work item
+  SHC-81 before treating the SHC-78/79 campaigns as broader
+  production-readiness evidence.
 - [ ] Investigate and qualify SHC-82. Reproduce an App Framework deployment
   whose bundle requires Search Head and indexer restarts; pin the exact
   Operator, Docker-Splunk, and Splunk Enterprise sources; establish the
@@ -1788,3 +1797,10 @@ observed `searchable=0` and `force=0` record from unproven conclusions, spans
 both Search Head and indexer clusters, and requires exact Splunk semantics,
 active-search behavior, continuous service evidence, and fail-closed
 redundancy qualification before a product default or forced mode is selected.
+
+2026-07-29: Selected SHC-80 on isolated branch
+`codex/shc-80-authorized-revision-recovery` from integrated feature baseline
+`9eecde5d68e9dc889bb2b2f1913420396e00cb21`. Recorded the single-target safety
+boundary and retained partially completed rollouts and image upgrades as
+fail-closed cases. This registration deliberately makes no implementation or
+qualification claim.

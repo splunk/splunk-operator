@@ -54,7 +54,7 @@ without duplicating their full content.
 | SHC-77 | Distinguish retryable image-pull backoff from terminal invalid image syntax and retain the authorized ordinal under the replacement startup budget | `b3ae4b291`, `4710438a0` | STS-008, REJ-004, REJ-005, OBS-001, OBS-002 | EKS-qualified for a 60-second retryable pull hold and recovery, complete `2 -> 1 -> 0` convergence, immediate `InvalidImageName` block at ordinal two, 131 uninterrupted searches, minimum two Ready endpoints, and maximum unavailability one |
 | SHC-78 | Attribute scheduling, Pod-infrastructure, and CSI attachment waits without collapsing them into image-pull or container-startup time | `63714251f`, `7b90da269`, `a5a41c07c` | REJ-002, REJ-003, STS-008, OBS-001, OBS-002 | EKS-qualified for six-sample unschedulable and exact CSI-attachment holds, complete scheduler recovery, same-target storage recovery, minimum two Ready endpoints, uninterrupted HTTP 200 search, and zero restarts |
 | SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | `96c16b49b`, `a59fc5103` | API-005, STS-003, OBS-002 | Source-qualified; EKS-qualified for omitted/defaulted generic-ephemeral `volumeMode`, stable StatefulSet generations and revisions, controller restart, six post-restart samples, HTTP 200 search on every member, and zero Pod replacement or restart |
-| SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | Pending | STS-003, STS-008, STS-014, OBS-001 | Identified on EKS: withdrawing the requested volume left the active Search Head revision frozen on an unschedulable authorized target; implementation and qualification pending |
+| SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | Pending | STS-003, STS-008, STS-014, OBS-001 | Selected on isolated branch `codex/shc-80-authorized-revision-recovery` from integrated feature baseline `9eecde5d6`; implementation and qualification remain pending |
 | SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | Pending | OPS-004, OBS-001, OBS-005 | Identified on EKS: finalization attempted to recreate a Secret in a terminating namespace and could not complete; implementation and qualification pending |
 | SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | Pending | OPS-006, OPS-011, OBS-001, OBS-003, OBS-005 | Customer-reported behavior includes a bundle-triggered indexer message with `searchable=0` and `force=0`; exact Splunk semantics, effective configuration, active-search behavior, and end-to-end availability remain to be established before selecting a solution |
 
@@ -276,10 +276,10 @@ Splunkd change or weakened KV gate is part of SHC-78.
 SHC-79 through SHC-81 record separate gaps discovered by the accepted SHC-78
 campaign. SHC-79 is now source- and EKS-qualified on its isolated branch.
 SHC-82 records a separate customer-reported App Framework availability
-requirement that spans both Search Head and indexer clusters. SHC-80 through
-SHC-82 remain registered but unassigned; none is implemented merely because
-it is registered here. Each must use its own branch and immutable source
-commit.
+requirement that spans both Search Head and indexer clusters. SHC-80 is now
+assigned to its isolated branch. SHC-81 and SHC-82 remain registered but
+unassigned. None is implemented merely because it is registered or assigned
+here. Each must use its own branch and immutable source commit.
 
 Other remaining scenarios continue to be selected from
 `SHCTestScenarioMatrix.md`; the absence of a new `SHC-*` number does not make a
@@ -312,3 +312,11 @@ the observed `searchable=0` and `force=0` signal without treating that one log
 line as proof of replica loss, data unavailability, or root cause. Source,
 Splunk semantic, active-search, and end-to-end qualification work remains
 pending.
+
+2026-07-29 UTC: Selected SHC-80 on
+`codex/shc-80-authorized-revision-recovery` from integrated feature baseline
+`9eecde5d68e9dc889bb2b2f1913420396e00cb21`. The bounded scope is safe
+withdrawal or supersession of one already-authorized revision that cannot
+start, while every peer remains healthy at the last known-good revision. No
+implementation or qualification is claimed by this branch-registration
+record.
