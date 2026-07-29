@@ -53,7 +53,7 @@ without duplicating their full content.
 | SHC-76 | Retain an already-authorized target across a superseding desired revision, queue the later Pod template, and release it only after Kubernetes traffic readiness | `24eea3f37`, `243f7a5d2`, `50eb10514` | STS-003, STS-014, OBS-001, OBS-002 | EKS-qualified for post-authorization revision handoff, two distinct target authorizations, complete reverse-ordinal convergence, 127 uninterrupted searches, and 300-second final stability |
 | SHC-77 | Distinguish retryable image-pull backoff from terminal invalid image syntax and retain the authorized ordinal under the replacement startup budget | `b3ae4b291`, `4710438a0` | STS-008, REJ-004, REJ-005, OBS-001, OBS-002 | EKS-qualified for a 60-second retryable pull hold and recovery, complete `2 -> 1 -> 0` convergence, immediate `InvalidImageName` block at ordinal two, 131 uninterrupted searches, minimum two Ready endpoints, and maximum unavailability one |
 | SHC-78 | Attribute scheduling, Pod-infrastructure, and CSI attachment waits without collapsing them into image-pull or container-startup time | `63714251f`, `7b90da269`, `a5a41c07c` | REJ-002, REJ-003, STS-008, OBS-001, OBS-002 | EKS-qualified for six-sample unschedulable and exact CSI-attachment holds, complete scheduler recovery, same-target storage recovery, minimum two Ready endpoints, uninterrupted HTTP 200 search, and zero restarts |
-| SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | Pending | API-005, STS-003, OBS-002 | Assigned on `codex/shc-79-normalize-volume-defaults`; EKS defaulting-drift observation captured; implementation and qualification pending |
+| SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | `96c16b49b`, `a59fc5103` | API-005, STS-003, OBS-002 | Source-qualified; EKS-qualified for omitted/defaulted generic-ephemeral `volumeMode`, stable StatefulSet generations and revisions, controller restart, six post-restart samples, HTTP 200 search on every member, and zero Pod replacement or restart |
 | SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | Pending | STS-003, STS-008, STS-014, OBS-001 | Identified on EKS: withdrawing the requested volume left the active Search Head revision frozen on an unschedulable authorized target; implementation and qualification pending |
 | SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | Pending | OPS-004, OBS-001, OBS-005 | Identified on EKS: finalization attempted to recreate a Secret in a terminating namespace and could not complete; implementation and qualification pending |
 
@@ -217,13 +217,66 @@ alive and continued successful database pings. The Operator correctly held
 `ValidatingCluster/KVStoreNotReady` and preserved search availability. No
 Splunkd change or weakened KV gate is part of SHC-78.
 
+## SHC-79 immutable qualification inputs
+
+- source branch: `codex/shc-79-normalize-volume-defaults`;
+- integrated feature baseline:
+  `884427c05`;
+- registration commit:
+  `96c16b49b`;
+- implementation source and exact source used for the qualification image:
+  `a59fc5103b9199b2a136601ebfbdde1d593c4cc8`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-79-a59fc5103`;
+- Operator image digest:
+  `sha256:e1b77c45bba3853f96a7ac93ef5d98ac84ebde9ca991d1fbd10a847865767ede`;
+- EKS cluster: `vivek-spl-301372` in `us-west-2`, Kubernetes
+  `v1.31.14-eks-7d6f6ec`;
+- accepted qualification namespace: `shc79-volume-defaults`;
+- accepted runtime image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:9.4.1-jdk-11`;
+- accepted runtime digest:
+  `sha256:e51312c90d8cd860065a0fcb887a50c3d227122477b2ca3f5a7336f93d9308cb`;
+- feature gates:
+  `SplunkPodLifecycle=true,SearchHeadClusterLifecycle=true`;
+- Linux gate: `make vet build test`, 41 Ginkgo suites, 154 controller
+  specifications, zero failures, and 78.6 percent composite coverage;
+- API-defaulting result: the SHC CR continued to omit
+  `volumeMode` from its generic ephemeral `volumeClaimTemplate`, while the
+  API-server-returned Deployer and Search Head StatefulSets both contained
+  `volumeMode: Filesystem`;
+- reconciliation result: the Deployer and Search Head StatefulSets remained at
+  generation one with one ControllerRevision each, unchanged matching
+  current/update revisions
+  `splunk-shc79-deployer-c96f56679` and
+  `splunk-shc79-search-head-fc79bcf47`, and zero
+  `pod Volumes differ` log records;
+- controller-recovery result: the Operator Pod changed UID from
+  `b52ff38e-8d05-4f84-a2a4-959d133cd217` to
+  `0402be07-3c2f-44ee-8e7e-7d181263291e` and resumed with the same pinned
+  image digest without revising or replacing either StatefulSet;
+- stability result: six post-restart samples from
+  `2026-07-29T17:21:54Z` through `2026-07-29T17:24:28Z` retained the same four
+  workload Pod UIDs, zero container restarts, four Ready Pods, three Search
+  Head Service endpoints, an initialized Ready SHC with a ready dynamic
+  captain, and successful HTTP 200 searches;
+- semantic-safety result: source tests prove comparison does not mutate the CR
+  or observed StatefulSet volume slices, treats explicit Kubernetes defaults
+  as equal to omitted fields, preserves explicit non-default differences, and
+  prevents `MergePodSpecUpdates` from requesting an update solely because the
+  API server defaulted generic-ephemeral `volumeMode`; and
+- cleanup result: CR-first deletion removed all four Pods, all twelve PVCs,
+  and all twelve associated PVs before namespace deletion. The namespace was
+  then removed, all three workers remained Ready and schedulable, and the EBS
+  CSI controller finished at two ready replicas.
+
 ## Next execution records
 
 SHC-79 through SHC-81 record separate gaps discovered by the accepted SHC-78
-campaign. Each must use its own branch and immutable source commit; no entry is
-implemented merely because it is registered here. SHC-79 was selected on
-`codex/shc-79-normalize-volume-defaults` from integrated feature baseline
-`884427c05`; SHC-80 and SHC-81 remain registered but unassigned.
+campaign. SHC-79 is now source- and EKS-qualified on its isolated branch.
+SHC-80 and SHC-81 remain registered but unassigned; neither is implemented
+merely because it is registered here. Each must use its own branch and
+immutable source commit.
 
 Other remaining scenarios continue to be selected from
 `SHCTestScenarioMatrix.md`; the absence of a new `SHC-*` number does not make a
@@ -242,3 +295,10 @@ follow-up gaps without claiming them as implemented.
 2026-07-29 UTC: Selected SHC-79 on
 `codex/shc-79-normalize-volume-defaults` from integrated feature baseline
 `884427c05`. No implementation is claimed by this branch-registration record.
+
+2026-07-29 UTC: Recorded SHC-79 implementation source
+`a59fc5103b9199b2a136601ebfbdde1d593c4cc8`, the complete Linux source gate,
+and accepted EKS qualification of Kubernetes volume-default normalization,
+including exact API defaulting evidence, a real Operator restart, six stable
+post-restart samples, successful searches, and zero workload replacement or
+restart.
