@@ -53,7 +53,7 @@ without duplicating their full content.
 | SHC-76 | Retain an already-authorized target across a superseding desired revision, queue the later Pod template, and release it only after Kubernetes traffic readiness | `24eea3f37`, `243f7a5d2`, `50eb10514` | STS-003, STS-014, OBS-001, OBS-002 | EKS-qualified for post-authorization revision handoff, two distinct target authorizations, complete reverse-ordinal convergence, 127 uninterrupted searches, and 300-second final stability |
 | SHC-77 | Distinguish retryable image-pull backoff from terminal invalid image syntax and retain the authorized ordinal under the replacement startup budget | `b3ae4b291`, `4710438a0` | STS-008, REJ-004, REJ-005, OBS-001, OBS-002 | EKS-qualified for a 60-second retryable pull hold and recovery, complete `2 -> 1 -> 0` convergence, immediate `InvalidImageName` block at ordinal two, 131 uninterrupted searches, minimum two Ready endpoints, and maximum unavailability one |
 | SHC-78 | Attribute scheduling, Pod-infrastructure, and CSI attachment waits without collapsing them into image-pull or container-startup time | `63714251f`, `7b90da269`, `a5a41c07c` | REJ-002, REJ-003, STS-008, OBS-001, OBS-002 | EKS-qualified for six-sample unschedulable and exact CSI-attachment holds, complete scheduler recovery, same-target storage recovery, minimum two Ready endpoints, uninterrupted HTTP 200 search, and zero restarts |
-| SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | Pending | API-005, STS-003, OBS-002 | Identified on EKS: omitted generic-ephemeral `volumeMode` defaulted to `Filesystem` and caused repeated false template drift; implementation and qualification pending |
+| SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | Pending | API-005, STS-003, OBS-002 | Assigned on `codex/shc-79-normalize-volume-defaults`; EKS defaulting-drift observation captured; implementation and qualification pending |
 | SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | Pending | STS-003, STS-008, STS-014, OBS-001 | Identified on EKS: withdrawing the requested volume left the active Search Head revision frozen on an unschedulable authorized target; implementation and qualification pending |
 | SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | Pending | OPS-004, OBS-001, OBS-005 | Identified on EKS: finalization attempted to recreate a Secret in a terminating namespace and could not complete; implementation and qualification pending |
 
@@ -221,8 +221,9 @@ Splunkd change or weakened KV gate is part of SHC-78.
 
 SHC-79 through SHC-81 record separate gaps discovered by the accepted SHC-78
 campaign. Each must use its own branch and immutable source commit; no entry is
-implemented merely because it is registered here. Select and create one branch
-from the current integrated feature baseline before changing source.
+implemented merely because it is registered here. SHC-79 was selected on
+`codex/shc-79-normalize-volume-defaults` from integrated feature baseline
+`884427c05`; SHC-80 and SHC-81 remain registered but unassigned.
 
 Other remaining scenarios continue to be selected from
 `SHCTestScenarioMatrix.md`; the absence of a new `SHC-*` number does not make a
@@ -237,3 +238,7 @@ the retryable and terminal image-pull classification results, recorded SHC-78
 source and EKS qualification, and registered the independently bounded
 template-defaulting, authorized-revision-withdrawal, and deletion-finalization
 follow-up gaps without claiming them as implemented.
+
+2026-07-29 UTC: Selected SHC-79 on
+`codex/shc-79-normalize-volume-defaults` from integrated feature baseline
+`884427c05`. No implementation is claimed by this branch-registration record.
