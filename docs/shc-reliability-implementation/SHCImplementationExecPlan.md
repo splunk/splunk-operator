@@ -252,6 +252,10 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   with dynamic captain transfer, preserved every Splunk GUID, completed 187
   searches without failure, and passed a 369-second final gate. A partially
   completed rollout or active image upgrade remains fail closed.
+- [x] (2026-07-29) Selected SHC-81 on isolated branch
+  `codex/shc-81-termination-safe-finalization` from integrated feature
+  baseline `efbff783f02be7cee29c45c793e5cd2886dd2325`. Selection does not
+  claim implementation or qualification.
 - [ ] Resolve the deletion-finalization gap as separate bounded work item
   SHC-81 before treating the SHC-78/79 campaigns as broader
   production-readiness evidence.
@@ -1903,3 +1907,8 @@ captain transfer, 187 uninterrupted searches, a 369-second stability gate,
 and complete CR-first storage cleanup. Also recorded the fresh-formation
 readiness gap and the destructive CRD dependency in the current `make deploy`
 helper as separate follow-up concerns.
+
+2026-07-29: Selected SHC-81 on
+`codex/shc-81-termination-safe-finalization` from integrated feature baseline
+`efbff783f02be7cee29c45c793e5cd2886dd2325`. This registration deliberately
+makes no implementation or qualification claim.

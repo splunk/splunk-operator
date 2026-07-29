@@ -55,7 +55,7 @@ without duplicating their full content.
 | SHC-78 | Attribute scheduling, Pod-infrastructure, and CSI attachment waits without collapsing them into image-pull or container-startup time | `63714251f`, `7b90da269`, `a5a41c07c` | REJ-002, REJ-003, STS-008, OBS-001, OBS-002 | EKS-qualified for six-sample unschedulable and exact CSI-attachment holds, complete scheduler recovery, same-target storage recovery, minimum two Ready endpoints, uninterrupted HTTP 200 search, and zero restarts |
 | SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | `96c16b49b`, `a59fc5103` | API-005, STS-003, OBS-002 | Source-qualified; EKS-qualified for omitted/defaulted generic-ephemeral `volumeMode`, stable StatefulSet generations and revisions, controller restart, six post-restart samples, HTTP 200 search on every member, and zero Pod replacement or restart |
 | SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | `d1f6e301d`, `744bfb096`, `9be744f06`, `0b9253f11` | STS-003, STS-008, STS-014, OBS-001 | Source-qualified and EKS-qualified for an authorized unschedulable replacement, superseding queued revision, durable last-known-good recovery across an Operator restart, complete queued rollout, dynamic captain transfer, 187 uninterrupted searches, and 369 seconds of final stability |
-| SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | Pending | OPS-004, OBS-001, OBS-005 | Identified on EKS: finalization attempted to recreate a Secret in a terminating namespace and could not complete; implementation and qualification pending |
+| SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | Pending | OPS-004, OBS-001, OBS-005 | Selected on `codex/shc-81-termination-safe-finalization` from integrated baseline `efbff783f`; implementation and qualification are not claimed by this registration |
 | SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | Pending | OPS-006, OPS-011, OBS-001, OBS-003, OBS-005 | Customer-reported behavior includes a bundle-triggered indexer message with `searchable=0` and `force=0`; exact Splunk semantics, effective configuration, active-search behavior, and end-to-end availability remain to be established before selecting a solution |
 
 ## SHC-75 immutable qualification inputs
@@ -344,10 +344,10 @@ SHC-79 through SHC-81 record separate gaps discovered by the accepted SHC-78
 campaign. SHC-79 and SHC-80 are now source- and EKS-qualified on their
 isolated branches.
 SHC-82 records a separate customer-reported App Framework availability
-requirement that spans both Search Head and indexer clusters. SHC-81 and
-SHC-82 remain registered but unassigned. Registration or assignment alone
-does not claim implementation. Each remaining item must use its own branch and
-immutable source commit.
+requirement that spans both Search Head and indexer clusters. SHC-81 is
+selected on its isolated branch; SHC-82 remains registered but unassigned.
+Registration or assignment alone does not claim implementation. Each
+remaining item must use its own branch and immutable source commit.
 
 Other remaining scenarios continue to be selected from
 `SHCTestScenarioMatrix.md`; the absence of a new `SHC-*` number does not make a
@@ -373,6 +373,11 @@ and accepted EKS qualification of Kubernetes volume-default normalization,
 including exact API defaulting evidence, a real Operator restart, six stable
 post-restart samples, successful searches, and zero workload replacement or
 restart.
+
+2026-07-29 UTC: Selected SHC-81 on isolated branch
+`codex/shc-81-termination-safe-finalization` from integrated feature baseline
+`efbff783f02be7cee29c45c793e5cd2886dd2325`. This registration does not claim
+implementation or qualification.
 
 2026-07-29 UTC: Registered SHC-82 and OPS-011 from a customer-reported
 App Framework restart-availability concern. The record deliberately preserves
