@@ -89,6 +89,20 @@ var SHCSearchDrainContinuationApprovalCounter = prometheus.NewCounter(
 	},
 )
 
+var SHCAuthorizedRevisionWithdrawalCounter = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "splunk_operator_shc_authorized_revision_withdrawal_total",
+		Help: "The number of durable withdrawals of failed, already-authorized Search Head Cluster revisions",
+	},
+)
+
+var SHCAuthorizedRevisionRecoveryCounter = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "splunk_operator_shc_authorized_revision_recovery_total",
+		Help: "The number of Search Head Cluster members recovered at a last known-good revision after authorized revision withdrawal",
+	},
+)
+
 func GetPrometheusLabels(request reconcile.Request, kind string) prometheus.Labels {
 	return prometheus.Labels{
 		LabelNamespace: request.Namespace,
@@ -120,5 +134,7 @@ func init() {
 		SHCRolloutDecisionCounters,
 		SHCRolloutPartitionAdvanceCounter,
 		SHCSearchDrainContinuationApprovalCounter,
+		SHCAuthorizedRevisionWithdrawalCounter,
+		SHCAuthorizedRevisionRecoveryCounter,
 	)
 }

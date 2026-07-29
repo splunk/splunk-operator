@@ -1371,6 +1371,81 @@ func TestRecoverySeparatesPodReadinessFromCaptainSynchronization(t *testing.T) {
 	}
 }
 
+func TestRecoveryRestoresWithdrawnAuthorizationAtKnownGoodRevision(
+	t *testing.T,
+) {
+	now := time.Date(2026, 7, 29, 18, 30, 0, 0, time.UTC)
+	failed := authorizedRecoveryOperation(now)
+	failed.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling
+	failed.Reason =
+		enterpriseApi.SearchHeadClusterLifecycleReasonPodUnschedulable
+	operation, started := StartAuthorizedPodUpdateRevisionRecovery(
+		failed,
+		"revision-1",
+		now.Add(time.Second),
+	)
+	if !started {
+		t.Fatal("authorized revision recovery was not started")
+	}
+
+	decision := EvaluateRecovery(
+		operation,
+		RecoveryObservation{
+			PodExists:   true,
+			PodUID:      "failed-replacement-uid",
+			PodRevision: "revision-2",
+		},
+		testRecoveryPolicy(),
+		now.Add(2*time.Second),
+	)
+	if decision.Operation.Stage !=
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling ||
+		decision.Operation.Reason !=
+			enterpriseApi.
+				SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn ||
+		decision.Operation.ReplacementPodUID != "" {
+		t.Fatalf("superseded Pod recovery decision = %#v", decision.Operation)
+	}
+
+	recovered := recoveredPodObservation()
+	recovered.PodRevision = "revision-1"
+	decision = EvaluateRecovery(
+		decision.Operation,
+		recovered,
+		testRecoveryPolicy(),
+		now.Add(3*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+		ActionReleaseDetention,
+	)
+	decision.Operation = RecordDetentionReleaseAttempt(
+		decision.Operation,
+		now.Add(4*time.Second),
+	)
+	decision = EvaluateRecovery(
+		decision.Operation,
+		recovered,
+		testRecoveryPolicy(),
+		now.Add(5*time.Second),
+	)
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		ActionNone,
+	)
+	if len(decision.Operation.CompletedOrdinals) != 0 {
+		t.Fatalf(
+			"recovery at known-good revision marked failed desired revision complete: %v",
+			decision.Operation.CompletedOrdinals,
+		)
+	}
+}
+
 func authorizedRecoveryOperation(now time.Time) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
 	operation := StartReplacement(
 		"operation-1",

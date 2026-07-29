@@ -238,7 +238,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	cr.Status.DeployerPhase = phase
 
 	// create or update statefulset for the search heads
-	statefulSet, err = getSearchHeadStatefulSet(ctx, client, cr)
+	var authorizedRevisionWithdrawalRequested bool
+	statefulSet, authorizedRevisionWithdrawalRequested, err =
+		getSearchHeadStatefulSetForReconcile(ctx, client, cr)
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head StatefulSet")
 		return result, err
@@ -258,6 +260,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	mgr := newSearchHeadClusterPodManager(client, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr.authorizedRevisionWithdrawalRequested =
+		authorizedRevisionWithdrawalRequested
 
 	// handle SHC upgrade process
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
@@ -577,10 +581,25 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
 func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
+	statefulSet, _, err := getSearchHeadStatefulSetForReconcile(
+		ctx,
+		client,
+		cr,
+	)
+	return statefulSet, err
+}
 
+// getSearchHeadStatefulSetForReconcile also reports a safe, changed-template
+// request to withdraw an authorized revision. The caller persists that intent
+// before any StatefulSet partition mutation.
+func getSearchHeadStatefulSetForReconcile(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.SearchHeadCluster,
+) (*appsv1.StatefulSet, bool, error) {
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// get search head env variables with deployer
@@ -589,16 +608,18 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	// get generic statefulset for Splunk Enterprise objects
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env, certMounts)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
-		ctx,
-		client,
-		cr,
-		&ss.Spec.Template,
-	); err != nil {
-		return nil, err
+	authorizedRevisionWithdrawalRequested, err :=
+		holdSearchHeadStatefulSetTemplateForActiveReplacement(
+			ctx,
+			client,
+			cr,
+			&ss.Spec.Template,
+		)
+	if err != nil {
+		return nil, false, err
 	}
 
 	updateStrategy, err := getSearchHeadStatefulSetUpdateStrategy(
@@ -608,11 +629,11 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 		&ss.Spec.Template,
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	ss.Spec.UpdateStrategy = updateStrategy
 
-	return ss, nil
+	return ss, authorizedRevisionWithdrawalRequested, nil
 }
 
 // holdSearchHeadStatefulSetTemplateForActiveReplacement serializes desired
@@ -631,18 +652,25 @@ func holdSearchHeadStatefulSetTemplateForActiveReplacement(
 	client splcommon.ControllerClient,
 	cr *enterpriseApi.SearchHeadCluster,
 	desiredTemplate *corev1.PodTemplateSpec,
-) error {
+) (bool, error) {
 	operation := cr.Status.LifecycleOperation
 	replacementCompleted := operation != nil &&
 		operation.Stage ==
 			enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+	authorizedRevisionWithdrawalEligible :=
+		shcworkflow.AuthorizedPodUpdateRevisionRecoveryEligible(operation)
+	authorizedRevisionRecoveryActive :=
+		operation != nil && operation.RecoveryRevision != ""
 	if desiredTemplate == nil ||
-		(!lifecycleRecoveryActive(operation) && !replacementCompleted) ||
+		(!lifecycleRecoveryActive(operation) &&
+			!replacementCompleted &&
+			!authorizedRevisionWithdrawalEligible &&
+			!authorizedRevisionRecoveryActive) ||
 		operation.Intent !=
 			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
 		operation.ReplacementAuthorizedAt == nil ||
 		operation.TargetOrdinal == nil {
-		return nil
+		return false, nil
 	}
 
 	current := &appsv1.StatefulSet{}
@@ -651,21 +679,39 @@ func holdSearchHeadStatefulSetTemplateForActiveReplacement(
 		Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
 	}, current)
 	if k8serrors.IsNotFound(err) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return err
+		return false, err
+	}
+	currentPartition := int32(-1)
+	if current.Spec.UpdateStrategy.RollingUpdate != nil &&
+		current.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
+		currentPartition =
+			*current.Spec.UpdateStrategy.RollingUpdate.Partition
 	}
 	if current.Spec.UpdateStrategy.Type !=
 		appsv1.RollingUpdateStatefulSetStrategyType ||
 		current.Spec.UpdateStrategy.RollingUpdate == nil ||
-		current.Spec.UpdateStrategy.RollingUpdate.Partition == nil ||
-		*current.Spec.UpdateStrategy.RollingUpdate.Partition !=
-			*operation.TargetOrdinal {
-		return nil
+		current.Spec.UpdateStrategy.RollingUpdate.Partition == nil {
+		return false, nil
+	}
+	if authorizedRevisionRecoveryActive &&
+		currentPartition != *operation.TargetOrdinal &&
+		currentPartition != *operation.TargetOrdinal+1 {
+		*desiredTemplate = *current.Spec.Template.DeepCopy()
+		return false, nil
+	}
+	if !authorizedRevisionRecoveryActive &&
+		currentPartition != *operation.TargetOrdinal {
+		return false, nil
 	}
 
 	if replacementCompleted && operation.TargetPod != "" {
+		expectedRevision := operation.DesiredRevision
+		if operation.RecoveryRevision != "" {
+			expectedRevision = operation.RecoveryRevision
+		}
 		target := &corev1.Pod{}
 		err = client.Get(ctx, types.NamespacedName{
 			Namespace: cr.GetNamespace(),
@@ -675,20 +721,297 @@ func holdSearchHeadStatefulSetTemplateForActiveReplacement(
 			target.DeletionTimestamp == nil &&
 			string(target.UID) != operation.TargetPodUID &&
 			target.GetLabels()["controller-revision-hash"] ==
-				operation.DesiredRevision &&
+				expectedRevision &&
 			podConditionStatus(target, corev1.PodReady) ==
 				corev1.ConditionTrue &&
 			podConditionStatus(target, searchHeadServingCondition) ==
 				corev1.ConditionTrue {
-			return nil
+			return false, nil
 		}
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return err
+			return false, err
+		}
+	}
+
+	if authorizedRevisionWithdrawalEligible &&
+		operation.RecoveryRevision == "" {
+		currentTemplate := current.Spec.Template.DeepCopy()
+		queuedTemplate := desiredTemplate.DeepCopy()
+		templateChanged := splctrl.MergePodUpdates(
+			ctx,
+			currentTemplate,
+			queuedTemplate,
+			current.GetName(),
+		)
+		if templateChanged {
+			safe, err := authorizedRevisionRecoverySafe(
+				ctx,
+				client,
+				cr,
+				current,
+			)
+			if err != nil {
+				return false, err
+			}
+			if safe {
+				*desiredTemplate = *current.Spec.Template.DeepCopy()
+				return true, nil
+			}
 		}
 	}
 
 	*desiredTemplate = *current.Spec.Template.DeepCopy()
-	return nil
+	return false, nil
+}
+
+// authorizedRevisionRecoverySafe proves that the authorized target is the only
+// Pod at the failed revision and that every non-target peer remains Ready,
+// serving, and at the last known-good revision. This bounds automatic recovery
+// to one unavailable member; a partially completed rollout remains fail closed
+// for a separate multi-member rollback policy.
+func authorizedRevisionRecoverySafe(
+	ctx context.Context,
+	controllerClient splcommon.ControllerClient,
+	cr *enterpriseApi.SearchHeadCluster,
+	current *appsv1.StatefulSet,
+) (bool, error) {
+	operation := cr.Status.LifecycleOperation
+	if current == nil ||
+		operation == nil ||
+		!shcworkflow.AuthorizedPodUpdateRevisionRecoveryEligible(operation) ||
+		shcImageUpgradeActive(cr.Status.ImageUpgrade) ||
+		current.Spec.Replicas == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal < 0 ||
+		*operation.TargetOrdinal >= *current.Spec.Replicas ||
+		current.Status.CurrentRevision == "" ||
+		current.Status.UpdateRevision != operation.DesiredRevision ||
+		current.Status.CurrentRevision == operation.DesiredRevision {
+		return false, nil
+	}
+
+	for ordinal := int32(0); ordinal < *current.Spec.Replicas; ordinal++ {
+		pod := &corev1.Pod{}
+		err := controllerClient.Get(ctx, types.NamespacedName{
+			Namespace: current.GetNamespace(),
+			Name: fmt.Sprintf(
+				"%s-%d",
+				current.GetName(),
+				ordinal,
+			),
+		}, pod)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		revision := pod.GetLabels()["controller-revision-hash"]
+		if ordinal == *operation.TargetOrdinal {
+			if pod.DeletionTimestamp != nil ||
+				string(pod.UID) == operation.TargetPodUID ||
+				revision != operation.DesiredRevision ||
+				podConditionStatus(pod, corev1.PodReady) ==
+					corev1.ConditionTrue {
+				return false, nil
+			}
+			continue
+		}
+		if pod.DeletionTimestamp != nil ||
+			revision != current.Status.CurrentRevision ||
+			podConditionStatus(pod, corev1.PodReady) !=
+				corev1.ConditionTrue ||
+			podConditionStatus(pod, searchHeadServingCondition) !=
+				corev1.ConditionTrue {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// reconcileAuthorizedRevisionRecoveryPodDeletion performs the one narrowly
+// scoped Pod deletion required by Kubernetes forced rollback semantics. With
+// OrderedReady, raising a StatefulSet partition does not replace an unhealthy
+// Pod that was already created from a withdrawn revision: the StatefulSet
+// controller waits for that Pod to become Ready first. The durable withdrawal
+// barrier and recovery partition must both be visible, and all non-target
+// members must still be Ready, serving, and at CurrentRevision, before this
+// method gracefully deletes the single withdrawn target. Kubernetes then
+// recreates the same ordinal and PVC identity from CurrentRevision.
+func (mgr *searchHeadClusterPodManager) reconcileAuthorizedRevisionRecoveryPodDeletion(
+	ctx context.Context,
+	eventPublisher *K8EventPublisher,
+	statefulSet *appsv1.StatefulSet,
+) (bool, error) {
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil ||
+		operation.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		operation.TargetOrdinal == nil ||
+		operation.RecoveryRevision == "" ||
+		operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
+		return false, nil
+	}
+
+	safe, target, err := authorizedRevisionRecoveryPodDeletionSafe(
+		ctx,
+		mgr.c,
+		mgr.cr,
+		statefulSet,
+	)
+	if err != nil {
+		return false, err
+	}
+	if target == nil {
+		if !safe {
+			mgr.cr.Status.Message = fmt.Sprintf(
+				"SHC RollingUpdate AuthorizedRevisionWithdrawn: revalidating partition, revision, and peer safety before recycling %s",
+				operation.TargetPod,
+			)
+		}
+		// No target is safe to delete yet, or the withdrawn Pod is already
+		// terminating/absent. Wait for a later observation.
+		return true, nil
+	}
+	if target.GetLabels()["controller-revision-hash"] ==
+		operation.RecoveryRevision {
+		return false, nil
+	}
+	if !safe {
+		mgr.cr.Status.Message = fmt.Sprintf(
+			"SHC RollingUpdate AuthorizedRevisionWithdrawn: waiting for safe deletion of withdrawn revision %s on %s",
+			operation.DesiredRevision,
+			operation.TargetPod,
+		)
+		return true, nil
+	}
+
+	preconditions := client.Preconditions{
+		UID:             &target.ObjectMeta.UID,
+		ResourceVersion: &target.ObjectMeta.ResourceVersion,
+	}
+	if err = mgr.c.Delete(ctx, target, preconditions); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	eventPublisher.Normal(
+		ctx,
+		EventReasonSHCAuthorizedRevisionRecoveryStarted,
+		fmt.Sprintf(
+			"Gracefully deleted %s at withdrawn revision %s after recovery partition %d was observed; Kubernetes will recreate the ordinal at last known-good revision %s",
+			operation.TargetPod,
+			operation.DesiredRevision,
+			*operation.TargetOrdinal+1,
+			operation.RecoveryRevision,
+		),
+	)
+	logging.FromContext(ctx).InfoContext(
+		ctx,
+		"Search Head authorized revision recovery Pod deletion requested",
+		"operationID",
+		operation.OperationID,
+		"targetPod",
+		operation.TargetPod,
+		"targetPodUID",
+		string(target.UID),
+		"withdrawnRevision",
+		operation.DesiredRevision,
+		"recoveryRevision",
+		operation.RecoveryRevision,
+	)
+	return true, nil
+}
+
+// authorizedRevisionRecoveryPodDeletionSafe revalidates the bounded recovery
+// invariant immediately before deleting the withdrawn target. A nil target
+// with a nil error means the expected target is already absent or terminating.
+func authorizedRevisionRecoveryPodDeletionSafe(
+	ctx context.Context,
+	controllerClient splcommon.ControllerClient,
+	cr *enterpriseApi.SearchHeadCluster,
+	current *appsv1.StatefulSet,
+) (bool, *corev1.Pod, error) {
+	operation := cr.Status.LifecycleOperation
+	if current == nil ||
+		operation == nil ||
+		operation.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		shcImageUpgradeActive(cr.Status.ImageUpgrade) ||
+		current.Spec.Replicas == nil ||
+		current.Spec.UpdateStrategy.Type !=
+			appsv1.RollingUpdateStatefulSetStrategyType ||
+		current.Spec.UpdateStrategy.RollingUpdate == nil ||
+		current.Spec.UpdateStrategy.RollingUpdate.Partition == nil ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal < 0 ||
+		*operation.TargetOrdinal >= *current.Spec.Replicas ||
+		operation.TargetPod == "" ||
+		operation.TargetPodUID == "" ||
+		operation.DesiredRevision == "" ||
+		operation.RecoveryRevision == "" ||
+		current.Status.CurrentRevision != operation.RecoveryRevision ||
+		current.Status.UpdateRevision != operation.DesiredRevision ||
+		*current.Spec.UpdateStrategy.RollingUpdate.Partition !=
+			*operation.TargetOrdinal+1 {
+		return false, nil, nil
+	}
+
+	var target *corev1.Pod
+	for ordinal := int32(0); ordinal < *current.Spec.Replicas; ordinal++ {
+		pod := &corev1.Pod{}
+		err := controllerClient.Get(ctx, types.NamespacedName{
+			Namespace: current.GetNamespace(),
+			Name: fmt.Sprintf(
+				"%s-%d",
+				current.GetName(),
+				ordinal,
+			),
+		}, pod)
+		if err != nil {
+			if k8serrors.IsNotFound(err) &&
+				ordinal == *operation.TargetOrdinal {
+				return true, nil, nil
+			}
+			if k8serrors.IsNotFound(err) {
+				return false, nil, nil
+			}
+			return false, nil, err
+		}
+
+		revision := pod.GetLabels()["controller-revision-hash"]
+		if ordinal == *operation.TargetOrdinal {
+			if pod.DeletionTimestamp != nil {
+				return true, nil, nil
+			}
+			target = pod
+			if pod.GetName() != operation.TargetPod ||
+				string(pod.UID) == operation.TargetPodUID {
+				return false, target, nil
+			}
+			if revision == operation.RecoveryRevision {
+				return true, target, nil
+			}
+			if revision != operation.DesiredRevision ||
+				podConditionStatus(pod, searchHeadServingCondition) ==
+					corev1.ConditionTrue {
+				return false, target, nil
+			}
+			continue
+		}
+
+		if pod.DeletionTimestamp != nil ||
+			revision != operation.RecoveryRevision ||
+			podConditionStatus(pod, corev1.PodReady) !=
+				corev1.ConditionTrue ||
+			podConditionStatus(pod, searchHeadServingCondition) !=
+				corev1.ConditionTrue {
+			return false, target, nil
+		}
+	}
+	return target != nil, target, nil
 }
 
 // getSearchHeadStatefulSetUpdateStrategy keeps OnDelete as the compatibility
@@ -786,17 +1109,35 @@ func getSearchHeadStatefulSetUpdateStrategy(
 		current.Spec.UpdateStrategy.RollingUpdate != nil &&
 		current.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
 		currentPartition := *current.Spec.UpdateStrategy.RollingUpdate.Partition
-		currentTemplate := current.Spec.Template.DeepCopy()
-		templateChanged := splctrl.MergePodUpdates(
-			ctx,
-			currentTemplate,
-			desiredTemplate,
-			current.GetName(),
-		)
-		if !templateChanged &&
-			currentPartition >= 0 &&
-			currentPartition <= partitionCeiling {
-			partition = currentPartition
+		operation := cr.Status.LifecycleOperation
+		recoveringAuthorizedRevision := operation != nil &&
+			operation.Intent ==
+				enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+			operation.TargetOrdinal != nil &&
+			operation.RecoveryRevision != "" &&
+			operation.RecoveryRevision == current.Status.CurrentRevision &&
+			operation.DesiredRevision == current.Status.UpdateRevision &&
+			currentPartition == *operation.TargetOrdinal &&
+			*operation.TargetOrdinal+1 <= partitionCeiling
+		if recoveringAuthorizedRevision {
+			// Raising the partition by exactly one makes only the failed target
+			// ineligible for the superseded revision. Once this recovery
+			// boundary is persisted, the controller gracefully deletes that
+			// one withdrawn Pod so StatefulSet recreates it from CurrentRevision.
+			partition = *operation.TargetOrdinal + 1
+		} else {
+			currentTemplate := current.Spec.Template.DeepCopy()
+			templateChanged := splctrl.MergePodUpdates(
+				ctx,
+				currentTemplate,
+				desiredTemplate,
+				current.GetName(),
+			)
+			if !templateChanged &&
+				currentPartition >= 0 &&
+				currentPartition <= partitionCeiling {
+				partition = currentPartition
+			}
 		}
 	}
 

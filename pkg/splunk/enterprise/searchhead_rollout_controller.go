@@ -323,6 +323,20 @@ func lifecycleRecoveryActiveForStatefulSet(
 		return true
 	}
 	if operation.Intent ==
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+		operation.RecoveryRevision != "" {
+		if operation.TargetOrdinal == nil ||
+			statefulSet.Spec.UpdateStrategy.RollingUpdate == nil ||
+			statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition == nil {
+			return false
+		}
+		// Raising the partition by exactly one withdraws only the failed
+		// authorization target and restores it to CurrentRevision. The queued CR
+		// template remains held until the same durable operation recovers.
+		return *statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition ==
+			*operation.TargetOrdinal+1
+	}
+	if operation.Intent ==
 		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown {
 		// A cancelled scale-down restores the existing target in place. No
 		// partition change or Pod replacement is being authorized.

@@ -3243,6 +3243,545 @@ func TestRollingUpdateObservationDoesNotRepeatDurableLifecycleBlockedEvent(
 	}
 }
 
+func TestAuthorizedRevisionWithdrawalPersistsBeforePartitionRecovery(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-2"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:             "PodUpdate:example-search-head-2:revision-2:2",
+			Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:         "revision-2",
+			TargetPod:               statefulSet.GetName() + "-2",
+			TargetOrdinal:           &target,
+			TargetPodUID:            "original-pod-uid",
+			Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+			Reason:                  enterpriseApi.SearchHeadClusterLifecycleReasonPodUnschedulable,
+			ReplacementAuthorizedAt: &authorizedAt,
+		}
+	for ordinal := int32(0); ordinal < 3; ordinal++ {
+		pod := &corev1.Pod{}
+		if err := client.Get(
+			context.Background(),
+			types.NamespacedName{
+				Namespace: statefulSet.GetNamespace(),
+				Name:      fmt.Sprintf("%s-%d", statefulSet.GetName(), ordinal),
+			},
+			pod,
+		); err != nil {
+			t.Fatalf("read Pod %d: %v", ordinal, err)
+		}
+		pod.UID = types.UID(fmt.Sprintf("pod-uid-%d", ordinal))
+		pod.Status.Conditions = append(
+			pod.Status.Conditions,
+			corev1.PodCondition{
+				Type:   searchHeadServingCondition,
+				Status: corev1.ConditionTrue,
+			},
+		)
+		if ordinal == target {
+			for index := range pod.Status.Conditions {
+				pod.Status.Conditions[index].Status = corev1.ConditionFalse
+			}
+		}
+		if err := client.Update(context.Background(), pod); err != nil {
+			t.Fatalf("update Pod %d: %v", ordinal, err)
+		}
+	}
+	client.ResetCalls()
+
+	recorder := &mockEventRecorder{}
+	publisher := &K8EventPublisher{
+		recorder: recorder,
+		instance: mgr.cr,
+	}
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		publisher,
+	)
+	withdrawalMetricBefore := testutil.ToFloat64(
+		splmetrics.SHCAuthorizedRevisionWithdrawalCounter,
+	)
+	mgr.authorizedRevisionWithdrawalRequested = true
+	phase, err := mgr.Update(
+		ctx,
+		client,
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("persist authorized revision recovery: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("revision recovery barrier phase = %q, want Updating", phase)
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation.DesiredRevision != "revision-2" ||
+		operation.RecoveryRevision != "revision-1" ||
+		operation.RevisionWithdrawalStartedAt == nil ||
+		operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling ||
+		operation.Reason !=
+			enterpriseApi.
+				SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn {
+		t.Fatalf("authorized revision recovery = %#v", operation)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf(
+			"status barrier changed Kubernetes state: %v",
+			client.Calls["Update"],
+		)
+	}
+	assertRolloutEvent(
+		t,
+		recorder,
+		EventReasonSHCAuthorizedRevisionWithdrawn,
+		corev1.EventTypeNormal,
+	)
+	if got := testutil.ToFloat64(
+		splmetrics.SHCAuthorizedRevisionWithdrawalCounter,
+	); got != withdrawalMetricBefore+1 {
+		t.Fatalf(
+			"authorized revision withdrawal metric = %f, want %f",
+			got,
+			withdrawalMetricBefore+1,
+		)
+	}
+
+	started, err := mgr.startAuthorizedRevisionRecovery(
+		context.Background(),
+		publisher,
+		statefulSet,
+	)
+	if err != nil || started {
+		t.Fatalf(
+			"durable recovery barrier repeated: started=%t err=%v",
+			started,
+			err,
+		)
+	}
+	if len(recorder.events) != 1 {
+		t.Fatalf("repeated barrier emitted %d events, want one", len(recorder.events))
+	}
+	if got := testutil.ToFloat64(
+		splmetrics.SHCAuthorizedRevisionWithdrawalCounter,
+	); got != withdrawalMetricBefore+1 {
+		t.Fatalf(
+			"repeated barrier changed withdrawal metric to %f, want %f",
+			got,
+			withdrawalMetricBefore+1,
+		)
+	}
+}
+
+func TestAuthorizedRevisionRecoveryCompletionRequeuesOnlyOnTransition(
+	t *testing.T,
+) {
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		RecoveryRevision: "revision-1",
+		Stage: enterpriseApi.
+			SearchHeadClusterLifecycleStageCompleted,
+	}
+	if !authorizedRevisionRecoveryCompletedOnThisReconcile(
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+		operation,
+	) {
+		t.Fatal("recovery completion transition must requeue")
+	}
+	if authorizedRevisionRecoveryCompletedOnThisReconcile(
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+		operation,
+	) {
+		t.Fatal("already-completed recovery must release the queued rollout")
+	}
+	operation.RecoveryRevision = ""
+	if authorizedRevisionRecoveryCompletedOnThisReconcile(
+		enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery,
+		operation,
+	) {
+		t.Fatal("ordinary recovery completion is not an authorized revision withdrawal")
+	}
+}
+
+func TestAuthorizedRevisionRecoveryDeletesWithdrawnTargetAfterPartitionBarrier(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-2"},
+	)
+	targetOrdinal := int32(2)
+	authorizedAt := metav1.Now()
+	withdrawalStartedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:                 "withdrawn-revision-operation",
+			Intent:                      enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:             "revision-2",
+			RecoveryRevision:            "revision-1",
+			TargetPod:                   statefulSet.GetName() + "-2",
+			TargetOrdinal:               &targetOrdinal,
+			TargetPodUID:                "original-pod-uid",
+			Stage:                       enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+			Reason:                      enterpriseApi.SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn,
+			ReplacementAuthorizedAt:     &authorizedAt,
+			RevisionWithdrawalStartedAt: &withdrawalStartedAt,
+		}
+	for ordinal := int32(0); ordinal < 3; ordinal++ {
+		pod := &corev1.Pod{}
+		if err := client.Get(
+			context.Background(),
+			types.NamespacedName{
+				Namespace: statefulSet.GetNamespace(),
+				Name: fmt.Sprintf(
+					"%s-%d",
+					statefulSet.GetName(),
+					ordinal,
+				),
+			},
+			pod,
+		); err != nil {
+			t.Fatalf("get Pod %d: %v", ordinal, err)
+		}
+		pod.UID = types.UID(fmt.Sprintf("replacement-pod-uid-%d", ordinal))
+		servingStatus := corev1.ConditionTrue
+		if ordinal == targetOrdinal {
+			servingStatus = corev1.ConditionFalse
+			for conditionIndex := range pod.Status.Conditions {
+				if pod.Status.Conditions[conditionIndex].Type == corev1.PodReady {
+					pod.Status.Conditions[conditionIndex].Status =
+						corev1.ConditionFalse
+				}
+			}
+		}
+		pod.Status.Conditions = append(
+			pod.Status.Conditions,
+			corev1.PodCondition{
+				Type:   searchHeadServingCondition,
+				Status: servingStatus,
+			},
+		)
+		if err := client.Update(context.Background(), pod); err != nil {
+			t.Fatalf("update Pod %d: %v", ordinal, err)
+		}
+	}
+	client.ResetCalls()
+
+	recorder := &mockEventRecorder{}
+	publisher := &K8EventPublisher{
+		recorder: recorder,
+		instance: mgr.cr,
+	}
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		publisher,
+	)
+	phase, err := mgr.Update(ctx, client, statefulSet, 3)
+	if err != nil {
+		t.Fatalf("delete withdrawn revision target: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("recovery deletion phase = %q, want Updating", phase)
+	}
+	if len(client.Calls["Delete"]) != 1 {
+		t.Fatalf(
+			"recovery deletion calls = %d, want one: %v",
+			len(client.Calls["Delete"]),
+			client.Calls["Delete"],
+		)
+	}
+	deletedPod, ok := client.Calls["Delete"][0].Obj.(*corev1.Pod)
+	if !ok || deletedPod.GetName() != statefulSet.GetName()+"-2" {
+		t.Fatalf(
+			"recovery deleted %#v, want only ordinal 2",
+			client.Calls["Delete"][0].Obj,
+		)
+	}
+	assertRolloutEvent(
+		t,
+		recorder,
+		EventReasonSHCAuthorizedRevisionRecoveryStarted,
+		corev1.EventTypeNormal,
+	)
+}
+
+func TestAuthorizedRevisionRecoveryDeletionReleasesQueuedRevisionAfterCompletion(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-3",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	targetOrdinal := int32(2)
+	authorizedAt := metav1.Now()
+	withdrawalStartedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:                 "completed-withdrawn-revision-operation",
+			Intent:                      enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:             "revision-2",
+			RecoveryRevision:            "revision-1",
+			TargetPod:                   statefulSet.GetName() + "-2",
+			TargetOrdinal:               &targetOrdinal,
+			TargetPodUID:                "original-pod-uid",
+			Stage:                       enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+			Reason:                      enterpriseApi.SearchHeadClusterLifecycleReasonOperationCompleted,
+			ReplacementAuthorizedAt:     &authorizedAt,
+			RevisionWithdrawalStartedAt: &withdrawalStartedAt,
+		}
+	mgr.cr.Status.Message = "completed recovery"
+	client.ResetCalls()
+
+	pending, err := mgr.reconcileAuthorizedRevisionRecoveryPodDeletion(
+		context.Background(),
+		&K8EventPublisher{
+			recorder: &mockEventRecorder{},
+			instance: mgr.cr,
+		},
+		statefulSet,
+	)
+	if err != nil {
+		t.Fatalf("release queued revision after recovery completion: %v", err)
+	}
+	if pending {
+		t.Fatal("completed recovery kept the forced-deletion path pending")
+	}
+	if mgr.cr.Status.Message != "completed recovery" {
+		t.Fatalf(
+			"completed recovery message = %q, want unchanged",
+			mgr.cr.Status.Message,
+		)
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
+func TestAuthorizedRevisionRecoveryDoesNotDeleteBeforePartitionBarrier(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-2"},
+	)
+	targetOrdinal := int32(2)
+	authorizedAt := metav1.Now()
+	withdrawalStartedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:                 "withdrawn-revision-operation",
+			Intent:                      enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:             "revision-2",
+			RecoveryRevision:            "revision-1",
+			TargetPod:                   statefulSet.GetName() + "-2",
+			TargetOrdinal:               &targetOrdinal,
+			TargetPodUID:                "original-pod-uid",
+			Stage:                       enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+			Reason:                      enterpriseApi.SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn,
+			ReplacementAuthorizedAt:     &authorizedAt,
+			RevisionWithdrawalStartedAt: &withdrawalStartedAt,
+		}
+	safe, target, err := authorizedRevisionRecoveryPodDeletionSafe(
+		context.Background(),
+		client,
+		mgr.cr,
+		statefulSet,
+	)
+	if err != nil {
+		t.Fatalf("validate pre-barrier recovery deletion: %v", err)
+	}
+	if safe || target != nil {
+		t.Fatalf(
+			"pre-barrier recovery deletion safe=%t target=%v, want fail closed",
+			safe,
+			target,
+		)
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
+func TestAuthorizedRevisionRecoveryDeletionFailsClosedWhenSafetyChanges(
+	t *testing.T,
+) {
+	testCases := []struct {
+		name   string
+		mutate func(
+			*searchHeadClusterPodManager,
+			*appsv1.StatefulSet,
+			*spltest.MockClient,
+		)
+	}{
+		{
+			name: "peer is not Ready",
+			mutate: func(
+				_ *searchHeadClusterPodManager,
+				statefulSet *appsv1.StatefulSet,
+				client *spltest.MockClient,
+			) {
+				setRollingUpdateFixturePodReady(
+					t,
+					client,
+					statefulSet,
+					1,
+					false,
+				)
+			},
+		},
+		{
+			name: "peer is not serving",
+			mutate: func(
+				_ *searchHeadClusterPodManager,
+				statefulSet *appsv1.StatefulSet,
+				client *spltest.MockClient,
+			) {
+				setRollingUpdateFixturePodServing(
+					t,
+					client,
+					statefulSet,
+					1,
+					false,
+				)
+			},
+		},
+		{
+			name: "another peer is at withdrawn revision",
+			mutate: func(
+				_ *searchHeadClusterPodManager,
+				statefulSet *appsv1.StatefulSet,
+				client *spltest.MockClient,
+			) {
+				setRollingUpdateFixturePodRevision(
+					t,
+					client,
+					statefulSet,
+					1,
+					"revision-2",
+				)
+			},
+		},
+		{
+			name: "withdrawn target is serving",
+			mutate: func(
+				_ *searchHeadClusterPodManager,
+				statefulSet *appsv1.StatefulSet,
+				client *spltest.MockClient,
+			) {
+				setRollingUpdateFixturePodServing(
+					t,
+					client,
+					statefulSet,
+					2,
+					true,
+				)
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			setLifecyclePolicyTestGates(t, true, true)
+			mgr, statefulSet, client := rollingUpdateControllerFixture(
+				t,
+				3,
+				"revision-1",
+				"revision-2",
+				[]string{"revision-1", "revision-1", "revision-2"},
+			)
+			targetOrdinal := int32(2)
+			authorizedAt := metav1.Now()
+			withdrawalStartedAt := metav1.Now()
+			mgr.cr.Status.LifecycleOperation =
+				&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+					OperationID:                 "withdrawn-revision-operation",
+					Intent:                      enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+					DesiredRevision:             "revision-2",
+					RecoveryRevision:            "revision-1",
+					TargetPod:                   statefulSet.GetName() + "-2",
+					TargetOrdinal:               &targetOrdinal,
+					TargetPodUID:                "original-pod-uid",
+					Stage:                       enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+					Reason:                      enterpriseApi.SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn,
+					ReplacementAuthorizedAt:     &authorizedAt,
+					RevisionWithdrawalStartedAt: &withdrawalStartedAt,
+				}
+			for ordinal := int32(0); ordinal < 3; ordinal++ {
+				pod := &corev1.Pod{}
+				if err := client.Get(
+					context.Background(),
+					types.NamespacedName{
+						Namespace: statefulSet.GetNamespace(),
+						Name: fmt.Sprintf(
+							"%s-%d",
+							statefulSet.GetName(),
+							ordinal,
+						),
+					},
+					pod,
+				); err != nil {
+					t.Fatalf("get Pod %d: %v", ordinal, err)
+				}
+				pod.UID = types.UID(
+					fmt.Sprintf("replacement-pod-uid-%d", ordinal),
+				)
+				if err := client.Update(context.Background(), pod); err != nil {
+					t.Fatalf("set Pod %d UID: %v", ordinal, err)
+				}
+				setRollingUpdateFixturePodServing(
+					t,
+					client,
+					statefulSet,
+					ordinal,
+					ordinal != targetOrdinal,
+				)
+			}
+			setRollingUpdateFixturePodReady(
+				t,
+				client,
+				statefulSet,
+				targetOrdinal,
+				false,
+			)
+			testCase.mutate(mgr, statefulSet, client)
+			client.ResetCalls()
+
+			safe, _, err := authorizedRevisionRecoveryPodDeletionSafe(
+				context.Background(),
+				client,
+				mgr.cr,
+				statefulSet,
+			)
+			if err != nil {
+				t.Fatalf("validate recovery deletion: %v", err)
+			}
+			if safe {
+				t.Fatal("unsafe recovery deletion was allowed")
+			}
+			assertNoRollingUpdatePodDelete(t, client)
+		})
+	}
+}
+
 func TestSearchDrainContinuationApprovalIsAppliedAndEmittedOnce(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, _ := rollingUpdateControllerFixture(
@@ -3787,6 +4326,63 @@ func TestRollingUpdateControllerCompletesAuthorizedRevisionWithdrawal(
 	assertNoRollingUpdatePodDelete(t, client)
 	stored := getRollingUpdateFixtureStatefulSet(t, client, statefulSet)
 	assertRollingUpdatePartition(t, stored.Spec.UpdateStrategy, 3)
+}
+
+func TestRollingUpdateControllerStartsQueuedRevisionAfterAuthorizedRecovery(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-3",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:             "withdrawn-revision-operation",
+			Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:         "revision-2",
+			RecoveryRevision:        "revision-1",
+			TargetPod:               statefulSet.GetName() + "-2",
+			TargetOrdinal:           &target,
+			TargetPodUID:            "original-pod-uid",
+			Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+			ReplacementAuthorizedAt: &authorizedAt,
+		}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("start queued revision after recovery: %v", err)
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if phase != enterpriseApi.PhaseUpdating ||
+		operation == nil ||
+		operation.OperationID == "withdrawn-revision-operation" ||
+		operation.DesiredRevision != "revision-3" ||
+		operation.RecoveryRevision != "" ||
+		operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != target {
+		t.Fatalf(
+			"queued revision phase=%q lifecycle=%#v, want fresh revision-3 ordinal-2 operation",
+			phase,
+			operation,
+		)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf(
+			"fresh queued operation changed partition before lifecycle preparation: %v",
+			client.Calls["Update"],
+		)
+	}
+	assertNoRollingUpdatePodDelete(t, client)
 }
 
 func TestRollingUpdateControllerHandsAuthorizedTargetToSupersedingRevision(
@@ -4448,6 +5044,47 @@ func setRollingUpdateFixturePodReady(
 	}
 	if err := client.Update(context.Background(), pod); err != nil {
 		t.Fatalf("update Pod %d readiness: %v", ordinal, err)
+	}
+}
+
+func setRollingUpdateFixturePodServing(
+	t *testing.T,
+	client *spltest.MockClient,
+	statefulSet *appsv1.StatefulSet,
+	ordinal int32,
+	serving bool,
+) {
+	t.Helper()
+	pod := &corev1.Pod{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Namespace: statefulSet.GetNamespace(),
+		Name:      fmt.Sprintf("%s-%d", statefulSet.GetName(), ordinal),
+	}, pod); err != nil {
+		t.Fatalf("get Pod %d: %v", ordinal, err)
+	}
+	status := corev1.ConditionFalse
+	if serving {
+		status = corev1.ConditionTrue
+	}
+	for conditionIndex := range pod.Status.Conditions {
+		if pod.Status.Conditions[conditionIndex].Type ==
+			searchHeadServingCondition {
+			pod.Status.Conditions[conditionIndex].Status = status
+			if err := client.Update(context.Background(), pod); err != nil {
+				t.Fatalf("update Pod %d serving condition: %v", ordinal, err)
+			}
+			return
+		}
+	}
+	pod.Status.Conditions = append(
+		pod.Status.Conditions,
+		corev1.PodCondition{
+			Type:   searchHeadServingCondition,
+			Status: status,
+		},
+	)
+	if err := client.Update(context.Background(), pod); err != nil {
+		t.Fatalf("add Pod %d serving condition: %v", ordinal, err)
 	}
 }
 

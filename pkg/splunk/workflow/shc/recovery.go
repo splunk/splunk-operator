@@ -265,11 +265,25 @@ func classifyPodRecovery(
 	now time.Time,
 ) Decision {
 	if !observation.PodExists {
+		reason := enterpriseApi.SearchHeadClusterLifecycleReasonReplacementAuthorized
+		message := fmt.Sprintf(
+			"waiting for replacement Pod %s to be created",
+			operation.TargetPod,
+		)
+		if operation.RecoveryRevision != "" {
+			reason = enterpriseApi.
+				SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn
+			message = fmt.Sprintf(
+				"waiting for Kubernetes to restore %s at last known-good revision %s",
+				operation.TargetPod,
+				operation.RecoveryRevision,
+			)
+		}
 		transitionIfNeeded(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
-			enterpriseApi.SearchHeadClusterLifecycleReasonReplacementAuthorized,
-			fmt.Sprintf("waiting for replacement Pod %s to be created", operation.TargetPod),
+			reason,
+			message,
 			now,
 		)
 		return Decision{Operation: operation}
@@ -295,16 +309,36 @@ func classifyPodRecovery(
 		return Decision{Operation: operation}
 	}
 
+	expectedRevision := operation.DesiredRevision
+	if operation.RecoveryRevision != "" {
+		expectedRevision = operation.RecoveryRevision
+		if observation.PodRevision == operation.DesiredRevision {
+			setReason(
+				operation,
+				enterpriseApi.
+					SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn,
+				fmt.Sprintf(
+					"waiting for Kubernetes to replace superseded revision %s on %s with last known-good revision %s",
+					operation.DesiredRevision,
+					operation.TargetPod,
+					operation.RecoveryRevision,
+				),
+				now,
+			)
+			return Decision{Operation: operation}
+		}
+	}
+
 	operation.ReplacementPodUID = observation.PodUID
 	ensureReplacementPodObserved(operation, now, false)
-	if observation.PodRevision != operation.DesiredRevision {
+	if observation.PodRevision != expectedRevision {
 		transition(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
 			enterpriseApi.SearchHeadClusterLifecycleReasonPodRevisionMismatch,
-			fmt.Sprintf("replacement Pod revision %q does not match desired revision %q",
+			fmt.Sprintf("replacement Pod revision %q does not match expected revision %q",
 				observation.PodRevision,
-				operation.DesiredRevision,
+				expectedRevision,
 			),
 			now,
 		)
@@ -631,6 +665,14 @@ func validateRecoveredMember(
 			operation.TargetPod,
 		)
 	}
+	if operation.RecoveryRevision != "" {
+		completionMessage = fmt.Sprintf(
+			"authorized revision %s was withdrawn; %s recovered its persistent member identity at last known-good revision %s before the queued template is reconciled",
+			operation.DesiredRevision,
+			operation.TargetPod,
+			operation.RecoveryRevision,
+		)
+	}
 	transition(
 		operation,
 		enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
@@ -641,6 +683,7 @@ func validateRecoveredMember(
 	if operation.Intent ==
 		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
 		!podUpdateCancellation &&
+		operation.RecoveryRevision == "" &&
 		operation.TargetOrdinal != nil &&
 		!slices.Contains(operation.CompletedOrdinals, *operation.TargetOrdinal) {
 		operation.CompletedOrdinals = append(operation.CompletedOrdinals, *operation.TargetOrdinal)

@@ -16,11 +16,14 @@ package enterprise
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -379,7 +382,7 @@ func TestSearchHeadStatefulSetRollingUpdateRetainsAuthorizedTargetForNewTemplate
 	desiredTemplate := current.Spec.Template.DeepCopy()
 	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
 
-	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+	if _, err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
 		context.Background(),
 		client,
 		cr,
@@ -408,7 +411,7 @@ func TestSearchHeadStatefulSetRollingUpdateRetainsAuthorizedTargetForNewTemplate
 		enterpriseApi.SearchHeadClusterLifecycleStageCompleted
 	desiredTemplate = current.Spec.Template.DeepCopy()
 	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
-	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+	if _, err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
 		context.Background(),
 		client,
 		cr,
@@ -450,7 +453,7 @@ func TestSearchHeadStatefulSetRollingUpdateRetainsAuthorizedTargetForNewTemplate
 	}
 	desiredTemplate = current.Spec.Template.DeepCopy()
 	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
-	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+	if _, err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
 		context.Background(),
 		client,
 		cr,
@@ -476,7 +479,7 @@ func TestSearchHeadStatefulSetRollingUpdateRetainsAuthorizedTargetForNewTemplate
 	}
 	desiredTemplate = current.Spec.Template.DeepCopy()
 	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
-	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+	if _, err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
 		context.Background(),
 		client,
 		cr,
@@ -500,6 +503,258 @@ func TestSearchHeadStatefulSetRollingUpdateRetainsAuthorizedTargetForNewTemplate
 		t.Fatalf("resolve completed authorized strategy: %v", err)
 	}
 	assertRollingUpdatePartition(t, strategy, replicas)
+}
+
+func TestSearchHeadStatefulSetRecoversFailedAuthorizedRevisionBeforeQueuedTemplate(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	cr := searchHeadRolloutStrategyTestCR()
+	cr.Spec.LifecyclePolicy.PodUpdateStrategy =
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate
+	replicas := int32(3)
+	target := int32(2)
+	partition := target
+	authorizedAt := metav1.Now()
+	cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:             "pod-update-2",
+			Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:         "revision-2",
+			TargetPod:               GetSplunkStatefulsetPodName(SplunkSearchHead, cr.GetName(), target),
+			TargetOrdinal:           &target,
+			TargetPodUID:            "original-pod-uid",
+			Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+			Reason:                  enterpriseApi.SearchHeadClusterLifecycleReasonPodUnschedulable,
+			ReplacementAuthorizedAt: &authorizedAt,
+		}
+	current := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+			Namespace: cr.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"revision-input": "failed",
+					},
+				},
+			},
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition: &partition,
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			CurrentRevision: "revision-1",
+			UpdateRevision:  "revision-2",
+		},
+	}
+	client := spltest.NewMockClient()
+	if err := client.Create(context.Background(), current); err != nil {
+		t.Fatalf("create StatefulSet: %v", err)
+	}
+	for ordinal := int32(0); ordinal < replicas; ordinal++ {
+		revision := "revision-1"
+		ready := corev1.ConditionTrue
+		uid := types.UID("stable-pod-uid")
+		if ordinal == target {
+			revision = "revision-2"
+			ready = corev1.ConditionFalse
+			uid = types.UID("failed-replacement-uid")
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%d", current.GetName(), ordinal),
+				Namespace: current.GetNamespace(),
+				UID:       uid,
+				Labels: map[string]string{
+					"controller-revision-hash": revision,
+				},
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{
+						Type:   corev1.PodReady,
+						Status: ready,
+					},
+					{
+						Type:   searchHeadServingCondition,
+						Status: ready,
+					},
+				},
+			},
+		}
+		if err := client.Create(context.Background(), pod); err != nil {
+			t.Fatalf("create Pod %d: %v", ordinal, err)
+		}
+	}
+
+	peer := &corev1.Pod{}
+	if err := client.Get(
+		context.Background(),
+		types.NamespacedName{
+			Namespace: current.GetNamespace(),
+			Name:      fmt.Sprintf("%s-1", current.GetName()),
+		},
+		peer,
+	); err != nil {
+		t.Fatalf("read peer at failed revision boundary: %v", err)
+	}
+	peer.Labels["controller-revision-hash"] = "revision-2"
+	if err := client.Update(context.Background(), peer); err != nil {
+		t.Fatalf("put peer at failed revision: %v", err)
+	}
+	unsafeTemplate := current.Spec.Template.DeepCopy()
+	unsafeTemplate.Labels["revision-input"] = "queued"
+	requested, err :=
+		holdSearchHeadStatefulSetTemplateForActiveReplacement(
+			context.Background(),
+			client,
+			cr,
+			unsafeTemplate,
+		)
+	if err != nil {
+		t.Fatalf("evaluate partially completed rollout: %v", err)
+	}
+	if requested ||
+		unsafeTemplate.Labels["revision-input"] != "failed" {
+		t.Fatalf(
+			"partially completed rollout request=%t template=%#v, want fail-closed hold",
+			requested,
+			unsafeTemplate.Labels,
+		)
+	}
+	peer.Labels["controller-revision-hash"] = "revision-1"
+	if err := client.Update(context.Background(), peer); err != nil {
+		t.Fatalf("restore peer revision: %v", err)
+	}
+
+	cr.Status.ImageUpgrade =
+		&enterpriseApi.SearchHeadClusterImageUpgradeStatus{
+			Phase: enterpriseApi.
+				SearchHeadClusterImageUpgradePhaseRollingMembers,
+		}
+	unsafeTemplate = current.Spec.Template.DeepCopy()
+	unsafeTemplate.Labels["revision-input"] = "queued"
+	requested, err =
+		holdSearchHeadStatefulSetTemplateForActiveReplacement(
+			context.Background(),
+			client,
+			cr,
+			unsafeTemplate,
+		)
+	if err != nil {
+		t.Fatalf("evaluate active image-upgrade boundary: %v", err)
+	}
+	if requested ||
+		unsafeTemplate.Labels["revision-input"] != "failed" {
+		t.Fatalf(
+			"active image upgrade request=%t template=%#v, want fail-closed hold",
+			requested,
+			unsafeTemplate.Labels,
+		)
+	}
+	cr.Status.ImageUpgrade = nil
+
+	queuedTemplate := current.Spec.Template.DeepCopy()
+	queuedTemplate.Labels["revision-input"] = "queued"
+	requested, err =
+		holdSearchHeadStatefulSetTemplateForActiveReplacement(
+			context.Background(),
+			client,
+			cr,
+			queuedTemplate,
+		)
+	if err != nil {
+		t.Fatalf("detect authorized revision withdrawal: %v", err)
+	}
+	if !requested ||
+		queuedTemplate.Labels["revision-input"] != "failed" {
+		t.Fatalf(
+			"withdrawal request=%t held template=%#v, want request and failed template held",
+			requested,
+			queuedTemplate.Labels,
+		)
+	}
+
+	recovery, started :=
+		shcworkflow.StartAuthorizedPodUpdateRevisionRecovery(
+			cr.Status.LifecycleOperation,
+			current.Status.CurrentRevision,
+			time.Now(),
+		)
+	if !started {
+		t.Fatal("start authorized revision recovery")
+	}
+	cr.Status.LifecycleOperation = recovery
+	strategy, err := getSearchHeadStatefulSetUpdateStrategy(
+		context.Background(),
+		client,
+		cr,
+		&current.Spec.Template,
+	)
+	if err != nil {
+		t.Fatalf("raise recovery partition: %v", err)
+	}
+	assertRollingUpdatePartition(t, strategy, replicas)
+
+	current.Spec.UpdateStrategy = strategy
+	if err := client.Update(context.Background(), current); err != nil {
+		t.Fatalf("store recovery partition: %v", err)
+	}
+	failedTarget := &corev1.Pod{}
+	if err := client.Get(
+		context.Background(),
+		types.NamespacedName{
+			Namespace: current.GetNamespace(),
+			Name:      cr.Status.LifecycleOperation.TargetPod,
+		},
+		failedTarget,
+	); err != nil {
+		t.Fatalf("read failed target: %v", err)
+	}
+	if err := client.Delete(context.Background(), failedTarget); err != nil {
+		t.Fatalf("delete failed target: %v", err)
+	}
+	recoveredTarget := failedTarget.DeepCopy()
+	recoveredTarget.ResourceVersion = ""
+	recoveredTarget.UID = types.UID("recovered-pod-uid")
+	recoveredTarget.Labels["controller-revision-hash"] = "revision-1"
+	for index := range recoveredTarget.Status.Conditions {
+		recoveredTarget.Status.Conditions[index].Status =
+			corev1.ConditionTrue
+	}
+	if err := client.Create(context.Background(), recoveredTarget); err != nil {
+		t.Fatalf("create recovered target: %v", err)
+	}
+	cr.Status.LifecycleOperation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageCompleted
+
+	queuedTemplate = current.Spec.Template.DeepCopy()
+	queuedTemplate.Labels["revision-input"] = "queued"
+	requested, err =
+		holdSearchHeadStatefulSetTemplateForActiveReplacement(
+			context.Background(),
+			client,
+			cr,
+			queuedTemplate,
+		)
+	if err != nil {
+		t.Fatalf("release queued template: %v", err)
+	}
+	if requested ||
+		queuedTemplate.Labels["revision-input"] != "queued" {
+		t.Fatalf(
+			"completed recovery request=%t template=%#v, want queued template released",
+			requested,
+			queuedTemplate.Labels,
+		)
+	}
 }
 
 func TestSearchHeadStatefulSetDoesNotQueueTemplateBeforePartitionAuthorization(
@@ -546,7 +801,7 @@ func TestSearchHeadStatefulSetDoesNotQueueTemplateBeforePartitionAuthorization(
 	desiredTemplate := current.Spec.Template.DeepCopy()
 	desiredTemplate.Labels = map[string]string{"revision-input": "changed"}
 
-	if err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
+	if _, err := holdSearchHeadStatefulSetTemplateForActiveReplacement(
 		context.Background(),
 		client,
 		cr,

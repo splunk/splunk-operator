@@ -236,6 +236,7 @@ const (
 	SearchHeadClusterLifecycleReasonImagePullFailed                 SearchHeadClusterLifecycleReason = "ImagePullFailed"
 	SearchHeadClusterLifecycleReasonPodStartupTimedOut              SearchHeadClusterLifecycleReason = "PodStartupTimedOut"
 	SearchHeadClusterLifecycleReasonSplunkStartupFailed             SearchHeadClusterLifecycleReason = "SplunkStartupFailed"
+	SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn     SearchHeadClusterLifecycleReason = "AuthorizedRevisionWithdrawn"
 	SearchHeadClusterLifecycleReasonMemberNotRegistered             SearchHeadClusterLifecycleReason = "MemberNotRegistered"
 	SearchHeadClusterLifecycleReasonMemberNotUp                     SearchHeadClusterLifecycleReason = "MemberNotUp"
 	SearchHeadClusterLifecycleReasonMemberIdentityMismatch          SearchHeadClusterLifecycleReason = "MemberIdentityMismatch"
@@ -325,34 +326,43 @@ type SearchHeadClusterImageUpgradeStatus struct {
 // SearchHeadClusterLifecycleOperationStatus records enough information to
 // resume and diagnose one lifecycle operation across reconciliations.
 type SearchHeadClusterLifecycleOperationStatus struct {
-	OperationID                  string                           `json:"operationID"`
-	Intent                       SearchHeadClusterLifecycleIntent `json:"intent"`
-	DesiredRevision              string                           `json:"desiredRevision,omitempty"`
-	TargetPod                    string                           `json:"targetPod,omitempty"`
-	TargetOrdinal                *int32                           `json:"targetOrdinal,omitempty"`
-	Stage                        SearchHeadClusterLifecycleStage  `json:"stage"`
-	StartedAt                    *metav1.Time                     `json:"startedAt,omitempty"`
-	StageStartedAt               *metav1.Time                     `json:"stageStartedAt,omitempty"`
-	LastTransitionTime           *metav1.Time                     `json:"lastTransitionTime,omitempty"`
-	CompletedOrdinals            []int32                          `json:"completedOrdinals,omitempty"`
-	RetryCount                   int32                            `json:"retryCount,omitempty"`
-	Reason                       SearchHeadClusterLifecycleReason `json:"reason,omitempty"`
-	Message                      string                           `json:"message,omitempty"`
-	Captain                      string                           `json:"captain,omitempty"`
-	CaptainReady                 bool                             `json:"captainReady,omitempty"`
-	CaptainTransferTarget        string                           `json:"captainTransferTarget,omitempty"`
-	CaptainTransferRequestedAt   *metav1.Time                     `json:"captainTransferRequestedAt,omitempty"`
-	TargetPodUID                 string                           `json:"targetPodUID,omitempty"`
-	TargetMemberID               string                           `json:"targetMemberID,omitempty"`
-	ReplacementPodUID            string                           `json:"replacementPodUID,omitempty"`
-	ReplacementMemberID          string                           `json:"replacementMemberID,omitempty"`
-	ReplacementAuthorizedAt      *metav1.Time                     `json:"replacementAuthorizedAt,omitempty"`
-	ReplacementPodObservedAt     *metav1.Time                     `json:"replacementPodObservedAt,omitempty"`
-	MembershipRemovalRequestedAt *metav1.Time                     `json:"membershipRemovalRequestedAt,omitempty"`
-	MemberRejoinStartedAt        *metav1.Time                     `json:"memberRejoinStartedAt,omitempty"`
-	DetentionRequestedAt         *metav1.Time                     `json:"detentionRequestedAt,omitempty"`
-	DetentionRequestAttemptCount int32                            `json:"detentionRequestAttemptCount,omitempty"`
-	DetentionReleaseRequestedAt  *metav1.Time                     `json:"detentionReleaseRequestedAt,omitempty"`
+	OperationID                string                           `json:"operationID"`
+	Intent                     SearchHeadClusterLifecycleIntent `json:"intent"`
+	DesiredRevision            string                           `json:"desiredRevision,omitempty"`
+	TargetPod                  string                           `json:"targetPod,omitempty"`
+	TargetOrdinal              *int32                           `json:"targetOrdinal,omitempty"`
+	Stage                      SearchHeadClusterLifecycleStage  `json:"stage"`
+	StartedAt                  *metav1.Time                     `json:"startedAt,omitempty"`
+	StageStartedAt             *metav1.Time                     `json:"stageStartedAt,omitempty"`
+	LastTransitionTime         *metav1.Time                     `json:"lastTransitionTime,omitempty"`
+	CompletedOrdinals          []int32                          `json:"completedOrdinals,omitempty"`
+	RetryCount                 int32                            `json:"retryCount,omitempty"`
+	Reason                     SearchHeadClusterLifecycleReason `json:"reason,omitempty"`
+	Message                    string                           `json:"message,omitempty"`
+	Captain                    string                           `json:"captain,omitempty"`
+	CaptainReady               bool                             `json:"captainReady,omitempty"`
+	CaptainTransferTarget      string                           `json:"captainTransferTarget,omitempty"`
+	CaptainTransferRequestedAt *metav1.Time                     `json:"captainTransferRequestedAt,omitempty"`
+	TargetPodUID               string                           `json:"targetPodUID,omitempty"`
+	TargetMemberID             string                           `json:"targetMemberID,omitempty"`
+	ReplacementPodUID          string                           `json:"replacementPodUID,omitempty"`
+	ReplacementMemberID        string                           `json:"replacementMemberID,omitempty"`
+	ReplacementAuthorizedAt    *metav1.Time                     `json:"replacementAuthorizedAt,omitempty"`
+	ReplacementPodObservedAt   *metav1.Time                     `json:"replacementPodObservedAt,omitempty"`
+	// RecoveryRevision is the last known-good StatefulSet revision used to
+	// recover a single unavailable target after its authorized desired revision
+	// was withdrawn or superseded. DesiredRevision remains the failed
+	// authorization for auditability.
+	RecoveryRevision string `json:"recoveryRevision,omitempty"`
+	// RevisionWithdrawalStartedAt records the durable barrier before the
+	// StatefulSet partition is raised and the withdrawn target is gracefully
+	// recycled at RecoveryRevision.
+	RevisionWithdrawalStartedAt  *metav1.Time `json:"revisionWithdrawalStartedAt,omitempty"`
+	MembershipRemovalRequestedAt *metav1.Time `json:"membershipRemovalRequestedAt,omitempty"`
+	MemberRejoinStartedAt        *metav1.Time `json:"memberRejoinStartedAt,omitempty"`
+	DetentionRequestedAt         *metav1.Time `json:"detentionRequestedAt,omitempty"`
+	DetentionRequestAttemptCount int32        `json:"detentionRequestAttemptCount,omitempty"`
+	DetentionReleaseRequestedAt  *metav1.Time `json:"detentionReleaseRequestedAt,omitempty"`
 	// SearchDrainContinuationToken is issued only after this operation reaches
 	// a search-drain timeout and is required for an exact post-timeout approval.
 	SearchDrainContinuationToken string `json:"searchDrainContinuationToken,omitempty"`

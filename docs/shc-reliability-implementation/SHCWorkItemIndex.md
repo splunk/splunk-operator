@@ -54,7 +54,7 @@ without duplicating their full content.
 | SHC-77 | Distinguish retryable image-pull backoff from terminal invalid image syntax and retain the authorized ordinal under the replacement startup budget | `b3ae4b291`, `4710438a0` | STS-008, REJ-004, REJ-005, OBS-001, OBS-002 | EKS-qualified for a 60-second retryable pull hold and recovery, complete `2 -> 1 -> 0` convergence, immediate `InvalidImageName` block at ordinal two, 131 uninterrupted searches, minimum two Ready endpoints, and maximum unavailability one |
 | SHC-78 | Attribute scheduling, Pod-infrastructure, and CSI attachment waits without collapsing them into image-pull or container-startup time | `63714251f`, `7b90da269`, `a5a41c07c` | REJ-002, REJ-003, STS-008, OBS-001, OBS-002 | EKS-qualified for six-sample unschedulable and exact CSI-attachment holds, complete scheduler recovery, same-target storage recovery, minimum two Ready endpoints, uninterrupted HTTP 200 search, and zero restarts |
 | SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | `96c16b49b`, `a59fc5103` | API-005, STS-003, OBS-002 | Source-qualified; EKS-qualified for omitted/defaulted generic-ephemeral `volumeMode`, stable StatefulSet generations and revisions, controller restart, six post-restart samples, HTTP 200 search on every member, and zero Pod replacement or restart |
-| SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | Pending | STS-003, STS-008, STS-014, OBS-001 | Identified on EKS: withdrawing the requested volume left the active Search Head revision frozen on an unschedulable authorized target; implementation and qualification pending |
+| SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | `d1f6e301d`, `744bfb096`, `9be744f06`, `0b9253f11` | STS-003, STS-008, STS-014, OBS-001 | Source-qualified and EKS-qualified for an authorized unschedulable replacement, superseding queued revision, durable last-known-good recovery across an Operator restart, complete queued rollout, dynamic captain transfer, 187 uninterrupted searches, and 369 seconds of final stability |
 | SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | Pending | OPS-004, OBS-001, OBS-005 | Identified on EKS: finalization attempted to recreate a Secret in a terminating namespace and could not complete; implementation and qualification pending |
 | SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | Pending | OPS-006, OPS-011, OBS-001, OBS-003, OBS-005 | Customer-reported behavior includes a bundle-triggered indexer message with `searchable=0` and `force=0`; exact Splunk semantics, effective configuration, active-search behavior, and end-to-end availability remain to be established before selecting a solution |
 
@@ -271,15 +271,83 @@ Splunkd change or weakened KV gate is part of SHC-78.
   then removed, all three workers remained Ready and schedulable, and the EBS
   CSI controller finished at two ready replicas.
 
+## SHC-80 immutable qualification inputs
+
+- source branch:
+  `codex/shc-80-authorized-revision-recovery`;
+- integrated feature baseline:
+  `9eecde5d68e9dc889bb2b2f1913420396e00cb21`;
+- registration, implementation, forced-rollback, and queued-revision-release
+  commits:
+  `d1f6e301d`, `744bfb096`, `9be744f06`, and
+  `0b9253f1181947348c43eec7894ff1a9abd65366`;
+- exact source used for the final qualification image:
+  `0b9253f1181947348c43eec7894ff1a9abd65366`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-80-0b9253f11`;
+- Operator image digest:
+  `sha256:fecf5134468a2478c0de13ad88b463b8f2db38747d795e60aae3304a0b9986cb`;
+- EKS cluster: `vivek-spl-301372` in `us-west-2`, Kubernetes
+  `v1.31.14-eks-8f14419`;
+- accepted qualification namespace:
+  `shc80-authorized-recovery-v2`;
+- accepted runtime image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:9.4.1-jdk-11`;
+- accepted runtime digest:
+  `sha256:e51312c90d8cd860065a0fcb887a50c3d227122477b2ca3f5a7336f93d9308cb`;
+- feature gates:
+  `SplunkPodLifecycle=true,SearchHeadClusterLifecycle=true`;
+- Linux gate: `make fmt vet build test`, 41 Ginkgo suites, 154 controller
+  specifications, zero failures, and 78.5 percent composite coverage;
+- revision sequence: last-known-good revision
+  `splunk-shc80-search-head-8659646985`, failed authorized revision
+  `splunk-shc80-search-head-b6d6d44d9`, and queued desired revision
+  `splunk-shc80-search-head-6987ddbf74`;
+- injected failure: all three workers were cordoned after healthy formation;
+  ordinal two was authorized for the failed revision and remained the only
+  Pending, unschedulable replacement while both non-target peers remained
+  Ready and serving. The queued revision was submitted before recovery;
+- durable recovery result: the controller raised the recovery partition to
+  three, deleted only the failed target after observing that barrier, and
+  retained the operation ID, original and replacement Pod UIDs, desired and
+  recovery revisions, target member GUID, and withdrawal timestamp across a
+  real Operator Pod replacement. After workers were uncordoned, ordinal two
+  rejoined at the last-known-good revision with GUID
+  `E308A2D4-49A3-4595-A71F-7D4B7AE01FDB`;
+- queued rollout result: the completed historical recovery record no longer
+  held the recovery deletion path. The queued revision then completed
+  ordinals `2 -> 1 -> 0`; partition changes were authorized one at a time;
+  captaincy moved before both captain replacements; the StatefulSet converged
+  with current and update revision equal and reset partition to three;
+- identity and Splunk result: all final members were registered `Up` with
+  `NoRestart`; their GUIDs remained
+  `E35DC033-3CEF-4ACE-B9EE-A7ABAE5F9AB2`,
+  `B723CD8C-7BB0-4190-BA67-8919769A583E`, and
+  `E308A2D4-49A3-4595-A71F-7D4B7AE01FDB`; the dynamic captain reported
+  initialized, minimum peers joined, and service ready, with no rolling
+  restart or maintenance mode;
+- availability result: 187 continuous Service searches returned HTTP 200,
+  with zero failures, minimum two serving endpoints, maximum one unavailable
+  Search Head, and zero workload or Operator container restarts;
+- final stability result: 21 clean samples from
+  `2026-07-29T21:40:43Z` through `2026-07-29T21:46:52Z`, spanning 369 seconds,
+  retained a Ready three-member CR, three endpoints, equal StatefulSet
+  revisions, partition three, and zero workload or Operator restarts; and
+- cleanup result: CR-first deletion removed four workload Pods, eight PVCs,
+  and all eight associated PVs before namespace deletion. No test SHC or PV
+  remained; all three workers finished Ready and schedulable, and the EBS CSI
+  controller finished at two ready replicas.
+
 ## Next execution records
 
 SHC-79 through SHC-81 record separate gaps discovered by the accepted SHC-78
-campaign. SHC-79 is now source- and EKS-qualified on its isolated branch.
+campaign. SHC-79 and SHC-80 are now source- and EKS-qualified on their
+isolated branches.
 SHC-82 records a separate customer-reported App Framework availability
-requirement that spans both Search Head and indexer clusters. SHC-80 through
-SHC-82 remain registered but unassigned; none is implemented merely because
-it is registered here. Each must use its own branch and immutable source
-commit.
+requirement that spans both Search Head and indexer clusters. SHC-81 and
+SHC-82 remain registered but unassigned. Registration or assignment alone
+does not claim implementation. Each remaining item must use its own branch and
+immutable source commit.
 
 Other remaining scenarios continue to be selected from
 `SHCTestScenarioMatrix.md`; the absence of a new `SHC-*` number does not make a
@@ -312,3 +380,17 @@ the observed `searchable=0` and `force=0` signal without treating that one log
 line as proof of replica loss, data unavailability, or root cause. Source,
 Splunk semantic, active-search, and end-to-end qualification work remains
 pending.
+
+2026-07-29 UTC: Selected SHC-80 on
+`codex/shc-80-authorized-revision-recovery` from integrated feature baseline
+`9eecde5d68e9dc889bb2b2f1913420396e00cb21`. The bounded scope is safe
+withdrawal or supersession of one already-authorized revision that cannot
+start, while every peer remains healthy at the last known-good revision. No
+implementation or qualification is claimed by this branch-registration
+record.
+
+2026-07-29 UTC: Recorded SHC-80 source and EKS qualification. Added durable
+single-target authorized-revision withdrawal, partition-barrier recovery,
+Operator-restart continuity, completed-recovery release of a queued revision,
+dynamic captain transfer, persistent GUID proof, 187 uninterrupted searches,
+a 369-second stability gate, and complete CR-first storage cleanup.

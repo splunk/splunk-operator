@@ -850,6 +850,78 @@ func TestEvaluationDoesNotMutatePersistedInput(t *testing.T) {
 	}
 }
 
+func TestStartAuthorizedPodUpdateRevisionRecoveryRecordsDurableBarrier(
+	t *testing.T,
+) {
+	now := time.Date(2026, 7, 29, 18, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling
+	operation.Reason =
+		enterpriseApi.SearchHeadClusterLifecycleReasonPodUnschedulable
+	operation.ReplacementPodUID = "failed-replacement-uid"
+	observedAt := metav1.NewTime(now.Add(time.Second))
+	operation.ReplacementPodObservedAt = &observedAt
+	operation.MemberRejoinStartedAt = &observedAt
+
+	recovery, started := StartAuthorizedPodUpdateRevisionRecovery(
+		operation,
+		"revision-1",
+		now.Add(2*time.Second),
+	)
+	if !started {
+		t.Fatal("authorized revision recovery was not started")
+	}
+	if operation.RecoveryRevision != "" ||
+		operation.ReplacementPodUID != "failed-replacement-uid" {
+		t.Fatalf("input operation was mutated: %#v", operation)
+	}
+	if recovery.DesiredRevision != "revision-2" ||
+		recovery.RecoveryRevision != "revision-1" ||
+		recovery.RevisionWithdrawalStartedAt == nil ||
+		recovery.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling ||
+		recovery.Reason !=
+			enterpriseApi.
+				SearchHeadClusterLifecycleReasonAuthorizedRevisionWithdrawn {
+		t.Fatalf("revision recovery = %#v", recovery)
+	}
+	if recovery.ReplacementPodUID != "" ||
+		recovery.ReplacementPodObservedAt != nil ||
+		recovery.MemberRejoinStartedAt != nil {
+		t.Fatalf("failed replacement identity was retained: %#v", recovery)
+	}
+}
+
+func TestAuthorizedPodUpdateRevisionRecoveryRequiresAttributableFailure(
+	t *testing.T,
+) {
+	now := time.Date(2026, 7, 29, 18, 0, 0, 0, time.UTC)
+	operation := authorizedRecoveryOperation(now)
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer
+	operation.Reason =
+		enterpriseApi.SearchHeadClusterLifecycleReasonReplacementAuthorized
+
+	if AuthorizedPodUpdateRevisionRecoveryEligible(operation) {
+		t.Fatal("generic container startup wait was eligible for revision recovery")
+	}
+	recovery, started := StartAuthorizedPodUpdateRevisionRecovery(
+		operation,
+		"revision-1",
+		now.Add(time.Second),
+	)
+	if started || recovery.RecoveryRevision != "" {
+		t.Fatalf("unsafe revision recovery started: %#v", recovery)
+	}
+
+	operation.Reason =
+		enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed
+	if !AuthorizedPodUpdateRevisionRecoveryEligible(operation) {
+		t.Fatal("attributable image-pull failure was not eligible")
+	}
+}
+
 func newTestOperation(now time.Time) *enterpriseApi.SearchHeadClusterLifecycleOperationStatus {
 	return StartReplacement(
 		"operation-1",
