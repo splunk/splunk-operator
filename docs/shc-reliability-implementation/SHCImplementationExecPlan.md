@@ -221,10 +221,26 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   and recovered the same replacement through Pod infrastructure, container
   startup, SHC registration, and ready KV Store after CSI returned to two
   replicas.
-- [ ] Resolve the newly observed template-defaulting, authorized-revision
-  withdrawal, and deletion-finalization gaps as separate bounded work items
-  before treating the SHC-78 campaign as broader production-readiness
-  evidence.
+- [x] (2026-07-29) Implemented SHC-79 at
+  `a59fc5103b9199b2a136601ebfbdde1d593c4cc8`. Volume comparison now works on
+  deep copies normalized with Kubernetes Pod-volume defaults, so API-server
+  defaulting does not create a false desired/observed StatefulSet difference
+  and comparison cannot mutate caller-owned desired or observed objects.
+- [x] (2026-07-29) Passed the complete Linux source gate for SHC-79:
+  `make vet`, `make build`, and `make test`. All 41 Ginkgo suites passed,
+  including 154 controller envtest specifications, with 78.6 percent composite
+  coverage.
+- [x] (2026-07-29) Qualified SHC-79 on EKS with exact Operator image digest
+  `sha256:e1b77c45bba3853f96a7ac93ef5d98ac84ebde9ca991d1fbd10a847865767ede`.
+  The CR omitted generic-ephemeral `volumeMode`; both returned StatefulSets
+  contained the Kubernetes default `Filesystem`; their generations,
+  ControllerRevisions, and workload Pod UIDs remained fixed; and zero volume
+  difference was logged. After a real Operator restart, six samples retained
+  a Ready SHC, four Ready Pods, three endpoints, zero restarts, and HTTP 200
+  search.
+- [ ] Resolve the remaining authorized-revision withdrawal and
+  deletion-finalization gaps as separate bounded work items before treating
+  the SHC-78/79 campaigns as broader production-readiness evidence.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -251,7 +267,24 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   StatefulSets. Explicitly setting `volumeMode: Filesystem` stopped the loop.
   Desired and observed Pod templates must be compared after normalizing
   Kubernetes API defaults; customers should not have to repeat a Kubernetes
-  default to obtain a stable reconcile.
+  default to obtain a stable reconcile. SHC-79 closes the demonstrated
+  volume-defaulting loop and source tests retain explicit non-default
+  differences.
+
+- (2026-07-29 UTC) The SHC API accepts the generic ephemeral
+  `volumeClaimTemplate.spec` used by this qualification but its current strict
+  schema rejected optional `volumeClaimTemplate.metadata.labels`. The accepted
+  fixture therefore used only schema-supported fields. This is a CRD surface
+  constraint, not evidence of Kubernetes defaulting drift.
+
+- (2026-07-29 UTC) `make deploy` uses generated text replacement for both
+  `WATCH_NAMESPACE` and `SPLUNK_GENERAL_TERMS`. Leaving the latter empty let
+  the cleanup expression match both empty placeholders and temporarily wrote
+  `WATCH_NAMESPACE_VALUE` into an unrelated field. The live deployment was
+  immediately corrected with the required non-empty SGT acceptance value and
+  the Make-mutated files were restored. Qualification invocations must provide
+  every required non-empty replacement input and verify the live environment;
+  hardening that general deployment helper is separate from SHC-79.
 
 - (2026-07-29 UTC) `Immediate` EBS provisioning can bind a generic ephemeral
   volume in a zone that conflicts with the retained per-ordinal `etc` and
@@ -1572,6 +1605,38 @@ SHC-78 Pod-infrastructure-attribution qualification captured on 2026-07-29:
   the test StorageClass. All three workers finished Ready and schedulable, and
   the EBS CSI controller finished at two ready replicas.
 
+SHC-79 Kubernetes-volume-default normalization qualification captured on
+2026-07-29:
+
+- source branch: `codex/shc-79-normalize-volume-defaults`;
+- implementation and exact image source:
+  `a59fc5103b9199b2a136601ebfbdde1d593c4cc8`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-79-a59fc5103`;
+- Operator image digest:
+  `sha256:e1b77c45bba3853f96a7ac93ef5d98ac84ebde9ca991d1fbd10a847865767ede`;
+- Linux `make vet`, `make build`, and `make test` passed all 41 Ginkgo suites
+  and 154 controller specifications with zero failures and 78.6 percent
+  composite coverage;
+- the accepted EKS fixture used cluster `vivek-spl-301372`, namespace
+  `shc79-volume-defaults`, both lifecycle feature gates, and the accepted
+  Splunk 9.4.1 runtime digest
+  `sha256:e51312c90d8cd860065a0fcb887a50c3d227122477b2ca3f5a7336f93d9308cb`;
+- the CR omitted `volumeMode`; the live Deployer and Search Head StatefulSets
+  returned `volumeMode: Filesystem`; both remained generation one with one
+  ControllerRevision and unchanged matching current/update revisions;
+- after initial SHC formation converged, every member returned HTTP 200 for
+  server info, SHC member info, and an `_internal` export search;
+- restarting the Operator changed only the controller Pod UID and retained the
+  same pinned image digest. Six post-restart samples retained all four
+  workload Pod UIDs, zero restarts, four Ready Pods, three Search Head Service
+  endpoints, initialized SHC state, captain readiness, and successful
+  searches; and
+- the Operator emitted zero `pod Volumes differ` records for the fixture.
+  CR-first cleanup then removed all four Pods, twelve PVCs, and twelve PVs
+  before namespace deletion; all workers remained Ready and schedulable, and
+  EBS CSI finished at two ready replicas.
+
 ## Interfaces and Dependencies
 
 The technical designs must define concrete interfaces for:
@@ -1676,3 +1741,9 @@ Added the complete scheduler recovery, bounded CSI hold and recovery, minimum
 service-capacity evidence, the Splunk 10.6 KV Store qualification boundary, and
 the newly identified template-defaulting, authorized-revision withdrawal, and
 deletion-finalization follow-up requirements.
+
+2026-07-29: Recorded SHC-79 source and EKS qualification for Kubernetes
+Pod-volume default normalization. Added exact CR-versus-StatefulSet defaulting
+evidence, semantic comparison tests, immutable image provenance, controller
+restart recovery, six stable post-restart samples, successful member searches,
+and the separate CRD-schema and Make deployment-helper discoveries.

@@ -212,6 +212,31 @@ func TestMergePodUpdates(t *testing.T) {
 	podUpdateTester("Container removed")
 }
 
+func TestMergePodSpecUpdatesIgnoresDefaultedEphemeralVolumeMode(t *testing.T) {
+	filesystem := corev1.PersistentVolumeFilesystem
+	current := corev1.PodSpec{
+		Volumes: []corev1.Volume{{
+			Name: "scratch",
+			VolumeSource: corev1.VolumeSource{
+				Ephemeral: &corev1.EphemeralVolumeSource{
+					VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+						Spec: corev1.PersistentVolumeClaimSpec{VolumeMode: &filesystem},
+					},
+				},
+			},
+		}},
+	}
+	revised := current.DeepCopy()
+	revised.Volumes[0].Ephemeral.VolumeClaimTemplate.Spec.VolumeMode = nil
+
+	if MergePodSpecUpdates(context.Background(), &current, revised, "search-head") {
+		t.Fatal("MergePodSpecUpdates() treated API-defaulted volumeMode as a material update")
+	}
+	if current.Volumes[0].Ephemeral.VolumeClaimTemplate.Spec.VolumeMode == nil {
+		t.Fatal("MergePodSpecUpdates() mutated the observed Pod volume")
+	}
+}
+
 func TestMergeServiceSpecUpdates(t *testing.T) {
 	ctx := context.TODO()
 	var current, revised corev1.ServiceSpec

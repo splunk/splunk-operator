@@ -96,6 +96,13 @@ ownership.
   `OutOfOrderRevision`, `ExistingUnavailablePod`, or `TooManyUnavailable`
   Event or log, and passed a 321-second final combined Kubernetes, SHC,
   management, and KV Store stability gate.
+- [x] (2026-07-29) Qualified SHC-79 Kubernetes-volume default normalization on
+  EKS with exact source `a59fc5103b9199b2a136601ebfbdde1d593c4cc8`.
+  The CR omitted generic-ephemeral `volumeMode`, both API-server-returned
+  StatefulSets contained `Filesystem`, and six samples after a real Operator
+  restart retained identical workload Pod UIDs, zero restarts, unchanged
+  StatefulSet generations and revisions, three endpoints, and successful
+  searches without a volume-difference reconcile.
 - [ ] Complete cloud-provider qualification and release-readiness review.
 
 ## Surprises & Discoveries
@@ -1203,6 +1210,44 @@ and digest were restored for recovery. This avoided both a synthetic
 already-running-container restart artifact and mixed Pod/StatefulSet image
 desired state.
 
+2026-07-29 API-005 Kubernetes-volume-default normalization qualification:
+
+- Operator source was
+  `a59fc5103b9199b2a136601ebfbdde1d593c4cc8`; the image was
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-79-a59fc5103`
+  at digest
+  `sha256:e1b77c45bba3853f96a7ac93ef5d98ac84ebde9ca991d1fbd10a847865767ede`;
+- Linux `make vet`, `make build`, and `make test` passed. All 41 Ginkgo suites
+  and 154 controller specifications passed with zero failures and 78.6 percent
+  composite coverage;
+- the accepted run used EKS cluster `vivek-spl-301372`, Kubernetes
+  `v1.31.14-eks-7d6f6ec`, namespace `shc79-volume-defaults`, both lifecycle
+  feature gates, and runtime digest
+  `sha256:e51312c90d8cd860065a0fcb887a50c3d227122477b2ca3f5a7336f93d9308cb`;
+- the SHC CR's generic ephemeral volume omitted `volumeMode`; Kubernetes
+  returned `volumeMode: Filesystem` in both generated StatefulSets. The
+  Deployer and Search Head StatefulSets remained generation one, retained
+  matching current/update revisions
+  `splunk-shc79-deployer-c96f56679` and
+  `splunk-shc79-search-head-fc79bcf47`, and retained one ControllerRevision
+  each;
+- before the disruption, all three Search Heads returned HTTP 200 for
+  `/services/server/info`, `/services/shcluster/member/info`, and an
+  `_internal` export search;
+- the Operator Pod UID changed from
+  `b52ff38e-8d05-4f84-a2a4-959d133cd217` to
+  `0402be07-3c2f-44ee-8e7e-7d181263291e`, with the exact image digest
+  unchanged;
+- six samples from `2026-07-29T17:21:54Z` through
+  `2026-07-29T17:24:28Z` observed phase Ready, initialized true, a ready
+  captain, four Ready workload Pods, three Search Head Service endpoints,
+  unchanged Pod UIDs, zero container restarts, unchanged StatefulSet
+  generations and revisions, and successful HTTP 200 searches; and
+- Operator logs contained zero `pod Volumes differ` records for the fixture.
+  CR-first cleanup then removed all four Pods, all twelve PVCs, and all twelve
+  associated PVs before namespace deletion. Every worker remained Ready and
+  schedulable, and the EBS CSI controller finished at two ready replicas.
+
 ## Interfaces and Dependencies
 
 The test harness requires stable adapters for:
@@ -1305,3 +1350,9 @@ first-pull `ErrImagePull`/`ImagePullBackOff` retry and recovery, immediate
 `InvalidImageName` blocking, authorized-ordinal and partition retention,
 Search-Head-only revision isolation, uninterrupted Service-search evidence,
 default-readiness findings, and full test-resource cleanup.
+
+2026-07-29: Recorded API-005/SHC-79 Kubernetes-volume default normalization.
+Added immutable source and image provenance, exact CR-versus-StatefulSet
+defaulting evidence, a real Operator restart, six stable post-restart samples,
+unchanged StatefulSet and workload identities, successful searches, and zero
+false volume-difference reconciles.

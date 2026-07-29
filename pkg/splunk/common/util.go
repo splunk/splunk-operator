@@ -29,6 +29,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 func init() {
@@ -161,7 +162,153 @@ func CompareImagePullSecrets(a []corev1.LocalObjectReference, b []corev1.LocalOb
 // CompareVolumes is a generic comparer of two Kubernetes Volumes.
 // It returns true if there are material differences between them, or false otherwise.
 func CompareVolumes(a []corev1.Volume, b []corev1.Volume) bool {
-	return sortAndCompareSlices(a, b, SortFieldName)
+	return sortAndCompareSlices(normalizeVolumeDefaults(a), normalizeVolumeDefaults(b), SortFieldName)
+}
+
+// normalizeVolumeDefaults returns a deep copy of volumes with the Kubernetes
+// API server's core/v1 volume defaults applied. StatefulSet templates returned
+// by the API server contain these defaults even when the desired template
+// omitted them. Normalizing both sides prevents an endless reconcile caused
+// only by that representational difference.
+func normalizeVolumeDefaults(volumes []corev1.Volume) []corev1.Volume {
+	normalized := make([]corev1.Volume, len(volumes))
+	for i := range volumes {
+		volumes[i].DeepCopyInto(&normalized[i])
+		setVolumeDefaults(&normalized[i])
+	}
+	return normalized
+}
+
+func setVolumeDefaults(volume *corev1.Volume) {
+	// Keep these defaults aligned with Kubernetes
+	// pkg/apis/core/v1/defaults.go and zz_generated.defaults.go.
+	source := &volume.VolumeSource
+
+	if ptr.AllPtrFieldsNil(source) {
+		source.EmptyDir = &corev1.EmptyDirVolumeSource{}
+	}
+	if source.Image != nil && source.Image.PullPolicy == "" {
+		source.Image.PullPolicy = defaultVolumeImagePullPolicy(source.Image.Reference)
+	}
+	if source.HostPath != nil && source.HostPath.Type == nil {
+		source.HostPath.Type = ptr.To(corev1.HostPathUnset)
+	}
+	if source.Secret != nil && source.Secret.DefaultMode == nil {
+		source.Secret.DefaultMode = ptr.To(int32(corev1.SecretVolumeSourceDefaultMode))
+	}
+	if source.ISCSI != nil && source.ISCSI.ISCSIInterface == "" {
+		source.ISCSI.ISCSIInterface = "default"
+	}
+	if source.RBD != nil {
+		if source.RBD.RBDPool == "" {
+			source.RBD.RBDPool = "rbd"
+		}
+		if source.RBD.RadosUser == "" {
+			source.RBD.RadosUser = "admin"
+		}
+		if source.RBD.Keyring == "" {
+			source.RBD.Keyring = "/etc/ceph/keyring"
+		}
+	}
+	if source.DownwardAPI != nil {
+		if source.DownwardAPI.DefaultMode == nil {
+			source.DownwardAPI.DefaultMode = ptr.To(int32(corev1.DownwardAPIVolumeSourceDefaultMode))
+		}
+		for i := range source.DownwardAPI.Items {
+			setObjectFieldSelectorDefaults(source.DownwardAPI.Items[i].FieldRef)
+		}
+	}
+	if source.ConfigMap != nil && source.ConfigMap.DefaultMode == nil {
+		source.ConfigMap.DefaultMode = ptr.To(int32(corev1.ConfigMapVolumeSourceDefaultMode))
+	}
+	if source.AzureDisk != nil {
+		if source.AzureDisk.CachingMode == nil {
+			mode := corev1.AzureDataDiskCachingMode(corev1.AzureDataDiskCachingReadWrite)
+			source.AzureDisk.CachingMode = &mode
+		}
+		if source.AzureDisk.FSType == nil {
+			source.AzureDisk.FSType = ptr.To("ext4")
+		}
+		if source.AzureDisk.ReadOnly == nil {
+			source.AzureDisk.ReadOnly = ptr.To(false)
+		}
+		if source.AzureDisk.Kind == nil {
+			kind := corev1.AzureDataDiskKind(corev1.AzureSharedBlobDisk)
+			source.AzureDisk.Kind = &kind
+		}
+	}
+	if source.Projected != nil {
+		if source.Projected.DefaultMode == nil {
+			source.Projected.DefaultMode = ptr.To(int32(corev1.ProjectedVolumeSourceDefaultMode))
+		}
+		for i := range source.Projected.Sources {
+			projection := &source.Projected.Sources[i]
+			if projection.DownwardAPI != nil {
+				for j := range projection.DownwardAPI.Items {
+					setObjectFieldSelectorDefaults(projection.DownwardAPI.Items[j].FieldRef)
+				}
+			}
+			if projection.ServiceAccountToken != nil && projection.ServiceAccountToken.ExpirationSeconds == nil {
+				projection.ServiceAccountToken.ExpirationSeconds = ptr.To(int64(time.Hour.Seconds()))
+			}
+		}
+	}
+	if source.ScaleIO != nil {
+		if source.ScaleIO.StorageMode == "" {
+			source.ScaleIO.StorageMode = "ThinProvisioned"
+		}
+		if source.ScaleIO.FSType == "" {
+			source.ScaleIO.FSType = "xfs"
+		}
+	}
+	if source.Ephemeral != nil && source.Ephemeral.VolumeClaimTemplate != nil {
+		spec := &source.Ephemeral.VolumeClaimTemplate.Spec
+		if spec.VolumeMode == nil {
+			spec.VolumeMode = ptr.To(corev1.PersistentVolumeFilesystem)
+		}
+		normalizeResourceList(spec.Resources.Limits)
+		normalizeResourceList(spec.Resources.Requests)
+	}
+}
+
+func setObjectFieldSelectorDefaults(selector *corev1.ObjectFieldSelector) {
+	if selector != nil && selector.APIVersion == "" {
+		selector.APIVersion = "v1"
+	}
+}
+
+func normalizeResourceList(resources corev1.ResourceList) {
+	const milliScale = -3
+	for name, quantity := range resources {
+		quantity.RoundUp(milliScale)
+		// Populate the canonical string cache so semantically identical
+		// quantities also compare equal through reflect.DeepEqual.
+		_ = quantity.String()
+		resources[name] = quantity
+	}
+}
+
+func defaultVolumeImagePullPolicy(reference string) corev1.PullPolicy {
+	name := reference
+	if slash := strings.LastIndex(name, "/"); slash >= 0 {
+		name = name[slash+1:]
+	}
+
+	hasDigest := false
+	if at := strings.Index(name, "@"); at >= 0 {
+		hasDigest = true
+		name = name[:at]
+	}
+	if colon := strings.LastIndex(name, ":"); colon >= 0 {
+		if name[colon+1:] == "latest" {
+			return corev1.PullAlways
+		}
+		return corev1.PullIfNotPresent
+	}
+	if !hasDigest {
+		return corev1.PullAlways
+	}
+	return corev1.PullIfNotPresent
 }
 
 // CompareVolumeMounts is a generic comparer of two Kubernetes VolumeMounts.
