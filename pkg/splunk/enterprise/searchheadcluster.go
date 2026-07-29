@@ -848,7 +848,9 @@ func (mgr *searchHeadClusterPodManager) reconcileAuthorizedRevisionRecoveryPodDe
 		operation.Intent !=
 			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
 		operation.TargetOrdinal == nil ||
-		operation.RecoveryRevision == "" {
+		operation.RecoveryRevision == "" ||
+		operation.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageCompleted {
 		return false, nil
 	}
 

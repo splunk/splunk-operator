@@ -3520,6 +3520,60 @@ func TestAuthorizedRevisionRecoveryDeletesWithdrawnTargetAfterPartitionBarrier(
 	)
 }
 
+func TestAuthorizedRevisionRecoveryDeletionReleasesQueuedRevisionAfterCompletion(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-3",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	targetOrdinal := int32(2)
+	authorizedAt := metav1.Now()
+	withdrawalStartedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			OperationID:                 "completed-withdrawn-revision-operation",
+			Intent:                      enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:             "revision-2",
+			RecoveryRevision:            "revision-1",
+			TargetPod:                   statefulSet.GetName() + "-2",
+			TargetOrdinal:               &targetOrdinal,
+			TargetPodUID:                "original-pod-uid",
+			Stage:                       enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+			Reason:                      enterpriseApi.SearchHeadClusterLifecycleReasonOperationCompleted,
+			ReplacementAuthorizedAt:     &authorizedAt,
+			RevisionWithdrawalStartedAt: &withdrawalStartedAt,
+		}
+	mgr.cr.Status.Message = "completed recovery"
+	client.ResetCalls()
+
+	pending, err := mgr.reconcileAuthorizedRevisionRecoveryPodDeletion(
+		context.Background(),
+		&K8EventPublisher{
+			recorder: &mockEventRecorder{},
+			instance: mgr.cr,
+		},
+		statefulSet,
+	)
+	if err != nil {
+		t.Fatalf("release queued revision after recovery completion: %v", err)
+	}
+	if pending {
+		t.Fatal("completed recovery kept the forced-deletion path pending")
+	}
+	if mgr.cr.Status.Message != "completed recovery" {
+		t.Fatalf(
+			"completed recovery message = %q, want unchanged",
+			mgr.cr.Status.Message,
+		)
+	}
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
 func TestAuthorizedRevisionRecoveryDoesNotDeleteBeforePartitionBarrier(
 	t *testing.T,
 ) {
