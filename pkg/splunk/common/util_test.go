@@ -24,10 +24,12 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 func TestAsOwner(t *testing.T) {
@@ -946,6 +948,241 @@ func TestCompareVolumes(t *testing.T) {
 	a = []corev1.Volume{secret3Volume}
 	b = []corev1.Volume{secret4Volume}
 	test(false)
+}
+
+func TestCompareVolumesNormalizesKubernetesDefaults(t *testing.T) {
+	filesystem := corev1.PersistentVolumeFilesystem
+	defaultMode := int32(0644)
+	hostPathUnset := corev1.HostPathUnset
+	tokenExpiration := int64(time.Hour.Seconds())
+
+	tests := []struct {
+		name     string
+		desired  corev1.Volume
+		observed corev1.Volume
+		want     bool
+	}{
+		{
+			name:     "empty volume source defaults to emptyDir",
+			desired:  corev1.Volume{Name: "volume"},
+			observed: corev1.Volume{Name: "volume", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		},
+		{
+			name:     "secret mode defaults to 0644",
+			desired:  corev1.Volume{Name: "volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{}}},
+			observed: corev1.Volume{Name: "volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode}}},
+		},
+		{
+			name:     "hostPath type defaults to unset",
+			desired:  corev1.Volume{Name: "volume", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/data"}}},
+			observed: corev1.Volume{Name: "volume", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/data", Type: &hostPathUnset}}},
+		},
+		{
+			name:     "configMap mode defaults to 0644",
+			desired:  corev1.Volume{Name: "volume", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{}}},
+			observed: corev1.Volume{Name: "volume", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{DefaultMode: &defaultMode}}},
+		},
+		{
+			name:     "generic ephemeral volume mode defaults to Filesystem",
+			desired:  genericEphemeralVolume(nil),
+			observed: genericEphemeralVolume(&filesystem),
+		},
+		{
+			name: "projected volume and token defaults are normalized",
+			desired: corev1.Volume{
+				Name: "volume",
+				VolumeSource: corev1.VolumeSource{
+					Projected: &corev1.ProjectedVolumeSource{
+						Sources: []corev1.VolumeProjection{{
+							ServiceAccountToken: &corev1.ServiceAccountTokenProjection{Path: "token"},
+						}},
+					},
+				},
+			},
+			observed: corev1.Volume{
+				Name: "volume",
+				VolumeSource: corev1.VolumeSource{
+					Projected: &corev1.ProjectedVolumeSource{
+						DefaultMode: &defaultMode,
+						Sources: []corev1.VolumeProjection{{
+							ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+								Path:              "token",
+								ExpirationSeconds: &tokenExpiration,
+							},
+						}},
+					},
+				},
+			},
+		},
+		{
+			name: "downward API field reference defaults to v1",
+			desired: corev1.Volume{
+				Name: "volume",
+				VolumeSource: corev1.VolumeSource{
+					DownwardAPI: &corev1.DownwardAPIVolumeSource{
+						Items: []corev1.DownwardAPIVolumeFile{{
+							Path:     "name",
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
+						}},
+					},
+				},
+			},
+			observed: corev1.Volume{
+				Name: "volume",
+				VolumeSource: corev1.VolumeSource{
+					DownwardAPI: &corev1.DownwardAPIVolumeSource{
+						DefaultMode: &defaultMode,
+						Items: []corev1.DownwardAPIVolumeFile{{
+							Path: "name",
+							FieldRef: &corev1.ObjectFieldSelector{
+								APIVersion: "v1",
+								FieldPath:  "metadata.name",
+							},
+						}},
+					},
+				},
+			},
+		},
+		{
+			name:     "untagged image volume defaults to Always",
+			desired:  imageVolume("registry.example/splunk"),
+			observed: imageVolumeWithPullPolicy("registry.example/splunk", corev1.PullAlways),
+		},
+		{
+			name:     "tagged image volume defaults to IfNotPresent",
+			desired:  imageVolume("registry.example/splunk:10.0"),
+			observed: imageVolumeWithPullPolicy("registry.example/splunk:10.0", corev1.PullIfNotPresent),
+		},
+		{
+			name:     "latest image volume defaults to Always",
+			desired:  imageVolume("registry.example/splunk:latest"),
+			observed: imageVolumeWithPullPolicy("registry.example/splunk:latest", corev1.PullAlways),
+		},
+		{
+			name:     "digest image volume defaults to IfNotPresent",
+			desired:  imageVolume("registry.example/splunk@sha256:0123456789abcdef"),
+			observed: imageVolumeWithPullPolicy("registry.example/splunk@sha256:0123456789abcdef", corev1.PullIfNotPresent),
+		},
+		{
+			name:     "non-default secret mode remains material",
+			desired:  corev1.Volume{Name: "volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{}}},
+			observed: corev1.Volume{Name: "volume", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: ptr.To(int32(0600))}}},
+			want:     true,
+		},
+		{
+			name:     "non-default ephemeral volume mode remains material",
+			desired:  genericEphemeralVolume(nil),
+			observed: genericEphemeralVolume(ptr.To(corev1.PersistentVolumeBlock)),
+			want:     true,
+		},
+		{
+			name:     "non-default image pull policy remains material",
+			desired:  imageVolume("registry.example/splunk:10.0"),
+			observed: imageVolumeWithPullPolicy("registry.example/splunk:10.0", corev1.PullAlways),
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			desiredBefore := tt.desired.DeepCopy()
+			observedBefore := tt.observed.DeepCopy()
+
+			if got := CompareVolumes([]corev1.Volume{tt.desired}, []corev1.Volume{tt.observed}); got != tt.want {
+				t.Fatalf("CompareVolumes() = %t, want %t", got, tt.want)
+			}
+			if !reflect.DeepEqual(&tt.desired, desiredBefore) {
+				t.Fatal("CompareVolumes() mutated the desired volume")
+			}
+			if !reflect.DeepEqual(&tt.observed, observedBefore) {
+				t.Fatal("CompareVolumes() mutated the observed volume")
+			}
+		})
+	}
+}
+
+func TestCompareVolumesNormalizesDeprecatedVolumeDefaults(t *testing.T) {
+	desired := []corev1.Volume{
+		{Name: "iscsi", VolumeSource: corev1.VolumeSource{ISCSI: &corev1.ISCSIVolumeSource{}}},
+		{Name: "rbd", VolumeSource: corev1.VolumeSource{RBD: &corev1.RBDVolumeSource{}}},
+		{Name: "azure", VolumeSource: corev1.VolumeSource{AzureDisk: &corev1.AzureDiskVolumeSource{}}},
+		{Name: "scaleio", VolumeSource: corev1.VolumeSource{ScaleIO: &corev1.ScaleIOVolumeSource{}}},
+	}
+	observed := []corev1.Volume{
+		{Name: "iscsi", VolumeSource: corev1.VolumeSource{ISCSI: &corev1.ISCSIVolumeSource{ISCSIInterface: "default"}}},
+		{
+			Name: "rbd",
+			VolumeSource: corev1.VolumeSource{RBD: &corev1.RBDVolumeSource{
+				RBDPool:   "rbd",
+				RadosUser: "admin",
+				Keyring:   "/etc/ceph/keyring",
+			}},
+		},
+		{
+			Name: "azure",
+			VolumeSource: corev1.VolumeSource{AzureDisk: &corev1.AzureDiskVolumeSource{
+				CachingMode: ptr.To(corev1.AzureDataDiskCachingMode(corev1.AzureDataDiskCachingReadWrite)),
+				FSType:      ptr.To("ext4"),
+				ReadOnly:    ptr.To(false),
+				Kind:        ptr.To(corev1.AzureDataDiskKind(corev1.AzureSharedBlobDisk)),
+			}},
+		},
+		{
+			Name: "scaleio",
+			VolumeSource: corev1.VolumeSource{ScaleIO: &corev1.ScaleIOVolumeSource{
+				StorageMode: "ThinProvisioned",
+				FSType:      "xfs",
+			}},
+		},
+	}
+
+	if CompareVolumes(desired, observed) {
+		t.Fatal("CompareVolumes() reported material differences for Kubernetes-defaulted deprecated volume fields")
+	}
+}
+
+func TestCompareVolumesNormalizesEphemeralResourceQuantities(t *testing.T) {
+	desired := genericEphemeralVolume(nil)
+	desired.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests = corev1.ResourceList{
+		corev1.ResourceStorage: resource.MustParse("0.0001"),
+	}
+	observed := genericEphemeralVolume(ptr.To(corev1.PersistentVolumeFilesystem))
+	observed.Ephemeral.VolumeClaimTemplate.Spec.Resources.Requests = corev1.ResourceList{
+		corev1.ResourceStorage: resource.MustParse("1m"),
+	}
+
+	if CompareVolumes([]corev1.Volume{desired}, []corev1.Volume{observed}) {
+		t.Fatal("CompareVolumes() reported a material difference after API resource-quantity rounding")
+	}
+}
+
+func genericEphemeralVolume(volumeMode *corev1.PersistentVolumeMode) corev1.Volume {
+	return corev1.Volume{
+		Name: "volume",
+		VolumeSource: corev1.VolumeSource{
+			Ephemeral: &corev1.EphemeralVolumeSource{
+				VolumeClaimTemplate: &corev1.PersistentVolumeClaimTemplate{
+					Spec: corev1.PersistentVolumeClaimSpec{VolumeMode: volumeMode},
+				},
+			},
+		},
+	}
+}
+
+func imageVolume(reference string) corev1.Volume {
+	return imageVolumeWithPullPolicy(reference, "")
+}
+
+func imageVolumeWithPullPolicy(reference string, pullPolicy corev1.PullPolicy) corev1.Volume {
+	return corev1.Volume{
+		Name: "volume",
+		VolumeSource: corev1.VolumeSource{
+			Image: &corev1.ImageVolumeSource{
+				Reference:  reference,
+				PullPolicy: pullPolicy,
+			},
+		},
+	}
 }
 
 func TestSortAndCompareSlices(t *testing.T) {
