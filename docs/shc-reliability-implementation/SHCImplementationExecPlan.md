@@ -241,6 +241,12 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
 - [ ] Resolve the remaining authorized-revision withdrawal and
   deletion-finalization gaps as separate bounded work items before treating
   the SHC-78/79 campaigns as broader production-readiness evidence.
+- [ ] Investigate and qualify SHC-82. Reproduce an App Framework deployment
+  whose bundle requires Search Head and indexer restarts; pin the exact
+  Operator, Docker-Splunk, and Splunk Enterprise sources; establish the
+  effective Splunk restart mode and the meaning of `searchable` and `force`;
+  and continuously prove ingest, search-result completeness, cluster
+  redundancy, and single-disruption coordination before changing defaults.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -690,7 +696,35 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   explicit, least-privilege metrics access rather than assume an
   unauthenticated in-container scrape.
 
+- Observation: a customer reported that App Framework app deployment can
+  trigger restarts on both Search Heads and indexers. One indexer-side record
+  said `Rolling restart with searchable=0 and force=0 initiated` while its
+  preflight reported `rfMet=1 sfMet=1 allSearchable=1`.
+  Evidence: current Operator App Framework source invokes
+  `splunk apply shcluster-bundle` for an SHC and
+  `splunk apply cluster-bundle --skip-validation` for an indexer cluster. The
+  Operator command does not itself select `searchable` or `searchable_force`;
+  the effective rolling-restart behavior is owned below that command boundary.
+  Consequence: do not infer from this line alone that multiple copies of a
+  bucket were offline. SHC-82 must trace the exact Splunk Enterprise version,
+  effective `server.conf`, bundle restart decision, peer order, replication
+  and search-factor state, active-search behavior, and App Framework
+  coordination before choosing an Operator, Docker-Splunk, Splunk
+  configuration, or Splunk Enterprise change.
+
 ## Decision Log
+
+- Decision: treat restart-required App Framework delivery as one
+  cross-topology availability contract, not as an SHC-only rollout setting or
+  a request to copy `rolling_restart=searchable_force` into every deployment.
+  Rationale: App Framework can cause distinct Splunk-managed restart workflows
+  on Search Heads and indexers. The supported values and their version-specific
+  behavior, the meaning of the force mode, and the effect on running searches
+  must be established from Splunk documentation and source and then proved
+  under insufficient-redundancy and active-search fault cases. Until those
+  gates pass, the safe requirement is to serialize the operation, observe the
+  effective policy, and fail closed rather than force progress.
+  Date: 2026-07-29 UTC.
 
 - Decision: SHC-78 will use `PodScheduled` as the scheduling boundary and
   `PodReadyToStartContainers` as the generic Pod-infrastructure boundary.
@@ -1747,3 +1781,10 @@ Pod-volume default normalization. Added exact CR-versus-StatefulSet defaulting
 evidence, semantic comparison tests, immutable image provenance, controller
 restart recovery, six stable post-restart samples, successful member searches,
 and the separate CRD-schema and Make deployment-helper discoveries.
+
+2026-07-29: Registered the customer-reported App Framework restart-availability
+concern as SHC-82 and stable scenario OPS-011. The plan now separates the
+observed `searchable=0` and `force=0` record from unproven conclusions, spans
+both Search Head and indexer clusters, and requires exact Splunk semantics,
+active-search behavior, continuous service evidence, and fail-closed
+redundancy qualification before a product default or forced mode is selected.
