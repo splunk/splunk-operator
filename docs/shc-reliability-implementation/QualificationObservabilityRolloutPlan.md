@@ -103,6 +103,14 @@ ownership.
   restart retained identical workload Pod UIDs, zero restarts, unchanged
   StatefulSet generations and revisions, three endpoints, and successful
   searches without a volume-difference reconcile.
+- [x] (2026-07-29) Qualified SHC-80 authorized-revision recovery on EKS with
+  exact source `0b9253f1181947348c43eec7894ff1a9abd65366`. One authorized,
+  unschedulable ordinal recovered at the last-known-good revision across an
+  Operator restart, then released a queued revision that completed
+  `2 -> 1 -> 0` with dynamic captain transfer and every persistent member GUID
+  preserved. The monitor recorded 187 HTTP 200 searches, zero failures,
+  minimum two serving endpoints, maximum one unavailable member, zero
+  restarts, and a clean 369-second final gate.
 - [ ] Qualify OPS-011/SHC-82 with a restart-required App Framework package on
   both a three-member SHC and a replicated indexer cluster. Capture the
   effective restart flags and exact peer/member order while continuous ingest,
@@ -315,6 +323,45 @@ ownership.
   bounded test identity. Production monitoring must explicitly qualify its
   scrape RBAC.
 
+- Observation: increasing an `OrderedReady` StatefulSet partition above an
+  already-created failed ordinal does not remove that Pod.
+  Consequence: SHC-80 recovery observes the higher recovery partition and
+  revalidates every non-target peer before deleting only the failed authorized
+  target. Qualification records both the failed Pod UID and the recovery Pod
+  UID and proves Kubernetes recreated the ordinal at the last-known-good
+  ControllerRevision.
+
+- Observation: durable completed-operation history must remain available for
+  support without continuing to control future destructive work.
+  Consequence: a completed authorized-revision recovery exits the recovery
+  deletion path before evaluating a later update revision. A source regression
+  test proves queued work is released without deleting a Pod or changing the
+  completed message.
+
+- Observation: the fresh fixture briefly reported Kubernetes and CR readiness
+  before image-owned SHC initialization, synchronization, and internal Splunk
+  restarts completed. The readiness gates later withdrew all endpoints until
+  the members recovered.
+  Consequence: SHC-80 fault injection began only after sustained endpoint,
+  member, captain, and search validation. The early-ready interval remains a
+  separate Docker-Splunk and Splunk Enterprise startup-contract gap and cannot
+  be treated as proof that the cluster is ready for disruption.
+
+- Observation: SHC recovery and withdrawal counters are process-local. The
+  deliberate Operator restart retained durable CR status and Events but reset
+  those counters; the final process correctly reported only the later queued
+  rollout transitions.
+  Consequence: qualification and support must correlate durable operation
+  status, Kubernetes Events, structured logs, and persisted Prometheus series.
+  A zero counter after a controller restart is not evidence that recovery did
+  not occur.
+
+- Observation: the current `make deploy` target depends on `uninstall`, which
+  deletes the Splunk Enterprise CRDs before deployment.
+  Consequence: live-fixture image qualification updates only the Operator
+  Deployment and verifies its image digest. The Make target must be redesigned
+  or guarded before it can represent an in-place Operator upgrade procedure.
+
 ## Decision Log
 
 - Decision: OPS-011 passes only with continuous customer-visible evidence, not
@@ -474,6 +521,21 @@ ownership.
   respected the one-member lifecycle.
   Date/Author: 2026-07-28, qualification team.
 
+- Decision: automatic post-authorization recovery is limited to one failed
+  target whose revision is absent from every non-target Pod and whose peers
+  are Ready, serving, and at the last-known-good revision.
+  Rationale: this proves a single-target rollback boundary. A partial rollout,
+  uncertain peer state, or active image upgrade remains fail closed rather
+  than broadening recovery into an implicit multi-member rollback.
+  Date/Author: 2026-07-29, qualification team.
+
+- Decision: recovery completion releases future queued work but does not erase
+  the completed lifecycle record.
+  Rationale: support needs durable evidence of the withdrawal, while a
+  historical operation must never authorize deletion against a later
+  StatefulSet revision.
+  Date/Author: 2026-07-29, qualification team.
+
 ## Outcomes & Retrospective
 
 The first integrated positive-path campaign, one active-strategy rollback, the
@@ -502,12 +564,18 @@ retained the original captain Pod, restored it in place after revision
 withdrawal, completed deterministic rollback, emitted only the expected
 warning and cancellation signals, and passed a 321-second final stability
 gate.
+The SHC-80 image additionally recovered one already-authorized,
+unschedulable target at its last-known-good revision across a real Operator
+restart, then released the superseding queued revision and completed a
+captain-safe `2 -> 1 -> 0` rollout with all persistent GUIDs preserved. Its
+complete monitor recorded 187 successful searches and zero failures, and the
+converged cluster passed 369 seconds of final stability.
 
 The complete `OnDelete` and `RollingUpdate` gates remain open because the
 required repetitions, full-campaign soak around the new search cases,
 additional timeout classes, forced disruption, scheduling/storage/network
-faults, version skew, revision withdrawal after replacement authorization, and
-other rollback-under-failure cases have not passed. The earlier log-severity,
+faults, version skew, other post-authorization and partial-rollout variants,
+and other rollback-under-failure cases have not passed. The earlier log-severity,
 phase, scale-event, higher-ordinal observation, cancelled-update recovery,
 stale search-count, unaudited continuation, failed-transfer, revision-reuse,
 and stale-StatefulSet-observation defects are corrected for the tested paths.
@@ -1278,6 +1346,65 @@ desired state.
   associated PVs before namespace deletion. Every worker remained Ready and
   schedulable, and the EBS CSI controller finished at two ready replicas.
 
+2026-07-29 STS-003/STS-008/STS-014 authorized-revision recovery
+qualification:
+
+- source branch:
+  `codex/shc-80-authorized-revision-recovery`;
+- registration, implementation, forced-rollback, and queued-release commits:
+  `d1f6e301d`, `744bfb096`, `9be744f06`, and
+  `0b9253f1181947348c43eec7894ff1a9abd65366`;
+- final Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-80-0b9253f11`
+  at digest
+  `sha256:fecf5134468a2478c0de13ad88b463b8f2db38747d795e60aae3304a0b9986cb`;
+- Linux `make fmt vet build test` passed all 41 Ginkgo suites and 154
+  controller specifications with zero failures and 78.5 percent composite
+  coverage;
+- the accepted run used EKS cluster `vivek-spl-301372`, Kubernetes
+  `v1.31.14-eks-8f14419`, namespace `shc80-authorized-recovery-v2`, both
+  lifecycle feature gates, and pinned Splunk 9.4.1 runtime digest
+  `sha256:e51312c90d8cd860065a0fcb887a50c3d227122477b2ca3f5a7336f93d9308cb`;
+- the healthy baseline revision was
+  `splunk-shc80-search-head-8659646985`. After all workers were cordoned,
+  revision `splunk-shc80-search-head-b6d6d44d9` was authorized for ordinal
+  two, and its replacement remained Pending and unschedulable. Revision
+  `splunk-shc80-search-head-6987ddbf74` was queued before recovery;
+- the operation retained ID
+  `PodUpdate:splunk-shc80-search-head-2:splunk-shc80-search-head-b6d6d44d9:2`,
+  original and replacement Pod UIDs, desired and recovery revisions, target
+  GUID, and withdrawal timestamp across a real Operator Pod replacement while
+  the recovery Pod remained Pending;
+- after workers were uncordoned, ordinal two rejoined the last-known-good
+  revision with original GUID
+  `E308A2D4-49A3-4595-A71F-7D4B7AE01FDB`. The queued revision then completed
+  ordinals `2 -> 1 -> 0`, including captain transfers before replacing
+  ordinal one and ordinal zero, and reset partition to three after current and
+  update revisions converged;
+- final GUIDs exactly matched baseline:
+  `E35DC033-3CEF-4ACE-B9EE-A7ABAE5F9AB2`,
+  `B723CD8C-7BB0-4190-BA67-8919769A583E`, and
+  `E308A2D4-49A3-4595-A71F-7D4B7AE01FDB`. Every member was registered `Up`
+  with `NoRestart`; the captain was initialized, service ready, and outside
+  maintenance or rolling restart;
+- Kubernetes Events recorded one withdrawal, one recovery start, one recovery
+  completion, three queued-rollout target starts, three partition advances,
+  and one final completion. After the final Operator restart, Prometheus
+  reported `PrepareTarget=3`, `SetPartition=3`, `Complete=1`,
+  `WaitingForKubernetes=4`, and four authorized partition changes. Recovery
+  and withdrawal counters were zero in that final process, as expected after
+  the deliberate controller restart;
+- the availability monitor recorded 187 HTTP 200 searches, zero failures,
+  minimum two serving endpoints, maximum one unavailable Search Head, and
+  zero workload or Operator restarts;
+- 21 final samples from `2026-07-29T21:40:43Z` through
+  `2026-07-29T21:46:52Z` spanned 369 seconds with a Ready 3/3 CR, three
+  endpoints, equal revisions, partition three, zero restarts, and no bad
+  sample; and
+- CR-first cleanup removed four Pods, eight PVCs, and all eight PVs before
+  namespace deletion. No test SHC or PV remained; all three workers were
+  Ready and schedulable, and EBS CSI finished at `2/2` Ready.
+
 ## Interfaces and Dependencies
 
 The test harness requires stable adapters for:
@@ -1393,3 +1520,11 @@ reproduction signature, required active-search and result-completeness
 evidence, redundancy and conflict negative cases, and the rule that
 `searchable=0` is an observation to explain rather than proof of the reported
 impact.
+
+2026-07-29: Recorded SHC-80 authorized-revision recovery qualification. Added
+immutable source and image provenance, partition-barrier forced rollback,
+durable Operator-restart recovery, completed-operation release of queued work,
+dynamic captain-transfer evidence, exact persistent GUID continuity, Event
+and process-local metric interpretation, 187 uninterrupted searches, a
+369-second final gate, complete storage cleanup, and the separate early-ready
+and destructive `make deploy` follow-up findings.

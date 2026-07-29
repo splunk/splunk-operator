@@ -242,11 +242,16 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `codex/shc-80-authorized-revision-recovery` from integrated feature baseline
   `9eecde5d68e9dc889bb2b2f1913420396e00cb21`; this registration does not claim
   implementation or qualification.
-- [ ] Implement and qualify SHC-80 as a durable, single-target withdrawal
+- [x] (2026-07-29) Implemented and qualified SHC-80 as a durable,
+  single-target withdrawal
   barrier. Automatic recovery is limited to a failed authorized target that is
   the only Pod on the failed revision while every peer remains Ready, serving,
-  and on the last known-good revision. A partially completed rollout or active
-  image upgrade remains fail closed.
+  and on the last known-good revision. The accepted EKS run recovered an
+  unschedulable authorized ordinal across an Operator restart, released a
+  queued revision after recovery completion, completed ordinals `2 -> 1 -> 0`
+  with dynamic captain transfer, preserved every Splunk GUID, completed 187
+  searches without failure, and passed a 369-second final gate. A partially
+  completed rollout or active image upgrade remains fail closed.
 - [ ] Resolve the deletion-finalization gap as separate bounded work item
   SHC-81 before treating the SHC-78/79 campaigns as broader
   production-readiness evidence.
@@ -301,6 +306,15 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   every required non-empty replacement input and verify the live environment;
   hardening that general deployment helper is separate from SHC-79.
 
+- (2026-07-29 UTC) The `deploy` Make target depends on `uninstall`, and
+  `uninstall` deletes the generated Splunk Enterprise CRDs before `deploy`
+  reapplies them. Running that target against a cluster containing live
+  Splunk custom resources deleted the qualification fixture. In-place
+  qualification image changes must update only the Operator Deployment and
+  verify the resulting image digest. The deployment helper must be redesigned
+  or explicitly guarded before it is safe for an upgrade workflow with live
+  custom resources.
+
 - (2026-07-29 UTC) `Immediate` EBS provisioning can bind a generic ephemeral
   volume in a zone that conflicts with the retained per-ordinal `etc` and
   `var` volumes. Kubernetes then correctly leaves the Pod unschedulable with
@@ -319,6 +333,32 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   withdrawn. A separate policy and implementation must safely cancel, roll
   back, or explicitly continue that operation without exposing a second
   target.
+
+- (2026-07-29 UTC) Raising an `OrderedReady` StatefulSet partition back above
+  an already-created failed ordinal does not remove that Pod. The first SHC-80
+  prototype therefore reached the recovery revision in the template but
+  remained blocked by the existing failed Pod. The accepted implementation
+  deletes only the authorized failed target after it observes the recovery
+  partition and revalidates that all non-target peers are Ready, serving, and
+  on the last-known-good revision. Kubernetes then recreates that ordinal at
+  the recovery revision.
+
+- (2026-07-29 UTC) A completed recovery operation initially continued to enter
+  the recovery-deletion guard. Once a queued template produced a new
+  StatefulSet update revision, that guard could no longer prove the historical
+  revision invariants and held the queued rollout indefinitely. Completed
+  operations now leave that deletion path immediately; a regression test
+  proves the historical recovery record cannot delete a Pod, rewrite its
+  message, or keep the queued revision pending.
+
+- (2026-07-29 UTC) During fresh SHC formation, the CR and Pods briefly
+  reported Ready before image-owned Ansible cluster initialization, bundle
+  synchronization, and the resulting internal Splunk restarts had completed.
+  The lifecycle readiness gates later removed all Search Head Service
+  endpoints until actual member recovery. The accepted SHC-80 action began
+  only after sustained Splunk and Service validation, but this observation
+  remains a separate startup/readiness contract gap for Docker-Splunk and
+  Splunk Enterprise.
 
 - (2026-07-29 UTC) Deleting the disposable qualification namespace exposed a
   deletion-finalizer edge. The SHC finalizer attempted to recreate its Secret
@@ -993,10 +1033,16 @@ passed. The StatefulSet never advanced more than one planned Search Head at a
   proved structured unschedulable attribution and exact EBS CSI attachment
   attribution, including bounded holds, uninterrupted service through two
   unaffected members, and recovery of the same authorized replacement.
+  SHC-80 additionally recovered an already-authorized unschedulable
+  replacement at its last-known-good revision across a real Operator restart,
+  released the superseding queued revision after recovery completion, and
+  completed a captain-safe `2 -> 1 -> 0` rollout with every persistent Splunk
+  GUID preserved. The complete monitor recorded 187 successful searches,
+  zero failures, and a final 369-second stability gate.
 
 This is not production-readiness evidence. Forced deletion and node loss,
 additional storage providers and scheduling causes, network and TLS variants,
-version skew, safe withdrawal of an authorized replacement that cannot start,
+version skew, other authorized-revision failure and partial-rollout variants,
 rollback under other injected failures, repeated runs, soak testing, and
 support/alert qualification remain open. The lifecycle-aware log, phase,
 scale-event, transient higher-ordinal observation, cancellation, continuation,
@@ -1680,6 +1726,50 @@ SHC-79 Kubernetes-volume-default normalization qualification captured on
   before namespace deletion; all workers remained Ready and schedulable, and
   EBS CSI finished at two ready replicas.
 
+SHC-80 authorized-revision recovery qualification captured on 2026-07-29:
+
+- source branch:
+  `codex/shc-80-authorized-revision-recovery`;
+- source commits:
+  `d1f6e301d`, `744bfb096`, `9be744f06`, and
+  `0b9253f1181947348c43eec7894ff1a9abd65366`;
+- final Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-80-0b9253f11`;
+- final Operator image digest:
+  `sha256:fecf5134468a2478c0de13ad88b463b8f2db38747d795e60aae3304a0b9986cb`;
+- Linux `make fmt vet build test` passed all 41 Ginkgo suites and 154
+  controller specifications with zero failures and 78.5 percent composite
+  coverage;
+- the EKS fixture used cluster `vivek-spl-301372`, namespace
+  `shc80-authorized-recovery-v2`, both lifecycle feature gates, and pinned
+  Splunk 9.4.1 runtime digest
+  `sha256:e51312c90d8cd860065a0fcb887a50c3d227122477b2ca3f5a7336f93d9308cb`;
+- after all workers were cordoned, revision
+  `splunk-shc80-search-head-b6d6d44d9` was authorized for ordinal two and the
+  replacement remained Pending and unschedulable. Revision
+  `splunk-shc80-search-head-6987ddbf74` was then queued while both peers
+  remained Ready and serving at last-known-good revision
+  `splunk-shc80-search-head-8659646985`;
+- the controller raised partition three, removed only the failed target,
+  recreated it at the last-known-good revision, and retained exact lifecycle
+  identity, revisions, UIDs, member GUID, and withdrawal timestamp across a
+  real Operator restart while the replacement was Pending;
+- after workers were uncordoned, recovered ordinal two rejoined with its
+  original GUID. The queued revision then completed `2 -> 1 -> 0`, including
+  captain transfers before ordinal-one and ordinal-zero replacement, and
+  reset the converged StatefulSet partition to three;
+- all final members were registered `Up` with `NoRestart` and their original
+  GUIDs. The dynamic captain reported initialized, minimum peers joined, and
+  service ready, without maintenance or Splunk rolling restart;
+- the complete monitor recorded 187 successful Service searches, zero
+  failures, minimum two serving endpoints, maximum one unavailable Search
+  Head, and zero workload or Operator restarts;
+- 21 final samples from `2026-07-29T21:40:43Z` through
+  `2026-07-29T21:46:52Z` spanned 369 seconds with no bad sample; and
+- CR-first cleanup removed four Pods, eight PVCs, and eight PVs before
+  namespace deletion. No test SHC or PV remained, all workers were Ready and
+  schedulable, and EBS CSI was `2/2` Ready.
+
 ## Interfaces and Dependencies
 
 The technical designs must define concrete interfaces for:
@@ -1804,3 +1894,12 @@ redundancy qualification before a product default or forced mode is selected.
 boundary and retained partially completed rollouts and image upgrades as
 fail-closed cases. This registration deliberately makes no implementation or
 qualification claim.
+
+2026-07-29: Recorded SHC-80 source and EKS qualification. Added durable
+authorized-revision withdrawal, forced-rollback target recycling behind a
+partition and peer-safety barrier, completed-recovery release of queued work,
+Operator-restart continuity, exact persistent member identity proof, dynamic
+captain transfer, 187 uninterrupted searches, a 369-second stability gate,
+and complete CR-first storage cleanup. Also recorded the fresh-formation
+readiness gap and the destructive CRD dependency in the current `make deploy`
+helper as separate follow-up concerns.
