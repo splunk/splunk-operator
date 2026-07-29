@@ -162,6 +162,40 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   The accepted run passed 127 uninterrupted searches with maximum
   unavailability one and zero restarts, followed by a 300-second, 37-sample
   stability gate.
+- [x] (2026-07-28) Implemented SHC-77 on
+  `codex/shc-77-image-pull-classification` at `b3ae4b291`. The Kubernetes
+  adapter now distinguishes retryable pull failures from terminal invalid
+  image syntax, and the recovery workflow retains the authorized ordinal under
+  the replacement startup budget without making a later ordinal eligible.
+- [x] (2026-07-28) Passed the complete Linux source gate for SHC-77 at
+  `4710438a0`: `make fmt`, `make vet`, `make build`, and `make test`. All 41
+  Ginkgo suites passed, including 154 controller envtest specifications, with
+  78.5 percent composite coverage.
+- [x] (2026-07-28) Qualified SHC-77 on EKS cluster
+  `vivek-spl-301372` with Operator source `4710438a0`, Operator image digest
+  `sha256:2d9af851e07bbf891b03ad07bec0c849f973280bb92cf03e344620ecbf6154b7`,
+  and runtime digest
+  `sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547`.
+  A missing desired tag remained retryable at ordinal two for 60 seconds,
+  recovered after that exact tag was restored, and completed `2 -> 1 -> 0`
+  with dynamic captain transfer. Invalid image syntax then blocked immediately
+  at ordinal two. All 131 service searches passed, minimum ready endpoints
+  stayed at two, maximum unavailability stayed at one, and the Deployer did not
+  restart or change revision.
+- [x] (2026-07-28/29 UTC) Completed the Kubernetes observation spike for the
+  next bounded work item, SHC-78. On the qualification cluster's Kubernetes
+  1.31 control plane, an unschedulable Pod exposed
+  `PodScheduled=False/Unschedulable`. A scheduled Pod blocked on CSI
+  attachment instead exposed `PodReadyToStartContainers=False`,
+  `ContainerCreating` with no message, and a matching VolumeAttachment with
+  `attached=false`; `FailedAttachVolume` appeared later as a Pod Event. All
+  spike resources were removed, including the generated VolumeAttachment.
+- [ ] Close the SHC-77 publication gap, create
+  `codex/shc-78-pod-infrastructure-attribution` from the updated feature
+  branch, and add the assigned work item to `SHCWorkItemIndex.md`.
+- [ ] Implement and source-qualify SHC-78 so scheduling, volume attachment,
+  generic Pod infrastructure, image pull, container startup, and Splunk rejoin
+  remain separate durable observations under one replacement startup budget.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -180,6 +214,91 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
 - [ ] Complete release readiness, rollback rehearsal, and support enablement.
 
 ## Surprises & Discoveries
+
+- (2026-07-28/29 UTC) The live EKS 1.31 API disproved the current storage
+  heuristic. During a real CSI attachment wait, the target Pod was scheduled
+  and its container state was `ContainerCreating`, but the waiting message was
+  empty. The current adapter only sets `StoragePending` when that free-form
+  message contains `volume`, `attach`, or `mount`, so it would classify the
+  observed attachment delay as a generic container wait.
+
+- (2026-07-28/29 UTC) `PodReadyToStartContainers=False` is the stable boundary
+  available on the qualification cluster before image pulling and container
+  startup. It proves that Pod sandbox, networking, volume setup, or dynamic
+  resource preparation is incomplete, but it does not identify which one.
+  The Operator must report a generic Pod-infrastructure wait unless a more
+  specific structured Kubernetes object confirms storage attachment state.
+
+- (2026-07-28/29 UTC) The generated VolumeAttachment provided the immediate,
+  structured storage signal: it matched the target Pod's bound PVC volume and
+  scheduled node and reported `attached=false`. Its `attachError` was empty.
+  The namespaced `FailedAttachVolume` Event arrived only after the
+  attach/detach controller's timeout. Events therefore remain valuable
+  diagnostic evidence but are too late and too best-effort to be the sole
+  lifecycle classifier.
+
+- (2026-07-28/29 UTC) The current Operator service account can read namespaced
+  core Events and PVCs but cannot read cluster-scoped VolumeAttachments.
+  Exact immediate attachment attribution therefore requires a deliberate
+  read-only RBAC addition. VolumeAttachment objects have no namespace and
+  cannot be queried server-side by persistent-volume name, so the
+  implementation must bound and document its list/filter behavior.
+
+- (2026-07-28) The existing lifecycle adapter collapsed
+  `ErrImagePull`/`ImagePullBackOff` and
+  `InvalidImageName`/`ErrInvalidImage` into one immediately blocked
+  observation. Kubernetes retries the former states and can recover without a
+  new Pod or revision, while the latter identifies an image reference kubelet
+  cannot interpret. Treating both as terminal contradicted REJ-004 and could
+  convert a temporary registry interruption into an unnecessarily permanent
+  lifecycle block.
+
+- (2026-07-28) A SearchHeadCluster image-string change cannot be used as an
+  image-pull fault-injection shortcut. The new image-upgrade workflow correctly
+  blocks `UnknownUpgradePath` because no production authoritative
+  compatibility provider is connected yet, and it deliberately refuses to
+  infer compatibility from image tags. The EKS qualification must preserve
+  that safety boundary rather than install a test-only production bypass.
+
+- (2026-07-28) Kubernetes accepts an in-place update to a running Pod's
+  container image. Kubelet stops the old container because its definition
+  changed and then resolves the new image without requiring an extra signal.
+  When the old container has already run, `containerStatuses` can alternate
+  between restart `CrashLoopBackOff` and image-pull failure even while Pod
+  Events consistently report pull failures. That is an artifact of mutating an
+  already-started container, not the normal first-pull failure of a
+  StatefulSet replacement. Final qualification therefore holds scheduling,
+  injects the fault before the unscheduled authorized replacement's first
+  container attempt, and then restores scheduling so only the real image-pull
+  path is exercised.
+
+- (2026-07-28) Restoring a missing tag under an out-of-band Pod image alias
+  allowed the member to rejoin, but the completed Pod then had a different
+  image string from the StatefulSet template. The image-upgrade safety boundary
+  correctly rejected that mixed source state. Retryable qualification must use
+  a dedicated image tag as the desired image from initial formation, remove
+  that same tag only while the authorized replacement is unscheduled, and
+  restore it to the identical digest. This creates a real pull interruption
+  without leaving desired-state drift.
+
+- (2026-07-28) A qualification override of readiness
+  `failureThreshold: 12` with `periodSeconds: 10` kept members in the Service
+  while their local port 8089 was refusing connections during post-formation
+  splunkd restarts. Direct probes identified ordinals zero and one as
+  unavailable while each Pod still reported `Ready=True`; kubelet Events
+  independently recorded failed readiness and liveness probes. The Operator
+  source defaults are a readiness threshold of three and period of five
+  seconds. Slow startup protection belongs in the startup and liveness
+  budgets; increasing the readiness failure window directly increases the time
+  Kubernetes can continue routing to a locally unavailable member.
+
+- (2026-07-28) `spec.extraEnv` changes both the Search Head and Deployer Pod
+  templates. Removing a shared desired image tag during such a revision caused
+  the Deployer's legacy rollout path to report terminal `ErrImagePull` before
+  the SHC lifecycle adapter could own the result. The qualification revision
+  must be Search-Head-only. Pinning `deployerResourceSpec` to the baseline
+  resources while changing a harmless common resource request on Search Heads
+  provides that isolation without adding a production test hook.
 
 - Observation: current `develop` already detains a member and polls historical
   plus real-time search counts during recycle.
@@ -463,6 +582,50 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
 
 ## Decision Log
 
+- Decision: SHC-78 will use `PodScheduled` as the scheduling boundary and
+  `PodReadyToStartContainers` as the generic Pod-infrastructure boundary.
+  It will classify `WaitingForStorage` only when a matching Kubernetes
+  VolumeAttachment for one of the target Pod's bound PVCs and scheduled node
+  reports `attached=false`. It will not infer storage state from a container's
+  free-form waiting message or depend on an Event being retained.
+  Rationale: the live EKS API exposed all three structured signals and showed
+  that the current message substring is absent during a real attachment wait.
+  This separates Kubernetes infrastructure time from image, container, and
+  Splunk time without claiming that every pre-container delay is storage.
+  Date: 2026-07-28/29 UTC.
+
+- Decision: grant only `get`, `list`, and `watch` on cluster-scoped
+  `storage.k8s.io/volumeattachments` for SHC-78, correlate only the authorized
+  target Pod's scheduled node and bound PVC volume names, and persist no raw
+  attachment-error or Event message in lifecycle status.
+  Rationale: VolumeAttachment is the immediate structured attachment source,
+  while raw messages can contain provider volume handles or other
+  infrastructure details. Bounded reason codes and booleans provide useful
+  attribution without expanding the diagnostic data surface.
+  Date: 2026-07-28/29 UTC.
+
+- Decision: SHC-77 classifies `ErrImagePull` and `ImagePullBackOff` as
+  retryable within the existing replacement Pod startup budget, while
+  `InvalidImageName` and `ErrInvalidImage` remain immediately terminal.
+  Rationale: kubelet already retries pull/backoff states, so the Operator must
+  preserve the same authorized target and let that retry recover. Invalid
+  image syntax cannot recover without desired-state correction and must remain
+  fail-closed. After the startup budget expires, a retryable pull becomes
+  `Blocked/ImagePullFailed`; no later ordinal is eligible in either path.
+  Date: 2026-07-28.
+
+- Decision: form the qualification SHC with a dedicated image tag that resolves
+  to the pinned runtime digest. For the retryable path, temporarily cordon the
+  test workers, remove that tag only after the authorized replacement exists
+  unscheduled, restore scheduling, and later restore the same tag to the same
+  digest. For the terminal path, patch only the unscheduled authorized
+  replacement to invalid image syntax and then restore scheduling.
+  Rationale: this exercises real first-pull kubelet behavior and the production
+  Operator adapter while leaving the fail-closed authoritative image-upgrade
+  compatibility boundary unchanged and avoiding mixed Pod/StatefulSet image
+  desired state after recovery.
+  Date: 2026-07-28.
+
 - Decision: base implementation planning on the GitLab `sok/develop` branch,
   while pinning a commit for reproducible review.
   Rationale: the user identified GitLab as the integration repository, and a
@@ -658,6 +821,11 @@ passed. The StatefulSet never advanced more than one planned Search Head at a
   durable in-place recovery after revision withdrawal, deterministic
   reverse-ordinal rollback, no false rollout diagnostics, and 321 continuous
   seconds of final SHC, Kubernetes, management-endpoint, and KV Store health.
+  SHC-77 additionally proved real kubelet `ErrImagePull` and
+  `ImagePullBackOff` recovery without releasing the authorized ordinal, plus
+  immediate fail-closed handling of `InvalidImageName`. The accepted campaign
+  completed 131 uninterrupted service searches with at least two ready
+  endpoints and no more than one unavailable Search Head.
 
 This is not production-readiness evidence. Forced deletion and node loss,
 storage and scheduling delay, network and TLS variants, version skew,

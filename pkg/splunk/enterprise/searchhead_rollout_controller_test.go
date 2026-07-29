@@ -2522,6 +2522,98 @@ func TestRollingUpdateControllerBlocksFailedReplacementWithoutAdvancing(t *testi
 	}
 }
 
+func TestRollingUpdateControllerHoldsPartitionForRetryableImagePull(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-2"},
+	)
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:             "pod-update-2",
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		DesiredRevision:         "revision-2",
+		TargetPod:               statefulSet.GetName() + "-2",
+		TargetOrdinal:           &target,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+		Reason:                  enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed,
+		Message:                 "waiting for image pull retry",
+		ReplacementAuthorizedAt: &authorizedAt,
+	}
+	setRollingUpdateFixturePodReady(t, client, statefulSet, target, false)
+	client.ResetCalls()
+
+	for observation := 1; observation <= 3; observation++ {
+		phase, err := mgr.updateRollingStatefulSetPods(
+			context.Background(),
+			statefulSet,
+			3,
+		)
+		if err != nil {
+			t.Fatalf(
+				"retryable image-pull observation %d returned error: %v",
+				observation,
+				err,
+			)
+		}
+		if phase != enterpriseApi.PhaseUpdating {
+			t.Fatalf(
+				"retryable image-pull observation %d phase = %q, want Updating",
+				observation,
+				phase,
+			)
+		}
+		if len(client.Calls["Update"]) != 0 {
+			t.Fatalf(
+				"retryable image-pull observation %d changed Kubernetes state: %v",
+				observation,
+				client.Calls["Update"],
+			)
+		}
+		assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, target)
+		assertNoRollingUpdatePodDelete(t, client)
+		operation := mgr.cr.Status.LifecycleOperation
+		if operation == nil ||
+			operation.TargetOrdinal == nil ||
+			*operation.TargetOrdinal != target ||
+			operation.Stage !=
+				enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer ||
+			operation.Reason !=
+				enterpriseApi.SearchHeadClusterLifecycleReasonImagePullFailed {
+			t.Fatalf(
+				"retryable image-pull operation = %#v, want ordinal 2 container wait",
+				operation,
+			)
+		}
+	}
+
+	operation := mgr.cr.Status.LifecycleOperation
+	operation.Stage = enterpriseApi.SearchHeadClusterLifecycleStageBlocked
+	operation.Message = "replacement Pod image pull exceeded its startup budget"
+	client.ResetCalls()
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err == nil {
+		t.Fatal("expected exhausted image-pull retry to block rollout")
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Fatalf("blocked image-pull phase = %q, want %q", phase, enterpriseApi.PhaseError)
+	}
+	if len(client.Calls["Update"]) != 0 {
+		t.Fatalf("blocked image pull changed Kubernetes state: %v", client.Calls["Update"])
+	}
+	assertRollingUpdatePartition(t, statefulSet.Spec.UpdateStrategy, target)
+	assertNoRollingUpdatePodDelete(t, client)
+}
+
 func TestRollingUpdateControllerHoldsPartitionWhileMemberCannotRejoinCaptain(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(

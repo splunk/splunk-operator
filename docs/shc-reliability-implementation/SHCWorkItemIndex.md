@@ -51,6 +51,7 @@ without duplicating their full content.
 | SHC-74 | Add audited post-timeout continuation with operation/token matching and a durable approval barrier | `54a5aae3c`, `5bfd23b18` | LFC-006, OBS-001, OBS-003, OBS-006 | EKS-qualified for wrong-token, stale-operation, exact approval, reverse-ordinal rollout, and 312-second stability |
 | SHC-75 | Qualify failed captain transfer and pre-authorization revision withdrawal; handle ControllerRevision reuse, in-place readiness handoff, and StatefulSet generation observation | `eb6907ee5`, `44ccac31e`, `3e9e735a7` | LFC-007, OBS-001, OBS-002 | EKS-qualified for pre-authorization failure/cancellation, reverse-ordinal rollback, clean Event/log audit, and 321-second stability |
 | SHC-76 | Retain an already-authorized target across a superseding desired revision, queue the later Pod template, and release it only after Kubernetes traffic readiness | `24eea3f37`, `243f7a5d2`, `50eb10514` | STS-003, STS-014, OBS-001, OBS-002 | EKS-qualified for post-authorization revision handoff, two distinct target authorizations, complete reverse-ordinal convergence, 127 uninterrupted searches, and 300-second final stability |
+| SHC-77 | Distinguish retryable image-pull backoff from terminal invalid image syntax and retain the authorized ordinal under the replacement startup budget | `b3ae4b291`, `4710438a0` | STS-008, REJ-004, REJ-005, OBS-001, OBS-002 | EKS-qualified for a 60-second retryable pull hold and recovery, complete `2 -> 1 -> 0` convergence, immediate `InvalidImageName` block at ordinal two, 131 uninterrupted searches, minimum two Ready endpoints, and maximum unavailability one |
 
 ## SHC-75 immutable qualification inputs
 
@@ -118,6 +119,52 @@ lifecycle operation; the Operator kept partition three and reported
 `ExistingUnavailablePod` without authorizing disruption. The accepted third
 run began only after the sustained pre-action gate.
 
+## SHC-77 immutable qualification inputs
+
+- source branch:
+  `codex/shc-77-image-pull-classification`;
+- final source before this documentation commit:
+  `4710438a031e77f0906a4eaf26d5821ee70d0ed8`;
+- Operator source commit:
+  `b3ae4b291`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-reliability-4710438a0`;
+- Operator image digest:
+  `sha256:2d9af851e07bbf891b03ad07bec0c849f973280bb92cf03e344620ecbf6154b7`;
+- EKS cluster: `vivek-spl-301372` in `us-west-2`;
+- accepted qualification namespace: `shc77-image-pull`;
+- runtime image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc-prestart-7951d69-ansible-9954434-splunk-10.6.0.0-d9be152689b7`;
+- runtime image digest:
+  `sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547`;
+- transient desired tag:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc77-runtime-4710438a0`,
+  resolving to the pinned runtime digest before and after fault injection;
+- Linux gate: `make fmt vet build test`, 41 Ginkgo suites, 154 controller
+  specifications, zero failures, and 78.5 percent composite coverage;
+- retryable result: ordinal two remained the only authorized target through
+  real kubelet `ErrImagePull` and `ImagePullBackOff` for 60 seconds, recovered
+  when the exact desired tag was restored, and the rollout then completed
+  ordinals `2 -> 1 -> 0` with captain transfer before ordinal zero;
+- terminal result: invalid image syntax produced `InvalidImageName` and
+  immediate `Blocked/ImagePullFailed` at ordinal two, partition remained two,
+  and no later ordinal became eligible;
+- availability result: 131 successful Service searches, zero failures,
+  minimum two Ready endpoints, maximum one unavailable Search Head, and an
+  unchanged Ready Deployer with zero restarts; and
+- cleanup result: the qualification namespace and its persistent volumes were
+  removed, all worker nodes were schedulable, and the transient ECR tag was
+  absent after the campaign.
+
+The qualification preserved the production image-upgrade safety boundary:
+without an authoritative compatibility provider, the Operator continued to
+report an unknown upgrade path rather than infer compatibility from image
+tags. Fault injection instead exercised a first-pull failure of the already
+authorized StatefulSet replacement. It also used the default readiness timing;
+an earlier non-accepted run showed that increasing the readiness failure
+window could leave a Pod in Service endpoints while its local management port
+was refusing connections.
+
 ## Next execution records
 
 The next work item must be assigned before implementation and added here in the
@@ -129,7 +176,8 @@ scenario complete.
 
 ## Revision Note
 
-2026-07-28: Created the central SHC-60 through SHC-76 execution registry,
+2026-07-28/29 UTC: Extended the central SHC-60 through SHC-77 execution
+registry,
 linked implementation commits to stable scenario identifiers, recorded
 qualification scope without claiming production readiness, and recorded the
-post-authorization revision-withdrawal handoff.
+retryable and terminal image-pull classification results.
