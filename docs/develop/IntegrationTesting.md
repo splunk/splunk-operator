@@ -131,6 +131,7 @@ graph TD
   - App download PVC wiring on the operator deployment; the helper retries update conflicts and skips duplicate `app-staging` volume and mount entries
 - **Prerequisites validation (fail-fast):** `SetupTestCaseEnv` calls `ValidateTestPrerequisites` immediately after creating the namespace and deployment. This checks that (a) the test namespace exists and (b) the operator pod is `Running` and `Ready` in the correct namespace (`splunk-operator` for cluster-wide, or the test namespace otherwise). If either check fails, the test fails fast with a clear error before any long-running operations begin
 - Torn down via `testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)` — which handles failure detection, skip-teardown on failure, deployment cleanup, and namespace deletion in one call
+- **Cloud credential validation (fail-fast):** when `CLUSTER_PROVIDER` is `eks`, `azure`, or `gcp`, `TestCaseEnv` rejects missing provider credentials before creating an incomplete Kubernetes Secret. The setup error names the missing variable, so the spec stops before cloud API operations begin
 
 **Deployment** (`test/testenv/deployment.go`)
 - Wraps the Splunk Custom Resources deployed in a test
@@ -911,7 +912,9 @@ kubectl get all,pvc --all-namespaces -o json | \
 
 ### Cloud Provider Credentials
 
-Cloud provider variables below are used to create Kubernetes Secrets in each test namespace for SmartStore, App Framework, and index tests. In CI, these are populated from repository secrets. For local runs, export them in your shell or source them from a `.env` file. If you're only running smoke tests without cloud storage features, these can be left unset.
+Cloud provider variables below are used to create Kubernetes Secrets in each test namespace for SmartStore, App Framework, and index tests. In CI, these are populated from repository secrets. For local runs, export them in your shell or source them from a `.env` file.
+
+Credential validation runs whenever a `TestCaseEnv` is created with `CLUSTER_PROVIDER=eks`, `azure`, or `gcp`, regardless of which test suite is running. This means that even a smoke suite fails during setup when its selected cloud provider's required credentials are missing. Tests using `CLUSTER_PROVIDER=kind` (or another non-cloud provider) do not create these cloud Secrets and can leave the variables unset.
 
 > **Caution:** If you modify `test/env.sh` with local values or secrets, do **not** commit or push it. Changes to `env.sh` affect CI runs for all contributors and risk disclosing confidential data such as credentials and access keys. Consider using a local `.env` file (which is `.gitignore`d) or exporting variables in your shell session instead.
 
@@ -920,8 +923,10 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 | Variable | Description |
 |----------|-------------|
 | `ECR_REGISTRY` | ECR registry URL |
-| `TEST_S3_ACCESS_KEY_ID` | S3 access key for test buckets |
-| `TEST_S3_SECRET_ACCESS_KEY` | S3 secret key |
+| `TEST_S3_ACCESS_KEY_ID` | Required S3 access key for test buckets; `AWS_ACCESS_KEY_ID` is accepted as a fallback |
+| `TEST_S3_SECRET_ACCESS_KEY` | Required S3 secret key; `AWS_SECRET_ACCESS_KEY` is accepted as a fallback |
+| `AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID` | Required S3 access key for the index/ingestion separation Secret |
+| `AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY` | Required S3 secret key for the index/ingestion separation Secret |
 | `TEST_BUCKET` / `TEST_S3_BUCKET` | S3 bucket for test data |
 | `TEST_INDEXES_S3_BUCKET` | S3 bucket for index tests |
 | `S3_REGION` | AWS region (default: `us-west-2`) |
@@ -936,8 +941,8 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 
 | Variable | Description |
 |----------|-------------|
-| `STORAGE_ACCOUNT` | Azure Storage account name |
-| `STORAGE_ACCOUNT_KEY` | Azure Storage account key |
+| `STORAGE_ACCOUNT` | Required Azure Storage account name |
+| `STORAGE_ACCOUNT_KEY` | Required Azure Storage account key |
 | `TEST_CONTAINER` | Azure Blob container for test data |
 | `INDEXES_CONTAINER` | Azure Blob container for index tests |
 
@@ -945,7 +950,7 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 
 | Variable | Description |
 |----------|-------------|
-| `GCP_SERVICE_ACCOUNT_KEY` | Base64-encoded GCP service account JSON |
+| `GCP_SERVICE_ACCOUNT_KEY` | Required base64-encoded GCP service account JSON |
 | `GCP_CONTAINER_REGISTRY_LOGIN_SERVER` | GCP Artifact Registry URL |
 
 ---
