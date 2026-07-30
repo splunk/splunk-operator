@@ -273,6 +273,16 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   effective Splunk restart mode and the meaning of `searchable` and `force`;
   and continuously prove ingest, search-result completeness, cluster
   redundancy, and single-disruption coordination before changing defaults.
+  Partial EKS evidence from 2026-07-30 used a deterministic version `1.0.1`
+  update and 120 numbered HEC events. HEC accepted every event and the final
+  search returned `count=120`, `min=1`, `max=120`, and `distinct=120`, but 11
+  Service searches failed. Nine samples had zero Search Head Service
+  endpoints. The SHC rolling restart was `2 -> 1 -> 0`; the captain transferred
+  `0 -> 2 -> 0`. All Kubernetes Pod UIDs and container restart counts remained
+  unchanged because Splunk restarted inside each running container. The same
+  package did not restart indexers: every peer reported
+  `restart_required=0`, so the indexer restart-required and negative cases
+  remain open.
 - [ ] Define and qualify SHC-83 so Service readiness cannot succeed before
   image-owned SHC initialization, synchronization, and internal Splunk
   restarts have completed.
@@ -804,7 +814,51 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   coordination before choosing an Operator, Docker-Splunk, Splunk
   configuration, or Splunk Enterprise change.
 
+- (2026-07-30 UTC) The first real SHC-82 update exposed two independent
+  Search Head availability gaps. Splunk performed an internal rolling restart
+  in the supported `2 -> 1 -> 0` order, but the generic readiness probe used a
+  five-second period and three-failure threshold. Each non-captain splunkd
+  outage was short enough that Kubernetes continued to advertise the
+  restarting member, and two Service searches failed while all three
+  endpoints were still present. When ordinal zero transferred captaincy and
+  restarted, the Operator temporarily observed `CaptainReady=false`. The
+  serving-gate implementation then set `ClusterNotReady` on every healthy
+  member because App Framework is not a durable Operator lifecycle operation.
+  The Search Head Service had zero ready endpoints from the monitor's
+  `07:22:04Z` sample through `07:23:18Z`; the independent monitor bounded the
+  EndpointSlice transition from two endpoints at `07:22:02Z` to three at
+  `07:23:29Z`. This contradicts the existing decision that member traffic
+  readiness is local and captain health belongs in CR conditions. A fix must
+  preserve fresh-formation fail-closed behavior, keep the actual restarting
+  member out of traffic promptly, and retain locally healthy members after a
+  previously stable cluster enters a transient captain transition.
+
+- (2026-07-30 UTC) The restart-required fixture proved restart-required SHC
+  bundle behavior but not indexer restart behavior. The Cluster Manager
+  recorded `restart_required=0` for all three indexers and completed the
+  bundle by reload. The fixture description and remaining qualification must
+  not claim an indexer rolling restart until a configuration that Splunk
+  actually classifies as restart-required is selected and observed.
+
 ## Decision Log
+
+- Decision: an established SHC must not withdraw every Kubernetes traffic
+  endpoint solely because captain observation is transiently unavailable
+  during a Splunk-managed rolling restart.
+  Rationale: traffic readiness is a local member property; captain health is a
+  cluster condition. The observed implementation amplified a supported
+  captain transfer into a zero-endpoint outage. Fresh formation must still
+  fail closed, so the implementation must use durable evidence that the
+  current replica topology previously reached stable Ready state rather than
+  globally ignoring captain readiness.
+  Date: 2026-07-30 UTC.
+
+- Decision: a qualification app is restart-required only for the topology
+  whose Splunk structured status reports `restart_required=1`.
+  Rationale: the first fixture restarted Search Heads but every indexer
+  reported `restart_required=0`; app metadata and a test-case name are not
+  runtime evidence of an indexer restart.
+  Date: 2026-07-30 UTC.
 
 - Decision: treat restart-required App Framework delivery as one
   cross-topology availability contract, not as an SHC-only rollout setting or

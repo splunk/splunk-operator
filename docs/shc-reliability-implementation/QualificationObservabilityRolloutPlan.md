@@ -133,8 +133,13 @@ ownership.
   expected LicenseManager Service URL. The LicenseManager itself initially
   used the built-in Enterprise trial license, which Splunk rejected for remote
   manager operation. A Secret-backed, remote-manager-capable license removed
-  that qualification-environment error. The remaining App Framework
-  availability, completeness, conflict, and unhealthy-redundancy gates stay
+  that qualification-environment error. A subsequent version `1.0.1` update
+  submitted 120 numbered HEC events with zero ingestion failure and recovered
+  every sequence exactly once, but produced 11 failed Service searches and
+  nine zero-endpoint samples during the SHC rolling restart. All Pod UIDs and
+  Kubernetes container restart counts remained unchanged. The package reloaded
+  on the indexers without a restart, so App Framework availability,
+  indexer-restart, active-search, conflict, and unhealthy-redundancy gates stay
   open.
 - [ ] Qualify SHC-83 with an explicit startup-complete traffic-readiness
   contract across image-owned initialization, synchronization, and internal
@@ -201,6 +206,28 @@ ownership.
   search-factor, searchable-bucket, and rolling-restart state and with
   end-to-end searches. It must separately record what happens to searches that
   were already running when each Search Head or indexer restarts.
+
+- Observation: the first versioned SHC-82 update performed a Splunk-managed
+  Search Head rolling restart without replacing a Pod or incrementing a
+  Kubernetes container restart count. The member order was `2 -> 1 -> 0`, with
+  captain transfer `0 -> 2 -> 0`. The five-second, three-failure readiness
+  probe did not withdraw each short internal splunkd outage before traffic
+  could reach it. Later, transient captain unavailability caused the
+  Operator-owned readiness gate to mark all three Pods `ClusterNotReady`, even
+  though this was not an Operator lifecycle target operation.
+  Consequence: qualification must observe internal splunkd start identity in
+  addition to Pod UID and container restart count, and must report
+  `ContainersReady`, Pod `Ready`, the SHC serving gate, and EndpointSlice state
+  separately. The implementation must combine prompt local withdrawal with
+  previously-formed-cluster evidence so a captain transition cannot remove all
+  otherwise healthy local search capacity.
+
+- Observation: the same package did not exercise an indexer rolling restart.
+  Every peer reported `restart_required=0`, and the Cluster Manager completed
+  the bundle by reload.
+  Consequence: the indexer-side SHC-82 gate remains untested; the qualification
+  fixture must be replaced or extended with a configuration Splunk classifies
+  as restart-required before any searchable-restart policy is evaluated.
 
 - Observation: the compatibility variable named as a captain URL is also a
   bootstrap seed. Its name cannot be treated as proof of runtime captaincy.
@@ -417,6 +444,15 @@ ownership.
   or guarded before it can represent an in-place Operator upgrade procedure.
 
 ## Decision Log
+
+- Decision: record internal splunkd identity and all four Kubernetes traffic
+  signals separately for every App Framework run: container readiness, Pod
+  readiness, the Operator SHC-serving gate, and EndpointSlice readiness.
+  Rationale: Splunk can restart inside an unchanged container. Pod UID and
+  Kubernetes restart count alone missed the entire `2 -> 1 -> 0` restart, and
+  container readiness alone did not reveal the later cluster-wide gate
+  withdrawal.
+  Date: 2026-07-30 UTC.
 
 - Decision: OPS-011 passes only with continuous customer-visible evidence, not
   merely a successful bundle command or final healthy cluster.

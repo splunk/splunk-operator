@@ -3,11 +3,18 @@
 This fixture is used only for controlled App Framework availability
 qualification.
 
-The enabled `splunktcp` input is a restart-required configuration based on the
-Splunk Enterprise cluster-bundle test case
-`test_push_app_with_other_conf_restart_needed`. The `full` deployer push mode
-provides the corresponding Search Head Cluster bundle path. The listener uses
-the otherwise unused port `19997`; the test does not send traffic to it.
+The `full` deployer push mode and restart-required app metadata exercise the
+Search Head Cluster bundle path. The enabled `splunktcp` input was selected
+from the Splunk Enterprise cluster-bundle test case
+`test_push_app_with_other_conf_restart_needed`; the listener uses the otherwise
+unused port `19997`, and the test does not send traffic to it.
+
+The first EKS update proved that this package causes a Splunk-managed Search
+Head rolling restart. It did not cause an indexer restart on the tested Splunk
+build: every peer reported `restart_required=0` and reloaded the bundle.
+Therefore this fixture must not be used as indexer restart qualification
+evidence. SHC-82 still requires a separate indexer package whose live
+structured bundle status reports `restart_required=1`.
 
 Build the package from the repository root:
 
