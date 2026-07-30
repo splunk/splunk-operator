@@ -158,10 +158,19 @@ type SearchHeadClusterMemberStatus struct {
 	// Name of the search head cluster member
 	Name string `json:"name"`
 
-	// Indicates the status of the member.
+	// Indicates the status reported by the member itself.
 	Status string `json:"status"`
 
-	// Flag that indicates if this member can run scheduled searches.
+	// Indicates the authoritative status reported by the SHC captain. This is
+	// populated while Splunk is performing a rolling restart or captaincy is
+	// changing.
+	CaptainStatus string `json:"captain_status,omitempty"`
+
+	// Indicates whether the member has been instructed to restart.
+	RestartState string `json:"restart_state,omitempty"`
+
+	// Indicates whether this member is configured as an ad-hoc search head and
+	// therefore does not run scheduled jobs.
 	Adhoc bool `json:"adhoc_searchhead"`
 
 	// Indicates if this member is registered with the searchhead cluster captain.

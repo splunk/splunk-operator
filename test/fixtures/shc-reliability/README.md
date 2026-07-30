@@ -28,7 +28,11 @@ Framework state. It does not print the HEC token or administrator password.
 Search Head observations report container readiness, Kubernetes Pod readiness,
 the Operator-owned SHC serving gate, and Service EndpointSlice readiness as
 separate signals so an internal Splunk restart cannot be mistaken for a
-healthy Kubernetes traffic endpoint.
+healthy Kubernetes traffic endpoint. Each sample also records the exact
+EndpointSlice target Pods, each serving-gate reason, and the local and
+captain-reported member/restart states exposed by the SearchHeadCluster.
+Failed searches retain a bounded, whitespace-normalized response detail
+without logging credentials.
 The monitor exits successfully only when every submitted sequence is present
 exactly once at the final completeness gate.
 

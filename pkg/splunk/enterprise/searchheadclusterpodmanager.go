@@ -908,6 +908,18 @@ var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterP
 	return c.GetSearchHeadCaptainInfo()
 }
 
+// GetSearchHeadCaptainMembersForStatus is replaceable in tests. The captain's
+// member view is authoritative for a peer that Splunk has selected for an
+// internal rolling restart; the peer's local member endpoint can still report
+// Up during that transition.
+var GetSearchHeadCaptainMembersForStatus = func(
+	ctx context.Context,
+	mgr *searchHeadClusterPodManager,
+	n int32,
+) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+	return mgr.getClient(ctx, n).GetSearchHeadCaptainMembers()
+}
+
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
 func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
 	// populate members status using REST API to get search head cluster member info
@@ -929,12 +941,15 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 		mgr.cr.Status.LifecycleOperation,
 	)
 	gotCaptainInfo := false
+	captainObservationOrdinal := int32(-1)
+	observeCaptainMembers := false
 	for n := int32(0); n < memberObservationCount; n++ {
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
 		memberInfo, err := GetSearchHeadClusterMemberInfo(ctx, mgr, n)
 		if err == nil {
 			memberStatus.Status = memberInfo.Status
+			memberStatus.RestartState = memberInfo.RestartState
 			memberStatus.Adhoc = memberInfo.Adhoc
 			memberStatus.Registered = memberInfo.Registered
 			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
@@ -986,6 +1001,9 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				mgr.cr.Status.MinPeersJoined = captainInfo.MinPeersJoined
 				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
 				gotCaptainInfo = true
+				captainObservationOrdinal = n
+				observeCaptainMembers = captainInfo.RollingRestart ||
+					(previousCaptain != "" && previousCaptain != captainInfo.Label)
 
 				if previousCaptain != "" && previousCaptain != captainInfo.Label {
 					shcLogger.InfoContext(ctx, "captain election completed",
@@ -1004,6 +1022,29 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			mgr.cr.Status.Members[n] = memberStatus
 		} else {
 			mgr.cr.Status.Members = append(mgr.cr.Status.Members, memberStatus)
+		}
+	}
+
+	if observeCaptainMembers {
+		captainMembers, err := GetSearchHeadCaptainMembersForStatus(
+			ctx,
+			mgr,
+			captainObservationOrdinal,
+		)
+		if err != nil {
+			shcLogger.ErrorContext(
+				ctx,
+				"unable to retrieve authoritative SearchHeadCluster member status",
+				"captain", mgr.cr.Status.Captain,
+				"error", err,
+			)
+		} else {
+			for n := range mgr.cr.Status.Members {
+				member := &mgr.cr.Status.Members[n]
+				if captainMember, ok := captainMembers[member.Name]; ok {
+					member.CaptainStatus = captainMember.Status
+				}
+			}
 		}
 	}
 

@@ -10452,9 +10452,16 @@ spec:
                       description: Number of currently running realtime searches.
                       type: integer
                     adhoc_searchhead:
-                      description: Flag that indicates if this member can run scheduled
-                        searches.
+                      description: |-
+                        Indicates whether this member is configured as an ad-hoc search head and
+                        therefore does not run scheduled jobs.
                       type: boolean
+                    captain_status:
+                      description: |-
+                        Indicates the authoritative status reported by the SHC captain. This is
+                        populated while Splunk is performing a rolling restart or captaincy is
+                        changing.
+                      type: string
                     is_registered:
                       description: Indicates if this member is registered with the
                         searchhead cluster captain.
@@ -10462,8 +10469,12 @@ spec:
                     name:
                       description: Name of the search head cluster member
                       type: string
+                    restart_state:
+                      description: Indicates whether the member has been instructed
+                        to restart.
+                      type: string
                     status:
-                      description: Indicates the status of the member.
+                      description: Indicates the status reported by the member itself.
                       type: string
                   type: object
                 type: array

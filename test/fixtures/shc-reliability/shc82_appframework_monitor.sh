@@ -116,11 +116,17 @@ for sequence in $(seq 1 "${samples}"); do
   distinct="$(extract_field distinct "${search_response}")"
   if [ -n "${count}" ] && [ -n "${distinct}" ] && [ -n "${maximum}" ]; then
     search_state="ok"
+    search_detail="result"
     last_count="${count}"
     last_distinct="${distinct}"
     last_max="${maximum}"
   else
     search_state="fail"
+    search_detail="$(
+      printf '%s' "${search_response}" |
+        tr '\r\n\t ' '_' |
+        sed 's/__*/_/g; s/^$/empty/; s/^\(.\{160\}\).*/\1/'
+    )"
     search_failures=$((search_failures + 1))
     count="${last_count}"
     distinct="${last_distinct}"
@@ -152,6 +158,22 @@ for sequence in $(seq 1 "${samples}"); do
       -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' \
       2>/dev/null | grep -c '^true$' || true
   )"
+  sh_endpoint_pods="$(
+    kubectl -n "${namespace}" get endpointslice \
+      -l kubernetes.io/service-name="${shc_service}" \
+      -o jsonpath='{range .items[*].endpoints[*]}{.targetRef.name}={.conditions.ready}{";"}{end}' \
+      2>/dev/null || printf 'Unavailable'
+  )"
+  sh_serving_conditions="$(
+    kubectl -n "${namespace}" get pods \
+      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance=splunk-shc82-shc-search-head \
+      -o jsonpath='{range .items[*]}{.metadata.name}={range .status.conditions[?(@.type=="enterprise.splunk.com/shc-serving")]}{.status}/{.reason}{end}{";"}{end}' \
+      2>/dev/null || printf 'Unavailable'
+  )"
+  sh_member_states="$(
+    resource_state searchheadcluster.enterprise.splunk.com shc82-shc \
+      '{range .status.members[*]}{.name}={.status}/{.restart_state}/{.captain_status}{";"}{end}'
+  )"
   idx_endpoints="$(
     kubectl -n "${namespace}" get endpointslice \
       -l kubernetes.io/service-name="${hec_service}" \
@@ -180,7 +202,7 @@ for sequence in $(seq 1 "${samples}"); do
       '{.status.appContext.isDeploymentInProgress}/{.status.appContext.bundlePushStatus.bundlePushStage}'
   )"
 
-  log_line "${timestamp} seq=${sequence} hec=${hec_state} search=${search_state} count=${count} min=${minimum:-unknown} max=${maximum} distinct=${distinct} shContainersReady=${sh_containers_ready} shPodsReady=${sh_pods_ready} shServingReady=${sh_serving_ready} shEndpoints=${sh_endpoints} idxEndpoints=${idx_endpoints} restarts=${restarts} shc=${shc} idxc=${idxc} shcApp=${shc_app} cmApp=${cm_app}"
+  log_line "${timestamp} seq=${sequence} hec=${hec_state} search=${search_state}/${search_detail} count=${count} min=${minimum:-unknown} max=${maximum} distinct=${distinct} shContainersReady=${sh_containers_ready} shPodsReady=${sh_pods_ready} shServingReady=${sh_serving_ready} shEndpoints=${sh_endpoints} shEndpointPods=${sh_endpoint_pods} shServingConditions=${sh_serving_conditions} shMembers=${sh_member_states} idxEndpoints=${idx_endpoints} restarts=${restarts} shc=${shc} idxc=${idxc} shcApp=${shc_app} cmApp=${cm_app}"
   sleep "${interval_seconds}"
 done
 

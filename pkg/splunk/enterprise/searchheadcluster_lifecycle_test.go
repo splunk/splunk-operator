@@ -492,6 +492,98 @@ func TestUpdateStatusPreservesHigherOrdinalDuringLowerOrdinalReplacement(
 	}
 }
 
+func TestUpdateStatusRecordsCaptainMemberStateDuringCaptainTransition(
+	t *testing.T,
+) {
+	oldGetMemberInfo := GetSearchHeadClusterMemberInfo
+	oldGetCaptainInfo := GetSearchHeadCaptainInfo
+	oldGetCaptainMembers := GetSearchHeadCaptainMembersForStatus
+	t.Cleanup(func() {
+		GetSearchHeadClusterMemberInfo = oldGetMemberInfo
+		GetSearchHeadCaptainInfo = oldGetCaptainInfo
+		GetSearchHeadCaptainMembersForStatus = oldGetCaptainMembers
+	})
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "example"},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Captain: "splunk-example-search-head-0",
+		},
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+	GetSearchHeadClusterMemberInfo = func(
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		_ int32,
+	) (*splclient.SearchHeadClusterMemberInfo, error) {
+		return &splclient.SearchHeadClusterMemberInfo{
+			Status:       "Up",
+			Registered:   true,
+			RestartState: "NoRestart",
+		}, nil
+	}
+	GetSearchHeadCaptainInfo = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (*splclient.SearchHeadCaptainInfo, error) {
+		return &splclient.SearchHeadCaptainInfo{
+			Label:          "splunk-example-search-head-2",
+			ServiceReady:   false,
+			Initialized:    true,
+			MinPeersJoined: true,
+		}, nil
+	}
+	captainMemberCalls := 0
+	GetSearchHeadCaptainMembersForStatus = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+		captainMemberCalls++
+		return map[string]splclient.SearchHeadCaptainMemberInfo{
+			"splunk-example-search-head-0": {
+				Label:  "splunk-example-search-head-0",
+				Status: "Restarting",
+			},
+			"splunk-example-search-head-1": {
+				Label:  "splunk-example-search-head-1",
+				Status: "Up",
+			},
+			"splunk-example-search-head-2": {
+				Label:   "splunk-example-search-head-2",
+				Status:  "Up",
+				Captain: true,
+			},
+		}, nil
+	}
+
+	replicas := int32(3)
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: replicas,
+		},
+	}
+	if err := mgr.updateStatus(context.Background(), statefulSet); err != nil {
+		t.Fatalf("update status: %v", err)
+	}
+
+	if captainMemberCalls != 1 {
+		t.Fatalf("captain member calls = %d, want 1", captainMemberCalls)
+	}
+	if cr.Status.Members[0].Status != "Up" ||
+		cr.Status.Members[0].RestartState != "NoRestart" ||
+		cr.Status.Members[0].CaptainStatus != "Restarting" {
+		t.Fatalf("old captain status = %#v", cr.Status.Members[0])
+	}
+	if cr.Status.Members[1].CaptainStatus != "Up" ||
+		cr.Status.Members[2].CaptainStatus != "Up" {
+		t.Fatalf("peer captain statuses = %#v", cr.Status.Members)
+	}
+}
+
 func TestScaleUpMemberObservationExpectedUnavailable(t *testing.T) {
 	stable := int32(3)
 	replicas := int32(4)

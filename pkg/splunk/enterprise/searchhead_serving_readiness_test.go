@@ -79,6 +79,18 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	require.Equal(t, "MemberNotUp", reason)
 
 	mgr.cr.Status.Members[0].Status = "Up"
+	mgr.cr.Status.Members[0].RestartState = "RestartRequested"
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, ordinal)
+	require.Equal(t, corev1.ConditionFalse, status)
+	require.Equal(t, "MemberRestartPending", reason)
+
+	mgr.cr.Status.Members[0].RestartState = "NoRestart"
+	mgr.cr.Status.Members[0].CaptainStatus = "Restarting"
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, ordinal)
+	require.Equal(t, corev1.ConditionFalse, status)
+	require.Equal(t, "CaptainReportsMemberNotUp", reason)
+
+	mgr.cr.Status.Members[0].CaptainStatus = "Up"
 	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
 		TargetOrdinal: &ordinal,
 		Stage:         enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget,

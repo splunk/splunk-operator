@@ -195,7 +195,8 @@ type SearchHeadCaptainMemberInfo struct {
 	// Persistent identifier assigned to this SHC member.
 	Identifier string `json:"-"`
 
-	// Flag that indicates if this member can run scheduled searches.
+	// Indicates whether this member is configured as an ad-hoc search head and
+	// therefore does not run scheduled jobs.
 	Adhoc bool `json:"adhoc_searchhead"`
 
 	// Flag to indicate if this peer advertised that it needed a restart.
@@ -279,7 +280,8 @@ type SearchHeadClusterMemberInfo struct {
 	// Number of currently running realtime searches.
 	ActiveRealtimeSearchCount int `json:"active_realtime_search_count"`
 
-	// Flag that indicates if this member can run scheduled searches.
+	// Indicates whether this member is configured as an ad-hoc search head and
+	// therefore does not run scheduled jobs.
 	Adhoc bool `json:"adhoc_searchhead"`
 
 	// Indicates if this member is registered with the searchhead cluster captain.

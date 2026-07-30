@@ -125,6 +125,18 @@ func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 	if member.Status != "Up" {
 		return corev1.ConditionFalse, "MemberNotUp", fmt.Sprintf("SHC member status is %q", member.Status)
 	}
+	if member.RestartState != "" && member.RestartState != "NoRestart" {
+		return corev1.ConditionFalse, "MemberRestartPending", fmt.Sprintf(
+			"SHC member restart state is %q",
+			member.RestartState,
+		)
+	}
+	if member.CaptainStatus != "" && member.CaptainStatus != "Up" {
+		return corev1.ConditionFalse, "CaptainReportsMemberNotUp", fmt.Sprintf(
+			"SHC captain reports member status %q",
+			member.CaptainStatus,
+		)
+	}
 	operation := mgr.cr.Status.LifecycleOperation
 	lifecycleActive := operation != nil &&
 		operation.TargetOrdinal != nil &&
