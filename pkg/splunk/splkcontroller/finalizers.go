@@ -100,5 +100,5 @@ func removeSplunkFinalizer(ctx context.Context, cr splcommon.MetaObject, c splco
 
 	// update object
 	cr.GetObjectMeta().SetFinalizers(newFinalizers)
-	return c.Update(context.Background(), cr)
+	return c.Update(ctx, cr)
 }

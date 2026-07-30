@@ -855,8 +855,12 @@ func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.Con
 	defaultSecretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	_, err = splutil.RemoveSecretOwnerRef(ctx, client, defaultSecretName, cr)
 	if err != nil {
-		scopedLog.ErrorContext(ctx, fmt.Sprintf("Owner reference removal failed for Secret Object %s", defaultSecretName), "error", err)
-		return err
+		if k8serrors.IsNotFound(err) {
+			scopedLog.InfoContext(ctx, "Secret already absent during owner reference cleanup", "secret", defaultSecretName)
+		} else {
+			scopedLog.ErrorContext(ctx, fmt.Sprintf("Owner reference removal failed for Secret Object %s", defaultSecretName), "error", err)
+			return err
+		}
 	}
 
 	// Remove unwanted Owner References for statefulSet during deletion.
@@ -874,6 +878,10 @@ func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.Con
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(instanceType, cr.GetName())}
 	err = splctrl.RemoveUnwantedOwnerRefSs(ctx, client, namespacedName, cr)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			scopedLog.InfoContext(ctx, "StatefulSet already absent during owner reference cleanup", "statefulSet", namespacedName.Name)
+			return nil
+		}
 		scopedLog.ErrorContext(ctx, "owner Reference removal failed for statefulSet", "error", err)
 		return err
 	}
@@ -1797,6 +1805,10 @@ func UpdateOrRemoveEntryFromConfigMapLocked(ctx context.Context, c splcommon.Con
 	defer mux.Unlock()
 	configMap, err := splctrl.GetConfigMap(ctx, c, namespacedName)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			scopedLog.InfoContext(ctx, "configMap already absent during cleanup", "name", namespacedName.Name)
+			return nil
+		}
 		scopedLog.ErrorContext(ctx, "unable to get config map", "name", namespacedName.Name, "error", err)
 		return err
 	}
@@ -1825,6 +1837,10 @@ refCount: %d`, getManualUpdateStatus(ctx, c, cr, configMapName), numOfObjects)
 	// Update configMap now
 	err = splutil.UpdateResource(ctx, c, configMap)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			scopedLog.InfoContext(ctx, "configMap removed concurrently during cleanup", "name", namespacedName.Name)
+			return nil
+		}
 		scopedLog.ErrorContext(ctx, "unable to update configMap", "name", namespacedName.Name, "error", err)
 		return err
 	}

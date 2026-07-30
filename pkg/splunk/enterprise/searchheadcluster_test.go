@@ -1937,34 +1937,17 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 			Kind: "SearchHeadCluster",
 		},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
+			// Deliberately invalid for normal reconciliation: finalization
+			// must not depend on App Framework validation succeeding.
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				AppsRepoPollInterval: 0,
-				VolList: []enterpriseApi.VolumeSpec{
-					{Name: "msos_s2s3_vol",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws"},
-				},
 				AppSources: []enterpriseApi.AppSourceSpec{
-					{Name: "adminApps",
-						Location: "adminAppsRepo",
+					{
+						Name:     "invalid-without-volume",
+						Location: "apps",
 						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-					{Name: "securityApps",
-						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-					{Name: "authenticationApps",
-						Location: "authenticationAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
+							VolName: "missing-volume",
+							Scope:   enterpriseApi.ScopeLocal,
+						},
 					},
 				},
 			},
@@ -1978,22 +1961,16 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-
-	// Create S3 secret
-	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
-	c.AddObject(&s3Secret)
-
-	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
-	if err != nil {
-		t.Error(err.Error())
-	}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] =
+		errors.New("namespace is terminating: creates are forbidden")
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
 	shc.ObjectMeta.DeletionTimestamp = &currentTime
 	shc.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+	shc.ObjectMeta.Annotations = map[string]string{
+		enterpriseApi.SearchHeadClusterPausedAnnotation: "true",
+	}
 	target := int32(2)
 	shc.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
 		OperationID:   "PodUpdate:splunk-stack1-search-head-2:revision-2",
@@ -2016,17 +1993,29 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 	}
 	c.ListObj = &pvclist
 
-	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
+	// Finalization must not depend on normal validation/configuration
+	// prerequisites and must not issue any Create call.
+	_, err := ApplySearchHeadCluster(ctx, c, &shc)
 	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+		t.Errorf("ApplySearchHeadCluster deletion should not have returned error: %v", err)
 	}
-
-	_, err = ApplySearchHeadCluster(ctx, c, &shc)
-	if err != nil {
-		t.Errorf("ApplySearchHeadCluster should not have returned error here.")
+	if len(c.Calls["Create"]) != 0 {
+		t.Fatalf("deletion attempted %d resource creates", len(c.Calls["Create"]))
+	}
+	statusRefreshCalls := 0
+	for _, call := range c.Calls["Get"] {
+		if _, ok := call.Obj.(*enterpriseApi.SearchHeadCluster); ok {
+			statusRefreshCalls++
+		}
+	}
+	if statusRefreshCalls != 0 {
+		t.Fatalf(
+			"successful deletion attempted %d post-finalization status refreshes",
+			statusRefreshCalls,
+		)
+	}
+	if len(shc.GetFinalizers()) != 0 {
+		t.Fatalf("deletion retained finalizers: %v", shc.GetFinalizers())
 	}
 	operation := shc.Status.LifecycleOperation
 	if operation == nil ||

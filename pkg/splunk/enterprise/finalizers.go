@@ -23,6 +23,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -71,14 +72,14 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 			client.MatchingLabels(labels),
 		}
 		pvclist := corev1.PersistentVolumeClaimList{}
-		if err := c.List(context.Background(), &pvclist, listOpts...); err != nil {
+		if err := c.List(ctx, &pvclist, listOpts...); err != nil {
 			return err
 		}
 
 		// delete each PVC
 		for _, pvc := range pvclist.Items {
 			logger.InfoContext(ctx, "deleting PVC", "name", pvc.ObjectMeta.Name)
-			if err := c.Delete(context.Background(), &pvc); err != nil {
+			if err := c.Delete(ctx, &pvc); err != nil && !k8serrors.IsNotFound(err) {
 				return err
 			}
 		}

@@ -252,15 +252,29 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   with dynamic captain transfer, preserved every Splunk GUID, completed 187
   searches without failure, and passed a 369-second final gate. A partially
   completed rollout or active image upgrade remains fail closed.
-- [ ] Resolve the deletion-finalization gap as separate bounded work item
-  SHC-81 before treating the SHC-78/79 campaigns as broader
-  production-readiness evidence.
+- [x] (2026-07-29) Selected SHC-81 on isolated branch
+  `codex/shc-81-termination-safe-finalization` from integrated feature
+  baseline `efbff783f02be7cee29c45c793e5cd2886dd2325`. Selection does not
+  claim implementation or qualification.
+- [x] (2026-07-30 UTC) Implemented and qualified SHC-81 termination-safe
+  finalization at source `58437e3ad`. A direct namespace deletion of a paused,
+  healthy three-member SHC created no namespace content, performed no
+  per-member rollout workflow, removed all eight declared PVCs and PVs, and
+  produced no namespace-termination, stale status, or storage-precondition
+  error. This closes the demonstrated SHC deletion edge; it does not by itself
+  claim broader production readiness.
 - [ ] Investigate and qualify SHC-82. Reproduce an App Framework deployment
   whose bundle requires Search Head and indexer restarts; pin the exact
   Operator, Docker-Splunk, and Splunk Enterprise sources; establish the
   effective Splunk restart mode and the meaning of `searchable` and `force`;
   and continuously prove ingest, search-result completeness, cluster
   redundancy, and single-disruption coordination before changing defaults.
+- [ ] Define and qualify SHC-83 so Service readiness cannot succeed before
+  image-owned SHC initialization, synchronization, and internal Splunk
+  restarts have completed.
+- [ ] Define and qualify SHC-84 so first-start and supported-upgrade work has
+  an explicit startup budget while every kubelet-initiated restart reaches one
+  prompt, observable TERM-to-container-exit path.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -356,17 +370,42 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   synchronization, and the resulting internal Splunk restarts had completed.
   The lifecycle readiness gates later removed all Search Head Service
   endpoints until actual member recovery. The accepted SHC-80 action began
-  only after sustained Splunk and Service validation, but this observation
-  remains a separate startup/readiness contract gap for Docker-Splunk and
-  Splunk Enterprise.
+  only after sustained Splunk and Service validation. SHC-81 qualification
+  reproduced the same sequence: a nominally Ready fixture subsequently lost
+  member and endpoint availability during image-owned initialization before
+  converging again. This is registered as SHC-83, a separate startup/readiness
+  contract gap across the Operator, Docker-Splunk, and Splunk Enterprise.
 
 - (2026-07-29 UTC) Deleting the disposable qualification namespace exposed a
   deletion-finalizer edge. The SHC finalizer attempted to recreate its Secret
   after the namespace had entered termination, which Kubernetes rejected
   because new content is forbidden. The exact test CR finalizer had to be
-  cleared after its remaining resources were verified. CR deletion must use a
-  termination-safe path that never creates namespace content and still
-  applies the declared PVC retention policy.
+  cleared after its remaining resources were verified. SHC-81 closes the
+  demonstrated edge: deleting CRs now route to finalization before ordinary
+  validation or configuration, tolerate already-absent owned resources, make
+  no create call, apply the declared PVC retention policy, and stop status
+  writers after successful finalizer removal. The accepted namespace-first EKS
+  run completed without manual finalizer removal.
+
+- (2026-07-30 UTC) The first SHC-81 fixture exposed a distinct startup and
+  termination-budget interaction. Supported Ansible and captain bootstrap work
+  took about 7 minutes 24 seconds, longer than the approximately 6 minute
+  29 second default startup-probe budget. The resulting kubelet restart used
+  the Pod's configured 1200-second termination grace. That legacy runtime did
+  not contain the qualified `/sbin/splunk-shutdown` contract and did not exit
+  promptly. SHC-84 therefore keeps startup/upgrade duration, probe-triggered
+  restart policy, grace-period sizing, and prompt TERM-to-PID-1 exit as one
+  explicit qualification boundary. Increasing grace alone is not an accepted
+  fix.
+
+- (2026-07-30 UTC) SHC finalizer removal initially succeeded inside
+  `ApplySearchHeadCluster`, but the outer SearchHeadCluster reconciler still
+  attempted a generic stalled-condition status update using the now-deleted
+  object. SHC-81 now suppresses both inner and outer post-finalization status
+  writers while preserving the ordinary error-condition path when finalization
+  fails. Similar outer condition-writer structure exists in other enterprise
+  reconcilers; an Operator-wide audit is a separate follow-up and this SHC
+  qualification does not claim their runtime behavior is defective.
 
 - (2026-07-29 UTC) The Splunk 10.6 development runtime could not provide a
   stable same-version restart baseline for this Operator-only qualification.
@@ -1903,3 +1942,19 @@ captain transfer, 187 uninterrupted searches, a 369-second stability gate,
 and complete CR-first storage cleanup. Also recorded the fresh-formation
 readiness gap and the destructive CRD dependency in the current `make deploy`
 helper as separate follow-up concerns.
+
+2026-07-29: Selected SHC-81 on
+`codex/shc-81-termination-safe-finalization` from integrated feature baseline
+`efbff783f02be7cee29c45c793e5cd2886dd2325`. This registration deliberately
+makes no implementation or qualification claim.
+
+2026-07-30 UTC: Recorded SHC-81 implementation and EKS qualification at exact
+source `58437e3ad` and Operator digest
+`sha256:f2ffee5a6cc7d33b2aa26e8cbdab81618a3785e31600d7a676ed3ec149c52b6d`.
+The accepted namespace-first deletion created no resources after namespace
+termination, removed all declared storage, avoided inner and outer stale
+status writes, and left no workload or PV behind. Registered SHC-83 and SHC-84
+as separate, still-pending requirements for startup-complete traffic readiness
+and the startup-budget/TERM-exit contract. Also retained the structurally
+similar condition-writer pattern in non-SHC controllers as an Operator-wide
+audit item rather than extending SHC-81 without qualification.

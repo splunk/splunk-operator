@@ -57,7 +57,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 	var err error
 	// Initialize phase and conditions
-	isPaused := cr.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true"
+	isPaused := cr.GetDeletionTimestamp() == nil &&
+		cr.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
@@ -70,7 +71,36 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
+	updateStatusOnReturn := true
+	defer func() {
+		if updateStatusOnReturn {
+			updateCRStatus(ctx, client, cr, &err)
+		}
+	}()
+
+	// Deletion finalization must run before normal reconciliation. A namespace
+	// with a deletion timestamp rejects creation of new namespaced resources,
+	// so validation, migration, and ApplySplunkConfig cannot be prerequisites
+	// for removing the CR finalizer.
+	if cr.GetDeletionTimestamp() != nil {
+		result, err = finalizeSearchHeadClusterDeletion(
+			ctx,
+			client,
+			cr,
+			eventPublisher,
+			setPhaseAndConditions,
+			result,
+		)
+		// Successful finalization removes the finalizer and allows the API
+		// server to delete the CR immediately. A deferred status update would
+		// race that deletion and produce a misleading precondition or NotFound
+		// error after cleanup already succeeded. Retain status reporting only
+		// when finalization itself failed and the CR remains actionable.
+		if err == nil {
+			updateStatusOnReturn = false
+		}
+		return result, err
+	}
 
 	// validate and updates defaults for CR
 	err = validateSearchHeadClusterSpec(ctx, client, cr)
@@ -145,49 +175,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 	if cr.Status.AdminPasswordChangedSecrets == nil {
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
-	}
-
-	// check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		if searchHeadClusterLifecycleEnabled() {
-			cr.Status.LifecycleOperation = shcworkflow.StartClusterDeletion(
-				cr.Status.LifecycleOperation,
-				cr.GetName(),
-				searchHeadClusterLifecycleNow(),
-			)
-		}
-		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), false)
-			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
-				return result, err
-			}
-		}
-
-		// If this is the last of its kind getting deleted,
-		// remove the entry for this CR type from configMap or else
-		// just decrement the refCount for this CR type.
-		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkSearchHead)
-			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
-				return result, err
-			}
-		}
-
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkSearchHead)
-
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
-			cr.Status.DeployerPhase = enterpriseApi.PhaseTerminating
-		} else {
-			result.Requeue = false
-		}
-		if err != nil {
-			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()))
-		}
-		return result, err
 	}
 
 	// create or update a headless search head cluster service
@@ -330,6 +317,93 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		result.RequeueAfter = 0
 	}
 
+	return result, nil
+}
+
+// finalizeSearchHeadClusterDeletion performs only deletion-safe operations.
+// It must not create replacement namespace content because Kubernetes rejects
+// creates after the Namespace enters Terminating.
+func finalizeSearchHeadClusterDeletion(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.SearchHeadCluster,
+	eventPublisher *K8EventPublisher,
+	setPhaseAndConditions func(enterpriseApi.Phase, string),
+	result reconcile.Result,
+) (reconcile.Result, error) {
+	if searchHeadClusterLifecycleEnabled() {
+		cr.Status.LifecycleOperation = shcworkflow.StartClusterDeletion(
+			cr.Status.LifecycleOperation,
+			cr.GetName(),
+			searchHeadClusterLifecycleNow(),
+		)
+	}
+	setPhaseAndConditions(
+		enterpriseApi.PhaseTerminating,
+		"Resource is being deleted",
+	)
+	cr.Status.DeployerPhase = enterpriseApi.PhaseTerminating
+
+	if cr.Spec.MonitoringConsoleRef.Name != "" {
+		if _, err := ApplyMonitoringConsoleEnvConfigMap(
+			ctx,
+			client,
+			cr.GetNamespace(),
+			cr.GetName(),
+			cr.Spec.MonitoringConsoleRef.Name,
+			getSearchHeadEnv(cr),
+			false,
+		); err != nil {
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to update Monitoring Console env ConfigMap during deletion",
+			)
+			return result, err
+		}
+	}
+
+	// If this is the last of its kind getting deleted, remove the entry for
+	// this CR type from the shared app-framework ConfigMap. If the ConfigMap
+	// has already been removed, cleanup is already complete.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		if err := UpdateOrRemoveEntryFromConfigMapLocked(
+			ctx,
+			client,
+			cr,
+			SplunkSearchHead,
+		); err != nil {
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to clean up resources during deletion",
+			)
+			return result, err
+		}
+	}
+
+	// This cleanup has historically been best-effort. Missing Secrets or
+	// StatefulSets are expected when the namespace controller is deleting
+	// resources concurrently.
+	_ = DeleteOwnerReferencesForResources(
+		ctx,
+		client,
+		cr,
+		SplunkSearchHead,
+	)
+
+	_, err := splctrl.CheckForDeletion(ctx, cr, client)
+	if err != nil {
+		eventPublisher.Warning(
+			ctx,
+			EventReasonDeleteFailed,
+			fmt.Sprintf(
+				"Failed to delete custom resource %s — check operator logs",
+				cr.GetName(),
+			),
+		)
+		return result, err
+	}
+
+	result.Requeue = false
 	return result, nil
 }
 
