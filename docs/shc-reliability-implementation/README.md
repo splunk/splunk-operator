@@ -51,13 +51,16 @@ enablement. Exact source, image, and evidence details are in
    lifecycle orchestration.
 6. `RuntimeLifecycleContract.md` defines the contract between the Operator,
    Pod lifecycle, probe scripts, Docker-Splunk/Splunk Ansible, and splunkd.
-7. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
+7. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
+   Splunk-managed indexer restart boundary and the remote serving-recovery
+   contract that cannot be completed by an Operator readiness probe.
+8. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
    integration rules, and conflict prevention.
-8. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
+9. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
    and common pass invariants.
-9. `QualificationObservabilityRolloutPlan.md` is the executable test,
+10. `QualificationObservabilityRolloutPlan.md` is the executable test,
    evidence, migration, release, and rollback plan.
-10. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
+11. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
    contract for Docker-Splunk image construction on a supported Linux host.
 
 The Operator design is a Wave 0 spike contract and the runtime design now

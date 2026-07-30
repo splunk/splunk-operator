@@ -319,6 +319,21 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   withdraw the one owned lifecycle target without blocking controller
   progress, and so the next peer is not authorized until the previous peer is
   both `Up/searchable` and remotely serving its configured traffic path.
+  The active Operator spike on
+  `codex/shc-85-indexer-serving-lifecycle` now separates local HEC serving
+  readiness from durable `OnDelete` progress. For an Operator-owned
+  replacement it requires the new Pod UID and revision, Kubernetes readiness,
+  Cluster Manager `Up/searchable`, client-Service EndpointSlice publication,
+  and an independent Pod-to-Pod traffic-path request before completion. The
+  request uses the effective HTTP or HTTPS HEC health endpoint when HEC is
+  enabled and the declared Splunk-to-Splunk TCP port otherwise. The live
+  serving check is repeated after its first durable observation so stale status
+  cannot authorize the next target. Unit, enterprise-package, and full
+  repository tests pass; Linux image and EKS qualification remain open.
+  Splunk-managed bundle-push restarts are a separate boundary: Splunk
+  Enterprise, not the Operator, chooses the next peer inside that workflow.
+  A supported Splunk Enterprise remote-serving readiness contract is therefore
+  still required before OPS-011 or SHC-85 can be closed end to end.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was

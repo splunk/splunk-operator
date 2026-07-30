@@ -87,14 +87,20 @@ Pod update. The controller may continue past one deliberately unavailable Pod
 only when that Pod is the recorded target and the Cluster Manager reports a
 controlled decommission state. It does not use this exception for a second or
 unrelated unavailable Pod. A replacement completes only after it has a new UID,
-the desired StatefulSet revision, Kubernetes readiness, and an `Up`, searchable
-Cluster Manager peer observation. Completion is persisted before another target
-is selected. If a replica-count change arrives during an owned Pod update, the
-controller first recovers that target and then applies the scale change, so
-scale-down cannot decommission a second peer concurrently. If the controller
-restarts after the Cluster Manager accepted decommission but before that API
-result reached CR status, it records the exact target's controlled peer state
-as a recovered durable transition before authorizing replacement.
+the desired StatefulSet revision, Kubernetes readiness, an `Up`, searchable
+Cluster Manager peer observation, publication in the client-facing Indexer
+Service EndpointSlice, and a remote serving-path observation. When HEC is
+enabled, a separate healthy Splunk Pod must reach the replacement's effective
+HTTP or HTTPS HEC health endpoint through Pod DNS. When HEC is disabled,
+a separate healthy Splunk Pod must establish a TCP connection to the
+replacement's declared Splunk-to-Splunk container port. The serving observation
+and completion are persisted before another target is selected. If a
+replica-count change arrives during an owned Pod update, the controller first
+recovers that target and then applies the scale change, so scale-down cannot
+decommission a second peer concurrently. If the controller restarts after the
+Cluster Manager accepted decommission but before that API result reached CR
+status, it records the exact target's controlled peer state as a recovered
+durable transition before authorizing replacement.
 
 Readiness withdrawal is itself a durable stage: the controller records the
 target first, records withdrawal intent next, writes the Pod-local withdrawal
@@ -136,6 +142,16 @@ fallback for Splunk Enterprise 8-to-9 Indexer migrations because that path
 cannot preserve exact one-Pod-at-a-time ownership. Such migrations remain a
 separate compatibility qualification: the gated controller uses the normal
 per-Pod lifecycle and fails closed if a peer cannot be decommissioned.
+
+This Operator-owned lifecycle cannot interpose between peers in a rolling
+restart that Splunk Enterprise performs internally after a Cluster Manager
+bundle push. The readiness check still removes a locally non-serving peer from
+Kubernetes Service traffic, but Splunk Enterprise currently decides when to
+advance its own internal restart from one peer to the next. Requiring remote
+HEC recovery before that internal advance needs a supported Splunk Enterprise
+rolling-restart readiness contract or callback. Until that product contract is
+available and qualified, App Framework indexer restart availability remains an
+open end-to-end requirement rather than a capability completed by this gate.
 
 ## Adding a New Feature Gate
 

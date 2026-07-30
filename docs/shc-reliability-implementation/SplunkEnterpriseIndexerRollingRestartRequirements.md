@@ -1,0 +1,140 @@
+# Splunk Enterprise Indexer Rolling-Restart Serving Requirements
+
+## Status and scope
+
+This document records a Splunk Enterprise product boundary identified while
+qualifying restart-required App Framework updates on Kubernetes. It is a
+requirement record, not a claim that Splunk Enterprise has implemented the
+behavior.
+
+The near-term Operator work is intentionally limited to Splunk Operator and
+the current Docker-Splunk runtime. No splunkd source change is part of the
+SHC-85 Operator branch.
+
+## Observed problem
+
+On a supported four-peer indexer cluster with RF3/SF2, the Cluster Manager
+started a searchable rolling restart after a valid bundle push. Splunk
+preserved replication factor, search factor, and all-searchable state and
+restarted one peer at a time. Kubernetes traffic availability did not follow
+the same boundary:
+
+- existing management-oriented readiness allowed 7 of 55 HEC submissions to
+  fail;
+- adding local HEC health with default readiness timing reduced the result to
+  1 failure from 55;
+- a 2-second, one-failure experiment completed 55 of 55 submissions exactly;
+  and
+- peer-level observation still found an unavailable HEC peer advertised for
+  traffic and one transition where the next peer stopped serving before the
+  previous peer was remotely serving again.
+
+The complete evidence and limitations are in
+[SHC82AppFrameworkIndexerQualification.md](SHC82AppFrameworkIndexerQualification.md).
+
+## Current ownership boundary
+
+An Operator-owned `OnDelete` replacement and a Splunk-managed bundle-push
+restart are different workflows.
+
+For an Operator-owned replacement, the Operator selects the exact Pod and can
+wait for Kubernetes readiness, Cluster Manager status, EndpointSlice
+publication, and a remote traffic-path check before selecting another target.
+
+For a bundle-push restart, Splunk Enterprise owns the peer sequence inside the
+Cluster Manager rolling-restart workflow. The Operator initiates or observes
+the higher-level bundle operation but does not receive a supported per-peer
+authorization point between Splunk's internal restarts. A Kubernetes readiness
+probe can remove a non-serving peer from Service traffic, but it cannot tell
+the Cluster Manager when it may advance to the next peer.
+
+Therefore the Operator must not claim that its readiness or lifecycle gate
+alone prevents previous-peer/next-peer serving overlap during an internally
+managed Splunk rolling restart.
+
+## Required Splunk Enterprise contract
+
+Before Splunk Enterprise authorizes the next peer in a searchable rolling
+restart, the previous peer must satisfy all applicable conditions:
+
+1. The peer has completed its restart and has a new, stable splunkd process
+   identity for that restart attempt.
+2. The Cluster Manager reports the exact peer `Up` and searchable.
+3. RF, SF, bucket primacy, and all-searchable preflight remain satisfied.
+4. Every configured customer-serving path used by that peer has recovered.
+   For HEC this includes the effective enabled/disabled state, HTTP or HTTPS,
+   and configured port. For Splunk-to-Splunk ingestion it includes successful
+   acceptance on the configured receiving port.
+5. Recovery is observed from outside the peer process. A loopback-only result
+   is not sufficient evidence of DNS, Pod networking, sidecar, or listener
+   availability.
+6. The recovery observation is bound to the exact peer restart attempt and
+   cannot be reused after another process restart or identity change.
+7. The observation remains successful for a qualified stability interval, not
+   only one instantaneous sample.
+8. Any conflicting peer failure, insufficient redundancy, or inconclusive
+   recovery blocks the next restart and exposes a classified reason.
+
+Splunk Enterprise can satisfy this contract internally or expose a supported
+per-peer readiness callback/API that lets an external orchestrator provide the
+remote serving result. The contract must not depend on a private endpoint or
+an undocumented interpretation of logs.
+
+## Required durable state and diagnostics
+
+The rolling-restart operation must expose enough durable state to answer:
+
+- the operation identity and bundle/revision being applied;
+- current target and previous target;
+- peer restart start and completion times;
+- first `Up/searchable` time;
+- first remote serving time and the traffic path checked;
+- stability-window start and completion;
+- redundancy preflight result before each target;
+- why advancement is waiting, blocked, cancelled, or failed; and
+- whether a controller or Cluster Manager restart resumed the same operation.
+
+Logs and metrics must use bounded reason and stage values. Peer names, bundle
+identities, and detailed error text belong in structured logs or operation
+status, not unbounded Prometheus labels.
+
+## Failure behavior
+
+The internal rolling restart must fail closed when:
+
+- the previous peer is locally healthy but not remotely reachable;
+- Kubernetes or an external observer reports contradictory serving state;
+- another peer becomes unavailable;
+- RF/SF/all-searchable health is lost;
+- the configured traffic protocol or port cannot be determined safely;
+- a peer identity changes after serving recovery was recorded; or
+- the Cluster Manager restarts without enough durable state to prove which
+  peer was authorized.
+
+Failing closed means that Splunk preserves the recovered peers, stops selecting
+new targets, and reports the exact blocking stage. It does not mean forcefully
+continuing, restarting all peers, or silently downgrading from searchable
+restart.
+
+## Qualification requirements
+
+The contract is not complete until it passes:
+
+- HEC over HTTP and HTTPS, plus HEC disabled with Splunk-to-Splunk ingestion;
+- default and supported custom serving ports;
+- no mesh and every supported mesh/mTLS mode;
+- ingress TLS termination without using ingress policy for Pod-local protocol;
+- persistent connections and stale EndpointSlice/client caches;
+- one pre-existing unhealthy peer and insufficient RF/SF;
+- Cluster Manager and Operator restart at every durable stage;
+- concurrent app update, image rollout, scale, node drain, and manual Pod
+  deletion;
+- previous supported Splunk and Operator versions;
+- continuously acknowledged ingestion with exact final completeness and no
+  unreported duplication; and
+- historical, real-time, active, and scheduled search behavior throughout the
+  restart.
+
+Until these requirements are implemented and qualified, searchable rolling
+restart should remain enabled for its RF/SF/searchability protection, but it
+must not be described as a complete Kubernetes traffic-availability guarantee.
