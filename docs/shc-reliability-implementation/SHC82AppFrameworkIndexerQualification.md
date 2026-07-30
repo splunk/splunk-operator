@@ -384,18 +384,17 @@ environment-qualified:
   caches;
 - insufficient RF/SF/peer redundancy, which must fail closed;
 - one peer already unhealthy before the app update;
-- Operator restart and API disconnection during every durable stage;
+- Operator restart during durable stages other than the now-qualified
+  `Decommissioning` boundary, plus long controller and API-server
+  disconnection;
 - concurrent image rollout, app update, scale, node drain, and manual
   deletion;
 - previous supported Splunk and Operator/image combinations;
 - active, historical, real-time, and scheduled searches;
 - client retry and HEC acknowledgment behavior;
 - recovery stability before the next peer; and
-- Operator restart and API-disconnection recovery during the now-qualified
-  automatic serving-withdrawal lifecycle. The uninterrupted four-member run
-  above removed the earlier manual-advancement requirement for the tested
-  steady-controller path, but restart/disconnection and conflict recovery
-  remain open.
+- leader failover, concurrent-controller contention, and desired-state
+  conflict recovery during the automatic serving-withdrawal lifecycle.
 
 ## Current recommendation
 
@@ -403,8 +402,9 @@ Retain searchable rolling restart for supported indexer topologies, because
 it provides Splunk's RF/SF/searchability coordination. Add an explicit,
 configuration-aware serving contract and a durable one-target lifecycle
 contract rather than relying on probe tuning alone. The later Operator-owned
-campaign demonstrates that contract for one steady-controller RF3/SF2
-revision roll and fixed Splunk build. Do not generalize that result to
-Splunk-managed App Framework restarts, controller interruption, conflicting
-disruptions, unsupported redundancy, or the remaining negative and
-compatibility gates above.
+campaigns demonstrate that contract for one steady-controller RF3/SF2
+revision roll and one controller-Pod restart during `Decommissioning` on the
+fixed Splunk build. Do not generalize those results to Splunk-managed App
+Framework restarts, other interruption stages, long disconnection,
+conflicting disruptions, unsupported redundancy, or the remaining negative
+and compatibility gates above.
