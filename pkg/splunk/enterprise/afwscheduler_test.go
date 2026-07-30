@@ -2938,13 +2938,20 @@ func TestSHCRunPlaybook(t *testing.T) {
 
 	playbookContext = getClusterScopePlaybookContext(ctx, c, cr, afwPipeline, targetPodName, kind, mockPodExecClient)
 
-	// Test2: If the poxExec failed for changing the file permissions, should return an error
+	// Test2: Initial App Framework is allowed to run while Kubernetes traffic
+	// readiness remains pending. The command error proves the playbook was not
+	// skipped by the normal PhaseReady guard.
+	cr.Status.Phase = enterpriseApi.PhasePending
+	cr.Status.InitialFormationStage =
+		enterpriseApi.SearchHeadClusterInitialFormationStageAppFrameworkPending
 	mockPodExecReturnContexts[0].StdErr = "Failed"
 	err = playbookContext.runPlaybook(ctx)
 	if err == nil {
 		t.Errorf("runPlaybook() should should return an error if the command %v execution fails", podExecCommands[0])
 	}
 	mockPodExecReturnContexts[0].StdErr = ""
+	cr.Status.Phase = enterpriseApi.PhaseReady
+	cr.Status.InitialFormationStage = ""
 
 	// Test3: invalid scenario where we get error while applying SHC bundle push
 	err = playbookContext.runPlaybook(ctx)

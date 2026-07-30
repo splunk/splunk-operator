@@ -1981,7 +1981,8 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 	if !ok {
 		return nil
 	}
-	if cr.Status.Phase != enterpriseApi.PhaseReady {
+	if cr.Status.Phase != enterpriseApi.PhaseReady &&
+		!searchHeadCanRunInitialAppFramework(cr) {
 		scopedLog.InfoContext(ctx, "SHC is not ready yet")
 		return nil
 	}

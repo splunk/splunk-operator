@@ -167,6 +167,9 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 
 	mgr.statefulSet.Status.CurrentRevision = ""
 	mgr.statefulSet.Status.ObservedGeneration = 0
+	mgr.statefulSet.Spec.Template.Spec.ReadinessGates = []corev1.PodReadinessGate{{
+		ConditionType: searchHeadServingCondition,
+	}}
 	mgr.cr.Status.LastStableReplicas = nil
 	mgr.initialFormationContainersReady = false
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
@@ -193,19 +196,21 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	mgr.cr.Status.Members[0].AdvertiseRestartRequired = false
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
 	require.Equal(t, corev1.ConditionFalse, status, "live Splunk formation checks still apply")
-	require.Equal(t, "ClusterNotReady", reason)
+	require.Equal(t, "InitialFormationStabilizing", reason)
 
 	mgr.statefulSet.Status.CurrentRevision = "current"
 	mgr.statefulSet.Status.ObservedGeneration = 2
 	mgr.statefulSetUpdatePending = true
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
-	require.Equal(t, corev1.ConditionTrue, status)
-	require.Equal(t, "PeerServingDuringRolloutPlanning", reason)
+	require.Equal(t, corev1.ConditionFalse, status)
+	require.Equal(t, "InitialFormationStabilizing", reason)
 	mgr.statefulSetUpdatePending = false
 
 	mgr.cr.Status.Initialized = true
 	mgr.cr.Status.MinPeersJoined = true
 	mgr.cr.Status.CaptainReady = true
+	mgr.cr.Status.InitialFormationStage =
+		enterpriseApi.SearchHeadClusterInitialFormationStageComplete
 	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
 		TargetOrdinal: &ordinal,
 		Stage:         enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget,

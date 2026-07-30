@@ -2939,6 +2939,10 @@ func (in *SearchHeadClusterStatus) DeepCopyInto(out *SearchHeadClusterStatus) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.InitialFormationStableSince != nil {
+		in, out := &in.InitialFormationStableSince, &out.InitialFormationStableSince
+		*out = (*in).DeepCopy()
+	}
 	if in.ShcSecretChanged != nil {
 		in, out := &in.ShcSecretChanged, &out.ShcSecretChanged
 		*out = make([]bool, len(*in))

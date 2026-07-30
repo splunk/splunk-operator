@@ -186,13 +186,18 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
-	if err == nil {
-		if readinessErr := mgr.reconcileSearchHeadServingConditions(
-			ctx,
-			statefulSet,
-		); readinessErr != nil {
+	if err == nil &&
+		searchHeadServingReadinessGateConfigured(statefulSet) {
+		initialFormationContainersReady, readinessErr :=
+			mgr.desiredSearchHeadContainersReady(
+				ctx,
+				statefulSet,
+			)
+		if readinessErr != nil {
 			return enterpriseApi.PhaseError, readinessErr
 		}
+		mgr.initialFormationContainersReady =
+			initialFormationContainersReady
 		restartInitiated, restartErr :=
 			mgr.reconcileInitialFormationRestart(
 				ctx,
@@ -201,6 +206,13 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			)
 		if restartErr != nil {
 			return enterpriseApi.PhaseError, restartErr
+		}
+		mgr.reconcileInitialFormationStage(desiredReplicas)
+		if readinessErr = mgr.reconcileSearchHeadServingConditions(
+			ctx,
+			statefulSet,
+		); readinessErr != nil {
+			return enterpriseApi.PhaseError, readinessErr
 		}
 		if restartInitiated {
 			return enterpriseApi.PhasePending, nil
@@ -956,6 +968,12 @@ func (mgr *searchHeadClusterPodManager) reconcileInitialFormationRestart(
 	desiredReplicas int32,
 ) (bool, error) {
 	if !mgr.searchHeadInitialFormationPending() ||
+		normalizedSearchHeadInitialFormationStage(
+			mgr.cr.Status.InitialFormationStage,
+		) !=
+			enterpriseApi.SearchHeadClusterInitialFormationStageClusterFormation ||
+		mgr.cr.Status.InitialFormationRestartInitiated ||
+		mgr.cr.Status.TelAppInstalled ||
 		!mgr.initialFormationContainersReady ||
 		!mgr.cr.Status.CaptainMembersObserved ||
 		mgr.cr.Status.CaptainRollingRestart ||
@@ -1000,6 +1018,8 @@ func (mgr *searchHeadClusterPodManager) reconcileInitialFormationRestart(
 	}
 
 	mgr.cr.Status.CaptainRollingRestart = true
+	mgr.cr.Status.InitialFormationRestartInitiated = true
+	mgr.cr.Status.InitialFormationStableSince = nil
 	if eventPublisher != nil {
 		eventPublisher.Normal(
 			ctx,

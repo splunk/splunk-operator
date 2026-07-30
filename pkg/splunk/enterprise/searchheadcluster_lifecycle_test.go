@@ -213,6 +213,8 @@ func TestRecordStableReplicaCountEmitsOnlyDesiredScaleEvents(t *testing.T) {
 
 	t.Run("initializes migration baseline without scale event", func(t *testing.T) {
 		mgr, recorder, ctx := newManager(nil, 3)
+		mgr.cr.Status.InitialFormationStage =
+			enterpriseApi.SearchHeadClusterInitialFormationStageComplete
 		mgr.recordStableReplicaCount(
 			ctx,
 			GetEventPublisher(ctx, mgr.cr),
@@ -734,6 +736,9 @@ func TestReconcileInitialFormationRestart(t *testing.T) {
 		if !mgr.cr.Status.CaptainRollingRestart {
 			t.Fatal("accepted restart did not set captain rolling state")
 		}
+		if !mgr.cr.Status.InitialFormationRestartInitiated {
+			t.Fatal("accepted restart did not persist initiation")
+		}
 	})
 
 	t.Run("waits until every member is authoritative and up", func(t *testing.T) {
@@ -791,6 +796,204 @@ func TestReconcileInitialFormationRestart(t *testing.T) {
 				"initiated=%t err=%v, want true/nil",
 				initiated,
 				err,
+			)
+		}
+	})
+
+	t.Run("does not repeat an initiated restart", func(t *testing.T) {
+		mgr := newManager()
+		mgr.cr.Status.InitialFormationRestartInitiated = true
+		calls := 0
+		InitiateSearchHeadInitialFormationRollingRestart = func(
+			context.Context,
+			*searchHeadClusterPodManager,
+		) error {
+			calls++
+			return nil
+		}
+
+		initiated, err := mgr.reconcileInitialFormationRestart(
+			context.Background(),
+			nil,
+			3,
+		)
+		if err != nil || initiated || calls != 0 {
+			t.Fatalf(
+				"initiated=%t calls=%d err=%v, want false/0/nil",
+				initiated,
+				calls,
+				err,
+			)
+		}
+	})
+
+	t.Run("does not duplicate a deployer bundle restart", func(t *testing.T) {
+		mgr := newManager()
+		mgr.cr.Status.TelAppInstalled = true
+		calls := 0
+		InitiateSearchHeadInitialFormationRollingRestart = func(
+			context.Context,
+			*searchHeadClusterPodManager,
+		) error {
+			calls++
+			return nil
+		}
+
+		initiated, err := mgr.reconcileInitialFormationRestart(
+			context.Background(),
+			nil,
+			3,
+		)
+		if err != nil || initiated || calls != 0 {
+			t.Fatalf(
+				"initiated=%t calls=%d err=%v, want false/0/nil",
+				initiated,
+				calls,
+				err,
+			)
+		}
+	})
+}
+
+func TestReconcileInitialFormationStage(t *testing.T) {
+	originalNow := searchHeadClusterLifecycleNow
+	t.Cleanup(func() {
+		searchHeadClusterLifecycleNow = originalNow
+	})
+
+	start := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	now := start
+	searchHeadClusterLifecycleNow = func() time.Time {
+		return now
+	}
+
+	newManager := func() *searchHeadClusterPodManager {
+		return &searchHeadClusterPodManager{
+			cr: &enterpriseApi.SearchHeadCluster{
+				Status: enterpriseApi.SearchHeadClusterStatus{
+					DeployerPhase:          enterpriseApi.PhaseReady,
+					Captain:                "splunk-example-search-head-0",
+					CaptainReady:           true,
+					CaptainMembersObserved: true,
+					Initialized:            true,
+					MinPeersJoined:         true,
+					Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+						{
+							Name:          "splunk-example-search-head-0",
+							Status:        "Up",
+							CaptainStatus: "Up",
+							RestartState:  "NoRestart",
+							Registered:    true,
+						},
+						{
+							Name:          "splunk-example-search-head-1",
+							Status:        "Up",
+							CaptainStatus: "Up",
+							RestartState:  "NoRestart",
+							Registered:    true,
+						},
+						{
+							Name:          "splunk-example-search-head-2",
+							Status:        "Up",
+							CaptainStatus: "Up",
+							RestartState:  "NoRestart",
+							Registered:    true,
+						},
+					},
+				},
+			},
+			initialFormationContainersReady: true,
+		}
+	}
+
+	t.Run("requires an uninterrupted minute before telemetry", func(t *testing.T) {
+		mgr := newManager()
+		mgr.reconcileInitialFormationStage(3)
+		if mgr.cr.Status.InitialFormationStableSince == nil {
+			t.Fatal("stable interval was not started")
+		}
+
+		now = start.Add(59 * time.Second)
+		mgr.reconcileInitialFormationStage(3)
+		if mgr.cr.Status.InitialFormationStage !=
+			enterpriseApi.SearchHeadClusterInitialFormationStageClusterFormation {
+			t.Fatalf(
+				"stage = %s, want ClusterFormation",
+				mgr.cr.Status.InitialFormationStage,
+			)
+		}
+
+		mgr.cr.Status.CaptainRollingRestart = true
+		now = start.Add(time.Minute)
+		mgr.reconcileInitialFormationStage(3)
+		if mgr.cr.Status.InitialFormationStableSince != nil {
+			t.Fatal("rolling restart did not reset stable interval")
+		}
+
+		mgr.cr.Status.CaptainRollingRestart = false
+		now = start.Add(61 * time.Second)
+		mgr.reconcileInitialFormationStage(3)
+		now = start.Add(121 * time.Second)
+		mgr.reconcileInitialFormationStage(3)
+		if mgr.cr.Status.InitialFormationStage !=
+			enterpriseApi.SearchHeadClusterInitialFormationStageTelemetryPending {
+			t.Fatalf(
+				"stage = %s, want TelemetryPending",
+				mgr.cr.Status.InitialFormationStage,
+			)
+		}
+	})
+
+	t.Run("waits for telemetry restart before completing without apps", func(t *testing.T) {
+		mgr := newManager()
+		mgr.cr.Status.InitialFormationStage =
+			enterpriseApi.SearchHeadClusterInitialFormationStageTelemetryApplied
+		now = start
+		mgr.reconcileInitialFormationStage(3)
+		now = start.Add(time.Minute)
+		mgr.reconcileInitialFormationStage(3)
+		if mgr.cr.Status.InitialFormationStage !=
+			enterpriseApi.SearchHeadClusterInitialFormationStageComplete {
+			t.Fatalf(
+				"stage = %s, want Complete",
+				mgr.cr.Status.InitialFormationStage,
+			)
+		}
+	})
+
+	t.Run("routes configured apps through app framework and final stabilization", func(t *testing.T) {
+		mgr := newManager()
+		mgr.cr.Spec.AppFrameworkConfig.AppSources =
+			[]enterpriseApi.AppSourceSpec{{Name: "initial-apps"}}
+		mgr.cr.Status.InitialFormationStage =
+			enterpriseApi.SearchHeadClusterInitialFormationStageTelemetryApplied
+		now = start
+		mgr.reconcileInitialFormationStage(3)
+		now = start.Add(time.Minute)
+		mgr.reconcileInitialFormationStage(3)
+		if !searchHeadCanRunInitialAppFramework(mgr.cr) {
+			t.Fatalf(
+				"stage = %s, want AppFrameworkPending",
+				mgr.cr.Status.InitialFormationStage,
+			)
+		}
+
+		mgr.cr.Status.AppContext.BundlePushStatus.BundlePushStage =
+			enterpriseApi.BundlePushComplete
+		if !searchHeadInitialFormationAppFrameworkSettled(mgr.cr) {
+			t.Fatal("completed initial App Framework work was not settled")
+		}
+		mgr.cr.Status.InitialFormationStage =
+			enterpriseApi.SearchHeadClusterInitialFormationStageFinalStabilization
+		now = start.Add(2 * time.Minute)
+		mgr.reconcileInitialFormationStage(3)
+		now = start.Add(3 * time.Minute)
+		mgr.reconcileInitialFormationStage(3)
+		if mgr.cr.Status.InitialFormationStage !=
+			enterpriseApi.SearchHeadClusterInitialFormationStageComplete {
+			t.Fatalf(
+				"stage = %s, want Complete",
+				mgr.cr.Status.InitialFormationStage,
 			)
 		}
 	})

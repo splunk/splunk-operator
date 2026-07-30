@@ -10288,6 +10288,22 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              initialFormationRestartInitiated:
+                description: |-
+                  true after the controller has requested the supported first-formation
+                  rolling restart; this prevents duplicate requests across reconciliations
+                type: boolean
+              initialFormationStableSince:
+                description: |-
+                  beginning of the current uninterrupted initial-formation stabilization
+                  interval
+                format: date-time
+                type: string
+              initialFormationStage:
+                description: |-
+                  durable initial-formation stage used to keep a new SHC out of Service
+                  traffic through its required Splunk and deployer-managed restarts
+                type: string
               initialized:
                 description: true if the search head cluster has finished initialization
                 type: boolean

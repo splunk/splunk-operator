@@ -187,6 +187,32 @@ type SearchHeadClusterMemberStatus struct {
 	ActiveRealtimeSearchCount int `json:"active_realtime_search_count"`
 }
 
+// SearchHeadClusterInitialFormationStage identifies the durable startup stage
+// for a Search Head Cluster that has not yet served traffic.
+type SearchHeadClusterInitialFormationStage string
+
+const (
+	// SearchHeadClusterInitialFormationStageClusterFormation waits for the
+	// initial SHC join and any restart advertised by the members.
+	SearchHeadClusterInitialFormationStageClusterFormation SearchHeadClusterInitialFormationStage = "ClusterFormation"
+	// SearchHeadClusterInitialFormationStageTelemetryPending allows the
+	// controller to apply the Operator telemetry bundle before exposing the
+	// newly formed cluster.
+	SearchHeadClusterInitialFormationStageTelemetryPending SearchHeadClusterInitialFormationStage = "TelemetryPending"
+	// SearchHeadClusterInitialFormationStageTelemetryApplied waits for the
+	// telemetry bundle's Splunk-managed restart to settle.
+	SearchHeadClusterInitialFormationStageTelemetryApplied SearchHeadClusterInitialFormationStage = "TelemetryApplied"
+	// SearchHeadClusterInitialFormationStageAppFrameworkPending allows initial
+	// App Framework work and its deployer bundle push to finish.
+	SearchHeadClusterInitialFormationStageAppFrameworkPending SearchHeadClusterInitialFormationStage = "AppFrameworkPending"
+	// SearchHeadClusterInitialFormationStageFinalStabilization waits for the
+	// SHC to remain continuously healthy after initial App Framework work.
+	SearchHeadClusterInitialFormationStageFinalStabilization SearchHeadClusterInitialFormationStage = "FinalStabilization"
+	// SearchHeadClusterInitialFormationStageComplete permits the initial
+	// topology to enter Kubernetes Service traffic.
+	SearchHeadClusterInitialFormationStageComplete SearchHeadClusterInitialFormationStage = "Complete"
+)
+
 // SearchHeadClusterLifecycleIntent identifies why a durable lifecycle
 // operation exists.
 type SearchHeadClusterLifecycleIntent string
@@ -447,6 +473,21 @@ type SearchHeadClusterStatus struct {
 	// true when the controller successfully observed every desired member
 	// through the captain's authoritative member endpoint
 	CaptainMembersObserved bool `json:"captainMembersObserved,omitempty"`
+
+	// durable initial-formation stage used to keep a new SHC out of Service
+	// traffic through its required Splunk and deployer-managed restarts
+	// +optional
+	InitialFormationStage SearchHeadClusterInitialFormationStage `json:"initialFormationStage,omitempty"`
+
+	// true after the controller has requested the supported first-formation
+	// rolling restart; this prevents duplicate requests across reconciliations
+	// +optional
+	InitialFormationRestartInitiated bool `json:"initialFormationRestartInitiated,omitempty"`
+
+	// beginning of the current uninterrupted initial-formation stabilization
+	// interval
+	// +optional
+	InitialFormationStableSince *metav1.Time `json:"initialFormationStableSince,omitempty"`
 
 	// true if the search head cluster has finished initialization
 	Initialized bool `json:"initialized"`

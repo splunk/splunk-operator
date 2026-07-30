@@ -266,9 +266,54 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 	setPhaseAndConditions(phase, cr.Status.Message)
 
+	// A new SHC must receive the Operator telemetry app before Kubernetes
+	// advertises any Search Head as ready. Applying the deployer bundle can
+	// initiate another Splunk-managed rolling restart, so persist the next
+	// startup stage and let the pod manager observe and stabilize that restart.
+	if cr.Status.LastStableReplicas == nil &&
+		normalizedSearchHeadInitialFormationStage(
+			cr.Status.InitialFormationStage,
+		) ==
+			enterpriseApi.SearchHeadClusterInitialFormationStageTelemetryPending {
+		if !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
+			if err = addTelApp(
+				ctx,
+				podExecClient,
+				numberOfDeployerReplicas,
+				cr,
+			); err != nil {
+				setPhaseAndConditions(
+					enterpriseApi.PhaseError,
+					"Failed to install Telemetry app during initial formation",
+				)
+				return result, err
+			}
+			cr.Status.TelAppInstalled = true
+		}
+		cr.Status.InitialFormationStage =
+			enterpriseApi.SearchHeadClusterInitialFormationStageTelemetryApplied
+		cr.Status.InitialFormationStableSince = nil
+		setPhaseAndConditions(
+			enterpriseApi.PhasePending,
+			"Waiting for the Search Head Cluster to stabilize after the initial telemetry bundle",
+		)
+		return result, nil
+	}
+
 	var finalResult *reconcile.Result
 	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
 		finalResult = handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		if searchHeadCanRunInitialAppFramework(cr) &&
+			searchHeadInitialFormationAppFrameworkSettled(cr) {
+			cr.Status.InitialFormationStage =
+				enterpriseApi.SearchHeadClusterInitialFormationStageFinalStabilization
+			cr.Status.InitialFormationStableSince = nil
+			setPhaseAndConditions(
+				enterpriseApi.PhasePending,
+				"Waiting for the Search Head Cluster to stabilize after initial App Framework work",
+			)
+		}
 	}
 
 	if cr.Spec.MonitoringConsoleRef.Name != "" {

@@ -113,25 +113,34 @@ func (mgr *searchHeadClusterPodManager) searchHeadInitialFormationPending() bool
 }
 
 // searchHeadInitialFormationRestartPending keeps a newly formed cluster out of
-// Service traffic until Splunk's authoritative captain view proves that no
-// desired member has advertised a required restart and the captain is not
-// coordinating an SHC rolling restart. Docker-Splunk can complete local image
-// initialization before Splunk begins this post-join rolling restart.
+// Service traffic until every durable initial-formation stage is complete.
+// Those stages include Splunk's post-join restart, the Operator telemetry
+// bundle, optional initial App Framework work, and an uninterrupted
+// stabilization interval.
 func (mgr *searchHeadClusterPodManager) searchHeadInitialFormationRestartPending() bool {
 	if !mgr.searchHeadInitialFormationPending() {
 		return false
 	}
-	if mgr.cr == nil ||
-		!mgr.cr.Status.CaptainMembersObserved ||
-		mgr.cr.Status.CaptainRollingRestart {
-		return true
-	}
-	for i := range mgr.cr.Status.Members {
-		if mgr.cr.Status.Members[i].AdvertiseRestartRequired {
+	if mgr == nil ||
+		!searchHeadServingReadinessGateConfigured(mgr.statefulSet) {
+		if mgr == nil ||
+			mgr.cr == nil ||
+			!mgr.cr.Status.CaptainMembersObserved ||
+			mgr.cr.Status.CaptainRollingRestart {
 			return true
 		}
+		for i := range mgr.cr.Status.Members {
+			if mgr.cr.Status.Members[i].AdvertiseRestartRequired {
+				return true
+			}
+		}
+		return false
 	}
-	return false
+	return mgr.cr == nil ||
+		normalizedSearchHeadInitialFormationStage(
+			mgr.cr.Status.InitialFormationStage,
+		) !=
+			enterpriseApi.SearchHeadClusterInitialFormationStageComplete
 }
 
 // desiredSearchHeadContainersReady proves that every desired Search Head has
@@ -221,6 +230,15 @@ func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 			}
 		}
 	}
+	if mgr.searchHeadInitialFormationRestartPending() {
+		return corev1.ConditionFalse, "InitialFormationStabilizing",
+			fmt.Sprintf(
+				"Initial SHC formation is in durable stage %s",
+				normalizedSearchHeadInitialFormationStage(
+					mgr.cr.Status.InitialFormationStage,
+				),
+			)
+	}
 	if ordinal < 0 || ordinal >= int32(len(mgr.cr.Status.Members)) {
 		return corev1.ConditionFalse, "MemberUnobserved", "SHC member has not been observed"
 	}
@@ -281,12 +299,6 @@ func (mgr *searchHeadClusterPodManager) reconcileSearchHeadServingConditions(
 	if !searchHeadServingReadinessGateConfigured(statefulSet) {
 		return nil
 	}
-	initialFormationContainersReady, err :=
-		mgr.desiredSearchHeadContainersReady(ctx, statefulSet)
-	if err != nil {
-		return err
-	}
-	mgr.initialFormationContainersReady = initialFormationContainersReady
 	mgr.servingConditionChanged = make(map[int32]bool)
 	for ordinal := int32(0); ordinal < statefulSet.Status.Replicas; ordinal++ {
 		podName := GetSplunkStatefulsetPodName(
