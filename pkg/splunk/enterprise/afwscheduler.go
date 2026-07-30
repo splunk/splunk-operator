@@ -1690,7 +1690,9 @@ func resolveSHCBundlePushTarget(
 				Name:      member.Name,
 			},
 			pod,
-		); err != nil || pod.DeletionTimestamp != nil || !podIsReady(pod) {
+		); err != nil ||
+			pod.DeletionTimestamp != nil ||
+			!podEligibleForSHCBundlePush(shc, pod) {
 			continue
 		}
 		return splcommon.GetServiceFQDN(
@@ -1708,6 +1710,31 @@ func resolveSHCBundlePushTarget(
 	}
 
 	return "", fmt.Errorf("no registered, Up, Kubernetes-ready SHC member is available for bundle push")
+}
+
+func podEligibleForSHCBundlePush(
+	shc *enterpriseApi.SearchHeadCluster,
+	pod *corev1.Pod,
+) bool {
+	if shc != nil &&
+		shc.Status.LastStableReplicas == nil {
+		switch normalizedSearchHeadInitialFormationStage(
+			shc.Status.InitialFormationStage,
+		) {
+		case enterpriseApi.SearchHeadClusterInitialFormationStageTelemetryPending,
+			enterpriseApi.SearchHeadClusterInitialFormationStageAppFrameworkPending:
+			// The initial-formation readiness gate deliberately keeps
+			// PodReady false until bundle-owned restarts have completed.
+			// ContainersReady plus the captain-observed Up and registered
+			// checks above proves the member is safe for this internal
+			// management operation without publishing it for client traffic.
+			return podConditionStatus(
+				pod,
+				corev1.ContainersReady,
+			) == corev1.ConditionTrue
+		}
+	}
+	return podIsReady(pod)
 }
 
 func podIsReady(pod *corev1.Pod) bool {

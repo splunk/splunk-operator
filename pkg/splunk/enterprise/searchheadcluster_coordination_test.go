@@ -20,6 +20,9 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/splunk/test"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestSHCPodRolloutActiveFailsClosed(t *testing.T) {
@@ -151,6 +154,117 @@ func TestSHCBundleTargetRejectsActiveImageUpgradeOwner(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "image-upgrade operation") {
 		t.Fatalf("active image owner bundle target error = %v", err)
+	}
+}
+
+func TestSHCBundleTargetUsesContainerReadinessDuringInitialFormation(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	ctx := context.Background()
+	client := test.NewMockClient()
+	shc := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Captain:      "splunk-stack1-search-head-0",
+			CaptainReady: true,
+			InitialFormationStage: enterpriseApi.
+				SearchHeadClusterInitialFormationStageTelemetryPending,
+			Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+				{
+					Name:       "splunk-stack1-search-head-0",
+					Status:     "Up",
+					Registered: true,
+				},
+			},
+		},
+	}
+	client.AddObject(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-search-head-0",
+			Namespace: "test",
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{
+					Type:   corev1.ContainersReady,
+					Status: corev1.ConditionTrue,
+				},
+				{
+					Type:   corev1.PodReady,
+					Status: corev1.ConditionFalse,
+				},
+			},
+		},
+	})
+
+	got, err := resolveSHCBundlePushTarget(ctx, client, shc)
+	if err != nil {
+		t.Fatalf("resolve initial-formation bundle target: %v", err)
+	}
+	want := GetSplunkStatefulsetURL(
+		"test",
+		SplunkSearchHead,
+		"stack1",
+		0,
+		false,
+	)
+	if got != want {
+		t.Fatalf("initial-formation bundle target = %q, want %q", got, want)
+	}
+}
+
+func TestSHCBundleTargetRejectsContainerNotReadyDuringInitialFormation(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	ctx := context.Background()
+	client := test.NewMockClient()
+	shc := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Captain:      "splunk-stack1-search-head-0",
+			CaptainReady: true,
+			InitialFormationStage: enterpriseApi.
+				SearchHeadClusterInitialFormationStageTelemetryPending,
+			Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+				{
+					Name:       "splunk-stack1-search-head-0",
+					Status:     "Up",
+					Registered: true,
+				},
+			},
+		},
+	}
+	client.AddObject(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-search-head-0",
+			Namespace: "test",
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{
+					Type:   corev1.ContainersReady,
+					Status: corev1.ConditionFalse,
+				},
+				{
+					Type:   corev1.PodReady,
+					Status: corev1.ConditionFalse,
+				},
+			},
+		},
+	})
+
+	_, err := resolveSHCBundlePushTarget(ctx, client, shc)
+	if err == nil ||
+		!strings.Contains(err.Error(), "no registered, Up") {
+		t.Fatalf("container-not-ready bundle target error = %v", err)
 	}
 }
 
