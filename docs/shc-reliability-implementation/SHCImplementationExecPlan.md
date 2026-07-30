@@ -309,6 +309,27 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   serving readiness, durable owned-target progression, previous-peer
   service-recovery gating, client retry/acknowledgment, and the recorded
   negative cases remain open.
+- [x] (2026-07-30 UTC) Qualified the bounded SHC-85 Operator-owned indexer
+  lifecycle on EKS using official Splunk build
+  `10.5.2605.0/844c593e9c1d`, runtime digest
+  `sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`,
+  Operator source `7ff844f4a0ad3fdd33e34443e009d08aff087124`, and
+  Operator digest
+  `sha256:f7e2a4f8444ffa1b335486e266e4ed9e940180f78d460639de5703a8bdb2530b`.
+  A same-image replacement reused a populated MongoDB/WiredTiger volume and
+  did not reproduce the prior KV Store upgrade-precheck failure. A
+  Pod-template revision then completed automatically in order
+  `3 -> 2 -> 1 -> 0`, with one withdrawn target, durable stages, Splunk
+  decommission, replacement, and remote serving recovery before the next
+  target. Every final Pod used the desired digest and revision, reached Ready
+  with zero restarts, and completed Ansible with `failed=0`. Cluster Manager
+  finished with RF/SF met, all data searchable, all peers Up, and no fixups.
+  The workload records completed 80/80 and 30/30 exact sequences with zero
+  HEC or search-request failures. This closes manual advancement for the
+  tested steady-controller Operator path; it does not close
+  controller-restart/disconnection, conflict, insufficient-redundancy,
+  configuration/protocol, persistent-client, or Splunk-managed App Framework
+  target-control gates.
 - [ ] Define and qualify SHC-83 so Service readiness cannot succeed before
   image-owned SHC initialization, synchronization, and internal Splunk
   restarts have completed.

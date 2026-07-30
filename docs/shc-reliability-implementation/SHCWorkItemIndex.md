@@ -56,10 +56,10 @@ without duplicating their full content.
 | SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | `96c16b49b`, `a59fc5103` | API-005, STS-003, OBS-002 | Source-qualified; EKS-qualified for omitted/defaulted generic-ephemeral `volumeMode`, stable StatefulSet generations and revisions, controller restart, six post-restart samples, HTTP 200 search on every member, and zero Pod replacement or restart |
 | SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | `d1f6e301d`, `744bfb096`, `9be744f06`, `0b9253f11` | STS-003, STS-008, STS-014, OBS-001 | Source-qualified and EKS-qualified for an authorized unschedulable replacement, superseding queued revision, durable last-known-good recovery across an Operator restart, complete queued rollout, dynamic captain transfer, 187 uninterrupted searches, and 369 seconds of final stability |
 | SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | `d053ff65b`, `33ff143d1`, `58437e3ad` | OPS-004, OBS-001, OBS-005 | Source-qualified and EKS-qualified for direct namespace deletion of a paused, healthy three-member SHC: no create after namespace termination, no post-finalization status write, declared PVC deletion completed, and no workload or PV remained |
-| SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | First SH serving correction `0fc1bcf31`; SH drain work `632d9155c`; indexer evidence recorded separately | OPS-006, OPS-011, K8S-007, OBS-001, OBS-003, OBS-005 | Partial EKS evidence: the SH correction removed the zero-endpoint captain-transition outage, but an already-admitted captain search still failed. Four-peer searchable indexer restart preserved RF/SF/searchability; existing readiness lost 7/55 HEC submissions, default HEC-aware readiness lost 1/55, and a fast experiment completed 55/55 exactly. The fast run still observed asynchronous advertised/non-serving and recovery-overlap windows and exposed a controller deadlock after intentional readiness withdrawal. Configuration variants, durable progress, client delivery, conflict, and unhealthy-redundancy gates remain open |
+| SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | First SH serving correction `0fc1bcf31`; SH drain work `632d9155c`; indexer lifecycle work under SHC-85 | OPS-006, OPS-011, K8S-007, OBS-001, OBS-003, OBS-005 | Partial EKS evidence: the SH correction removed the zero-endpoint captain-transition outage, but an already-admitted captain search still failed. Four-peer searchable indexer restart preserved RF/SF/searchability; existing readiness lost 7/55 HEC submissions, default HEC-aware readiness lost 1/55, and a fast experiment completed 55/55 exactly. SHC-85 later removed manual lifecycle advancement for a tested Operator-owned four-peer roll and completed 80/80 plus 30/30 exact workload runs on the official fixed KV Store build. Splunk-managed App Framework target control, configuration variants, client delivery, conflict, and unhealthy-redundancy gates remain open |
 | SHC-83 | Prevent traffic readiness before image-owned SHC initialization, synchronization, and internal Splunk restarts are complete | Pending | HLT-001, HLT-002, HLT-009, STS-012, OBS-001 | Registered from repeated EKS observations of a brief early-ready interval; no cross-layer startup-complete contract or solution is claimed |
 | SHC-84 | Bound first-start and upgrade startup probes and guarantee prompt TERM exit for kubelet-initiated restarts | Pending | HLT-009, RUN-003, RUN-004, REJ-005, OBS-005 | Registered after a legacy-runtime fixture exceeded the default startup budget and then consumed the configured 1200-second termination grace; no runtime or probe-policy implementation is claimed |
-| SHC-85 | Separate indexer serving readiness from lifecycle progress and require previous-peer network-path recovery before authorizing another disruption | Active on `codex/shc-85-indexer-serving-lifecycle` | OPS-011, K8S-007, OBS-001, OBS-002, OBS-003 | Operator spike adds configuration-aware local HEC readiness, durable exact-target `OnDelete` progress, EndpointSlice publication, and an independent Pod-to-Pod HEC or Splunk-to-Splunk recovery proof before the next Operator-owned target. Unit, enterprise-package, and full repository suites pass. Linux image and EKS qualification remain open. Splunk-managed App Framework rolling restart still chooses its own next peer; remote-path gating for that internal workflow requires a supported Splunk Enterprise contract and is explicitly not claimed by this Operator branch |
+| SHC-85 | Separate indexer serving readiness from lifecycle progress and require previous-peer network-path recovery before authorizing another disruption | `3f60d9301`, `11d719f64`, `7ff844f4a` on `codex/shc-85-indexer-serving-lifecycle` | OPS-011, K8S-007, OBS-001, OBS-002, OBS-003 | Source-qualified and EKS-qualified for one Operator-owned four-peer RF3/SF2 `OnDelete` revision roll on official Splunk build `10.5.2605.0/844c593e9c1d`: automatic `3 -> 2 -> 1 -> 0` progress, one withdrawn target at a time, previous-peer remote serving recovery before the next target, zero container restarts, four Ansible `failed=0` results, no prior KV Store failure signature, final RF/SF/all-searchable health, and exact 80/80 plus 30/30 workload completeness. Controller restart/disconnection, conflict, redundancy, protocol/configuration variants, and Splunk-managed App Framework next-target control remain open |
 
 ## SHC-75 immutable qualification inputs
 
@@ -404,9 +404,10 @@ SHC-84 preserve two distinct runtime-contract gaps exposed during repeated
 formation and finalization campaigns: early traffic readiness, and the
 interaction among startup duration, kubelet restart policy, and prompt
 process exit. SHC-85 preserves the independently bounded indexer
-serving-readiness/lifecycle-progress gap exposed by SHC-82. SHC-82 is selected
-on its isolated evidence branch; SHC-83 through SHC-85 remain registered but
-unassigned.
+serving-readiness/lifecycle-progress gap exposed by SHC-82. SHC-85 is now
+source-qualified and EKS-qualified for the bounded Operator-owned path recorded
+above. SHC-82 remains selected on its isolated evidence branch; SHC-83 and
+SHC-84 remain registered but unassigned.
 Registration or assignment alone does not claim implementation. Each
 remaining item must use its own branch and immutable source commit.
 
@@ -514,6 +515,22 @@ decommission, requiring controlled manual advancement for test purposes.
 These results register serving/lifecycle separation, previous-peer
 service-recovery gating, and client delivery semantics as open requirements;
 they do not claim completion.
+
+2026-07-30 UTC: Recorded SHC-85 EKS qualification on Operator source
+`7ff844f4a0ad3fdd33e34443e009d08aff087124` and immutable Operator digest
+`sha256:f7e2a4f8444ffa1b335486e266e4ed9e940180f78d460639de5703a8bdb2530b`.
+The runtime used official Splunk build `10.5.2605.0/844c593e9c1d` at digest
+`sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`.
+A same-image replacement reused the populated KV Store volumes and completed
+without the prior upgrade-precheck failure. The Operator then advanced a
+four-peer RF3/SF2 revision automatically in order `3 -> 2 -> 1 -> 0`, kept one
+target withdrawn at a time, required remote serving recovery before selecting
+the next target, retained peer GUIDs, and finished with four Ready peers,
+RF/SF met, all data searchable, and no fixups. The two workload records
+completed 80/80 and 30/30 exact sequences with zero HEC or search-request
+failures. This qualifies the bounded Operator-owned lifecycle; it does not
+claim control over a Splunk-managed App Framework internal rolling restart or
+the remaining negative and compatibility variants.
 
 2026-07-29 UTC: Selected SHC-80 on
 `codex/shc-80-authorized-revision-recovery` from integrated feature baseline

@@ -29,6 +29,82 @@ The accepted final run used:
 No credential, license content, HEC token, or authorization header is part of
 the recorded evidence.
 
+## Official-build Operator lifecycle qualification
+
+A later 2026-07-30 UTC campaign qualified the Operator-owned indexer Pod
+replacement path that the earlier App Framework experiments had left blocked.
+This is a separate result from a Splunk-managed internal App Framework rolling
+restart; it must not be used to claim that the Operator controls Splunk's
+internal next-peer selection.
+
+The campaign used:
+
+- Splunk Cloud build `10.5.2605.0`, build `844c593e9c1d`, from the official
+  `splunkcloud-10.5.2605.0-844c593e9c1d-linux-amd64.tgz` artifact;
+- Docker-Splunk source `f063cfd3936c42428c0775783b8415c2fcfbb3ef`
+  with Splunk Ansible source
+  `5e9e12fd46f2d24823b2b9a291cc5fa14abaf8f5`;
+- runtime image digest
+  `sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`;
+- Operator source `7ff844f4a0ad3fdd33e34443e009d08aff087124`
+  and Operator image digest
+  `sha256:f7e2a4f8444ffa1b335486e266e4ed9e940180f78d460639de5703a8bdb2530b`;
+  and
+- the same EKS cluster, namespace, four-peer RF3/SF2 indexer topology, and
+  three-member SHC used by the preceding qualification.
+
+The first bounded test replaced indexer ordinal 3 without changing its image
+or deleting its storage. Kubernetes changed the Pod UID from
+`968a9337-58a9-49ab-9234-59b07c72892c` to
+`2624d1ab-364a-43b7-a54f-2b4a4a4b5dd0`, while the `/opt/splunk/etc` and
+`/opt/splunk/var` PVC UIDs remained
+`816b3724-0297-48c1-a3ee-4dc255293b49` and
+`5c36029f-c3e7-4844-940d-e728f20bf851`. The replacement mounted the populated
+MongoDB/WiredTiger directory, completed the normal Ansible-internal Splunk
+restart with `ok=111`, `failed=0`, reached Ready with zero container restarts,
+and did not emit `Active KVStore version upgrade precheck FAILED`.
+
+A harmless Pod annotation then created StatefulSet revision
+`splunk-shc82-idxc-indexer-7d6f677979`. The Operator completed ordinals
+`3 -> 2 -> 1 -> 0`. For each target it durably recorded the target and stage,
+withdrew readiness, requested decommission, waited for Splunk to reassign
+primaries, replaced only that Pod, required Kubernetes and remote serving
+recovery, and only then selected the next ordinal. No manual Pod deletion was
+used to advance the four-member roll.
+
+All four final Pods:
+
+- had new UIDs and the desired per-Pod controller revision;
+- used the same immutable runtime digest;
+- reached Ready with zero container restarts;
+- completed Ansible with `failed=0`;
+- produced zero matches for the prior KV Store failure signature; and
+- retained their original Splunk peer GUIDs.
+
+The final Cluster Manager observation reported replication factor met, search
+factor met, all data searchable, all peers Up, no fixups, and readiness for a
+searchable rolling restart. The IndexerCluster reported `Ready`, four of four
+ready replicas, and durable lifecycle stage `Completed`.
+
+Two numbered workload monitors covered the roll and recovery:
+
+| Run | Coverage | Result | Evidence SHA-256 |
+|---|---|---|---|
+| `official-844c593-operator-roll` | Three complete replacements and the final ordinal's drain | 80 submissions, zero HEC failures, zero search-request failures, final `count=80`, `min=1`, `max=80`, `distinct=80` | `a6fcfad5c6eccbcaa1b887d0cff924fe8ee2c69dc04d75c1b28f7a837fe721e0` |
+| `official-844c593-operator-roll-final` | Final replacement and stable post-roll service | 30 submissions, zero HEC failures, zero search-request failures, final `count=30`, `min=1`, `max=30`, `distinct=30` | `dd3b21d8caa07935c4a7f905a0009c08e77d5d5eb5f17121fb1216ada3db8a2b` |
+
+Some intermediate aggregate searches temporarily lagged recently accepted
+events and later converged. The result therefore proves eventual exact
+completeness and uninterrupted request handling for this workload; it does not
+claim that every immediate search saw every event accepted seconds earlier.
+
+One Kubernetes status nuance remains relevant to supportability. The
+StatefulSet retained its old `.status.currentRevision` even after all four
+Pods carried the desired `controller-revision-hash` and the IndexerCluster
+lifecycle reported `Completed`. Qualification therefore used the per-Pod
+revision labels, Pod UIDs, durable CR stage, and serving/cluster observations
+rather than treating StatefulSet `currentRevision` alone as completion proof.
+
 ## What the accepted searchable restart did
 
 The Cluster Manager validated the bundle on all four peers and logged:
@@ -235,15 +311,20 @@ environment-qualified:
 - active, historical, real-time, and scheduled searches;
 - client retry and HEC acknowledgment behavior;
 - recovery stability before the next peer; and
-- automatic controller progress after intentional serving withdrawal, with no
-  manual Pod deletion.
+- Operator restart and API-disconnection recovery during the now-qualified
+  automatic serving-withdrawal lifecycle. The uninterrupted four-member run
+  above removed the earlier manual-advancement requirement for the tested
+  steady-controller path, but restart/disconnection and conflict recovery
+  remain open.
 
 ## Current recommendation
 
 Retain searchable rolling restart for supported indexer topologies, because
 it provides Splunk's RF/SF/searchability coordination. Add an explicit,
 configuration-aware serving contract and a durable one-target lifecycle
-contract rather than relying on probe tuning alone. Do not declare the
-workflow interruption-free until the controller can continue an owned
-withdrawn target, the previous peer is proven remotely serving before the next
-restart, and the workload passes the negative and compatibility gates above.
+contract rather than relying on probe tuning alone. The later Operator-owned
+campaign demonstrates that contract for one steady-controller RF3/SF2
+revision roll and fixed Splunk build. Do not generalize that result to
+Splunk-managed App Framework restarts, controller interruption, conflicting
+disruptions, unsupported redundancy, or the remaining negative and
+compatibility gates above.

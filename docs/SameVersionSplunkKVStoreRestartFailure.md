@@ -14,6 +14,53 @@ This is not currently understood to be an Operator, readiness-probe, or timeout
 failure. Splunk exits with code 2 during `splunk start`, before it can become
 ready.
 
+## Official fixed-build revalidation
+
+The reported product fix has now passed a bounded Kubernetes revalidation with
+official Splunk Cloud build `10.5.2605.0`, build `844c593e9c1d`. The artifact
+was:
+
+`https://repo.splunkdev.net/artifactory/generic-west-local/splcore/builds/develop/844c593e9c1d83a6e89a3e4b2ed68becf11f6948/231923365/splunkcloud-10.5.2605.0-844c593e9c1d-linux-amd64.tgz`
+
+Docker-Splunk verified the artifact's published SHA-512 during the build. The
+resulting runtime was pushed and deployed by immutable digest:
+
+`sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`
+
+The revalidation first replaced one indexer Pod with the same image digest and
+the same persistent `/opt/splunk/etc` and `/opt/splunk/var` claims. Before
+replacement, the mounted KV Store contained a populated MongoDB/WiredTiger
+database. The replacement:
+
+- mounted the same two PVC UIDs;
+- reported the exact `10.5.2605.0`/`844c593e9c1d` identity;
+- completed Docker-Splunk/Ansible startup and its internal Splunk restart with
+  `ok=111`, `failed=0`;
+- reached Kubernetes Ready with zero container restarts; and
+- produced zero matches for
+  `Active KVStore version upgrade precheck FAILED`.
+
+The Operator then completed an automated same-image StatefulSet revision roll
+across four persistent indexers in order `3 -> 2 -> 1 -> 0`. Every replacement
+reused its persistent data, completed Ansible with `failed=0`, reached Ready
+with zero container restarts, retained its Splunk peer GUID, and produced no
+prior failure signature. Cluster Manager finished with RF and SF met, all data
+searchable, all peers Up, and no fixups.
+
+Continuous workload evidence also passed:
+
+- the primary run submitted 80 numbered events with zero HEC failures and zero
+  search-request failures, then found all 80 exactly once; and
+- a continuation through the final replacement and stable post-roll period
+  submitted 30 events with zero failures and found all 30 exactly once.
+
+This closes the original same-version, existing-volume failure for the tested
+official build and topology. It does not by itself qualify every legacy
+marker state, supported upgrade path, Search Head role, or older-to-newer
+version transition. The exact product-source change in the official artifact
+was not inferred from runtime success; source review and broader upgrade
+coverage remain separate product gates.
+
 ## Environment and exact identity
 
 Observed on 27 July 2026 in a three-member Search Head Cluster on Kubernetes.
@@ -143,6 +190,10 @@ The spike is isolated on `codex/kvstore-same-version-restart`. It is not yet a
 product-approved or merged fix. Qualification must use the package built from
 the exact reviewed commit and must demonstrate both recovery and fail-closed
 behavior.
+
+The official-build result above supersedes the spike as the runtime used for
+the current Operator qualification. The spike remains historical diagnostic
+work and is not part of the Docker-Splunk or Splunk Operator solution.
 
 ## Kubernetes impact
 
