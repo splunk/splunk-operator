@@ -186,12 +186,22 @@ func (testenv *TestCaseEnv) setup() error {
 	// Create secret object for index test
 	switch ClusterProvider {
 	case "eks":
-		testenv.createIndexSecret()
-		testenv.createIndexIngestSepSecret()
+		if err = testenv.createIndexSecret(); err != nil {
+			return err
+		}
+		if err = testenv.createIndexIngestSepSecret(); err != nil {
+			return err
+		}
 	case "azure":
-		testenv.createIndexSecretAzure()
+		if os.Getenv("AZURE_MANAGED_ID_ENABLED") == "false" {
+			if err = testenv.createIndexSecretAzure(); err != nil {
+				return err
+			}
+		}
 	case "gcp":
-		testenv.createIndexSecretGCP()
+		if err = testenv.createIndexSecretGCP(); err != nil {
+			return err
+		}
 	default:
 		testenv.Log.Info("Failed to create secret object")
 	}
@@ -620,9 +630,15 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 	if accessKey == "" {
 		accessKey = os.Getenv("AWS_ACCESS_KEY_ID")
 	}
+	if accessKey == "" {
+		return fmt.Errorf("required environment variable not set; expected one of [TEST_S3_ACCESS_KEY_ID AWS_ACCESS_KEY_ID]")
+	}
 	secretKey := os.Getenv("TEST_S3_SECRET_ACCESS_KEY")
 	if secretKey == "" {
 		secretKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	}
+	if secretKey == "" {
+		return fmt.Errorf("required environment variable not set; expected one of [TEST_S3_SECRET_ACCESS_KEY AWS_SECRET_ACCESS_KEY]")
 	}
 
 	data := map[string][]byte{"s3_access_key": []byte(accessKey),
@@ -644,12 +660,15 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 	return nil
 }
 
-// CreateIndexSecret create secret object
+// createIndexSecretGCP create secret object for GCP
 func (testenv *TestCaseEnv) createIndexSecretGCP() error {
 	ctx := context.Background()
 	secretName := testenv.s3IndexSecret
 	ns := testenv.namespace
 	encodedString := os.Getenv("GCP_SERVICE_ACCOUNT_KEY")
+	if encodedString == "" {
+		return fmt.Errorf("required environment variable GCP_SERVICE_ACCOUNT_KEY is not set")
+	}
 	gcpCredentials, err := base64.StdEncoding.DecodeString(encodedString)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to decode GCP service account key")
@@ -678,8 +697,18 @@ func (testenv *TestCaseEnv) createIndexSecretAzure() error {
 	ctx := context.Background()
 	secretName := testenv.s3IndexSecret
 	ns := testenv.namespace
-	data := map[string][]byte{"azure_sa_name": []byte(os.Getenv("STORAGE_ACCOUNT")),
-		"azure_sa_secret_key": []byte(os.Getenv("STORAGE_ACCOUNT_KEY"))}
+
+	storageAccount := os.Getenv("STORAGE_ACCOUNT")
+	if storageAccount == "" {
+		return fmt.Errorf("required environment variable STORAGE_ACCOUNT is not set")
+	}
+	storageAccountKey := os.Getenv("STORAGE_ACCOUNT_KEY")
+	if storageAccountKey == "" {
+		return fmt.Errorf("required environment variable STORAGE_ACCOUNT_KEY is not set")
+	}
+
+	data := map[string][]byte{"azure_sa_name": []byte(storageAccount),
+		"azure_sa_secret_key": []byte(storageAccountKey)}
 	secret := newSecretSpec(ns, secretName, data)
 	if err := testenv.GetKubeClient().Create(ctx, secret); err != nil {
 		testenv.Log.Error(err, "Unable to create Azure index secret object")
@@ -703,8 +732,17 @@ func (testenv *TestCaseEnv) createIndexIngestSepSecret() error {
 	secretName := testenv.indexIngestSepSecret
 	ns := testenv.namespace
 
-	data := map[string][]byte{"s3_access_key": []byte(os.Getenv("AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID")),
-		"s3_secret_key": []byte(os.Getenv("AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY"))}
+	accessKey := os.Getenv("AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID")
+	if accessKey == "" {
+		return fmt.Errorf("required environment variable AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID is not set")
+	}
+	secretKey := os.Getenv("AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY")
+	if secretKey == "" {
+		return fmt.Errorf("required environment variable AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY is not set")
+	}
+
+	data := map[string][]byte{"s3_access_key": []byte(accessKey),
+		"s3_secret_key": []byte(secretKey)}
 	secret := newSecretSpec(ns, secretName, data)
 
 	if err := testenv.GetKubeClient().Create(ctx, secret); err != nil {
