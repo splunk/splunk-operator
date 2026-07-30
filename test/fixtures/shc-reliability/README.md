@@ -25,6 +25,10 @@ requirement.
 Cluster HTTP Event Collector and searches for those events through the Search
 Head Cluster Service while collecting Kubernetes, SHC, IDXC, captain, and App
 Framework state. It does not print the HEC token or administrator password.
+Search Head observations report container readiness, Kubernetes Pod readiness,
+the Operator-owned SHC serving gate, and Service EndpointSlice readiness as
+separate signals so an internal Splunk restart cannot be mistaken for a
+healthy Kubernetes traffic endpoint.
 The monitor exits successfully only when every submitted sequence is present
 exactly once at the final completeness gate.
 

@@ -128,11 +128,23 @@ for sequence in $(seq 1 "${samples}"); do
     minimum="unknown"
   fi
 
-  sh_ready="$(
+  sh_containers_ready="$(
     kubectl -n "${namespace}" get pods \
       -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance=splunk-shc82-shc-search-head \
       -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' \
       2>/dev/null | grep -c '^true$' || true
+  )"
+  sh_pods_ready="$(
+    kubectl -n "${namespace}" get pods \
+      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance=splunk-shc82-shc-search-head \
+      -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\n"}{end}{end}' \
+      2>/dev/null | grep -c '^True$' || true
+  )"
+  sh_serving_ready="$(
+    kubectl -n "${namespace}" get pods \
+      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance=splunk-shc82-shc-search-head \
+      -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="enterprise.splunk.com/shc-serving")]}{.status}{"\n"}{end}{end}' \
+      2>/dev/null | grep -c '^True$' || true
   )"
   sh_endpoints="$(
     kubectl -n "${namespace}" get endpointslice \
@@ -168,7 +180,7 @@ for sequence in $(seq 1 "${samples}"); do
       '{.status.appContext.isDeploymentInProgress}/{.status.appContext.bundlePushStatus.bundlePushStage}'
   )"
 
-  log_line "${timestamp} seq=${sequence} hec=${hec_state} search=${search_state} count=${count} min=${minimum:-unknown} max=${maximum} distinct=${distinct} shReady=${sh_ready} shEndpoints=${sh_endpoints} idxEndpoints=${idx_endpoints} restarts=${restarts} shc=${shc} idxc=${idxc} shcApp=${shc_app} cmApp=${cm_app}"
+  log_line "${timestamp} seq=${sequence} hec=${hec_state} search=${search_state} count=${count} min=${minimum:-unknown} max=${maximum} distinct=${distinct} shContainersReady=${sh_containers_ready} shPodsReady=${sh_pods_ready} shServingReady=${sh_serving_ready} shEndpoints=${sh_endpoints} idxEndpoints=${idx_endpoints} restarts=${restarts} shc=${shc} idxc=${idxc} shcApp=${shc_app} cmApp=${cm_app}"
   sleep "${interval_seconds}"
 done
 
