@@ -20,3 +20,21 @@ make shc82-license-secret \
 The supplied license must support operation as a remote license manager. The
 built-in Enterprise trial license does not satisfy this qualification
 requirement.
+
+`shc82_appframework_monitor.sh` sends numbered events through the Indexer
+Cluster HTTP Event Collector and searches for those events through the Search
+Head Cluster Service while collecting Kubernetes, SHC, IDXC, captain, and App
+Framework state. It does not print the HEC token or administrator password.
+The monitor exits successfully only when every submitted sequence is present
+exactly once at the final completeness gate.
+
+Run it from the repository root:
+
+```bash
+SHC82_NAMESPACE=<qualification-namespace> \
+SHC82_SAMPLES=180 \
+test/fixtures/shc-reliability/shc82_appframework_monitor.sh
+```
+
+The evidence log is written below `build/_test/shc82` unless
+`SHC82_EVIDENCE_FILE` specifies another location.

@@ -146,16 +146,26 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out $(UNIT_TEST_PACKAGES)
 
 SHC82_APP_SOURCE_DIR ?= test/fixtures/shc-reliability/shc82_restart_required
-SHC82_APP_OUTPUT ?= build/_test/shc82/shc82_restart_required-1.0.0.tgz
+SHC82_APP_VERSION ?= 1.0.0
+SHC82_APP_OUTPUT ?= build/_test/shc82/shc82_restart_required-$(SHC82_APP_VERSION).tgz
 SHC82_NAMESPACE ?= shc82-afw-baseline
 SHC82_LICENSE_FILE ?=
 
 .PHONY: shc82-app-package shc82-license-secret
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
+	@printf '%s\n' "$(SHC82_APP_VERSION)" | \
+		grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || \
+		{ echo "SHC82_APP_VERSION must use numeric major.minor.patch form"; exit 1; }
 	@mkdir -p "$(dir $(SHC82_APP_OUTPUT))"
-	tar --sort=name --mtime="@0" --owner=0 --group=0 --numeric-owner \
-		-cf - -C "$(dir $(SHC82_APP_SOURCE_DIR))" "$(notdir $(SHC82_APP_SOURCE_DIR))" | \
-		gzip -n > "$(SHC82_APP_OUTPUT)"
+	@staging_dir="$$(mktemp -d)"; \
+		trap 'rm -rf "$${staging_dir}"' EXIT; \
+		cp -R "$(SHC82_APP_SOURCE_DIR)" \
+			"$${staging_dir}/$(notdir $(SHC82_APP_SOURCE_DIR))"; \
+		sed -i "s/^version = .*/version = $(SHC82_APP_VERSION)/" \
+			"$${staging_dir}/$(notdir $(SHC82_APP_SOURCE_DIR))/default/app.conf"; \
+		tar --sort=name --mtime="@0" --owner=0 --group=0 --numeric-owner \
+			-cf - -C "$${staging_dir}" "$(notdir $(SHC82_APP_SOURCE_DIR))" | \
+			gzip -n > "$(SHC82_APP_OUTPUT)"
 	sha256sum "$(SHC82_APP_OUTPUT)"
 
 shc82-license-secret: ## Create or update the SHC-82 LicenseManager license Secret.

@@ -15,6 +15,18 @@ Build the package from the repository root:
 make shc82-app-package
 ```
 
+Build a subsequent version of the same application without modifying the
+checked-in source:
+
+```text
+make shc82-app-package SHC82_APP_VERSION=1.0.1
+```
+
+The version must use numeric `major.minor.patch` form. Packaging copies the
+fixture into a temporary directory and changes only the staged `app.conf`, so
+the generated archive keeps the same application directory while presenting a
+new application version and digest to the App Framework.
+
 The generated archive is written below `build/_test/shc82`, which is ignored
 by Git. The Make target normalizes file order, timestamps, ownership, and gzip
 metadata so repeated builds from identical source have the same SHA-256

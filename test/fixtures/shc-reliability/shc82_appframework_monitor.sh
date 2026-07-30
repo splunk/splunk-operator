@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+namespace="${SHC82_NAMESPACE:-shc82-afw-baseline}"
+samples="${SHC82_SAMPLES:-180}"
+interval_seconds="${SHC82_INTERVAL_SECONDS:-5}"
+settle_attempts="${SHC82_SETTLE_ATTEMPTS:-24}"
+run_id="${SHC82_RUN_ID:-shc82-afw-$(date -u +%Y%m%dT%H%M%SZ)}"
+evidence_file="${SHC82_EVIDENCE_FILE:-build/_test/shc82/${run_id}.log}"
+
+probe_pod="splunk-shc82-license-manager-0"
+secret_name="splunk-${namespace}-secret"
+hec_service="splunk-shc82-idxc-indexer-service"
+shc_service="splunk-shc82-shc-search-head-service"
+
+for value in "${samples}" "${interval_seconds}" "${settle_attempts}"; do
+  if ! printf '%s\n' "${value}" | grep -Eq '^[1-9][0-9]*$'; then
+    printf 'sample, interval, and settle values must be positive integers\n' >&2
+    exit 2
+  fi
+done
+
+mkdir -p "$(dirname "${evidence_file}")"
+: >"${evidence_file}"
+
+hec_token="$(
+  kubectl -n "${namespace}" get secret "${secret_name}" \
+    -o jsonpath='{.data.hec_token}' | base64 --decode
+)"
+admin_password="$(
+  kubectl -n "${namespace}" get secret "${secret_name}" \
+    -o jsonpath='{.data.password}' | base64 --decode
+)"
+
+log_line() {
+  printf '%s\n' "$*" | tee -a "${evidence_file}"
+}
+
+submit_event() {
+  local sequence="$1"
+  local payload response
+  payload="$(
+    printf '{"event":{"shc82_run":"%s","seq":%d},"sourcetype":"_json","index":"main"}' \
+      "${run_id}" "${sequence}"
+  )"
+  response="$(
+    printf '%s\n%s\n' "${hec_token}" "${payload}" |
+      kubectl -n "${namespace}" exec -i "${probe_pod}" -c splunk -- sh -c '
+        IFS= read -r token
+        IFS= read -r payload
+        curl -sk --connect-timeout 3 --max-time 15 \
+          -H "Authorization: Splunk ${token}" \
+          -H "Content-Type: application/json" \
+          --data-binary "${payload}" \
+          "https://splunk-shc82-idxc-indexer-service:8088/services/collector/event"
+      ' 2>/dev/null || true
+  )"
+  printf '%s' "${response}" | grep -q '"code":0'
+}
+
+search_sequences() {
+  printf '%s\n%s\n' "${admin_password}" "${run_id}" |
+    kubectl -n "${namespace}" exec -i "${probe_pod}" -c splunk -- sh -c '
+      IFS= read -r password
+      IFS= read -r run_id
+      curl -sk --connect-timeout 3 --max-time 20 \
+        -u "admin:${password}" \
+        -X POST "https://splunk-shc82-shc-search-head-service:8089/services/search/jobs/export" \
+        --data-urlencode "search=search index=main earliest=-24h shc82_run=\"${run_id}\" | stats count min(seq) as min max(seq) as max dc(seq) as distinct" \
+        --data "output_mode=json"
+    ' 2>/dev/null || true
+}
+
+extract_field() {
+  local field="$1"
+  local response="$2"
+  printf '%s' "${response}" |
+    sed -n "s/.*\"${field}\":\"\\([0-9][0-9]*\\)\".*/\\1/p" |
+    tail -1
+}
+
+resource_state() {
+  local resource="$1"
+  local name="$2"
+  local template="$3"
+  kubectl -n "${namespace}" get "${resource}" "${name}" \
+    -o "jsonpath=${template}" 2>/dev/null || printf 'Unavailable'
+}
+
+baseline_uids="$(
+  kubectl -n "${namespace}" get pods \
+    -o jsonpath='{range .items[*]}{.metadata.name}={.metadata.uid}{";"}{end}'
+)"
+log_line "run=${run_id} start=$(date -u +%Y-%m-%dT%H:%M:%SZ) namespace=${namespace}"
+log_line "baselinePodUIDs=${baseline_uids}"
+
+hec_failures=0
+search_failures=0
+last_count=0
+last_distinct=0
+last_max=0
+
+for sequence in $(seq 1 "${samples}"); do
+  timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if submit_event "${sequence}"; then
+    hec_state="ok"
+  else
+    hec_state="fail"
+    hec_failures=$((hec_failures + 1))
+  fi
+
+  search_response="$(search_sequences)"
+  count="$(extract_field count "${search_response}")"
+  minimum="$(extract_field min "${search_response}")"
+  maximum="$(extract_field max "${search_response}")"
+  distinct="$(extract_field distinct "${search_response}")"
+  if [ -n "${count}" ] && [ -n "${distinct}" ] && [ -n "${maximum}" ]; then
+    search_state="ok"
+    last_count="${count}"
+    last_distinct="${distinct}"
+    last_max="${maximum}"
+  else
+    search_state="fail"
+    search_failures=$((search_failures + 1))
+    count="${last_count}"
+    distinct="${last_distinct}"
+    maximum="${last_max}"
+    minimum="unknown"
+  fi
+
+  sh_ready="$(
+    kubectl -n "${namespace}" get pods \
+      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance=splunk-shc82-shc-search-head \
+      -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' \
+      2>/dev/null | grep -c '^true$' || true
+  )"
+  sh_endpoints="$(
+    kubectl -n "${namespace}" get endpointslice \
+      -l kubernetes.io/service-name="${shc_service}" \
+      -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' \
+      2>/dev/null | grep -c '^true$' || true
+  )"
+  idx_endpoints="$(
+    kubectl -n "${namespace}" get endpointslice \
+      -l kubernetes.io/service-name="${hec_service}" \
+      -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' \
+      2>/dev/null | grep -c '^true$' || true
+  )"
+  restarts="$(
+    kubectl -n "${namespace}" get pods \
+      -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.restartCount}{"\n"}{end}{end}' \
+      2>/dev/null | awk '{sum += $1} END {print sum + 0}'
+  )"
+  shc="$(
+    resource_state searchheadcluster.enterprise.splunk.com shc82-shc \
+      '{.status.phase}/{.status.readyReplicas}/{.status.replicas}/{.status.captain}'
+  )"
+  idxc="$(
+    resource_state indexercluster.enterprise.splunk.com shc82-idxc \
+      '{.status.phase}/{.status.readyReplicas}/{.status.replicas}'
+  )"
+  shc_app="$(
+    resource_state searchheadcluster.enterprise.splunk.com shc82-shc \
+      '{.status.appContext.isDeploymentInProgress}/{.status.appContext.bundlePushStatus.bundlePushStage}'
+  )"
+  cm_app="$(
+    resource_state clustermanager.enterprise.splunk.com shc82 \
+      '{.status.appContext.isDeploymentInProgress}/{.status.appContext.bundlePushStatus.bundlePushStage}'
+  )"
+
+  log_line "${timestamp} seq=${sequence} hec=${hec_state} search=${search_state} count=${count} min=${minimum:-unknown} max=${maximum} distinct=${distinct} shReady=${sh_ready} shEndpoints=${sh_endpoints} idxEndpoints=${idx_endpoints} restarts=${restarts} shc=${shc} idxc=${idxc} shcApp=${shc_app} cmApp=${cm_app}"
+  sleep "${interval_seconds}"
+done
+
+final_complete=false
+for attempt in $(seq 1 "${settle_attempts}"); do
+  search_response="$(search_sequences)"
+  count="$(extract_field count "${search_response}")"
+  minimum="$(extract_field min "${search_response}")"
+  maximum="$(extract_field max "${search_response}")"
+  distinct="$(extract_field distinct "${search_response}")"
+  if [ "${count:-0}" -eq "${samples}" ] &&
+    [ "${minimum:-0}" -eq 1 ] &&
+    [ "${maximum:-0}" -eq "${samples}" ] &&
+    [ "${distinct:-0}" -eq "${samples}" ]; then
+    final_complete=true
+    break
+  fi
+  sleep 5
+done
+
+final_uids="$(
+  kubectl -n "${namespace}" get pods \
+    -o jsonpath='{range .items[*]}{.metadata.name}={.metadata.uid}{";"}{end}'
+)"
+log_line "finalPodUIDs=${final_uids}"
+log_line "run=${run_id} end=$(date -u +%Y-%m-%dT%H:%M:%SZ) submitted=${samples} hecFailures=${hec_failures} searchFailures=${search_failures} finalCount=${count:-0} finalMin=${minimum:-0} finalMax=${maximum:-0} finalDistinct=${distinct:-0} complete=${final_complete}"
+
+if [ "${hec_failures}" -ne 0 ] ||
+  [ "${search_failures}" -ne 0 ] ||
+  [ "${final_complete}" != true ]; then
+  exit 1
+fi
