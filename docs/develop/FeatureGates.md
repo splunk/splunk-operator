@@ -53,10 +53,11 @@ When running the operator binary directly, pass feature gates at startup:
 | `PostgresController`         | `false` | Alpha | ?            | PostgresCluster, PostgresClusterClass, and PostgresDatabase controllers and CRDs |
 | `SplunkPodLifecycle`         | `false` | Alpha | Wave 0 spike | Common Splunk workload Pod lifecycle contract                             |
 | `SearchHeadClusterLifecycle` | `false` | Alpha | Wave 0 spike | Durable Search Head Cluster lifecycle policy and orchestration contract   |
+| `IndexerClusterLifecycle`    | `false` | Alpha | SHC-85 spike | Durable Indexer Pod-update ownership and serving-path readiness contract  |
 
-`SearchHeadClusterLifecycle=true` requires
-`SplunkPodLifecycle=true`. The Operator rejects this invalid combination at
-startup.
+`SearchHeadClusterLifecycle=true` and `IndexerClusterLifecycle=true` each
+require `SplunkPodLifecycle=true`. The Operator rejects either invalid
+combination at startup.
 
 ### Splunk Pod lifecycle
 
@@ -77,6 +78,64 @@ is owned by the separate lifecycle-orchestration work.
 
 The Splunk Enterprise Helm chart exposes
 `terminationGracePeriodSeconds` under each workload's values section.
+
+### Indexer Cluster lifecycle
+
+When `IndexerClusterLifecycle=true`, the Operator records the exact Indexer Pod,
+UID, source revision, desired revision, and lifecycle stage before it starts a
+Pod update. The controller may continue past one deliberately unavailable Pod
+only when that Pod is the recorded target and the Cluster Manager reports a
+controlled decommission state. It does not use this exception for a second or
+unrelated unavailable Pod. A replacement completes only after it has a new UID,
+the desired StatefulSet revision, Kubernetes readiness, and an `Up`, searchable
+Cluster Manager peer observation. Completion is persisted before another target
+is selected. If a replica-count change arrives during an owned Pod update, the
+controller first recovers that target and then applies the scale change, so
+scale-down cannot decommission a second peer concurrently. If the controller
+restarts after the Cluster Manager accepted decommission but before that API
+result reached CR status, it records the exact target's controlled peer state
+as a recovered durable transition before authorizing replacement.
+
+Readiness withdrawal is itself a durable stage: the controller records the
+target first, records withdrawal intent next, writes the Pod-local withdrawal
+signal, waits for Kubernetes `Ready=False`, and only then asks the Cluster
+Manager to decommission the peer. If a template change is reverted while only
+target selection has been persisted, the untouched operation is cancelled.
+Once readiness withdrawal has been durably authorized, the exact target is
+recovered through replacement before the controller accepts the rollback or
+any other disruption.
+
+Aggregate Cluster Manager readiness may become false while the recorded target
+is withdrawn. That signal does not abandon the only path that can restore the
+peer: the controller may continue the exact recovery only after a successful
+Cluster Manager observation shows every non-target peer remains `Up` and
+searchable. Any non-target degradation blocks progress.
+
+The Operator emits Kubernetes Events and structured logs for target selection,
+readiness withdrawal, decommission, revision adoption, recovery, cancellation,
+and completion. Prometheus exposes
+`splunk_operator_indexer_lifecycle_transition_total{stage,reason}` and
+`splunk_operator_indexer_lifecycle_stage_duration_seconds{stage}`. Labels are
+bounded and deliberately exclude namespace, resource name, Pod, UID, revision,
+operation ID, and free-form messages.
+
+The gate also enables an Indexer-only HEC serving check in the readiness probe.
+If effective local Splunk configuration enables HEC, readiness requires the
+local HTTP or HTTPS HEC health endpoint to respond. Disabled HEC is not treated
+as a normal-operation failure. An Operator-owned decommission always withdraws
+Indexer readiness, including when HEC is disabled, so S2S and other Service
+traffic cannot continue selecting the draining Pod. The probe derives HEC
+protocol and port from effective `inputs.conf` and uses loopback, so it does not
+depend on ingress TLS termination, a service mesh, or external network routing.
+These serving checks do not change liveness. When no explicit readiness timing
+is configured, the Alpha gate uses a 2-second period, 2-second timeout, and
+one-failure threshold; explicitly configured probe values remain authoritative.
+
+The lifecycle gate does not use the historical whole-StatefulSet recreation
+fallback for Splunk Enterprise 8-to-9 Indexer migrations because that path
+cannot preserve exact one-Pod-at-a-time ownership. Such migrations remain a
+separate compatibility qualification: the gated controller uses the normal
+per-Pod lifecycle and fails closed if a peer cannot be decommissioned.
 
 ## Adding a New Feature Gate
 
