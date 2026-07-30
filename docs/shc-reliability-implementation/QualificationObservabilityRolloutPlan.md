@@ -1583,3 +1583,9 @@ for the repeated early-ready interval and the coupled startup-budget,
 probe-restart, grace-period, and TERM-exit contract. Retained the similar
 non-SHC condition-writer structure as an audit item without making an
 unqualified defect claim.
+
+2026-07-30 UTC: Selected SHC-82 on isolated branch
+`codex/shc-82-appframework-restart-availability` from integrated feature
+baseline `079e26233267`. Qualification remains pending and must preserve the
+separation between observed restart-mode signals and proven ingest, search,
+redundancy, and disruption outcomes.

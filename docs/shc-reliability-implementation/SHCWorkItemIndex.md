@@ -56,7 +56,7 @@ without duplicating their full content.
 | SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | `96c16b49b`, `a59fc5103` | API-005, STS-003, OBS-002 | Source-qualified; EKS-qualified for omitted/defaulted generic-ephemeral `volumeMode`, stable StatefulSet generations and revisions, controller restart, six post-restart samples, HTTP 200 search on every member, and zero Pod replacement or restart |
 | SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | `d1f6e301d`, `744bfb096`, `9be744f06`, `0b9253f11` | STS-003, STS-008, STS-014, OBS-001 | Source-qualified and EKS-qualified for an authorized unschedulable replacement, superseding queued revision, durable last-known-good recovery across an Operator restart, complete queued rollout, dynamic captain transfer, 187 uninterrupted searches, and 369 seconds of final stability |
 | SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | `d053ff65b`, `33ff143d1`, `58437e3ad` | OPS-004, OBS-001, OBS-005 | Source-qualified and EKS-qualified for direct namespace deletion of a paused, healthy three-member SHC: no create after namespace termination, no post-finalization status write, declared PVC deletion completed, and no workload or PV remained |
-| SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | Pending | OPS-006, OPS-011, OBS-001, OBS-003, OBS-005 | Customer-reported behavior includes a bundle-triggered indexer message with `searchable=0` and `force=0`; exact Splunk semantics, effective configuration, active-search behavior, and end-to-end availability remain to be established before selecting a solution |
+| SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | Selected on `codex/shc-82-appframework-restart-availability` at `079e26233`; implementation not claimed | OPS-006, OPS-011, OBS-001, OBS-003, OBS-005 | Customer-reported behavior includes a bundle-triggered indexer message with `searchable=0` and `force=0`; exact Splunk semantics, effective configuration, active-search behavior, and end-to-end availability remain to be established before selecting a solution |
 | SHC-83 | Prevent traffic readiness before image-owned SHC initialization, synchronization, and internal Splunk restarts are complete | Pending | HLT-001, HLT-002, HLT-009, STS-012, OBS-001 | Registered from repeated EKS observations of a brief early-ready interval; no cross-layer startup-complete contract or solution is claimed |
 | SHC-84 | Bound first-start and upgrade startup probes and guarantee prompt TERM exit for kubelet-initiated restarts | Pending | HLT-009, RUN-003, RUN-004, REJ-005, OBS-005 | Registered after a legacy-runtime fixture exceeded the default startup budget and then consumed the configured 1200-second termination grace; no runtime or probe-policy implementation is claimed |
 
@@ -402,7 +402,8 @@ requirement that spans both Search Head and indexer clusters. SHC-83 and
 SHC-84 preserve two distinct runtime-contract gaps exposed during repeated
 formation and finalization campaigns: early traffic readiness, and the
 interaction among startup duration, kubelet restart policy, and prompt
-process exit. SHC-82 through SHC-84 remain registered but unassigned.
+process exit. SHC-82 is selected on its isolated evidence branch; SHC-83 and
+SHC-84 remain registered but unassigned.
 Registration or assignment alone does not claim implementation. Each
 remaining item must use its own branch and immutable source commit.
 
@@ -443,6 +444,11 @@ post-finalization status writes, and completed without namespace-termination
 or storage-precondition errors. Registered SHC-83 and SHC-84 separately for
 the observed early-ready startup interval and the startup-budget/TERM-exit
 contract; neither follow-up is claimed as implemented.
+
+2026-07-30 UTC: Selected SHC-82 on isolated branch
+`codex/shc-82-appframework-restart-availability` from integrated feature
+baseline `079e26233267`. Selection records the evidence boundary only; it does
+not claim implementation, qualification, or a chosen restart policy.
 
 2026-07-29 UTC: Registered SHC-82 and OPS-011 from a customer-reported
 App Framework restart-availability concern. The record deliberately preserves

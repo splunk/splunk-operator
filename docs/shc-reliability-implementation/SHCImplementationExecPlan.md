@@ -263,6 +263,10 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   produced no namespace-termination, stale status, or storage-precondition
   error. This closes the demonstrated SHC deletion edge; it does not by itself
   claim broader production readiness.
+- [x] (2026-07-30 UTC) Selected SHC-82 on isolated branch
+  `codex/shc-82-appframework-restart-availability` from integrated feature
+  baseline `079e26233267`. Selection does not claim implementation,
+  qualification, or a chosen restart policy.
 - [ ] Investigate and qualify SHC-82. Reproduce an App Framework deployment
   whose bundle requires Search Head and indexer restarts; pin the exact
   Operator, Docker-Splunk, and Splunk Enterprise sources; establish the
@@ -1958,3 +1962,9 @@ as separate, still-pending requirements for startup-complete traffic readiness
 and the startup-budget/TERM-exit contract. Also retained the structurally
 similar condition-writer pattern in non-SHC controllers as an Operator-wide
 audit item rather than extending SHC-81 without qualification.
+
+2026-07-30 UTC: Selected SHC-82 on
+`codex/shc-82-appframework-restart-availability` from integrated feature
+baseline `079e26233267`. The branch begins with source tracing and controlled
+reproduction; this record deliberately makes no implementation,
+qualification, or default-policy claim.
