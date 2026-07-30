@@ -347,9 +347,14 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   container restarts. Controller restart is now qualified for this bounded
   stage; longer disconnection, leader contention, conflict, redundancy, and
   compatibility variants remain open.
-- [ ] Define and qualify SHC-83 so Service readiness cannot succeed before
-  image-owned SHC initialization, synchronization, and internal Splunk
-  restarts have completed.
+- [ ] Define and qualify SHC-83 on isolated branch
+  `codex/shc-83-startup-readiness-qualification`. During initial formation,
+  no Search Head may enter the client Service until every desired Search Head
+  container has completed image-owned initialization. The existing live
+  member, captain, and synchronization checks still apply after that
+  cross-Pod barrier. Previously stable peers must remain eligible during
+  scale, rollout, and recovery; selection does not claim implementation or
+  qualification.
 - [ ] Define and qualify SHC-84 so first-start and supported-upgrade work has
   an explicit startup budget while every kubelet-initiated restart reaches one
   prompt, observable TERM-to-container-exit path.
@@ -489,6 +494,19 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   member and endpoint availability during image-owned initialization before
   converging again. This is registered as SHC-83, a separate startup/readiness
   contract gap across the Operator, Docker-Splunk, and Splunk Enterprise.
+
+- (2026-07-30 UTC) The SHC-80 and SHC-81 early-ready observations already
+  contained the Operator's per-member SHC serving readiness gate introduced
+  by `d58fc2044`. Docker-Splunk writes `starting` before invoking Ansible and
+  writes `started` only after the playbook returns successfully; the mounted
+  readiness probe requires that state and a serving local management endpoint.
+  The missing boundary is cluster-wide initial formation: an earlier member
+  can satisfy its local and current Splunk checks while another desired member
+  is still inside image-owned initialization and can later initiate
+  synchronization or an internal restart. SHC-83 therefore begins with an
+  all-desired-container initialization barrier only for a topology that has
+  never been stable. It must not withdraw healthy peers during scale or an
+  established-cluster recovery.
 
 - (2026-07-29 UTC) Deleting the disposable qualification namespace exposed a
   deletion-finalizer edge. The SHC finalizer attempted to recreate its Secret
@@ -2189,3 +2207,13 @@ valid-empty classification in the overlapping 80/80 run, immutable runtime
 and Operator provenance, final RF/SF/all-searchable/no-fixup health, and the
 remaining disconnection, contention, conflict, redundancy, and compatibility
 boundaries.
+
+2026-07-30 UTC: Selected SHC-83 on isolated branch
+`codex/shc-83-startup-readiness-qualification` from the last SHC-85 qualified
+baseline `1e695381a`. Source tracing established that the historical
+early-ready evidence already included the per-member serving gate and that
+Docker-Splunk exposes successful local Ansible completion through its
+container-state-backed readiness probe. The selected contract adds a
+first-formation all-desired-container barrier before the existing live Splunk
+checks, while preserving availability for previously stable topologies. This
+record does not claim implementation or EKS qualification.

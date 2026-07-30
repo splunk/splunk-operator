@@ -150,7 +150,11 @@ ownership.
   not yet qualified.
 - [ ] Qualify SHC-83 with an explicit startup-complete traffic-readiness
   contract across image-owned initialization, synchronization, and internal
-  Splunk restarts.
+  Splunk restarts. The bounded first-formation gate requires all desired
+  Search Head containers to complete image initialization before publishing
+  any member, then requires the existing live member and captain checks.
+  Qualification must also prove that a previously stable topology does not
+  lose healthy Service endpoints during scale or recovery.
 - [ ] Qualify SHC-84 with measured first-start and upgrade startup budgets,
   kubelet probe-triggered restart behavior, and bounded TERM-to-container-exit
   evidence for every supported runtime.
