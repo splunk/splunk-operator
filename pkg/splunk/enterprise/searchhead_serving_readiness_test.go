@@ -136,8 +136,24 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	require.Equal(t, corev1.ConditionFalse, status)
 	require.Equal(t, "ClusterNotReady", reason)
 
+	stableReplicas := int32(2)
+	mgr.statefulSet.Spec.Replicas = &stableReplicas
+	mgr.cr.Status.LastStableReplicas = &stableReplicas
+	mgr.cr.Status.Initialized = false
+	mgr.cr.Status.MinPeersJoined = false
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionTrue, status)
+	require.Equal(t, "MemberServingAfterStableFormation", reason)
+
+	previousStableReplicas := int32(1)
+	mgr.cr.Status.LastStableReplicas = &previousStableReplicas
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionFalse, status, "a different stable topology must fail closed")
+	require.Equal(t, "ClusterNotReady", reason)
+
 	mgr.statefulSet.Status.CurrentRevision = ""
 	mgr.statefulSet.Status.ObservedGeneration = 0
+	mgr.cr.Status.LastStableReplicas = nil
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
 	require.Equal(t, corev1.ConditionFalse, status, "fresh formation must fail closed")
 	require.Equal(t, "ClusterNotReady", reason)
@@ -150,6 +166,8 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	require.Equal(t, "PeerServingDuringRolloutPlanning", reason)
 	mgr.statefulSetUpdatePending = false
 
+	mgr.cr.Status.Initialized = true
+	mgr.cr.Status.MinPeersJoined = true
 	mgr.cr.Status.CaptainReady = true
 	mgr.cr.Status.LifecycleOperation = &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
 		TargetOrdinal: &ordinal,

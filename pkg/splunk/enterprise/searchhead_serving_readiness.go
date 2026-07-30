@@ -90,6 +90,21 @@ func (mgr *searchHeadClusterPodManager) searchHeadRollingUpdatePending() bool {
 		statefulSet.Status.CurrentRevision != statefulSet.Status.UpdateRevision
 }
 
+// searchHeadTopologyPreviouslyStable distinguishes an established replica
+// topology from initial formation. LastStableReplicas is recorded only after
+// the SHC and every desired Pod have reached Ready. It remains durable while a
+// Splunk-managed operation, such as an App Framework bundle push, restarts
+// splunkd inside otherwise unchanged Pods.
+func (mgr *searchHeadClusterPodManager) searchHeadTopologyPreviouslyStable() bool {
+	if mgr.statefulSet == nil ||
+		mgr.statefulSet.Spec.Replicas == nil ||
+		mgr.cr.Status.LastStableReplicas == nil {
+		return false
+	}
+	return *mgr.cr.Status.LastStableReplicas ==
+		*mgr.statefulSet.Spec.Replicas
+}
+
 func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 	pod *corev1.Pod,
 	ordinal int32,
@@ -127,6 +142,10 @@ func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 		if mgr.searchHeadRollingUpdatePending() {
 			return corev1.ConditionTrue, "PeerServingDuringRolloutPlanning",
 				"healthy SHC member remains eligible while the coordinated rolling revision is established"
+		}
+		if mgr.searchHeadTopologyPreviouslyStable() {
+			return corev1.ConditionTrue, "MemberServingAfterStableFormation",
+				"healthy SHC member remains eligible while cluster-wide readiness observation recovers"
 		}
 		return corev1.ConditionFalse, "ClusterNotReady", "SHC formation or captain readiness is incomplete"
 	}
