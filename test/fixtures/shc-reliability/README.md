@@ -63,11 +63,11 @@ make shc83-license-secret \
 
 Start `shc83_startup_readiness_monitor.sh` before applying the fixture. The
 monitor fails immediately if any Search Head becomes a ready Service endpoint,
-or its Operator-owned serving gate becomes true, before all desired Search
-Head containers have completed image-owned initialization. It records Pod
-UIDs, container and Pod readiness, serving-gate reasons, EndpointSlice targets,
-container restart counts, local container-state files, and aggregate SHC
-formation status.
+or its Operator-owned serving gate becomes true, before the durable v4 initial
+formation stage is complete. It records the formation stage, restart decision,
+stabilization timestamp, Pod UIDs, container and Pod readiness, serving-gate
+reasons, EndpointSlice targets, container restart counts, local container-state
+files, and aggregate SHC formation status.
 
 ```bash
 SHC83_NAMESPACE=shc83-startup-readiness \
@@ -79,4 +79,5 @@ wait
 
 The default success gate requires twelve consecutive five-second samples with
 all desired members ready, serving, present in the client Service
-EndpointSlice, and reflected by `status.lastStableReplicas`.
+EndpointSlice, reflected by `status.lastStableReplicas`, and reported in the
+`Complete` initial-formation stage after the required restart was initiated.

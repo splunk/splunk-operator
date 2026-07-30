@@ -14,7 +14,7 @@ condition_type="enterprise.splunk.com/shc-serving"
 
 mkdir -p "$(dirname "${evidence_file}")"
 printf '%s\n' \
-  $'timestamp\tphase\tdesired\tpods\tcontainers_ready\tpod_ready\tserving_true\tendpoints\trestarts\tinitialized\tmin_peers\tcaptain_ready\tlast_stable\tcaptain_api_observed\tcaptain_rolling_restart\trestart_required_members\tpod_detail\tendpoint_pods\tcontainer_states' \
+  $'timestamp\tphase\tdesired\tpods\tcontainers_ready\tpod_ready\tserving_true\tendpoints\trestarts\tinitialized\tmin_peers\tcaptain_ready\tlast_stable\tinitial_formation_stage\tinitial_formation_restart_initiated\tinitial_formation_stable_since\tcaptain_api_observed\tcaptain_rolling_restart\trestart_required_members\tpod_detail\tendpoint_pods\tcontainer_states' \
   > "${evidence_file}"
 
 stable_samples=0
@@ -35,6 +35,15 @@ for ((sample = 1; sample <= samples; sample++)); do
   min_peers="$(jq -r '.status.minPeersJoined // false' <<<"${cr_json}")"
   captain_ready="$(jq -r '.status.captainReady // false' <<<"${cr_json}")"
   last_stable="$(jq -r '.status.lastStableReplicas // ""' <<<"${cr_json}")"
+  initial_formation_stage="$(
+    jq -r '.status.initialFormationStage // ""' <<<"${cr_json}"
+  )"
+  initial_formation_restart_initiated="$(
+    jq -r '.status.initialFormationRestartInitiated // false' <<<"${cr_json}"
+  )"
+  initial_formation_stable_since="$(
+    jq -r '.status.initialFormationStableSince // ""' <<<"${cr_json}"
+  )"
 
   all_pods_json="$(kubectl -n "${namespace}" get pods -o json)"
   pods_json="$(jq -c --arg prefix "${pod_prefix}" \
@@ -123,23 +132,25 @@ for ((sample = 1; sample <= samples; sample++)); do
     fi
   done < <(jq -r '.[].metadata.name' <<<"${pods_json}")
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "${timestamp}" "${phase}" "${desired}" "${pod_count}" \
     "${containers_ready}" "${pod_ready}" "${serving_true}" \
     "${endpoint_count}" "${restarts}" "${initialized}" "${min_peers}" \
-    "${captain_ready}" "${last_stable}" "${captain_api_observed}" \
-    "${captain_rolling_restart}" "${restart_required_members}" \
-    "${pod_detail}" "${endpoint_pods}" "${container_states}" \
+    "${captain_ready}" "${last_stable}" "${initial_formation_stage}" \
+    "${initial_formation_restart_initiated}" \
+    "${initial_formation_stable_since}" "${captain_api_observed}" \
+    "${captain_rolling_restart}" "${restart_required_members}" "${pod_detail}" \
+    "${endpoint_pods}" "${container_states}" \
     >> "${evidence_file}"
 
-  if [[ -z "${last_stable}" ]] &&
-    ((desired > 0 && endpoint_count > 0 && containers_ready < desired)); then
-    echo "FAIL: Service endpoints appeared before every desired container was ready" >&2
+  if [[ "${initial_formation_stage}" != "Complete" ]] &&
+    ((desired > 0 && endpoint_count > 0)); then
+    echo "FAIL: Service endpoints appeared before initial formation completed" >&2
     exit 1
   fi
-  if [[ -z "${last_stable}" ]] &&
-    ((desired > 0 && serving_true > 0 && containers_ready < desired)); then
-    echo "FAIL: an SHC serving gate became true before every desired container was ready" >&2
+  if [[ "${initial_formation_stage}" != "Complete" ]] &&
+    ((desired > 0 && serving_true > 0)); then
+    echo "FAIL: an SHC serving gate became true before initial formation completed" >&2
     exit 1
   fi
   if [[ "${last_stable}" == "${desired}" &&
@@ -165,6 +176,8 @@ for ((sample = 1; sample <= samples; sample++)); do
         "${min_peers}" == "true" &&
         "${captain_ready}" == "true" &&
         "${last_stable}" == "${desired}" &&
+        "${initial_formation_stage}" == "Complete" &&
+        "${initial_formation_restart_initiated}" == "true" &&
         "${captain_api_observed}" == "true" &&
         "${captain_rolling_restart}" == "false" &&
         "$(jq 'length' <<<"${restart_required_members}")" -eq 0 ]]; then
