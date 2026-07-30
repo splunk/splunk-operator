@@ -29,6 +29,11 @@ type searchHeadClusterPodManager struct {
 	newSplunkClient          func(managementURI, username, password string) *splclient.SplunkClient
 	servingConditionChanged  map[int32]bool
 	statefulSetUpdatePending bool
+	// initialFormationContainersReady is recomputed from every desired Search
+	// Head Pod before serving conditions are reconciled. It prevents an
+	// earlier initialized member from entering Service traffic while another
+	// first-formation member is still running image-owned initialization.
+	initialFormationContainersReady bool
 	// authorizedRevisionWithdrawalRequested is an in-memory signal from the
 	// desired StatefulSet renderer. It is never persisted in a Kubernetes
 	// object; Update converts it to durable lifecycle status before changing

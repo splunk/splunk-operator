@@ -105,6 +105,64 @@ func (mgr *searchHeadClusterPodManager) searchHeadTopologyPreviouslyStable() boo
 		*mgr.statefulSet.Spec.Replicas
 }
 
+// searchHeadInitialFormationPending distinguishes first cluster formation from
+// scale and recovery of a topology that has already served traffic. The stable
+// replica count is durable across controller and Pod restarts.
+func (mgr *searchHeadClusterPodManager) searchHeadInitialFormationPending() bool {
+	return mgr.cr == nil || mgr.cr.Status.LastStableReplicas == nil
+}
+
+// desiredSearchHeadContainersReady proves that every desired Search Head has
+// completed the current image-owned local initialization contract. In
+// Docker-Splunk, ContainersReady cannot become true until the entrypoint has
+// changed splunk-container.state from "starting" to "started" after Ansible
+// succeeds and the local management endpoint is serving.
+//
+// This aggregate barrier applies only to a topology that has never been
+// stable. Established clusters must keep healthy peers serving while a scale,
+// rollout, or recovery target is unavailable.
+func (mgr *searchHeadClusterPodManager) desiredSearchHeadContainersReady(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+) (bool, error) {
+	if !mgr.searchHeadInitialFormationPending() {
+		return true, nil
+	}
+	if statefulSet == nil ||
+		statefulSet.Spec.Replicas == nil ||
+		*statefulSet.Spec.Replicas <= 0 {
+		return false, nil
+	}
+
+	for ordinal := int32(0); ordinal < *statefulSet.Spec.Replicas; ordinal++ {
+		podName := GetSplunkStatefulsetPodName(
+			SplunkSearchHead,
+			mgr.cr.GetName(),
+			ordinal,
+		)
+		pod := &corev1.Pod{}
+		err := mgr.c.Get(ctx, types.NamespacedName{
+			Namespace: mgr.cr.GetNamespace(),
+			Name:      podName,
+		}, pod)
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf(
+				"get Search Head Pod %s while validating initial formation: %w",
+				podName,
+				err,
+			)
+		}
+		if pod.DeletionTimestamp != nil ||
+			podConditionStatus(pod, corev1.ContainersReady) != corev1.ConditionTrue {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 	pod *corev1.Pod,
 	ordinal int32,
@@ -114,6 +172,11 @@ func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 	}
 	if podConditionStatus(pod, corev1.ContainersReady) != corev1.ConditionTrue {
 		return corev1.ConditionFalse, "ContainersNotReady", "Splunk container readiness has not succeeded"
+	}
+	if mgr.searchHeadInitialFormationPending() &&
+		!mgr.initialFormationContainersReady {
+		return corev1.ConditionFalse, "InitialFormationIncomplete",
+			"Another Search Head container has not completed image-owned initialization"
 	}
 	if ordinal < 0 || ordinal >= int32(len(mgr.cr.Status.Members)) {
 		return corev1.ConditionFalse, "MemberUnobserved", "SHC member has not been observed"
@@ -175,6 +238,12 @@ func (mgr *searchHeadClusterPodManager) reconcileSearchHeadServingConditions(
 	if !searchHeadServingReadinessGateConfigured(statefulSet) {
 		return nil
 	}
+	initialFormationContainersReady, err :=
+		mgr.desiredSearchHeadContainersReady(ctx, statefulSet)
+	if err != nil {
+		return err
+	}
+	mgr.initialFormationContainersReady = initialFormationContainersReady
 	mgr.servingConditionChanged = make(map[int32]bool)
 	for ordinal := int32(0); ordinal < statefulSet.Status.Replicas; ordinal++ {
 		podName := GetSplunkStatefulsetPodName(

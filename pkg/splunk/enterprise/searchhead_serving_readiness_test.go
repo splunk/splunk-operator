@@ -50,12 +50,14 @@ func TestSearchHeadServingReadinessGateWiring(t *testing.T) {
 
 func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	ordinal := int32(0)
+	stableReplicas := int32(1)
 	mgr := &searchHeadClusterPodManager{
 		cr: &enterpriseApi.SearchHeadCluster{
 			Status: enterpriseApi.SearchHeadClusterStatus{
-				Initialized:    true,
-				MinPeersJoined: true,
-				CaptainReady:   true,
+				Initialized:        true,
+				MinPeersJoined:     true,
+				CaptainReady:       true,
+				LastStableReplicas: &stableReplicas,
 				Members: []enterpriseApi.SearchHeadClusterMemberStatus{{
 					Name:       "splunk-example-search-head-0",
 					Status:     "Up",
@@ -148,7 +150,7 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	require.Equal(t, corev1.ConditionFalse, status)
 	require.Equal(t, "ClusterNotReady", reason)
 
-	stableReplicas := int32(2)
+	stableReplicas = int32(2)
 	mgr.statefulSet.Spec.Replicas = &stableReplicas
 	mgr.cr.Status.LastStableReplicas = &stableReplicas
 	mgr.cr.Status.Initialized = false
@@ -166,8 +168,14 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	mgr.statefulSet.Status.CurrentRevision = ""
 	mgr.statefulSet.Status.ObservedGeneration = 0
 	mgr.cr.Status.LastStableReplicas = nil
+	mgr.initialFormationContainersReady = false
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
 	require.Equal(t, corev1.ConditionFalse, status, "fresh formation must fail closed")
+	require.Equal(t, "InitialFormationIncomplete", reason)
+
+	mgr.initialFormationContainersReady = true
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionFalse, status, "live Splunk formation checks still apply")
 	require.Equal(t, "ClusterNotReady", reason)
 
 	mgr.statefulSet.Status.CurrentRevision = "current"
@@ -195,6 +203,115 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, ordinal)
 	require.Equal(t, corev1.ConditionFalse, status)
 	require.Equal(t, "PodTerminating", reason)
+}
+
+func TestDesiredSearchHeadContainersReady(t *testing.T) {
+	const namespace = "test"
+	const clusterName = "example"
+	replicas := int32(3)
+
+	newPod := func(ordinal int32, ready corev1.ConditionStatus) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: fmt.Sprintf(
+					"splunk-%s-search-head-%d",
+					clusterName,
+					ordinal,
+				),
+				Namespace: namespace,
+			},
+			Status: corev1.PodStatus{Conditions: []corev1.PodCondition{{
+				Type:   corev1.ContainersReady,
+				Status: ready,
+			}}},
+		}
+	}
+	newStatefulSet := func() *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{
+			Spec: appsv1.StatefulSetSpec{Replicas: &replicas},
+		}
+	}
+	newManager := func(
+		lastStableReplicas *int32,
+		pods ...*corev1.Pod,
+	) *searchHeadClusterPodManager {
+		c := spltest.NewMockClient()
+		for _, pod := range pods {
+			c.AddObject(pod)
+		}
+		return &searchHeadClusterPodManager{
+			c: c,
+			cr: &enterpriseApi.SearchHeadCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+				},
+				Status: enterpriseApi.SearchHeadClusterStatus{
+					LastStableReplicas: lastStableReplicas,
+				},
+			},
+		}
+	}
+
+	t.Run("first formation waits for every desired container", func(t *testing.T) {
+		mgr := newManager(
+			nil,
+			newPod(0, corev1.ConditionTrue),
+			newPod(1, corev1.ConditionTrue),
+			newPod(2, corev1.ConditionFalse),
+		)
+		ready, err := mgr.desiredSearchHeadContainersReady(
+			context.Background(),
+			newStatefulSet(),
+		)
+		require.NoError(t, err)
+		require.False(t, ready)
+	})
+
+	t.Run("first formation passes after every desired container", func(t *testing.T) {
+		mgr := newManager(
+			nil,
+			newPod(0, corev1.ConditionTrue),
+			newPod(1, corev1.ConditionTrue),
+			newPod(2, corev1.ConditionTrue),
+		)
+		ready, err := mgr.desiredSearchHeadContainersReady(
+			context.Background(),
+			newStatefulSet(),
+		)
+		require.NoError(t, err)
+		require.True(t, ready)
+	})
+
+	t.Run("missing desired member fails closed", func(t *testing.T) {
+		mgr := newManager(
+			nil,
+			newPod(0, corev1.ConditionTrue),
+			newPod(1, corev1.ConditionTrue),
+		)
+		ready, err := mgr.desiredSearchHeadContainersReady(
+			context.Background(),
+			newStatefulSet(),
+		)
+		require.NoError(t, err)
+		require.False(t, ready)
+	})
+
+	t.Run("established topology preserves healthy peers", func(t *testing.T) {
+		stable := int32(3)
+		mgr := newManager(
+			&stable,
+			newPod(0, corev1.ConditionTrue),
+			newPod(1, corev1.ConditionTrue),
+			newPod(2, corev1.ConditionFalse),
+		)
+		ready, err := mgr.desiredSearchHeadContainersReady(
+			context.Background(),
+			newStatefulSet(),
+		)
+		require.NoError(t, err)
+		require.True(t, ready)
+	})
 }
 
 func TestCanProceedWithPodUpdateDespiteNotReadyReplicas(t *testing.T) {
