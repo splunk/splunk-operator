@@ -124,6 +124,10 @@ spec:
     name: shc82
   licenseManagerRef:
     name: shc82
+  defaults: |-
+    splunk:
+      shc:
+        prestart_config: true
   etcVolumeStorageConfig:
     storageClassName: gp3
     storageCapacity: 10Gi
