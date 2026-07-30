@@ -2181,6 +2181,12 @@ func TestImageUpdatedTo9(t *testing.T) {
 	if !imageUpdatedTo9("splunk/splunk:8.2.6", "splunk/splunk:9.0.0") {
 		t.Errorf("Should have detected an upgrade from 8 to 9")
 	}
+	if !shouldRecreateIndexerStatefulSetForUpgrade(
+		"splunk/splunk:8.2.6",
+		"splunk/splunk:9.0.0",
+	) {
+		t.Errorf("Legacy behavior should preserve the 8-to-9 fallback")
+	}
 	if imageUpdatedTo9("splunk/splunk:9.0.3", "splunk/splunk:9.0.4") {
 		t.Errorf("Should not have detected an upgrade from 8 to 9")
 	}

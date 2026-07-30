@@ -2433,6 +2433,13 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
+		if err = validateIndexerClusterPodUpdateStatusMerge(
+			latestCR.Status.PodUpdate,
+			cr.Status.PodUpdate,
+			cr.GetName(),
+		); err != nil {
+			return nil, err
+		}
 		cr.Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
 			cr.Status.Message = (*crError).Error()
@@ -2521,6 +2528,43 @@ func setProbeLevelOnSplunkPod(ctx context.Context, podExecClient splutil.PodExec
 	return err
 }
 
+func setIndexerReadinessWithdrawalOnSplunkPod(
+	ctx context.Context,
+	podExecClient splutil.PodExecClientImpl,
+) error {
+	command := fmt.Sprintf(
+		"mkdir -p %s; printf 'export %s=%d\\nexport %s=true\\n' > %s",
+		GetLivenessDriverFileDir(),
+		livenessProbeLevelName,
+		livenessProbeLevelOne,
+		indexerServingReadinessEnv,
+		GetLivenessDriverFilePath(),
+	)
+	streamOptions := splutil.NewStreamOptionsObject(command)
+	podExecClient.SetTargetPodName(ctx, podExecClient.GetTargetPodName())
+	splutil.ResetStringReader(streamOptions, command)
+	stdOut, _, err := podExecClient.RunPodExecCommand(
+		ctx,
+		streamOptions,
+		[]string{"/bin/sh"},
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"unable to withdraw Indexer readiness with command %s; stdout: %s: %w",
+			command,
+			stdOut,
+			err,
+		)
+	}
+	logging.FromContext(ctx).InfoContext(
+		ctx,
+		"successfully requested Indexer readiness withdrawal",
+		"podName",
+		podExecClient.GetTargetPodName(),
+	)
+	return nil
+}
+
 // setProbeLevelOnCRPods set K8_OPERATOR_LIVENESS_LEVEL in k8_liveness_driver.sh script on all pods of CR,  Set probeLevel to 0 to unset K8_OPERATOR_LIVENESS_LEVEL.
 func setProbeLevelOnCRPods(ctx context.Context, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
 	var err error
@@ -2572,6 +2616,118 @@ func validateSearchHeadClusterImageUpgradeStatusMerge(
 		fmt.Errorf(
 			"refusing to replace image upgrade operation %q with stale operation %q",
 			latest.OperationID,
+			reconciledOperationID,
+		),
+	)
+}
+
+func validateIndexerClusterPodUpdateStatusMerge(
+	latest *enterpriseApi.IndexerClusterPodUpdateStatus,
+	reconciled *enterpriseApi.IndexerClusterPodUpdateStatus,
+	name string,
+) error {
+	if latest == nil {
+		return nil
+	}
+	if reconciled != nil &&
+		latest.OperationID == reconciled.OperationID {
+		if indexerClusterPodUpdateStageRank(reconciled.Stage) <
+			indexerClusterPodUpdateStageRank(latest.Stage) ||
+			(indexerClusterPodUpdateStageIsTerminal(latest.Stage) &&
+				reconciled.Stage != latest.Stage) ||
+			(latest.DecommissionRequestedAt != nil &&
+				reconciled.DecommissionRequestedAt == nil) ||
+			(latest.ObservedDecommissioning &&
+				!reconciled.ObservedDecommissioning) ||
+			(latest.ReplacementPodUID != "" &&
+				reconciled.ReplacementPodUID == "") ||
+			(latest.FinishedAt != nil &&
+				reconciled.FinishedAt == nil) ||
+			indexerClusterPodUpdateTransitionIsOlder(
+				reconciled.LastTransitionTime,
+				latest.LastTransitionTime,
+			) {
+			return newIndexerClusterPodUpdateStatusConflict(
+				name,
+				latest.OperationID,
+				reconciled.OperationID,
+			)
+		}
+		return nil
+	}
+	if (latest.Stage ==
+		enterpriseApi.IndexerClusterPodUpdateStageCompleted ||
+		latest.Stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageCancelled) &&
+		latest.FinishedAt != nil &&
+		reconciled != nil &&
+		reconciled.StartedAt != nil &&
+		!reconciled.StartedAt.Time.Before(latest.FinishedAt.Time) {
+		return nil
+	}
+	reconciledOperationID := ""
+	if reconciled != nil {
+		reconciledOperationID = reconciled.OperationID
+	}
+	return newIndexerClusterPodUpdateStatusConflict(
+		name,
+		latest.OperationID,
+		reconciledOperationID,
+	)
+}
+
+func indexerClusterPodUpdateStageRank(
+	stage enterpriseApi.IndexerClusterPodUpdateStage,
+) int {
+	switch stage {
+	case enterpriseApi.IndexerClusterPodUpdateStageTargetSelected:
+		return 1
+	case enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness:
+		return 2
+	case enterpriseApi.IndexerClusterPodUpdateStageDecommissioning:
+		return 3
+	case enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement:
+		return 4
+	case enterpriseApi.IndexerClusterPodUpdateStageCompleted:
+		return 5
+	case enterpriseApi.IndexerClusterPodUpdateStageCancelled:
+		return 5
+	default:
+		return 0
+	}
+}
+
+func indexerClusterPodUpdateStageIsTerminal(
+	stage enterpriseApi.IndexerClusterPodUpdateStage,
+) bool {
+	return stage ==
+		enterpriseApi.IndexerClusterPodUpdateStageCompleted ||
+		stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageCancelled
+}
+
+func indexerClusterPodUpdateTransitionIsOlder(
+	reconciled *metav1.Time,
+	latest *metav1.Time,
+) bool {
+	return latest != nil &&
+		(reconciled == nil || reconciled.Time.Before(latest.Time))
+}
+
+func newIndexerClusterPodUpdateStatusConflict(
+	name string,
+	latestOperationID string,
+	reconciledOperationID string,
+) error {
+	return k8serrors.NewConflict(
+		schema.GroupResource{
+			Group:    enterpriseApi.GroupVersion.Group,
+			Resource: "indexerclusters",
+		},
+		name,
+		fmt.Errorf(
+			"refusing to replace indexer Pod update operation %q with stale operation %q",
+			latestOperationID,
 			reconciledOperationID,
 		),
 	)

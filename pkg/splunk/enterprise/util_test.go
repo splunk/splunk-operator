@@ -2853,6 +2853,161 @@ func TestSearchHeadClusterImageUpgradeStatusMergeAllowsOnlyNewerCompletedReplace
 	}
 }
 
+func TestIndexerClusterPodUpdateStatusMergeIsMonotonic(t *testing.T) {
+	startedAt := metav1.NewTime(
+		time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC),
+	)
+	decommissionedAt := metav1.NewTime(startedAt.Add(time.Minute))
+	later := metav1.NewTime(decommissionedAt.Add(time.Minute))
+	latest := &enterpriseApi.IndexerClusterPodUpdateStatus{
+		OperationID:             "pod-uid:revision-1",
+		Stage:                   enterpriseApi.IndexerClusterPodUpdateStageDecommissioning,
+		StartedAt:               &startedAt,
+		DecommissionRequestedAt: &decommissionedAt,
+		ObservedDecommissioning: true,
+		LastTransitionTime:      &decommissionedAt,
+	}
+
+	for _, test := range []struct {
+		name       string
+		reconciled *enterpriseApi.IndexerClusterPodUpdateStatus
+		wantErr    bool
+	}{
+		{
+			name: "stage regression",
+			reconciled: &enterpriseApi.IndexerClusterPodUpdateStatus{
+				OperationID:        latest.OperationID,
+				Stage:              enterpriseApi.IndexerClusterPodUpdateStageTargetSelected,
+				StartedAt:          &startedAt,
+				LastTransitionTime: &startedAt,
+			},
+			wantErr: true,
+		},
+		{
+			name: "observation regression",
+			reconciled: &enterpriseApi.IndexerClusterPodUpdateStatus{
+				OperationID:             latest.OperationID,
+				Stage:                   latest.Stage,
+				StartedAt:               &startedAt,
+				DecommissionRequestedAt: &decommissionedAt,
+				LastTransitionTime:      &decommissionedAt,
+			},
+			wantErr: true,
+		},
+		{
+			name: "forward stage",
+			reconciled: &enterpriseApi.IndexerClusterPodUpdateStatus{
+				OperationID:             latest.OperationID,
+				Stage:                   enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+				StartedAt:               &startedAt,
+				DecommissionRequestedAt: &decommissionedAt,
+				ObservedDecommissioning: true,
+				LastTransitionTime:      &later,
+			},
+		},
+		{
+			name:    "operation erased",
+			wantErr: true,
+		},
+		{
+			name: "unrelated operation replaces active operation",
+			reconciled: &enterpriseApi.IndexerClusterPodUpdateStatus{
+				OperationID:        "different",
+				Stage:              enterpriseApi.IndexerClusterPodUpdateStageTargetSelected,
+				StartedAt:          &later,
+				LastTransitionTime: &later,
+			},
+			wantErr: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateIndexerClusterPodUpdateStatusMerge(
+				latest,
+				test.reconciled,
+				"example",
+			)
+			if k8serrors.IsConflict(err) != test.wantErr {
+				t.Fatalf(
+					"merge error = %v, wantConflict=%t",
+					err,
+					test.wantErr,
+				)
+			}
+		})
+	}
+}
+
+func TestIndexerClusterPodUpdateStatusMergeAllowsOnlyNewerCompletedOperation(
+	t *testing.T,
+) {
+	finishedAt := metav1.NewTime(
+		time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC),
+	)
+	latest := &enterpriseApi.IndexerClusterPodUpdateStatus{
+		OperationID: "old",
+		Stage:       enterpriseApi.IndexerClusterPodUpdateStageCompleted,
+		FinishedAt:  &finishedAt,
+	}
+	for _, test := range []struct {
+		name         string
+		startedAt    time.Time
+		wantConflict bool
+	}{
+		{
+			name:         "older stale operation",
+			startedAt:    finishedAt.Add(-time.Minute),
+			wantConflict: true,
+		},
+		{
+			name:      "new operation after completion",
+			startedAt: finishedAt.Add(time.Minute),
+		},
+		{
+			name:      "new operation at serialized finish time",
+			startedAt: finishedAt.Time,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			startedAt := metav1.NewTime(test.startedAt)
+			err := validateIndexerClusterPodUpdateStatusMerge(
+				latest,
+				&enterpriseApi.IndexerClusterPodUpdateStatus{
+					OperationID: "new",
+					Stage: enterpriseApi.
+						IndexerClusterPodUpdateStageTargetSelected,
+					StartedAt: &startedAt,
+				},
+				"example",
+			)
+			if k8serrors.IsConflict(err) != test.wantConflict {
+				t.Fatalf(
+					"merge error = %v, wantConflict=%t",
+					err,
+					test.wantConflict,
+				)
+			}
+		})
+	}
+
+	cancelled := latest.DeepCopy()
+	cancelled.Stage =
+		enterpriseApi.IndexerClusterPodUpdateStageCancelled
+	startedAt := finishedAt.DeepCopy()
+	err := validateIndexerClusterPodUpdateStatusMerge(
+		cancelled,
+		&enterpriseApi.IndexerClusterPodUpdateStatus{
+			OperationID: "after-cancel",
+			Stage: enterpriseApi.
+				IndexerClusterPodUpdateStageTargetSelected,
+			StartedAt: startedAt,
+		},
+		"example",
+	)
+	if err != nil {
+		t.Fatalf("new operation after cancellation was rejected: %v", err)
+	}
+}
+
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))

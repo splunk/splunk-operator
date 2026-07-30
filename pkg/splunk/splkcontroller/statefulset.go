@@ -55,6 +55,32 @@ type statefulSetPodUpdateReadinessManager interface {
 	) (bool, error)
 }
 
+// statefulSetPodUpdateOwnershipManager is an optional contract for a manager
+// that persists exact ownership of a Pod update before starting disruptive
+// preparation. The unavailable-Pod exception is deliberately separate from
+// the aggregate ready-replica exception: both checks must pass before generic
+// StatefulSet code may continue past a not-ready container.
+type statefulSetPodUpdateOwnershipManager interface {
+	RequiresOwnedPodReplacement(
+		context.Context,
+		*appsv1.StatefulSet,
+		*corev1.Pod,
+		int32,
+	) (bool, error)
+	EnsurePodUpdateIntent(
+		context.Context,
+		*appsv1.StatefulSet,
+		*corev1.Pod,
+		int32,
+	) (bool, error)
+	CanProceedWithUnavailablePodUpdate(
+		context.Context,
+		*appsv1.StatefulSet,
+		*corev1.Pod,
+		int32,
+	) (bool, error)
+}
+
 // statefulSetScaleDownReadinessManager is an optional contract for a
 // StatefulSetPodManager that can prove one not-ready Pod is the highest
 // ordinal deliberately withdrawn by its active, durable scale-down operation.
@@ -436,7 +462,56 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			scopedLog.ErrorContext(ctx, "unable to find Pod", "podName", podName, "error", err)
 			return enterpriseApi.PhaseError, err
 		}
-		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || !pod.Status.ContainerStatuses[0].Ready {
+		podNeedsUpdate := statefulSet.Status.UpdateRevision != "" &&
+			statefulSet.Status.UpdateRevision !=
+				pod.GetLabels()["controller-revision-hash"]
+		if ownershipManager, ok :=
+			mgr.(statefulSetPodUpdateOwnershipManager); ok {
+			ownedReplacementRequired, ownershipErr :=
+				ownershipManager.RequiresOwnedPodReplacement(
+					ctx,
+					statefulSet,
+					&pod,
+					n,
+				)
+			if ownershipErr != nil {
+				return enterpriseApi.PhaseError, ownershipErr
+			}
+			podNeedsUpdate = podNeedsUpdate ||
+				ownedReplacementRequired
+		}
+		containerReady := pod.Status.Phase == corev1.PodRunning &&
+			len(pod.Status.ContainerStatuses) > 0 &&
+			pod.Status.ContainerStatuses[0].Ready
+		canProceedWithUnavailablePod := false
+		if !containerReady &&
+			canProceedWithPodUpdate &&
+			podNeedsUpdate &&
+			pod.Status.Phase == corev1.PodRunning &&
+			len(pod.Status.ContainerStatuses) > 0 {
+			if ownershipManager, ok :=
+				mgr.(statefulSetPodUpdateOwnershipManager); ok {
+				canProceedWithUnavailablePod, err =
+					ownershipManager.CanProceedWithUnavailablePodUpdate(
+						ctx,
+						statefulSet,
+						&pod,
+						n,
+					)
+				if err != nil {
+					scopedLog.ErrorContext(
+						ctx,
+						"unable to validate owned unavailable Pod update",
+						"podName",
+						podName,
+						"error",
+						err,
+					)
+					return enterpriseApi.PhaseError, err
+				}
+			}
+		}
+		if !containerReady && !canProceedWithUnavailablePod {
 			if termErr := checkPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
 				scopedLog.ErrorContext(ctx, "terminal pod failure detected during update; setting PhaseError", "error", termErr)
 				return enterpriseApi.PhaseError, splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr)
@@ -444,9 +519,51 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			scopedLog.ErrorContext(ctx, "waiting for Pod to become ready", "podName", podName, "error", err)
 			return enterpriseApi.PhaseUpdating, err
 		}
+		if canProceedWithUnavailablePod {
+			scopedLog.InfoContext(
+				ctx,
+				"continuing owned Pod update while target is unavailable",
+				"podName",
+				podName,
+				"ordinal",
+				n,
+			)
+		}
 
 		// terminate pod if it has pending updates; k8s will start a new one with revised template
-		if statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"] {
+		if podNeedsUpdate {
+			if ownershipManager, ok :=
+				mgr.(statefulSetPodUpdateOwnershipManager); ok {
+				intentPersisted, intentErr :=
+					ownershipManager.EnsurePodUpdateIntent(
+						ctx,
+						statefulSet,
+						&pod,
+						n,
+					)
+				if intentErr != nil {
+					scopedLog.ErrorContext(
+						ctx,
+						"unable to persist Pod update intent",
+						"podName",
+						podName,
+						"error",
+						intentErr,
+					)
+					return enterpriseApi.PhaseError, intentErr
+				}
+				if !intentPersisted {
+					scopedLog.InfoContext(
+						ctx,
+						"waiting for Pod update intent to persist",
+						"podName",
+						podName,
+						"ordinal",
+						n,
+					)
+					return enterpriseApi.PhaseUpdating, nil
+				}
+			}
 			// pod needs to be updated; first, prepare it to be recycled
 			ready, err := mgr.PrepareRecycle(ctx, n)
 			if err != nil {

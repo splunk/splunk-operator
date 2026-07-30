@@ -51,6 +51,48 @@ type readinessWithdrawalTestPodManager struct {
 	scaleDownValidationErr error
 	scaleDownReady         bool
 	scaleDownPrepareCalls  []int32
+	intentPersisted        bool
+	intentErr              error
+	intentCalls            []int32
+	unavailableAllow       bool
+	unavailableErr         error
+	unavailableCalls       []int32
+	ownedReplacement       bool
+	ownedReplacementErr    error
+	ownedReplacementCalls  []int32
+}
+
+func (mgr *readinessWithdrawalTestPodManager) RequiresOwnedPodReplacement(
+	_ context.Context,
+	_ *appsv1.StatefulSet,
+	_ *corev1.Pod,
+	ordinal int32,
+) (bool, error) {
+	mgr.ownedReplacementCalls = append(
+		mgr.ownedReplacementCalls,
+		ordinal,
+	)
+	return mgr.ownedReplacement, mgr.ownedReplacementErr
+}
+
+func (mgr *readinessWithdrawalTestPodManager) EnsurePodUpdateIntent(
+	_ context.Context,
+	_ *appsv1.StatefulSet,
+	_ *corev1.Pod,
+	ordinal int32,
+) (bool, error) {
+	mgr.intentCalls = append(mgr.intentCalls, ordinal)
+	return mgr.intentPersisted, mgr.intentErr
+}
+
+func (mgr *readinessWithdrawalTestPodManager) CanProceedWithUnavailablePodUpdate(
+	_ context.Context,
+	_ *appsv1.StatefulSet,
+	_ *corev1.Pod,
+	ordinal int32,
+) (bool, error) {
+	mgr.unavailableCalls = append(mgr.unavailableCalls, ordinal)
+	return mgr.unavailableAllow, mgr.unavailableErr
 }
 
 func (mgr *readinessWithdrawalTestPodManager) CanProceedWithPodUpdateDespiteNotReadyReplicas(
@@ -589,7 +631,10 @@ func TestUpdateStatefulSetPodsAllowsVerifiedReadinessWithdrawal(t *testing.T) {
 			stored.Status.UpdateRevision,
 		)
 	}
-	mgr := &readinessWithdrawalTestPodManager{allow: true}
+	mgr := &readinessWithdrawalTestPodManager{
+		allow:           true,
+		intentPersisted: true,
+	}
 
 	phase, err := UpdateStatefulSetPods(
 		ctx,
@@ -606,6 +651,200 @@ func TestUpdateStatefulSetPodsAllowsVerifiedReadinessWithdrawal(t *testing.T) {
 	}
 	if !reflect.DeepEqual(mgr.prepareCalls, []int32{2}) {
 		t.Fatalf("PrepareRecycle calls = %v, want [2]", mgr.prepareCalls)
+	}
+}
+
+func TestUpdateStatefulSetPodsAllowsExactOwnedUnavailableTarget(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(3)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        replicas,
+			ReadyReplicas:   replicas - 1,
+			CurrentRevision: "old",
+			UpdateRevision:  "new",
+		},
+	}
+	target := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-indexer-2",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "old",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Ready: false,
+			}},
+		},
+	}
+	peerZero := target.DeepCopy()
+	peerZero.Name = "splunk-example-indexer-0"
+	peerZero.Status.ContainerStatuses[0].Ready = true
+	peerOne := target.DeepCopy()
+	peerOne.Name = "splunk-example-indexer-1"
+	peerOne.Status.ContainerStatuses[0].Ready = true
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, peerZero, peerOne, target})
+	mgr := &readinessWithdrawalTestPodManager{
+		allow:            true,
+		intentPersisted:  true,
+		unavailableAllow: true,
+	}
+
+	phase, err := UpdateStatefulSetPods(
+		ctx,
+		c,
+		statefulSet,
+		mgr,
+		replicas,
+	)
+	if err != nil {
+		t.Fatalf("UpdateStatefulSetPods returned error: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("phase = %s, want %s", phase, enterpriseApi.PhaseUpdating)
+	}
+	if !reflect.DeepEqual(mgr.unavailableCalls, []int32{2}) {
+		t.Fatalf(
+			"unavailable validation calls = %v, want [2]",
+			mgr.unavailableCalls,
+		)
+	}
+	if !reflect.DeepEqual(mgr.prepareCalls, []int32{2}) {
+		t.Fatalf("PrepareRecycle calls = %v, want [2]", mgr.prepareCalls)
+	}
+}
+
+func TestUpdateStatefulSetPodsRejectsUnownedUnavailableTarget(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        replicas,
+			ReadyReplicas:   0,
+			CurrentRevision: "old",
+			UpdateRevision:  "new",
+		},
+	}
+	target := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-indexer-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "old",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Ready: false,
+			}},
+		},
+	}
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, target})
+	mgr := &readinessWithdrawalTestPodManager{
+		allow:            true,
+		intentPersisted:  true,
+		unavailableAllow: false,
+	}
+
+	phase, err := UpdateStatefulSetPods(
+		ctx,
+		c,
+		statefulSet,
+		mgr,
+		replicas,
+	)
+	if err != nil {
+		t.Fatalf("UpdateStatefulSetPods returned error: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("phase = %s, want %s", phase, enterpriseApi.PhaseUpdating)
+	}
+	if len(mgr.prepareCalls) != 0 {
+		t.Fatalf("PrepareRecycle calls = %v, want none", mgr.prepareCalls)
+	}
+}
+
+func TestUpdateStatefulSetPodsContinuesOwnedSameRevisionReplacement(
+	t *testing.T,
+) {
+	ctx := context.Background()
+	replicas := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        replicas,
+			ReadyReplicas:   replicas,
+			CurrentRevision: "old",
+			UpdateRevision:  "old",
+		},
+	}
+	target := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-example-indexer-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "old",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Ready: true,
+			}},
+		},
+	}
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, target})
+	mgr := &readinessWithdrawalTestPodManager{
+		intentPersisted:  true,
+		ownedReplacement: true,
+	}
+
+	phase, err := UpdateStatefulSetPods(
+		ctx,
+		c,
+		statefulSet,
+		mgr,
+		replicas,
+	)
+	if err != nil {
+		t.Fatalf("UpdateStatefulSetPods returned error: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("phase = %s, want %s", phase, enterpriseApi.PhaseUpdating)
+	}
+	if !reflect.DeepEqual(mgr.prepareCalls, []int32{0}) {
+		t.Fatalf("PrepareRecycle calls = %v, want [0]", mgr.prepareCalls)
 	}
 }
 

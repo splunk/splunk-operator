@@ -28,7 +28,9 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	splmetrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -40,6 +42,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -226,7 +229,10 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		for _, owner := range v.GetOwnerReferences() {
 			if owner.UID == statefulSet.UID {
 				// get the pod image name
-				if imageUpdatedTo9(v.Spec.Containers[0].Image, cr.Spec.Image) {
+				if shouldRecreateIndexerStatefulSetForUpgrade(
+					v.Spec.Containers[0].Image,
+					cr.Spec.Image,
+				) {
 					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break
@@ -523,7 +529,10 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		for _, owner := range v.GetOwnerReferences() {
 			if owner.UID == statefulSet.UID {
 				// get the pod image name
-				if imageUpdatedTo9(v.Spec.Containers[0].Image, cr.Spec.Image) {
+				if shouldRecreateIndexerStatefulSetForUpgrade(
+					v.Spec.Containers[0].Image,
+					cr.Spec.Image,
+				) {
 					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break
@@ -922,7 +931,13 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 
 	// update CR status with IDXC information
 	err = mgr.updateStatus(ctx, statefulSet)
-	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
+	clusterReady := mgr.cr.Status.ReadyReplicas > 0 &&
+		mgr.cr.Status.Initialized &&
+		mgr.cr.Status.IndexingReady &&
+		mgr.cr.Status.ServiceReady
+	ownedRecovery := err == nil &&
+		mgr.canContinueOwnedUpdateDespiteClusterNotReady(statefulSet)
+	if err != nil || (!clusterReady && !ownedRecovery) {
 		if termErr := splctrl.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
 			mgr.log.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
 			return enterpriseApi.PhaseError, termErr
@@ -930,9 +945,53 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 		mgr.log.InfoContext(ctx, "IndexerCluster is not ready", "error ", err)
 		return enterpriseApi.PhasePending, nil
 	}
+	if ownedRecovery && !clusterReady {
+		mgr.log.InfoContext(
+			ctx,
+			"continuing exact owned Indexer recovery while aggregate cluster readiness is false",
+			"operationID",
+			mgr.cr.Status.PodUpdate.OperationID,
+			"targetPod",
+			mgr.cr.Status.PodUpdate.TargetPod,
+			"initialized",
+			mgr.cr.Status.Initialized,
+			"indexingReady",
+			mgr.cr.Status.IndexingReady,
+			"serviceReady",
+			mgr.cr.Status.ServiceReady,
+		)
+	}
 
-	// manage scaling and updates
-	phase, err := splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	// Finish one already-owned peer update before accepting a concurrent
+	// scale request. Otherwise generic scale-down could decommission a second
+	// peer while the recorded target is still unavailable.
+	updateDesiredReplicas := desiredIndexerReplicasDuringPodUpdate(
+		statefulSet,
+		desiredReplicas,
+		mgr.cr.Status.PodUpdate,
+	)
+	if updateDesiredReplicas != desiredReplicas &&
+		mgr.cr.Status.PodUpdate != nil {
+		mgr.log.InfoContext(
+			ctx,
+			"deferring Indexer replica-count change until owned Pod update completes",
+			"currentReplicas",
+			updateDesiredReplicas,
+			"requestedReplicas",
+			desiredReplicas,
+			"operationID",
+			mgr.cr.Status.PodUpdate.OperationID,
+			"targetPod",
+			mgr.cr.Status.PodUpdate.TargetPod,
+		)
+	}
+	phase, err := splctrl.UpdateStatefulSetPods(
+		ctx,
+		c,
+		statefulSet,
+		mgr,
+		updateDesiredReplicas,
+	)
 	if err != nil {
 		return phase, err
 	}
@@ -978,6 +1037,15 @@ func (mgr *indexerClusterPodManager) PrepareScaleDown(ctx context.Context, n int
 
 // PrepareRecycle for indexerClusterPodManager prepares indexer pod to be recycled for updates; it returns true when ready
 func (mgr *indexerClusterPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
+	if indexerClusterLifecycleEnabled() {
+		operation := mgr.cr.Status.PodUpdate
+		if operation != nil &&
+			operation.TargetOrdinal == n &&
+			operation.Stage ==
+				enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement {
+			return true, nil
+		}
+	}
 	return mgr.decommission(ctx, n, false)
 }
 
@@ -987,46 +1055,602 @@ func (mgr *indexerClusterPodManager) FinishUpgrade(ctx context.Context, n int32)
 
 // FinishRecycle for indexerClusterPodManager completes recycle event for indexer pod; it returns true when complete
 func (mgr *indexerClusterPodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
-	if n >= int32(len(mgr.cr.Status.Peers)) {
+	if indexerClusterLifecycleEnabled() {
+		operation := mgr.cr.Status.PodUpdate
+		if operation != nil && operation.TargetOrdinal == n {
+			if indexerPodUpdateIsTerminal(operation) {
+				return true, nil
+			}
+
+			var replacement corev1.Pod
+			err := mgr.c.Get(
+				ctx,
+				types.NamespacedName{
+					Namespace: mgr.cr.GetNamespace(),
+					Name:      operation.TargetPod,
+				},
+				&replacement,
+			)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					return false, nil
+				}
+				return false, err
+			}
+			if string(replacement.GetUID()) == operation.TargetPodUID {
+				if operation.Stage ==
+					enterpriseApi.IndexerClusterPodUpdateStageTargetSelected {
+					var currentStatefulSet appsv1.StatefulSet
+					err = mgr.c.Get(
+						ctx,
+						types.NamespacedName{
+							Namespace: mgr.cr.GetNamespace(),
+							Name: GetSplunkStatefulsetName(
+								SplunkIndexer,
+								mgr.cr.GetName(),
+							),
+						},
+						&currentStatefulSet,
+					)
+					if err != nil {
+						return false, err
+					}
+					if currentStatefulSet.Status.UpdateRevision ==
+						operation.SourceRevision {
+						mgr.transitionIndexerPodUpdate(
+							ctx,
+							enterpriseApi.IndexerClusterPodUpdateStageCancelled,
+							"IndexerRecycleCancelled",
+							"Desired revision returned to the untouched target revision",
+						)
+					}
+				}
+				return false, nil
+			}
+			replacementRevision :=
+				replacement.GetLabels()["controller-revision-hash"]
+			if replacementRevision != operation.DesiredRevision {
+				var currentStatefulSet appsv1.StatefulSet
+				err = mgr.c.Get(
+					ctx,
+					types.NamespacedName{
+						Namespace: mgr.cr.GetNamespace(),
+						Name: GetSplunkStatefulsetName(
+							SplunkIndexer,
+							mgr.cr.GetName(),
+						),
+					},
+					&currentStatefulSet,
+				)
+				if err != nil {
+					return false, err
+				}
+				if replacementRevision == "" ||
+					replacementRevision !=
+						currentStatefulSet.Status.UpdateRevision {
+					return false, nil
+				}
+				mgr.adoptIndexerPodUpdateDesiredRevision(
+					ctx,
+					replacementRevision,
+				)
+				return false, nil
+			}
+			if !isKubernetesPodReady(&replacement) {
+				return false, nil
+			}
+
+			peer, ok := mgr.indexerPeerByName(operation.TargetPod)
+			if !ok || peer.Status != "Up" || !peer.Searchable {
+				return false, nil
+			}
+
+			operation.ReplacementPodUID = string(replacement.GetUID())
+			mgr.transitionIndexerPodUpdate(
+				ctx,
+				enterpriseApi.IndexerClusterPodUpdateStageCompleted,
+				"IndexerRecycleCompleted",
+				"Indexer Pod replacement is Ready, Up, and searchable",
+			)
+			// Persist completion before generic traversal can select another
+			// target or act on a concurrent replica-count change.
+			return false, nil
+		}
+	}
+	if n < 0 || n >= int32(len(mgr.cr.Status.Peers)) {
 		return false, fmt.Errorf("incorrect Peer got %d length of peer list %d", n, int32(len(mgr.cr.Status.Peers)))
 	}
 	return mgr.cr.Status.Peers[n].Status == "Up", nil
 }
 
+// RequiresOwnedPodReplacement keeps an already disrupted exact target under
+// lifecycle control even if a later template update returns the StatefulSet to
+// the target's source revision.
+func (mgr *indexerClusterPodManager) RequiresOwnedPodReplacement(
+	_ context.Context,
+	statefulSet *appsv1.StatefulSet,
+	pod *corev1.Pod,
+	ordinal int32,
+) (bool, error) {
+	if !indexerClusterLifecycleEnabled() {
+		return false, nil
+	}
+	operation := mgr.cr.Status.PodUpdate
+	if !indexerPodUpdateIsActive(operation) ||
+		operation.Stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageTargetSelected {
+		return false, nil
+	}
+	if statefulSet.Spec.UpdateStrategy.Type !=
+		appsv1.OnDeleteStatefulSetStrategyType {
+		return false, fmt.Errorf(
+			"owned Indexer replacement requires OnDelete StatefulSet strategy",
+		)
+	}
+	if err := validateIndexerPodUpdateTarget(
+		operation,
+		pod,
+		ordinal,
+	); err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+// EnsurePodUpdateIntent persists exact ownership before decommission begins.
+// Returning false after selecting a new target forces one reconciliation
+// boundary so the deferred status update completes before disruptive work.
+func (mgr *indexerClusterPodManager) EnsurePodUpdateIntent(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+	pod *corev1.Pod,
+	ordinal int32,
+) (bool, error) {
+	if !indexerClusterLifecycleEnabled() {
+		return true, nil
+	}
+	if statefulSet.Spec.UpdateStrategy.Type !=
+		appsv1.OnDeleteStatefulSetStrategyType {
+		return false, fmt.Errorf(
+			"indexer Pod update ownership requires OnDelete StatefulSet strategy",
+		)
+	}
+	if statefulSet.Status.UpdateRevision == "" {
+		return false, fmt.Errorf("indexer Pod update has no desired revision")
+	}
+	sourceRevision := pod.GetLabels()["controller-revision-hash"]
+	if sourceRevision == "" ||
+		sourceRevision == statefulSet.Status.UpdateRevision {
+		return false, fmt.Errorf(
+			"indexer Pod %s has invalid source revision %q for desired revision %q",
+			pod.GetName(),
+			sourceRevision,
+			statefulSet.Status.UpdateRevision,
+		)
+	}
+	if pod.GetUID() == "" {
+		return false, fmt.Errorf(
+			"indexer Pod %s has no UID for durable update ownership",
+			pod.GetName(),
+		)
+	}
+	expectedPodName := fmt.Sprintf("%s-%d", statefulSet.GetName(), ordinal)
+	if pod.GetName() != expectedPodName {
+		return false, fmt.Errorf(
+			"indexer Pod update target %s does not match ordinal %d (%s)",
+			pod.GetName(),
+			ordinal,
+			expectedPodName,
+		)
+	}
+
+	current := mgr.cr.Status.PodUpdate
+	if indexerPodUpdateIsActive(current) {
+		if err := validateIndexerPodUpdateTarget(
+			current,
+			pod,
+			ordinal,
+		); err != nil {
+			return false, err
+		}
+		if current.DesiredRevision != statefulSet.Status.UpdateRevision {
+			mgr.adoptIndexerPodUpdateDesiredRevision(
+				ctx,
+				statefulSet.Status.UpdateRevision,
+			)
+			return false, nil
+		}
+		return true, nil
+	}
+
+	now := metav1.Now()
+	mgr.cr.Status.PodUpdate = &enterpriseApi.IndexerClusterPodUpdateStatus{
+		OperationID: fmt.Sprintf(
+			"%s:%s:%d",
+			pod.GetUID(),
+			statefulSet.Status.UpdateRevision,
+			now.UnixNano(),
+		),
+		Stage:              enterpriseApi.IndexerClusterPodUpdateStageTargetSelected,
+		TargetPod:          pod.GetName(),
+		TargetPodUID:       string(pod.GetUID()),
+		TargetOrdinal:      ordinal,
+		SourceRevision:     sourceRevision,
+		DesiredRevision:    statefulSet.Status.UpdateRevision,
+		StartedAt:          &now,
+		StageStartedAt:     &now,
+		LastTransitionTime: &now,
+		Reason:             "IndexerRecycleTargetSelected",
+		Message: fmt.Sprintf(
+			"Selected %s for revision %s",
+			pod.GetName(),
+			statefulSet.Status.UpdateRevision,
+		),
+	}
+	splmetrics.IndexerLifecycleTransitionCounters.WithLabelValues(
+		string(enterpriseApi.IndexerClusterPodUpdateStageTargetSelected),
+		"IndexerRecycleTargetSelected",
+	).Inc()
+	mgr.log.InfoContext(
+		ctx,
+		"persisting indexer Pod update target before decommission",
+		"operationID",
+		mgr.cr.Status.PodUpdate.OperationID,
+		"targetPod",
+		pod.GetName(),
+		"targetOrdinal",
+		ordinal,
+		"sourceRevision",
+		sourceRevision,
+		"desiredRevision",
+		statefulSet.Status.UpdateRevision,
+	)
+	if eventPublisher := GetEventPublisher(ctx, mgr.cr); eventPublisher != nil {
+		eventPublisher.Normal(
+			ctx,
+			"IndexerRecycleTargetSelected",
+			fmt.Sprintf(
+				"Selected %s (UID %s) for revision %s",
+				pod.GetName(),
+				pod.GetUID(),
+				statefulSet.Status.UpdateRevision,
+			),
+		)
+	}
+	return false, nil
+}
+
+// CanProceedWithPodUpdateDespiteNotReadyReplicas proves that the only
+// not-ready Pod is the exact, persisted target already in decommission.
+func (mgr *indexerClusterPodManager) CanProceedWithPodUpdateDespiteNotReadyReplicas(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32,
+) (bool, error) {
+	if !indexerClusterLifecycleEnabled() {
+		return false, nil
+	}
+	if statefulSet.Spec.Replicas == nil {
+		return false, nil
+	}
+	replicas := *statefulSet.Spec.Replicas
+	if statefulSet.Spec.UpdateStrategy.Type !=
+		appsv1.OnDeleteStatefulSetStrategyType ||
+		replicas != desiredReplicas ||
+		statefulSet.Status.ReadyReplicas != replicas-1 {
+		return false, nil
+	}
+	operation := mgr.cr.Status.PodUpdate
+	if !indexerPodUpdateCanOwnUnavailability(operation) {
+		return false, nil
+	}
+
+	unreadyCount := 0
+	for ordinal := int32(0); ordinal < replicas; ordinal++ {
+		var pod corev1.Pod
+		err := mgr.c.Get(
+			ctx,
+			types.NamespacedName{
+				Namespace: statefulSet.GetNamespace(),
+				Name:      fmt.Sprintf("%s-%d", statefulSet.GetName(), ordinal),
+			},
+			&pod,
+		)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		if isKubernetesPodReady(&pod) {
+			continue
+		}
+		unreadyCount++
+		if err := validateIndexerPodUpdateTarget(
+			operation,
+			&pod,
+			ordinal,
+		); err != nil {
+			mgr.log.InfoContext(
+				ctx,
+				"not-ready indexer Pod is not the owned update target",
+				"podName",
+				pod.GetName(),
+				"reason",
+				err.Error(),
+			)
+			return false, nil
+		}
+		if operation.DesiredRevision != statefulSet.Status.UpdateRevision {
+			mgr.adoptIndexerPodUpdateDesiredRevision(
+				ctx,
+				statefulSet.Status.UpdateRevision,
+			)
+			return false, nil
+		}
+	}
+	if unreadyCount != 1 {
+		return false, nil
+	}
+	return mgr.indexerPodUpdatePeerIsControlled(operation), nil
+}
+
+// CanProceedWithUnavailablePodUpdate performs the per-Pod half of the
+// ownership proof required by generic StatefulSet update code.
+func (mgr *indexerClusterPodManager) CanProceedWithUnavailablePodUpdate(
+	_ context.Context,
+	statefulSet *appsv1.StatefulSet,
+	pod *corev1.Pod,
+	ordinal int32,
+) (bool, error) {
+	if !indexerClusterLifecycleEnabled() {
+		return false, nil
+	}
+	operation := mgr.cr.Status.PodUpdate
+	if !indexerPodUpdateCanOwnUnavailability(operation) {
+		return false, nil
+	}
+	if err := validateIndexerPodUpdateIdentity(
+		operation,
+		statefulSet,
+		pod,
+		ordinal,
+	); err != nil {
+		return false, nil
+	}
+	return mgr.indexerPodUpdatePeerIsControlled(operation), nil
+}
+
 // decommission for indexerClusterPodManager decommissions an indexer pod; it returns true when ready
 func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, enforceCounts bool) (bool, error) {
 	peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
+	peerStatus := ""
+	var operation *enterpriseApi.IndexerClusterPodUpdateStatus
+	if indexerClusterLifecycleEnabled() && !enforceCounts {
+		operation = mgr.cr.Status.PodUpdate
+		if operation == nil || operation.TargetOrdinal != n ||
+			operation.TargetPod != peerName {
+			return false, fmt.Errorf(
+				"indexer recycle ordinal %d has no matching durable Pod update",
+				n,
+			)
+		}
+		if operation.Stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement {
+			return true, nil
+		}
+		peer, ok := mgr.indexerPeerByName(peerName)
+		if !ok {
+			return false, nil
+		}
+		peerStatus = peer.Status
+	} else {
+		if n < 0 || n >= int32(len(mgr.cr.Status.Peers)) {
+			return false, fmt.Errorf(
+				"incorrect Peer got %d length of peer list %d",
+				n,
+				len(mgr.cr.Status.Peers),
+			)
+		}
+		peerStatus = mgr.cr.Status.Peers[n].Status
+	}
 
-	switch mgr.cr.Status.Peers[n].Status {
+	if operation != nil &&
+		operation.DecommissionRequestedAt == nil &&
+		indexerPeerStatusIsControlledDecommission(peerStatus) {
+		now := metav1.Now()
+		operation.DecommissionRequestedAt = &now
+		operation.ObservedDecommissioning = true
+		message := fmt.Sprintf(
+			"Observed %s in controlled decommission state %s after target selection",
+			peerName,
+			peerStatus,
+		)
+		mgr.transitionIndexerPodUpdate(
+			ctx,
+			enterpriseApi.IndexerClusterPodUpdateStageDecommissioning,
+			"IndexerDecommissionRecovered",
+			message,
+		)
+		mgr.log.InfoContext(
+			ctx,
+			"recovering indexer decommission accepted before status persisted",
+			"operationID",
+			operation.OperationID,
+			"peerName",
+			peerName,
+			"peerStatus",
+			peerStatus,
+		)
+		// Persist recovered ownership before interpreting the observed peer
+		// state as replacement authorization.
+		return false, nil
+	}
+
+	switch peerStatus {
 	case "Up":
-		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
-		err := setProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne)
-		if err != nil {
-			// Don't return error here. We may be reconciling several times, and the actual Pod status is down, but
-			// not yet reflecting on the Cluster Master, in which case, the podExec fails, though the decommission is
-			// going fine.
-			mgr.log.WarnContext(ctx, "unable to lower the liveness probe level", "peerName", peerName, "enforceCounts", enforceCounts)
+		if operation != nil &&
+			operation.DecommissionRequestedAt != nil {
+			if operation.ObservedDecommissioning {
+				mgr.transitionIndexerPodUpdate(
+					ctx,
+					enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+					"IndexerRecycleReadyForReplacement",
+					"Indexer peer completed decommission and returned Up",
+				)
+			} else {
+				mgr.log.InfoContext(
+					ctx,
+					"waiting to observe indexer peer leave Up after decommission request",
+					"peerName",
+					peerName,
+					"operationID",
+					operation.OperationID,
+				)
+			}
+			return false, nil
+		}
+		if operation != nil {
+			switch operation.Stage {
+			case enterpriseApi.IndexerClusterPodUpdateStageTargetSelected:
+				mgr.transitionIndexerPodUpdate(
+					ctx,
+					enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness,
+					"IndexerReadinessWithdrawalRequested",
+					"Persisted readiness withdrawal before decommission",
+				)
+				return false, nil
+			case enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness:
+				var targetPod corev1.Pod
+				err := mgr.c.Get(
+					ctx,
+					types.NamespacedName{
+						Namespace: mgr.cr.GetNamespace(),
+						Name:      operation.TargetPod,
+					},
+					&targetPod,
+				)
+				if err != nil {
+					return false, err
+				}
+				if isKubernetesPodReady(&targetPod) {
+					podExecClient := splutil.GetPodExecClient(
+						mgr.c,
+						mgr.cr,
+						operation.TargetPod,
+					)
+					if err := setIndexerReadinessWithdrawalOnSplunkPod(
+						ctx,
+						podExecClient,
+					); err != nil {
+						return false, err
+					}
+					mgr.log.InfoContext(
+						ctx,
+						"waiting for Indexer Pod readiness withdrawal before decommission",
+						"operationID",
+						operation.OperationID,
+						"peerName",
+						peerName,
+					)
+					return false, nil
+				}
+			}
+		} else {
+			podExecClient := splutil.GetPodExecClient(
+				mgr.c,
+				mgr.cr,
+				getApplicablePodNameForK8Probes(mgr.cr, n),
+			)
+			err := setProbeLevelOnSplunkPod(
+				ctx,
+				podExecClient,
+				livenessProbeLevelOne,
+			)
+			if err != nil {
+				// Preserve legacy behavior outside the durable lifecycle gate.
+				mgr.log.WarnContext(
+					ctx,
+					"unable to lower the liveness probe level",
+					"peerName",
+					peerName,
+					"enforceCounts",
+					enforceCounts,
+				)
+			}
 		}
 
 		mgr.log.InfoContext(ctx, "decommissioning IndexerCluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
 		c := mgr.getClient(ctx, n)
-		return false, c.DecommissionIndexerClusterPeer(enforceCounts)
+		err := c.DecommissionIndexerClusterPeer(enforceCounts)
+		if err != nil {
+			return false, err
+		}
+		if operation != nil {
+			now := metav1.Now()
+			operation.DecommissionRequestedAt = &now
+			mgr.transitionIndexerPodUpdate(
+				ctx,
+				enterpriseApi.IndexerClusterPodUpdateStageDecommissioning,
+				"IndexerDecommissionRequested",
+				fmt.Sprintf("Requested decommission of %s", peerName),
+			)
+		}
+		return false, nil
 
 	case "Decommissioning":
+		if operation != nil {
+			operation.ObservedDecommissioning = true
+		}
 		mgr.log.InfoContext(ctx, "waiting for decommission to complete", "peerName", peerName)
 		return false, nil
 
 	case "ReassigningPrimaries":
+		if operation != nil {
+			operation.ObservedDecommissioning = true
+		}
 		mgr.log.InfoContext(ctx, "waiting for decommission to complete", "peerName", peerName)
 		return false, nil
 
 	case "GracefulShutdown":
-		mgr.log.InfoContext(ctx, "decommission complete", "peerName", peerName, "status", mgr.cr.Status.Peers[n].Status)
+		if operation != nil {
+			operation.ObservedDecommissioning = true
+			mgr.transitionIndexerPodUpdate(
+				ctx,
+				enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+				"IndexerRecycleReadyForReplacement",
+				"Indexer peer reached GracefulShutdown",
+			)
+			return false, nil
+		}
+		mgr.log.InfoContext(ctx, "decommission complete", "peerName", peerName, "status", peerStatus)
 		return true, nil
 
 	case "Down":
-		mgr.log.InfoContext(ctx, "decommission complete", "peerName", peerName, "status", mgr.cr.Status.Peers[n].Status)
+		if operation != nil {
+			operation.ObservedDecommissioning = true
+			mgr.transitionIndexerPodUpdate(
+				ctx,
+				enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+				"IndexerRecycleReadyForReplacement",
+				"Indexer peer reached Down",
+			)
+			return false, nil
+		}
+		mgr.log.InfoContext(ctx, "decommission complete", "peerName", peerName, "status", peerStatus)
 		return true, nil
+
+	case "Restarting":
+		if operation != nil {
+			operation.ObservedDecommissioning = true
+			mgr.transitionIndexerPodUpdate(
+				ctx,
+				enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+				"IndexerRecycleReadyForReplacement",
+				"Indexer peer reached Restarting",
+			)
+			return false, nil
+		}
 
 	case "": // this can happen after the peer has been removed from the indexer cluster
 		mgr.log.InfoContext(ctx, "peer has empty ID", "peerName", peerName)
@@ -1034,7 +1658,309 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 	}
 
 	// unhandled status
-	return false, fmt.Errorf("Status=%s", mgr.cr.Status.Peers[n].Status)
+	return false, fmt.Errorf("Status=%s", peerStatus)
+}
+
+func indexerClusterLifecycleEnabled() bool {
+	return config.DefaultMutableFeatureGate.Enabled(
+		config.SplunkPodLifecycle,
+	) && config.DefaultMutableFeatureGate.Enabled(
+		config.IndexerClusterLifecycle,
+	)
+}
+
+func indexerPodUpdateCanOwnUnavailability(
+	operation *enterpriseApi.IndexerClusterPodUpdateStatus,
+) bool {
+	if operation == nil {
+		return false
+	}
+	if operation.Stage ==
+		enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness {
+		return true
+	}
+	if operation.DecommissionRequestedAt == nil {
+		return false
+	}
+	return operation.Stage ==
+		enterpriseApi.IndexerClusterPodUpdateStageDecommissioning ||
+		operation.Stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement
+}
+
+func indexerPodUpdateIsActive(
+	operation *enterpriseApi.IndexerClusterPodUpdateStatus,
+) bool {
+	return operation != nil && !indexerPodUpdateIsTerminal(operation)
+}
+
+func indexerPodUpdateIsTerminal(
+	operation *enterpriseApi.IndexerClusterPodUpdateStatus,
+) bool {
+	return operation != nil &&
+		(operation.Stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageCompleted ||
+			operation.Stage ==
+				enterpriseApi.IndexerClusterPodUpdateStageCancelled)
+}
+
+func desiredIndexerReplicasDuringPodUpdate(
+	statefulSet *appsv1.StatefulSet,
+	requestedReplicas int32,
+	operation *enterpriseApi.IndexerClusterPodUpdateStatus,
+) int32 {
+	if indexerClusterLifecycleEnabled() &&
+		indexerPodUpdateIsActive(operation) &&
+		statefulSet.Spec.Replicas != nil {
+		return *statefulSet.Spec.Replicas
+	}
+	return requestedReplicas
+}
+
+func (mgr *indexerClusterPodManager) canContinueOwnedUpdateDespiteClusterNotReady(
+	statefulSet *appsv1.StatefulSet,
+) bool {
+	if !indexerClusterLifecycleEnabled() ||
+		statefulSet.Spec.Replicas == nil {
+		return false
+	}
+	operation := mgr.cr.Status.PodUpdate
+	if !indexerPodUpdateIsActive(operation) ||
+		operation.Stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageTargetSelected ||
+		int32(len(mgr.cr.Status.Peers)) != *statefulSet.Spec.Replicas {
+		return false
+	}
+
+	targetSeen := false
+	for _, peer := range mgr.cr.Status.Peers {
+		if peer.Name == operation.TargetPod {
+			targetSeen = true
+			if peer.Status != "" &&
+				peer.Status != "Up" &&
+				!indexerPeerStatusIsControlledDecommission(peer.Status) {
+				return false
+			}
+			continue
+		}
+		if peer.Status != "Up" || !peer.Searchable {
+			return false
+		}
+	}
+	return targetSeen
+}
+
+func validateIndexerPodUpdateIdentity(
+	operation *enterpriseApi.IndexerClusterPodUpdateStatus,
+	statefulSet *appsv1.StatefulSet,
+	pod *corev1.Pod,
+	ordinal int32,
+) error {
+	if err := validateIndexerPodUpdateTarget(
+		operation,
+		pod,
+		ordinal,
+	); err != nil {
+		return err
+	}
+	if operation.DesiredRevision != statefulSet.Status.UpdateRevision {
+		return fmt.Errorf(
+			"StatefulSet desired revision %s does not match target revision %s",
+			statefulSet.Status.UpdateRevision,
+			operation.DesiredRevision,
+		)
+	}
+	return nil
+}
+
+func validateIndexerPodUpdateTarget(
+	operation *enterpriseApi.IndexerClusterPodUpdateStatus,
+	pod *corev1.Pod,
+	ordinal int32,
+) error {
+	if operation == nil {
+		return fmt.Errorf("no indexer Pod update is recorded")
+	}
+	if operation.TargetOrdinal != ordinal ||
+		operation.TargetPod != pod.GetName() ||
+		operation.TargetPodUID != string(pod.GetUID()) {
+		return fmt.Errorf(
+			"Pod identity %s/%s ordinal %d does not match target %s/%s ordinal %d",
+			pod.GetName(),
+			pod.GetUID(),
+			ordinal,
+			operation.TargetPod,
+			operation.TargetPodUID,
+			operation.TargetOrdinal,
+		)
+	}
+	if operation.SourceRevision !=
+		pod.GetLabels()["controller-revision-hash"] {
+		return fmt.Errorf(
+			"Pod source revision %s does not match target source revision %s",
+			pod.GetLabels()["controller-revision-hash"],
+			operation.SourceRevision,
+		)
+	}
+	return nil
+}
+
+func (mgr *indexerClusterPodManager) adoptIndexerPodUpdateDesiredRevision(
+	ctx context.Context,
+	desiredRevision string,
+) {
+	operation := mgr.cr.Status.PodUpdate
+	if operation == nil ||
+		desiredRevision == "" ||
+		operation.DesiredRevision == desiredRevision {
+		return
+	}
+	previousRevision := operation.DesiredRevision
+	now := metav1.Now()
+	operation.DesiredRevision = desiredRevision
+	operation.LastTransitionTime = &now
+	operation.Reason = "IndexerRecycleRevisionUpdated"
+	operation.Message = fmt.Sprintf(
+		"Desired revision changed from %s to %s",
+		previousRevision,
+		desiredRevision,
+	)
+	mgr.log.InfoContext(
+		ctx,
+		"indexer Pod update adopted newer desired revision",
+		"operationID",
+		operation.OperationID,
+		"targetPod",
+		operation.TargetPod,
+		"previousDesiredRevision",
+		previousRevision,
+		"desiredRevision",
+		desiredRevision,
+	)
+	if eventPublisher := GetEventPublisher(ctx, mgr.cr); eventPublisher != nil {
+		eventPublisher.Normal(
+			ctx,
+			"IndexerRecycleRevisionUpdated",
+			fmt.Sprintf(
+				"%s update target changed from revision %s to %s",
+				operation.TargetPod,
+				previousRevision,
+				desiredRevision,
+			),
+		)
+	}
+}
+
+func isKubernetesPodReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
+func (mgr *indexerClusterPodManager) indexerPeerByName(
+	name string,
+) (enterpriseApi.IndexerClusterMemberStatus, bool) {
+	for _, peer := range mgr.cr.Status.Peers {
+		if peer.Name == name {
+			return peer, true
+		}
+	}
+	return enterpriseApi.IndexerClusterMemberStatus{}, false
+}
+
+func (mgr *indexerClusterPodManager) indexerPodUpdatePeerIsControlled(
+	operation *enterpriseApi.IndexerClusterPodUpdateStatus,
+) bool {
+	peer, ok := mgr.indexerPeerByName(operation.TargetPod)
+	if !ok {
+		return false
+	}
+	switch peer.Status {
+	case "Decommissioning",
+		"ReassigningPrimaries",
+		"GracefulShutdown",
+		"Restarting",
+		"Down":
+		return true
+	case "Up":
+		return operation.Stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness ||
+			(operation.ObservedDecommissioning &&
+				operation.Stage ==
+					enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement)
+	default:
+		return false
+	}
+}
+
+func indexerPeerStatusIsControlledDecommission(status string) bool {
+	switch status {
+	case "Decommissioning",
+		"ReassigningPrimaries",
+		"GracefulShutdown",
+		"Restarting",
+		"Down":
+		return true
+	default:
+		return false
+	}
+}
+
+func (mgr *indexerClusterPodManager) transitionIndexerPodUpdate(
+	ctx context.Context,
+	stage enterpriseApi.IndexerClusterPodUpdateStage,
+	eventReason string,
+	message string,
+) {
+	operation := mgr.cr.Status.PodUpdate
+	if operation == nil || operation.Stage == stage {
+		return
+	}
+	previousStage := operation.Stage
+	now := metav1.Now()
+	if operation.StageStartedAt != nil {
+		stageDuration := now.Sub(operation.StageStartedAt.Time).Seconds()
+		if stageDuration >= 0 {
+			splmetrics.IndexerLifecycleStageDurationSeconds.WithLabelValues(
+				string(previousStage),
+			).Observe(stageDuration)
+		}
+	}
+	operation.Stage = stage
+	operation.StageStartedAt = &now
+	operation.LastTransitionTime = &now
+	operation.Reason = eventReason
+	operation.Message = message
+	if stage == enterpriseApi.IndexerClusterPodUpdateStageCompleted ||
+		stage == enterpriseApi.IndexerClusterPodUpdateStageCancelled {
+		operation.FinishedAt = &now
+	}
+	splmetrics.IndexerLifecycleTransitionCounters.WithLabelValues(
+		string(stage),
+		eventReason,
+	).Inc()
+	mgr.log.InfoContext(
+		ctx,
+		"indexer Pod update stage changed",
+		"operationID",
+		operation.OperationID,
+		"targetPod",
+		operation.TargetPod,
+		"fromStage",
+		previousStage,
+		"toStage",
+		stage,
+	)
+	if eventPublisher := GetEventPublisher(ctx, mgr.cr); eventPublisher != nil {
+		eventPublisher.Normal(
+			ctx,
+			eventReason,
+			fmt.Sprintf("%s: %s", operation.TargetPod, message),
+		)
+	}
 }
 
 // getClient for indexerClusterPodManager returns a SplunkClient for the member n
@@ -1428,4 +2354,17 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 	previousVersion := strings.Split(previousImage, ":")[1]
 	currentVersion := strings.Split(currentImage, ":")[1]
 	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
+}
+
+// shouldRecreateIndexerStatefulSetForUpgrade preserves the historical 8-to-9
+// compatibility fallback only outside the durable lifecycle feature. Deleting
+// and recreating a StatefulSet bypasses exact per-Pod ownership and may remove
+// multiple peers, so the lifecycle contract must fail closed in normal
+// per-Pod orchestration instead.
+func shouldRecreateIndexerStatefulSetForUpgrade(
+	previousImage string,
+	currentImage string,
+) bool {
+	return !indexerClusterLifecycleEnabled() &&
+		imageUpdatedTo9(previousImage, currentImage)
 }

@@ -629,24 +629,17 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 
 	configMapName := GetProbeConfigMapName(cr.GetNamespace())
 	configMapNamespace := cr.GetNamespace()
-	namespacedName := types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}
-
-	// Check if the config map already exists
-	logger.DebugContext(ctx, "checking for existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
-	var configMap corev1.ConfigMap
-	err := client.Get(ctx, namespacedName, &configMap)
-
-	if err == nil {
-		logger.DebugContext(ctx, "retrieved existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
-		return &configMap, nil
-	} else if !k8serrors.IsNotFound(err) {
-		logger.ErrorContext(ctx, "error retrieving config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace, "error", err)
-		return nil, err
+	namespacedName := types.NamespacedName{
+		Namespace: configMapNamespace,
+		Name:      configMapName,
+	}
+	var existing corev1.ConfigMap
+	getErr := client.Get(ctx, namespacedName, &existing)
+	if getErr != nil && !k8serrors.IsNotFound(getErr) {
+		return nil, getErr
 	}
 
-	// Existing config map not found, create one for the probes
-	logger.InfoContext(ctx, "creating new config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
-	configMap = corev1.ConfigMap{
+	configMap := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
 			Namespace: configMapNamespace,
@@ -674,11 +667,45 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 	}
 	configMap.Data[GetStartupScriptName()] = data
 
-	// Apply the configured config map
-	_, err = splctrl.ApplyConfigMap(ctx, client, &configMap)
+	// Reconcile probe data on every pass. Probe ConfigMaps are namespace-scoped
+	// and outlive individual workloads, so returning an existing object without
+	// applying the desired scripts leaves upgraded Operators running stale
+	// readiness and liveness logic.
+	if getErr == nil {
+		if reflect.DeepEqual(existing.Data, configMap.Data) {
+			return &existing, nil
+		}
+		existing.Data = configMap.Data
+		if err := splutil.UpdateResource(ctx, client, &existing); err != nil {
+			return &existing, err
+		}
+		logger.DebugContext(
+			ctx,
+			"reconciled existing probe config map",
+			"configMapName",
+			configMapName,
+			"configMapNamespace",
+			configMapNamespace,
+			"dataUpdated",
+			true,
+		)
+		return &existing, nil
+	}
+
+	updated, err := splctrl.ApplyConfigMap(ctx, client, &configMap)
 	if err != nil {
 		return &configMap, err
 	}
+	logger.DebugContext(
+		ctx,
+		"reconciled probe config map",
+		"configMapName",
+		configMapName,
+		"configMapNamespace",
+		configMapNamespace,
+		"dataUpdated",
+		updated,
+	)
 	return &configMap, nil
 }
 
@@ -1040,6 +1067,13 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
 		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
 	}
+	if instanceType == SplunkIndexer &&
+		indexerClusterLifecycleEnabled() {
+		env = append(env, corev1.EnvVar{
+			Name:  indexerServingReadinessEnv,
+			Value: "true",
+		})
+	}
 
 	// update variables for licensing, if configured
 	if spec.LicenseURL != "" {
@@ -1258,6 +1292,18 @@ func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType
 func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
 	logger := logging.FromContext(ctx)
 	readinessProbe := getProbeWithConfigUpdates(&defaultReadinessProbe, spec.ReadinessProbe, spec.ReadinessInitialDelaySeconds)
+	if instanceType == SplunkIndexer &&
+		indexerClusterLifecycleEnabled() &&
+		spec.ReadinessProbe == nil {
+		// This Alpha lifecycle contract uses the serving-path check in
+		// readinessProbe.sh. A single failed HEC check withdraws the peer
+		// promptly; customers who explicitly configure a readiness probe retain
+		// their exact values.
+		readinessProbe = readinessProbe.DeepCopy()
+		readinessProbe.TimeoutSeconds = 2
+		readinessProbe.PeriodSeconds = 2
+		readinessProbe.FailureThreshold = 1
+	}
 	logger.DebugContext(ctx, "readinessProbe", "Configured", readinessProbe)
 	return readinessProbe
 }

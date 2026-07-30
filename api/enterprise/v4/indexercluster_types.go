@@ -72,6 +72,68 @@ type IndexerClusterMemberStatus struct {
 	Searchable bool `json:"is_searchable"`
 }
 
+// IndexerClusterPodUpdateStage identifies the durable stage of one
+// Operator-owned indexer Pod update.
+type IndexerClusterPodUpdateStage string
+
+const (
+	IndexerClusterPodUpdateStageTargetSelected       IndexerClusterPodUpdateStage = "TargetSelected"
+	IndexerClusterPodUpdateStageWithdrawingReadiness IndexerClusterPodUpdateStage = "WithdrawingReadiness"
+	IndexerClusterPodUpdateStageDecommissioning      IndexerClusterPodUpdateStage = "Decommissioning"
+	IndexerClusterPodUpdateStageReadyForReplacement  IndexerClusterPodUpdateStage = "ReadyForReplacement"
+	IndexerClusterPodUpdateStageCompleted            IndexerClusterPodUpdateStage = "Completed"
+	IndexerClusterPodUpdateStageCancelled            IndexerClusterPodUpdateStage = "Cancelled"
+)
+
+// IndexerClusterPodUpdateStatus records exact ownership of one indexer Pod
+// update. It is persisted before decommission so the controller can
+// distinguish its deliberately unavailable target from an unrelated failure.
+type IndexerClusterPodUpdateStatus struct {
+	// Stable operation identity derived from target UID, desired revision, and
+	// selection time so a cancelled target can later retry the same revision.
+	OperationID string `json:"operationID"`
+
+	// Current lifecycle stage.
+	Stage IndexerClusterPodUpdateStage `json:"stage"`
+
+	// Exact target identity.
+	TargetPod     string `json:"targetPod"`
+	TargetPodUID  string `json:"targetPodUID"`
+	TargetOrdinal int32  `json:"targetOrdinal"`
+
+	// StatefulSet revision boundary authorized by this operation.
+	SourceRevision  string `json:"sourceRevision"`
+	DesiredRevision string `json:"desiredRevision"`
+
+	// When target ownership was first persisted.
+	StartedAt *metav1.Time `json:"startedAt,omitempty"`
+
+	// When the current stage began.
+	StageStartedAt *metav1.Time `json:"stageStartedAt,omitempty"`
+
+	// When decommission was requested, or when the controller first recovered
+	// an already accepted request from a controlled Cluster Manager peer state.
+	DecommissionRequestedAt *metav1.Time `json:"decommissionRequestedAt,omitempty"`
+
+	// Whether the target was observed outside Up after decommission was
+	// requested. This prevents an unchanged, eventually consistent Up response
+	// from being mistaken for a completed decommission cycle.
+	ObservedDecommissioning bool `json:"observedDecommissioning,omitempty"`
+
+	// Most recent stage transition time.
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	// Machine-readable reason and human-readable detail for the most recent
+	// lifecycle observation.
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
+
+	// Identity of the accepted replacement and the time this operation reached
+	// a terminal Completed or Cancelled stage.
+	ReplacementPodUID string       `json:"replacementPodUID,omitempty"`
+	FinishedAt        *metav1.Time `json:"finishedAt,omitempty"`
+}
+
 // IndexerClusterStatus defines the observed state of a Splunk Enterprise indexer cluster
 type IndexerClusterStatus struct {
 	// current phase of the indexer cluster
@@ -131,6 +193,10 @@ type IndexerClusterStatus struct {
 
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
+
+	// Current or most recently completed Operator-owned Pod update.
+	// +optional
+	PodUpdate *IndexerClusterPodUpdateStatus `json:"podUpdate,omitempty"`
 
 	// Auxiliary message describing CR status
 	Message string `json:"message"`

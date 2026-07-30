@@ -1717,6 +1717,128 @@ func TestGetReadinessProbe(t *testing.T) {
 	}
 }
 
+func TestGetIndexerLifecycleReadinessProbe(t *testing.T) {
+	oldPodLifecycle :=
+		config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle)
+	oldIndexerLifecycle :=
+		config.DefaultMutableFeatureGate.Enabled(config.IndexerClusterLifecycle)
+	t.Cleanup(func() {
+		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
+			map[string]bool{
+				string(config.SplunkPodLifecycle):      oldPodLifecycle,
+				string(config.IndexerClusterLifecycle): oldIndexerLifecycle,
+			},
+		))
+	})
+	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
+		map[string]bool{
+			string(config.SplunkPodLifecycle):      true,
+			string(config.IndexerClusterLifecycle): true,
+		},
+	))
+
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idxc",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
+	probe := getReadinessProbe(
+		context.Background(),
+		cr,
+		SplunkIndexer,
+		spec,
+	)
+	if probe.TimeoutSeconds != 2 ||
+		probe.PeriodSeconds != 2 ||
+		probe.FailureThreshold != 1 {
+		t.Fatalf(
+			"lifecycle indexer readiness = timeout %d, period %d, failure %d; want 2/2/1",
+			probe.TimeoutSeconds,
+			probe.PeriodSeconds,
+			probe.FailureThreshold,
+		)
+	}
+
+	spec.ReadinessProbe = &enterpriseApi.Probe{
+		TimeoutSeconds:   7,
+		PeriodSeconds:    11,
+		FailureThreshold: 4,
+	}
+	configured := getReadinessProbe(
+		context.Background(),
+		cr,
+		SplunkIndexer,
+		spec,
+	)
+	if configured.TimeoutSeconds != 7 ||
+		configured.PeriodSeconds != 11 ||
+		configured.FailureThreshold != 4 {
+		t.Fatalf(
+			"explicit readiness = timeout %d, period %d, failure %d; want 7/11/4",
+			configured.TimeoutSeconds,
+			configured.PeriodSeconds,
+			configured.FailureThreshold,
+		)
+	}
+}
+
+func TestGetProbeConfigMapReconcilesExistingScripts(t *testing.T) {
+	ctx := context.Background()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idxc",
+			Namespace: "test",
+		},
+	}
+	name := GetProbeConfigMapName(cr.Namespace)
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+		},
+		Data: map[string]string{
+			GetReadinessScriptName(): "stale-readiness",
+			GetLivenessScriptName():  "stale-liveness",
+			GetStartupScriptName():   "stale-startup",
+		},
+	}
+	c := spltest.NewMockClient()
+	c.AddObject(existing)
+
+	desired, err := getProbeConfigMap(ctx, c, cr)
+	require.NoError(t, err)
+	require.Equal(t, name, desired.Name)
+
+	var updated corev1.ConfigMap
+	require.NoError(t, c.Get(
+		ctx,
+		types.NamespacedName{Namespace: cr.Namespace, Name: name},
+		&updated,
+	))
+	require.NotEqual(
+		t,
+		"stale-readiness",
+		updated.Data[GetReadinessScriptName()],
+	)
+	require.Contains(
+		t,
+		updated.Data[GetReadinessScriptName()],
+		"SPLUNK_OPERATOR_INDEXER_SERVING_READINESS",
+	)
+	require.NotEqual(
+		t,
+		"stale-liveness",
+		updated.Data[GetLivenessScriptName()],
+	)
+	require.NotEqual(
+		t,
+		"stale-startup",
+		updated.Data[GetStartupScriptName()],
+	)
+}
+
 func TestGetStartupProbe(t *testing.T) {
 	ctx := context.TODO()
 	cr := &enterpriseApi.ClusterManager{

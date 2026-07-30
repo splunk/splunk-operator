@@ -9041,6 +9041,72 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              podUpdate:
+                description: Current or most recently completed Operator-owned Pod
+                  update.
+                properties:
+                  decommissionRequestedAt:
+                    description: |-
+                      When decommission was requested, or when the controller first recovered
+                      an already accepted request from a controlled Cluster Manager peer state.
+                    format: date-time
+                    type: string
+                  desiredRevision:
+                    type: string
+                  finishedAt:
+                    format: date-time
+                    type: string
+                  lastTransitionTime:
+                    description: Most recent stage transition time.
+                    format: date-time
+                    type: string
+                  message:
+                    type: string
+                  observedDecommissioning:
+                    description: |-
+                      Whether the target was observed outside Up after decommission was
+                      requested. This prevents an unchanged, eventually consistent Up response
+                      from being mistaken for a completed decommission cycle.
+                    type: boolean
+                  operationID:
+                    description: |-
+                      Stable operation identity derived from target UID, desired revision, and
+                      selection time so a cancelled target can later retry the same revision.
+                    type: string
+                  reason:
+                    description: |-
+                      Machine-readable reason and human-readable detail for the most recent
+                      lifecycle observation.
+                    type: string
+                  replacementPodUID:
+                    description: |-
+                      Identity of the accepted replacement and the time this operation reached
+                      a terminal Completed or Cancelled stage.
+                    type: string
+                  sourceRevision:
+                    description: StatefulSet revision boundary authorized by this
+                      operation.
+                    type: string
+                  stage:
+                    description: Current lifecycle stage.
+                    type: string
+                  stageStartedAt:
+                    description: When the current stage began.
+                    format: date-time
+                    type: string
+                  startedAt:
+                    description: When target ownership was first persisted.
+                    format: date-time
+                    type: string
+                  targetOrdinal:
+                    format: int32
+                    type: integer
+                  targetPod:
+                    description: Exact target identity.
+                    type: string
+                  targetPodUID:
+                    type: string
+                type: object
               readyReplicas:
                 description: current number of ready indexer peers
                 format: int32

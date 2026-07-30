@@ -104,3 +104,52 @@ func TestSHCAuthorizedRevisionRecoveryMetricsHaveNoLabels(t *testing.T) {
 		})
 	}
 }
+
+func TestIndexerLifecycleMetricsUseOnlyBoundedLabels(t *testing.T) {
+	for _, testCase := range []struct {
+		name          string
+		collector     prometheus.Collector
+		variableLabel string
+	}{
+		{
+			name:          "transition",
+			collector:     IndexerLifecycleTransitionCounters,
+			variableLabel: "variableLabels: {stage,reason}",
+		},
+		{
+			name:          "stage duration",
+			collector:     IndexerLifecycleStageDurationSeconds,
+			variableLabel: "variableLabels: {stage}",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			descriptions := make(chan *prometheus.Desc, 1)
+			testCase.collector.Describe(descriptions)
+			description := (<-descriptions).String()
+			if !strings.Contains(description, testCase.variableLabel) {
+				t.Fatalf(
+					"metric description = %q, want %s",
+					description,
+					testCase.variableLabel,
+				)
+			}
+			for _, forbidden := range []string{
+				"namespace",
+				"name",
+				"operation",
+				"revision",
+				"pod",
+				"uid",
+				"message",
+			} {
+				if strings.Contains(description, forbidden) {
+					t.Fatalf(
+						"metric description contains unbounded label %q: %s",
+						forbidden,
+						description,
+					)
+				}
+			}
+		})
+	}
+}

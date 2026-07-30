@@ -47,6 +47,9 @@ const (
 	// SearchHeadClusterLifecycle gates durable Search Head Cluster lifecycle
 	// orchestration and its customer-facing policy.
 	SearchHeadClusterLifecycle featuregate.Feature = "SearchHeadClusterLifecycle"
+	// IndexerClusterLifecycle gates durable ownership of indexer Pod updates
+	// and indexer serving-path readiness.
+	IndexerClusterLifecycle featuregate.Feature = "IndexerClusterLifecycle"
 )
 
 // defaultFeatureGates is the authoritative registry of all feature gates and
@@ -58,6 +61,10 @@ var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	CertManagement:     {Default: true, PreRelease: featuregate.Beta},
 	SplunkPodLifecycle: {Default: false, PreRelease: featuregate.Alpha},
 	SearchHeadClusterLifecycle: {
+		Default:    false,
+		PreRelease: featuregate.Alpha,
+	},
+	IndexerClusterLifecycle: {
 		Default:    false,
 		PreRelease: featuregate.Alpha,
 	},
@@ -101,6 +108,9 @@ func EnableFeatureGate(gates ...featuregate.Feature) {
 func ValidateFeatureGateDependencies(fg featuregate.FeatureGate) error {
 	if fg.Enabled(SearchHeadClusterLifecycle) && !fg.Enabled(SplunkPodLifecycle) {
 		return fmt.Errorf("%s requires %s=true", SearchHeadClusterLifecycle, SplunkPodLifecycle)
+	}
+	if fg.Enabled(IndexerClusterLifecycle) && !fg.Enabled(SplunkPodLifecycle) {
+		return fmt.Errorf("%s requires %s=true", IndexerClusterLifecycle, SplunkPodLifecycle)
 	}
 	return nil
 }

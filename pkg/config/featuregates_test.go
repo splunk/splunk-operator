@@ -44,7 +44,11 @@ func TestValidationWebhookOffByDefault(t *testing.T) {
 
 func TestLifecycleFeatureGatesRegisteredOffByDefault(t *testing.T) {
 	all := DefaultMutableFeatureGate.GetAll()
-	for _, gate := range []featuregate.Feature{SplunkPodLifecycle, SearchHeadClusterLifecycle} {
+	for _, gate := range []featuregate.Feature{
+		SplunkPodLifecycle,
+		SearchHeadClusterLifecycle,
+		IndexerClusterLifecycle,
+	} {
 		spec, ok := all[gate]
 		if !ok {
 			t.Fatalf("%s gate not registered", gate)
@@ -60,15 +64,26 @@ func TestLifecycleFeatureGatesRegisteredOffByDefault(t *testing.T) {
 
 func TestValidateFeatureGateDependencies(t *testing.T) {
 	tests := []struct {
-		name    string
-		podGate bool
-		shcGate bool
-		wantErr bool
+		name     string
+		podGate  bool
+		shcGate  bool
+		idxcGate bool
+		wantErr  bool
 	}{
 		{name: "both disabled"},
 		{name: "pod lifecycle only", podGate: true},
 		{name: "both enabled", podGate: true, shcGate: true},
 		{name: "SHC lifecycle without pod lifecycle", shcGate: true, wantErr: true},
+		{
+			name:     "indexer lifecycle with pod lifecycle",
+			podGate:  true,
+			idxcGate: true,
+		},
+		{
+			name:     "indexer lifecycle without pod lifecycle",
+			idxcGate: true,
+			wantErr:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -80,6 +95,7 @@ func TestValidateFeatureGateDependencies(t *testing.T) {
 			if err := fg.SetFromMap(map[string]bool{
 				string(SplunkPodLifecycle):         tt.podGate,
 				string(SearchHeadClusterLifecycle): tt.shcGate,
+				string(IndexerClusterLifecycle):    tt.idxcGate,
 			}); err != nil {
 				t.Fatalf("SetFromMap: %v", err)
 			}

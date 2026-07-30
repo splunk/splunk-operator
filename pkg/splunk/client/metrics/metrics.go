@@ -18,6 +18,7 @@ const (
 	LabelResourceVersion = "resource_version"
 	LabelAction          = "action"
 	LabelReason          = "reason"
+	LabelStage           = "stage"
 )
 
 var (
@@ -103,6 +104,23 @@ var SHCAuthorizedRevisionRecoveryCounter = prometheus.NewCounter(
 	},
 )
 
+var IndexerLifecycleTransitionCounters = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "splunk_operator_indexer_lifecycle_transition_total",
+		Help: "The number of durable Indexer Pod lifecycle stage transitions",
+	},
+	[]string{LabelStage, LabelReason},
+)
+
+var IndexerLifecycleStageDurationSeconds = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Name:    "splunk_operator_indexer_lifecycle_stage_duration_seconds",
+		Help:    "Time spent in each completed durable Indexer Pod lifecycle stage",
+		Buckets: prometheus.ExponentialBuckets(1, 2, 12),
+	},
+	[]string{LabelStage},
+)
+
 func GetPrometheusLabels(request reconcile.Request, kind string) prometheus.Labels {
 	return prometheus.Labels{
 		LabelNamespace: request.Namespace,
@@ -136,5 +154,7 @@ func init() {
 		SHCSearchDrainContinuationApprovalCounter,
 		SHCAuthorizedRevisionWithdrawalCounter,
 		SHCAuthorizedRevisionRecoveryCounter,
+		IndexerLifecycleTransitionCounters,
+		IndexerLifecycleStageDurationSeconds,
 	)
 }
