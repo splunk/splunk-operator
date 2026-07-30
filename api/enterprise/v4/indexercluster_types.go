@@ -132,6 +132,19 @@ type IndexerClusterPodUpdateStatus struct {
 	// a terminal Completed or Cancelled stage.
 	ReplacementPodUID string       `json:"replacementPodUID,omitempty"`
 	FinishedAt        *metav1.Time `json:"finishedAt,omitempty"`
+
+	// When Kubernetes endpoint publication and an independent Pod-to-Pod
+	// request first proved that the replacement's enabled HEC path was
+	// remotely serving. For HEC-disabled deployments, the proof uses a remote
+	// connection to the replacement's declared Splunk-to-Splunk port.
+	ServingRecoveryObservedAt *metav1.Time `json:"servingRecoveryObservedAt,omitempty"`
+
+	// Exact replacement UID covered by the serving-recovery observation.
+	ServingRecoveryPodUID string `json:"servingRecoveryPodUID,omitempty"`
+
+	// Monotonic observation sequence used to prevent a stale status writer
+	// from restoring proof for an earlier replacement UID.
+	ServingRecoverySequence int64 `json:"servingRecoverySequence,omitempty"`
 }
 
 // IndexerClusterStatus defines the observed state of a Splunk Enterprise indexer cluster

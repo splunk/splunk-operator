@@ -1145,6 +1145,58 @@ func (mgr *indexerClusterPodManager) FinishRecycle(ctx context.Context, n int32)
 				return false, nil
 			}
 
+			servingRecovered, err := checkIndexerServingRecovery(
+				ctx,
+				mgr,
+				&replacement,
+			)
+			if err != nil {
+				return false, err
+			}
+			if !servingRecovered {
+				return false, nil
+			}
+			if operation.ServingRecoveryObservedAt == nil ||
+				operation.ServingRecoveryPodUID !=
+					string(replacement.GetUID()) {
+				now := metav1.Now()
+				operation.ServingRecoveryObservedAt = &now
+				operation.ServingRecoverySequence++
+				operation.ServingRecoveryPodUID =
+					string(replacement.GetUID())
+				operation.LastTransitionTime = &now
+				operation.Reason = "IndexerServingRecoveryObserved"
+				operation.Message =
+					"Replacement is published and remotely serving its configured traffic path"
+				mgr.log.InfoContext(
+					ctx,
+					"persisting remote Indexer serving recovery before completion",
+					"operationID",
+					operation.OperationID,
+					"targetPod",
+					operation.TargetPod,
+					"replacementPodUID",
+					replacement.GetUID(),
+				)
+				if eventPublisher := GetEventPublisher(
+					ctx,
+					mgr.cr,
+				); eventPublisher != nil {
+					eventPublisher.Normal(
+						ctx,
+						"IndexerServingRecoveryObserved",
+						fmt.Sprintf(
+							"%s replacement is published and remotely serving",
+							operation.TargetPod,
+						),
+					)
+				}
+				// Persist the serving proof before completing the operation.
+				// The next reconcile repeats the live check so a stale proof
+				// cannot authorize the following target.
+				return false, nil
+			}
+
 			operation.ReplacementPodUID = string(replacement.GetUID())
 			mgr.transitionIndexerPodUpdate(
 				ctx,

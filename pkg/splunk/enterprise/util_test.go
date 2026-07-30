@@ -3008,6 +3008,61 @@ func TestIndexerClusterPodUpdateStatusMergeAllowsOnlyNewerCompletedOperation(
 	}
 }
 
+func TestIndexerClusterPodUpdateStatusMergePreservesServingRecovery(
+	t *testing.T,
+) {
+	observedAt := metav1.NewTime(
+		time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC),
+	)
+	latest := &enterpriseApi.IndexerClusterPodUpdateStatus{
+		OperationID:               "operation",
+		Stage:                     enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+		LastTransitionTime:        &observedAt,
+		ServingRecoveryObservedAt: &observedAt,
+		ServingRecoveryPodUID:     "replacement-uid",
+		ServingRecoverySequence:   1,
+		DecommissionRequestedAt:   &observedAt,
+		ObservedDecommissioning:   true,
+	}
+	reconciled := latest.DeepCopy()
+	reconciled.ServingRecoveryObservedAt = nil
+	if err := validateIndexerClusterPodUpdateStatusMerge(
+		latest,
+		reconciled,
+		"example",
+	); !k8serrors.IsConflict(err) {
+		t.Fatalf("serving recovery regression error = %v, want conflict", err)
+	}
+
+	reconciled.ServingRecoveryObservedAt = &observedAt
+	if err := validateIndexerClusterPodUpdateStatusMerge(
+		latest,
+		reconciled,
+		"example",
+	); err != nil {
+		t.Fatalf("preserved serving recovery was rejected: %v", err)
+	}
+
+	reconciled.ServingRecoveryPodUID = ""
+	if err := validateIndexerClusterPodUpdateStatusMerge(
+		latest,
+		reconciled,
+		"example",
+	); !k8serrors.IsConflict(err) {
+		t.Fatalf("serving recovery UID regression error = %v, want conflict", err)
+	}
+
+	reconciled.ServingRecoveryPodUID = latest.ServingRecoveryPodUID
+	reconciled.ServingRecoverySequence = 0
+	if err := validateIndexerClusterPodUpdateStatusMerge(
+		latest,
+		reconciled,
+		"example",
+	); !k8serrors.IsConflict(err) {
+		t.Fatalf("serving recovery sequence regression error = %v, want conflict", err)
+	}
+}
+
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))

@@ -55,6 +55,21 @@ func enableIndexerLifecycleForTest(t *testing.T) {
 	))
 }
 
+func allowIndexerServingRecoveryForTest(t *testing.T) {
+	t.Helper()
+	oldCheck := checkIndexerServingRecovery
+	t.Cleanup(func() {
+		checkIndexerServingRecovery = oldCheck
+	})
+	checkIndexerServingRecovery = func(
+		_ context.Context,
+		_ *indexerClusterPodManager,
+		_ *corev1.Pod,
+	) (bool, error) {
+		return true, nil
+	}
+}
+
 func indexerLifecycleFixture(
 	t *testing.T,
 ) (
@@ -674,27 +689,31 @@ func TestIndexerPersistsReadinessWithdrawalBeforePodMutation(t *testing.T) {
 
 func TestIndexerReplacementRequiresReadyUpAndSearchable(t *testing.T) {
 	enableIndexerLifecycleForTest(t)
+	allowIndexerServingRecoveryForTest(t)
 	mgr, _, pods := indexerLifecycleFixture(t)
 	target := pods[2]
 	now := metav1.Now()
 	mgr.cr.Status.PodUpdate =
 		&enterpriseApi.IndexerClusterPodUpdateStatus{
-			OperationID:             "operation",
-			Stage:                   enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
-			TargetPod:               target.Name,
-			TargetPodUID:            string(target.UID),
-			TargetOrdinal:           2,
-			SourceRevision:          "old",
-			DesiredRevision:         "new",
-			StartedAt:               &now,
-			DecommissionRequestedAt: &now,
-			ObservedDecommissioning: true,
-			LastTransitionTime:      &now,
+			OperationID:               "operation",
+			Stage:                     enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+			TargetPod:                 target.Name,
+			TargetPodUID:              string(target.UID),
+			TargetOrdinal:             2,
+			SourceRevision:            "old",
+			DesiredRevision:           "new",
+			StartedAt:                 &now,
+			DecommissionRequestedAt:   &now,
+			ObservedDecommissioning:   true,
+			LastTransitionTime:        &now,
+			ServingRecoveryObservedAt: &now,
 		}
 	replacement := target.DeepCopy()
 	replacement.UID = types.UID("replacement-uid")
 	replacement.Labels["controller-revision-hash"] = "new"
 	require.NoError(t, mgr.c.Update(context.Background(), replacement))
+	mgr.cr.Status.PodUpdate.ServingRecoveryPodUID =
+		string(replacement.UID)
 
 	targetPeer := mgr.cr.Status.Peers[2]
 	mgr.cr.Status.Peers = mgr.cr.Status.Peers[:2]
@@ -734,9 +753,9 @@ func TestIndexerReplacementRequiresReadyUpAndSearchable(t *testing.T) {
 	}
 }
 
-func TestIndexerReplacementAdoptsLatestStatefulSetRevision(t *testing.T) {
+func TestIndexerReplacementRevalidatesPersistedServingRecovery(t *testing.T) {
 	enableIndexerLifecycleForTest(t)
-	mgr, statefulSet, pods := indexerLifecycleFixture(t)
+	mgr, _, pods := indexerLifecycleFixture(t)
 	target := pods[2]
 	now := metav1.Now()
 	mgr.cr.Status.PodUpdate =
@@ -753,12 +772,116 @@ func TestIndexerReplacementAdoptsLatestStatefulSetRevision(t *testing.T) {
 			ObservedDecommissioning: true,
 			LastTransitionTime:      &now,
 		}
+	replacement := target.DeepCopy()
+	replacement.UID = types.UID("replacement-uid")
+	replacement.Labels["controller-revision-hash"] = "new"
+	require.NoError(t, mgr.c.Update(context.Background(), replacement))
+
+	serving := true
+	oldCheck := checkIndexerServingRecovery
+	t.Cleanup(func() {
+		checkIndexerServingRecovery = oldCheck
+	})
+	checkIndexerServingRecovery = func(
+		_ context.Context,
+		_ *indexerClusterPodManager,
+		_ *corev1.Pod,
+	) (bool, error) {
+		return serving, nil
+	}
+
+	complete, err := mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.NotNil(t, mgr.cr.Status.PodUpdate.ServingRecoveryObservedAt)
+	require.Equal(
+		t,
+		string(replacement.UID),
+		mgr.cr.Status.PodUpdate.ServingRecoveryPodUID,
+	)
+	require.Equal(
+		t,
+		int64(1),
+		mgr.cr.Status.PodUpdate.ServingRecoverySequence,
+	)
+	require.Equal(
+		t,
+		enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+		mgr.cr.Status.PodUpdate.Stage,
+	)
+
+	replacement = replacement.DeepCopy()
+	replacement.UID = types.UID("second-replacement-uid")
+	require.NoError(t, mgr.c.Update(context.Background(), replacement))
+	complete, err = mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.Equal(
+		t,
+		string(replacement.UID),
+		mgr.cr.Status.PodUpdate.ServingRecoveryPodUID,
+	)
+	require.Equal(
+		t,
+		int64(2),
+		mgr.cr.Status.PodUpdate.ServingRecoverySequence,
+	)
+	require.Equal(
+		t,
+		enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+		mgr.cr.Status.PodUpdate.Stage,
+	)
+
+	serving = false
+	complete, err = mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.Equal(
+		t,
+		enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+		mgr.cr.Status.PodUpdate.Stage,
+	)
+
+	serving = true
+	complete, err = mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.Equal(
+		t,
+		enterpriseApi.IndexerClusterPodUpdateStageCompleted,
+		mgr.cr.Status.PodUpdate.Stage,
+	)
+}
+
+func TestIndexerReplacementAdoptsLatestStatefulSetRevision(t *testing.T) {
+	enableIndexerLifecycleForTest(t)
+	allowIndexerServingRecoveryForTest(t)
+	mgr, statefulSet, pods := indexerLifecycleFixture(t)
+	target := pods[2]
+	now := metav1.Now()
+	mgr.cr.Status.PodUpdate =
+		&enterpriseApi.IndexerClusterPodUpdateStatus{
+			OperationID:               "operation",
+			Stage:                     enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+			TargetPod:                 target.Name,
+			TargetPodUID:              string(target.UID),
+			TargetOrdinal:             2,
+			SourceRevision:            "old",
+			DesiredRevision:           "new",
+			StartedAt:                 &now,
+			DecommissionRequestedAt:   &now,
+			ObservedDecommissioning:   true,
+			LastTransitionTime:        &now,
+			ServingRecoveryObservedAt: &now,
+		}
 	statefulSet.Status.UpdateRevision = "newer"
 	require.NoError(t, mgr.c.Update(context.Background(), statefulSet))
 	replacement := target.DeepCopy()
 	replacement.UID = types.UID("replacement-uid")
 	replacement.Labels["controller-revision-hash"] = "newer"
 	require.NoError(t, mgr.c.Update(context.Background(), replacement))
+	mgr.cr.Status.PodUpdate.ServingRecoveryPodUID =
+		string(replacement.UID)
 
 	complete, err := mgr.FinishRecycle(context.Background(), 2)
 	require.NoError(t, err)

@@ -9083,6 +9083,24 @@ spec:
                       Identity of the accepted replacement and the time this operation reached
                       a terminal Completed or Cancelled stage.
                     type: string
+                  servingRecoveryObservedAt:
+                    description: |-
+                      When Kubernetes endpoint publication and an independent Pod-to-Pod
+                      request first proved that the replacement's enabled HEC path was
+                      remotely serving. For HEC-disabled deployments, the proof uses a remote
+                      connection to the replacement's declared Splunk-to-Splunk port.
+                    format: date-time
+                    type: string
+                  servingRecoveryPodUID:
+                    description: Exact replacement UID covered by the serving-recovery
+                      observation.
+                    type: string
+                  servingRecoverySequence:
+                    description: |-
+                      Monotonic observation sequence used to prevent a stale status writer
+                      from restoring proof for an earlier replacement UID.
+                    format: int64
+                    type: integer
                   sourceRevision:
                     description: StatefulSet revision boundary authorized by this
                       operation.

@@ -27,6 +27,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,7 +41,12 @@ import (
 
 func init() {
 	MockObjectCopiers = append(MockObjectCopiers, coreObjectCopier, appsObjectCopier, enterpriseObjCopier)
-	MockObjectListCopiers = append(MockObjectListCopiers, coreObjectListCopier, enterpriseObjListCopier)
+	MockObjectListCopiers = append(
+		MockObjectListCopiers,
+		coreObjectListCopier,
+		discoveryObjectListCopier,
+		enterpriseObjListCopier,
+	)
 }
 
 // MockObjectCopiers is a slice of MockObjectCopier methods that MockClient uses to copy client.Objects
@@ -113,6 +119,9 @@ type MockObjectListCopier func(dst, src *client.ObjectList) bool
 func enterpriseObjListCopier(dst, src *client.ObjectList) bool {
 	dstP := *dst
 	srcP := *src
+	if reflect.TypeOf(dstP) != reflect.TypeOf(srcP) {
+		return false
+	}
 	switch srcP.(type) {
 	case *enterpriseApi.IndexerClusterList:
 		*dstP.(*enterpriseApi.IndexerClusterList) = *srcP.(*enterpriseApi.IndexerClusterList)
@@ -149,6 +158,24 @@ func coreObjectListCopier(dst, src *client.ObjectList) bool {
 		default:
 			return false
 		}
+		return true
+	}
+	return false
+}
+
+// discoveryObjectListCopier is used to copy discovery.k8s.io client lists.
+func discoveryObjectListCopier(dst, src *client.ObjectList) bool {
+	dstP := *dst
+	srcP := *src
+	if reflect.TypeOf(dstP) != reflect.TypeOf(srcP) {
+		return false
+	}
+	switch srcP.(type) {
+	case *discoveryv1.EndpointSliceList:
+		*dstP.(*discoveryv1.EndpointSliceList) =
+			*srcP.(*discoveryv1.EndpointSliceList)
+	default:
+		return false
 	}
 	return true
 }
@@ -196,15 +223,13 @@ func copyMockObject(dst, src *client.Object) {
 
 // copyMockObjectList uses the global MockObjectCopiers to perform the typed copy of a client.Object from src to dst
 func copyMockObjectList(dst, src *client.ObjectList) {
-	for n := range MockObjectCopiers {
+	for n := range MockObjectListCopiers {
 		if MockObjectListCopiers[n](dst, src) {
 			return
 		}
 	}
-	//FIXME
-	//srcP := *src
-	// default if no types match
-	//*dst = srcP.DeepCopyObject()
+	srcP := *src
+	*dst = srcP.DeepCopyObject().(client.ObjectList)
 }
 
 // MockFuncCall is used to record a function call to MockClient methods

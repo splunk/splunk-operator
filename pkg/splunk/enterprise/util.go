@@ -2641,6 +2641,12 @@ func validateIndexerClusterPodUpdateStatusMerge(
 				!reconciled.ObservedDecommissioning) ||
 			(latest.ReplacementPodUID != "" &&
 				reconciled.ReplacementPodUID == "") ||
+			(latest.ServingRecoveryObservedAt != nil &&
+				reconciled.ServingRecoveryObservedAt == nil) ||
+			(latest.ServingRecoveryPodUID != "" &&
+				reconciled.ServingRecoveryPodUID == "") ||
+			(reconciled.ServingRecoverySequence <
+				latest.ServingRecoverySequence) ||
 			(latest.FinishedAt != nil &&
 				reconciled.FinishedAt == nil) ||
 			indexerClusterPodUpdateTransitionIsOlder(
