@@ -326,35 +326,45 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   finished with RF/SF met, all data searchable, all peers Up, and no fixups.
   The workload records completed 80/80 and 30/30 exact sequences with zero
   HEC or search-request failures. This closes manual advancement for the
-  tested steady-controller Operator path; it does not close
-  controller-restart/disconnection, conflict, insufficient-redundancy,
-  configuration/protocol, persistent-client, or Splunk-managed App Framework
-  target-control gates.
+  tested steady-controller Operator path. Controller-Pod restart during
+  `Decommissioning` is qualified separately below; long controller or
+  API-server disconnection, conflict, insufficient-redundancy,
+  configuration/protocol, persistent-client, and Splunk-managed App Framework
+  target-control gates remain open.
+- [x] (2026-07-30 UTC) Qualified SHC-85 controller-Pod restart recovery on
+  isolated branch `codex/shc-85-controller-restart-qualification`. The
+  Operator was deleted after ordinal 3 had durably reached
+  `Decommissioning`. Its replacement retained the exact operation ID, target
+  Pod and UID, source and desired revisions, and decommission timestamp,
+  issued no duplicate ordinal-3 decommission Event, and completed
+  `3 -> 2 -> 1 -> 0` with one withdrawn target at a time. The accepted
+  workload record completed 100/100 exact events with zero HEC or search
+  failures; an overlapping 80-event record also reached exact completeness
+  but classified its valid initial `count=0` result as one search failure; a
+  stable post-roll record completed 30/30 with zero failures. Final health was
+  four Ready peers, RF/SF met, all data searchable, no fixups, four
+  `failed=0` Ansible recaps, zero KV Store upgrade-precheck failures, and zero
+  container restarts. Controller restart is now qualified for this bounded
+  stage; longer disconnection, leader contention, conflict, redundancy, and
+  compatibility variants remain open.
 - [ ] Define and qualify SHC-83 so Service readiness cannot succeed before
   image-owned SHC initialization, synchronization, and internal Splunk
   restarts have completed.
 - [ ] Define and qualify SHC-84 so first-start and supported-upgrade work has
   an explicit startup budget while every kubelet-initiated restart reaches one
   prompt, observable TERM-to-container-exit path.
-- [ ] Define and qualify SHC-85 so indexer serving readiness can deliberately
-  withdraw the one owned lifecycle target without blocking controller
-  progress, and so the next peer is not authorized until the previous peer is
-  both `Up/searchable` and remotely serving its configured traffic path.
-  The active Operator spike on
-  `codex/shc-85-indexer-serving-lifecycle` now separates local HEC serving
-  readiness from durable `OnDelete` progress. For an Operator-owned
-  replacement it requires the new Pod UID and revision, Kubernetes readiness,
-  Cluster Manager `Up/searchable`, client-Service EndpointSlice publication,
-  and an independent Pod-to-Pod traffic-path request before completion. The
-  request uses the effective HTTP or HTTPS HEC health endpoint when HEC is
-  enabled and the declared Splunk-to-Splunk TCP port otherwise. The live
-  serving check is repeated after its first durable observation so stale status
-  cannot authorize the next target. Unit, enterprise-package, and full
-  repository tests pass; Linux image and EKS qualification remain open.
-  Splunk-managed bundle-push restarts are a separate boundary: Splunk
-  Enterprise, not the Operator, chooses the next peer inside that workflow.
-  A supported Splunk Enterprise remote-serving readiness contract is therefore
-  still required before OPS-011 or SHC-85 can be closed end to end.
+- [ ] Complete the remaining SHC-85 negative and compatibility qualification.
+  The bounded Operator-owned lifecycle is source-qualified and EKS-qualified
+  for steady-controller operation and one controller-Pod restart during
+  `Decommissioning`. Remaining gates include long controller or API-server
+  disconnection, leader contention, conflicting desired-state changes,
+  insufficient RF/SF health, HEC-disabled Splunk-to-Splunk traffic, HTTP and
+  HTTPS HEC variants, ingress TLS termination, service-mesh and no-mesh
+  deployments, persistent-client connection behavior, and repeated/soak
+  campaigns. Splunk-managed bundle-push restarts remain a separate boundary:
+  Splunk Enterprise, not the Operator, chooses the next peer inside that
+  workflow. A supported Splunk Enterprise remote-serving readiness contract
+  is still required before OPS-011 or SHC-85 can be closed end to end.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -373,6 +383,30 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
 - [ ] Complete release readiness, rollback rehearsal, and support enablement.
 
 ## Surprises & Discoveries
+
+- (2026-07-30 UTC) Restarting the Operator during the persisted indexer
+  `Decommissioning` stage produced about a 58-second gap before the replacement
+  controller's first relevant lifecycle log. The CR retained the operation
+  identity and stage throughout that gap, the one withdrawn peer remained the
+  only unavailable target, and the replacement controller resumed by waiting
+  for that peer rather than repeating decommission or selecting another
+  ordinal. Durable CR status, rather than controller process memory, is the
+  recovery boundary for this tested path.
+
+- (2026-07-30 UTC) The replacement Operator logged one transient License
+  Manager headless-Service DNS failure in the qualification namespace during
+  startup and many Cluster Manager connection failures for a different
+  retained test namespace. The target error did not recur, and all workload
+  and Splunk health checks passed. Qualification log audits must scope by
+  namespace, controller, message, and time; a process-wide ERROR count alone
+  can mix unrelated fixtures and cannot establish lifecycle failure.
+
+- (2026-07-30 UTC) A fresh workload run can receive a valid aggregate search
+  result with `count=0` before the first accepted HEC event is searchable. The
+  current monitor classifies that response as a search failure because
+  `min/max` are absent, even though the HTTP request succeeded. Final exact
+  completeness remains authoritative for delivered data, while request
+  transport failure and result freshness must be reported separately.
 
 - (2026-07-29 UTC) Omitting `volumeMode` from a generic ephemeral
   `volumeClaimTemplate` caused a render/observe loop. Kubernetes defaulted the
@@ -922,6 +956,26 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
 
 ## Decision Log
 
+- Decision: qualify controller restart by interrupting an already-persisted
+  indexer `Decommissioning` operation, not by restarting before target
+  ownership exists or after replacement has already been authorized.
+  Rationale: this is the highest-risk boundary for duplicate decommission,
+  second-target authorization, or loss of target identity. Acceptance requires
+  the same operation ID, target Pod UID, source/desired revisions, and
+  decommission timestamp after restart, exactly one decommission Event for
+  the target, and previous-peer remote serving recovery before the next
+  ordinal.
+  Date: 2026-07-30 UTC.
+
+- Decision: preserve valid empty aggregate search responses as a distinct
+  freshness/harness observation rather than rewriting them as transport
+  success or service outage.
+  Rationale: an HTTP-successful `count=0` response proves the request reached
+  Splunk but not that a just-accepted event is searchable. Final exact
+  completeness and a separate stable post-roll run provide the delivery and
+  service evidence without hiding the transient result.
+  Date: 2026-07-30 UTC.
+
 - Decision: an established SHC must not withdraw every Kubernetes traffic
   endpoint solely because captain observation is transiently unavailable
   during a Splunk-managed rolling restart.
@@ -1227,6 +1281,16 @@ passed. The StatefulSet never advanced more than one planned Search Head at a
   completed a captain-safe `2 -> 1 -> 0` rollout with every persistent Splunk
   GUID preserved. The complete monitor recorded 187 successful searches,
   zero failures, and a final 369-second stability gate.
+  SHC-85 additionally resumed an indexer rollout after deleting the Operator
+  during the persisted ordinal-3 `Decommissioning` stage. The replacement
+  controller retained the exact operation and target, completed the same
+  target before authorizing ordinal 2, and finished `3 -> 2 -> 1 -> 0` with
+  maximum unavailability one. The principal and stable workload records
+  completed 100/100 and 30/30 exact events with zero HEC or search failures;
+  the overlapping record completed 80/80 exactly with one explicitly
+  classified valid-empty initial search result. Final Splunk health, Pod
+  revisions, endpoint publication, Ansible recaps, and KV Store log checks
+  all passed.
 
 This is not production-readiness evidence. Forced deletion and node loss,
 additional storage providers and scheduling causes, network and TLS variants,
@@ -2113,3 +2177,15 @@ audit item rather than extending SHC-81 without qualification.
 baseline `079e26233267`. The branch begins with source tracing and controlled
 reproduction; this record deliberately makes no implementation,
 qualification, or default-policy claim.
+
+2026-07-30 UTC: Recorded SHC-85 controller-restart qualification on isolated
+branch `codex/shc-85-controller-restart-qualification`. Deleted the Operator
+at the persisted ordinal-3 `Decommissioning` stage, verified exact operation
+and target continuity in the replacement controller, observed exactly one
+decommission Event for that target, and completed the full `3 -> 2 -> 1 -> 0`
+roll with previous-peer remote serving recovery before each next target.
+Recorded 100/100 and 30/30 zero-failure exact workload runs, the transparent
+valid-empty classification in the overlapping 80/80 run, immutable runtime
+and Operator provenance, final RF/SF/all-searchable/no-fixup health, and the
+remaining disconnection, contention, conflict, redundancy, and compatibility
+boundaries.

@@ -105,6 +105,86 @@ lifecycle reported `Completed`. Qualification therefore used the per-Pod
 revision labels, Pod UIDs, durable CR stage, and serving/cluster observations
 rather than treating StatefulSet `currentRevision` alone as completion proof.
 
+## Operator restart recovery qualification
+
+A separate 2026-07-30 UTC campaign tested the durable controller boundary on
+branch `codex/shc-85-controller-restart-qualification`. It reused the same
+pinned Operator source and image, official Splunk runtime, EKS cluster,
+namespace, and four-peer RF3/SF2 topology described above. A harmless Pod
+annotation created desired StatefulSet revision
+`splunk-shc82-idxc-indexer-64d4d7b6d4`.
+
+The Operator selected ordinal 3, persisted operation
+`5ef37b13-b3a0-4507-9ee6-e24ab3ecd884:splunk-shc82-idxc-indexer-64d4d7b6d4:1785428315376697503`,
+withdrew only that Pod from the indexer Service, and reached durable stage
+`Decommissioning`. At `2026-07-30T16:18:50Z`, the Operator Pod
+`splunk-operator-controller-manager-9f8dfdd4b-l77lf`, UID
+`b66e3ae4-9f2f-4695-880c-5470985381a2`, was deleted. Its replacement,
+`splunk-operator-controller-manager-9f8dfdd4b-6sj2n`, UID
+`ed0cf975-b0be-494d-8f41-b089101867f7`, became Ready with zero container
+restarts.
+
+After controller startup and leader/cache recovery, the replacement controller
+read the same operation ID, target Pod, target UID, source revision, desired
+revision, and `decommissionRequestedAt` value from IndexerCluster status. Its
+first relevant lifecycle logs at `16:19:48Z` continued the already-withdrawn
+ordinal 3 and waited for that peer to become Down. It did not select another
+ordinal or issue a second ordinal-3 decommission Event. The single
+`IndexerDecommissionRequested` Event for ordinal 3 remained timestamped
+`16:18:47Z`.
+
+The recovered controller then completed the entire roll in order
+`3 -> 2 -> 1 -> 0`. Before each next target it observed the previous
+replacement as Kubernetes Ready, Cluster Manager Up/searchable, published in
+the EndpointSlice, and remotely serving. At most one indexer was withdrawn
+from the client Service at a time. The final Pod UIDs were:
+
+- ordinal 0: `9ff8e018-b35f-474d-a0c0-90ad9f00490a`;
+- ordinal 1: `1cd55acb-8568-46ff-8caf-9ed2e306af1d`;
+- ordinal 2: `18e63db7-cb7b-4307-b21a-06573e8f5b73`; and
+- ordinal 3: `c4e3b3d3-4241-4e4f-b835-f716c10ac3a4`.
+
+Every final indexer used revision
+`splunk-shc82-idxc-indexer-64d4d7b6d4` and runtime digest
+`sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`,
+was Ready with zero container restarts, and completed Ansible with
+`ok=111`, `failed=0`. No replacement emitted
+`Active KVStore version upgrade precheck FAILED`. The final Cluster Manager
+check reported RF met, SF met, all data searchable, all peers Up and
+searchable, no fixups, and readiness for a searchable rolling restart. The
+four persistent peer GUIDs remained unchanged.
+
+Three workload records covered failure injection, the complete roll, and
+stable recovery:
+
+| Run | Coverage | Result | Evidence SHA-256 |
+|---|---|---|---|
+| `official-844c593-controller-restart` | Controller deletion during ordinal-3 `Decommissioning`, recovery, and most of the four-peer roll | 100 submissions, zero HEC failures, zero search failures, final `count=100`, `min=1`, `max=100`, `distinct=100` | `46760971e2a3f31a04b837db2fc655a7146926b351ff2ee3f69c949a54cb8814` |
+| `official-844c593-controller-restart-final` | Overlapping coverage through ordinal 0 and final convergence | 80 submissions, zero HEC failures, final `count=80`, `min=1`, `max=80`, `distinct=80`; one valid initial `count=0` result was classified as a search failure because the fresh result omitted `min/max` | `7872034182cacc7be9df2b67a7612e515ea44b6c3daa78e720131007bc0d8059` |
+| `official-844c593-controller-restart-stable` | Stable post-roll service | 30 submissions, zero HEC failures, zero search failures, final `count=30`, `min=1`, `max=30`, `distinct=30` | `bdd63879007c265ca2a1b9268ee98a6cdcee7f6fa25233aea89ea4c162838e1e` |
+
+The continuation record's first search returned a valid Splunk response with
+`count=0` immediately after accepting its first event. The monitor calls that
+a search failure because its aggregate parser requires `min`, `max`, and
+`distinct`; it was not an HTTP or Service request failure. The final exact
+result and the independent post-roll record preserve this distinction rather
+than rewriting the raw evidence.
+
+The replacement Operator emitted no panic. Its target namespace contained one
+transient License Manager DNS lookup failure at `16:19:22Z` during controller
+startup; that error did not recur and did not affect License Manager, indexer,
+SHC, ingest, or search health. The log also contained repeated errors for an
+unavailable Cluster Manager in a different retained test namespace. Those
+entries are not evidence from this qualification namespace and were excluded
+from the lifecycle result.
+
+This campaign qualifies controller-Pod replacement during one persisted
+Operator-owned indexer `Decommissioning` operation. It does not qualify a
+long-duration API-server disconnection, leader failover with concurrent
+controllers, conflicting desired-state changes, insufficient redundancy,
+other network/TLS/HEC configurations, or Splunk-managed App Framework
+next-peer selection.
+
 ## What the accepted searchable restart did
 
 The Cluster Manager validated the bundle on all four peers and logged:
