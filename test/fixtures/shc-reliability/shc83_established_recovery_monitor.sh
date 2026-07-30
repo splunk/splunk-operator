@@ -8,9 +8,7 @@ target_pod="${SHC83_TARGET_POD:?SHC83_TARGET_POD is required}"
 samples="${SHC83_SAMPLES:-360}"
 interval_seconds="${SHC83_INTERVAL_SECONDS:-5}"
 stable_samples_required="${SHC83_STABLE_SAMPLES:-12}"
-evidence_file="${
-  SHC83_EVIDENCE_FILE:-build/_test/shc83/established-recovery.tsv
-}"
+evidence_file="${SHC83_EVIDENCE_FILE:-build/_test/shc83/established-recovery.tsv}"
 pod_prefix="splunk-${cr_name}-search-head-"
 service_name="splunk-${cr_name}-search-head-service"
 condition_type="enterprise.splunk.com/shc-serving"
