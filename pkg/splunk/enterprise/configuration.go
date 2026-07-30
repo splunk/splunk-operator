@@ -789,6 +789,10 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
+	// splunk/image-tag is an internal marker used to trigger reconciliation of
+	// dependent resources. It is not Pod configuration; propagating it into the
+	// template creates a new StatefulSet revision and an unnecessary Pod recycle.
+	delete(statefulSet.Spec.Template.Annotations, splunkImageTagAnnotation)
 	if len(spec.PodAnnotations) > 0 {
 		if statefulSet.Spec.Template.Annotations == nil {
 			statefulSet.Spec.Template.Annotations = make(map[string]string)

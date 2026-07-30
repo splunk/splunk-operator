@@ -59,6 +59,8 @@ import (
 
 var operatorResourceTracker *globalResourceTracker = nil
 
+const splunkImageTagAnnotation = "splunk/image-tag"
+
 // initialize operator level context
 func init() {
 	initGlobalResourceTracker()
@@ -2623,14 +2625,14 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
-	if _, ok := annotations["splunk/image-tag"]; ok {
-		if annotations["splunk/image-tag"] == image {
+	if _, ok := annotations[splunkImageTagAnnotation]; ok {
+		if annotations[splunkImageTagAnnotation] == image {
 			return nil
 		}
 	}
 
 	// create/update the checkUpdateImage annotation field
-	annotations["splunk/image-tag"] = image
+	annotations[splunkImageTagAnnotation] = image
 
 	cr.SetAnnotations(annotations)
 	err := c.Update(ctx, cr)

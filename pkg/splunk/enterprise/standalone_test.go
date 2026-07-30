@@ -495,6 +495,46 @@ func TestGetStandaloneStatefulSetPodAnnotationsPreserveIstioDefaults(t *testing.
 	}
 }
 
+func TestGetStandaloneStatefulSetDoesNotPropagateInternalImageTagAnnotation(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+			Annotations: map[string]string{
+				splunkImageTagAnnotation:      "internal-reconcile-marker",
+				"custom.splunk.com/preserved": "from-parent",
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("Failed to create namespace scoped object: %v", err)
+	}
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() returned error: %v", err)
+	}
+
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	if err != nil {
+		t.Fatalf("getStandaloneStatefulSet() returned error: %v", err)
+	}
+
+	annotations := ss.Spec.Template.GetAnnotations()
+	if _, ok := annotations[splunkImageTagAnnotation]; ok {
+		t.Errorf("internal annotation %q must not be copied to the Pod template", splunkImageTagAnnotation)
+	}
+	if got := annotations["custom.splunk.com/preserved"]; got != "from-parent" {
+		t.Errorf("custom parent annotation = %q; want %q", got, "from-parent")
+	}
+	if got := cr.GetAnnotations()[splunkImageTagAnnotation]; got != "internal-reconcile-marker" {
+		t.Errorf("CR reconcile marker = %q; want %q", got, "internal-reconcile-marker")
+	}
+}
+
 func TestStandaloneSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Unset the SPLUNK_GENERAL_TERMS environment variable
 	os.Unsetenv("SPLUNK_GENERAL_TERMS")
