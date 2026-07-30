@@ -255,11 +255,25 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 		// revalidating safety or authorizing replacement.
 		return enterpriseApi.PhaseUpdating, nil
 	}
+	onDeleteReplacementObserved := false
+	if err == nil && searchHeadClusterLifecycleEnabled() {
+		var replacementObservationErr error
+		onDeleteReplacementObserved, replacementObservationErr =
+			mgr.onDeleteReplacementObserved(
+				ctx,
+				statefulSet,
+				mgr.cr.Status.LifecycleOperation,
+			)
+		if replacementObservationErr != nil {
+			return enterpriseApi.PhaseError, replacementObservationErr
+		}
+	}
 	if err == nil &&
 		searchHeadClusterLifecycleEnabled() &&
 		lifecycleRecoveryActiveForStatefulSet(
 			statefulSet,
 			mgr.cr.Status.LifecycleOperation,
+			onDeleteReplacementObserved,
 		) {
 		stageBeforeRecovery := mgr.cr.Status.LifecycleOperation.Stage
 		recoveryComplete, lifecycleErr := mgr.resumeLifecycleRecovery(

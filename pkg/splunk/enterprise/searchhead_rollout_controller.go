@@ -314,12 +314,26 @@ func (mgr *searchHeadClusterPodManager) updateRollingStatefulSetPods(
 func lifecycleRecoveryActiveForStatefulSet(
 	statefulSet *appsv1.StatefulSet,
 	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	onDeleteReplacementObserved bool,
 ) bool {
 	if !lifecycleRecoveryActive(operation) {
 		return false
 	}
-	if statefulSet == nil ||
-		statefulSet.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType {
+	if statefulSet == nil {
+		return true
+	}
+	if statefulSet.Spec.UpdateStrategy.Type !=
+		appsv1.RollingUpdateStatefulSetStrategyType {
+		if operation.Intent ==
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+			operation.Stage ==
+				enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement {
+			// OnDelete does not encode authorization in StatefulSet state.
+			// Recovery starts only after the original Pod is observed deleting,
+			// absent, or replaced. Until then the Operator-owned delete path
+			// must remain able to consume the durable authorization barrier.
+			return onDeleteReplacementObserved
+		}
 		return true
 	}
 	if operation.Intent ==
@@ -360,6 +374,44 @@ func lifecycleRecoveryActiveForStatefulSet(
 
 	return *statefulSet.Spec.UpdateStrategy.RollingUpdate.Partition ==
 		*operation.TargetOrdinal
+}
+
+func (mgr *searchHeadClusterPodManager) onDeleteReplacementObserved(
+	ctx context.Context,
+	statefulSet *appsv1.StatefulSet,
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+) (bool, error) {
+	if statefulSet == nil ||
+		statefulSet.Spec.UpdateStrategy.Type !=
+			appsv1.OnDeleteStatefulSetStrategyType ||
+		operation == nil ||
+		operation.Intent !=
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate ||
+		operation.Stage !=
+			enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement ||
+		operation.ReplacementAuthorizedAt == nil ||
+		operation.TargetPod == "" ||
+		operation.TargetPodUID == "" {
+		return false, nil
+	}
+
+	pod := &corev1.Pod{}
+	err := mgr.c.Get(ctx, types.NamespacedName{
+		Namespace: mgr.cr.GetNamespace(),
+		Name:      operation.TargetPod,
+	}, pod)
+	if k8serrors.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf(
+			"observe OnDelete replacement for Search Head Pod %s: %w",
+			operation.TargetPod,
+			err,
+		)
+	}
+	return pod.DeletionTimestamp != nil ||
+		string(pod.UID) != operation.TargetPodUID, nil
 }
 
 func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeMemberCompletion(
