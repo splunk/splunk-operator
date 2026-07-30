@@ -314,6 +314,14 @@ func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, r
 		result = true
 	}
 
+	if current.PublishNotReadyAddresses != revised.PublishNotReadyAddresses {
+		scopedLog.InfoContext(ctx, "publish Not Ready Addresses differs",
+			"current", current.PublishNotReadyAddresses,
+			"revised", revised.PublishNotReadyAddresses)
+		current.PublishNotReadyAddresses = revised.PublishNotReadyAddresses
+		result = true
+	}
+
 	if splcommon.CompareSortedStrings(current.ExternalIPs, revised.ExternalIPs) {
 		scopedLog.InfoContext(ctx, "external IPs differs",
 			"current", current.ExternalIPs,

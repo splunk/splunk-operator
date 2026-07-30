@@ -255,8 +255,14 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(service.ObjectMeta.GetObjectMeta(), cr.GetObjectMeta())
 
-	if instanceType == SplunkDeployer || (instanceType == SplunkSearchHead && isHeadless) {
-		// required for SHC bootstrap process; use services with heads when readiness is desired
+	if instanceType == SplunkDeployer ||
+		(instanceType == SplunkSearchHead && isHeadless) ||
+		(instanceType == SplunkIndexer &&
+			isHeadless &&
+			indexerClusterLifecycleEnabled()) {
+		// Keep internal identity and management DNS available independently
+		// from traffic readiness. Client-facing Services retain the default
+		// behavior and exclude unready Pods.
 		service.Spec.PublishNotReadyAddresses = true
 	}
 

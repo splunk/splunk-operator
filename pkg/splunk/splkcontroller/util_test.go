@@ -297,6 +297,20 @@ func TestMergeServiceSpecUpdates(t *testing.T) {
 	revised.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
 	matcher = func() bool { return current.ExternalTrafficPolicy == revised.ExternalTrafficPolicy }
 	svcUpdateTester("Service ExternalTrafficPolicy changed")
+
+	revised.PublishNotReadyAddresses = true
+	matcher = func() bool {
+		return current.PublishNotReadyAddresses ==
+			revised.PublishNotReadyAddresses
+	}
+	svcUpdateTester("Service PublishNotReadyAddresses enabled")
+
+	revised.PublishNotReadyAddresses = false
+	matcher = func() bool {
+		return current.PublishNotReadyAddresses ==
+			revised.PublishNotReadyAddresses
+	}
+	svcUpdateTester("Service PublishNotReadyAddresses disabled")
 }
 
 func TestMergeServiceSpecUpdatesEmptyRevisedType(t *testing.T) {

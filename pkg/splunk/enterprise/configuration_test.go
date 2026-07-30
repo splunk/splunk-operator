@@ -264,6 +264,79 @@ func TestGetSplunkService(t *testing.T) {
 	test(SplunkSearchHead, true, loadFixture(t, "splunk_search_head_headless.json"))
 }
 
+func TestIndexerLifecyclePublishesNotReadyControlAddresses(t *testing.T) {
+	oldPodLifecycle :=
+		config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle)
+	oldIndexerLifecycle :=
+		config.DefaultMutableFeatureGate.Enabled(config.IndexerClusterLifecycle)
+	t.Cleanup(func() {
+		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
+			map[string]bool{
+				string(config.SplunkPodLifecycle):      oldPodLifecycle,
+				string(config.IndexerClusterLifecycle): oldIndexerLifecycle,
+			},
+		))
+	})
+
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idxc",
+			Namespace: "test",
+		},
+	}
+	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
+		map[string]bool{
+			string(config.SplunkPodLifecycle):      true,
+			string(config.IndexerClusterLifecycle): true,
+		},
+	))
+
+	headless := getSplunkService(
+		context.Background(),
+		cr,
+		&cr.Spec.CommonSplunkSpec,
+		SplunkIndexer,
+		true,
+	)
+	require.True(
+		t,
+		headless.Spec.PublishNotReadyAddresses,
+		"the lifecycle control path must retain exact Pod DNS during readiness withdrawal",
+	)
+
+	clientService := getSplunkService(
+		context.Background(),
+		cr,
+		&cr.Spec.CommonSplunkSpec,
+		SplunkIndexer,
+		false,
+	)
+	require.False(
+		t,
+		clientService.Spec.PublishNotReadyAddresses,
+		"the client-facing Service must exclude an unready Indexer",
+	)
+
+	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
+		map[string]bool{
+			string(config.SplunkPodLifecycle):      true,
+			string(config.IndexerClusterLifecycle): false,
+		},
+	))
+	headlessWithoutLifecycle := getSplunkService(
+		context.Background(),
+		cr,
+		&cr.Spec.CommonSplunkSpec,
+		SplunkIndexer,
+		true,
+	)
+	require.False(
+		t,
+		headlessWithoutLifecycle.Spec.PublishNotReadyAddresses,
+		"the disabled Alpha gate must retain the existing Service contract",
+	)
+}
+
 func TestGetSplunkDefaults(t *testing.T) {
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
