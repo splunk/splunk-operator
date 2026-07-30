@@ -292,12 +292,33 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Service search was interrupted after it was admitted on the captain selected
   for the next restart. Therefore the cluster-wide readiness correction is
   qualified, but prompt target withdrawal and active-search drain remain open.
+  The indexer-side qualification is recorded in
+  [SHC82AppFrameworkIndexerQualification.md](SHC82AppFrameworkIndexerQualification.md).
+  On a supported four-peer RF3/SF2 topology, searchable App Framework restarts
+  preserved Splunk RF/SF/searchability health but the existing
+  management-oriented readiness allowed 7 of 55 HEC submissions to fail.
+  Adding HEC health with the default readiness timing reduced that to 1 of 55.
+  A 2-second, failure-threshold-one experiment completed 55 of 55 submissions
+  and recovered all 55 sequence numbers exactly once, but peer-level
+  observation still found two samples with an unavailable HEC peer advertised
+  and one sample with only two remotely serving HEC peers. The fast-probe
+  StatefulSet revision also exposed an Operator deadlock: intentional serving
+  withdrawal reduced `readyReplicas`, and the generic update path waited
+  instead of deleting the already-decommissioned target. Probe tuning is
+  therefore mitigation evidence, not the final design. Configuration-aware
+  serving readiness, durable owned-target progression, previous-peer
+  service-recovery gating, client retry/acknowledgment, and the recorded
+  negative cases remain open.
 - [ ] Define and qualify SHC-83 so Service readiness cannot succeed before
   image-owned SHC initialization, synchronization, and internal Splunk
   restarts have completed.
 - [ ] Define and qualify SHC-84 so first-start and supported-upgrade work has
   an explicit startup budget while every kubelet-initiated restart reaches one
   prompt, observable TERM-to-container-exit path.
+- [ ] Define and qualify SHC-85 so indexer serving readiness can deliberately
+  withdraw the one owned lifecycle target without blocking controller
+  progress, and so the next peer is not authorized until the previous peer is
+  both `Up/searchable` and remotely serving its configured traffic path.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was

@@ -263,7 +263,21 @@ StatefulSet template.
 | OPS-008 | P1 | Unsupported simultaneous-restart configuration | Admission or controller blocks rolling treatment |
 | OPS-009 | P2 | TLS, ingress termination, and optional service mesh | No mesh is required; local readiness follows Splunkd TLS rather than ingress TLS, bypasses configured HTTP proxies, and management traffic remains valid in each qualified mesh mode |
 | OPS-010 | P2 | Private registry/air gap | Registry-qualified and digest-pinned image references plus all pull secrets survive rendering and rollout tracking unchanged; lifecycle and diagnostics add no helper image or undeclared external service |
-| OPS-011 | P1 | App Framework deploys an app whose bundle requires Search Head or indexer restart | The effective Splunk restart policy is observed and recorded; SHC and indexer restart work is serialized with every other planned disruption; insufficient redundancy fails closed; continuous ingest and representative real-time, historical, and scheduled searches prove that supported app deployment does not create a customer-visible search outage or silently incomplete result |
+| OPS-011 | P1 | App Framework deploys an app whose bundle requires Search Head or indexer restart | The effective Splunk restart policy is observed and recorded; SHC and indexer restart work is serialized with every other planned disruption; insufficient redundancy fails closed; serving withdrawal is role-, protocol-, and configuration-aware; previous-peer Splunk and network-path recovery precedes the next target; continuous acknowledged ingest and representative real-time, historical, and scheduled searches prove that supported app deployment does not create a customer-visible search outage or silently incomplete result |
+
+### OPS-011 indexer qualification evidence
+
+The accepted 2026-07-30 EKS evidence and remaining gates are recorded in
+[SHC82AppFrameworkIndexerQualification.md](SHC82AppFrameworkIndexerQualification.md).
+On four peers with RF3/SF2, `searchable=1`, `force=0`, and successful RF/SF/all
+searchable preflight, existing readiness still allowed 7 of 55 HEC
+submissions to fail. An HEC-aware default-timing gate reduced that to 1 of 55.
+A faster experimental gate completed 55 of 55 with exact eventual
+completeness, while a peer-level monitor still observed asynchronous
+non-serving/advertised and next-peer/recovery boundaries. The same experiment
+exposed a controller deadlock when intentional serving withdrawal made the
+target container unready during an `OnDelete` template update. These are
+partial qualification results, not an OPS-011 pass.
 
 ## Kubernetes disruption scenarios
 
