@@ -134,7 +134,7 @@ spec:
     initialDelaySeconds: 40
     timeoutSeconds: 30
     periodSeconds: 30
-    failureThreshold: 40
+    failureThreshold: 80
   livenessProbe:
     initialDelaySeconds: 60
     timeoutSeconds: 30
