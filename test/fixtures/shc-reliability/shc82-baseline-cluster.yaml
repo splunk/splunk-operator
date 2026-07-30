@@ -1,0 +1,148 @@
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: shc82
+  namespace: shc82-afw-baseline
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc-prestart-7951d69-ansible-9954434-splunk-10.6.0.0-d9be152689b7@sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547
+  imagePullPolicy: IfNotPresent
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 40
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+  terminationGracePeriodSeconds: 1200
+---
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: shc82
+  namespace: shc82-afw-baseline
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc-prestart-7951d69-ansible-9954434-splunk-10.6.0.0-d9be152689b7@sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547
+  imagePullPolicy: IfNotPresent
+  licenseManagerRef:
+    name: shc82
+  defaults: |-
+    splunk:
+      idxc:
+        replication_factor: 3
+        search_factor: 2
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 40
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+  terminationGracePeriodSeconds: 1200
+---
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: shc82-idxc
+  namespace: shc82-afw-baseline
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc-prestart-7951d69-ansible-9954434-splunk-10.6.0.0-d9be152689b7@sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547
+  imagePullPolicy: IfNotPresent
+  replicas: 3
+  clusterManagerRef:
+    name: shc82
+  licenseManagerRef:
+    name: shc82
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 40
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+  terminationGracePeriodSeconds: 1200
+---
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc82-shc
+  namespace: shc82-afw-baseline
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc-prestart-7951d69-ansible-9954434-splunk-10.6.0.0-d9be152689b7@sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547
+  imagePullPolicy: IfNotPresent
+  replicas: 3
+  clusterManagerRef:
+    name: shc82
+  licenseManagerRef:
+    name: shc82
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 40
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+  terminationGracePeriodSeconds: 1200
