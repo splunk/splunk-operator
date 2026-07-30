@@ -457,6 +457,15 @@ line as proof of replica loss, data unavailability, or root cause. Source,
 Splunk semantic, active-search, and end-to-end qualification work remains
 pending.
 
+2026-07-30 UTC: Corrected the SHC-82 qualification LicenseManager setup. The
+ClusterManager, IndexerCluster, SHC deployer, and all Search Heads already
+received the intended LicenseManager Service reference. The built-in trial
+license did not support remote-manager operation and caused repeated peer
+usage rejection. A Secret-backed development license with remote-manager
+capability removed that environmental failure while continuous SHC Service
+searches remained successful. This is partial qualification evidence only;
+the remaining App Framework availability and negative-case gates stay open.
+
 2026-07-29 UTC: Selected SHC-80 on
 `codex/shc-80-authorized-revision-recovery` from integrated feature baseline
 `9eecde5d68e9dc889bb2b2f1913420396e00cb21`. The bounded scope is safe

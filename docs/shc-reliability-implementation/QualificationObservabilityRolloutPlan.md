@@ -127,6 +127,15 @@ ownership.
   completeness. Repeat with an active Operator rollout and with replication or
   search factor intentionally unmet; both cases must block rather than start a
   conflicting or forced restart.
+  Partial evidence from 2026-07-30 confirms that the ClusterManager,
+  IndexerCluster, and SearchHeadCluster all referenced the same
+  LicenseManager, and every generated non-LicenseManager Pod received the
+  expected LicenseManager Service URL. The LicenseManager itself initially
+  used the built-in Enterprise trial license, which Splunk rejected for remote
+  manager operation. A Secret-backed, remote-manager-capable license removed
+  that qualification-environment error. The remaining App Framework
+  availability, completeness, conflict, and unhealthy-redundancy gates stay
+  open.
 - [ ] Qualify SHC-83 with an explicit startup-complete traffic-readiness
   contract across image-owned initialization, synchronization, and internal
   Splunk restarts.
@@ -1449,6 +1458,44 @@ qualification:
 - CR-first cleanup removed four Pods, eight PVCs, and all eight PVs before
   namespace deletion. No test SHC or PV remained; all three workers were
   Ready and schedulable, and EBS CSI finished at `2/2` Ready.
+
+2026-07-30 OPS-011/SHC-82 LicenseManager qualification correction:
+
+- the Operator documentation and v4 API establish two separate relationships:
+  `spec.volumes` plus `spec.licenseUrl` load the license into the
+  LicenseManager, while `spec.licenseManagerRef` on each managed tier points
+  that tier at the LicenseManager Service;
+- the active ClusterManager, IndexerCluster, and SearchHeadCluster already set
+  `spec.licenseManagerRef.name: shc82`. Generated Pod inspection confirmed
+  `SPLUNK_LICENSE_MASTER_URL=splunk-shc82-license-manager-service` on the
+  ClusterManager, all three indexers, the SHC deployer, and all three Search
+  Heads. The LicenseManager correctly did not reference itself;
+- the LicenseManager had no external `licenseUrl` or volume and loaded
+  `enttrial.lic`. Its `splunkd.log` repeatedly reported
+  `This license does not support being a remote manager` for peer usage
+  requests. This was a license-capability failure, not a missing
+  `licenseManagerRef`, Service-routing failure, or authentication failure, and
+  it explains the repeated license-peer retry interval seen during formation;
+- a non-committed Kubernetes Secret named `shc82-license` was created from the
+  development-only license already present in the Splunk source workspace;
+  that license advertises remote-manager capability. The LicenseManager
+  mounted the Secret at `/mnt/licenses`, loaded
+  `/mnt/licenses/enterprise.lic`, and Ansible recorded a successful license
+  apply with zero failed tasks;
+- the replacement LicenseManager Pod was created at `06:50:58Z`, applied the
+  license at `06:51:53Z`, completed its internal restart and play at
+  `06:52:35Z`, and reached Kubernetes Ready at `06:52:44Z`. The last
+  remote-manager rejection remained at `06:42:15Z`, before this replacement;
+  no new rejection appeared after the licensed instance started;
+- throughout the LicenseManager replacement, all three Search Heads and all
+  three Service endpoints remained available, container restart count stayed
+  zero, and every monitored Service search succeeded. The SHC status
+  temporarily reported `Error` while its referenced LicenseManager was
+  unavailable and returned to `Ready` at `06:54:11Z`; and
+- the reusable baseline fixture now declares the Secret-backed LicenseManager
+  volume and `licenseUrl`. The deterministic `make shc82-license-secret`
+  target creates or updates the Secret from a caller-supplied file without
+  storing license contents in Git.
 
 ## Interfaces and Dependencies
 

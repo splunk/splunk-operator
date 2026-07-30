@@ -8,6 +8,11 @@ metadata:
 spec:
   image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc-prestart-7951d69-ansible-9954434-splunk-10.6.0.0-d9be152689b7@sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547
   imagePullPolicy: IfNotPresent
+  volumes:
+    - name: licenses
+      secret:
+        secretName: shc82-license
+  licenseUrl: /mnt/licenses/enterprise.lic
   etcVolumeStorageConfig:
     storageClassName: gp3
     storageCapacity: 10Gi

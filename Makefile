@@ -147,14 +147,25 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 
 SHC82_APP_SOURCE_DIR ?= test/fixtures/shc-reliability/shc82_restart_required
 SHC82_APP_OUTPUT ?= build/_test/shc82/shc82_restart_required-1.0.0.tgz
+SHC82_NAMESPACE ?= shc82-afw-baseline
+SHC82_LICENSE_FILE ?=
 
-.PHONY: shc82-app-package
+.PHONY: shc82-app-package shc82-license-secret
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
 	@mkdir -p "$(dir $(SHC82_APP_OUTPUT))"
 	tar --sort=name --mtime="@0" --owner=0 --group=0 --numeric-owner \
 		-cf - -C "$(dir $(SHC82_APP_SOURCE_DIR))" "$(notdir $(SHC82_APP_SOURCE_DIR))" | \
 		gzip -n > "$(SHC82_APP_OUTPUT)"
 	sha256sum "$(SHC82_APP_OUTPUT)"
+
+shc82-license-secret: ## Create or update the SHC-82 LicenseManager license Secret.
+	@test -n "$(SHC82_LICENSE_FILE)" || \
+		{ echo "SHC82_LICENSE_FILE must point to a valid remote-manager-capable Splunk license"; exit 1; }
+	@test -f "$(SHC82_LICENSE_FILE)" || \
+		{ echo "license file not found: $(SHC82_LICENSE_FILE)"; exit 1; }
+	kubectl -n "$(SHC82_NAMESPACE)" create secret generic "shc82-license" \
+		--from-file=enterprise.lic="$(SHC82_LICENSE_FILE)" \
+		--dry-run=client -o yaml | kubectl apply -f -
 
 
 ##@ Documentation
