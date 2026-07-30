@@ -159,7 +159,9 @@ ownership.
   Operator restart.
 - [ ] Qualify SHC-84 with measured first-start and upgrade startup budgets,
   kubelet probe-triggered restart behavior, and bounded TERM-to-container-exit
-  evidence for every supported runtime.
+  evidence for every supported runtime. The isolated campaign is selected on
+  `codex/shc-84-startup-term-qualification`; current-v4 default measurement
+  precedes any policy change.
 - [ ] Qualify SHC-86 with direct namespace-first deletion of a referenced
   LicenseManager, no post-termination create, automatic finalizer removal, and
   exact owned-resource cleanup.
@@ -1738,3 +1740,11 @@ clearing a LicenseManager finalizer once its remaining resources were verified
 absent. The pending qualification must reproduce namespace-first deletion,
 prove no Secret creation after termination begins, and complete cleanup
 without manual finalizer intervention.
+
+2026-07-30 UTC: Selected SHC-84 on
+`codex/shc-84-startup-term-qualification`. Operator source begins at qualified
+SHC-83 commit `163d5d646`; Docker-Splunk begins at integrated runtime commit
+`f063cfd3936c42428c0775783b8415c2fcfbb3ef`. The campaign records rendered
+probe and grace values, actual startup and persistent-restart durations,
+kubelet probe-failure and killing Events, runtime shutdown owner/result
+artifacts, and container exit timing before recommending a bounded default.

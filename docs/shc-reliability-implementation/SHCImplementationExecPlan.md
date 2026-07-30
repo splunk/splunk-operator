@@ -359,7 +359,9 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   recovery, and controller-restart EKS campaigns.
 - [ ] Define and qualify SHC-84 so first-start and supported-upgrade work has
   an explicit startup budget while every kubelet-initiated restart reaches one
-  prompt, observable TERM-to-container-exit path.
+  prompt, observable TERM-to-container-exit path. Work is selected on
+  `codex/shc-84-startup-term-qualification`; measurement precedes any default
+  or policy change.
 - [ ] Define and qualify SHC-86 so namespace-first deletion of a referenced
   LicenseManager performs no create after termination begins, removes its
   finalizer without manual intervention, and cleans its owned resources.
@@ -2265,3 +2267,12 @@ namespace-finalization requirement after SHC-83 teardown reproduced a Secret
 create attempt in a terminating namespace and required finalizer clearing
 after owned resources were absent. No implementation or qualification is
 claimed.
+
+2026-07-30 UTC: Selected SHC-84 on
+`codex/shc-84-startup-term-qualification` from qualified SHC-83 source
+`163d5d646`, with Docker-Splunk based on integrated runtime source
+`f063cfd3936c42428c0775783b8415c2fcfbb3ef`. The first campaign measures the
+rendered current-v4 startup/liveness probes and Pod termination grace, actual
+first-start and persistent-restart durations, kubelet probe Events, exact
+runtime shutdown ownership, and TERM-to-container-exit time. No threshold or
+production-policy decision is claimed before that evidence.
