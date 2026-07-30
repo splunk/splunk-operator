@@ -106,3 +106,28 @@ phase, initial-formation stage, `lastStableReplicas`, Search Head UIDs, restart
 counts, and EndpointSlice targets. All three established endpoints and Search
 Head UIDs must remain unchanged while the replacement controller resumes from
 durable `Complete` state.
+
+## SHC-84 startup and termination budgets
+
+`shc84-startup-term-baseline.yaml` keeps the Search Head probe and Pod
+termination fields omitted so the campaign measures the rendered v4 defaults.
+The LicenseManager uses an explicit extended startup budget so a dependency
+does not obscure the Search Head result.
+
+```bash
+kubectl create namespace shc84-startup-term
+make shc84-license-secret \
+  SHC84_LICENSE_FILE=/absolute/path/to/enterprise.lic
+SHC84_EVIDENCE_FILE=build/_test/shc84/default-startup.tsv \
+test/fixtures/shc-reliability/shc84_probe_budget_monitor.sh &
+kubectl apply -f \
+  test/fixtures/shc-reliability/shc84-startup-term-baseline.yaml
+wait
+```
+
+The monitor records the rendered startup and liveness probes, Pod-level grace,
+container start and termination states, restart counts, kubelet `Unhealthy`
+and `Killing` Events, client endpoints, and the runtime shutdown owner/result
+artifacts. A stable result does not by itself accept the defaults: the evidence
+must be compared with first-start and supported-upgrade durations, and any
+probe-triggered restart must prove bounded, exact-once shutdown.
