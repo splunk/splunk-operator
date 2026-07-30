@@ -283,6 +283,15 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   package did not restart indexers: every peer reported
   `restart_required=0`, so the indexer restart-required and negative cases
   remain open.
+  A follow-up `1.0.2` run used source `0fc1bcf31` and immutable Operator
+  digest
+  `sha256:c55ebe692659300121eef74f2e6897dbc27bdbae15bcfe40c0ae8c3566c02690`.
+  It preserved at least two Search Head endpoints throughout the same internal
+  restart, accepted all 120 HEC events, recovered every sequence exactly once,
+  kept all Pod UIDs unchanged, and recorded zero container restarts. One
+  Service search was interrupted after it was admitted on the captain selected
+  for the next restart. Therefore the cluster-wide readiness correction is
+  qualified, but prompt target withdrawal and active-search drain remain open.
 - [ ] Define and qualify SHC-83 so Service readiness cannot succeed before
   image-owned SHC initialization, synchronization, and internal Splunk
   restarts have completed.
@@ -840,6 +849,20 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   not claim an indexer rolling restart until a configuration that Splunk
   actually classifies as restart-required is selected and observed.
 
+- (2026-07-30 UTC) The first serving-gate correction was qualified with
+  App Framework version `1.0.2`. It eliminated the zero-endpoint interval:
+  the Service retained at least two endpoints throughout the captain
+  transition. The only failed search began on ordinal zero at
+  `08:00:11.941Z`, after Splunk logged `Requesting my own restart` at
+  `08:00:08.429Z`. Splunk then terminated the streamed dispatch at
+  `08:00:13.779Z` with `Local side shutting down`. The request did not fail on
+  a recovered member; it was interrupted by the next internal shutdown while
+  that member was still a Kubernetes endpoint. The member endpoint exposes
+  `restart_state`, and the captain endpoint exposes the authoritative peer
+  status used by Splunk to select a restart target. `adhoc_searchhead` is not
+  a readiness flag: Splunk's `server.conf` contract defines it as the static
+  role that prevents scheduled jobs on a dedicated ad-hoc member.
+
 ## Decision Log
 
 - Decision: an established SHC must not withdraw every Kubernetes traffic
@@ -851,6 +874,17 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   fail closed, so the implementation must use durable evidence that the
   current replica topology previously reached stable Ready state rather than
   globally ignoring captain readiness.
+  Date: 2026-07-30 UTC.
+
+- Decision: target withdrawal for a Splunk-managed SHC restart must use
+  Splunk's restart intent, not management-port reachability or
+  `adhoc_searchhead`.
+  Rationale: the five-second, three-failure container probe remained Ready
+  during short internal restarts, and the captain admitted a search after it
+  had already selected itself for restart. Splunk source exposes local
+  `restart_state` and the captain's authoritative member status before the
+  shutdown path; the Operator must map those states to the Pod serving gate
+  while keeping liveness independent.
   Date: 2026-07-30 UTC.
 
 - Decision: a qualification app is restart-required only for the topology

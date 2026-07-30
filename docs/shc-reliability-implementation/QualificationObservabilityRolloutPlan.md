@@ -141,6 +141,13 @@ ownership.
   on the indexers without a restart, so App Framework availability,
   indexer-restart, active-search, conflict, and unhealthy-redundancy gates stay
   open.
+  A `1.0.2` follow-up at source `0fc1bcf31` removed the zero-endpoint
+  captain-transition failure and retained at least two Search Head endpoints.
+  It again accepted and recovered all 120 numbered events exactly once, with
+  unchanged Pod UIDs and zero container restarts. One search was admitted on
+  the captain after Splunk selected it for restart and was terminated by
+  Splunk's internal shutdown, so target withdrawal and active-search drain are
+  not yet qualified.
 - [ ] Qualify SHC-83 with an explicit startup-complete traffic-readiness
   contract across image-owned initialization, synchronization, and internal
   Splunk restarts.
@@ -228,6 +235,19 @@ ownership.
   Consequence: the indexer-side SHC-82 gate remains untested; the qualification
   fixture must be replaced or extended with a configuration Splunk classifies
   as restart-required before any searchable-restart policy is evaluated.
+
+- Observation: source `0fc1bcf31` kept two or three Search Head endpoints
+  throughout the `1.0.2` internal restart, proving that transient captain
+  readiness must not globally withdraw healthy peers. The one interrupted
+  search was admitted on ordinal zero at `08:00:11.941Z`; Splunk had requested
+  its own restart at `08:00:08.429Z` and terminated the dispatch with
+  `Local side shutting down` at `08:00:13.779Z`.
+  Consequence: the next qualification layer must record exact EndpointSlice
+  target names, serving reasons, local `restart_state`, and captain-reported
+  member status. It must withdraw the selected target from traffic without
+  coupling that transition to container liveness. It must also exercise
+  Splunk's supported `rolling_restart=searchable` behavior before any product
+  default is proposed.
 
 - Observation: the compatibility variable named as a captain URL is also a
   bootstrap seed. Its name cannot be treated as proof of runtime captaincy.

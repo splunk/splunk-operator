@@ -56,7 +56,7 @@ without duplicating their full content.
 | SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | `96c16b49b`, `a59fc5103` | API-005, STS-003, OBS-002 | Source-qualified; EKS-qualified for omitted/defaulted generic-ephemeral `volumeMode`, stable StatefulSet generations and revisions, controller restart, six post-restart samples, HTTP 200 search on every member, and zero Pod replacement or restart |
 | SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | `d1f6e301d`, `744bfb096`, `9be744f06`, `0b9253f11` | STS-003, STS-008, STS-014, OBS-001 | Source-qualified and EKS-qualified for an authorized unschedulable replacement, superseding queued revision, durable last-known-good recovery across an Operator restart, complete queued rollout, dynamic captain transfer, 187 uninterrupted searches, and 369 seconds of final stability |
 | SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | `d053ff65b`, `33ff143d1`, `58437e3ad` | OPS-004, OBS-001, OBS-005 | Source-qualified and EKS-qualified for direct namespace deletion of a paused, healthy three-member SHC: no create after namespace termination, no post-finalization status write, declared PVC deletion completed, and no workload or PV remained |
-| SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | Harness branches through `codex/shc-82-appframework-completeness-harness` at `2aa812af9`; implementation not claimed | OPS-006, OPS-011, OBS-001, OBS-003, OBS-005 | Partial EKS evidence: 120/120 events recovered exactly once and zero HEC failures, but 11 SHC Service searches failed and nine samples had zero Search Head endpoints during an internal `2 -> 1 -> 0` rolling restart. The package reloaded indexers with `restart_required=0`, so indexer restart, active-search, conflict, and unhealthy-redundancy gates remain open |
+| SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | First readiness correction `0fc1bcf31`; further drain work active on `codex/shc-82-splunk-managed-restart-drain` | OPS-006, OPS-011, OBS-001, OBS-003, OBS-005 | Partial EKS evidence: the first correction removed the zero-endpoint captain-transition outage and retained at least two Search Head endpoints. A classic Splunk-managed restart still interrupted one search already routed to the captain before its internal shutdown. All 120 events were recovered exactly once, with zero HEC failures, unchanged Pod UIDs, and zero container restarts. Indexer restart, active-search, conflict, and unhealthy-redundancy gates remain open |
 | SHC-83 | Prevent traffic readiness before image-owned SHC initialization, synchronization, and internal Splunk restarts are complete | Pending | HLT-001, HLT-002, HLT-009, STS-012, OBS-001 | Registered from repeated EKS observations of a brief early-ready interval; no cross-layer startup-complete contract or solution is claimed |
 | SHC-84 | Bound first-start and upgrade startup probes and guarantee prompt TERM exit for kubelet-initiated restarts | Pending | HLT-009, RUN-003, RUN-004, REJ-005, OBS-005 | Registered after a legacy-runtime fixture exceeded the default startup budget and then consumed the configured 1200-second termination grace; no runtime or probe-policy implementation is claimed |
 
@@ -479,6 +479,22 @@ reported `restart_required=0`. Added a deterministic completeness monitor and
 separated container, Pod, serving-gate, and EndpointSlice observations. This
 is failure evidence that bounds the next fix; it is not a completed
 qualification claim.
+
+2026-07-30 UTC: Qualified the first serving-gate correction at source
+`0fc1bcf31` and Operator image digest
+`sha256:c55ebe692659300121eef74f2e6897dbc27bdbae15bcfe40c0ae8c3566c02690`.
+The `1.0.2` App Framework run preserved at least two Search Head Service
+endpoints throughout the internal `2 -> 1 -> 0` restart and eliminated the
+previous zero-endpoint captain-transition outage. It accepted all 120 HEC
+events, recovered `count=120`, `min=1`, `max=120`, and `distinct=120`, kept
+every Pod UID unchanged, and recorded zero Kubernetes container restarts.
+One Service search was interrupted. Splunk requested the captain's own restart
+at `08:00:08.429Z`; the search was admitted on that captain at
+`08:00:11.941Z`; and Splunk terminated its streamed dispatch at
+`08:00:13.779Z` with `Local side shutting down`. The effective SHC setting was
+`rolling_restart=restart`. This proves that the cluster-wide readiness
+correction works, while selection and drain of a Splunk-managed restart target
+remain open.
 
 2026-07-29 UTC: Selected SHC-80 on
 `codex/shc-80-authorized-revision-recovery` from integrated feature baseline
