@@ -175,6 +175,23 @@ func TestDesiredSearchHeadServingCondition(t *testing.T) {
 
 	mgr.initialFormationContainersReady = true
 	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionFalse, status, "captain restart state must be observed")
+	require.Equal(t, "InitialFormationRestartStateUnobserved", reason)
+
+	mgr.cr.Status.CaptainMembersObserved = true
+	mgr.cr.Status.CaptainRollingRestart = true
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionFalse, status, "captain rolling restart must fail closed")
+	require.Equal(t, "InitialFormationRollingRestart", reason)
+
+	mgr.cr.Status.CaptainRollingRestart = false
+	mgr.cr.Status.Members[0].AdvertiseRestartRequired = true
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
+	require.Equal(t, corev1.ConditionFalse, status, "advertised restart must fail closed")
+	require.Equal(t, "InitialFormationRestartRequired", reason)
+
+	mgr.cr.Status.Members[0].AdvertiseRestartRequired = false
+	status, reason, _ = mgr.desiredSearchHeadServingCondition(pod, peerOrdinal)
 	require.Equal(t, corev1.ConditionFalse, status, "live Splunk formation checks still apply")
 	require.Equal(t, "ClusterNotReady", reason)
 

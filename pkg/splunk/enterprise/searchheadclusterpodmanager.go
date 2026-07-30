@@ -517,7 +517,8 @@ func (mgr *searchHeadClusterPodManager) recordStableReplicaCount(
 	desiredReplicas int32,
 ) {
 	if phase != enterpriseApi.PhaseReady ||
-		mgr.cr.Status.ReadyReplicas != desiredReplicas {
+		mgr.cr.Status.ReadyReplicas != desiredReplicas ||
+		mgr.searchHeadInitialFormationRestartPending() {
 		return
 	}
 
@@ -933,6 +934,8 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 	mgr.cr.Status.Captain = ""
 	mgr.cr.Status.CaptainReady = false
+	mgr.cr.Status.CaptainRollingRestart = false
+	mgr.cr.Status.CaptainMembersObserved = false
 	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if mgr.cr.Status.ReadyReplicas == 0 &&
 		!searchHeadServingReadinessGateConfigured(statefulSet) {
@@ -1005,9 +1008,12 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				mgr.cr.Status.Initialized = captainInfo.Initialized
 				mgr.cr.Status.MinPeersJoined = captainInfo.MinPeersJoined
 				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
+				mgr.cr.Status.CaptainRollingRestart =
+					captainInfo.RollingRestart
 				gotCaptainInfo = true
 				captainObservationOrdinal = n
 				observeCaptainMembers = captainInfo.RollingRestart ||
+					mgr.searchHeadInitialFormationPending() ||
 					(previousCaptain != "" && previousCaptain != captainInfo.Label)
 
 				if previousCaptain != "" && previousCaptain != captainInfo.Label {
@@ -1044,12 +1050,18 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				"error", err,
 			)
 		} else {
+			observedCaptainMembers := 0
 			for n := range mgr.cr.Status.Members {
 				member := &mgr.cr.Status.Members[n]
 				if captainMember, ok := captainMembers[member.Name]; ok {
 					member.CaptainStatus = captainMember.Status
+					member.AdvertiseRestartRequired =
+						captainMember.AdvertiseRestartRequired
+					observedCaptainMembers++
 				}
 			}
+			mgr.cr.Status.CaptainMembersObserved =
+				observedCaptainMembers == int(memberObservationCount)
 		}
 	}
 

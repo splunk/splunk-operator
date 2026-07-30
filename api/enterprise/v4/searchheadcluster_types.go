@@ -169,6 +169,10 @@ type SearchHeadClusterMemberStatus struct {
 	// Indicates whether the member has been instructed to restart.
 	RestartState string `json:"restart_state,omitempty"`
 
+	// Indicates whether the member has advertised to the captain that a
+	// restart is required.
+	AdvertiseRestartRequired bool `json:"advertise_restart_required,omitempty"`
+
 	// Indicates whether this member is configured as an ad-hoc search head and
 	// therefore does not run scheduled jobs.
 	Adhoc bool `json:"adhoc_searchhead"`
@@ -436,6 +440,13 @@ type SearchHeadClusterStatus struct {
 
 	// true if the search head cluster's captain is ready to service requests
 	CaptainReady bool `json:"captainReady"`
+
+	// true while the captain is coordinating an SHC rolling restart
+	CaptainRollingRestart bool `json:"captainRollingRestart,omitempty"`
+
+	// true when the controller successfully observed every desired member
+	// through the captain's authoritative member endpoint
+	CaptainMembersObserved bool `json:"captainMembersObserved,omitempty"`
 
 	// true if the search head cluster has finished initialization
 	Initialized bool `json:"initialized"`

@@ -10129,9 +10129,18 @@ spec:
               captain:
                 description: name or label of the search head captain
                 type: string
+              captainMembersObserved:
+                description: |-
+                  true when the controller successfully observed every desired member
+                  through the captain's authoritative member endpoint
+                type: boolean
               captainReady:
                 description: true if the search head cluster's captain is ready to
                   service requests
+                type: boolean
+              captainRollingRestart:
+                description: true while the captain is coordinating an SHC rolling
+                  restart
                 type: boolean
               conditions:
                 description: |-
@@ -10455,6 +10464,11 @@ spec:
                       description: |-
                         Indicates whether this member is configured as an ad-hoc search head and
                         therefore does not run scheduled jobs.
+                      type: boolean
+                    advertise_restart_required:
+                      description: |-
+                        Indicates whether the member has advertised to the captain that a
+                        restart is required.
                       type: boolean
                     captain_status:
                       description: |-

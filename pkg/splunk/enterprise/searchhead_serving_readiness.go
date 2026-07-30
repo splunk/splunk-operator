@@ -112,6 +112,28 @@ func (mgr *searchHeadClusterPodManager) searchHeadInitialFormationPending() bool
 	return mgr.cr == nil || mgr.cr.Status.LastStableReplicas == nil
 }
 
+// searchHeadInitialFormationRestartPending keeps a newly formed cluster out of
+// Service traffic until Splunk's authoritative captain view proves that no
+// desired member has advertised a required restart and the captain is not
+// coordinating an SHC rolling restart. Docker-Splunk can complete local image
+// initialization before Splunk begins this post-join rolling restart.
+func (mgr *searchHeadClusterPodManager) searchHeadInitialFormationRestartPending() bool {
+	if !mgr.searchHeadInitialFormationPending() {
+		return false
+	}
+	if mgr.cr == nil ||
+		!mgr.cr.Status.CaptainMembersObserved ||
+		mgr.cr.Status.CaptainRollingRestart {
+		return true
+	}
+	for i := range mgr.cr.Status.Members {
+		if mgr.cr.Status.Members[i].AdvertiseRestartRequired {
+			return true
+		}
+	}
+	return false
+}
+
 // desiredSearchHeadContainersReady proves that every desired Search Head has
 // completed the current image-owned local initialization contract. In
 // Docker-Splunk, ContainersReady cannot become true until the entrypoint has
@@ -177,6 +199,27 @@ func (mgr *searchHeadClusterPodManager) desiredSearchHeadServingCondition(
 		!mgr.initialFormationContainersReady {
 		return corev1.ConditionFalse, "InitialFormationIncomplete",
 			"Another Search Head container has not completed image-owned initialization"
+	}
+	if mgr.searchHeadInitialFormationPending() &&
+		!mgr.cr.Status.CaptainMembersObserved {
+		return corev1.ConditionFalse, "InitialFormationRestartStateUnobserved",
+			"The captain's authoritative restart state has not been observed for every desired Search Head"
+	}
+	if mgr.searchHeadInitialFormationPending() &&
+		mgr.cr.Status.CaptainRollingRestart {
+		return corev1.ConditionFalse, "InitialFormationRollingRestart",
+			"The SHC captain is coordinating the first-formation rolling restart"
+	}
+	if mgr.searchHeadInitialFormationPending() {
+		for i := range mgr.cr.Status.Members {
+			if mgr.cr.Status.Members[i].AdvertiseRestartRequired {
+				return corev1.ConditionFalse, "InitialFormationRestartRequired",
+					fmt.Sprintf(
+						"Search Head %s has advertised a required restart to the captain",
+						mgr.cr.Status.Members[i].Name,
+					)
+			}
+		}
 	}
 	if ordinal < 0 || ordinal >= int32(len(mgr.cr.Status.Members)) {
 		return corev1.ConditionFalse, "MemberUnobserved", "SHC member has not been observed"

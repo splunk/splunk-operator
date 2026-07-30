@@ -582,6 +582,19 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 			Status: 200,
 			Err:    nil,
 			Body:   loadFixture(t, "shc_captain_info_response.json"),
+		}, {
+			Method: "GET",
+			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/shcluster/captain/members?count=0&output_mode=json",
+			Status: 200,
+			Err:    nil,
+			Body: `{"entry":[{
+				"name":"member-0",
+				"content":{
+					"label":"splunk-stack1-search-head-0",
+					"status":"Up",
+					"advertise_restart_required":false
+				}
+			}]}`,
 		},
 	}
 
@@ -601,7 +614,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		},
 	}
 	method = "searchHeadClusterPodManager.Update(All pods ready)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => transition to detention
@@ -621,21 +634,25 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	)
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v0"
 	method = "searchHeadClusterPodManager.Update(Quarantine Pod)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for searches to drain
-	mockHandlers = []spltest.MockHTTPHandler{mockHandlers[0], mockHandlers[1]}
+	mockHandlers = []spltest.MockHTTPHandler{
+		mockHandlers[0],
+		mockHandlers[1],
+		mockHandlers[2],
+	}
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"status":"Up"`, `"status":"ManualDetention"`, 1)
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":0`, `"active_historical_search_count":1`, 1)
 	method = "searchHeadClusterPodManager.Update(Draining Searches)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => delete pod
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":1`, `"active_historical_search_count":0`, 1)
 	method = "searchHeadClusterPodManager.Update(Delete Pod)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod update finished => release from detention
@@ -648,16 +665,21 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		Body:   ``,
 	})
 	method = "searchHeadClusterPodManager.Update(Release Quarantine)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => remove member
-	mockHandlers[2] = spltest.MockHTTPHandler{
-		Method: "GET",
-		URL:    "https://splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/shcluster/member/info?count=0&output_mode=json",
-		Status: 200,
-		Err:    nil,
-		Body:   loadFixture(t, "shc_member_remove_response.json"),
+	mockHandlers = []spltest.MockHTTPHandler{
+		mockHandlers[0],
+		mockHandlers[1],
+		{
+			Method: "GET",
+			URL:    "https://splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/shcluster/member/info?count=0&output_mode=json",
+			Status: 200,
+			Err:    nil,
+			Body:   loadFixture(t, "shc_member_remove_response.json"),
+		},
+		mockHandlers[2],
 	}
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
 		Method: "POST",
@@ -678,6 +700,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},

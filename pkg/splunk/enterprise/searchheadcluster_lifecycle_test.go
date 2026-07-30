@@ -196,8 +196,9 @@ func TestRecordStableReplicaCountEmitsOnlyDesiredScaleEvents(t *testing.T) {
 				Namespace: "test",
 			},
 			Status: enterpriseApi.SearchHeadClusterStatus{
-				ReadyReplicas:      ready,
-				LastStableReplicas: stable,
+				ReadyReplicas:          ready,
+				LastStableReplicas:     stable,
+				CaptainMembersObserved: true,
 			},
 		}
 		recorder := &mockEventRecorder{}
@@ -227,6 +228,69 @@ func TestRecordStableReplicaCountEmitsOnlyDesiredScaleEvents(t *testing.T) {
 		}
 		if len(recorder.events) != 0 {
 			t.Fatalf("migration baseline emitted %d events", len(recorder.events))
+		}
+	})
+
+	t.Run("first formation waits for captain member observation", func(t *testing.T) {
+		mgr, recorder, ctx := newManager(nil, 3)
+		mgr.cr.Status.CaptainMembersObserved = false
+		mgr.recordStableReplicaCount(
+			ctx,
+			GetEventPublisher(ctx, mgr.cr),
+			enterpriseApi.PhaseReady,
+			3,
+		)
+		if mgr.cr.Status.LastStableReplicas != nil {
+			t.Fatalf(
+				"last stable replicas = %v, want nil",
+				mgr.cr.Status.LastStableReplicas,
+			)
+		}
+		if len(recorder.events) != 0 {
+			t.Fatalf("unobserved formation emitted %d events", len(recorder.events))
+		}
+	})
+
+	t.Run("first formation waits for captain rolling restart", func(t *testing.T) {
+		mgr, recorder, ctx := newManager(nil, 3)
+		mgr.cr.Status.CaptainRollingRestart = true
+		mgr.recordStableReplicaCount(
+			ctx,
+			GetEventPublisher(ctx, mgr.cr),
+			enterpriseApi.PhaseReady,
+			3,
+		)
+		if mgr.cr.Status.LastStableReplicas != nil {
+			t.Fatalf(
+				"last stable replicas = %v, want nil",
+				mgr.cr.Status.LastStableReplicas,
+			)
+		}
+		if len(recorder.events) != 0 {
+			t.Fatalf("rolling formation emitted %d events", len(recorder.events))
+		}
+	})
+
+	t.Run("first formation waits for advertised member restart", func(t *testing.T) {
+		mgr, recorder, ctx := newManager(nil, 3)
+		mgr.cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{{
+			Name:                     "splunk-example-search-head-1",
+			AdvertiseRestartRequired: true,
+		}}
+		mgr.recordStableReplicaCount(
+			ctx,
+			GetEventPublisher(ctx, mgr.cr),
+			enterpriseApi.PhaseReady,
+			3,
+		)
+		if mgr.cr.Status.LastStableReplicas != nil {
+			t.Fatalf(
+				"last stable replicas = %v, want nil",
+				mgr.cr.Status.LastStableReplicas,
+			)
+		}
+		if len(recorder.events) != 0 {
+			t.Fatalf("restart-required formation emitted %d events", len(recorder.events))
 		}
 	})
 
@@ -411,9 +475,11 @@ func TestUpdateStatusPreservesHigherOrdinalDuringLowerOrdinalReplacement(
 	})
 
 	target := int32(1)
+	stableReplicas := int32(3)
 	cr := &enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "example"},
 		Status: enterpriseApi.SearchHeadClusterStatus{
+			LastStableReplicas: &stableReplicas,
 			Members: []enterpriseApi.SearchHeadClusterMemberStatus{
 				{
 					Name:       "splunk-example-search-head-0",
@@ -532,6 +598,7 @@ func TestUpdateStatusRecordsCaptainMemberStateDuringCaptainTransition(
 			ServiceReady:   false,
 			Initialized:    true,
 			MinPeersJoined: true,
+			RollingRestart: true,
 		}, nil
 	}
 	captainMemberCalls := 0
@@ -547,8 +614,9 @@ func TestUpdateStatusRecordsCaptainMemberStateDuringCaptainTransition(
 				Status: "Restarting",
 			},
 			"splunk-example-search-head-1": {
-				Label:  "splunk-example-search-head-1",
-				Status: "Up",
+				Label:                    "splunk-example-search-head-1",
+				Status:                   "Up",
+				AdvertiseRestartRequired: true,
 			},
 			"splunk-example-search-head-2": {
 				Label:   "splunk-example-search-head-2",
@@ -581,6 +649,14 @@ func TestUpdateStatusRecordsCaptainMemberStateDuringCaptainTransition(
 	if cr.Status.Members[1].CaptainStatus != "Up" ||
 		cr.Status.Members[2].CaptainStatus != "Up" {
 		t.Fatalf("peer captain statuses = %#v", cr.Status.Members)
+	}
+	if !cr.Status.CaptainRollingRestart ||
+		!cr.Status.CaptainMembersObserved ||
+		!cr.Status.Members[1].AdvertiseRestartRequired {
+		t.Fatalf(
+			"captain restart state was not preserved: status=%#v",
+			cr.Status,
+		)
 	}
 }
 
