@@ -3,6 +3,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -191,6 +192,18 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			statefulSet,
 		); readinessErr != nil {
 			return enterpriseApi.PhaseError, readinessErr
+		}
+		restartInitiated, restartErr :=
+			mgr.reconcileInitialFormationRestart(
+				ctx,
+				eventPublisher,
+				desiredReplicas,
+			)
+		if restartErr != nil {
+			return enterpriseApi.PhaseError, restartErr
+		}
+		if restartInitiated {
+			return enterpriseApi.PhasePending, nil
 		}
 	}
 	if err == nil &&
@@ -924,6 +937,86 @@ var GetSearchHeadCaptainMembersForStatus = func(
 	n int32,
 ) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
 	return mgr.getClient(ctx, n).GetSearchHeadCaptainMembers()
+}
+
+// InitiateSearchHeadInitialFormationRollingRestart is replaceable in tests.
+// Splunk proxies the captain control endpoint when ordinal zero is not the
+// active captain.
+var InitiateSearchHeadInitialFormationRollingRestart = func(
+	ctx context.Context,
+	mgr *searchHeadClusterPodManager,
+) error {
+	return mgr.getClient(ctx, 0).
+		InitiateSearchHeadRollingRestart(true)
+}
+
+func (mgr *searchHeadClusterPodManager) reconcileInitialFormationRestart(
+	ctx context.Context,
+	eventPublisher *K8EventPublisher,
+	desiredReplicas int32,
+) (bool, error) {
+	if !mgr.searchHeadInitialFormationPending() ||
+		!mgr.initialFormationContainersReady ||
+		!mgr.cr.Status.CaptainMembersObserved ||
+		mgr.cr.Status.CaptainRollingRestart ||
+		!mgr.cr.Status.Initialized ||
+		!mgr.cr.Status.MinPeersJoined ||
+		!mgr.cr.Status.CaptainReady ||
+		mgr.cr.Status.MaintenanceMode ||
+		int32(len(mgr.cr.Status.Members)) != desiredReplicas {
+		return false, nil
+	}
+
+	advertisedMembers := make([]string, 0, desiredReplicas)
+	for i := range mgr.cr.Status.Members {
+		member := mgr.cr.Status.Members[i]
+		if member.Status != "Up" ||
+			member.CaptainStatus != "Up" ||
+			!member.Registered {
+			return false, nil
+		}
+		if member.AdvertiseRestartRequired {
+			advertisedMembers = append(advertisedMembers, member.Name)
+		}
+	}
+	if len(advertisedMembers) == 0 {
+		return false, nil
+	}
+
+	if err := InitiateSearchHeadInitialFormationRollingRestart(
+		ctx,
+		mgr,
+	); err != nil {
+		// A request accepted by the captain sets rolling_restart_flag before
+		// returning. If the response raced a retry, use that authoritative
+		// state instead of treating an already-running restart as a failure.
+		captainInfo, observeErr := GetSearchHeadCaptainInfo(ctx, mgr, 0)
+		if observeErr != nil || !captainInfo.RollingRestart {
+			return false, fmt.Errorf(
+				"unable to initiate first-formation SHC rolling restart: %w",
+				err,
+			)
+		}
+	}
+
+	mgr.cr.Status.CaptainRollingRestart = true
+	if eventPublisher != nil {
+		eventPublisher.Normal(
+			ctx,
+			EventReasonSHCInitialFormationRestartStarted,
+			fmt.Sprintf(
+				"Splunk accepted a first-formation rolling restart for restart-required Search Heads: %s",
+				strings.Join(advertisedMembers, ", "),
+			),
+		)
+	}
+	logging.FromContext(ctx).InfoContext(
+		ctx,
+		"first-formation Search Head rolling restart initiated",
+		"members",
+		advertisedMembers,
+	)
+	return true, nil
 }
 
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource

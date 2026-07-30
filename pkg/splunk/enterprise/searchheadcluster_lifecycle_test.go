@@ -660,6 +660,142 @@ func TestUpdateStatusRecordsCaptainMemberStateDuringCaptainTransition(
 	}
 }
 
+func TestReconcileInitialFormationRestart(t *testing.T) {
+	originalInitiate :=
+		InitiateSearchHeadInitialFormationRollingRestart
+	originalCaptainInfo := GetSearchHeadCaptainInfo
+	t.Cleanup(func() {
+		InitiateSearchHeadInitialFormationRollingRestart =
+			originalInitiate
+		GetSearchHeadCaptainInfo = originalCaptainInfo
+	})
+
+	newManager := func() *searchHeadClusterPodManager {
+		return &searchHeadClusterPodManager{
+			cr: &enterpriseApi.SearchHeadCluster{
+				Status: enterpriseApi.SearchHeadClusterStatus{
+					Initialized:            true,
+					MinPeersJoined:         true,
+					CaptainReady:           true,
+					CaptainMembersObserved: true,
+					Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+						{
+							Name:                     "splunk-example-search-head-0",
+							Status:                   "Up",
+							CaptainStatus:            "Up",
+							Registered:               true,
+							AdvertiseRestartRequired: true,
+						},
+						{
+							Name:                     "splunk-example-search-head-1",
+							Status:                   "Up",
+							CaptainStatus:            "Up",
+							Registered:               true,
+							AdvertiseRestartRequired: true,
+						},
+						{
+							Name:                     "splunk-example-search-head-2",
+							Status:                   "Up",
+							CaptainStatus:            "Up",
+							Registered:               true,
+							AdvertiseRestartRequired: true,
+						},
+					},
+				},
+			},
+			initialFormationContainersReady: true,
+		}
+	}
+
+	t.Run("initiates supported advertising-member restart", func(t *testing.T) {
+		mgr := newManager()
+		calls := 0
+		InitiateSearchHeadInitialFormationRollingRestart = func(
+			context.Context,
+			*searchHeadClusterPodManager,
+		) error {
+			calls++
+			return nil
+		}
+
+		initiated, err := mgr.reconcileInitialFormationRestart(
+			context.Background(),
+			nil,
+			3,
+		)
+		if err != nil || !initiated || calls != 1 {
+			t.Fatalf(
+				"initiated=%t calls=%d err=%v, want true/1/nil",
+				initiated,
+				calls,
+				err,
+			)
+		}
+		if !mgr.cr.Status.CaptainRollingRestart {
+			t.Fatal("accepted restart did not set captain rolling state")
+		}
+	})
+
+	t.Run("waits until every member is authoritative and up", func(t *testing.T) {
+		mgr := newManager()
+		mgr.cr.Status.Members[2].CaptainStatus = "Down"
+		calls := 0
+		InitiateSearchHeadInitialFormationRollingRestart = func(
+			context.Context,
+			*searchHeadClusterPodManager,
+		) error {
+			calls++
+			return nil
+		}
+
+		initiated, err := mgr.reconcileInitialFormationRestart(
+			context.Background(),
+			nil,
+			3,
+		)
+		if err != nil || initiated || calls != 0 {
+			t.Fatalf(
+				"initiated=%t calls=%d err=%v, want false/0/nil",
+				initiated,
+				calls,
+				err,
+			)
+		}
+	})
+
+	t.Run("accepts authoritative rolling state after request race", func(t *testing.T) {
+		mgr := newManager()
+		InitiateSearchHeadInitialFormationRollingRestart = func(
+			context.Context,
+			*searchHeadClusterPodManager,
+		) error {
+			return errors.New("restart already in progress")
+		}
+		GetSearchHeadCaptainInfo = func(
+			context.Context,
+			*searchHeadClusterPodManager,
+			int32,
+		) (*splclient.SearchHeadCaptainInfo, error) {
+			return &splclient.SearchHeadCaptainInfo{
+				RollingRestart: true,
+			}, nil
+		}
+
+		initiated, err := mgr.reconcileInitialFormationRestart(
+			context.Background(),
+			nil,
+			3,
+		)
+		if err != nil || !initiated {
+			t.Fatalf(
+				"initiated=%t err=%v, want true/nil",
+				initiated,
+				err,
+			)
+		}
+	})
+}
+
 func TestScaleUpMemberObservationExpectedUnavailable(t *testing.T) {
 	stable := int32(3)
 	replicas := int32(4)

@@ -325,6 +325,33 @@ func TestTransferSearchHeadCaptain(t *testing.T) {
 	splunkClientErrorTester(t, test)
 }
 
+func TestInitiateSearchHeadRollingRestart(t *testing.T) {
+	body := strings.NewReader("advertising=true")
+	wantRequest, _ := http.NewRequest(
+		"POST",
+		"https://localhost:8089/services/shcluster/captain/control/control/restart",
+		body,
+	)
+	wantRequest.Header.Set(
+		"Content-Type",
+		"application/x-www-form-urlencoded",
+	)
+	test := func(c splunk.SplunkClient) error {
+		c.SearchHeadClusterUpgradeClient = c.Client
+		return c.InitiateSearchHeadRollingRestart(true)
+	}
+	splunkClientTester(
+		t,
+		"TestInitiateSearchHeadRollingRestart",
+		200,
+		"",
+		wantRequest,
+		test,
+	)
+
+	splunkClientErrorTester(t, test)
+}
+
 func TestBundlePush(t *testing.T) {
 	body := strings.NewReader("&ignore_identical_bundle=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/manager/control/default/apply", body)

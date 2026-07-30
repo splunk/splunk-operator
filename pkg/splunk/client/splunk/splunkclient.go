@@ -58,8 +58,8 @@ type SplunkClient struct {
 	// HTTP client used to process requests
 	Client SplunkHTTPClient
 
-	// HTTP client used only for synchronous search head cluster upgrade
-	// control requests. Splunk can hold these requests while it coordinates
+	// HTTP client used only for synchronous search head cluster control
+	// requests. Splunk can hold these requests while it coordinates
 	// cluster-wide state, so they need a larger bound than routine observations.
 	SearchHeadClusterUpgradeClient SplunkHTTPClient
 }
@@ -391,6 +391,39 @@ func (c *SplunkClient) TransferSearchHeadCaptain(managementURI string) error {
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	return c.Do(request, []int{200}, nil)
+}
+
+// InitiateSearchHeadRollingRestart asks the SHC captain to run Splunk's
+// supported rolling-restart workflow. When advertisingOnly is true, Splunk
+// restarts only members whose captain heartbeat reports that a restart is
+// required. The endpoint proxies to the active captain when called through
+// another member.
+func (c *SplunkClient) InitiateSearchHeadRollingRestart(
+	advertisingOnly bool,
+) error {
+	form := url.Values{}
+	form.Set("advertising", strconv.FormatBool(advertisingOnly))
+	endpoint := fmt.Sprintf(
+		"%s/services/shcluster/captain/control/control/restart",
+		c.ManagementURI,
+	)
+	request, err := http.NewRequest(
+		"POST",
+		endpoint,
+		strings.NewReader(form.Encode()),
+	)
+	if err != nil {
+		return err
+	}
+	request.Header.Set(
+		"Content-Type",
+		"application/x-www-form-urlencoded",
+	)
+	client := c.SearchHeadClusterUpgradeClient
+	if client == nil {
+		client = c.Client
+	}
+	return c.doWithClient(client, request, []int{200}, nil)
 }
 
 // InitiateUpgrade initializes rolling upgrade process for a search head cluster
