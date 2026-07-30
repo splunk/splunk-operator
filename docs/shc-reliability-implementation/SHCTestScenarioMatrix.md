@@ -34,8 +34,7 @@ Unless a scenario explicitly tests loss of majority, assert:
 | API-002 | P0 | Grace explicitly set | Customer value is preserved |
 | API-003 | P0 | Invalid grace and timeouts | Admission rejects invalid values with stable messages |
 | API-004 | P0 | All timeout fields differ | Grace, drain, transfer, and rejoin remain independent |
-| API-005 | P1 | Existing CR after Operator upgrade | No uncontrolled replacement; migration status is visible |
-| API-006 | P1 | v3/v4 conversion | Values and lifecycle state survive conversion |
+| API-005 | P1 | Existing v4 CR after Operator upgrade | No uncontrolled replacement; rollout state is visible |
 | API-007 | P1 | Feature gate disabled | Current `OnDelete` behavior remains selected |
 | API-008 | P1 | Unknown/unsupported runtime capability | Operator blocks or safely falls back |
 
@@ -264,6 +263,7 @@ StatefulSet template.
 | OPS-009 | P2 | TLS, ingress termination, and optional service mesh | No mesh is required; local readiness follows Splunkd TLS rather than ingress TLS, bypasses configured HTTP proxies, and management traffic remains valid in each qualified mesh mode |
 | OPS-010 | P2 | Private registry/air gap | Registry-qualified and digest-pinned image references plus all pull secrets survive rendering and rollout tracking unchanged; lifecycle and diagnostics add no helper image or undeclared external service |
 | OPS-011 | P1 | App Framework deploys an app whose bundle requires Search Head or indexer restart | The effective Splunk restart policy is observed and recorded; SHC and indexer restart work is serialized with every other planned disruption; insufficient redundancy fails closed; serving withdrawal is role-, protocol-, and configuration-aware; previous-peer Splunk and network-path recovery precedes the next target; continuous acknowledged ingest and representative real-time, historical, and scheduled searches prove that supported app deployment does not create a customer-visible search outage or silently incomplete result |
+| OPS-012 | P1 | Namespace-first deletion with a referenced LicenseManager | The LicenseManager performs no create after namespace termination, removes its finalizer without manual intervention, and leaves no owned Secret, workload, PVC, or PV |
 
 ### OPS-011 indexer qualification evidence
 

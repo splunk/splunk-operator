@@ -148,16 +148,21 @@ ownership.
   the captain after Splunk selected it for restart and was terminated by
   Splunk's internal shutdown, so target withdrawal and active-search drain are
   not yet qualified.
-- [ ] Qualify SHC-83 with an explicit startup-complete traffic-readiness
+- [x] Qualify SHC-83 with an explicit startup-complete traffic-readiness
   contract across image-owned initialization, synchronization, and internal
   Splunk restarts. The bounded first-formation gate requires all desired
   Search Head containers to complete image initialization before publishing
   any member, then requires the existing live member and captain checks.
-  Qualification must also prove that a previously stable topology does not
-  lose healthy Service endpoints during scale or recovery.
+  Exact source `2889c8002` kept client endpoints at zero until `Complete`,
+  retained at least two endpoints during established non-captain and
+  active-captain recovery, and retained all three endpoints through an
+  Operator restart.
 - [ ] Qualify SHC-84 with measured first-start and upgrade startup budgets,
   kubelet probe-triggered restart behavior, and bounded TERM-to-container-exit
   evidence for every supported runtime.
+- [ ] Qualify SHC-86 with direct namespace-first deletion of a referenced
+  LicenseManager, no post-termination create, automatic finalizer removal, and
+  exact owned-resource cleanup.
 - [ ] Complete cloud-provider qualification and release-readiness review.
 
 ## Surprises & Discoveries
@@ -431,6 +436,24 @@ ownership.
   sequence before converging to two consecutive clean health samples; SHC-83
   now tracks an explicit startup-complete traffic gate across the Operator,
   Docker-Splunk, and Splunk Enterprise.
+
+- Observation: the first SHC-83 implementation held both client traffic and
+  internal bundle selection behind Kubernetes Pod readiness. The EKS fixture
+  reached `TelemetryPending` and could not select a target for the work needed
+  to finish formation.
+  Consequence: internal management eligibility and client Service eligibility
+  are separate contracts. A bounded first-formation stage may use a
+  container-ready, registered, `Up` member for internal bundle work without
+  publishing that Pod to clients. The corrected campaign published no endpoint
+  before `Complete`, then passed established member, active-captain, and
+  controller-restart recovery without reducing healthy topology availability.
+
+- Observation: SHC-83 teardown removed the Search Head workload and storage,
+  but a referenced LicenseManager retained the terminating namespace while
+  reconciliation attempted to recreate its Secret.
+  Consequence: OPS-012/SHC-86 separately requires namespace-first
+  LicenseManager finalization to perform no create, remove its finalizer
+  without manual intervention, and prove exact owned-resource cleanup.
 
 - Observation: namespace-first deletion originally entered ordinary reconcile
   work after namespace termination, and successful finalizer removal was
@@ -1696,3 +1719,22 @@ unqualified defect claim.
 baseline `079e26233267`. Qualification remains pending and must preserve the
 separation between observed restart-mode signals and proven ingest, search,
 redundancy, and disruption outcomes.
+
+2026-07-30 UTC: Recorded SHC-83 source and EKS qualification on
+`codex/shc-83-startup-readiness-qualification`. Exact code source
+`2889c80025bbf1e9010dc8722a10b35320e39195` and immutable Operator digest
+`sha256:22a4398917a3dc27bdbe68aa4513c70b2bfd4d62f05a474e55fd6f9600db7ae9`
+passed local and Linux `make fmt vet build test` gates. Fresh formation
+recorded 99 samples with zero premature-traffic samples, one
+initial-formation restart Event, zero Kubernetes container restarts, and
+twelve stable three-endpoint samples after `Complete`. Established
+non-captain and active-captain replacements retained a minimum of two
+endpoints and returned to three; captaincy moved from ordinal zero to ordinal
+two. A controller-Pod replacement retained all three endpoints, every Search
+Head UID, zero restarts, `Complete`, and `lastStableReplicas=3` throughout.
+
+2026-07-30 UTC: Registered OPS-012/SHC-86 after the SHC-83 teardown required
+clearing a LicenseManager finalizer once its remaining resources were verified
+absent. The pending qualification must reproduce namespace-first deletion,
+prove no Secret creation after termination begins, and complete cleanup
+without manual finalizer intervention.

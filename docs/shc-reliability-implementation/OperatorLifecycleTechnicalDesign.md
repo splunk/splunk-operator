@@ -495,16 +495,10 @@ entry point; they must never rely on admission as the only enforcement layer.
 
 ## Versioning decision
 
-The spike adds customer configuration only to the v4 storage API. v3 continues
-to read existing common/status fields and must not silently lose a v4 lifecycle
-policy through an unsupported round trip. Before production delivery, the team
-must choose one of:
-
-1. add equivalent fields and conversion preservation to v3; or
-2. formally require v4 for the capability and reject incompatible conversion.
-
-For Wave 0, API-006 remains an explicit blocking test and no production
-enablement is claimed until the conversion decision is implemented.
+The lifecycle capability is scoped to the current v4 API. The spike does not
+add fields, conversion behavior, or migration requirements for v3. Validation,
+defaulting, generated CRDs, status, documentation, and qualification therefore
+apply to v4 only.
 
 ## Ownership boundaries
 

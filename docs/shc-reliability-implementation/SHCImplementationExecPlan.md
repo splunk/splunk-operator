@@ -347,17 +347,22 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   container restarts. Controller restart is now qualified for this bounded
   stage; longer disconnection, leader contention, conflict, redundancy, and
   compatibility variants remain open.
-- [ ] Define and qualify SHC-83 on isolated branch
+- [x] Define and qualify SHC-83 on isolated branch
   `codex/shc-83-startup-readiness-qualification`. During initial formation,
   no Search Head may enter the client Service until every desired Search Head
   container has completed image-owned initialization. The existing live
   member, captain, and synchronization checks still apply after that
   cross-Pod barrier. Previously stable peers must remain eligible during
-  scale, rollout, and recovery; selection does not claim implementation or
-  qualification.
+  scale, rollout, and recovery. Source `2889c8002` and Operator digest
+  `sha256:22a4398917a3dc27bdbe68aa4513c70b2bfd4d62f05a474e55fd6f9600db7ae9`
+  passed the recorded fresh-formation, non-captain recovery, active-captain
+  recovery, and controller-restart EKS campaigns.
 - [ ] Define and qualify SHC-84 so first-start and supported-upgrade work has
   an explicit startup budget while every kubelet-initiated restart reaches one
   prompt, observable TERM-to-container-exit path.
+- [ ] Define and qualify SHC-86 so namespace-first deletion of a referenced
+  LicenseManager performs no create after termination begins, removes its
+  finalizer without manual intervention, and cleans its owned resources.
 - [ ] Complete the remaining SHC-85 negative and compatibility qualification.
   The bounded Operator-owned lifecycle is source-qualified and EKS-qualified
   for steady-controller operation and one controller-Pod restart during
@@ -507,6 +512,26 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   all-desired-container initialization barrier only for a topology that has
   never been stable. It must not withdraw healthy peers during scale or an
   established-cluster recovery.
+
+- (2026-07-30 UTC) The first SHC-83 EKS campaign exposed a circular boundary
+  at `TelemetryPending`: the client-serving gate correctly kept Pods
+  Kubernetes-not-ready until formation completed, but the internal bundle
+  target resolver also required Kubernetes Pod readiness. That prevented the
+  work needed to complete formation. The accepted contract separates internal
+  management eligibility from client traffic readiness. During the bounded
+  first-formation telemetry and App Framework stages, a container-ready,
+  registered, `Up`, non-deleting member observed by the captain may receive
+  internal bundle work while remaining absent from the client Service.
+  Established topologies retain the stricter Kubernetes-ready target rule.
+
+- (2026-07-30 UTC) SHC-83 qualification teardown exposed a separate
+  cross-resource deletion edge. Search Head workloads and storage were gone,
+  but a referenced LicenseManager retained the terminating namespace while
+  reconciliation attempted to recreate its Secret. The exact LicenseManager
+  finalizer was cleared only after the remaining resources were verified
+  absent. OPS-012/SHC-86 now tracks a no-create, self-finalizing
+  LicenseManager deletion contract; SHC-83 makes no implementation claim for
+  it.
 
 - (2026-07-29 UTC) Deleting the disposable qualification namespace exposed a
   deletion-finalizer edge. The SHC finalizer attempted to recreate its Secret
@@ -1371,7 +1396,7 @@ Define customer-visible and internal policy independently:
 - rollout enablement and compatibility/feature gating;
 - safe override or continuation semantics;
 - configuration-change classification; and
-- status/condition compatibility across v3 and v4 APIs.
+- status and condition additions within the current v4 API.
 
 The technical design must show example CRs, omitted-field behavior, explicit
 zero/invalid behavior, generated CRD changes, Helm mapping, upgrade behavior,
@@ -2217,3 +2242,26 @@ container-state-backed readiness probe. The selected contract adds a
 first-formation all-desired-container barrier before the existing live Splunk
 checks, while preserving availability for previously stable topologies. This
 record does not claim implementation or EKS qualification.
+
+2026-07-30 UTC: Recorded SHC-83 implementation and EKS qualification at exact
+code source `2889c80025bbf1e9010dc8722a10b35320e39195` and Operator digest
+`sha256:22a4398917a3dc27bdbe68aa4513c70b2bfd4d62f05a474e55fd6f9600db7ae9`.
+The fresh three-member formation published zero client endpoints until the
+durable stage reached `Complete`, emitted exactly one initial-formation
+restart Event, then retained three endpoints for twelve stable samples with
+zero Kubernetes container restarts. The first campaign exposed and the same
+source corrected the internal-bundle-target/client-readiness circular
+dependency by keeping those two contracts separate. Established non-captain
+and active-captain Pod replacements each retained at least two endpoints,
+withheld the replacement until it rejoined, and returned to three stable
+endpoints; active captaincy moved dynamically from ordinal zero to ordinal
+two. Deleting the Operator Pod changed no Search Head UID, endpoint, restart
+count, formation stage, or durable stable-replica result. This qualifies the
+bounded SHC-83 contract on the current v4 API; it does not claim the separate
+startup-budget and prompt TERM-exit work tracked by SHC-84.
+
+2026-07-30 UTC: Registered OPS-012/SHC-86 as a separate LicenseManager
+namespace-finalization requirement after SHC-83 teardown reproduced a Secret
+create attempt in a terminating namespace and required finalizer clearing
+after owned resources were absent. No implementation or qualification is
+claimed.

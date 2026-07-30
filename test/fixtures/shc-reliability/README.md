@@ -83,11 +83,13 @@ EndpointSlice, reflected by `status.lastStableReplicas`, and reported in the
 `Complete` initial-formation stage after the required restart was initiated.
 
 After startup qualifies, use `shc83_established_recovery_monitor.sh` to verify
-that deletion of an established non-captain member removes only that member
-from client traffic. The monitor fails if either unaffected peer leaves the
+deletion of an established member. The target may be a non-captain or the
+active captain. The monitor fails if either unaffected peer leaves the
 EndpointSlice or fewer than two established endpoints remain. It succeeds only
 after a replacement Pod with a new UID rejoins the captain view, becomes
-serving and ready, returns to the EndpointSlice, and remains stable.
+serving and ready, returns to the EndpointSlice, and remains stable. For a
+captain target, also verify that Splunk elects a live dynamic captain rather
+than assuming ordinal zero retains that role.
 
 ```bash
 SHC83_TARGET_POD=splunk-shc83-shc-search-head-1 \
@@ -97,3 +99,10 @@ kubectl -n shc83-startup-readiness delete pod \
   splunk-shc83-shc-search-head-1 --wait=false
 wait
 ```
+
+Repeat the monitor with the currently observed captain as
+`SHC83_TARGET_POD`. Finally, delete the Operator Pod while recording the SHC
+phase, initial-formation stage, `lastStableReplicas`, Search Head UIDs, restart
+counts, and EndpointSlice targets. All three established endpoints and Search
+Head UIDs must remain unchanged while the replacement controller resumes from
+durable `Complete` state.
