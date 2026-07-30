@@ -927,8 +927,20 @@ func TestLifecycleAdapterPersistsStagesBeforeActions(t *testing.T) {
 		t.Fatalf("stage = %q, want AuthorizingReplacement", cr.Status.LifecycleOperation.Stage)
 	}
 
-	// Only a later reconcile observing the durable authorization returns true
-	// to the existing Pod manager.
+	// A later reconcile persists the authorization timestamp, but still does
+	// not authorize deletion in the same status-write cycle.
+	ready, err = mgr.prepareLifecycleReplacement(
+		context.Background(),
+		2,
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+	)
+	assertLifecycleAdapterResult(t, ready, err, false)
+	if cr.Status.LifecycleOperation.ReplacementAuthorizedAt == nil {
+		t.Fatal("replacement authorization timestamp was not recorded")
+	}
+
+	// Only the next reconcile observing that durable authorization returns
+	// true to the existing Pod manager.
 	ready, err = mgr.prepareLifecycleReplacement(
 		context.Background(),
 		2,
@@ -2328,9 +2340,9 @@ func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *t
 		target,
 		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
 	)
-	assertLifecycleAdapterResult(t, ready, err, true)
+	assertLifecycleAdapterResult(t, ready, err, false)
 	if transferCalls != 0 {
-		t.Fatalf("captain transfer calls after authorization = %d, want zero", transferCalls)
+		t.Fatalf("captain transfer calls while persisting authorization = %d, want zero", transferCalls)
 	}
 	operation = cr.Status.LifecycleOperation
 	if operation.TargetOrdinal == nil ||
@@ -2341,6 +2353,18 @@ func TestLifecycleAdapterTreatsOrdinalZeroAsNonCaptainWhenObservedElsewhere(t *t
 			"ordinal-zero authorization = %#v, want authorized target with captured UID",
 			operation,
 		)
+	}
+
+	// Replacement permission is returned only after the authorization
+	// timestamp above has survived a reconciliation boundary.
+	ready, err = mgr.prepareLifecycleReplacement(
+		context.Background(),
+		target,
+		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+	)
+	assertLifecycleAdapterResult(t, ready, err, true)
+	if transferCalls != 0 {
+		t.Fatalf("captain transfer calls after durable authorization = %d, want zero", transferCalls)
 	}
 }
 

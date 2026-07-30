@@ -491,6 +491,8 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 		if err != nil {
 			return false, err
 		}
+		authorizationAlreadyPersisted :=
+			decision.Operation.ReplacementAuthorizedAt != nil
 		var authorized bool
 		decision.Operation, authorized =
 			shcworkflow.RecordReplacementAuthorization(
@@ -504,6 +506,14 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 				ctx,
 				beforeStage,
 			)
+		}
+		if decision.Operation.Intent ==
+			enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate &&
+			!authorizationAlreadyPersisted {
+			// Replacement authorization is a durable barrier. Persist the
+			// original Pod UID and authorization timestamp before allowing
+			// OnDelete or a RollingUpdate partition to replace the Pod.
+			return false, nil
 		}
 		return true, nil
 	default:
@@ -912,7 +922,27 @@ func lifecycleRecoveryActive(
 	}
 	if operation.Intent ==
 		enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate {
-		return operation.TargetPodUID != ""
+		if operation.TargetPodUID == "" {
+			return false
+		}
+		switch operation.Stage {
+		case enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement:
+			return operation.ReplacementAuthorizedAt != nil
+		case enterpriseApi.SearchHeadClusterLifecycleStageWaitingForTermination,
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForScheduling,
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForPodInfrastructure,
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForStorage,
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForContainer,
+			enterpriseApi.SearchHeadClusterLifecycleStageWaitingForMemberRejoin,
+			enterpriseApi.SearchHeadClusterLifecycleStageValidatingRecovery:
+			return true
+		case enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
+			enterpriseApi.SearchHeadClusterLifecycleStageFailed:
+			return operation.ReplacementAuthorizedAt != nil ||
+				operation.RecoveryRevision != ""
+		default:
+			return false
+		}
 	}
 	return operation.Intent ==
 		enterpriseApi.SearchHeadClusterLifecycleIntentScaleDown &&

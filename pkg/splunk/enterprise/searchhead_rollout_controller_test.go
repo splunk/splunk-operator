@@ -2897,11 +2897,13 @@ func TestRollingUpdateControllerReportsStableRevisionReady(t *testing.T) {
 func TestLifecycleRecoveryWaitsForRollingPartitionAuthorization(t *testing.T) {
 	target := int32(2)
 	partition := int32(3)
+	authorizedAt := metav1.Now()
 	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
-		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
-		TargetOrdinal: &target,
-		TargetPodUID:  "original-pod-uid",
-		Stage:         enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		TargetOrdinal:           &target,
+		TargetPodUID:            "original-pod-uid",
+		ReplacementAuthorizedAt: &authorizedAt,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
 	}
 	statefulSet := &appsv1.StatefulSet{
 		Spec: appsv1.StatefulSetSpec{
@@ -2914,23 +2916,25 @@ func TestLifecycleRecoveryWaitsForRollingPartitionAuthorization(t *testing.T) {
 		},
 	}
 
-	if lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
+	if lifecycleRecoveryActiveForStatefulSet(statefulSet, operation, false) {
 		t.Fatal("recovery became active before the partition authorized replacement")
 	}
 
 	partition = target
-	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
+	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation, false) {
 		t.Fatal("recovery did not become active after the partition authorized replacement")
 	}
 }
 
-func TestLifecycleRecoveryPreservesOnDeleteOrdering(t *testing.T) {
+func TestLifecycleRecoveryWaitsForOnDeleteReplacementObservation(t *testing.T) {
 	target := int32(2)
+	authorizedAt := metav1.Now()
 	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
-		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
-		TargetOrdinal: &target,
-		TargetPodUID:  "original-pod-uid",
-		Stage:         enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		TargetOrdinal:           &target,
+		TargetPodUID:            "original-pod-uid",
+		ReplacementAuthorizedAt: &authorizedAt,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
 	}
 	statefulSet := &appsv1.StatefulSet{
 		Spec: appsv1.StatefulSetSpec{
@@ -2940,8 +2944,114 @@ func TestLifecycleRecoveryPreservesOnDeleteOrdering(t *testing.T) {
 		},
 	}
 
-	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
-		t.Fatal("OnDelete recovery ordering changed")
+	if lifecycleRecoveryActiveForStatefulSet(statefulSet, operation, false) {
+		t.Fatal("OnDelete recovery started before the original Pod changed")
+	}
+	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation, true) {
+		t.Fatal("OnDelete recovery did not start after replacement was observed")
+	}
+}
+
+func TestLifecycleRecoveryDoesNotStartDuringOnDeletePreparation(t *testing.T) {
+	target := int32(2)
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		Intent:        enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		TargetOrdinal: &target,
+		TargetPodUID:  "original-pod-uid",
+		Stage:         enterpriseApi.SearchHeadClusterLifecycleStageValidatingCluster,
+	}
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
+		},
+	}
+
+	if lifecycleRecoveryActiveForStatefulSet(statefulSet, operation, true) {
+		t.Fatal("OnDelete preparation was misclassified as replacement recovery")
+	}
+}
+
+func TestOnDeleteReplacementObservationUsesPodIdentity(t *testing.T) {
+	target := int32(2)
+	authorizedAt := metav1.Now()
+	operation := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+		TargetOrdinal:           &target,
+		TargetPod:               "splunk-example-search-head-2",
+		TargetPodUID:            "original-pod-uid",
+		ReplacementAuthorizedAt: &authorizedAt,
+		Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+	}
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		podUID   types.UID
+		wantSeen bool
+	}{
+		{
+			name:     "original Pod remains",
+			podUID:   types.UID(operation.TargetPodUID),
+			wantSeen: false,
+		},
+		{
+			name:     "replacement Pod has new UID",
+			podUID:   "replacement-pod-uid",
+			wantSeen: true,
+		},
+		{
+			name:     "original Pod is absent",
+			wantSeen: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := spltest.NewMockClient()
+			cr := &enterpriseApi.SearchHeadCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example",
+					Namespace: "test",
+				},
+			}
+			if test.podUID != "" {
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      operation.TargetPod,
+						Namespace: cr.GetNamespace(),
+						UID:       test.podUID,
+					},
+				}
+				if err := client.Create(context.Background(), pod); err != nil {
+					t.Fatalf("create observed Pod: %v", err)
+				}
+			}
+			mgr := &searchHeadClusterPodManager{c: client, cr: cr}
+
+			seen, err := mgr.onDeleteReplacementObserved(
+				context.Background(),
+				statefulSet,
+				operation,
+			)
+			if err != nil {
+				t.Fatalf("observe OnDelete replacement: %v", err)
+			}
+			if seen != test.wantSeen {
+				t.Fatalf(
+					"replacement observed = %t, want %t",
+					seen,
+					test.wantSeen,
+				)
+			}
+		})
 	}
 }
 
@@ -2967,7 +3077,7 @@ func TestLifecycleRecoveryDoesNotRequirePartitionForScaleDownCancellation(
 		},
 	}
 
-	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
+	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation, false) {
 		t.Fatal("cancelled scale down incorrectly waited for partition advancement")
 	}
 }
@@ -2997,7 +3107,7 @@ func TestLifecycleRecoveryDoesNotRequirePartitionForPodUpdateCancellation(
 		},
 	}
 
-	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation) {
+	if !lifecycleRecoveryActiveForStatefulSet(statefulSet, operation, false) {
 		t.Fatal("cancelled Pod update incorrectly waited for partition advancement")
 	}
 }
