@@ -111,6 +111,15 @@ ownership.
   preserved. The monitor recorded 187 HTTP 200 searches, zero failures,
   minimum two serving endpoints, maximum one unavailable member, zero
   restarts, and a clean 369-second final gate.
+- [x] (2026-07-30 UTC) Qualified SHC-81 termination-safe finalization on EKS
+  with exact source `58437e3ad` and Operator digest
+  `sha256:f2ffee5a6cc7d33b2aa26e8cbdab81618a3785e31600d7a676ed3ec149c52b6d`.
+  Direct namespace deletion of a paused, healthy three-member SHC removed the
+  CR finalizer and all eight declared PVCs without creating namespace content,
+  writing status after successful finalization, or producing namespace-
+  termination or storage-precondition errors. The namespace, four workload
+  Pods, eight PVCs, and all eight PVs were absent about 40 seconds after the
+  deletion request.
 - [ ] Qualify OPS-011/SHC-82 with a restart-required App Framework package on
   both a three-member SHC and a replicated indexer cluster. Capture the
   effective restart flags and exact peer/member order while continuous ingest,
@@ -118,6 +127,12 @@ ownership.
   completeness. Repeat with an active Operator rollout and with replication or
   search factor intentionally unmet; both cases must block rather than start a
   conflicting or forced restart.
+- [ ] Qualify SHC-83 with an explicit startup-complete traffic-readiness
+  contract across image-owned initialization, synchronization, and internal
+  Splunk restarts.
+- [ ] Qualify SHC-84 with measured first-start and upgrade startup budgets,
+  kubelet probe-triggered restart behavior, and bounded TERM-to-container-exit
+  evidence for every supported runtime.
 - [ ] Complete cloud-provider qualification and release-readiness review.
 
 ## Surprises & Discoveries
@@ -241,6 +256,13 @@ ownership.
   termination grace period.
   Consequence: qualification includes a direct TERM-to-container-exit contract,
   exact-once shutdown invocation, and an in-cluster elapsed-time smoke test.
+  The first SHC-81 fixture confirmed why the contract is mandatory: about
+  7 minutes 24 seconds of supported first-start work exceeded the approximately
+  6 minute 29 second default startup-probe budget, the kubelet applied the
+  configured 1200-second grace to that probe-triggered restart, and a legacy
+  image without `/sbin/splunk-shutdown` did not exit promptly. SHC-84 must
+  qualify startup duration, restart policy, grace, and process exit together;
+  a larger grace period alone is not acceptance.
 
 - Observation: switching the requested policy to `OnDelete` during an active
   `RollingUpdate` target does not cancel the desired revision.
@@ -344,8 +366,31 @@ ownership.
   the members recovered.
   Consequence: SHC-80 fault injection began only after sustained endpoint,
   member, captain, and search validation. The early-ready interval remains a
-  separate Docker-Splunk and Splunk Enterprise startup-contract gap and cannot
-  be treated as proof that the cluster is ready for disruption.
+  separate startup-contract gap and cannot be treated as proof that the
+  cluster is ready for disruption. The final SHC-81 fixture reproduced this
+  sequence before converging to two consecutive clean health samples; SHC-83
+  now tracks an explicit startup-complete traffic gate across the Operator,
+  Docker-Splunk, and Splunk Enterprise.
+
+- Observation: namespace-first deletion originally entered ordinary reconcile
+  work after namespace termination, and successful finalizer removal was
+  followed by inner and outer status writes against a deleted object.
+  Consequence: SHC-81 routes deletion ahead of ordinary validation and
+  configuration, treats already-absent owned objects as success, creates no
+  namespace content, applies declared PVC retention, and stops both status
+  writers after successful finalization. The accepted EKS run began direct
+  namespace deletion at `2026-07-30T00:05:34Z`, observed the CR absent about
+  11 seconds later, and observed the namespace and all exact PVs absent about
+  40 seconds after the request. The bounded log audit found no
+  `NamespaceTerminating`, `StorageError`, precondition, configuration, delete,
+  or stalled-condition-write failure.
+
+- Observation: the generic outer condition-writer shape corrected for the
+  SearchHeadCluster controller also appears structurally in other enterprise
+  reconcilers.
+  Consequence: retain an Operator-wide source and behavior audit as a separate
+  follow-up. SHC-81 proves only the SearchHeadCluster deletion path and does
+  not infer a failure in controllers that were not exercised.
 
 - Observation: SHC recovery and withdrawal counters are process-local. The
   deliberate Operator restart retained durable CR status and Events but reset
@@ -1528,3 +1573,13 @@ dynamic captain-transfer evidence, exact persistent GUID continuity, Event
 and process-local metric interpretation, 187 uninterrupted searches, a
 369-second final gate, complete storage cleanup, and the separate early-ready
 and destructive `make deploy` follow-up findings.
+
+2026-07-30 UTC: Recorded SHC-81 termination-safe finalization qualification.
+Added immutable source, Operator, runtime, and EKS provenance; a sustained
+healthy-and-paused precondition; direct namespace-first deletion; no-create
+and no-post-finalization-status assertions; exact PVC/PV cleanup; bounded
+error-log audit; and worker/CSI health evidence. Registered SHC-83 and SHC-84
+for the repeated early-ready interval and the coupled startup-budget,
+probe-restart, grace-period, and TERM-exit contract. Retained the similar
+non-SHC condition-writer structure as an audit item without making an
+unqualified defect claim.

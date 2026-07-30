@@ -55,8 +55,10 @@ without duplicating their full content.
 | SHC-78 | Attribute scheduling, Pod-infrastructure, and CSI attachment waits without collapsing them into image-pull or container-startup time | `63714251f`, `7b90da269`, `a5a41c07c` | REJ-002, REJ-003, STS-008, OBS-001, OBS-002 | EKS-qualified for six-sample unschedulable and exact CSI-attachment holds, complete scheduler recovery, same-target storage recovery, minimum two Ready endpoints, uninterrupted HTTP 200 search, and zero restarts |
 | SHC-79 | Normalize Kubernetes-defaulted Pod volume fields before desired/observed StatefulSet comparison | `96c16b49b`, `a59fc5103` | API-005, STS-003, OBS-002 | Source-qualified; EKS-qualified for omitted/defaulted generic-ephemeral `volumeMode`, stable StatefulSet generations and revisions, controller restart, six post-restart samples, HTTP 200 search on every member, and zero Pod replacement or restart |
 | SHC-80 | Define and implement safe withdrawal or supersession when an authorized replacement cannot start | `d1f6e301d`, `744bfb096`, `9be744f06`, `0b9253f11` | STS-003, STS-008, STS-014, OBS-001 | Source-qualified and EKS-qualified for an authorized unschedulable replacement, superseding queued revision, durable last-known-good recovery across an Operator restart, complete queued rollout, dynamic captain transfer, 187 uninterrupted searches, and 369 seconds of final stability |
-| SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | Pending | OPS-004, OBS-001, OBS-005 | Selected on `codex/shc-81-termination-safe-finalization` from integrated baseline `efbff783f`; implementation and qualification are not claimed by this registration |
+| SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | `d053ff65b`, `33ff143d1`, `58437e3ad` | OPS-004, OBS-001, OBS-005 | Source-qualified and EKS-qualified for direct namespace deletion of a paused, healthy three-member SHC: no create after namespace termination, no post-finalization status write, declared PVC deletion completed, and no workload or PV remained |
 | SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | Pending | OPS-006, OPS-011, OBS-001, OBS-003, OBS-005 | Customer-reported behavior includes a bundle-triggered indexer message with `searchable=0` and `force=0`; exact Splunk semantics, effective configuration, active-search behavior, and end-to-end availability remain to be established before selecting a solution |
+| SHC-83 | Prevent traffic readiness before image-owned SHC initialization, synchronization, and internal Splunk restarts are complete | Pending | HLT-001, HLT-002, HLT-009, STS-012, OBS-001 | Registered from repeated EKS observations of a brief early-ready interval; no cross-layer startup-complete contract or solution is claimed |
+| SHC-84 | Bound first-start and upgrade startup probes and guarantee prompt TERM exit for kubelet-initiated restarts | Pending | HLT-009, RUN-003, RUN-004, REJ-005, OBS-005 | Registered after a legacy-runtime fixture exceeded the default startup budget and then consumed the configured 1200-second termination grace; no runtime or probe-policy implementation is claimed |
 
 ## SHC-75 immutable qualification inputs
 
@@ -338,14 +340,69 @@ Splunkd change or weakened KV gate is part of SHC-78.
   remained; all three workers finished Ready and schedulable, and the EBS CSI
   controller finished at two ready replicas.
 
+## SHC-81 immutable qualification inputs
+
+- source branch:
+  `codex/shc-81-termination-safe-finalization`;
+- integrated feature baseline:
+  `efbff783f02be7cee29c45c793e5cd2886dd2325`;
+- registration and implementation commits:
+  `ec27268a3b3e25d41b0da539ec0dcdd5ed430c01`,
+  `d053ff65be837ed0e2e23b163c9b53fb2f9492f8`,
+  `33ff143d18d448961d33c1774602863420e79ac0`, and
+  `58437e3ad6e63a7d244bb75b180b180325b47de2`;
+- exact source used for the final qualification image:
+  `58437e3ad6e63a7d244bb75b180b180325b47de2`;
+- Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-81-58437e3ad`;
+- Operator image digest:
+  `sha256:f2ffee5a6cc7d33b2aa26e8cbdab81618a3785e31600d7a676ed3ec149c52b6d`;
+- EKS cluster: `vivek-spl-301372` in `us-west-2`;
+- accepted qualification namespace and CR:
+  `shc81-termination-finalization-v4` and `shc81v4`;
+- runtime image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc-prestart-7951d69-ansible-9954434-splunk-10.6.0.0-d9be152689b7`;
+- runtime image digest:
+  `sha256:c295389a5bbcaa0aade25b0a5950952794179059564a525a7200b6f1c26b3547`;
+- feature gates:
+  `SplunkPodLifecycle=true,SearchHeadClusterLifecycle=true`;
+- Linux gate: `make vet`, `make build`, and `make test`, 41 Ginkgo suites,
+  155 controller specifications, zero failures, and 78.5 percent composite
+  coverage;
+- precondition: two consecutive samples retained CR phase `Ready`, three
+  ready Search Heads, three registered `Up` members, a ready dynamic captain,
+  minimum peers joined, three serving endpoints, and zero container restarts.
+  The CR was then paused with its supported annotation and retained the same
+  health before deletion;
+- finalization result: direct namespace deletion began at
+  `2026-07-30T00:05:34Z`. The deleting CR routed to finalization before normal
+  validation, tolerated already-absent owned resources, deleted all eight
+  declared PVCs, removed its finalizer, and was absent by
+  `2026-07-30T00:05:45Z`;
+- safety result: the accepted window contained no
+  `NamespaceTerminating`, post-finalization `StorageError` or precondition
+  failure, `ApplySplunkConfigFailed`, `DeleteFailed`, or failed stalled
+  condition write. The finalizer created no namespace content and did not run
+  per-member detention, captain transfer, or consensus-removal workflows for
+  whole-CR deletion;
+- cleanup result: the namespace, four workload Pods, eight PVCs, and all eight
+  exact PVs were absent by `2026-07-30T00:06:14Z`, about 40 seconds after the
+  deletion request; and
+- infrastructure result: all three EKS workers remained Ready and schedulable,
+  both EBS CSI controller replicas and all three node daemons remained Ready,
+  and those components recorded zero restarts.
+
 ## Next execution records
 
 SHC-79 through SHC-81 record separate gaps discovered by the accepted SHC-78
-campaign. SHC-79 and SHC-80 are now source- and EKS-qualified on their
-isolated branches.
+campaign. All three are now source- and EKS-qualified on their isolated
+branches.
 SHC-82 records a separate customer-reported App Framework availability
-requirement that spans both Search Head and indexer clusters. SHC-81 is
-selected on its isolated branch; SHC-82 remains registered but unassigned.
+requirement that spans both Search Head and indexer clusters. SHC-83 and
+SHC-84 preserve two distinct runtime-contract gaps exposed during repeated
+formation and finalization campaigns: early traffic readiness, and the
+interaction among startup duration, kubelet restart policy, and prompt
+process exit. SHC-82 through SHC-84 remain registered but unassigned.
 Registration or assignment alone does not claim implementation. Each
 remaining item must use its own branch and immutable source commit.
 
@@ -378,6 +435,14 @@ restart.
 `codex/shc-81-termination-safe-finalization` from integrated feature baseline
 `efbff783f02be7cee29c45c793e5cd2886dd2325`. This registration does not claim
 implementation or qualification.
+
+2026-07-30 UTC: Recorded SHC-81 source and EKS qualification. Direct namespace
+deletion of a paused, healthy three-member SHC routed through a no-create
+finalization path, removed all declared PVCs and PVs, avoided stale
+post-finalization status writes, and completed without namespace-termination
+or storage-precondition errors. Registered SHC-83 and SHC-84 separately for
+the observed early-ready startup interval and the startup-budget/TERM-exit
+contract; neither follow-up is claimed as implemented.
 
 2026-07-29 UTC: Registered SHC-82 and OPS-011 from a customer-reported
 App Framework restart-availability concern. The record deliberately preserves
