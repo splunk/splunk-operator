@@ -81,3 +81,19 @@ The default success gate requires twelve consecutive five-second samples with
 all desired members ready, serving, present in the client Service
 EndpointSlice, reflected by `status.lastStableReplicas`, and reported in the
 `Complete` initial-formation stage after the required restart was initiated.
+
+After startup qualifies, use `shc83_established_recovery_monitor.sh` to verify
+that deletion of an established non-captain member removes only that member
+from client traffic. The monitor fails if either unaffected peer leaves the
+EndpointSlice or fewer than two established endpoints remain. It succeeds only
+after a replacement Pod with a new UID rejoins the captain view, becomes
+serving and ready, returns to the EndpointSlice, and remains stable.
+
+```bash
+SHC83_TARGET_POD=splunk-shc83-shc-search-head-1 \
+SHC83_EVIDENCE_FILE=build/_test/shc83/established-recovery.tsv \
+test/fixtures/shc-reliability/shc83_established_recovery_monitor.sh &
+kubectl -n shc83-startup-readiness delete pod \
+  splunk-shc83-shc-search-head-1 --wait=false
+wait
+```
