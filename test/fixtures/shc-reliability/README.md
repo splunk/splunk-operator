@@ -46,3 +46,37 @@ test/fixtures/shc-reliability/shc82_appframework_monitor.sh
 
 The evidence log is written below `build/_test/shc82` unless
 `SHC82_EVIDENCE_FILE` specifies another location.
+
+## SHC-83 initial-formation readiness
+
+`shc83-startup-readiness-cluster.yaml` creates an isolated LicenseManager and
+three-member Search Head Cluster using the current qualification runtime. The
+license file is deliberately not stored in Git.
+
+Create the namespace and license Secret before applying the fixture:
+
+```bash
+kubectl create namespace shc83-startup-readiness
+make shc83-license-secret \
+  SHC83_LICENSE_FILE=/absolute/path/to/enterprise.lic
+```
+
+Start `shc83_startup_readiness_monitor.sh` before applying the fixture. The
+monitor fails immediately if any Search Head becomes a ready Service endpoint,
+or its Operator-owned serving gate becomes true, before all desired Search
+Head containers have completed image-owned initialization. It records Pod
+UIDs, container and Pod readiness, serving-gate reasons, EndpointSlice targets,
+container restart counts, local container-state files, and aggregate SHC
+formation status.
+
+```bash
+SHC83_NAMESPACE=shc83-startup-readiness \
+test/fixtures/shc-reliability/shc83_startup_readiness_monitor.sh &
+kubectl apply -f \
+  test/fixtures/shc-reliability/shc83-startup-readiness-cluster.yaml
+wait
+```
+
+The default success gate requires twelve consecutive five-second samples with
+all desired members ready, serving, present in the client Service
+EndpointSlice, and reflected by `status.lastStableReplicas`.

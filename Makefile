@@ -150,8 +150,10 @@ SHC82_APP_VERSION ?= 1.0.0
 SHC82_APP_OUTPUT ?= build/_test/shc82/shc82_restart_required-$(SHC82_APP_VERSION).tgz
 SHC82_NAMESPACE ?= shc82-afw-baseline
 SHC82_LICENSE_FILE ?=
+SHC83_NAMESPACE ?= shc83-startup-readiness
+SHC83_LICENSE_FILE ?=
 
-.PHONY: shc82-app-package shc82-license-secret
+.PHONY: shc82-app-package shc82-license-secret shc83-license-secret
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
 	@printf '%s\n' "$(SHC82_APP_VERSION)" | \
 		grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || \
@@ -175,6 +177,15 @@ shc82-license-secret: ## Create or update the SHC-82 LicenseManager license Secr
 		{ echo "license file not found: $(SHC82_LICENSE_FILE)"; exit 1; }
 	kubectl -n "$(SHC82_NAMESPACE)" create secret generic "shc82-license" \
 		--from-file=enterprise.lic="$(SHC82_LICENSE_FILE)" \
+		--dry-run=client -o yaml | kubectl apply -f -
+
+shc83-license-secret: ## Create or update the SHC-83 LicenseManager license Secret.
+	@test -n "$(SHC83_LICENSE_FILE)" || \
+		{ echo "SHC83_LICENSE_FILE must point to a valid remote-manager-capable Splunk license"; exit 1; }
+	@test -f "$(SHC83_LICENSE_FILE)" || \
+		{ echo "license file not found: $(SHC83_LICENSE_FILE)"; exit 1; }
+	kubectl -n "$(SHC83_NAMESPACE)" create secret generic "shc83-license" \
+		--from-file=enterprise.lic="$(SHC83_LICENSE_FILE)" \
 		--dry-run=client -o yaml | kubectl apply -f -
 
 
