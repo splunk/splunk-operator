@@ -7,11 +7,15 @@ interval_seconds="${SHC82_INTERVAL_SECONDS:-5}"
 settle_attempts="${SHC82_SETTLE_ATTEMPTS:-24}"
 run_id="${SHC82_RUN_ID:-shc82-afw-$(date -u +%Y%m%dT%H%M%SZ)}"
 evidence_file="${SHC82_EVIDENCE_FILE:-build/_test/shc82/${run_id}.log}"
+stack_name="${SHC82_STACK_NAME:-shc82}"
+indexercluster_name="${SHC82_IDXC_NAME:-${stack_name}-idxc}"
+searchheadcluster_name="${SHC82_SHC_NAME:-${stack_name}-shc}"
 
-probe_pod="splunk-shc82-license-manager-0"
+probe_pod="splunk-${stack_name}-license-manager-0"
 secret_name="splunk-${namespace}-secret"
-hec_service="splunk-shc82-idxc-indexer-service"
-shc_service="splunk-shc82-shc-search-head-service"
+hec_service="splunk-${indexercluster_name}-indexer-service"
+shc_service="splunk-${searchheadcluster_name}-search-head-service"
+shc_instance="splunk-${searchheadcluster_name}-search-head"
 
 for value in "${samples}" "${interval_seconds}" "${settle_attempts}"; do
   if ! printf '%s\n' "${value}" | grep -Eq '^[1-9][0-9]*$'; then
@@ -43,29 +47,35 @@ submit_event() {
     printf '{"event":{"shc82_run":"%s","seq":%d},"sourcetype":"_json","index":"main"}' \
       "${run_id}" "${sequence}"
   )"
+  # Variables in this command are intentionally expanded inside the Pod.
+  # shellcheck disable=SC2016
   response="$(
-    printf '%s\n%s\n' "${hec_token}" "${payload}" |
+    printf '%s\n%s\n%s\n' "${hec_token}" "${payload}" "${hec_service}" |
       kubectl -n "${namespace}" exec -i "${probe_pod}" -c splunk -- sh -c '
         IFS= read -r token
         IFS= read -r payload
+        IFS= read -r service
         curl -sk --connect-timeout 3 --max-time 15 \
           -H "Authorization: Splunk ${token}" \
           -H "Content-Type: application/json" \
           --data-binary "${payload}" \
-          "https://splunk-shc82-idxc-indexer-service:8088/services/collector/event"
+          "https://${service}:8088/services/collector/event"
       ' 2>/dev/null || true
   )"
   printf '%s' "${response}" | grep -q '"code":0'
 }
 
 search_sequences() {
-  printf '%s\n%s\n' "${admin_password}" "${run_id}" |
+  # Variables in this command are intentionally expanded inside the Pod.
+  # shellcheck disable=SC2016
+  printf '%s\n%s\n%s\n' "${admin_password}" "${run_id}" "${shc_service}" |
     kubectl -n "${namespace}" exec -i "${probe_pod}" -c splunk -- sh -c '
       IFS= read -r password
       IFS= read -r run_id
+      IFS= read -r service
       curl -sk --connect-timeout 3 --max-time 20 \
         -u "admin:${password}" \
-        -X POST "https://splunk-shc82-shc-search-head-service:8089/services/search/jobs/export" \
+        -X POST "https://${service}:8089/services/search/jobs/export" \
         --data-urlencode "search=search index=main earliest=-24h shc82_run=\"${run_id}\" | stats count min(seq) as min max(seq) as max dc(seq) as distinct" \
         --data "output_mode=json"
     ' 2>/dev/null || true
@@ -136,19 +146,19 @@ for sequence in $(seq 1 "${samples}"); do
 
   sh_containers_ready="$(
     kubectl -n "${namespace}" get pods \
-      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance=splunk-shc82-shc-search-head \
+      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance="${shc_instance}" \
       -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' \
       2>/dev/null | grep -c '^true$' || true
   )"
   sh_pods_ready="$(
     kubectl -n "${namespace}" get pods \
-      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance=splunk-shc82-shc-search-head \
+      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance="${shc_instance}" \
       -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\n"}{end}{end}' \
       2>/dev/null | grep -c '^True$' || true
   )"
   sh_serving_ready="$(
     kubectl -n "${namespace}" get pods \
-      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance=splunk-shc82-shc-search-head \
+      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance="${shc_instance}" \
       -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="enterprise.splunk.com/shc-serving")]}{.status}{"\n"}{end}{end}' \
       2>/dev/null | grep -c '^True$' || true
   )"
@@ -166,12 +176,12 @@ for sequence in $(seq 1 "${samples}"); do
   )"
   sh_serving_conditions="$(
     kubectl -n "${namespace}" get pods \
-      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance=splunk-shc82-shc-search-head \
+      -l app.kubernetes.io/component=search-head,app.kubernetes.io/instance="${shc_instance}" \
       -o jsonpath='{range .items[*]}{.metadata.name}={range .status.conditions[?(@.type=="enterprise.splunk.com/shc-serving")]}{.status}/{.reason}{end}{";"}{end}' \
       2>/dev/null || printf 'Unavailable'
   )"
   sh_member_states="$(
-    resource_state searchheadcluster.enterprise.splunk.com shc82-shc \
+    resource_state searchheadcluster.enterprise.splunk.com "${searchheadcluster_name}" \
       '{range .status.members[*]}{.name}={.status}/{.restart_state}/{.captain_status}{";"}{end}'
   )"
   idx_endpoints="$(
@@ -186,19 +196,19 @@ for sequence in $(seq 1 "${samples}"); do
       2>/dev/null | awk '{sum += $1} END {print sum + 0}'
   )"
   shc="$(
-    resource_state searchheadcluster.enterprise.splunk.com shc82-shc \
+    resource_state searchheadcluster.enterprise.splunk.com "${searchheadcluster_name}" \
       '{.status.phase}/{.status.readyReplicas}/{.status.replicas}/{.status.captain}'
   )"
   idxc="$(
-    resource_state indexercluster.enterprise.splunk.com shc82-idxc \
+    resource_state indexercluster.enterprise.splunk.com "${indexercluster_name}" \
       '{.status.phase}/{.status.readyReplicas}/{.status.replicas}'
   )"
   shc_app="$(
-    resource_state searchheadcluster.enterprise.splunk.com shc82-shc \
+    resource_state searchheadcluster.enterprise.splunk.com "${searchheadcluster_name}" \
       '{.status.appContext.isDeploymentInProgress}/{.status.appContext.bundlePushStatus.bundlePushStage}'
   )"
   cm_app="$(
-    resource_state clustermanager.enterprise.splunk.com shc82 \
+    resource_state clustermanager.enterprise.splunk.com "${stack_name}" \
       '{.status.appContext.isDeploymentInProgress}/{.status.appContext.bundlePushStatus.bundlePushStage}'
   )"
 
@@ -207,7 +217,7 @@ for sequence in $(seq 1 "${samples}"); do
 done
 
 final_complete=false
-for attempt in $(seq 1 "${settle_attempts}"); do
+for _ in $(seq 1 "${settle_attempts}"); do
   search_response="$(search_sequences)"
   count="$(extract_field count "${search_response}")"
   minimum="$(extract_field min "${search_response}")"

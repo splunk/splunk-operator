@@ -205,3 +205,59 @@ probe/grace values; and relevant Pod Events. It fails if fewer than two
 Search Heads remain endpoints, a retained container or replacement Pod
 restarts, the four-clock probe contract changes, or final Pods do not all use
 the target digest and rejoin registered and `Up`.
+
+## SHC-85 planned indexer lifecycle hold
+
+`shc85-lifecycle-hold-cluster.yaml` creates the isolated four-indexer RF3/SF2
+topology used to qualify a long controller absence after an Operator-owned
+target has durably reached `ReadyForReplacement`. The fixture also includes a
+three-member Search Head Cluster so the existing numbered HEC/search monitor
+can run throughout the lifecycle test. It pins the accepted Splunk Cloud
+`10.5.2605.0/844c593e9c1d` runtime digest.
+
+Create the namespace and license Secret, apply the fixture, and wait for all
+four indexers and three Search Heads to become Ready:
+
+```bash
+kubectl create namespace shc85-lifecycle-hold
+make shc85-license-secret \
+  SHC85_LICENSE_FILE=/absolute/path/to/enterprise.lic
+kubectl apply -f \
+  test/fixtures/shc-reliability/shc85-lifecycle-hold-cluster.yaml
+```
+
+The Operator must be running with `SplunkPodLifecycle`,
+`SearchHeadClusterLifecycle`, and `IndexerClusterLifecycle` enabled. Start the
+numbered workload monitor first, then run the lifecycle monitor. The latter
+owns the harmless `spec.podAnnotations` revision trigger, waits for ordinal
+three to reach `ReadyForReplacement`, scales the Operator Deployment to zero,
+and observes an uninterrupted five-minute controller absence. Its exit trap
+restores the original controller replica count on success or failure.
+
+```bash
+SHC82_NAMESPACE=shc85-lifecycle-hold \
+SHC82_STACK_NAME=shc85 \
+SHC82_SAMPLES=180 \
+SHC82_RUN_ID=shc85-ready-replacement-absence \
+SHC82_EVIDENCE_FILE=build/_test/shc85/workload.log \
+test/fixtures/shc-reliability/shc82_appframework_monitor.sh &
+workload_pid=$!
+
+SHC85_NAMESPACE=shc85-lifecycle-hold \
+SHC85_HOLD_SECONDS=300 \
+SHC85_EVIDENCE_FILE=build/_test/shc85/lifecycle-hold.tsv \
+test/fixtures/shc-reliability/shc85_lifecycle_hold_monitor.sh
+
+wait "${workload_pid}"
+```
+
+During controller absence the lifecycle monitor requires the exact persisted
+operation, target UID and revisions to remain fixed; the target container to
+remain running with zero restarts while staying unready and outside the
+EndpointSlice; and all three non-target peers to retain their UIDs, restart
+counts, readiness, and endpoints. After controller restoration it requires a
+complete `3 -> 2 -> 1 -> 0` roll, at most one unavailable indexer, zero
+container restarts, remote serving recovery on the final replacement, the
+desired revision on all four Pods, and removal of the temporary lifecycle
+marker with Pod replacement. The workload monitor independently requires
+zero HEC and search request failures plus exact eventual sequence recovery.

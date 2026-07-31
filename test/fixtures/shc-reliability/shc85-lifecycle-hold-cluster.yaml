@@ -1,0 +1,159 @@
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: shc85
+  namespace: shc85-lifecycle-hold
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc85-f063cfd-ansible-5e9e12f-splunkcloud-10.5.2605.0-844c593e9c1d@sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2
+  imagePullPolicy: IfNotPresent
+  volumes:
+    - name: licenses
+      secret:
+        secretName: shc85-license
+  licenseUrl: /mnt/licenses/enterprise.lic
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 40
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+  terminationGracePeriodSeconds: 1200
+---
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: shc85
+  namespace: shc85-lifecycle-hold
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc85-f063cfd-ansible-5e9e12f-splunkcloud-10.5.2605.0-844c593e9c1d@sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2
+  imagePullPolicy: IfNotPresent
+  licenseManagerRef:
+    name: shc85
+  defaults: |-
+    splunk:
+      idxc:
+        replication_factor: 3
+        search_factor: 2
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 40
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+  terminationGracePeriodSeconds: 1200
+---
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: shc85-idxc
+  namespace: shc85-lifecycle-hold
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc85-f063cfd-ansible-5e9e12f-splunkcloud-10.5.2605.0-844c593e9c1d@sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2
+  imagePullPolicy: IfNotPresent
+  replicas: 4
+  clusterManagerRef:
+    name: shc85
+  licenseManagerRef:
+    name: shc85
+  podAnnotations:
+    qualification.splunk.com/shc85-revision: baseline
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 40
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+  terminationGracePeriodSeconds: 1200
+---
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc85-shc
+  namespace: shc85-lifecycle-hold
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc85-f063cfd-ansible-5e9e12f-splunkcloud-10.5.2605.0-844c593e9c1d@sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2
+  imagePullPolicy: IfNotPresent
+  replicas: 3
+  clusterManagerRef:
+    name: shc85
+  licenseManagerRef:
+    name: shc85
+  defaults: |-
+    splunk:
+      shc:
+        prestart_config: true
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 80
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+  terminationGracePeriodSeconds: 1200
