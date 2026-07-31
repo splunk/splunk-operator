@@ -30,6 +30,9 @@ Operator branch:
 | `968e19b94` | Extend the startup failure budget and separate startup/liveness restart grace from Pod-deletion grace |
 | `3b0e9a2e9` | Add direct-TERM recovery evidence and correct the current readiness contract |
 | `d4cc12fc3` | Remove the unsupported SHC readiness-endpoint assumption from the product requirements |
+| `4ef6b488c` | Record the measured first-start and direct-TERM baseline |
+| `a954dd1b5` | Normalize only the exact persisted v4 legacy startup-probe default |
+| `c58ff86cd` | Reject probe-level termination grace on readiness through the v4 CRD and reconciliation validation |
 
 Docker-Splunk branch:
 `codex/shc-84-startup-term-qualification`
@@ -149,7 +152,7 @@ The following completed successfully on macOS:
 - `make generate manifests`;
 - `make fmt vet`;
 - `make build`;
-- `make test`: 41 suites, 155 specs, zero failures, 78.6% composite coverage;
+- `make test`: 41 suites, 156 specs, zero failures, 78.6% composite coverage;
 - focused API, probe-rendering, validation, and Search Head StatefulSet tests;
 - shell syntax and ShellCheck for both SHC-84 monitors; and
 - Docker-Splunk `make test_shutdown`: seven tests, zero failures.
