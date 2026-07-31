@@ -170,10 +170,21 @@ The target must be resolved from the live
 The candidate run must additionally show
 `livenessProbe.terminationGracePeriodSeconds: 660`.
 
-To qualify a supported-version upgrade, first form a fully serving v4 SHC on
-the supported source image and upgrade its referenced LicenseManager to the
-target image. After the LicenseManager is Ready on the target image, start the
-upgrade monitor before changing the SearchHeadCluster image:
+To qualify a supported-version upgrade, first form the fully serving v4 source
+fixture pinned to the qualified 10.4 runtime digest:
+
+```bash
+kubectl create namespace shc84-upgrade-candidate
+make shc84-license-secret \
+  SHC84_NAMESPACE=shc84-upgrade-candidate \
+  SHC84_LICENSE_FILE=/absolute/path/to/enterprise.lic
+kubectl apply -f \
+  test/fixtures/shc-reliability/shc84-supported-upgrade-source.yaml
+```
+
+Upgrade its referenced LicenseManager to the target image and wait for the
+LicenseManager to become Ready on that image. Then start the upgrade monitor
+before changing the SearchHeadCluster image:
 
 ```bash
 SHC84_NAMESPACE=shc84-upgrade-candidate \

@@ -1,0 +1,51 @@
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: shc84
+  namespace: shc84-upgrade-candidate
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc84-upgrade-base-f063cfd-ansible-5e9e12f-splunkcloud-10.4.2604.0-60dd7967c086@sha256:04b0a011f27e4cfb9930d1dd8c430d5da11ef596d08c6b98f98184589d727a9a
+  imagePullPolicy: IfNotPresent
+  volumes:
+    - name: licenses
+      secret:
+        secretName: shc84-license
+  licenseUrl: /mnt/licenses/enterprise.lic
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 40
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+---
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc84-shc
+  namespace: shc84-upgrade-candidate
+spec:
+  image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc84-upgrade-base-f063cfd-ansible-5e9e12f-splunkcloud-10.4.2604.0-60dd7967c086@sha256:04b0a011f27e4cfb9930d1dd8c430d5da11ef596d08c6b98f98184589d727a9a
+  imagePullPolicy: IfNotPresent
+  replicas: 3
+  licenseManagerRef:
+    name: shc84
+  defaults: |-
+    splunk:
+      shc:
+        prestart_config: true
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
