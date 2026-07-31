@@ -210,10 +210,13 @@ the target digest and rejoin registered and `Up`.
 
 `shc85-lifecycle-hold-cluster.yaml` creates the isolated four-indexer RF3/SF2
 topology used to qualify a long controller absence after an Operator-owned
-target has durably reached `ReadyForReplacement`. The fixture also includes a
-three-member Search Head Cluster so the existing numbered HEC/search monitor
-can run throughout the lifecycle test. It pins the accepted Splunk Cloud
-`10.5.2605.0/844c593e9c1d` runtime digest.
+target has durably reached `Decommissioning` or `ReadyForReplacement`. For
+`Decommissioning`, the monitor waits until the accepted operation records that
+Splunk has actually been observed in a decommission state; issuing the command
+alone is not sufficient. The fixture also includes a three-member Search Head
+Cluster so the numbered HEC/search monitor can run throughout the lifecycle
+test. It pins the accepted Splunk Cloud `10.5.2605.0/844c593e9c1d` runtime
+digest.
 
 Create the namespace and license Secret, apply the fixture, and wait for all
 four indexers and three Search Heads to become Ready:
@@ -232,9 +235,11 @@ in-cluster workload Job first, then run the lifecycle monitor. The Job sends
 numbered HEC events and searches through the Services without depending on a
 workstation `kubectl exec` connection. The lifecycle monitor owns the harmless
 `spec.podAnnotations` revision trigger, waits for ordinal three to reach
-`ReadyForReplacement`, scales the Operator Deployment to zero, and observes
-an uninterrupted five-minute controller absence. Its exit trap restores the
-original controller replica count on success or failure.
+the stage selected by `SHC85_HOLD_STAGE`, scales the Operator Deployment to
+zero, and observes an uninterrupted five-minute controller absence. The
+default stage is `ReadyForReplacement`; the other supported value is
+`Decommissioning`. Its exit trap restores the original controller replica
+count on success or failure.
 
 ```bash
 make shc85-incluster-workload
@@ -242,6 +247,7 @@ kubectl -n shc85-lifecycle-hold logs -f job/shc85-incluster-workload &
 workload_log_pid=$!
 
 SHC85_NAMESPACE=shc85-lifecycle-hold \
+SHC85_HOLD_STAGE=ReadyForReplacement \
 SHC85_HOLD_SECONDS=300 \
 SHC85_EVIDENCE_FILE=build/_test/shc85/lifecycle-hold.tsv \
 test/fixtures/shc-reliability/shc85_lifecycle_hold_monitor.sh
@@ -250,6 +256,10 @@ kubectl -n shc85-lifecycle-hold wait \
   --for=condition=complete job/shc85-incluster-workload --timeout=2h
 wait "${workload_log_pid}"
 ```
+
+To qualify a long absence after Splunk decommission has been observed but
+before replacement authorization, set
+`SHC85_HOLD_STAGE=Decommissioning` and use a new evidence-file name.
 
 During controller absence the lifecycle monitor requires the exact persisted
 operation, target UID and revisions to remain fixed; the target container to

@@ -7,6 +7,7 @@ cr_name="${SHC85_CR_NAME:-shc85-idxc}"
 operator_namespace="${SHC85_OPERATOR_NAMESPACE:-splunk-operator}"
 operator_deployment="${SHC85_OPERATOR_DEPLOYMENT:-splunk-operator-controller-manager}"
 hold_seconds="${SHC85_HOLD_SECONDS:-300}"
+hold_stage="${SHC85_HOLD_STAGE:-ReadyForReplacement}"
 sample_seconds="${SHC85_SAMPLE_SECONDS:-2}"
 stage_timeout_seconds="${SHC85_STAGE_TIMEOUT_SECONDS:-1800}"
 roll_timeout_seconds="${SHC85_ROLL_TIMEOUT_SECONDS:-7200}"
@@ -34,6 +35,14 @@ for value in "${hold_seconds}" "${sample_seconds}" \
     exit 2
   fi
 done
+
+case "${hold_stage}" in
+Decommissioning | ReadyForReplacement) ;;
+*)
+  printf 'SHC85_HOLD_STAGE must be Decommissioning or ReadyForReplacement\n' >&2
+  exit 2
+  ;;
+esac
 
 mkdir -p "$(dirname "${evidence_file}")"
 printf '%s\n' \
@@ -174,19 +183,24 @@ target_operation=""
 stage_polls=0
 while ((SECONDS < stage_deadline)); do
   current_update="$(pod_update_json)"
-  if [[ "$(jq -r '.stage // ""' <<<"${current_update}")" == \
-    ReadyForReplacement ]]; then
+  current_stage="$(jq -r '.stage // ""' <<<"${current_update}")"
+  current_observed_decommissioning="$({
+    jq -r '.observedDecommissioning // false' <<<"${current_update}"
+  })"
+  if [[ "${current_stage}" == "${hold_stage}" ]] &&
+    { [[ "${hold_stage}" != Decommissioning ]] ||
+      [[ "${current_observed_decommissioning}" == true ]]; }; then
     target_operation="${current_update}"
     break
   fi
   stage_polls=$((stage_polls + 1))
   if ((stage_polls % 25 == 0)); then
-    record_sample "waiting-ready-for-replacement"
+    record_sample "waiting-${hold_stage}"
   fi
   sleep 0.2
 done
 if [[ -z "${target_operation}" ]]; then
-  fail "ready-for-replacement-timeout"
+  fail "${hold_stage}-timeout"
 fi
 
 operation_id="$(jq -r '.operationID' <<<"${target_operation}")"
@@ -210,10 +224,11 @@ if [[ "${target_restart}" -lt 0 ]]; then
   fail "target-missing-before-controller-hold"
 fi
 
-# Stop the controller immediately after observing persisted replacement
-# authorization. All slower runtime and identity checks happen after the
-# Deployment has no remaining controller Pod, which minimizes the race with
-# the next reconciliation.
+# Stop the controller immediately after observing the requested persisted
+# stage. Decommissioning is accepted only after Splunk has been observed in
+# that state, not merely after the request was issued. All slower runtime and
+# identity checks happen after the Deployment has no remaining controller Pod,
+# which minimizes the race with the next reconciliation.
 kubectl -n "${operator_namespace}" scale deployment \
   "${operator_deployment}" --replicas=0 >/dev/null
 operator_scaled=true
@@ -242,7 +257,7 @@ if ! kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
   >/dev/null; then
   fail "lifecycle-hold-marker-missing"
 fi
-record_sample "ready-for-replacement-controller-absent"
+record_sample "${hold_stage}-controller-absent"
 
 operator_absent_start="$(date +%s)"
 hold_deadline=$((operator_absent_start + hold_seconds))
@@ -253,13 +268,18 @@ while [[ "$(date +%s)" -lt "${hold_deadline}" ]]; do
     --arg pod "${target_pod}" \
     --arg uid "${target_uid}" \
     --arg source "${source_revision}" \
-    --arg desired "${desired_revision}" '
+    --arg desired "${desired_revision}" \
+    --arg stage "${hold_stage}" '
       .operationID == $operation and
-      .stage == "ReadyForReplacement" and
+      .stage == $stage and
       .targetPod == $pod and
       .targetPodUID == $uid and
       .sourceRevision == $source and
-      .desiredRevision == $desired' <<<"${current_update}" >/dev/null; then
+      .desiredRevision == $desired and
+      (if $stage == "Decommissioning" then
+        .observedDecommissioning == true and
+        .decommissionRequestedAt != null
+      else true end)' <<<"${current_update}" >/dev/null; then
     fail "durable-operation-changed-during-absence"
   fi
 
@@ -418,6 +438,6 @@ while IFS= read -r pod; do
 done < <(pods_json | jq -r '.[].metadata.name')
 
 record_sample "PASS"
-printf 'PASS: operator absence=%ss order=%s stableSamples=%s evidence=%s\n' \
-  "${actual_hold_seconds}" "${seen_ordinals}" \
+printf 'PASS: stage=%s operator absence=%ss order=%s stableSamples=%s evidence=%s\n' \
+  "${hold_stage}" "${actual_hold_seconds}" "${seen_ordinals}" \
   "${stable_samples}" "${evidence_file}"
