@@ -194,17 +194,11 @@ while ((SECONDS < stage_deadline)); do
     case "${hold_stage}" in
     WithdrawingReadiness)
       candidate_target="$(jq -r '.targetPod // ""' <<<"${current_update}")"
-      candidate_pods="$(pods_json)"
-      candidate_endpoints="$(endpoint_pods_json)"
       if [[ -n "${candidate_target}" ]] &&
-        jq -e --arg pod "${candidate_target}" '
-          any(.[];
-            .metadata.name == $pod and
-            (any(.status.conditions[]?;
-              .type == "Ready" and .status == "True") | not))' \
-          <<<"${candidate_pods}" >/dev/null &&
-        ! jq -e --arg pod "${candidate_target}" 'index($pod) != null' \
-          <<<"${candidate_endpoints}" >/dev/null; then
+        kubectl -n "${namespace}" exec "${candidate_target}" -c splunk -- \
+          /bin/sh -ec \
+          "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
+          >/dev/null 2>&1; then
         hold_boundary_observed=true
       fi
       ;;
@@ -254,10 +248,11 @@ if [[ "${target_restart}" -lt 0 ]]; then
 fi
 
 # Stop the controller immediately after observing the requested persisted
-# stage. WithdrawingReadiness is accepted only after the target is unready and
-# absent from the Service. Decommissioning is accepted only after Splunk has
-# been observed in that state, not merely after the request was issued. All
-# slower runtime and identity checks happen after the Deployment has no
+# stage. WithdrawingReadiness is captured as soon as its explicit lifecycle
+# marker exists; external readiness and Service withdrawal are then required
+# with no controller present. Decommissioning is accepted only after Splunk
+# has been observed in that state, not merely after the request was issued.
+# All slower runtime and identity checks happen after the Deployment has no
 # remaining controller Pod, which minimizes the race with the next
 # reconciliation.
 kubectl -n "${operator_namespace}" scale deployment \
@@ -290,6 +285,40 @@ if ! kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
   /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
   >/dev/null; then
   fail "lifecycle-hold-marker-missing"
+fi
+
+if [[ "${hold_stage}" == WithdrawingReadiness ]]; then
+  withdrawal_deadline=$((SECONDS + 180))
+  withdrawal_observed=false
+  while ((SECONDS < withdrawal_deadline)); do
+    withdrawal_pods="$(pods_json)"
+    withdrawal_endpoints="$(endpoint_pods_json)"
+    if ! jq -e --arg pod "${target_pod}" --arg uid "${target_uid}" \
+      --argjson restart "${target_restart}" '
+        any(.[];
+          .metadata.name == $pod and
+          .metadata.uid == $uid and
+          ([.status.containerStatuses[]?.restartCount] | add // -1) == $restart and
+          any(.status.containerStatuses[]?; .state.running != null))' \
+      <<<"${withdrawal_pods}" >/dev/null; then
+      fail "withdrawing-target-changed-before-readiness-withdrawal"
+    fi
+    if jq -e --arg pod "${target_pod}" '
+        any(.[];
+          .metadata.name == $pod and
+          (any(.status.conditions[]?;
+            .type == "Ready" and .status == "True") | not))' \
+        <<<"${withdrawal_pods}" >/dev/null &&
+      ! jq -e --arg pod "${target_pod}" 'index($pod) != null' \
+        <<<"${withdrawal_endpoints}" >/dev/null; then
+      withdrawal_observed=true
+      break
+    fi
+    sleep 1
+  done
+  if [[ "${withdrawal_observed}" != true ]]; then
+    fail "readiness-withdrawal-not-observed-with-controller-absent"
+  fi
 fi
 record_sample "${hold_stage}-controller-absent"
 

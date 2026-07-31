@@ -213,7 +213,9 @@ topology used to qualify a long controller absence after an Operator-owned
 target has durably reached `WithdrawingReadiness`, `Decommissioning`, or
 `ReadyForReplacement`. For
 `WithdrawingReadiness`, the monitor additionally waits until the selected Pod
-is unready and absent from the indexer Service. For
+contains the explicit lifecycle marker, removes the controller, and then
+requires the Pod to become unready and absent from the indexer Service before
+starting the five-minute clock. For
 `Decommissioning`, the monitor waits until the accepted operation records that
 Splunk has actually been observed in a decommission state; issuing the command
 alone is not sufficient. The fixture also includes a three-member Search Head
@@ -266,8 +268,9 @@ wait "${workload_log_pid}"
 To qualify a long absence after Splunk decommission has been observed but
 before replacement authorization, set
 `SHC85_HOLD_STAGE=Decommissioning` and use a new evidence-file name.
-To stop the controller after readiness withdrawal is externally visible but
-before decommission is requested, use
+To remove the controller as soon as the target contains the persisted
+readiness-withdrawal marker, and then prove that kubelet-driven readiness and
+Service withdrawal complete without the controller, use
 `SHC85_HOLD_STAGE=WithdrawingReadiness`.
 
 During controller absence the lifecycle monitor requires the exact persisted
