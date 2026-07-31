@@ -373,6 +373,21 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   immediate distributed-search completeness gate below. Harness source
   `d610d4474` makes subsequent Job summaries report pending events, count
   regressions, and maximum pending count directly.
+- [x] (2026-07-31 UTC) Qualified a requested five-minute controller absence
+  after Splunk was durably observed in indexer ordinal 3
+  `Decommissioning`. Harness source `8d6a7dbc6` required
+  `observedDecommissioning=true` and a persisted request timestamp before
+  scaling the Operator to zero. The exact target, operation, and revision
+  boundary survived 306 observed seconds; the held target remained running,
+  unready, non-serving, and at zero restarts; and the other three peers
+  remained unchanged and serving. Restoration resumed the same operation and
+  completed `3 -> 2 -> 1 -> 0` with ten stable samples. Lifecycle evidence
+  SHA-256 is
+  `e457b347092503b7b4ddbec25047e3dbc1b120bc0293fb5a1cb82cd5a589bdde`.
+  The overlapping independent Job completed 1,800 submissions with zero HEC
+  or search-request failures, exact eventual results on every Search Head,
+  and workload-log SHA-256
+  `cf169d21801d25eef3314351e6b5726bb53b8ca993ac1d2297f7c8bd728d4be0`.
 - [x] (2026-07-31 UTC) Corrected two Search Head captain-transition defects
   exposed while forming the SHC-85 fixture. Source `99da90390` sends the
   captain-only authoritative member query to the newly elected captain instead
@@ -396,7 +411,11 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   result availability. The accepted record observed 24 successful-search count
   regressions and a maximum sequence-to-count gap of 362 at sequence 1418
   (`count=1056`, `max=1417`). No production fix is claimed by the
-  lifecycle-hold branch.
+  lifecycle-hold branch. The later observed-decommissioning campaign produced
+  41 regressions and maximum pending 406 at sequence 1423
+  (`count=1017`, `max=1421`). That worst sample occurred after lifecycle
+  `Completed` while all replacement Pods were Ready and published, and Search
+  Heads still logged requests to old indexer Pod IPs.
 - [x] Define and qualify SHC-83 on isolated branch
   `codex/shc-83-startup-readiness-qualification`. During initial formation,
   no Search Head may enter the client Service until every desired Search Head
@@ -426,9 +445,11 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
 - [ ] Complete the remaining SHC-85 negative and compatibility qualification.
   The bounded Operator-owned lifecycle is source-qualified and EKS-qualified
   for steady-controller operation, one controller-Pod restart during
-  `Decommissioning`, and a five-minute controller absence during
+  `Decommissioning`, five-minute controller absence during observed
+  `Decommissioning`, and five-minute controller absence during
   `ReadyForReplacement`. Remaining gates include long controller absence at
-  other stages, API-server disconnection, leader contention, conflicting
+  `TargetSelected` and `WithdrawingReadiness`, API-server disconnection,
+  leader contention, conflicting
   desired-state changes,
   insufficient RF/SF health, HEC-disabled Splunk-to-Splunk traffic, HTTP and
   HTTPS HEC variants, ingress TLS termination, service-mesh and no-mesh
@@ -2384,9 +2405,21 @@ workload submitted 1,800 events with zero HEC or search-request failures and
 final exact completeness. It also exposed 24 temporary successful-search count
 regressions, with a maximum sequence-to-count gap of 362 while Search Heads
 were still converging indexer peer addresses and authentication. The campaign
-also corrected
-the captain-only member query target and successful-observation/deadline
+also corrected the captain-only member query target and
+successful-observation/deadline
 ordering exposed during fresh SHC formation. The evidence does not claim an
 API-server partition, controller absence at every stage, or Operator control
 over Splunk-managed App Framework peer selection, and it does not claim that
 immediate distributed-search completeness is solved.
+
+2026-07-31 UTC: Recorded the separate SHC-85 observed-decommissioning absence
+campaign on `codex/shc-85-decommissioning-absence-qualification`. The harness
+waited for persisted `observedDecommissioning=true`, removed the Operator for
+306 observed seconds, retained the exact operation and one non-serving target,
+then completed `3 -> 2 -> 1 -> 0` with zero restarts and final healthy
+RF/SF/searchability. Its independent 1,800-event workload had zero request
+failures and exact eventual results on every Search Head. It also recorded 41
+count regressions and maximum pending 406 after the lifecycle had already
+reported `Completed` with four Ready desired-revision Pods, while Search Heads
+still attempted old Pod IPs. This qualifies the bounded controller-absence
+stage but leaves immediate distributed-search completeness open.

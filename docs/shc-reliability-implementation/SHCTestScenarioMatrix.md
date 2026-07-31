@@ -293,6 +293,31 @@ partial qualification results, not an OPS-011 pass.
 | K8S-008 | P2 | Cluster autoscaler/zone movement | Scheduling/storage stages remain attributable |
 | K8S-009 | P1 | PDB across supported SHC sizes | The PDB selects only this SHC, retains at most one voluntarily unavailable member, is reconciled idempotently, and never takes over a user-owned name collision |
 
+### Partial STS-002 and K8S-006-adjacent SHC-85 evidence
+
+The 2026-07-31 SHC-85 campaigns removed the sole Operator controller for a
+requested five minutes during two durable indexer lifecycle stages. The
+`ReadyForReplacement` record observed 302 seconds; the
+`Decommissioning` record waited for persisted
+`observedDecommissioning=true` and observed 306 seconds. Both retained the
+same exact target and operation, kept three non-target peers serving, recorded
+zero liveness failures and container restarts, and resumed the same operation
+through `3 -> 2 -> 1 -> 0` after controller restoration.
+
+This partially qualifies STS-002 for these two stages. It does not qualify
+controller absence at `TargetSelected` or `WithdrawingReadiness`. It is also
+adjacent evidence, not a K8S-006 pass: scaling the controller to zero does not
+exercise a running controller that loses and later regains API-server
+connectivity.
+
+The independent workloads spanning both long absences had zero HEC/search
+request failures and exact eventual completeness. They did not pass immediate
+distributed-search completeness: the later run reported 41 count regressions
+and maximum pending 406 after lifecycle `Completed`, while all four Pods were
+Ready and Search Heads still attempted old peer IPs. That observation remains
+an OPS-011 and Splunk Enterprise convergence requirement rather than a pass of
+the customer-visible availability invariant.
+
 ## Observability and security scenarios
 
 | ID | Priority | Scenario | Required proof |

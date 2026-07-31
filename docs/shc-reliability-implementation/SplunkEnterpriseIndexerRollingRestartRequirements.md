@@ -46,6 +46,16 @@ at sequence 1418, when the successful result contained 1,056 distinct events
 with `min=1` and `max=1417`. The workload log has SHA-256
 `8b14b210e1224219ee1509b150036c3f599c68f11bbf22b98cbdce71bf1e3faf`.
 
+A second independent 1,800-event record reproduced and strengthened the
+finding. It had zero HEC or search-request failures and exact eventual results
+on each Search Head, but reported 41 count regressions and maximum pending 406
+at sequence 1423 (`count=1017`, `min=1`, `max=1421`, `distinct=1017`). That
+sample occurred after the Operator lifecycle had persisted `Completed` and
+while all four replacement Pods were Ready, published, on the desired
+revision, and at zero restarts. Search Heads still logged connections to old
+Pod IPs at the same time. Its log has SHA-256
+`cf169d21801d25eef3314351e6b5726bb53b8ca993ac1d2297f7c8bd728d4be0`.
+
 This is not evidence that RF or SF was configured incorrectly, and it is not
 yet a complete root-cause finding. It proves that HTTP request success, Cluster
 Manager `Up/searchable`, Kubernetes endpoint recovery, and remote HEC health

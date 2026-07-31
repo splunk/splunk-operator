@@ -559,6 +559,18 @@ ownership.
   partial-result status in the oracle. Do not describe a successful search
   request as an availability success when completeness is unknown.
 
+- Observation: the observed-decommissioning repeat strengthened this boundary.
+  Its independent Job recorded 41 count regressions and maximum pending 406.
+  At the maximum, sequence 1423 returned only 1,017 distinct events. The
+  lifecycle had already persisted `Completed`; all four Pods were Ready,
+  published, on the desired revision, and at zero restarts. Search Head logs
+  at the same second still contacted old indexer Pod IPs and reported
+  `No route to host`.
+  Consequence: lifecycle `Completed` and remote serving recovery must remain
+  controller-progress facts, not customer-visible search-completeness facts.
+  The oracle needs an additional supported per-Search-Head convergence or
+  explicit partial-result boundary before an end-to-end availability claim.
+
 - Observation: the current `make deploy` target depends on `uninstall`, which
   deletes the Splunk Enterprise CRDs before deployment.
   Consequence: live-fixture image qualification updates only the Operator
@@ -1914,3 +1926,20 @@ The same record retains as an open immediate-completeness finding 24
 successful-search count regressions and a maximum
 sequence-to-count gap of 362 while Search Heads reported peer address and
 authentication convergence failures.
+
+2026-07-31 UTC: Recorded the isolated observed-decommissioning absence repeat
+on `codex/shc-85-decommissioning-absence-qualification`. Harness source
+`8d6a7dbc6` required persisted `observedDecommissioning=true`, retained the
+same target and operation through 306 controller-absent seconds, then completed
+`3 -> 2 -> 1 -> 0` with zero restarts and ten stable samples. Lifecycle
+evidence SHA-256 is
+`e457b347092503b7b4ddbec25047e3dbc1b120bc0293fb5a1cb82cd5a589bdde`.
+The 1,800-event independent workload recorded zero HEC/search request
+failures, exact eventual results on every Search Head, 41 count regressions,
+and maximum pending 406; workload-log SHA-256 is
+`cf169d21801d25eef3314351e6b5726bb53b8ca993ac1d2297f7c8bd728d4be0`.
+The maximum partial result occurred after lifecycle `Completed` with four
+Ready published desired-revision Pods while Search Heads still attempted old
+peer IPs. Long controller absence at `TargetSelected` and
+`WithdrawingReadiness`, API-server disconnection, and the customer-visible
+distributed-search convergence contract remain open.

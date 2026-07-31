@@ -334,6 +334,84 @@ Head has removed an old peer address, connected and authenticated to the
 replacement, or will explicitly report an incomplete search. That
 per-Search-Head convergence and partial-result contract remains open.
 
+## Five-minute observed-decommissioning absence qualification
+
+A separate 2026-07-31 UTC branch
+`codex/shc-85-decommissioning-absence-qualification` extended the same oracle
+to the prior durable stage. Harness source `8d6a7dbc6` does not remove the
+controller when decommission is merely requested. It waits until
+`status.podUpdate.stage=Decommissioning`,
+`observedDecommissioning=true`, and a decommission-request timestamp are all
+persisted, proving that Splunk was observed in the side-effecting stage.
+The production Operator remained source `ac1fe0db8` at digest
+`sha256:59fc2afdfafc7e0c2b9f49fceebf1862128521017311776b91f0ce3315eff608`,
+and the Splunk runtime remained
+`10.5.2605.0/844c593e9c1d` at digest
+`sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`.
+
+The campaign moved from source revision
+`splunk-shc85-idxc-indexer-7cc68b874c` to desired revision
+`splunk-shc85-idxc-indexer-b577748bf`. Its first operation retained ordinal 3,
+Pod UID `f1b2207f-c839-4b9d-ad88-a6c3ef60cef2`, and operation ID
+`f1b2207f-c839-4b9d-ad88-a6c3ef60cef2:splunk-shc85-idxc-indexer-b577748bf:1785523838468286533`
+through 306 observed seconds with no controller. During that interval:
+
+- the same target container remained running and unready with zero restarts,
+  outside the indexer Service;
+- the same durable operation, target UID, source revision, desired revision,
+  request timestamp, and observed-decommissioning fact remained unchanged;
+- ordinals 0, 1, and 2 retained their UIDs, readiness, zero restart counts,
+  and Service endpoints; and
+- the monitor observed zero indexer liveness failures.
+
+After controller restoration, the same lifecycle completed in order
+`3 -> 2 -> 1 -> 0`, with ten stable final samples. Final replacement UIDs for
+ordinals 0 through 3 were:
+
+- `5f0d6419-6095-4f6c-a2d8-a9dbca82e498`;
+- `baf075c8-40a1-4f6d-a54e-ca97b3f234c8`;
+- `13870583-7184-4d4f-9b92-0431e0083e98`; and
+- `bc966da8-226f-4aa6-928b-4874aa898d10`.
+
+All four replacements used the desired revision, remained at zero container
+restarts, completed Ansible with `ok=111`, `failed=0`, contained no previous
+KV Store precheck-failure signature, and removed the lifecycle marker. Final
+Cluster Manager health reported RF met, SF met, all data searchable, all peers
+Up, and no fixups. All Splunk CRs were Ready, and all four indexer plus all
+three Search Head endpoints were published. The lifecycle evidence has
+SHA-256
+`e457b347092503b7b4ddbec25047e3dbc1b120bc0293fb5a1cb82cd5a589bdde`.
+One License Manager reconciliation immediately after controller restoration
+encountered the same transient headless-Service DNS lookup failure seen in the
+prior campaign and then recovered without intervention.
+
+The independent Job `shc85-incluster-workload-chdhr`, Pod UID
+`7495c4da-ee7a-48a3-a059-f70e9f0e70b5`, ran from `18:50:24Z` through
+`19:24:39Z`. It submitted 1,800 events with zero HEC failures, zero
+search-request failures, zero client restarts, and final exact
+`count/min/max/distinct=1800/1/1800/1800`. Direct post-run searches on each
+Search Head independently returned the same exact result. The workload log
+has SHA-256
+`cf169d21801d25eef3314351e6b5726bb53b8ca993ac1d2297f7c8bd728d4be0`.
+
+Immediate completeness did not pass. The Job reported 41 successful-search
+count regressions. Its maximum pending count was 406 at `19:17:27Z`, when
+sequence 1423 returned `count=1017`, `min=1`, `max=1421`, and
+`distinct=1017`. Splunk had already recorded lifecycle `finishedAt` at
+`19:16:56Z`; the simultaneous lifecycle sample showed `Completed`, all four
+Pods Ready on the desired revision, zero restarts, and all four endpoints.
+At the same second, Search Head logs still showed `DistributedPeer` and
+`GetRemoteAuthToken` attempts to old indexer IP `10.0.58.126`, returning
+`No route to host`. All three Search Heads logged matching old-peer connection
+or authentication failures during the roll.
+
+This repeat closes the bounded five-minute `Decommissioning` controller-absence
+gate. It also strengthens the open requirement: current lifecycle completion
+and remote-serving recovery are too early to prove distributed-search result
+completeness on every Search Head. The lifecycle must not be described as
+end-to-end available until Splunk provides a supported per-Search-Head peer
+convergence signal or explicitly marks incomplete results as partial.
+
 ### Search Head defects exposed while forming the fixture
 
 Fresh formation for this campaign exposed two independent Search Head captain
