@@ -371,6 +371,37 @@ func TestCaptainTransferTimeoutDoesNotRequireAvailableObservation(t *testing.T) 
 	}
 }
 
+func TestExpiredCaptainTransferAcceptsFreshSuccessfulObservation(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	operation := newTestOperation(now)
+	operation.Stage =
+		enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain
+	stageStartedAt := metav1.NewTime(now)
+	operation.StageStartedAt = &stageStartedAt
+	requestedAt := metav1.NewTime(now.Add(time.Second))
+	operation.CaptainTransferRequestedAt = &requestedAt
+	operation.CaptainTransferTarget = "example-search-head-1"
+
+	observedAt := now.Add(31 * time.Second)
+	observation := safeObservation(observedAt)
+	observation.TargetMemberStatus = "ManualDetention"
+	observation.Captain = "example-search-head-1"
+
+	decision := EvaluateReplacement(
+		operation,
+		observation,
+		testPolicy(),
+		observedAt,
+	)
+
+	assertDecision(
+		t,
+		decision,
+		enterpriseApi.SearchHeadClusterLifecycleStageAuthorizingReplacement,
+		ActionAuthorizeReplacement,
+	)
+}
+
 func TestStaleObservationCannotAdvanceReplacement(t *testing.T) {
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	operation := newTestOperation(now)

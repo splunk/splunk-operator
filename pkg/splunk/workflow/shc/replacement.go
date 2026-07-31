@@ -433,7 +433,8 @@ func EvaluateReplacement(
 		return Decision{Operation: operation}
 	}
 	if operation.Stage == enterpriseApi.SearchHeadClusterLifecycleStageTransferringCaptain &&
-		stageTimedOut(operation, policy.CaptainTransferTimeout, now) {
+		stageTimedOut(operation, policy.CaptainTransferTimeout, now) &&
+		!captainTransferCompletionObserved(operation, observation) {
 		transition(
 			operation,
 			enterpriseApi.SearchHeadClusterLifecycleStageBlocked,
@@ -563,6 +564,18 @@ func evaluateSearchDrain(
 	}
 
 	return authorizeReplacement(operation, now)
+}
+
+func captainTransferCompletionObserved(
+	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	observation Observation,
+) bool {
+	return observation.Available &&
+		observation.Fresh &&
+		!observation.ConflictingCaptain &&
+		observation.Captain != "" &&
+		observation.Captain != operation.TargetPod &&
+		observation.CaptainReady
 }
 
 func evaluateCaptainTransfer(
