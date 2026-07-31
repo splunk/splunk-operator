@@ -69,6 +69,11 @@ search_failures=0
 last_count=0
 last_distinct=0
 last_max=0
+previous_count=0
+count_regressions=0
+max_pending=0
+max_pending_sequence=0
+max_pending_timestamp=""
 
 for sequence in $(seq 1 "${samples}"); do
   if submit_event "${sequence}"; then
@@ -91,6 +96,19 @@ for sequence in $(seq 1 "${samples}"); do
     last_count="${count}"
     last_distinct="${distinct}"
     last_max="${maximum}"
+    if ((count < previous_count)); then
+      count_regressions=$((count_regressions + 1))
+    fi
+    previous_count="${count}"
+    pending=$((sequence - count))
+    if ((pending < 0)); then
+      pending=0
+    fi
+    if ((pending > max_pending)); then
+      max_pending="${pending}"
+      max_pending_sequence="${sequence}"
+      max_pending_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    fi
   else
     search_state=fail
     search_failures=$((search_failures + 1))
@@ -98,11 +116,13 @@ for sequence in $(seq 1 "${samples}"); do
     minimum=unknown
     maximum="${last_max}"
     distinct="${last_distinct}"
+    pending=unknown
   fi
 
-  printf '%s seq=%s hec=%s search=%s count=%s min=%s max=%s distinct=%s\n' \
+  printf '%s seq=%s hec=%s search=%s count=%s min=%s max=%s distinct=%s pending=%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${sequence}" "${hec_state}" \
-    "${search_state}" "${count}" "${minimum}" "${maximum}" "${distinct}"
+    "${search_state}" "${count}" "${minimum}" "${maximum}" "${distinct}" \
+    "${pending}"
   sleep "${interval_seconds}"
 done
 
@@ -122,9 +142,11 @@ for _ in $(seq 1 "${settle_attempts}"); do
   sleep 5
 done
 
-printf 'run=%s end=%s submitted=%s hecFailures=%s searchFailures=%s finalCount=%s finalMin=%s finalMax=%s finalDistinct=%s complete=%s\n' \
+printf 'run=%s end=%s submitted=%s hecFailures=%s searchFailures=%s countRegressions=%s maxPending=%s maxPendingSequence=%s maxPendingTimestamp=%s finalCount=%s finalMin=%s finalMax=%s finalDistinct=%s complete=%s\n' \
   "${run_id}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${samples}" \
-  "${hec_failures}" "${search_failures}" "${count:-0}" "${minimum:-0}" \
+  "${hec_failures}" "${search_failures}" "${count_regressions}" \
+  "${max_pending}" "${max_pending_sequence}" \
+  "${max_pending_timestamp:-none}" "${count:-0}" "${minimum:-0}" \
   "${maximum:-0}" "${distinct:-0}" "${final_complete}"
 
 if [[ "${hec_failures}" -ne 0 || "${search_failures}" -ne 0 ||
