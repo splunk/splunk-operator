@@ -124,9 +124,12 @@ for sequence in $(seq 1 "${samples}"); do
   minimum="$(extract_field min "${search_response}")"
   maximum="$(extract_field max "${search_response}")"
   distinct="$(extract_field distinct "${search_response}")"
-  if [ -n "${count}" ] && [ -n "${distinct}" ] && [ -n "${maximum}" ]; then
+  if [ -n "${count}" ] && [ -n "${distinct}" ] &&
+    { [ "${count}" -eq 0 ] || [ -n "${maximum}" ]; }; then
     search_state="ok"
     search_detail="result"
+    minimum="${minimum:-0}"
+    maximum="${maximum:-0}"
     last_count="${count}"
     last_distinct="${distinct}"
     last_max="${maximum}"
