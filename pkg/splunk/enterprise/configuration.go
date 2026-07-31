@@ -1320,9 +1320,27 @@ func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceTyp
 func getStartupProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
 	logger := logging.FromContext(ctx)
 	startupProbe := getProbeWithConfigUpdates(&defaultStartupProbe, spec.StartupProbe, 0)
+	if config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle) &&
+		isLegacyDefaultStartupProbe(spec.StartupProbe) {
+		// Existing v4 objects may have the previous CRD default persisted in
+		// storage. Resolve only that exact tuple to the lifecycle default so a
+		// CRD upgrade protects existing workloads without overwriting a
+		// genuinely customized startup probe.
+		startupProbe = startupProbe.DeepCopy()
+		startupProbe.FailureThreshold = startupProbeFailureThreshold
+	}
 	startupProbe = withDefaultProbeTerminationGracePeriod(startupProbe)
 	logger.DebugContext(ctx, "startupProbe", "Configured", startupProbe)
 	return startupProbe
+}
+
+func isLegacyDefaultStartupProbe(probe *enterpriseApi.Probe) bool {
+	return probe != nil &&
+		probe.InitialDelaySeconds == startupProbeDefaultDelaySec &&
+		probe.TimeoutSeconds == startupProbeTimeoutSec &&
+		probe.PeriodSeconds == startupProbePeriodSec &&
+		probe.FailureThreshold == legacyStartupProbeFailureThreshold &&
+		probe.TerminationGracePeriodSeconds == nil
 }
 
 // withDefaultProbeTerminationGracePeriod separates kubelet-initiated container

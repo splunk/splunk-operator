@@ -1994,6 +1994,63 @@ func TestProbeTerminationGracePeriod(t *testing.T) {
 		require.NotNil(t, probe.TerminationGracePeriodSeconds)
 		require.Equal(t, explicitGrace, *probe.TerminationGracePeriodSeconds)
 	})
+
+	t.Run("exact legacy startup default is upgraded with lifecycle enabled", func(t *testing.T) {
+		setLifecyclePolicyTestGates(t, true, false)
+		spec := enterpriseApi.CommonSplunkSpec{
+			StartupProbe: &enterpriseApi.Probe{
+				InitialDelaySeconds: startupProbeDefaultDelaySec,
+				TimeoutSeconds:      startupProbeTimeoutSec,
+				PeriodSeconds:       startupProbePeriodSec,
+				FailureThreshold:    legacyStartupProbeFailureThreshold,
+			},
+		}
+
+		probe := getStartupProbe(ctx, cr, SplunkClusterManager, &spec)
+		require.Equal(
+			t,
+			int32(startupProbeFailureThreshold),
+			probe.FailureThreshold,
+		)
+	})
+
+	t.Run("legacy startup default is preserved with lifecycle disabled", func(t *testing.T) {
+		setLifecyclePolicyTestGates(t, false, false)
+		spec := enterpriseApi.CommonSplunkSpec{
+			StartupProbe: &enterpriseApi.Probe{
+				InitialDelaySeconds: startupProbeDefaultDelaySec,
+				TimeoutSeconds:      startupProbeTimeoutSec,
+				PeriodSeconds:       startupProbePeriodSec,
+				FailureThreshold:    legacyStartupProbeFailureThreshold,
+			},
+		}
+
+		probe := getStartupProbe(ctx, cr, SplunkClusterManager, &spec)
+		require.Equal(
+			t,
+			int32(legacyStartupProbeFailureThreshold),
+			probe.FailureThreshold,
+		)
+	})
+
+	t.Run("custom startup tuple is never normalized", func(t *testing.T) {
+		setLifecyclePolicyTestGates(t, true, false)
+		spec := enterpriseApi.CommonSplunkSpec{
+			StartupProbe: &enterpriseApi.Probe{
+				InitialDelaySeconds: startupProbeDefaultDelaySec,
+				TimeoutSeconds:      startupProbeTimeoutSec,
+				PeriodSeconds:       45,
+				FailureThreshold:    legacyStartupProbeFailureThreshold,
+			},
+		}
+
+		probe := getStartupProbe(ctx, cr, SplunkClusterManager, &spec)
+		require.Equal(
+			t,
+			int32(legacyStartupProbeFailureThreshold),
+			probe.FailureThreshold,
+		)
+	})
 }
 
 func TestGetProbe(t *testing.T) {

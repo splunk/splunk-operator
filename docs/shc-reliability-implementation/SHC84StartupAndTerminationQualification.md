@@ -65,6 +65,13 @@ field because a failed readiness probe does not terminate the container.
 When `SplunkPodLifecycle` is enabled and the customer omits the probe value,
 the Operator renders 660 seconds. An explicit customer value is preserved.
 
+Existing v4 objects can already have the old CRD startup tuple
+`40/30/30/12` persisted. With the lifecycle gate enabled, the Operator resolves
+only that exact legacy-default tuple to failure threshold 60. Any tuple with a
+customer-modified delay, timeout, period, threshold, or probe grace remains
+unchanged. This is current-v4 default normalization and does not add a
+v3-to-v4 migration contract.
+
 The 660-second default is the image's current 600-second shutdown deadline plus
 a 60-second kubelet margin. A customer who increases
 `SPLUNK_SHUTDOWN_TIMEOUT_SECONDS` must increase both restart-causing probe

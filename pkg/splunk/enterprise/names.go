@@ -179,10 +179,11 @@ const (
 	livenessProbeFailureThreshold = 3
 
 	// Startup probe time values
-	startupProbeDefaultDelaySec  = 40
-	startupProbeTimeoutSec       = 30
-	startupProbePeriodSec        = 30
-	startupProbeFailureThreshold = 60
+	startupProbeDefaultDelaySec        = 40
+	startupProbeTimeoutSec             = 30
+	startupProbePeriodSec              = 30
+	startupProbeFailureThreshold       = 60
+	legacyStartupProbeFailureThreshold = 12
 
 	minProbeTerminationGracePeriodSeconds int64 = 1
 	maxProbeTerminationGracePeriodSeconds int64 = 86400

@@ -26,6 +26,10 @@ The startup failure budget is approximately 30 minutes. Startup protects
 first start and upgrade work; liveness and readiness do not begin until startup
 succeeds.
 
+When `SplunkPodLifecycle` is enabled, an existing v4 resource that contains the
+exact previous default tuple (`40/30/30/12`) resolves to the new failure
+threshold. A probe with any customized tuple is preserved.
+
 Probe-level termination grace controls a container restart caused by a failed
 startup or liveness probe. It is separate from the Pod-level
 `spec.terminationGracePeriodSeconds` used when Kubernetes deletes a Pod. When
