@@ -29,6 +29,29 @@ the same boundary:
   traffic and one transition where the next peer stopped serving before the
   previous peer was remotely serving again.
 
+A later API-independent SHC-85 workload added another boundary during an
+Operator-owned Pod replacement. HEC submissions and exported-search requests
+continued to return success, but some successful aggregate searches
+temporarily returned fewer of the already observed numbered events. At the
+same timestamps, all Search Heads logged distributed-peer connection failures
+to terminating or newly assigned indexer Pod IPs, including `No route to host`,
+`Connection refused`, and authentication refresh failures. The export response
+contained no partial-result message. Results later converged exactly.
+
+The accepted record submitted 1,800 events with zero HEC request failures,
+zero exported-search request failures, and final exact
+`count/min/max/distinct=1800/1/1800/1800`. It nevertheless recorded 24
+successful-search count regressions. The maximum sequence-to-count gap was 362
+at sequence 1418, when the successful result contained 1,056 distinct events
+with `min=1` and `max=1417`. The workload log has SHA-256
+`8b14b210e1224219ee1509b150036c3f599c68f11bbf22b98cbdce71bf1e3faf`.
+
+This is not evidence that RF or SF was configured incorrectly, and it is not
+yet a complete root-cause finding. It proves that HTTP request success, Cluster
+Manager `Up/searchable`, Kubernetes endpoint recovery, and remote HEC health
+are insufficient by themselves to establish immediate distributed-search
+result completeness during peer identity and address churn.
+
 The complete evidence and limitations are in
 [SHC82AppFrameworkIndexerQualification.md](SHC82AppFrameworkIndexerQualification.md).
 
@@ -40,6 +63,11 @@ restart are different workflows.
 For an Operator-owned replacement, the Operator selects the exact Pod and can
 wait for Kubernetes readiness, Cluster Manager status, EndpointSlice
 publication, and a remote traffic-path check before selecting another target.
+Search Heads do not dispatch distributed searches through that Kubernetes
+Service. They retain Splunk-managed peer addresses and refresh connectivity as
+the replacement receives a new Pod IP. The Operator's HEC serving check does
+not prove that every Search Head has converged its distributed-peer view or
+that a successful search is complete.
 
 For a bundle-push restart, Splunk Enterprise owns the peer sequence inside the
 Cluster Manager rolling-restart workflow. The Operator initiates or observes
@@ -61,18 +89,26 @@ restart, the previous peer must satisfy all applicable conditions:
    identity for that restart attempt.
 2. The Cluster Manager reports the exact peer `Up` and searchable.
 3. RF, SF, bucket primacy, and all-searchable preflight remain satisfied.
-4. Every configured customer-serving path used by that peer has recovered.
+4. Every Search Head that can receive traffic has converged from the old peer
+   address to the exact replacement identity and address. No unresolved
+   distributed-peer connection or authentication failure remains for the
+   replacement attempt.
+5. A successful distributed search either includes all qualified searchable
+   peers and complete results or explicitly reports that its result is partial.
+   An HTTP-success response with silently incomplete results is not an
+   availability success.
+6. Every configured customer-serving path used by that peer has recovered.
    For HEC this includes the effective enabled/disabled state, HTTP or HTTPS,
    and configured port. For Splunk-to-Splunk ingestion it includes successful
    acceptance on the configured receiving port.
-5. Recovery is observed from outside the peer process. A loopback-only result
+7. Recovery is observed from outside the peer process. A loopback-only result
    is not sufficient evidence of DNS, Pod networking, sidecar, or listener
    availability.
-6. The recovery observation is bound to the exact peer restart attempt and
+8. The recovery observation is bound to the exact peer restart attempt and
    cannot be reused after another process restart or identity change.
-7. The observation remains successful for a qualified stability interval, not
+9. The observation remains successful for a qualified stability interval, not
    only one instantaneous sample.
-8. Any conflicting peer failure, insufficient redundancy, or inconclusive
+10. Any conflicting peer failure, insufficient redundancy, or inconclusive
    recovery blocks the next restart and exposes a classified reason.
 
 Splunk Enterprise can satisfy this contract internally or expose a supported
@@ -89,6 +125,10 @@ The rolling-restart operation must expose enough durable state to answer:
 - peer restart start and completion times;
 - first `Up/searchable` time;
 - first remote serving time and the traffic path checked;
+- per-Search-Head old-address removal, replacement-address connection, and
+  authentication convergence;
+- partial-search status, excluded peer identities, and the reason each peer
+  was excluded;
 - stability-window start and completion;
 - redundancy preflight result before each target;
 - why advancement is waiting, blocked, cancelled, or failed; and
@@ -106,6 +146,10 @@ The internal rolling restart must fail closed when:
 - Kubernetes or an external observer reports contradictory serving state;
 - another peer becomes unavailable;
 - RF/SF/all-searchable health is lost;
+- a traffic-eligible Search Head still targets an unavailable old peer address
+  or cannot authenticate to the replacement;
+- distributed search cannot prove complete participation and the response
+  cannot explicitly surface partial-result status;
 - the configured traffic protocol or port cannot be determined safely;
 - a peer identity changes after serving recovery was recorded; or
 - the Cluster Manager restarts without enough durable state to prove which
@@ -133,7 +177,8 @@ The contract is not complete until it passes:
 - continuously acknowledged ingestion with exact final completeness and no
   unreported duplication; and
 - historical, real-time, active, and scheduled search behavior throughout the
-  restart.
+  restart, including immediate count regression, maximum missing-event window,
+  final exact completeness, and explicit partial-result reporting.
 
 Until these requirements are implemented and qualified, searchable rolling
 restart should remain enabled for its RF/SF/searchability protection, but it

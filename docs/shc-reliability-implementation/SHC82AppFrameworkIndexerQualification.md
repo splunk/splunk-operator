@@ -2,12 +2,13 @@
 
 ## Status and evidence boundary
 
-This document records the indexer-side evidence gathered for SHC-82 on
-2026-07-30 UTC. It is not a production-readiness claim. The campaign proves
-that Splunk's searchable rolling restart and Kubernetes traffic readiness
-address different parts of the availability problem. It also identifies a
-controller-progress defect that must be corrected before an indexer serving
-gate can be adopted.
+This document records the indexer-side evidence first gathered for SHC-82 on
+2026-07-30 UTC and the bounded SHC-85 Operator-lifecycle follow-up through
+2026-07-31 UTC. It is not a production-readiness claim. The initial campaign
+proved that Splunk's searchable rolling restart and Kubernetes traffic
+readiness address different parts of the availability problem and identified
+the controller-progress defect addressed by the later Operator-owned
+lifecycle campaigns below.
 
 The accepted final run used:
 
@@ -184,6 +185,181 @@ long-duration API-server disconnection, leader failover with concurrent
 controllers, conflicting desired-state changes, insufficient redundancy,
 other network/TLS/HEC configurations, or Splunk-managed App Framework
 next-peer selection.
+
+## Five-minute controller-absence qualification
+
+A 2026-07-31 UTC campaign extended SHC-85 from a normal controller-Pod
+replacement to a complete five-minute period with no Operator controller
+running. This is the bounded failure that had previously restarted an
+intentionally stopped indexer: after the Operator withdrew the target and
+Splunk decommissioned it, the existing level-one liveness probe still required
+`splunkd`. If the controller remained unavailable long enough, kubelet treated
+the intentional stop as a liveness failure and restarted the container in the
+old Pod before the controller could perform the authorized replacement.
+
+The corrected contract keeps three signals separate:
+
+- readiness continues to remove the one authorized target from Services;
+- durable IndexerCluster status retains the operation, exact target Pod UID,
+  source revision, desired revision, and `ReadyForReplacement` stage; and
+- liveness treats an initialized and responsive container as live during the
+  explicit Operator-owned hold, even though `splunkd` is intentionally down.
+
+The hold is narrow. It is written only with the Operator-owned indexer
+readiness-withdrawal marker. A missing container-state file or an incomplete
+container initialization state still fails liveness, and level-one liveness
+without the explicit lifecycle marker still requires `splunkd`. Readiness does
+not return the held target to traffic.
+
+The campaign used:
+
+- branch `codex/shc-85-lifecycle-hold-qualification`;
+- lifecycle correction `5dbe7dac8`, qualification harness `854a76b8d`, and
+  production SHC corrections `99da90390` and `ac1fe0db8`;
+- production Operator source `ac1fe0db8` at immutable image digest
+  `sha256:59fc2afdfafc7e0c2b9f49fceebf1862128521017311776b91f0ce3315eff608`;
+- harness-only empty-result classification correction `5ab3a858b`;
+- the official Splunk `10.5.2605.0/844c593e9c1d` runtime at digest
+  `sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`;
+  and
+- EKS cluster `vivek-spl-301372`, namespace `shc85-lifecycle-hold`, a
+  four-peer RF3/SF2 indexer cluster, and a three-member Search Head Cluster.
+
+The lifecycle monitor created desired indexer revision
+`splunk-shc85-idxc-indexer-dc496ddb9`, captured ordinal 3 immediately after
+the operation durably reached `ReadyForReplacement`, and scaled the Operator
+Deployment to zero. For 300 seconds it required all of the following on every
+two-second sample:
+
+- the exact operation, target UID
+  `9d81e0d0-5b0a-4198-824d-42b7eed98c91`, and source and desired revisions
+  remained unchanged;
+- the target container remained running with the same UID and zero restarts,
+  while the Pod stayed unready and absent from the EndpointSlice;
+- all three non-target indexers retained their UIDs, zero restart counts,
+  Kubernetes readiness, and Service publication;
+- the explicit lifecycle marker remained present; and
+- Kubernetes recorded zero indexer liveness failures and zero kubelet kill
+  Events.
+
+The monitor then restored the Operator. The same lifecycle completed in order
+`3 -> 2 -> 1 -> 0`, never had more than one unavailable indexer, and required
+the previous replacement to return to remote serving before selecting the
+next target. Final Pod UIDs were:
+
+- ordinal 0: `3d223b85-b654-4b9c-81d5-58c5fff0c3b2`;
+- ordinal 1: `65b56d97-388f-4fbc-a8e0-fda07bd74b65`;
+- ordinal 2: `33e6cc31-9e98-4cb2-ad60-05c3383013a2`; and
+- ordinal 3: `29f15596-f175-429f-92a6-ccf9ba76545c`.
+
+All four replacements used the desired revision, reached Ready with zero
+container restarts, completed Ansible with `ok=111`, `failed=0`, and contained
+no prior KV Store upgrade-precheck failure signature. The lifecycle marker was
+absent from every replacement. The monitor passed after ten stable final
+samples and reported `operator absence=300s order=3,2,1,0`.
+
+Final Cluster Manager health reported RF met, SF met, all data searchable, all
+peers Up, and no fixups. The IndexerCluster was Ready 4/4, the Search Head
+Cluster was Ready 3/3, and the corresponding Services had four and three ready
+endpoints.
+
+The first long workload observer was workstation-driven. One Kubernetes API
+operation stalled for approximately 294 seconds between sequence 129 at
+`17:41:04Z` and sequence 130 at `17:45:58Z`. No request failed because the
+monitor attempted no HEC submission or search during that gap. Its final exact
+result can describe sampled request success, but it is not accepted as
+continuous workload evidence. Harness source `b2bf2e71d` therefore runs the
+HEC/search loop in an in-cluster Job and leaves Kubernetes and Splunk telemetry
+as separate observers.
+
+The accepted repeat ran the independent Job from `17:57:45Z` through
+`18:31:59Z`, spanning the complete controller absence, controller recovery,
+four-Pod roll, and post-roll convergence. In parallel, the lifecycle monitor:
+
+- moved from source revision `splunk-shc85-idxc-indexer-dc496ddb9` to desired
+  revision `splunk-shc85-idxc-indexer-7cc68b874c`;
+- held ordinal 3 and original Pod UID
+  `29f15596-f175-429f-92a6-ccf9ba76545c` under the exact persisted operation
+  while the Operator was absent for 302 observed seconds;
+- completed the replacement order `3 -> 2 -> 1 -> 0` with ten stable final
+  samples; and
+- finished with replacement Pod UIDs
+  `37c835b1-096a-45e1-bad3-07975244b448`,
+  `20f6ef7b-1285-46bc-9d74-0d5eab267f3f`,
+  `73c90c68-e2c7-4bd2-aa90-7949c25e05cf`, and
+  `f1b2207f-c839-4b9d-ad88-a6c3ef60cef2` for ordinals 0 through 3.
+
+The lifecycle evidence has SHA-256
+`655c998ab4d6072769d8efa2c47c83c737f919a730ee3a72467f9714b4df9263`.
+Every replacement remained at zero container restarts, completed Ansible with
+`ok=111`, `failed=0`, omitted the previous KV Store precheck-failure signature,
+and removed the lifecycle marker. Final Cluster Manager status again reported
+RF met, SF met, all data searchable, all peers Up, and no fixups. All Splunk
+CRs and expected Service endpoints were Ready. After controller restoration,
+one License Manager reconciliation saw a transient headless-Service DNS miss;
+the next reconciliations recovered without intervention.
+
+The in-cluster workload submitted 1,800 numbered HEC events. It recorded zero
+HEC request failures, zero exported-search request failures, zero client Pod
+restarts, and final exact results of `count=1800`, `min=1`, `max=1800`, and
+`distinct=1800`. Its log has SHA-256
+`8b14b210e1224219ee1509b150036c3f599c68f11bbf22b98cbdce71bf1e3faf`.
+This accepts the bounded lifecycle-hold and sampled request-availability gate;
+it does not accept immediate result completeness.
+
+Twenty-four successful aggregate-search samples returned a lower count than
+the preceding successful sample. The maximum sequence-to-count gap was 362 at
+`18:24:40Z`: sequence 1418 returned `count=1056`, `min=1`, `max=1417`, and
+`distinct=1056`. The valid export response carried `messages: null`, so the
+client received no partial-result indication. At matching times, every Search
+Head logged `DistributedPeer`, `GetRemoteAuthToken`, `HttpClientRequest`, or
+`TcpOutputFd` failures against terminating or newly starting indexer Pod IPs,
+including `No route to host`, `Connection refused`, connection timeout, and
+HTTP 401 during authentication refresh. Later searches converged to the exact
+1,800-event result.
+
+The accepted Job used harness source `b2bf2e71d`; the 24 regressions and
+maximum gap above were calculated from its retained per-sample log. Follow-up
+harness source `d610d4474` makes later runs report pending-count, count
+regressions, and maximum pending count directly in the Job summary.
+
+These observations prove a gap in the qualified contract, not a complete root
+cause or an Operator-only fix. Search Heads use Splunk-managed peer addresses
+for distributed search rather than the Kubernetes indexer Service. Cluster
+Manager `Up/searchable`, Kubernetes endpoint publication, and the Operator's
+remote HEC check therefore do not prove that every traffic-eligible Search
+Head has removed an old peer address, connected and authenticated to the
+replacement, or will explicitly report an incomplete search. That
+per-Search-Head convergence and partial-result contract remains open.
+
+### Search Head defects exposed while forming the fixture
+
+Fresh formation for this campaign exposed two independent Search Head captain
+transition defects before the indexer fault could be injected:
+
+1. Captain information can be proxied through an active member, but
+   `captain/members` is captain-only. After captaincy moved away from ordinal
+   zero, the Operator learned the new captain label and still sent the
+   authoritative member query to the old ordinal. Splunk correctly returned
+   HTTP 503 with the new captain location. Source `99da90390` maps the observed
+   captain label to its member ordinal and performs the captain-only query on
+   that elected captain.
+2. A fresh observation later proved that captain transfer had completed, but
+   the workflow evaluated its already-expired transfer deadline before it
+   accepted that successful observation. Source `ac1fe0db8` accepts a fresh,
+   available, non-conflicting observation of a different ready captain before
+   applying the timeout. Missing, stale, conflicting, empty, or unready
+   captain observations still fail closed.
+
+Both changes have regression tests and passed the complete Linux
+`make fmt vet build test` gate: 41 suites and 156 specs with zero failures.
+Because the running operation had already entered terminal `Blocked` state
+before the corrected image was deployed, the qualification used one explicit
+test-only status repair from `Blocked` back to its prior
+`TransferringCaptain` stage. The unchanged operation then advanced through
+captain transfer and replacement and completed. This repair is part of the
+test record; it is not presented as normal product recovery and no Splunk
+Enterprise source change was used.
 
 ## What the accepted searchable restart did
 
@@ -384,13 +560,16 @@ environment-qualified:
   caches;
 - insufficient RF/SF/peer redundancy, which must fail closed;
 - one peer already unhealthy before the app update;
-- Operator restart during durable stages other than the now-qualified
-  `Decommissioning` boundary, plus long controller and API-server
-  disconnection;
+- Operator restart or long absence during durable stages other than the
+  qualified `Decommissioning` restart and five-minute
+  `ReadyForReplacement` absence, plus API-server disconnection;
 - concurrent image rollout, app update, scale, node drain, and manual
   deletion;
 - previous supported Splunk and Operator/image combinations;
 - active, historical, real-time, and scheduled searches;
+- per-Search-Head old-peer removal, replacement-peer address/authentication
+  convergence, and explicit partial-result signaling when a peer cannot
+  participate;
 - client retry and HEC acknowledgment behavior;
 - recovery stability before the next peer; and
 - leader failover, concurrent-controller contention, and desired-state
@@ -403,8 +582,9 @@ it provides Splunk's RF/SF/searchability coordination. Add an explicit,
 configuration-aware serving contract and a durable one-target lifecycle
 contract rather than relying on probe tuning alone. The later Operator-owned
 campaigns demonstrate that contract for one steady-controller RF3/SF2
-revision roll and one controller-Pod restart during `Decommissioning` on the
-fixed Splunk build. Do not generalize those results to Splunk-managed App
-Framework restarts, other interruption stages, long disconnection,
+revision roll, one controller-Pod restart during `Decommissioning`, and one
+five-minute controller absence during `ReadyForReplacement` on the fixed
+Splunk build. Do not generalize those results to Splunk-managed App Framework
+restarts, other interruption stages, API-server disconnection,
 conflicting disruptions, unsupported redundancy, or the remaining negative
 and compatibility gates above.

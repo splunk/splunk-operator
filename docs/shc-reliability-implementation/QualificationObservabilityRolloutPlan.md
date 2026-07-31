@@ -493,6 +493,72 @@ ownership.
   A zero counter after a controller restart is not evidence that recovery did
   not occur.
 
+- Observation: an Operator-owned indexer may be intentionally initialized,
+  responsive, withdrawn from traffic, and stopped at
+  `ReadyForReplacement`. Ordinary level-one liveness still interpreted the
+  missing `splunkd` process as container failure. With the controller absent
+  long enough, kubelet restarted the old container and re-entered image
+  initialization before the authorized Pod replacement.
+  Consequence: the readiness-withdrawal command writes an explicit lifecycle
+  hold marker alongside the durable operation. During that narrow hold,
+  liveness requires a readable successful container-initialization state and
+  a responsive exec probe, while readiness keeps the target out of Services.
+  Missing or incomplete state fails closed, and level-one liveness without the
+  marker continues to require `splunkd`. The EKS oracle removes every
+  controller replica for 300 seconds and requires the same target UID, exact
+  operation and revisions, zero liveness failures, three unchanged serving
+  peers, and no target endpoint before controller recovery.
+
+- Observation: Search Head captain information may be proxied through an
+  active member, but the authoritative `captain/members` endpoint is
+  captain-only. After transfer, querying it on the old observation ordinal
+  produced a correct HTTP 503 redirect indication even though the Operator had
+  already learned the new captain label.
+  Consequence: map the observed captain label to its member ordinal and send
+  the captain-only query to that elected member. Qualification must continue
+  to treat HTTP 503 from this endpoint on a non-captain as endpoint scope, not
+  as a universal Search Head readiness failure.
+
+- Observation: an elapsed captain-transfer deadline and a fresh successful
+  transfer observation can arrive in the same reconciliation after a
+  controller or observation delay. Applying the deadline first converted an
+  already completed transfer into terminal `Blocked` state.
+  Consequence: accept only a fresh, available, non-conflicting observation of
+  a different ready captain before applying the timeout. Missing, stale,
+  conflicting, empty, or unready observations still block or time out. A
+  running operation that became terminal before this correction required an
+  explicit test-only status repair; the evidence must not describe that repair
+  as autonomous product recovery.
+
+- Observation: the workstation-side combined workload and telemetry monitor
+  stopped generating requests for approximately 294 seconds between sequence
+  129 at `17:41:04Z` and sequence 130 at `17:45:58Z` when one Kubernetes API
+  operation stalled. It recorded no HEC or search failure because no client
+  request was attempted during the gap.
+  Consequence: that record can prove the sampled requests succeeded and later
+  reached exact completeness, but it cannot prove continuous client traffic
+  through the gap. Source `b2bf2e71d` adds an in-cluster Job whose HEC and
+  search loop runs independently of `kubectl` and the workstation. Kubernetes,
+  lifecycle, and Splunk telemetry remain separate observers. Any observer gap
+  is reported as an evidence gap rather than silently pausing the client used
+  for an availability verdict.
+
+- Observation: the accepted in-cluster workload submitted 1,800 events with
+  zero HEC and exported-search request failures and reached exact final
+  completeness, but 24 successful aggregate-search samples returned a lower
+  count than the preceding successful sample. The maximum sequence-to-count
+  gap was 362 at sequence 1418 (`count=1056`, `max=1417`). The export response
+  contained no partial-result message. At corresponding times, every Search
+  Head logged failures connecting or authenticating to terminating or newly
+  starting indexer Pod IPs.
+  Consequence: request success, final convergence, Cluster Manager
+  `Up/searchable`, EndpointSlice publication, and a remote HEC check are
+  separate assertions from immediate distributed-search completeness. Keep
+  per-Search-Head old-address removal, replacement-address/authentication
+  convergence, count regression, maximum missing-event window, and explicit
+  partial-result status in the oracle. Do not describe a successful search
+  request as an availability success when completeness is unknown.
+
 - Observation: the current `make deploy` target depends on `uninstall`, which
   deletes the Splunk Enterprise CRDs before deployment.
   Consequence: live-fixture image qualification updates only the Operator
@@ -588,6 +654,24 @@ ownership.
   before and after the restart.
   Rationale: completion alone cannot rule out duplicate lifecycle intent.
   Date/Author: 2026-07-28, qualification team.
+
+- Decision: a long planned-replacement hold passes only if the controller is
+  absent for the full requested duration, the exact durable operation and Pod
+  identity remain unchanged, the target remains running but non-serving with
+  zero restarts, every non-target remains unchanged and serving, and restoring
+  the controller completes the same operation before selecting another peer.
+  Rationale: a final healthy cluster alone cannot prove that kubelet did not
+  restart the stopped target, that the controller did not create a duplicate
+  operation, or that multiple peers were unavailable together.
+  Date/Author: 2026-07-31, qualification team.
+
+- Decision: availability traffic must run independently inside the cluster;
+  workstation/API-driven telemetry may observe it but may not be the process
+  that generates it.
+  Rationale: a blocked `kubectl exec` can otherwise produce a silent request
+  gap that looks like zero failures. Separating the client and observer makes
+  traffic failure, telemetry failure, and API connectivity distinguishable.
+  Date/Author: 2026-07-31, qualification team.
 
 - Decision: cluster identity and member identity are separate assertions.
   Rationale: the shared `[shclustering] id` must remain stable across the
@@ -1804,3 +1888,29 @@ SHC-83 commit `163d5d646`; Docker-Splunk begins at integrated runtime commit
 probe and grace values, actual startup and persistent-restart durations,
 kubelet probe-failure and killing Events, runtime shutdown owner/result
 artifacts, and container exit timing before recommending a bounded default.
+
+2026-07-31 UTC: Recorded SHC-85 lifecycle-hold source and EKS evidence on
+`codex/shc-85-lifecycle-hold-qualification`. The monitor caught ordinal 3 at
+persisted `ReadyForReplacement`, scaled the Operator Deployment to zero for
+exactly 300 seconds, and continuously required exact durable identity, one
+unready and non-serving target, three unchanged serving peers, zero restarts,
+and zero liveness failures. Restoring the controller completed
+`3 -> 2 -> 1 -> 0`, kept maximum unavailability at one, removed the lifecycle
+marker with each replacement, and finished with four Ready indexers,
+RF/SF/all-searchable/no-fixup health, and four clean Ansible recaps. The same
+campaign corrected authoritative captain-member routing and accepted a fresh
+successful captain-transfer observation before applying an elapsed deadline.
+API-server disconnection and absence at other durable stages remain separate
+qualification gates.
+
+The accepted repeat observed 302 controller-absent seconds and produced
+lifecycle evidence SHA-256
+`655c998ab4d6072769d8efa2c47c83c737f919a730ee3a72467f9714b4df9263`.
+Its API-independent Job spanned the absence and complete roll, submitted 1,800
+events with zero HEC/search request failures, zero restarts, and exact final
+completeness, and produced workload evidence SHA-256
+`8b14b210e1224219ee1509b150036c3f599c68f11bbf22b98cbdce71bf1e3faf`.
+The same record retains as an open immediate-completeness finding 24
+successful-search count regressions and a maximum
+sequence-to-count gap of 362 while Search Heads reported peer address and
+authentication convergence failures.

@@ -347,6 +347,56 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   container restarts. Controller restart is now qualified for this bounded
   stage; longer disconnection, leader contention, conflict, redundancy, and
   compatibility variants remain open.
+- [x] (2026-07-31 UTC) Qualified a five-minute SHC-85 controller absence after
+  indexer ordinal 3 durably reached `ReadyForReplacement`. Operator source
+  `ac1fe0db8` and immutable image digest
+  `sha256:59fc2afdfafc7e0c2b9f49fceebf1862128521017311776b91f0ce3315eff608`
+  retained the exact operation, target UID, source revision, and desired
+  revision while the Deployment had zero replicas. The held container stayed
+  running and unready with zero restarts, three non-target peers stayed Ready
+  and serving, and Kubernetes recorded zero liveness failures or kill Events.
+  The accepted repeat observed 302 seconds with no controller. Restoring the
+  Operator completed `3 -> 2 -> 1 -> 0`, with maximum
+  unavailability one, remote-serving recovery before every next target, four
+  `failed=0` Ansible recaps, no prior KV Store failure signature, and final
+  RF/SF/all-searchable/no-fixup health. The qualification is bounded to
+  `ReadyForReplacement`; API-server disconnection and long absence at other
+  lifecycle stages remain open. The lifecycle record has SHA-256
+  `655c998ab4d6072769d8efa2c47c83c737f919a730ee3a72467f9714b4df9263`.
+- [x] (2026-07-31 UTC) Ran an API-independent workload Job across the accepted
+  controller absence and complete four-Pod roll. It submitted 1,800 numbered
+  HEC events with zero HEC request failures, zero exported-search request
+  failures, zero client restarts, and final exact
+  `count/min/max/distinct=1800/1/1800/1800`. The workload record has SHA-256
+  `8b14b210e1224219ee1509b150036c3f599c68f11bbf22b98cbdce71bf1e3faf`.
+  This closes the bounded client-request and final-convergence gate, not the
+  immediate distributed-search completeness gate below. Harness source
+  `d610d4474` makes subsequent Job summaries report pending events, count
+  regressions, and maximum pending count directly.
+- [x] (2026-07-31 UTC) Corrected two Search Head captain-transition defects
+  exposed while forming the SHC-85 fixture. Source `99da90390` sends the
+  captain-only authoritative member query to the newly elected captain instead
+  of the prior observation ordinal. Source `ac1fe0db8` accepts a fresh,
+  converged captain-transfer observation before applying an elapsed deadline,
+  while stale, conflicting, missing, or unready observations still fail
+  closed. Both passed regression tests and the complete Linux Make gate. The
+  qualification record explicitly retains the one test-only status repair
+  needed because the pre-fix running operation had already become terminally
+  `Blocked`.
+- [ ] Resolve the SHC-85 immediate distributed-search completeness finding.
+  The API-independent client continued to receive successful HEC and search
+  responses, but some successful aggregate searches temporarily returned a
+  smaller subset of previously observed events during indexer Pod IP churn.
+  Every Search Head logged distributed-peer connection failures to terminating
+  or newly starting peer addresses, while the export response carried no
+  partial-result message; direct searches later converged exactly. Preserve
+  this as a Splunk Enterprise and lifecycle-stability requirement. Determine
+  the exact bucket/dispatch cause, require explicit partial-result semantics,
+  and qualify per-Search-Head peer convergence before claiming immediate
+  result availability. The accepted record observed 24 successful-search count
+  regressions and a maximum sequence-to-count gap of 362 at sequence 1418
+  (`count=1056`, `max=1417`). No production fix is claimed by the
+  lifecycle-hold branch.
 - [x] Define and qualify SHC-83 on isolated branch
   `codex/shc-83-startup-readiness-qualification`. During initial formation,
   no Search Head may enter the client Service until every desired Search Head
@@ -375,13 +425,19 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   invalid configuration, or an expired wait.
 - [ ] Complete the remaining SHC-85 negative and compatibility qualification.
   The bounded Operator-owned lifecycle is source-qualified and EKS-qualified
-  for steady-controller operation and one controller-Pod restart during
-  `Decommissioning`. Remaining gates include long controller or API-server
-  disconnection, leader contention, conflicting desired-state changes,
+  for steady-controller operation, one controller-Pod restart during
+  `Decommissioning`, and a five-minute controller absence during
+  `ReadyForReplacement`. Remaining gates include long controller absence at
+  other stages, API-server disconnection, leader contention, conflicting
+  desired-state changes,
   insufficient RF/SF health, HEC-disabled Splunk-to-Splunk traffic, HTTP and
   HTTPS HEC variants, ingress TLS termination, service-mesh and no-mesh
   deployments, persistent-client connection behavior, and repeated/soak
-  campaigns. Splunk-managed bundle-push restarts remain a separate boundary:
+  campaigns. Per-Search-Head distributed-peer address/authentication
+  convergence and explicit partial-result behavior are also open after the
+  API-independent client observed transient incomplete successful search
+  results during peer IP churn. Splunk-managed bundle-push restarts remain a
+  separate boundary:
   Splunk Enterprise, not the Operator, chooses the next peer inside that
   workflow. A supported Splunk Enterprise remote-serving readiness contract
   is still required before OPS-011 or SHC-85 can be closed end to end.
@@ -2314,3 +2370,23 @@ sampled searches, and finished `Ready`/`Complete`/`Upgraded` with three
 registered `Up` target members. The result is bounded to the exact current-v4
 version pair; it does not claim v3-to-v4 conversion, every future pair, SAML,
 or every workload.
+
+2026-07-31 UTC: Recorded the SHC-85 lifecycle-hold source and EKS campaign on
+`codex/shc-85-lifecycle-hold-qualification`. An explicit lifecycle marker now
+lets an initialized container remain live while `splunkd` is intentionally
+stopped after readiness withdrawal; missing or incomplete container state and
+ordinary level-one liveness still fail closed. The monitor removed the
+Operator for exactly 300 seconds at persisted ordinal-3
+`ReadyForReplacement`, retained the exact target and operation with three
+serving peers and zero liveness failures, then restored the controller and
+completed `3 -> 2 -> 1 -> 0` with zero restarts. The accepted API-independent
+workload submitted 1,800 events with zero HEC or search-request failures and
+final exact completeness. It also exposed 24 temporary successful-search count
+regressions, with a maximum sequence-to-count gap of 362 while Search Heads
+were still converging indexer peer addresses and authentication. The campaign
+also corrected
+the captain-only member query target and successful-observation/deadline
+ordering exposed during fresh SHC formation. The evidence does not claim an
+API-server partition, controller absence at every stage, or Operator control
+over Splunk-managed App Framework peer selection, and it does not claim that
+immediate distributed-search completeness is solved.

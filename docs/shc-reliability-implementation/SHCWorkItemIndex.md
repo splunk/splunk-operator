@@ -59,7 +59,7 @@ without duplicating their full content.
 | SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | First SH serving correction `0fc1bcf31`; SH drain work `632d9155c`; indexer lifecycle work under SHC-85 | OPS-006, OPS-011, K8S-007, OBS-001, OBS-003, OBS-005 | Partial EKS evidence: the SH correction removed the zero-endpoint captain-transition outage, but an already-admitted captain search still failed. Four-peer searchable indexer restart preserved RF/SF/searchability; existing readiness lost 7/55 HEC submissions, default HEC-aware readiness lost 1/55, and a fast experiment completed 55/55 exactly. SHC-85 later removed manual lifecycle advancement for tested Operator-owned four-peer rolls, including controller-Pod restart recovery during `Decommissioning`, with exact 80/80, 30/30, 100/100, and stable 30/30 records on the official fixed KV Store build. Splunk-managed App Framework target control, configuration variants, client delivery, conflict, and unhealthy-redundancy gates remain open |
 | SHC-83 | Prevent traffic readiness before image-owned SHC initialization, synchronization, and internal Splunk restarts are complete | `635b81bc4`, `daf6b0608`, `0a2465cbe`, `85b00fd9f`, `2889c8002` on `codex/shc-83-startup-readiness-qualification` | HLT-001, HLT-002, HLT-009, STS-012, OBS-001 | Source-qualified and EKS-qualified for a fresh three-member formation with zero premature client endpoints, exactly one initial-formation restart Event, and twelve stable three-endpoint samples after `Complete`. Established non-captain and active-captain replacements retained at least two endpoints and returned to three; captaincy moved dynamically from ordinal zero to ordinal two. Operator replacement retained all three endpoints, Search Head UIDs, durable formation state, and zero restarts. The EKS campaign also corrected a circular dependency by separating internal management target eligibility from client Service readiness during bounded first formation |
 | SHC-84 | Bound first-start and upgrade startup probes and guarantee prompt TERM exit for kubelet-initiated restarts | Policy `968e19b94`, API validation `c58ff86cd`, merge fix `67c0d3bd2`; monitors `cbaef60af`, `524636f39`; source fixture `4718cef6f` on `codex/shc-84-startup-term-qualification` | HLT-009, RUN-003, RUN-004, REJ-005, OBS-005 | Source- and EKS-qualified with Operator digest `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`: existing-v4 reconciliation, fresh formation, forced liveness, planned deletion, and the supported `10.4.2604.0/60dd7967c086` to `10.5.2605.0/844c593e9c1d` upgrade passed. The upgrade replaced ordinals `2 -> 1 -> 0`, retained at least two endpoints, recorded zero container restarts, moved captaincy dynamically, completed 200/200 sampled searches, and finished with three registered `Up` target members. Startup/liveness grace rendered 660, readiness grace remained unset, and Pod grace remained 1200 |
-| SHC-85 | Separate indexer serving readiness from lifecycle progress and require previous-peer network-path recovery before authorizing another disruption | `3f60d9301`, `11d719f64`, `7ff844f4a` on `codex/shc-85-indexer-serving-lifecycle`; controller-restart evidence on `codex/shc-85-controller-restart-qualification` | OPS-011, K8S-007, OBS-001, OBS-002, OBS-003 | Source-qualified and EKS-qualified for Operator-owned four-peer RF3/SF2 `OnDelete` revision rolls on official Splunk build `10.5.2605.0/844c593e9c1d`: automatic `3 -> 2 -> 1 -> 0` progress, one withdrawn target at a time, previous-peer remote serving recovery before the next target, zero container restarts, four Ansible `failed=0` results, no prior KV Store failure signature, and final RF/SF/all-searchable health. A separate campaign deleted the Operator during persisted ordinal-3 `Decommissioning`; the replacement retained the exact operation/target without a duplicate decommission Event and completed the full roll. Principal and stable workload records completed exact 100/100 and 30/30 with zero failures; an overlapping 80/80 exact record transparently classified one valid initial empty result as a search failure. Longer disconnection, leader contention, conflict, redundancy, protocol/configuration variants, and Splunk-managed App Framework next-target control remain open |
+| SHC-85 | Separate indexer serving readiness from lifecycle progress and require previous-peer network-path recovery before authorizing another disruption | `3f60d9301`, `11d719f64`, `7ff844f4a`; controller-restart evidence on `codex/shc-85-controller-restart-qualification`; lifecycle hold `5dbe7dac8`, `99da90390`, `ac1fe0db8`; harness `854a76b8d`, `b2bf2e71d`, `d610d4474` on `codex/shc-85-lifecycle-hold-qualification` | OPS-011, K8S-007, OBS-001, OBS-002, OBS-003 | Source-qualified and EKS-qualified for Operator-owned four-peer RF3/SF2 `OnDelete` revision rolls on official Splunk build `10.5.2605.0/844c593e9c1d`: automatic `3 -> 2 -> 1 -> 0` progress, one withdrawn target at a time, previous-peer remote serving recovery before the next target, zero container restarts, four Ansible `failed=0` results, no prior KV Store failure signature, and final RF/SF/all-searchable health. Separate campaigns qualified controller restart during persisted ordinal-3 `Decommissioning` and a requested five-minute/observed 302-second controller absence during ordinal-3 `ReadyForReplacement`; both retained the durable operation and completed the full roll. An API-independent workload spanning the latter submitted 1,800 events with zero HEC/search request failures and exact final completeness. It also exposed 24 successful-search count regressions and a maximum sequence-to-count gap of 362 during peer-address/authentication convergence, without partial-result signaling. Immediate distributed-search completeness, API-server disconnection, controller absence at other stages, leader contention, conflict, redundancy, protocol/configuration variants, and Splunk-managed App Framework next-target control remain open |
 | SHC-86 | Make referenced LicenseManager finalization safe after namespace termination begins | Pending | OPS-012, OBS-001, OBS-005 | Registered after SHC-83 qualification teardown removed the Search Head workload and storage but a LicenseManager finalizer retained the namespace while reconciliation attempted to recreate a Secret. The finalizer was cleared only after the remaining resources were verified absent. This is a separate cross-resource deletion contract; no implementation or qualification is claimed |
 | SHC-87 | Distinguish retryable referenced-tier dependency convergence from terminal dependency or upgrade failure | Pending | OBS-001, OBS-004, OBS-005 | Registered after fresh SHC-84 formation temporarily reported `Error` and upgrade-path validation failure while its referenced LicenseManager was still starting, then recovered without user action through `Pending` to `Ready`. Normal dependency ordering must report Pending/Progressing with a bounded dependency reason; no implementation or qualification is claimed |
 
@@ -520,8 +520,10 @@ formation and finalization campaigns: early traffic readiness, and the
 interaction among startup duration, kubelet restart policy, and prompt
 process exit. SHC-85 preserves the independently bounded indexer
 serving-readiness/lifecycle-progress gap exposed by SHC-82. SHC-85 is now
-source-qualified and EKS-qualified for the bounded Operator-owned path recorded
-above. SHC-82 remains selected on its isolated evidence branch. SHC-83 is
+source-qualified and EKS-qualified for the bounded Operator-owned steady path,
+controller restart during `Decommissioning`, and five-minute controller
+absence during `ReadyForReplacement` recorded above. SHC-82 remains selected
+on its isolated evidence branch. SHC-83 is
 source- and EKS-qualified for its bounded current-v4 contract. SHC-84 is
 source- and EKS-qualified for its bounded current-v4 contract and the exact
 supported 10.4-to-10.5 upgrade recorded above. SHC-86 records the independently
@@ -667,6 +669,34 @@ all peers Up, no fixups, four `failed=0` Ansible recaps, zero prior KV Store
 failure signatures, and zero container restarts. Long controller/API
 disconnection and the other recorded negative and compatibility variants
 remain open.
+
+2026-07-31 UTC: Recorded the isolated SHC-85 five-minute controller-absence
+campaign on `codex/shc-85-lifecycle-hold-qualification`. Operator source
+`ac1fe0db8` at immutable digest
+`sha256:59fc2afdfafc7e0c2b9f49fceebf1862128521017311776b91f0ce3315eff608`
+retained the exact ordinal-3 operation, Pod UID, and revisions for 300 seconds
+with zero controller replicas. The target stayed running, unready, outside the
+Service, and at zero restarts; the other three peers stayed Ready and serving;
+and no indexer liveness failure or kubelet kill occurred. Restoring the
+controller completed `3 -> 2 -> 1 -> 0` with maximum unavailability one,
+remote-serving recovery before every next target, four clean Ansible recaps,
+and final RF/SF/all-searchable/no-fixup health. The same campaign corrected
+the elected-captain query target and the ordering between fresh successful
+captain observation and transfer timeout. It does not qualify API-server
+disconnection, controller absence at other stages, or Splunk-managed restart
+target selection.
+
+The accepted repeat observed 302 seconds without a controller and stored
+lifecycle evidence SHA-256
+`655c998ab4d6072769d8efa2c47c83c737f919a730ee3a72467f9714b4df9263`.
+The independent workload Job spanned the hold and complete roll, submitted
+1,800 numbered events with zero HEC or search-request failures and final exact
+completeness, and stored workload evidence SHA-256
+`8b14b210e1224219ee1509b150036c3f599c68f11bbf22b98cbdce71bf1e3faf`.
+It also observed 24 successful-search count regressions and a maximum
+sequence-to-count gap of 362 while all Search Heads logged peer connectivity
+or authentication-convergence errors. That immediate-completeness and
+partial-result contract remains open; no production fix is claimed for it.
 
 2026-07-29 UTC: Selected SHC-80 on
 `codex/shc-80-authorized-revision-recovery` from integrated feature baseline
