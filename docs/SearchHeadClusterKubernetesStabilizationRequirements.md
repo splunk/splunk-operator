@@ -114,20 +114,16 @@ Conversely, a locally reachable management port does not prove that a member sho
 
 ## Verified Current Readiness Behavior
 
-Splunk Enterprise exposes the following unauthenticated local endpoint for an SHC member:
+The current supported Splunk runtime does not expose
+`/services/shcluster/member/ready`. The image-provided readiness check reads
+the container state marker and makes a bounded request to the local splunkd
+management root using the configured HTTP or HTTPS scheme. It succeeds only
+after image-owned setup reports `running` or `started` and the management
+service responds.
 
-```text
-GET /services/shcluster/member/ready
-```
+That local check does not verify:
 
-The current implementation:
-
-- verifies that SHC is enabled;
-- returns unavailable when the local member is in manual or automatic detention;
-- otherwise returns success.
-
-It does not verify:
-
+- whether the member is in manual or automatic detention;
 - whether the member is registered with the captain;
 - whether the member status is `Up`;
 - whether a captain is present;
@@ -139,23 +135,31 @@ It does not verify:
 - restart state; or
 - the complete Splunk shutdown state.
 
-The narrow endpoint behavior aligns with search execution. Current Splunk code rejects both new user-created searches and new scheduled-search dispatch on a member in detention. Existing searches are allowed to continue.
+Current Splunk code rejects new user-created searches and new scheduled-search
+dispatch on a member in detention while allowing existing searches to
+continue. Because there is no current local traffic-readiness endpoint that
+publishes that decision, the Operator must withdraw its Pod readiness gate
+during a planned detention and must confirm current member state separately.
 
 ### Required Kubernetes readiness behavior
 
 Every SHC Pod, including the Pod that is currently captain, must use the same local readiness rule:
 
 ```text
-the container has reached its running state
+the container has completed image-owned initialization
 AND
 the local splunkd management service responds
 AND
-GET /services/shcluster/member/ready succeeds
+the Operator readiness gate confirms that the current member is eligible
+for client traffic
 ```
 
-The root management endpoint alone is insufficient. The current Operator readiness script calls the root management endpoint and therefore can report a detained Search Head as ready even though Splunk refuses new searches.
+The local management root alone is insufficient. During current-runtime
+compatibility, the Operator gate must withhold initial formation, require the
+local member to be registered and `Up`, and withdraw a planned target when
+detention begins. It must not invent or call an unsupported Splunk endpoint.
 
-The captain uses the same Pod readiness endpoint because:
+The captain uses the same local probe and member gate because:
 
 - the captain is also a Search Head member;
 - it can accept ad-hoc traffic;
@@ -231,7 +235,10 @@ A planned change to an SHC can cause avoidable search interruption or prolonged 
 
 ### Verified gaps in the current Operator design
 
-- The Search Head readiness probe checks the container state and splunkd management root. It does not call `/services/shcluster/member/ready`, so Kubernetes can continue reporting a manually or automatically detained member as ready for Service traffic.
+- The Search Head container readiness probe checks the container state and
+  splunkd management root. Those local signals do not expose detention. The
+  Operator must therefore own the planned readiness-gate withdrawal before it
+  authorizes Pod deletion.
 - Splunk StatefulSets use `OnDelete`. The Operator detects a revision mismatch, prepares one member, and explicitly deletes that Pod. Kubernetes records the desired revision but does not own progression of the complete rollout.
 - The current recycle path detains the selected member and waits for both historical and real-time active-search counts to reach zero before deletion. This Operator-owned polling path has no bounded timeout, so a long-running or real-time search can block the operation indefinitely.
 - The current recycle path requires a service-ready captain before it starts or continues preparation. However, it does not detect that the selected target is the current captain and does not request the supported captain-transfer operation before deleting it. It waits for Splunk election and captain readiness after the replacement begins.
@@ -406,7 +413,8 @@ As soon as detention is active:
 - the captain does not assign new scheduled searches to that member;
 - existing searches continue;
 - the member continues participating in most SHC operations; and
-- `/services/shcluster/member/ready` becomes unavailable, removing that Pod from normal Kubernetes Service traffic.
+- the Operator sets the target's readiness gate false and verifies its removal
+  from normal Kubernetes Service traffic.
 
 ### 4. Drain existing work
 
@@ -533,14 +541,18 @@ Detection must not automatically remove and re-add the member. Consensus removal
 Readiness controls traffic only:
 
 ```text
-container running
+image initialization complete
 AND local splunkd reachable
-AND /services/shcluster/member/ready returns success
+AND the Operator confirms this member is registered, Up, and eligible
+AND any planned detention has withdrawn the member
 ```
 
 This applies identically to captains and non-captains.
 
-Readiness must become false during manual or automatic detention. Captain instability must not automatically make every member unready.
+For the current runtime, the Operator explicitly withdraws readiness during
+its own planned detention. A future Splunk local traffic-readiness contract
+should also cover automatic detention. Captain instability must not
+automatically make every member unready.
 
 ### Liveness
 
@@ -617,7 +629,7 @@ Each duration needs a separate condition and metric. A single large grace period
 
 | **ID** | **Requirement** | **Priority** | **Reason** |
 |---|---|---:|---|
-| SHC-R1 | Use `/services/shcluster/member/ready` for every SHC Pod's traffic readiness, including the captain | Must | Aligns Kubernetes traffic with Splunk's current local search-acceptance decision |
+| SHC-R1 | Use the current container-state and local-management check plus an Operator-owned member readiness gate for every SHC Pod, including the captain; never call an unsupported endpoint | Must | Aligns Kubernetes traffic with confirmed current-runtime capabilities while withholding formation, rejoin, and planned-detention targets |
 | SHC-R2 | Keep captain and cluster health separate from Pod traffic readiness | Must | Preserves ad-hoc search availability during captain disruption |
 | SHC-R3 | Use local process responsiveness only for liveness; do not restart a Pod for detention or captain instability | Must | Prevents a cluster problem from causing additional member loss |
 | SHC-R4 | Discover the runtime captain through Splunk APIs | Must | Captaincy is dynamic |
@@ -897,7 +909,9 @@ Every test must verify separately:
 
 ### Phase 1 -- Correct health contracts
 
-- Change SHC Pod readiness to use `/services/shcluster/member/ready`.
+- Keep the supported local container-state and splunkd-management probe, and
+  add the Operator-owned SHC member readiness gate required by the current
+  runtime.
 - Keep captain and cluster health as separate conditions.
 - Define a conservative local liveness contract.
 - Add customer-configurable termination grace with the 1200-second compatibility default and qualification evidence.
@@ -976,7 +990,10 @@ Recommended semantic contracts are:
 
 1. **Local traffic readiness**
 
-   Whether this member can accept a new user or delegated search. The existing `/services/shcluster/member/ready` is a useful starting point but should publish a stable reason and machine-readable state.
+   Whether this member can accept a new user or delegated search. The current
+   product does not expose a dedicated endpoint for this decision. A future
+   versioned API should publish a stable reason and machine-readable state,
+   including detention.
 
 2. **Local process liveness**
 
