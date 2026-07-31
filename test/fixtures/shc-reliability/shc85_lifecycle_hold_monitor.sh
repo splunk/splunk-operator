@@ -294,10 +294,10 @@ start_api_disconnect() {
         echo API_FAULT_FAILED reason=preexisting-rule
         exit 3
       fi
-      before="$(curl -skS --connect-timeout 3 -o /dev/null
+      before="$(curl -skS --connect-timeout 3 -o /dev/null \
         -w "%{http_code}" "https://${API_SERVICE_IP}/version")"
       iptables -I OUTPUT 1 "${rule[@]}"
-      if curl -skS --connect-timeout 3 -o /dev/null
+      if curl -skS --connect-timeout 3 -o /dev/null \
         "https://${API_SERVICE_IP}/version"; then
         echo API_FAULT_FAILED reason=api-still-reachable
         exit 4
@@ -310,7 +310,7 @@ start_api_disconnect() {
       done
       cleanup
       trap - EXIT TERM INT
-      after="$(curl -skS --connect-timeout 3 -o /dev/null
+      after="$(curl -skS --connect-timeout 3 -o /dev/null \
         -w "%{http_code}" "https://${API_SERVICE_IP}/version")"
       echo "API_FAULT_REMOVED after=${after}"
     ' >"${api_fault_log}" 2>&1 &
