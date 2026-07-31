@@ -1,0 +1,54 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: shc85-incluster-workload
+  namespace: shc85-lifecycle-hold
+  labels:
+    qualification.splunk.com/scenario: shc85-lifecycle-hold
+spec:
+  activeDeadlineSeconds: 7200
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        qualification.splunk.com/scenario: shc85-lifecycle-hold
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: workload
+          image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc85-f063cfd-ansible-5e9e12f-splunkcloud-10.5.2605.0-844c593e9c1d@sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - /opt/qualification/shc85_incluster_workload.sh
+          env:
+            - name: HEC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: splunk-shc85-lifecycle-hold-secret
+                  key: hec_token
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: splunk-shc85-lifecycle-hold-secret
+                  key: password
+            - name: SHC85_WORKLOAD_SAMPLES
+              value: "1800"
+            - name: SHC85_WORKLOAD_INTERVAL_SECONDS
+              value: "1"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: workload
+              mountPath: /opt/qualification
+              readOnly: true
+      volumes:
+        - name: workload
+          configMap:
+            name: shc85-incluster-workload
+            defaultMode: 0555

@@ -157,7 +157,7 @@ SHC84_LICENSE_FILE ?=
 SHC85_NAMESPACE ?= shc85-lifecycle-hold
 SHC85_LICENSE_FILE ?=
 
-.PHONY: shc82-app-package shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret
+.PHONY: shc82-app-package shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
 	@printf '%s\n' "$(SHC82_APP_VERSION)" | \
 		grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || \
@@ -209,6 +209,16 @@ shc85-license-secret: ## Create or update the SHC-85 LicenseManager license Secr
 	kubectl -n "$(SHC85_NAMESPACE)" create secret generic "shc85-license" \
 		--from-file=enterprise.lic="$(SHC85_LICENSE_FILE)" \
 		--dry-run=client -o yaml | kubectl apply -f -
+
+shc85-incluster-workload: ## Recreate the API-independent SHC-85 HEC/search workload Job.
+	kubectl -n "$(SHC85_NAMESPACE)" create configmap shc85-incluster-workload \
+		--from-file=shc85_incluster_workload.sh=test/fixtures/shc-reliability/shc85_incluster_workload.sh \
+		--dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n "$(SHC85_NAMESPACE)" delete job shc85-incluster-workload \
+		--cascade=foreground --ignore-not-found --wait=true
+	kubectl -n "$(SHC85_NAMESPACE)" delete pod \
+		-l job-name=shc85-incluster-workload --ignore-not-found --wait=true
+	kubectl apply -f test/fixtures/shc-reliability/shc85-incluster-workload-job.yaml
 
 
 ##@ Documentation

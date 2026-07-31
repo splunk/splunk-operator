@@ -228,27 +228,27 @@ kubectl apply -f \
 
 The Operator must be running with `SplunkPodLifecycle`,
 `SearchHeadClusterLifecycle`, and `IndexerClusterLifecycle` enabled. Start the
-numbered workload monitor first, then run the lifecycle monitor. The latter
-owns the harmless `spec.podAnnotations` revision trigger, waits for ordinal
-three to reach `ReadyForReplacement`, scales the Operator Deployment to zero,
-and observes an uninterrupted five-minute controller absence. Its exit trap
-restores the original controller replica count on success or failure.
+in-cluster workload Job first, then run the lifecycle monitor. The Job sends
+numbered HEC events and searches through the Services without depending on a
+workstation `kubectl exec` connection. The lifecycle monitor owns the harmless
+`spec.podAnnotations` revision trigger, waits for ordinal three to reach
+`ReadyForReplacement`, scales the Operator Deployment to zero, and observes
+an uninterrupted five-minute controller absence. Its exit trap restores the
+original controller replica count on success or failure.
 
 ```bash
-SHC82_NAMESPACE=shc85-lifecycle-hold \
-SHC82_STACK_NAME=shc85 \
-SHC82_SAMPLES=180 \
-SHC82_RUN_ID=shc85-ready-replacement-absence \
-SHC82_EVIDENCE_FILE=build/_test/shc85/workload.log \
-test/fixtures/shc-reliability/shc82_appframework_monitor.sh &
-workload_pid=$!
+make shc85-incluster-workload
+kubectl -n shc85-lifecycle-hold logs -f job/shc85-incluster-workload &
+workload_log_pid=$!
 
 SHC85_NAMESPACE=shc85-lifecycle-hold \
 SHC85_HOLD_SECONDS=300 \
 SHC85_EVIDENCE_FILE=build/_test/shc85/lifecycle-hold.tsv \
 test/fixtures/shc-reliability/shc85_lifecycle_hold_monitor.sh
 
-wait "${workload_pid}"
+kubectl -n shc85-lifecycle-hold wait \
+  --for=condition=complete job/shc85-incluster-workload --timeout=2h
+wait "${workload_log_pid}"
 ```
 
 During controller absence the lifecycle monitor requires the exact persisted
@@ -261,3 +261,7 @@ container restarts, remote serving recovery on the final replacement, the
 desired revision on all four Pods, and removal of the temporary lifecycle
 marker with Pod replacement. The workload monitor independently requires
 zero HEC and search request failures plus exact eventual sequence recovery.
+Its Pod name supplies a unique run ID, so repeated Jobs do not reuse prior
+events. Workstation-side Kubernetes and Splunk telemetry should run as a
+separate observer; an observer/API stall must be recorded as a telemetry gap
+and must not silently pause the workload used for the availability verdict.
