@@ -240,9 +240,12 @@ workstation `kubectl exec` connection. The lifecycle monitor owns the harmless
 `spec.podAnnotations` revision trigger, waits for ordinal three to reach
 the stage selected by `SHC85_HOLD_STAGE`, scales the Operator Deployment to
 zero, and observes an uninterrupted five-minute controller absence. The
-default stage is `ReadyForReplacement`; the other supported value is
+default stage is `ReadyForReplacement`; the other supported values are
 `Decommissioning` or `WithdrawingReadiness`. Its exit trap restores the
-original controller replica count on success or failure.
+original controller replica count on success or failure. After setting the
+Deployment replica count to zero, the harness immediately removes any
+remaining controller Pod so it cannot cross the selected stage while
+terminating.
 
 ```bash
 make shc85-incluster-workload

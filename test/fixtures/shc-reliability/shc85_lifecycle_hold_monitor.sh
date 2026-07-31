@@ -263,6 +263,9 @@ fi
 kubectl -n "${operator_namespace}" scale deployment \
   "${operator_deployment}" --replicas=0 >/dev/null
 operator_scaled=true
+kubectl -n "${operator_namespace}" delete pod \
+  -l "${operator_selector}" --grace-period=0 --force --wait=false \
+  >/dev/null
 
 scale_deadline=$((SECONDS + 180))
 while ((SECONDS < scale_deadline)); do
