@@ -210,7 +210,10 @@ the target digest and rejoin registered and `Up`.
 
 `shc85-lifecycle-hold-cluster.yaml` creates the isolated four-indexer RF3/SF2
 topology used to qualify a long controller absence after an Operator-owned
-target has durably reached `Decommissioning` or `ReadyForReplacement`. For
+target has durably reached `WithdrawingReadiness`, `Decommissioning`, or
+`ReadyForReplacement`. For
+`WithdrawingReadiness`, the monitor additionally waits until the selected Pod
+is unready and absent from the indexer Service. For
 `Decommissioning`, the monitor waits until the accepted operation records that
 Splunk has actually been observed in a decommission state; issuing the command
 alone is not sufficient. The fixture also includes a three-member Search Head
@@ -238,8 +241,8 @@ workstation `kubectl exec` connection. The lifecycle monitor owns the harmless
 the stage selected by `SHC85_HOLD_STAGE`, scales the Operator Deployment to
 zero, and observes an uninterrupted five-minute controller absence. The
 default stage is `ReadyForReplacement`; the other supported value is
-`Decommissioning`. Its exit trap restores the original controller replica
-count on success or failure.
+`Decommissioning` or `WithdrawingReadiness`. Its exit trap restores the
+original controller replica count on success or failure.
 
 ```bash
 make shc85-incluster-workload
@@ -260,6 +263,9 @@ wait "${workload_log_pid}"
 To qualify a long absence after Splunk decommission has been observed but
 before replacement authorization, set
 `SHC85_HOLD_STAGE=Decommissioning` and use a new evidence-file name.
+To stop the controller after readiness withdrawal is externally visible but
+before decommission is requested, use
+`SHC85_HOLD_STAGE=WithdrawingReadiness`.
 
 During controller absence the lifecycle monitor requires the exact persisted
 operation, target UID and revisions to remain fixed; the target container to

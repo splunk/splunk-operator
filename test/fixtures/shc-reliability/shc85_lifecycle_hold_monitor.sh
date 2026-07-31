@@ -37,9 +37,11 @@ for value in "${hold_seconds}" "${sample_seconds}" \
 done
 
 case "${hold_stage}" in
-Decommissioning | ReadyForReplacement) ;;
+WithdrawingReadiness | Decommissioning | ReadyForReplacement) ;;
 *)
-  printf 'SHC85_HOLD_STAGE must be Decommissioning or ReadyForReplacement\n' >&2
+  printf '%s\n' \
+    'SHC85_HOLD_STAGE must be WithdrawingReadiness, Decommissioning, or ReadyForReplacement' \
+    >&2
   exit 2
   ;;
 esac
@@ -187,9 +189,36 @@ while ((SECONDS < stage_deadline)); do
   current_observed_decommissioning="$({
     jq -r '.observedDecommissioning // false' <<<"${current_update}"
   })"
-  if [[ "${current_stage}" == "${hold_stage}" ]] &&
-    { [[ "${hold_stage}" != Decommissioning ]] ||
-      [[ "${current_observed_decommissioning}" == true ]]; }; then
+  hold_boundary_observed=false
+  if [[ "${current_stage}" == "${hold_stage}" ]]; then
+    case "${hold_stage}" in
+    WithdrawingReadiness)
+      candidate_target="$(jq -r '.targetPod // ""' <<<"${current_update}")"
+      candidate_pods="$(pods_json)"
+      candidate_endpoints="$(endpoint_pods_json)"
+      if [[ -n "${candidate_target}" ]] &&
+        jq -e --arg pod "${candidate_target}" '
+          any(.[];
+            .metadata.name == $pod and
+            (any(.status.conditions[]?;
+              .type == "Ready" and .status == "True") | not))' \
+          <<<"${candidate_pods}" >/dev/null &&
+        ! jq -e --arg pod "${candidate_target}" 'index($pod) != null' \
+          <<<"${candidate_endpoints}" >/dev/null; then
+        hold_boundary_observed=true
+      fi
+      ;;
+    Decommissioning)
+      if [[ "${current_observed_decommissioning}" == true ]]; then
+        hold_boundary_observed=true
+      fi
+      ;;
+    ReadyForReplacement)
+      hold_boundary_observed=true
+      ;;
+    esac
+  fi
+  if [[ "${hold_boundary_observed}" == true ]]; then
     target_operation="${current_update}"
     break
   fi
@@ -225,10 +254,12 @@ if [[ "${target_restart}" -lt 0 ]]; then
 fi
 
 # Stop the controller immediately after observing the requested persisted
-# stage. Decommissioning is accepted only after Splunk has been observed in
-# that state, not merely after the request was issued. All slower runtime and
-# identity checks happen after the Deployment has no remaining controller Pod,
-# which minimizes the race with the next reconciliation.
+# stage. WithdrawingReadiness is accepted only after the target is unready and
+# absent from the Service. Decommissioning is accepted only after Splunk has
+# been observed in that state, not merely after the request was issued. All
+# slower runtime and identity checks happen after the Deployment has no
+# remaining controller Pod, which minimizes the race with the next
+# reconciliation.
 kubectl -n "${operator_namespace}" scale deployment \
   "${operator_deployment}" --replicas=0 >/dev/null
 operator_scaled=true
