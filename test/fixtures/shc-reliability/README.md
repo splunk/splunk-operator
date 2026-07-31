@@ -131,3 +131,17 @@ and `Killing` Events, client endpoints, and the runtime shutdown owner/result
 artifacts. A stable result does not by itself accept the defaults: the evidence
 must be compared with first-start and supported-upgrade durations, and any
 probe-triggered restart must prove bounded, exact-once shutdown.
+
+After the cluster is stable, qualify the image's direct TERM path on a current
+non-captain. The command intentionally bypasses `preStop`; Kubernetes restarts
+the container in the same Pod. The monitor requires exactly one restart, the
+same Pod UID, complete SHC recovery, and all three client endpoints.
+
+```bash
+SHC84_TARGET_POD=splunk-shc84-shc-search-head-1 \
+SHC84_EVIDENCE_FILE=build/_test/shc84/direct-term.tsv \
+test/fixtures/shc-reliability/shc84_term_exit_monitor.sh &
+kubectl -n shc84-startup-term exec \
+  splunk-shc84-shc-search-head-1 -c splunk -- /bin/kill -TERM 1
+wait
+```

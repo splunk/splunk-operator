@@ -11,19 +11,24 @@ hook is not guaranteed on force deletion, crash, OOM, or node loss.
 
 ### Readiness
 
-For the current Splunk runtime, the Search Head container readiness probe calls
-the local, unauthenticated splunkd endpoint
-`/services/shcluster/member/ready` over the configured management-port scheme.
-The endpoint rejects readiness while that local member is in detention. Captain
-and non-captain members use this same local contract; readiness does not depend
-on which member currently holds captaincy.
+The current supported Splunk runtime does not expose
+`/services/shcluster/member/ready`. The container readiness probe therefore
+uses the image state marker and a bounded request to the local splunkd
+management root. This proves only that image-owned initialization is complete
+and the local management service responds. Captain and non-captain members use
+the same local probe.
 
-This local endpoint does not prove that the member has fully rejoined and
-synchronized with the SHC, that a captain is reachable, or that the cluster is
-safe to advance a rollout. Those are separate controller-level recovery gates.
-The readiness probe first retains the existing container-state check, uses a
-bounded local request, and emits a concise failure reason for kubelet probe
-diagnostics.
+SHC membership, registration, `Up` status, synchronization, initial-formation
+completion, detention, and rollout safety are separate Operator observations.
+The Operator-owned Pod readiness gate combines those confirmed SHC facts with
+the container result before the Pod enters client Service endpoints. Planned
+lifecycle work withdraws that gate before deletion authorization. Captain
+availability remains a cluster condition and does not automatically make every
+otherwise usable Search Head unready.
+
+A future Splunk-owned local traffic-readiness API could replace part of this
+compatibility adapter, but the Operator must not call or document an endpoint
+that the current product does not provide.
 
 ### Liveness
 
@@ -33,8 +38,16 @@ and active search drain are not by themselves liveness failures.
 
 ### Startup
 
-Define when local startup is complete and keep full SHC rejoin as a separate
-Operator gate.
+Startup protects image-owned first-start and upgrade work. The default budget
+is about 30 minutes. Startup success means the image state marker is running
+and the local splunkd management root responds; full SHC rejoin remains a
+separate Operator gate.
+
+Startup- and liveness-triggered restarts use a 660-second container termination
+grace when the runtime lifecycle contract is enabled. Planned Pod deletion
+retains its separate 1200-second grace. The shorter probe-failure budget is
+sized for the image's 600-second bounded shutdown plus kubelet margin and does
+not change drain, captain-transfer, Pod-startup, or member-rejoin deadlines.
 
 ### Shutdown
 
