@@ -19,8 +19,9 @@ statefulset="splunk-${cr_name}-indexer"
 service_name="${statefulset}-service"
 pod_prefix="${statefulset}-"
 driver_file="/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"
+pause_annotation="indexercluster.enterprise.splunk.com/paused"
 
-for command in kubectl jq; do
+for command in kubectl jq pkill; do
   if ! command -v "${command}" >/dev/null 2>&1; then
     printf 'required command is unavailable: %s\n' "${command}" >&2
     exit 2
@@ -52,6 +53,10 @@ printf '%s\n' \
   >"${evidence_file}"
 
 operator_scaled=false
+target_pause_applied=false
+controller_stop_started=false
+stage_watch_open=false
+stage_watch_pid=""
 operator_original_replicas="$({
   kubectl -n "${operator_namespace}" get deployment \
     "${operator_deployment}" -o json | jq -r '.spec.replicas // 1'
@@ -71,7 +76,35 @@ restore_operator() {
     operator_scaled=false
   fi
 }
-trap restore_operator EXIT
+
+stop_stage_watch() {
+  if [[ "${stage_watch_open}" == true ]]; then
+    exec 3<&-
+    stage_watch_open=false
+  fi
+  if [[ -n "${stage_watch_pid}" ]]; then
+    pkill -TERM -P "${stage_watch_pid}" >/dev/null 2>&1 || true
+    kill "${stage_watch_pid}" >/dev/null 2>&1 || true
+    wait "${stage_watch_pid}" >/dev/null 2>&1 || true
+    stage_watch_pid=""
+  fi
+}
+
+remove_target_pause() {
+  if [[ "${target_pause_applied}" == true ]]; then
+    kubectl -n "${namespace}" annotate \
+      indexercluster.enterprise.splunk.com "${cr_name}" \
+      "${pause_annotation}-" >/dev/null 2>&1 || true
+    target_pause_applied=false
+  fi
+}
+
+cleanup() {
+  stop_stage_watch
+  restore_operator
+  remove_target_pause
+}
+trap cleanup EXIT
 
 pods_json() {
   kubectl -n "${namespace}" get pods -o json | jq -c \
@@ -159,6 +192,12 @@ if [[ "$(jq -r '.status.phase' <<<"${cr_json}")" != Ready ]] ||
     -ne "${desired_replicas}" ]]; then
   fail "baseline-indexercluster-not-ready"
 fi
+if [[ "${hold_stage}" == TargetSelected ]] &&
+  jq -e --arg annotation "${pause_annotation}" \
+    '.metadata.annotations[$annotation] == "true"' \
+    <<<"${cr_json}" >/dev/null; then
+  fail "baseline-indexercluster-paused"
+fi
 
 baseline_pods="$(pods_json)"
 baseline_endpoints="$(endpoint_pods_json)"
@@ -174,57 +213,109 @@ fi
 
 record_sample "baseline"
 
+if [[ "${hold_stage}" == TargetSelected ]]; then
+  exec 3< <(
+    kubectl -n "${namespace}" get \
+      indexercluster.enterprise.splunk.com "${cr_name}" \
+      --watch --output-watch-events -o json |
+      jq --unbuffered -c '
+        select(.object.status.podUpdate.stage == "TargetSelected") |
+        .object.status.podUpdate'
+  )
+  stage_watch_open=true
+  stage_watch_pid="$!"
+fi
+
 trigger_patch="$(jq -cn --arg run "${run_id}" \
   '{spec:{podAnnotations:{"qualification.splunk.com/shc85-revision":$run}}}')"
 kubectl -n "${namespace}" patch indexercluster.enterprise.splunk.com \
   "${cr_name}" --type merge -p "${trigger_patch}" >/dev/null
-record_sample "revision-triggered"
+if [[ "${hold_stage}" != TargetSelected ]]; then
+  record_sample "revision-triggered"
+fi
 
 stage_deadline=$((SECONDS + stage_timeout_seconds))
 target_operation=""
 stage_polls=0
-while ((SECONDS < stage_deadline)); do
-  current_update="$(pod_update_json)"
-  current_stage="$(jq -r '.stage // ""' <<<"${current_update}")"
-  current_observed_decommissioning="$({
-    jq -r '.observedDecommissioning // false' <<<"${current_update}"
-  })"
-  hold_boundary_observed=false
-  if [[ "${current_stage}" == "${hold_stage}" ]]; then
-    case "${hold_stage}" in
-    TargetSelected)
-      hold_boundary_observed=true
-      ;;
-    WithdrawingReadiness)
-      candidate_target="$(jq -r '.targetPod // ""' <<<"${current_update}")"
-      if [[ -n "${candidate_target}" ]] &&
-        kubectl -n "${namespace}" exec "${candidate_target}" -c splunk -- \
-          /bin/sh -ec \
-          "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
-          >/dev/null 2>&1; then
+if [[ "${hold_stage}" == TargetSelected ]]; then
+  if ! IFS= read -r -t "${stage_timeout_seconds}" target_operation <&3; then
+    stop_stage_watch
+    fail "TargetSelected-timeout"
+  fi
+
+  pause_patch="$(jq -cn --arg annotation "${pause_annotation}" '
+    {metadata:{annotations:{($annotation):"true"}}}')"
+  target_pause_applied=true
+  operator_scaled=true
+  controller_stop_started=true
+  fault_injection_failed=false
+
+  kubectl -n "${namespace}" patch \
+    indexercluster.enterprise.splunk.com "${cr_name}" \
+    --type merge -p "${pause_patch}" >/dev/null &
+  pause_pid="$!"
+  kubectl -n "${operator_namespace}" scale deployment \
+    "${operator_deployment}" --replicas=0 >/dev/null &
+  scale_pid="$!"
+  kubectl -n "${operator_namespace}" delete pod \
+    -l "${operator_selector}" --grace-period=0 --force --wait=false \
+    >/dev/null &
+  delete_pid="$!"
+
+  if ! wait "${pause_pid}"; then
+    fault_injection_failed=true
+  fi
+  if ! wait "${scale_pid}"; then
+    fault_injection_failed=true
+  fi
+  if ! wait "${delete_pid}"; then
+    fault_injection_failed=true
+  fi
+  stop_stage_watch
+  if [[ "${fault_injection_failed}" == true ]]; then
+    fail "target-selected-fault-injection-failed"
+  fi
+else
+  while ((SECONDS < stage_deadline)); do
+    current_update="$(pod_update_json)"
+    current_stage="$(jq -r '.stage // ""' <<<"${current_update}")"
+    current_observed_decommissioning="$({
+      jq -r '.observedDecommissioning // false' <<<"${current_update}"
+    })"
+    hold_boundary_observed=false
+    if [[ "${current_stage}" == "${hold_stage}" ]]; then
+      case "${hold_stage}" in
+      WithdrawingReadiness)
+        candidate_target="$(jq -r '.targetPod // ""' <<<"${current_update}")"
+        if [[ -n "${candidate_target}" ]] &&
+          kubectl -n "${namespace}" exec "${candidate_target}" -c splunk -- \
+            /bin/sh -ec \
+            "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
+            >/dev/null 2>&1; then
+          hold_boundary_observed=true
+        fi
+        ;;
+      Decommissioning)
+        if [[ "${current_observed_decommissioning}" == true ]]; then
+          hold_boundary_observed=true
+        fi
+        ;;
+      ReadyForReplacement)
         hold_boundary_observed=true
-      fi
-      ;;
-    Decommissioning)
-      if [[ "${current_observed_decommissioning}" == true ]]; then
-        hold_boundary_observed=true
-      fi
-      ;;
-    ReadyForReplacement)
-      hold_boundary_observed=true
-      ;;
-    esac
-  fi
-  if [[ "${hold_boundary_observed}" == true ]]; then
-    target_operation="${current_update}"
-    break
-  fi
-  stage_polls=$((stage_polls + 1))
-  if ((stage_polls % 25 == 0)); then
-    record_sample "waiting-${hold_stage}"
-  fi
-  sleep 0.2
-done
+        ;;
+      esac
+    fi
+    if [[ "${hold_boundary_observed}" == true ]]; then
+      target_operation="${current_update}"
+      break
+    fi
+    stage_polls=$((stage_polls + 1))
+    if ((stage_polls % 25 == 0)); then
+      record_sample "waiting-${hold_stage}"
+    fi
+    sleep 0.2
+  done
+fi
 if [[ -z "${target_operation}" ]]; then
   fail "${hold_stage}-timeout"
 fi
@@ -260,12 +351,14 @@ fi
 # slower runtime and identity checks happen after the Deployment has no
 # remaining controller Pod, which minimizes the race with the next
 # reconciliation.
-kubectl -n "${operator_namespace}" scale deployment \
-  "${operator_deployment}" --replicas=0 >/dev/null
-operator_scaled=true
-kubectl -n "${operator_namespace}" delete pod \
-  -l "${operator_selector}" --grace-period=0 --force --wait=false \
-  >/dev/null
+if [[ "${controller_stop_started}" != true ]]; then
+  kubectl -n "${operator_namespace}" scale deployment \
+    "${operator_deployment}" --replicas=0 >/dev/null
+  operator_scaled=true
+  kubectl -n "${operator_namespace}" delete pod \
+    -l "${operator_selector}" --grace-period=0 --force --wait=false \
+    >/dev/null
+fi
 
 scale_deadline=$((SECONDS + 180))
 while ((SECONDS < scale_deadline)); do
@@ -284,6 +377,9 @@ while ((SECONDS < scale_deadline)); do
 done
 if [[ "${deployment_replicas}" -ne 0 || "${operator_pods}" -ne 0 ]]; then
   fail "operator-did-not-become-absent"
+fi
+if [[ "${hold_stage}" == TargetSelected ]]; then
+  record_sample "revision-triggered-target-selected-controller-absent"
 fi
 
 if [[ "${hold_stage}" == TargetSelected ]]; then
@@ -360,6 +456,15 @@ while [[ "$(date +%s)" -lt "${hold_deadline}" ]]; do
   current_pods="$(pods_json)"
   current_endpoints="$(endpoint_pods_json)"
   if [[ "${hold_stage}" == TargetSelected ]]; then
+    pause_value="$({
+      kubectl -n "${namespace}" get \
+        indexercluster.enterprise.splunk.com "${cr_name}" -o json |
+        jq -r --arg annotation "${pause_annotation}" \
+          '.metadata.annotations[$annotation] // ""'
+    })"
+    if [[ "${pause_value}" != true ]]; then
+      fail "target-selected-pause-lost-during-absence"
+    fi
     if ! jq -e --arg pod "${target_pod}" --arg uid "${target_uid}" \
       --argjson restart "${target_restart}" '
         any(.[];
@@ -445,6 +550,12 @@ record_sample "operator-absence-complete"
 restore_operator
 kubectl -n "${operator_namespace}" rollout status deployment \
   "${operator_deployment}" --timeout=10m >/dev/null
+if [[ "${hold_stage}" == TargetSelected ]]; then
+  kubectl -n "${namespace}" annotate \
+    indexercluster.enterprise.splunk.com "${cr_name}" \
+    "${pause_annotation}-" >/dev/null
+  target_pause_applied=false
+fi
 record_sample "operator-restored"
 
 roll_deadline=$((SECONDS + roll_timeout_seconds))

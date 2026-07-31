@@ -278,6 +278,19 @@ To remove the controller immediately after durable target selection, before
 readiness withdrawal or decommission is requested, use
 `SHC85_HOLD_STAGE=TargetSelected`.
 
+`TargetSelected` is intentionally a short reconciliation boundary. For this
+stage the harness starts a Kubernetes watch before triggering the revision,
+captures the exact persisted operation, and immediately applies the supported
+IndexerCluster pause annotation, scales the controller Deployment to zero, and
+force-deletes the controller Pod concurrently. The run is accepted only if the
+post-stop state still has the exact `TargetSelected` identity, all four Pods
+remain Ready and serving, and no readiness-withdrawal marker exists. The pause
+annotation must remain present throughout the absence and is removed only
+after the controller Deployment is restored. The exit trap restores the
+controller and removes the annotation on every failure path. This prevents
+observer polling latency from silently turning the scenario into a later-stage
+test; it does not qualify concurrent desired-state conflict behavior.
+
 During controller absence the lifecycle monitor requires the exact persisted
 operation, target UID and revisions to remain fixed. At `TargetSelected`, all
 four peers must remain running, ready, and present in the EndpointSlice, with
