@@ -1912,8 +1912,9 @@ marker with each replacement, and finished with four Ready indexers,
 RF/SF/all-searchable/no-fixup health, and four clean Ansible recaps. The same
 campaign corrected authoritative captain-member routing and accepted a fresh
 successful captain-transfer observation before applying an elapsed deadline.
-API-server disconnection and absence at other durable stages remain separate
-qualification gates.
+At this checkpoint, API-server disconnection and absence at other durable
+stages were separate qualification gates; the later records below qualify the
+remaining bounded controller-absence stages.
 
 The accepted repeat observed 302 controller-absent seconds and produced
 lifecycle evidence SHA-256
@@ -1951,5 +1952,27 @@ Its 1,800-event workload had zero HEC/search request failures, exact final
 results on every Search Head, 37 count regressions, and maximum pending 404;
 workload-log SHA-256 is
 `7b2c7ae19ce41efda8ddb21a2e67d29192fb8589128511fbc17c57ebc034ac7a`.
-Long controller absence at `TargetSelected`, API-server disconnection, and the
-customer-visible distributed-search convergence contract remain open.
+A final isolated campaign on
+`codex/shc-85-target-selected-absence-qualification` closed the earlier
+controller-absence boundary. Harness sources `2d430748b` and `770a27799`
+captured the short persisted `TargetSelected` transition from a Kubernetes
+watch, coordinated the test-only pause and immediate controller removal, and
+rejected any baseline that was not fully converged on the StatefulSet
+`updateRevision`. Ordinal 3 and its exact operation remained unchanged while
+all four original Pods stayed Ready and serving for 300 controller-absent
+seconds. No readiness-withdrawal marker appeared. Restoration resumed the
+same operation and completed `3 -> 2 -> 1 -> 0` with zero restarts, ten stable
+samples, and final RF/SF/all-searchable/no-fixup health. The 228-sample
+lifecycle record has SHA-256
+`01f3cf1fe9330b2a139a2243d2ca3f5771bfada39ee9d25bd267410d52ef9c0e`.
+
+The overlapping 1,800-event Job had zero HEC/search request failures and exact
+final results on every Search Head; its 1,802-line log has SHA-256
+`d0d8de5eb851bea87a9057f0676e1b5d5f6e16a7ea134e0130d4af04ea6b2c3d`.
+It recorded 18 successful-search count regressions and maximum pending 364 at
+sequence 1481, after lifecycle `Completed`, while every Search Head still
+logged attempts to old indexer Pod IPs. API-server disconnection, conflict and
+redundancy variants, and the customer-visible distributed-search convergence
+contract remain open. The test-only pause is fault-injection coordination; it
+is not a production rollout requirement and does not qualify concurrent
+desired-state conflict behavior.

@@ -360,8 +360,9 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   unavailability one, remote-serving recovery before every next target, four
   `failed=0` Ansible recaps, no prior KV Store failure signature, and final
   RF/SF/all-searchable/no-fixup health. The qualification is bounded to
-  `ReadyForReplacement`; API-server disconnection and long absence at other
-  lifecycle stages remain open. The lifecycle record has SHA-256
+  `ReadyForReplacement`. At this checkpoint, API-server disconnection and
+  long absence at other lifecycle stages were open; later bullets record the
+  other bounded stage qualifications. The lifecycle record has SHA-256
   `655c998ab4d6072769d8efa2c47c83c737f919a730ee3a72467f9714b4df9263`.
 - [x] (2026-07-31 UTC) Ran an API-independent workload Job across the accepted
   controller absence and complete four-Pod roll. It submitted 1,800 numbered
@@ -388,6 +389,21 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   or search-request failures, exact eventual results on every Search Head,
   and workload-log SHA-256
   `cf169d21801d25eef3314351e6b5726bb53b8ca993ac1d2297f7c8bd728d4be0`.
+- [x] (2026-07-31 UTC) Qualified a five-minute controller absence at the
+  first durable `TargetSelected` boundary. Harness sources `2d430748b` and
+  `770a27799` use an unbuffered watch and a test-only pause to capture the
+  short stage without allowing observer latency to silently test a later
+  boundary. Ordinal 3, its UID, operation ID, and both revisions stayed exact
+  for 300 controller-absent seconds while all four original Pods remained
+  Ready, published, and at zero restarts with no lifecycle marker. Restoration
+  removed the pause, resumed the same operation, and completed
+  `3 -> 2 -> 1 -> 0` with ten stable samples. Lifecycle evidence SHA-256 is
+  `01f3cf1fe9330b2a139a2243d2ca3f5771bfada39ee9d25bd267410d52ef9c0e`.
+  The overlapping 1,800-event Job had zero HEC/search request failures and
+  exact eventual results on every Search Head; workload-log SHA-256 is
+  `d0d8de5eb851bea87a9057f0676e1b5d5f6e16a7ea134e0130d4af04ea6b2c3d`.
+  This qualifies controller absence at `TargetSelected`, not API-server
+  disconnection or concurrent desired-state conflict.
 - [x] (2026-07-31 UTC) Corrected two Search Head captain-transition defects
   exposed while forming the SHC-85 fixture. Source `99da90390` sends the
   captain-only authoritative member query to the newly elected captain instead
@@ -415,7 +431,10 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   41 regressions and maximum pending 406 at sequence 1423
   (`count=1017`, `max=1421`). That worst sample occurred after lifecycle
   `Completed` while all replacement Pods were Ready and published, and Search
-  Heads still logged requests to old indexer Pod IPs.
+  Heads still logged requests to old indexer Pod IPs. The later
+  `TargetSelected` campaign recorded 18 regressions and maximum pending 364 at
+  sequence 1481 after lifecycle `Completed`; all three Search Heads again
+  logged connection or authentication failures to old indexer Pod IPs.
 - [x] Define and qualify SHC-83 on isolated branch
   `codex/shc-83-startup-readiness-qualification`. During initial formation,
   no Search Head may enter the client Service until every desired Search Head
@@ -448,10 +467,9 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `Decommissioning`, five-minute controller absence during observed
   `Decommissioning`, five-minute controller absence during
   `ReadyForReplacement`, and five-minute controller absence during
-  `WithdrawingReadiness`. Remaining gates include long controller absence at
-  `TargetSelected`, API-server disconnection,
-  leader contention, conflicting
-  desired-state changes,
+  `WithdrawingReadiness`, and five-minute controller absence during
+  `TargetSelected`. Remaining gates include API-server disconnection, leader
+  contention, conflicting desired-state changes,
   insufficient RF/SF health, HEC-disabled Splunk-to-Splunk traffic, HTTP and
   HTTPS HEC variants, ingress TLS termination, service-mesh and no-mesh
   deployments, persistent-client connection behavior, and repeated/soak
@@ -2424,3 +2442,18 @@ count regressions and maximum pending 406 after the lifecycle had already
 reported `Completed` with four Ready desired-revision Pods, while Search Heads
 still attempted old Pod IPs. This qualifies the bounded controller-absence
 stage but leaves immediate distributed-search completeness open.
+
+2026-07-31 UTC: Recorded the isolated SHC-85 target-selection absence
+campaign on `codex/shc-85-target-selected-absence-qualification`. The
+accepted harness captured the short persisted `TargetSelected` stage, removed
+the controller for 300 seconds while all four original Pods stayed Ready and
+serving, then restored the same durable operation through the complete
+`3 -> 2 -> 1 -> 0` roll. The lifecycle and 1,800-event workload records have
+SHA-256 values
+`01f3cf1fe9330b2a139a2243d2ca3f5771bfada39ee9d25bd267410d52ef9c0e`
+and
+`d0d8de5eb851bea87a9057f0676e1b5d5f6e16a7ea134e0130d4af04ea6b2c3d`.
+Request continuity and eventual exactness passed; 18 successful-search count
+regressions with maximum pending 364 keep immediate distributed-search
+completeness open. API-server disconnection and the remaining negative and
+compatibility variants are separate gates.

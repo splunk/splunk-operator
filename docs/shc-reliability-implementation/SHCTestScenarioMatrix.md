@@ -296,29 +296,34 @@ partial qualification results, not an OPS-011 pass.
 ### Partial STS-002 and K8S-006-adjacent SHC-85 evidence
 
 The 2026-07-31 SHC-85 campaigns removed the sole Operator controller for a
-requested five minutes during three durable indexer lifecycle stages. The
+requested five minutes during all four durable indexer lifecycle stages. The
+`TargetSelected` record observed exactly 300 seconds while all four original
+Pods remained Ready and serving with no lifecycle marker; the
 `ReadyForReplacement` record observed 302 seconds; the
 `Decommissioning` record waited for persisted
 `observedDecommissioning=true` and observed 306 seconds; and the
 `WithdrawingReadiness` record observed 306 seconds after the lifecycle marker
 was persisted and kubelet independently removed the still-running target from
-readiness and the EndpointSlice. All three retained the same exact target and
-operation, kept three non-target peers serving, recorded zero liveness
+readiness and the EndpointSlice. All four retained the same exact target and
+operation, kept every non-target peer serving, recorded zero liveness
 failures and container restarts, and resumed the same operation through
 `3 -> 2 -> 1 -> 0` after controller restoration.
 
-This partially qualifies STS-002 for these three stages. It does not qualify
-controller absence at `TargetSelected`. It is also adjacent evidence, not a
-K8S-006 pass: scaling the controller to zero does not exercise a running
-controller that loses and later regains API-server connectivity.
+This qualifies the bounded STS-002 controller-absence behavior for all four
+stages. It is still adjacent evidence, not a K8S-006 pass: scaling the
+controller to zero does not exercise a running controller that loses and later
+regains API-server connectivity. The `TargetSelected` test-only pause also
+does not qualify a concurrent desired-state conflict.
 
-The independent workloads spanning all three long absences had zero HEC/search
+The independent workloads spanning all four long absences had zero HEC/search
 request failures and exact eventual completeness. They did not pass immediate
 distributed-search completeness: the observed-decommissioning run reported 41
-count regressions and maximum pending 406 after lifecycle `Completed`, while
-the readiness-withdrawal run reported 37 regressions and maximum pending 404.
-That observation remains an OPS-011 and Splunk Enterprise convergence
-requirement rather than a pass of the customer-visible availability invariant.
+count regressions and maximum pending 406 after lifecycle `Completed`, the
+readiness-withdrawal run reported 37 regressions and maximum pending 404, and
+the target-selection run reported 18 regressions and maximum pending 364 after
+`Completed`. That observation remains an OPS-011 and Splunk Enterprise
+convergence requirement rather than a pass of the customer-visible
+availability invariant.
 
 ## Observability and security scenarios
 

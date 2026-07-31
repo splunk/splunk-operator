@@ -65,6 +65,21 @@ Its log has SHA-256
 The different controller-absence boundary did not eliminate the later
 distributed-peer convergence problem.
 
+A fourth independent 1,800-event record held the Operator absent for exactly
+300 seconds at `TargetSelected`, before readiness withdrawal or decommission.
+All four original indexers remained Ready and published during that absence,
+then the resumed lifecycle completed the full `3 -> 2 -> 1 -> 0` replacement.
+The Job again had zero HEC or search-request failures and exact eventual
+results on every Search Head, but reported 18 count regressions and maximum
+pending 364 at sequence 1481. That maximum occurred after lifecycle
+`Completed` with all four replacement Pods Ready on the desired revision.
+All three Search Heads logged connection or authentication failures to old
+indexer Pod IPs during the same minute, and old-address attempts continued
+after exact final results were available. Its log has SHA-256
+`d0d8de5eb851bea87a9057f0676e1b5d5f6e16a7ea134e0130d4af04ea6b2c3d`.
+The earlier lifecycle boundary did not eliminate the later distributed-peer
+convergence problem.
+
 This is not evidence that RF or SF was configured incorrectly, and it is not
 yet a complete root-cause finding. It proves that HTTP request success, Cluster
 Manager `Up/searchable`, Kubernetes endpoint recovery, and remote HEC health

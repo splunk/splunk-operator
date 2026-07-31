@@ -477,7 +477,77 @@ response into an availability success, qualify API-server disconnection, or
 remove the requirement for supported per-Search-Head peer convergence and
 partial-result signaling.
 
-### Search Head defects exposed while forming the fixture
+## Five-minute target-selection absence qualification
+
+The isolated branch
+`codex/shc-85-target-selected-absence-qualification` moved the absence
+boundary to the first durable lifecycle stage. Harness sources `2d430748b`
+and `770a27799` use an unbuffered Kubernetes watch because `TargetSelected` is
+intentionally short, then apply the supported IndexerCluster pause annotation,
+scale the controller Deployment to zero, and remove the remaining controller
+Pod concurrently. The monitor accepts the run only when the exact persisted
+stage is still `TargetSelected`, the pause is present, all four original Pods
+remain Ready and published, and the target has no readiness-withdrawal marker.
+The pause is test-only fault-injection coordination. It is removed after the
+controller is restored and is not proposed as a production rollout step.
+The deployed Operator remained source `ac1fe0db8` at immutable digest
+`sha256:59fc2afdfafc7e0c2b9f49fceebf1862128521017311776b91f0ce3315eff608`;
+the Splunk runtime remained `10.5.2605.0/844c593e9c1d` at digest
+`sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`.
+
+The campaign moved from source revision
+`splunk-shc85-idxc-indexer-7fc9cd47d8` to desired revision
+`splunk-shc85-idxc-indexer-5f74d6565d`. It retained ordinal 3, Pod UID
+`51f86f00-6319-43db-9d24-ff1d754ff020`, and operation ID
+`51f86f00-6319-43db-9d24-ff1d754ff020:splunk-shc85-idxc-indexer-5f74d6565d:1785538176691741815`
+for exactly 300 controller-absent seconds. The operation identity and
+revisions did not change; all four Pods retained their UIDs, readiness,
+EndpointSlice publication, and zero restart counts; the target remained free
+of the lifecycle marker; and no indexer liveness failure was recorded.
+
+After controller restoration and pause removal, the same operation advanced
+normally through readiness withdrawal and decommission. The complete roll
+followed `3 -> 2 -> 1 -> 0`, permitted only one unavailable peer at a time,
+required previous-peer remote serving recovery before selecting the next
+ordinal, and ended with ten stable samples. Final replacement UIDs for
+ordinals 0 through 3 were:
+
+- `a696eb67-445f-475a-9767-62f8ac97a5d3`;
+- `0a8ee3df-e2e8-40c8-a33c-89f46e068575`;
+- `b25e54f4-c13f-4c30-96d7-ddfce9f39d66`; and
+- `1af649c1-e47c-4b36-83bf-086750e4808b`.
+
+All four replacements were Ready on the desired revision with zero container
+restarts. Each Ansible run completed with `ok=111`, `failed=0`, and none
+contained `Active KVStore version upgrade precheck FAILED`. Cluster Manager
+health reported RF met, SF met, all data searchable, all peers Up, no fixups,
+and readiness for searchable rolling restart. Every Splunk CR was Ready, all
+four indexer endpoints and all three Search Head endpoints were published,
+and the elected captain was ordinal 1. The lifecycle record contains 228
+samples from `22:49:35Z` through `23:18:24Z` and has SHA-256
+`01f3cf1fe9330b2a139a2243d2ca3f5771bfada39ee9d25bd267410d52ef9c0e`.
+
+The independent Job `shc85-incluster-workload-8xl68`, Pod UID
+`655f8a4e-631c-44fa-91c8-94752892f4e5`, ran from `22:49:09Z` through
+`23:23:30Z` with zero Pod restarts. It submitted 1,800 numbered events with
+zero HEC failures and zero search-request failures. The final result and
+direct queries on every Search Head were exact:
+`count/min/max/distinct=1800/1/1800/1800`. Its 1,802-line log has SHA-256
+`d0d8de5eb851bea87a9057f0676e1b5d5f6e16a7ea134e0130d4af04ea6b2c3d`.
+
+Immediate completeness remains open. The Job reported 18 successful-search
+count regressions and maximum pending 364 at sequence 1481 at `23:17:23Z`.
+The lifecycle had already persisted `Completed` at `23:16:52Z`; all four Pods
+were Ready and published on the desired revision. During the same minute all
+three Search Heads logged distributed-peer, authentication-token, or TCP
+connection failures to old indexer Pod IPs. Old-address attempts continued
+after final exact convergence even though current indexer Pod IPs were
+different. The run therefore closes only the bounded five-minute
+`TargetSelected` controller-absence gate. It does not qualify a running
+controller losing API-server connectivity, desired-state conflict, or the
+customer-visible immediate distributed-search completeness contract.
+
+## Search Head defects exposed while forming the fixture
 
 Fresh formation for this campaign exposed two independent Search Head captain
 transition defects before the indexer fault could be injected:
@@ -705,10 +775,10 @@ environment-qualified:
   caches;
 - insufficient RF/SF/peer redundancy, which must fail closed;
 - one peer already unhealthy before the app update;
-- Operator restart or long absence during durable stages other than the
-  qualified `Decommissioning` restart and five-minute absences during
-  `WithdrawingReadiness`, observed `Decommissioning`, and
-  `ReadyForReplacement`, plus API-server disconnection;
+- Operator restart or absence durations and topologies beyond the qualified
+  `Decommissioning` restart and five-minute absences during
+  `TargetSelected`, `WithdrawingReadiness`, observed `Decommissioning`, and
+  `ReadyForReplacement`; API-server disconnection remains open;
 - concurrent image rollout, app update, scale, node drain, and manual
   deletion;
 - previous supported Splunk and Operator/image combinations;
@@ -729,9 +799,9 @@ configuration-aware serving contract and a durable one-target lifecycle
 contract rather than relying on probe tuning alone. The later Operator-owned
 campaigns demonstrate that contract for one steady-controller RF3/SF2
 revision roll, one controller-Pod restart during `Decommissioning`, and one
-five-minute controller absence during each of `WithdrawingReadiness`, observed
-`Decommissioning`, and `ReadyForReplacement` on the fixed Splunk build. Do not
-generalize those results to Splunk-managed App Framework restarts,
-`TargetSelected`, API-server disconnection,
+five-minute controller absence during each of `TargetSelected`,
+`WithdrawingReadiness`, observed `Decommissioning`, and `ReadyForReplacement`
+on the fixed Splunk build. Do not generalize those results to Splunk-managed
+App Framework restarts, API-server disconnection,
 conflicting disruptions, unsupported redundancy, or the remaining negative
 and compatibility gates above.
