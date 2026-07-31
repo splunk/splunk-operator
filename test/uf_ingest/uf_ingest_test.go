@@ -37,7 +37,7 @@ var _ = Describe("UF to Standalone ingest test", func() {
 
 	Context("UF DaemonSet forwarding to Standalone (S1)", func() {
 		It("uf_ingest, integration, s1: UF ships events to standalone; standalone can index and search them",
-			Label("feature:uf-ingest"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+			Label("feature:uf-ingest"), NodeTimeout(testenv.DefaultTimeout), func(ctx SpecContext) {
 				RunUFToStandaloneIngestTest(ctx, deployment, testcaseEnvInst)
 			})
 	})

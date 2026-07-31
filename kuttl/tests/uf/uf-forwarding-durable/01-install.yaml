@@ -1,15 +1,14 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  # Install splunk-operator + standalone indexer via splunk-enterprise chart.
-  # Image overrides are only passed when the env vars are set (CI injects ECR images;
-  # local runs fall through to chart defaults).
+  # Install splunk-operator and a Standalone forwarding target. The dedicated
+  # uf-gp3 StorageClass is used only by the UF chart installed in the next step.
   - script: |
       OP=''
       ENT=''
       [ -n "${KUTTL_SPLUNK_OPERATOR_IMAGE:-}" ] && OP="--set splunk-operator.splunkOperator.image.repository=$KUTTL_SPLUNK_OPERATOR_IMAGE"
       [ -n "${KUTTL_SPLUNK_ENTERPRISE_IMAGE:-}" ] && ENT="--set splunk-operator.image.repository=$KUTTL_SPLUNK_ENTERPRISE_IMAGE"
-      helm install splunk-uf-test ../../../../helm-chart/splunk-enterprise \
+      helm install splunk-uf-durable-test ../../../../helm-chart/splunk-enterprise \
         -f uf_config.yaml \
         --namespace "$NAMESPACE" \
         --set splunk-operator.splunkOperator.clusterWideAccess=false \

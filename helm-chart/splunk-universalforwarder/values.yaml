@@ -82,7 +82,8 @@ conf:
   outputs: ""
   inputs: ""
 
-# Number of Deployment replicas
+# Number of Deployment replicas. Durable mode (storage.emptyDir=false) requires 1
+# because its two ReadWriteOnce PVCs are shared by the Deployment.
 replicaCount: 1
 
 # Optional Kubernetes Service for exposing input ports
@@ -133,6 +134,7 @@ storage:
   # Splunk from scratch. Suitable for pure forwarding tier with no local file monitoring.
   # Set to false to use PersistentVolumeClaims, which preserve fishbucket checkpoints and
   # Splunk config across restarts. Required when splunkConfig.add includes 'monitor' inputs.
+  # Durable mode requires replicaCount=1 and updateStrategy.type=Recreate.
   emptyDir: true
   # Storage class for PVCs (only used when emptyDir: false).
   storageClassName: ""
@@ -220,7 +222,8 @@ podAnnotations: {}
 # Annotations to add to the Deployment
 deploymentAnnotations: {}
 
-# Update strategy for the Deployment
+# Update strategy for the Deployment. Durable mode requires Recreate so a
+# replacement Pod cannot contend with the existing Pod for the shared RWO PVCs.
 updateStrategy:
   type: RollingUpdate
   rollingUpdate:
