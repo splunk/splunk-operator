@@ -218,6 +218,14 @@ type Probe struct {
 	// Minimum consecutive failures for the probe to be considered failed after having succeeded.
 	// +optional
 	FailureThreshold int32 `json:"failureThreshold,omitempty"`
+	// Duration in seconds the kubelet waits for container termination after
+	// this startup or liveness probe fails. When unset, Kubernetes uses the
+	// Pod-level terminationGracePeriodSeconds. Kubernetes does not support
+	// this field for readiness probes.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=86400
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
@@ -304,7 +312,7 @@ type CommonSplunkSpec struct {
 
 	// StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
 	// +optional
-	// +kubebuilder:default:={"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12}
+	// +kubebuilder:default:={"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":60}
 	StartupProbe *Probe `json:"startupProbe,omitempty"`
 
 	// TerminationGracePeriodSeconds is the time Kubernetes gives a Splunk Pod

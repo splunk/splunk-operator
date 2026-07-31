@@ -69,6 +69,15 @@ IndexerCluster, IngestorCluster, LicenseManager, MonitoringConsole,
 SearchHeadCluster members and deployer, Standalone, and their v3 compatibility
 workloads.
 
+The same gate gives startup and liveness probes a separate
+`terminationGracePeriodSeconds` default of 660 seconds. That value covers the
+current image's 600-second bounded shutdown plus a 60-second kubelet margin.
+Customers may set a different value inside `spec.startupProbe` or
+`spec.livenessProbe`. Readiness probes cannot use probe-level termination grace
+because a failed readiness probe does not restart the container. The startup
+failure budget is approximately 30 minutes (`failureThreshold: 60` and
+`periodSeconds: 30`) and is independent of the termination budgets.
+
 When the gate is disabled, the Operator leaves the Pod-template field unset,
 including when a stored custom resource contains the gated field. With the
 current `OnDelete` StatefulSet strategy, changing this value creates a new

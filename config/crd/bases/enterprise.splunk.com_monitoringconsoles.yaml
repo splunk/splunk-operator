@@ -1658,6 +1658,16 @@ spec:
                     description: How often (in seconds) to perform the probe.
                     format: int32
                     type: integer
+                  terminationGracePeriodSeconds:
+                    description: |-
+                      Duration in seconds the kubelet waits for container termination after
+                      this startup or liveness probe fails. When unset, Kubernetes uses the
+                      Pod-level terminationGracePeriodSeconds. Kubernetes does not support
+                      this field for readiness probes.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
                   timeoutSeconds:
                     description: |-
                       Number of seconds after which the probe times out.
@@ -1745,6 +1755,16 @@ spec:
                   periodSeconds:
                     description: How often (in seconds) to perform the probe.
                     format: int32
+                    type: integer
+                  terminationGracePeriodSeconds:
+                    description: |-
+                      Duration in seconds the kubelet waits for container termination after
+                      this startup or liveness probe fails. When unset, Kubernetes uses the
+                      Pod-level terminationGracePeriodSeconds. Kubernetes does not support
+                      this field for readiness probes.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
                     type: integer
                   timeoutSeconds:
                     description: |-
@@ -2336,7 +2356,7 @@ spec:
                 type: object
               startupProbe:
                 default:
-                  failureThreshold: 12
+                  failureThreshold: 60
                   initialDelaySeconds: 40
                   periodSeconds: 30
                   timeoutSeconds: 30
@@ -2356,6 +2376,16 @@ spec:
                   periodSeconds:
                     description: How often (in seconds) to perform the probe.
                     format: int32
+                    type: integer
+                  terminationGracePeriodSeconds:
+                    description: |-
+                      Duration in seconds the kubelet waits for container termination after
+                      this startup or liveness probe fails. When unset, Kubernetes uses the
+                      Pod-level terminationGracePeriodSeconds. Kubernetes does not support
+                      this field for readiness probes.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
                     type: integer
                   timeoutSeconds:
                     description: |-
@@ -6511,6 +6541,16 @@ spec:
                     description: How often (in seconds) to perform the probe.
                     format: int32
                     type: integer
+                  terminationGracePeriodSeconds:
+                    description: |-
+                      Duration in seconds the kubelet waits for container termination after
+                      this startup or liveness probe fails. When unset, Kubernetes uses the
+                      Pod-level terminationGracePeriodSeconds. Kubernetes does not support
+                      this field for readiness probes.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
                   timeoutSeconds:
                     description: |-
                       Number of seconds after which the probe times out.
@@ -6598,6 +6638,16 @@ spec:
                   periodSeconds:
                     description: How often (in seconds) to perform the probe.
                     format: int32
+                    type: integer
+                  terminationGracePeriodSeconds:
+                    description: |-
+                      Duration in seconds the kubelet waits for container termination after
+                      this startup or liveness probe fails. When unset, Kubernetes uses the
+                      Pod-level terminationGracePeriodSeconds. Kubernetes does not support
+                      this field for readiness probes.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
                     type: integer
                   timeoutSeconds:
                     description: |-
@@ -7189,7 +7239,7 @@ spec:
                 type: object
               startupProbe:
                 default:
-                  failureThreshold: 12
+                  failureThreshold: 60
                   initialDelaySeconds: 40
                   periodSeconds: 30
                   timeoutSeconds: 30
@@ -7209,6 +7259,16 @@ spec:
                   periodSeconds:
                     description: How often (in seconds) to perform the probe.
                     format: int32
+                    type: integer
+                  terminationGracePeriodSeconds:
+                    description: |-
+                      Duration in seconds the kubelet waits for container termination after
+                      this startup or liveness probe fails. When unset, Kubernetes uses the
+                      Pod-level terminationGracePeriodSeconds. Kubernetes does not support
+                      this field for readiness probes.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
                     type: integer
                   timeoutSeconds:
                     description: |-

@@ -178,6 +178,9 @@ The webhook validates the following spec fields:
 | `spec.livenessProbe.initialDelaySeconds` | Must be ≥ 0 | must be non-negative |
 | `spec.readinessProbe.initialDelaySeconds` | Must be ≥ 0 | must be non-negative |
 | `spec.startupProbe.initialDelaySeconds` | Must be ≥ 0 | must be non-negative |
+| `spec.livenessProbe.terminationGracePeriodSeconds` | Must be between 1 and 86400 seconds | must be between 1 and 86400 seconds |
+| `spec.startupProbe.terminationGracePeriodSeconds` | Must be between 1 and 86400 seconds | must be between 1 and 86400 seconds |
+| `spec.readinessProbe.terminationGracePeriodSeconds` | Not supported by Kubernetes | probe-level termination grace is supported only for startup and liveness |
 | `spec.resources.requests.cpu` | Must be ≤ `limits.cpu` | request must be less than or equal to limit |
 | `spec.resources.requests.memory` | Must be ≤ `limits.memory` | request must be less than or equal to limit |
 

@@ -171,13 +171,27 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 			name: "livenessProbe - valid values",
 			spec: &enterpriseApi.CommonSplunkSpec{
 				LivenessProbe: &enterpriseApi.Probe{
-					InitialDelaySeconds: 30,
-					TimeoutSeconds:      30,
-					PeriodSeconds:       30,
-					FailureThreshold:    3,
+					InitialDelaySeconds:           30,
+					TimeoutSeconds:                30,
+					PeriodSeconds:                 30,
+					FailureThreshold:              3,
+					TerminationGracePeriodSeconds: int64Pointer(660),
 				},
 			},
 			wantErrCount: 0,
+		},
+		{
+			name: "livenessProbe - termination grace below minimum",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				LivenessProbe: &enterpriseApi.Probe{
+					TimeoutSeconds:                1,
+					PeriodSeconds:                 1,
+					FailureThreshold:              1,
+					TerminationGracePeriodSeconds: int64Pointer(0),
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.livenessProbe.terminationGracePeriodSeconds",
 		},
 		{
 			name: "livenessProbe - initialDelaySeconds can be 0",
@@ -268,16 +282,43 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
+			name: "readinessProbe - termination grace is unsupported",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ReadinessProbe: &enterpriseApi.Probe{
+					TimeoutSeconds:                5,
+					PeriodSeconds:                 5,
+					FailureThreshold:              3,
+					TerminationGracePeriodSeconds: int64Pointer(60),
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.readinessProbe.terminationGracePeriodSeconds",
+		},
+		{
 			name: "startupProbe - valid values",
 			spec: &enterpriseApi.CommonSplunkSpec{
 				StartupProbe: &enterpriseApi.Probe{
-					InitialDelaySeconds: 40,
-					TimeoutSeconds:      30,
-					PeriodSeconds:       30,
-					FailureThreshold:    12,
+					InitialDelaySeconds:           40,
+					TimeoutSeconds:                30,
+					PeriodSeconds:                 30,
+					FailureThreshold:              60,
+					TerminationGracePeriodSeconds: int64Pointer(86400),
 				},
 			},
 			wantErrCount: 0,
+		},
+		{
+			name: "startupProbe - termination grace above maximum",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				StartupProbe: &enterpriseApi.Probe{
+					TimeoutSeconds:                30,
+					PeriodSeconds:                 30,
+					FailureThreshold:              60,
+					TerminationGracePeriodSeconds: int64Pointer(86401),
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.startupProbe.terminationGracePeriodSeconds",
 		},
 		// Resource requirements validation tests
 		{

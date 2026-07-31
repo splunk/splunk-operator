@@ -194,7 +194,7 @@
               "initialDelaySeconds": 40,
               "timeoutSeconds": 30,
               "periodSeconds": 30,
-              "failureThreshold": 12
+              "failureThreshold": 60
             },
             "imagePullPolicy": "IfNotPresent",
             "securityContext": {

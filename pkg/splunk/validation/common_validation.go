@@ -100,6 +100,11 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 	}
 	if spec.ReadinessProbe != nil {
 		allErrs = append(allErrs, validateProbe(spec.ReadinessProbe, fldPath.Child("readinessProbe"))...)
+		if spec.ReadinessProbe.TerminationGracePeriodSeconds != nil {
+			allErrs = append(allErrs, field.Forbidden(
+				fldPath.Child("readinessProbe").Child("terminationGracePeriodSeconds"),
+				"Kubernetes supports probe-level termination grace only for startup and liveness probes"))
+		}
 	}
 	if spec.StartupProbe != nil {
 		allErrs = append(allErrs, validateProbe(spec.StartupProbe, fldPath.Child("startupProbe"))...)
@@ -156,6 +161,13 @@ func validateProbe(probe *enterpriseApi.Probe, fldPath *field.Path) field.ErrorL
 			fldPath.Child("failureThreshold"),
 			probe.FailureThreshold,
 			"must be greater than or equal to 1"))
+	}
+
+	if probe.TerminationGracePeriodSeconds != nil {
+		allErrs = append(allErrs, validateLifecycleSeconds(
+			*probe.TerminationGracePeriodSeconds,
+			fldPath.Child("terminationGracePeriodSeconds"),
+		)...)
 	}
 
 	return allErrs

@@ -23,11 +23,16 @@ import (
 
 const (
 	DefaultTerminationGracePeriodSeconds int64 = 1200
-	DefaultDetentionTimeoutSeconds       int64 = 180
-	DefaultSearchDrainTimeoutSeconds     int64 = 180
-	DefaultCaptainTransferTimeoutSeconds int64 = 180
-	DefaultPodStartupTimeoutSeconds      int64 = 1800
-	DefaultMemberRejoinTimeoutSeconds    int64 = 1800
+	// DefaultProbeTerminationGracePeriodSeconds leaves the runtime's default
+	// 600-second bounded local shutdown deadline plus a 60-second kubelet
+	// margin. It applies only to startup- and liveness-probe failures; planned
+	// Pod replacement retains DefaultTerminationGracePeriodSeconds.
+	DefaultProbeTerminationGracePeriodSeconds int64 = 660
+	DefaultDetentionTimeoutSeconds            int64 = 180
+	DefaultSearchDrainTimeoutSeconds          int64 = 180
+	DefaultCaptainTransferTimeoutSeconds      int64 = 180
+	DefaultPodStartupTimeoutSeconds           int64 = 1800
+	DefaultMemberRejoinTimeoutSeconds         int64 = 1800
 )
 
 // ResolvedSearchHeadClusterLifecyclePolicy contains the effective values used

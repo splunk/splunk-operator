@@ -1927,6 +1927,73 @@ func TestGetStartupProbe(t *testing.T) {
 	if startupProbe.InitialDelaySeconds != startupProbeDefaultDelaySec {
 		t.Errorf("Failed to set Startup probe default delay")
 	}
+	if startupProbe.FailureThreshold != startupProbeFailureThreshold {
+		t.Errorf(
+			"startup failure threshold = %d, want %d",
+			startupProbe.FailureThreshold,
+			startupProbeFailureThreshold,
+		)
+	}
+}
+
+func TestProbeTerminationGracePeriod(t *testing.T) {
+	ctx := context.Background()
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "CM", Namespace: "test"},
+	}
+
+	t.Run("lifecycle default is limited to restart-causing probes", func(t *testing.T) {
+		setLifecyclePolicyTestGates(t, true, false)
+		spec := &cr.Spec.CommonSplunkSpec
+
+		livenessProbe := getLivenessProbe(ctx, cr, SplunkClusterManager, spec)
+		startupProbe := getStartupProbe(ctx, cr, SplunkClusterManager, spec)
+		readinessProbe := getReadinessProbe(ctx, cr, SplunkClusterManager, spec)
+
+		require.NotNil(t, livenessProbe.TerminationGracePeriodSeconds)
+		require.Equal(
+			t,
+			DefaultProbeTerminationGracePeriodSeconds,
+			*livenessProbe.TerminationGracePeriodSeconds,
+		)
+		require.NotNil(t, startupProbe.TerminationGracePeriodSeconds)
+		require.Equal(
+			t,
+			DefaultProbeTerminationGracePeriodSeconds,
+			*startupProbe.TerminationGracePeriodSeconds,
+		)
+		require.Nil(t, readinessProbe.TerminationGracePeriodSeconds)
+	})
+
+	t.Run("disabled lifecycle preserves the Kubernetes Pod-level fallback", func(t *testing.T) {
+		setLifecyclePolicyTestGates(t, false, false)
+		spec := &cr.Spec.CommonSplunkSpec
+
+		require.Nil(
+			t,
+			getLivenessProbe(ctx, cr, SplunkClusterManager, spec).
+				TerminationGracePeriodSeconds,
+		)
+		require.Nil(
+			t,
+			getStartupProbe(ctx, cr, SplunkClusterManager, spec).
+				TerminationGracePeriodSeconds,
+		)
+	})
+
+	t.Run("explicit value is preserved", func(t *testing.T) {
+		setLifecyclePolicyTestGates(t, true, false)
+		explicitGrace := int64(900)
+		spec := enterpriseApi.CommonSplunkSpec{
+			LivenessProbe: &enterpriseApi.Probe{
+				TerminationGracePeriodSeconds: &explicitGrace,
+			},
+		}
+
+		probe := getLivenessProbe(ctx, cr, SplunkClusterManager, &spec)
+		require.NotNil(t, probe.TerminationGracePeriodSeconds)
+		require.Equal(t, explicitGrace, *probe.TerminationGracePeriodSeconds)
+	})
 }
 
 func TestGetProbe(t *testing.T) {
@@ -2061,6 +2128,17 @@ func TestGetProbeWithConfigUpdates(t *testing.T) {
 	if returnedProbe.Exec != defaultReadinessProbe.Exec {
 		t.Errorf("Failed to set Exec")
 	}
+	explicitGrace := int64(900)
+	configuredProbe.TerminationGracePeriodSeconds = &explicitGrace
+	returnedProbe = getProbeWithConfigUpdates(
+		&defaultLivenessProbe,
+		&configuredProbe,
+		defaultInitialDelay,
+	)
+	if returnedProbe.TerminationGracePeriodSeconds == nil ||
+		*returnedProbe.TerminationGracePeriodSeconds != explicitGrace {
+		t.Errorf("Failed to preserve TerminationGracePeriodSeconds")
+	}
 
 	// Test when configured probe has 0 initialDelay and defaultDelay is 0
 	configuredProbe.InitialDelaySeconds = 0
@@ -2101,6 +2179,13 @@ func TestValidateStartupProbe(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error when less than deault values passed for startupProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", startupProbe.InitialDelaySeconds, startupProbe.TimeoutSeconds, startupProbe.PeriodSeconds, err.Error())
 	}
+
+	invalidGrace := int64(0)
+	startupProbe.TerminationGracePeriodSeconds = &invalidGrace
+	err = validateStartupProbe(ctx, cr, &startupProbe)
+	if err == nil || !strings.Contains(err.Error(), "between 1 and 86400") {
+		t.Errorf("expected startup termination grace validation error, got %v", err)
+	}
 }
 
 func TestValidateReadinessProbe(t *testing.T) {
@@ -2134,6 +2219,13 @@ func TestValidateReadinessProbe(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error when less than deault values passed for readinessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", readinessProbe.InitialDelaySeconds, readinessProbe.TimeoutSeconds, readinessProbe.PeriodSeconds, err.Error())
 	}
+
+	unsupportedGrace := int64(60)
+	readinessProbe.TerminationGracePeriodSeconds = &unsupportedGrace
+	err = validateReadinessProbe(ctx, cr, &readinessProbe)
+	if err == nil || !strings.Contains(err.Error(), "startup and liveness") {
+		t.Errorf("expected readiness termination grace validation error, got %v", err)
+	}
 }
 
 func TestValidateLivenessProbe(t *testing.T) {
@@ -2166,6 +2258,13 @@ func TestValidateLivenessProbe(t *testing.T) {
 	err = validateLivenessProbe(ctx, cr, &livenessProbe)
 	if err != nil {
 		t.Errorf("Unexpected error when less than deault values passed for livenessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", livenessProbe.InitialDelaySeconds, livenessProbe.TimeoutSeconds, livenessProbe.PeriodSeconds, err)
+	}
+
+	validGrace := DefaultProbeTerminationGracePeriodSeconds
+	livenessProbe.TerminationGracePeriodSeconds = &validGrace
+	err = validateLivenessProbe(ctx, cr, &livenessProbe)
+	if err != nil {
+		t.Errorf("unexpected liveness termination grace validation error: %v", err)
 	}
 }
 

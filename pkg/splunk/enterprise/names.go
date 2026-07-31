@@ -182,7 +182,10 @@ const (
 	startupProbeDefaultDelaySec  = 40
 	startupProbeTimeoutSec       = 30
 	startupProbePeriodSec        = 30
-	startupProbeFailureThreshold = 12
+	startupProbeFailureThreshold = 60
+
+	minProbeTerminationGracePeriodSeconds int64 = 1
+	maxProbeTerminationGracePeriodSeconds int64 = 86400
 
 	// Number of ClusterMasterReplicas
 	numberOfClusterMasterReplicas = 1

@@ -39,6 +39,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -1290,6 +1291,7 @@ func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
 func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
 	logger := logging.FromContext(ctx)
 	livenessProbe := getProbeWithConfigUpdates(&defaultLivenessProbe, spec.LivenessProbe, spec.LivenessInitialDelaySeconds)
+	livenessProbe = withDefaultProbeTerminationGracePeriod(livenessProbe)
 	logger.DebugContext(ctx, "livenessProbe", "Configured", livenessProbe)
 	return livenessProbe
 }
@@ -1318,8 +1320,26 @@ func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceTyp
 func getStartupProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
 	logger := logging.FromContext(ctx)
 	startupProbe := getProbeWithConfigUpdates(&defaultStartupProbe, spec.StartupProbe, 0)
+	startupProbe = withDefaultProbeTerminationGracePeriod(startupProbe)
 	logger.DebugContext(ctx, "startupProbe", "Configured", startupProbe)
 	return startupProbe
+}
+
+// withDefaultProbeTerminationGracePeriod separates kubelet-initiated container
+// restarts from the longer Pod-deletion budget. The default is gated with the
+// runtime lifecycle contract because it is sized against the image's bounded
+// shutdown helper. An explicit v4 probe value is always preserved.
+func withDefaultProbeTerminationGracePeriod(probe *corev1.Probe) *corev1.Probe {
+	if probe == nil ||
+		probe.TerminationGracePeriodSeconds != nil ||
+		!config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle) {
+		return probe
+	}
+
+	derivedProbe := probe.DeepCopy()
+	value := DefaultProbeTerminationGracePeriodSeconds
+	derivedProbe.TerminationGracePeriodSeconds = &value
+	return derivedProbe
 }
 
 // getProbeWithConfigUpdates Validates probe values and updates them
@@ -1331,10 +1351,11 @@ func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *ente
 		// while handling a reconcile event)
 		//var derivedProbe = *configuredProbe
 		derivedProbe := corev1.Probe{
-			InitialDelaySeconds: configuredProbe.InitialDelaySeconds,
-			TimeoutSeconds:      configuredProbe.TimeoutSeconds,
-			PeriodSeconds:       configuredProbe.PeriodSeconds,
-			FailureThreshold:    configuredProbe.FailureThreshold,
+			InitialDelaySeconds:           configuredProbe.InitialDelaySeconds,
+			TimeoutSeconds:                configuredProbe.TimeoutSeconds,
+			PeriodSeconds:                 configuredProbe.PeriodSeconds,
+			FailureThreshold:              configuredProbe.FailureThreshold,
+			TerminationGracePeriodSeconds: configuredProbe.TerminationGracePeriodSeconds,
 		}
 
 		if derivedProbe.InitialDelaySeconds == 0 {
@@ -2171,6 +2192,16 @@ func validateProbe(probe *enterpriseApi.Probe) error {
 	if probe.InitialDelaySeconds < 0 || probe.TimeoutSeconds < 0 || probe.PeriodSeconds < 0 || probe.FailureThreshold < 0 {
 		return fmt.Errorf("negative values are not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.FailureThreshold)
 	}
+	if probe.TerminationGracePeriodSeconds != nil &&
+		(*probe.TerminationGracePeriodSeconds < minProbeTerminationGracePeriodSeconds ||
+			*probe.TerminationGracePeriodSeconds > maxProbeTerminationGracePeriodSeconds) {
+		return fmt.Errorf(
+			"TerminationGracePeriodSeconds must be between %d and %d seconds. Configured value = %d",
+			minProbeTerminationGracePeriodSeconds,
+			maxProbeTerminationGracePeriodSeconds,
+			*probe.TerminationGracePeriodSeconds,
+		)
+	}
 	return nil
 }
 
@@ -2221,6 +2252,9 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 	err = validateProbe(readinessProbe)
 	if err != nil {
 		return fmt.Errorf("invalid Readiness Probe config. Reason: %s", err)
+	}
+	if readinessProbe.TerminationGracePeriodSeconds != nil {
+		return fmt.Errorf("invalid Readiness Probe config. Reason: Kubernetes supports probe-level termination grace only for startup and liveness probes")
 	}
 
 	if readinessProbe.InitialDelaySeconds != 0 && readinessProbe.InitialDelaySeconds < readinessProbeDefaultDelaySec {

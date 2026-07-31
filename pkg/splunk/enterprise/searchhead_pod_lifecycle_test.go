@@ -125,6 +125,35 @@ func TestSearchHeadStatefulSetUsesSupportedRuntimeLifecycle(t *testing.T) {
 		strings.Contains(strings.Join(container.ReadinessProbe.Exec.Command, " "),
 			"/services/shcluster/member/ready"),
 		"the Operator must not render an unsupported SHC readiness endpoint")
+	require.Equal(
+		t,
+		int32(60),
+		container.StartupProbe.FailureThreshold,
+		"startup must cover the controller's bounded first-start and upgrade window",
+	)
+	require.NotNil(t, container.StartupProbe.TerminationGracePeriodSeconds)
+	require.Equal(
+		t,
+		DefaultProbeTerminationGracePeriodSeconds,
+		*container.StartupProbe.TerminationGracePeriodSeconds,
+	)
+	require.NotNil(t, container.LivenessProbe.TerminationGracePeriodSeconds)
+	require.Equal(
+		t,
+		DefaultProbeTerminationGracePeriodSeconds,
+		*container.LivenessProbe.TerminationGracePeriodSeconds,
+	)
+	require.Nil(
+		t,
+		container.ReadinessProbe.TerminationGracePeriodSeconds,
+		"readiness failures do not terminate containers",
+	)
+	require.NotNil(t, statefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	require.Equal(
+		t,
+		DefaultTerminationGracePeriodSeconds,
+		*statefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds,
+	)
 	require.Equal(t,
 		[]string{"/bin/sh", "-ec", searchHeadPreStopScript},
 		container.Lifecycle.PreStop.Exec.Command)
