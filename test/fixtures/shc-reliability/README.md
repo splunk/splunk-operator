@@ -210,8 +210,10 @@ the target digest and rejoin registered and `Up`.
 
 `shc85-lifecycle-hold-cluster.yaml` creates the isolated four-indexer RF3/SF2
 topology used to qualify a long controller absence after an Operator-owned
-target has durably reached `WithdrawingReadiness`, `Decommissioning`, or
-`ReadyForReplacement`. For
+target has durably reached `TargetSelected`, `WithdrawingReadiness`,
+`Decommissioning`, or `ReadyForReplacement`. At `TargetSelected`, the monitor
+requires the selected target and all other indexers to remain ready and in the
+Service because traffic withdrawal has not been requested. For
 `WithdrawingReadiness`, the monitor additionally waits until the selected Pod
 contains the explicit lifecycle marker, removes the controller, and then
 requires the Pod to become unready and absent from the indexer Service before
@@ -243,10 +245,10 @@ workstation `kubectl exec` connection. The lifecycle monitor owns the harmless
 the stage selected by `SHC85_HOLD_STAGE`, scales the Operator Deployment to
 zero, and observes an uninterrupted five-minute controller absence. The
 default stage is `ReadyForReplacement`; the other supported values are
-`Decommissioning` or `WithdrawingReadiness`. Its exit trap restores the
-original controller replica count on success or failure. After setting the
-Deployment replica count to zero, the harness immediately removes any
-remaining controller Pod so it cannot cross the selected stage while
+`TargetSelected`, `WithdrawingReadiness`, or `Decommissioning`. Its exit trap
+restores the original controller replica count on success or failure. After
+setting the Deployment replica count to zero, the harness immediately removes
+any remaining controller Pod so it cannot cross the selected stage while
 terminating.
 
 ```bash
@@ -272,18 +274,23 @@ To remove the controller as soon as the target contains the persisted
 readiness-withdrawal marker, and then prove that kubelet-driven readiness and
 Service withdrawal complete without the controller, use
 `SHC85_HOLD_STAGE=WithdrawingReadiness`.
+To remove the controller immediately after durable target selection, before
+readiness withdrawal or decommission is requested, use
+`SHC85_HOLD_STAGE=TargetSelected`.
 
 During controller absence the lifecycle monitor requires the exact persisted
-operation, target UID and revisions to remain fixed; the target container to
-remain running with zero restarts while staying unready and outside the
-EndpointSlice; and all three non-target peers to retain their UIDs, restart
-counts, readiness, and endpoints. After controller restoration it requires a
-complete `3 -> 2 -> 1 -> 0` roll, at most one unavailable indexer, zero
-container restarts, remote serving recovery on the final replacement, the
-desired revision on all four Pods, and removal of the temporary lifecycle
-marker with Pod replacement. The workload monitor independently requires
-zero HEC and search request failures plus exact eventual sequence recovery.
-Its Pod name supplies a unique run ID, so repeated Jobs do not reuse prior
+operation, target UID and revisions to remain fixed. At `TargetSelected`, all
+four peers must remain running, ready, and present in the EndpointSlice, with
+no readiness-withdrawal marker. At every later supported stage, the target
+must remain running with zero restarts while staying unready and outside the
+EndpointSlice. All three non-target peers must retain their UIDs, restart
+counts, readiness, and endpoints. After controller restoration the monitor
+requires a complete `3 -> 2 -> 1 -> 0` roll, at most one unavailable indexer,
+zero container restarts, remote serving recovery on the final replacement,
+the desired revision on all four Pods, and removal of the temporary lifecycle
+marker with Pod replacement. The workload monitor independently requires zero
+HEC and search request failures plus exact eventual sequence recovery. Its Pod
+name supplies a unique run ID, so repeated Jobs do not reuse prior
 events. Workstation-side Kubernetes and Splunk telemetry should run as a
 separate observer; an observer/API stall must be recorded as a telemetry gap
 and must not silently pause the workload used for the availability verdict.

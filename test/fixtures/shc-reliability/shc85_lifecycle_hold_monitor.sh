@@ -37,10 +37,10 @@ for value in "${hold_seconds}" "${sample_seconds}" \
 done
 
 case "${hold_stage}" in
-WithdrawingReadiness | Decommissioning | ReadyForReplacement) ;;
+TargetSelected | WithdrawingReadiness | Decommissioning | ReadyForReplacement) ;;
 *)
   printf '%s\n' \
-    'SHC85_HOLD_STAGE must be WithdrawingReadiness, Decommissioning, or ReadyForReplacement' \
+    'SHC85_HOLD_STAGE must be TargetSelected, WithdrawingReadiness, Decommissioning, or ReadyForReplacement' \
     >&2
   exit 2
   ;;
@@ -192,6 +192,9 @@ while ((SECONDS < stage_deadline)); do
   hold_boundary_observed=false
   if [[ "${current_stage}" == "${hold_stage}" ]]; then
     case "${hold_stage}" in
+    TargetSelected)
+      hold_boundary_observed=true
+      ;;
     WithdrawingReadiness)
       candidate_target="$(jq -r '.targetPod // ""' <<<"${current_update}")"
       if [[ -n "${candidate_target}" ]] &&
@@ -248,11 +251,13 @@ if [[ "${target_restart}" -lt 0 ]]; then
 fi
 
 # Stop the controller immediately after observing the requested persisted
-# stage. WithdrawingReadiness is captured as soon as its explicit lifecycle
+# stage. TargetSelected is captured before any readiness withdrawal is
+# requested, so every peer must remain ready and serving while the controller
+# is absent. WithdrawingReadiness is captured as soon as its explicit lifecycle
 # marker exists; external readiness and Service withdrawal are then required
-# with no controller present. Decommissioning is accepted only after Splunk
-# has been observed in that state, not merely after the request was issued.
-# All slower runtime and identity checks happen after the Deployment has no
+# with no controller present. Decommissioning is accepted only after Splunk has
+# been observed in that state, not merely after the request was issued. All
+# slower runtime and identity checks happen after the Deployment has no
 # remaining controller Pod, which minimizes the race with the next
 # reconciliation.
 kubectl -n "${operator_namespace}" scale deployment \
@@ -281,7 +286,13 @@ if [[ "${deployment_replicas}" -ne 0 || "${operator_pods}" -ne 0 ]]; then
   fail "operator-did-not-become-absent"
 fi
 
-if ! kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
+if [[ "${hold_stage}" == TargetSelected ]]; then
+  if kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
+    /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
+    >/dev/null 2>&1; then
+    fail "target-selected-has-readiness-withdrawal-marker"
+  fi
+elif ! kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
   /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
   >/dev/null; then
   fail "lifecycle-hold-marker-missing"
@@ -348,21 +359,40 @@ while [[ "$(date +%s)" -lt "${hold_deadline}" ]]; do
 
   current_pods="$(pods_json)"
   current_endpoints="$(endpoint_pods_json)"
-  if ! jq -e --arg pod "${target_pod}" --arg uid "${target_uid}" \
-    --argjson restart "${target_restart}" '
-      any(.[];
-        .metadata.name == $pod and
-        .metadata.uid == $uid and
-        ([.status.containerStatuses[]?.restartCount] | add // -1) == $restart and
-        any(.status.containerStatuses[]?; .state.running != null) and
-        (any(.status.conditions[]?;
-          .type == "Ready" and .status == "True") | not))' \
-    <<<"${current_pods}" >/dev/null; then
-    fail "held-target-identity-liveness-or-readiness-changed"
-  fi
-  if jq -e --arg pod "${target_pod}" 'index($pod) != null' \
-    <<<"${current_endpoints}" >/dev/null; then
-    fail "held-target-returned-to-service"
+  if [[ "${hold_stage}" == TargetSelected ]]; then
+    if ! jq -e --arg pod "${target_pod}" --arg uid "${target_uid}" \
+      --argjson restart "${target_restart}" '
+        any(.[];
+          .metadata.name == $pod and
+          .metadata.uid == $uid and
+          ([.status.containerStatuses[]?.restartCount] | add // -1) == $restart and
+          any(.status.containerStatuses[]?; .state.running != null) and
+          any(.status.conditions[]?;
+            .type == "Ready" and .status == "True"))' \
+      <<<"${current_pods}" >/dev/null; then
+      fail "target-selected-identity-liveness-or-readiness-changed"
+    fi
+    if ! jq -e --arg pod "${target_pod}" 'index($pod) != null' \
+      <<<"${current_endpoints}" >/dev/null; then
+      fail "target-selected-left-service"
+    fi
+  else
+    if ! jq -e --arg pod "${target_pod}" --arg uid "${target_uid}" \
+      --argjson restart "${target_restart}" '
+        any(.[];
+          .metadata.name == $pod and
+          .metadata.uid == $uid and
+          ([.status.containerStatuses[]?.restartCount] | add // -1) == $restart and
+          any(.status.containerStatuses[]?; .state.running != null) and
+          (any(.status.conditions[]?;
+            .type == "Ready" and .status == "True") | not))' \
+      <<<"${current_pods}" >/dev/null; then
+      fail "held-target-identity-liveness-or-readiness-changed"
+    fi
+    if jq -e --arg pod "${target_pod}" 'index($pod) != null' \
+      <<<"${current_endpoints}" >/dev/null; then
+      fail "held-target-returned-to-service"
+    fi
   fi
 
   while IFS=$'\t' read -r pod uid restart; do
@@ -399,7 +429,13 @@ actual_hold_seconds=$(($(date +%s) - operator_absent_start))
 if ((actual_hold_seconds < hold_seconds)); then
   fail "operator-absence-shorter-than-requested"
 fi
-if ! kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
+if [[ "${hold_stage}" == TargetSelected ]]; then
+  if kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
+    /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
+    >/dev/null 2>&1; then
+    fail "target-selected-gained-readiness-withdrawal-marker"
+  fi
+elif ! kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
   /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
   >/dev/null; then
   fail "lifecycle-hold-marker-lost-during-absence"
