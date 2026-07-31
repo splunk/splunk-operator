@@ -24,5 +24,10 @@ commands:
 
   # Assert storage is emptyDir — verify no UF-labeled PVCs (already checked above) and
   # that etc/var share the same filesystem by checking stat device number matches.
-  - command: bash -c "ETC=$(kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- stat -c %d /opt/splunkforwarder/etc); VAR=$(kubectl exec -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') -- stat -c %d /opt/splunkforwarder/var); [ \"$ETC\" = \"$VAR\" ] && echo PASS-emptyDir-confirmed-same-device || (echo FAIL-expected-same-device-etc=$ETC-var=$VAR; exit 1)"
-    namespaced: true
+  - script: |
+      POD=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}')
+      ETC=$(kubectl exec -n "$NAMESPACE" "$POD" -- stat -c %d /opt/splunkforwarder/etc)
+      VAR=$(kubectl exec -n "$NAMESPACE" "$POD" -- stat -c %d /opt/splunkforwarder/var)
+      [ "$ETC" = "$VAR" ] &&
+        echo PASS-emptyDir-confirmed-same-device ||
+        (echo "FAIL-expected-same-device-etc=$ETC-var=$VAR"; exit 1)

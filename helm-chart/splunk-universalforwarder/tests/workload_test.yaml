@@ -153,6 +153,17 @@ tests:
             persistentVolumeClaim:
               claimName: RELEASE-NAME-splunk-universalforwarder-var
 
+  - it: should render Recreate without rollingUpdate settings
+    set:
+      updateStrategy.type: Recreate
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+      - isNull:
+          path: spec.strategy.rollingUpdate
+
   # Standalone pattern: Secret mounted at /mnt/splunk-secrets
   - it: should mount Secret at /mnt/splunk-secrets
     set:

@@ -94,3 +94,51 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "splunkConfig.splunkGeneralTerms not accepted"
+
+  - it: should fail when durable mode has more than one replica
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
+      storage.emptyDir: false
+      replicaCount: 2
+      updateStrategy.type: Recreate
+    asserts:
+      - failedTemplate:
+          errorPattern: "replicaCount must be 1 when storage.emptyDir is false"
+
+  - it: should fail when durable mode uses RollingUpdate
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
+      storage.emptyDir: false
+      replicaCount: 1
+      updateStrategy.type: RollingUpdate
+    asserts:
+      - failedTemplate:
+          errorPattern: "updateStrategy.type must be Recreate when storage.emptyDir is false"
+
+  - it: should allow durable mode with one replica and Recreate
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
+      storage.emptyDir: false
+      replicaCount: 1
+      updateStrategy.type: Recreate
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should allow multiple replicas with stateless storage
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      splunkConfig.splunkGeneralTerms: "--accept-sgt-current-at-splunk-com"
+      storage.emptyDir: true
+      replicaCount: 3
+      updateStrategy.type: RollingUpdate
+    asserts:
+      - hasDocuments:
+          count: 0
