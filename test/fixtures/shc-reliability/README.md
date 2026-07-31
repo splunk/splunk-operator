@@ -314,3 +314,36 @@ name supplies a unique run ID, so repeated Jobs do not reuse prior
 events. Workstation-side Kubernetes and Splunk telemetry should run as a
 separate observer; an observer/API stall must be recorded as a telemetry gap
 and must not silently pause the workload used for the availability verdict.
+
+The same monitor can qualify a running controller that loses only its path to
+the Kubernetes API. This is distinct from scaling the Deployment to zero: the
+original Operator Pod remains scheduled while a test-only privileged
+ephemeral container installs one OUTPUT rule in that Pod's network namespace.
+The rule rejects TCP port 443 only for the current in-cluster Kubernetes
+Service IP. It does not change node, cluster, or workload Pod networking. The
+utility image is pinned by digest, the monitor requires the original Operator
+Pod UID and the rule to remain present throughout the requested interval, and
+the evidence records its container identity, restart count, and runtime state.
+The ephemeral process has an independent timeout and EXIT trap that remove the
+rule even if the workstation monitor is interrupted. The run is accepted only
+after the log proves API access returned with HTTP 200.
+
+This mode currently starts at observed `Decommissioning`, where the durable
+operation proves the Splunk command has taken effect before the API path is
+removed. It requires authorization to update `pods/ephemeralcontainers` and a
+cluster policy that permits the privileged diagnostic container. Those are
+qualification-lab permissions, not product runtime requirements. Run it with:
+
+```bash
+SHC85_NAMESPACE=shc85-lifecycle-hold \
+SHC85_HOLD_STAGE=Decommissioning \
+SHC85_CONTROLLER_FAULT=APIDisconnected \
+SHC85_HOLD_SECONDS=300 \
+SHC85_EVIDENCE_FILE=build/_test/shc85/api-disconnected.tsv \
+test/fixtures/shc-reliability/shc85_lifecycle_hold_monitor.sh
+```
+
+The default `SHC85_CONTROLLER_FAULT=ControllerAbsent` retains the controller
+scale-to-zero campaign described above. API-disconnection qualification must
+not be inferred from NetworkPolicy unless the target CNI is independently
+proved to enforce the selected policy.
