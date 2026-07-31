@@ -1940,6 +1940,16 @@ and maximum pending 406; workload-log SHA-256 is
 `cf169d21801d25eef3314351e6b5726bb53b8ca993ac1d2297f7c8bd728d4be0`.
 The maximum partial result occurred after lifecycle `Completed` with four
 Ready published desired-revision Pods while Search Heads still attempted old
-peer IPs. Long controller absence at `TargetSelected` and
-`WithdrawingReadiness`, API-server disconnection, and the customer-visible
-distributed-search convergence contract remain open.
+peer IPs. A separate readiness-withdrawal campaign on
+`codex/shc-85-withdrawing-readiness-absence-qualification` retained the exact
+ordinal-3 operation for 306 controller-absent seconds at
+`WithdrawingReadiness`, proved kubelet-driven Service withdrawal without the
+controller, and completed `3 -> 2 -> 1 -> 0` with zero restarts. Lifecycle
+evidence SHA-256 is
+`4bba7447b3c245621982bf92d0bf13bc020fdf49e3e49d1c5ac3bf07af0b3752`.
+Its 1,800-event workload had zero HEC/search request failures, exact final
+results on every Search Head, 37 count regressions, and maximum pending 404;
+workload-log SHA-256 is
+`7b2c7ae19ce41efda8ddb21a2e67d29192fb8589128511fbc17c57ebc034ac7a`.
+Long controller absence at `TargetSelected`, API-server disconnection, and the
+customer-visible distributed-search convergence contract remain open.

@@ -446,9 +446,10 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   The bounded Operator-owned lifecycle is source-qualified and EKS-qualified
   for steady-controller operation, one controller-Pod restart during
   `Decommissioning`, five-minute controller absence during observed
-  `Decommissioning`, and five-minute controller absence during
-  `ReadyForReplacement`. Remaining gates include long controller absence at
-  `TargetSelected` and `WithdrawingReadiness`, API-server disconnection,
+  `Decommissioning`, five-minute controller absence during
+  `ReadyForReplacement`, and five-minute controller absence during
+  `WithdrawingReadiness`. Remaining gates include long controller absence at
+  `TargetSelected`, API-server disconnection,
   leader contention, conflicting
   desired-state changes,
   insufficient RF/SF health, HEC-disabled Splunk-to-Splunk traffic, HTTP and

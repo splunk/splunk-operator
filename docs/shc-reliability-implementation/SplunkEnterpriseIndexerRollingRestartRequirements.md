@@ -56,6 +56,15 @@ revision, and at zero restarts. Search Heads still logged connections to old
 Pod IPs at the same time. Its log has SHA-256
 `cf169d21801d25eef3314351e6b5726bb53b8ca993ac1d2297f7c8bd728d4be0`.
 
+A third independent 1,800-event record reproduced the same boundary while the
+Operator was absent for 306 seconds at `WithdrawingReadiness`. It had zero HEC
+or search-request failures and exact eventual results on every Search Head,
+but reported 37 count regressions and maximum pending 404 at sequence 1522.
+Its log has SHA-256
+`7b2c7ae19ce41efda8ddb21a2e67d29192fb8589128511fbc17c57ebc034ac7a`.
+The different controller-absence boundary did not eliminate the later
+distributed-peer convergence problem.
+
 This is not evidence that RF or SF was configured incorrectly, and it is not
 yet a complete root-cause finding. It proves that HTTP request success, Cluster
 Manager `Up/searchable`, Kubernetes endpoint recovery, and remote HEC health

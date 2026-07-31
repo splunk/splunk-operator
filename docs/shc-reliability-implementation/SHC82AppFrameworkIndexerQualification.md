@@ -412,6 +412,71 @@ completeness on every Search Head. The lifecycle must not be described as
 end-to-end available until Splunk provides a supported per-Search-Head peer
 convergence signal or explicitly marks incomplete results as partial.
 
+## Five-minute readiness-withdrawal absence qualification
+
+The isolated branch
+`codex/shc-85-withdrawing-readiness-absence-qualification` moved the
+controller-absence boundary earlier without changing the production Operator
+or Splunk images. Harness source `978d71bc5699382df3b8d54355541aea0365f503`
+waited for the durable `WithdrawingReadiness` stage and the explicit
+Operator-owned lifecycle marker, then removed the sole controller immediately.
+The production Operator remained source `ac1fe0db8` at immutable digest
+`sha256:59fc2afdfafc7e0c2b9f49fceebf1862128521017311776b91f0ce3315eff608`;
+the Splunk runtime remained `10.5.2605.0/844c593e9c1d` at digest
+`sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`.
+
+The campaign moved from source revision
+`splunk-shc85-idxc-indexer-6c4676ff9d` to desired revision
+`splunk-shc85-idxc-indexer-55fcc8f588`. It retained ordinal 3, Pod UID
+`5e089220-4a62-46c2-b81b-1d0d7990f07c`, and operation ID
+`5e089220-4a62-46c2-b81b-1d0d7990f07c:splunk-shc85-idxc-indexer-55fcc8f588:1785531269512728517`
+through 306 observed seconds with no controller. During the absence, kubelet
+readiness changed the still-running target to NotReady and EndpointSlice
+removed it without controller participation. The operation, target UID,
+revisions, and `WithdrawingReadiness` stage remained unchanged; the target and
+all three non-target containers retained zero restarts; and the three
+non-target Pods retained their original UIDs, readiness, and Service
+endpoints. No indexer liveness failure was recorded.
+
+After controller restoration, the same operation resumed and completed
+`3 -> 2 -> 1 -> 0` with one unavailable peer at a time, previous-peer remote
+serving recovery before each next target, and ten stable final samples. All
+four replacements reached the desired revision and Ready state with zero
+container restarts. Each completed Ansible with `ok=111`, `failed=0`, and none
+contained the prior `Active KVStore version upgrade precheck FAILED`
+signature. Cluster Manager health reported RF met, SF met, all data
+searchable, all peers Up, and no fixups. Lifecycle evidence contains 209
+samples from `20:54:28Z` through `21:24:06Z` and has SHA-256
+`4bba7447b3c245621982bf92d0bf13bc020fdf49e3e49d1c5ac3bf07af0b3752`.
+
+The final `OnDelete` StatefulSet reported `updatedReplicas=4` and all four Pod
+labels matched `updateRevision=splunk-shc85-idxc-indexer-55fcc8f588`, while
+`currentRevision` retained its original baseline revision. This is consistent
+with the Kubernetes v1.31 StatefulSet controller: the `OnDelete` path
+[short-circuits after status calculation](https://github.com/kubernetes/kubernetes/blob/v1.31.14/pkg/controller/statefulset/stateful_set_control.go#L508-L512),
+and its target-state contract
+[does not constrain Pod revisions](https://github.com/kubernetes/kubernetes/blob/v1.31.14/pkg/controller/statefulset/stateful_set_control.go#L311-L318).
+The accepted oracle therefore proves the explicit desired revision on every
+Pod rather than incorrectly requiring `currentRevision==updateRevision` under
+`OnDelete`. The later `RollingUpdate` qualification must use its own native
+revision and partition convergence contract.
+
+The independent Job `shc85-incluster-workload-vgqbn`, Pod UID
+`4c898950-232a-458d-bdff-df4f026a453c`, ran from `20:54:05Z` through
+`21:28:26Z` with zero Pod restarts. It submitted 1,800 numbered events with
+zero HEC failures and zero search-request failures. The final result was exact
+on the Service and independently on all three Search Heads:
+`count/min/max/distinct=1800/1/1800/1800`. Its 1,802-line log has SHA-256
+`7b2c7ae19ce41efda8ddb21a2e67d29192fb8589128511fbc17c57ebc034ac7a`.
+
+Immediate completeness remains open. The Job reported 37 successful-search
+count regressions and maximum pending 404 at sequence 1522. Therefore this
+campaign closes only the bounded five-minute `WithdrawingReadiness`
+controller-absence gate. It does not turn a successful but incomplete search
+response into an availability success, qualify API-server disconnection, or
+remove the requirement for supported per-Search-Head peer convergence and
+partial-result signaling.
+
 ### Search Head defects exposed while forming the fixture
 
 Fresh formation for this campaign exposed two independent Search Head captain
@@ -641,8 +706,9 @@ environment-qualified:
 - insufficient RF/SF/peer redundancy, which must fail closed;
 - one peer already unhealthy before the app update;
 - Operator restart or long absence during durable stages other than the
-  qualified `Decommissioning` restart and five-minute
-  `ReadyForReplacement` absence, plus API-server disconnection;
+  qualified `Decommissioning` restart and five-minute absences during
+  `WithdrawingReadiness`, observed `Decommissioning`, and
+  `ReadyForReplacement`, plus API-server disconnection;
 - concurrent image rollout, app update, scale, node drain, and manual
   deletion;
 - previous supported Splunk and Operator/image combinations;
@@ -663,8 +729,9 @@ configuration-aware serving contract and a durable one-target lifecycle
 contract rather than relying on probe tuning alone. The later Operator-owned
 campaigns demonstrate that contract for one steady-controller RF3/SF2
 revision roll, one controller-Pod restart during `Decommissioning`, and one
-five-minute controller absence during `ReadyForReplacement` on the fixed
-Splunk build. Do not generalize those results to Splunk-managed App Framework
-restarts, other interruption stages, API-server disconnection,
+five-minute controller absence during each of `WithdrawingReadiness`, observed
+`Decommissioning`, and `ReadyForReplacement` on the fixed Splunk build. Do not
+generalize those results to Splunk-managed App Framework restarts,
+`TargetSelected`, API-server disconnection,
 conflicting disruptions, unsupported redundancy, or the remaining negative
 and compatibility gates above.
