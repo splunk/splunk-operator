@@ -1,7 +1,9 @@
 # SHC-84 Startup and Termination Qualification
 
-Status: implementation source and current-runtime baseline qualified; candidate
-Linux image and EKS policy qualification remain open.
+Status: implementation source and candidate EKS behavior are qualified for
+existing-v4 reconciliation, fresh formation, forced liveness recovery, and
+planned Pod deletion. A supported-version upgrade remains an explicitly
+unqualified matrix cell.
 
 ## Scope
 
@@ -33,6 +35,11 @@ Operator branch:
 | `4ef6b488c` | Record the measured first-start and direct-TERM baseline |
 | `a954dd1b5` | Normalize only the exact persisted v4 legacy startup-probe default |
 | `c58ff86cd` | Reject probe-level termination grace on readiness through the v4 CRD and reconciliation validation |
+| `8c402b325` | Record the completed local source and runtime validation |
+| `301215fc7` | Record the forced-liveness baseline and build the subsequently rejected first Linux candidate |
+| `fb9f7b6dc` | Qualify the planned-deletion baseline and harden peer availability checks |
+| `67c0d3bd2` | Reconcile probe-grace-only Pod-template changes and add regression coverage |
+| `cbaef60af` | Make candidate monitors fail on peer replacement, peer restart, endpoint loss, or extra target restart |
 
 Docker-Splunk branch:
 `codex/shc-84-startup-term-qualification`
@@ -44,6 +51,12 @@ Docker-Splunk branch:
 The Docker-Splunk implementation under test already contained the exact-once
 shutdown helper and PID-1 exit correction. SHC-84 did not change executable
 runtime code.
+
+The accepted Operator binary was built from exact commit
+`67c0d3bd28c3d88a72d629ffb1245a139399fc0d` and published at immutable digest
+`sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`.
+Commit `cbaef60af652a17acdefe31a608cc8ced265c4f1` contains later evidence-monitor
+hardening only; it is not claimed as the binary source.
 
 ## Kubernetes contract
 
@@ -225,6 +238,21 @@ The following completed successfully on macOS:
 - shell syntax and ShellCheck for both SHC-84 monitors; and
 - Docker-Splunk `make test_shutdown`: seven tests, zero failures.
 
+The exact accepted binary source also completed the canonical Linux workstation
+path:
+
+- `make generate manifests`;
+- `make fmt vet build`;
+- `git diff --exit-code`; and
+- `make test`: 41 suites, 156 specs, zero failures, 78.6% composite coverage.
+
+The replacement image was built with `make docker-buildx` for
+`linux/amd64`. Generated CRDs were installed through `make install`, and the
+API server rejected a v4 readiness probe carrying
+`terminationGracePeriodSeconds`. The Operator Deployment used the immutable
+digest above, retained the three lifecycle feature gates, became Available,
+and recorded zero container restarts during qualification.
+
 ## Rejected first candidate
 
 The first Linux candidate was built from Operator commit `301215fc7` and
@@ -244,27 +272,133 @@ that update was not detected.
 This image is rejected and must not be used as qualification evidence. The
 merge comparison now treats addition, removal, or value change of
 `terminationGracePeriodSeconds` as a Pod-template change and has direct and
-merge-level regression coverage. A replacement image must pass the full
-candidate matrix.
+merge-level regression coverage.
+
+## Existing-v4 reconciliation result
+
+The accepted image and generated CRDs were first applied to an existing v4
+three-member SHC whose persisted startup probe still contained the exact
+legacy tuple. Reconciliation produced:
+
+```text
+startup:   initial=40 timeout=30 period=30 failure=60 probeGrace=660
+liveness:  initial=30 timeout=30 period=30 failure=3  probeGrace=660
+readiness: initial=10 timeout=5  period=5  failure=3  probeGrace=unset
+Pod grace: 1200
+```
+
+The current `OnDelete` lifecycle converged all three Pods to StatefulSet
+revision `splunk-shc84-shc-search-head-666c586686`. Every Pod retained zero
+container restarts, all three members returned registered and `Up`, and the
+SHC returned to `Ready`, formation stage `Complete`, and three client
+endpoints. Captaincy was observed on both ordinal one and ordinal zero while
+the rollout progressed; the final ordinal-zero target was handled only after
+captain transfer. This qualifies current-v4 default normalization and the
+probe-grace-only merge fix. It does not add a v3 conversion contract.
+
+## Fresh candidate formation result
+
+The accepted candidate formed a new three-member v4 SHC in namespace
+`shc84-startup-term-candidate` using the official fixed runtime digest
+`sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`.
+The fresh StatefulSet rendered the four-clock contract exactly as shown above.
+
+Measured observations were:
+
+- the monitor began before the CR existed at `2026-07-31T03:22:24Z`;
+- the three Search Head Pods completed image-owned startup and the supported
+  first-formation restart with zero Kubernetes container restarts;
+- formation advanced to `TelemetryApplied` at
+  `2026-07-31T03:32:20Z`;
+- the first `Ready`, `Complete`, three-Pod and three-endpoint sample was
+  `2026-07-31T03:37:14Z`; and
+- twelve final stable samples retained three endpoints and zero restarts.
+
+The candidate therefore qualifies the approximately 30-minute fresh-start
+budget without weakening readiness or liveness thresholds.
+
+The run also exposed a separate status-semantics gap. The SHC initially
+reported `Error` while its referenced LicenseManager was still starting.
+Controller validation described the dependency as not ready or not yet on the
+required image and attached an upgrade-path validation failure. Without user
+action, the same SHC changed to `Pending` once the LicenseManager became Ready
+and then completed formation. A retryable dependency wait must be represented
+as Pending/Progressing with a bounded dependency reason; `Error` must be
+reserved for terminal or incompatible dependency state. This observation did
+not cause a workload restart or formation failure, but it is a supportability
+requirement rather than an accepted status contract.
+
+## Forced-liveness candidate result
+
+At `2026-07-31T03:42:09Z`, the established non-captain ordinal two was made
+unhealthy through the runtime state marker. This exercised the accepted
+660-second liveness-probe termination grace.
+
+Observed result:
+
+- readiness removed ordinal two from client endpoints by
+  `2026-07-31T03:42:25Z`;
+- ordinals zero and one remained endpoints and retained their UIDs and restart
+  counts throughout;
+- the runtime artifact recorded one shutdown owner,
+  `pid=10409 source=prestop`, at `2026-07-31T03:43:16Z`;
+- TERM reused that result, with the previous log reporting
+  `shutdown already completed result=0 source=term`;
+- the successful stop took approximately 43 seconds from the first observed
+  `preStop` owner to old-container exit, longer than Kubernetes' ordinary
+  30-second default and well within the rendered 660-second probe grace;
+- Kubernetes restarted only the target container, exactly once, by the
+  `2026-07-31T03:44:02Z` sample;
+- target Pod UID
+  `4d2ce22a-ebe5-4d8e-a2f3-10af24494851` did not change; and
+- the first recovered `Ready`, `Complete`, three-endpoint sample was
+  `2026-07-31T03:45:22Z`, followed by twelve stable samples.
+
+The accepted probe override therefore provides a bounded kubelet restart,
+keeps two healthy members serving, and converges `preStop` and TERM on one
+runtime stop.
+
+## Planned-deletion candidate result
+
+At `2026-07-31T03:48:11Z`, the established non-captain ordinal one was deleted
+through the Kubernetes API. The deleting Pod carried the separate
+1200-second Pod grace.
+
+Observed result:
+
+- serving readiness and the client endpoint were withdrawn by
+  `2026-07-31T03:48:13Z`;
+- ordinals zero and two remained endpoints with unchanged UIDs and restart
+  counts;
+- the original Pod UID
+  `c409ee5b-63c3-4ba0-bcec-2e9e9ba121d3` exited, and the replacement UID
+  `a4b7fe61-da12-43c1-8024-9455873b1b62` was observed at
+  `2026-07-31T03:48:54Z`;
+- the replacement became registered and `Up` before it was returned to client
+  traffic;
+- all three endpoints were present at `2026-07-31T03:50:03Z`; and
+- the first `Ready`, `Complete` sample was `2026-07-31T03:50:10Z`, followed by
+  twelve stable samples.
+
+The client endpoint count never fell below two. As in the baseline, the old
+Pod's hook output was not durably available after replacement. Availability,
+identity, and rejoin behavior are qualified; durable per-Pod shutdown-stage
+retention remains a separate observability requirement.
 
 ## Remaining acceptance gates
 
-SHC-84 is not complete until the exact pushed source is:
+| Acceptance cell | Result |
+|---|---|
+| Exact Linux Make source gate | Passed |
+| Immutable Operator image and generated CRDs | Passed |
+| Existing-v4 normalization and reconciliation | Passed |
+| Fresh v4 formation | Passed |
+| Same-version persistent-container restart | Passed |
+| Forced liveness failure with probe grace 660 | Passed |
+| Planned Pod deletion with Pod grace 1200 | Passed |
+| Supported-version upgrade exercising image-owned upgrade work | Open |
 
-1. built through the Linux workstation Make path;
-2. published as an immutable Operator image;
-3. deployed with its generated CRDs;
-4. proven to render startup failure threshold 60, startup/liveness grace 660,
-   readiness grace unset, and Pod grace 1200;
-5. qualified through fresh v4 SHC formation;
-6. qualified through a same-version persistent-member restart;
-7. forced through a startup- or liveness-probe failure to prove the 660-second
-   override, exact-once shutdown, and bounded container exit;
-8. qualified through planned Pod deletion to prove `preStop` and TERM converge
-   on one shutdown while using the independent Pod grace; and
-9. compared with a supported upgrade whose image-owned work is capable of
-   exercising the longer startup window.
-
-Absence of an available supported source image for the last upgrade comparison
-must be recorded as an unqualified matrix cell; it must not be converted into
-an inferred pass.
+No older supported source image was available in this campaign for the final
+upgrade comparison. That cell remains unqualified; it is not converted into an
+inferred pass. The candidate policy is qualified for the measured current-v4
+paths above, not for every future Splunk upgrade duration.

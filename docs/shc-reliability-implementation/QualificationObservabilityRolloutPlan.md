@@ -157,11 +157,16 @@ ownership.
   retained at least two endpoints during established non-captain and
   active-captain recovery, and retained all three endpoints through an
   Operator restart.
-- [ ] Qualify SHC-84 with measured first-start and upgrade startup budgets,
-  kubelet probe-triggered restart behavior, and bounded TERM-to-container-exit
-  evidence for every supported runtime. The isolated campaign is selected on
-  `codex/shc-84-startup-term-qualification`; current-v4 default measurement
-  precedes any policy change.
+- [ ] Complete SHC-84 qualification. Exact Operator source `67c0d3bd2` and
+  immutable digest
+  `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`
+  passed the Linux source gate, existing-v4 reconciliation, fresh v4
+  formation, forced liveness recovery, and planned non-captain Pod deletion
+  on EKS. Startup/liveness probe grace rendered 660 seconds, readiness grace
+  remained unset, Pod grace remained 1200 seconds, unaffected peers stayed
+  serving, and the only forced container restart was the target. The
+  supported-version upgrade cell remains open because no suitable older
+  supported source image was available.
 - [ ] Qualify SHC-86 with direct namespace-first deletion of a referenced
   LicenseManager, no post-termination create, automatic finalizer removal, and
   exact owned-resource cleanup.
@@ -1581,6 +1586,27 @@ qualification:
   volume and `licenseUrl`. The deterministic `make shc82-license-secret`
   target creates or updates the Secret from a caller-supplied file without
   storing license contents in Git.
+
+2026-07-31 SHC-84 candidate qualification and SHC-87 status finding:
+
+- the accepted candidate rendered startup failure threshold 60, startup and
+  liveness probe termination grace 660, no readiness probe termination grace,
+  and Pod termination grace 1200 on every fresh Search Head;
+- fresh formation completed with zero Kubernetes container restarts and
+  twelve stable three-endpoint samples;
+- a forced liveness failure withdrew only non-captain ordinal two, retained
+  both peer endpoints, ran one runtime shutdown, restarted the target
+  container exactly once with the same Pod UID, and recovered the SHC;
+- planned deletion withdrew only non-captain ordinal one, retained both peer
+  endpoints and their UIDs/restart counts, replaced only the target, and
+  returned it to traffic after it was registered and `Up`;
+- the old deleting Pod's hook output was not durably available after
+  replacement, so durable per-Pod shutdown-stage evidence remains open; and
+- fresh formation temporarily classified a still-starting referenced
+  LicenseManager as SHC `Error` with upgrade-validation failure, then recovered
+  without user action through `Pending` to `Ready`. SHC-87 records the
+  requirement to classify normal dependency convergence as Pending/Progressing
+  with a bounded dependency reason and reserve Error for terminal state.
 
 ## Interfaces and Dependencies
 

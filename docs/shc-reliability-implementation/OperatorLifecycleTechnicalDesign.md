@@ -318,6 +318,7 @@ Define a typed, bounded reason vocabulary. Wave 0 includes:
 - `CaptainTransferRequired`;
 - `CaptainTransferTimedOut`;
 - `InitialFormationPending`;
+- `DependencyNotReady`;
 - `CaptainUnavailable`;
 - `ReplacementAuthorized`;
 - `PodTerminationTimedOut`;
@@ -337,6 +338,23 @@ Define a typed, bounded reason vocabulary. Wave 0 includes:
 
 Implementation branches may propose an additional reason only by updating this
 contract and adding its status/Event/log/metric/test mapping.
+
+### Retryable dependency status
+
+A referenced tier dependency that exists but is still starting, reconciling,
+or converging to the requested image is a retryable wait. The dependent
+resource remains `Pending` or `Progressing` with reason
+`DependencyNotReady`, identifies the dependency kind and name, and reports the
+last observed dependency phase or image without exposing credentials.
+
+The controller must not report a generic `Error` or upgrade-validation failure
+for that state. `Error` is reserved for terminal dependency conditions such as
+an incompatible image, invalid reference, rejected configuration, or an
+expired bounded wait. The distinction is required because Kubernetes
+controllers are asynchronous: a LicenseManager and its dependent SHC can be
+created together, and normal ordering must not look like a failed upgrade.
+The status transition, Event, structured log, metric, and tests must cover both
+the retryable and terminal cases.
 
 The partition coordinator uses a related bounded rollout-decision vocabulary.
 These values explain why Kubernetes partition progression is stable, waiting,
