@@ -114,6 +114,47 @@ for ((sample = 1; sample <= samples; sample++)); do
         select(.type == $condition) | .status][0] // "Unknown"),
       restarts: ([.status.containerStatuses[]?.restartCount] | add // 0)
     }]' <<<"${pods_json}")"
+  peer_identity_drift="$(jq -cn \
+    --argjson initial "${initial_pods_json}" \
+    --argjson current "${pods_json}" \
+    --arg target "${target_pod}" \
+    '[
+      $initial[] as $before |
+      select($before.metadata.name != $target) |
+      $current[] |
+      select(.metadata.name == $before.metadata.name) |
+      select(.metadata.uid != $before.metadata.uid) |
+      {
+        name: .metadata.name,
+        baselineUID: $before.metadata.uid,
+        currentUID: .metadata.uid
+      }
+    ]')"
+  restart_count_drift="$(jq -cn \
+    --argjson initial "${initial_pods_json}" \
+    --argjson current "${pods_json}" \
+    --arg target "${target_pod}" \
+    '[
+      $current[] as $after |
+      $initial[] |
+      select(.metadata.name == $after.metadata.name) |
+      ([.status.containerStatuses[]?.restartCount] | add // 0) as $before |
+      ([$after.status.containerStatuses[]?.restartCount] | add // 0) as $now |
+      (if $after.metadata.name == $target and
+          $after.metadata.uid != .metadata.uid
+        then 0
+        else $before
+        end) as $expected |
+      select($now != $expected) |
+      {
+        name: $after.metadata.name,
+        baselineUID: .metadata.uid,
+        currentUID: $after.metadata.uid,
+        baselineRestarts: $before,
+        currentRestarts: $now,
+        expectedRestarts: $expected
+      }
+    ]')"
 
   endpoint_pods="$(kubectl -n "${namespace}" get \
     endpointslices.discovery.k8s.io -o json | \
@@ -154,10 +195,12 @@ for ((sample = 1; sample <= samples; sample++)); do
       exit 1
     fi
   done < <(jq -r '.[]' <<<"${expected_peer_pods}")
-  if (( "$(jq \
-    '[.[].status.containerStatuses[]?.restartCount] | add // 0' \
-    <<<"${pods_json}")" > 0 )); then
-    echo "FAIL: a Search Head container restart count became non-zero" >&2
+  if (( "$(jq 'length' <<<"${peer_identity_drift}")" > 0 )); then
+    echo "FAIL: an unaffected Search Head Pod was replaced: ${peer_identity_drift}" >&2
+    exit 1
+  fi
+  if (( "$(jq 'length' <<<"${restart_count_drift}")" > 0 )); then
+    echo "FAIL: a Search Head restart count changed unexpectedly: ${restart_count_drift}" >&2
     exit 1
   fi
 

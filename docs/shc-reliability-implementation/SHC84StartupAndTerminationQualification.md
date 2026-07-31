@@ -178,6 +178,41 @@ liveness kills a container. It does not qualify the candidate's 660-second
 probe-level grace, because the pre-candidate Pod had no probe-level override
 and used the 1200-second Pod grace.
 
+## Planned-deletion current-runtime result
+
+At `2026-07-31T02:30:10Z`, the test deleted established non-captain ordinal
+one through the Kubernetes API. This exercised the current Pod-level
+1200-second grace and runtime `preStop` path; it did not claim an
+Operator-controlled rolling revision.
+
+Observed result:
+
+- the deleting member's serving readiness became false and the client Service
+  retained the two unaffected endpoints by `2026-07-31T02:30:15Z`;
+- the unaffected Pod UIDs and their captured restart counts did not change;
+- StatefulSet replacement was first observed with new Pod UID
+  `8bbc528e-ef13-460c-8048-db77e4e74ffc` and zero restarts at
+  `2026-07-31T02:30:53Z`;
+- the captain remained ordinal zero;
+- the replacement rejoined registered and `Up`; and
+- the first `Ready`, `Complete`, three-endpoint observation was
+  `2026-07-31T02:31:58Z`.
+
+The client endpoint count never fell below two. The established-recovery
+monitor was corrected to compare each member with its captured restart-count
+baseline, rather than assuming every campaign starts with zero restarts. It
+also now rejects replacement of either unaffected peer.
+
+The attempted live log stream ended with a connection reset as the old Pod
+disappeared and did not durably retain the hook output. The replacement Pod
+cannot provide the old Pod's container or hook log. Planned-deletion
+qualification therefore still requires a durable shutdown result outside the
+ephemeral Pod log stream. Until that is implemented, support must correlate
+the deletion timestamp, serving-readiness withdrawal, old and new Pod UIDs,
+replacement timing, unaffected endpoints, and SHC rejoin state; those facts
+prove availability and recovery but do not independently prove exact-once
+shutdown ownership.
+
 ## Source validation
 
 The following completed successfully on macOS:

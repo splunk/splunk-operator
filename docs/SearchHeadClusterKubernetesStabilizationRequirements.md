@@ -831,6 +831,8 @@ The support bundle must retain:
 - relevant Kubernetes events;
 - Operator logs correlated by operation;
 - sanitized readiness, preStop, shutdown, and startup logs;
+- durable shutdown owner, result, and timestamps that survive deletion of the
+  old Pod; a live `kubectl logs -f` stream is not sufficient evidence;
 - actual captain and member summaries;
 - active historical and real-time search counts;
 - configuration synchronization and KV status;

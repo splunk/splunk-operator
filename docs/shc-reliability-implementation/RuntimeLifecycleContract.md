@@ -74,6 +74,8 @@ The shared runtime shutdown contract provides:
 - explicit `stopping` state written before work begins;
 - lock/ownership behavior for concurrent triggers;
 - bounded commands and exit reporting;
+- a sanitized owner, result, and timestamp record exported outside the old
+  Pod's ephemeral filesystem and log stream before Pod deletion completes;
 - relationship to readiness withdrawal and endpoint propagation;
 - how remaining grace is preserved for splunkd shutdown;
 - behavior if the caller disappears or retries; and
