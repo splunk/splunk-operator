@@ -1,0 +1,29 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      POD=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=splunk-uf-durable -o jsonpath='{.items[0].metadata.name}')
+      OLD_UID=$(kubectl get configmap uf-durable-restart-state -n "$NAMESPACE" -o jsonpath='{.data.old-pod-uid}')
+      NEW_UID=$(kubectl get pod -n "$NAMESPACE" "$POD" -o jsonpath='{.metadata.uid}')
+      [ "$NEW_UID" != "$OLD_UID" ] &&
+        echo PASS-replacement-pod-has-new-uid ||
+        (echo FAIL-pod-was-not-replaced; exit 1)
+  - script: |
+      POD=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=splunk-uf-durable -o jsonpath='{.items[0].metadata.name}')
+      [ "$(kubectl exec -n "$NAMESPACE" "$POD" -- cat /opt/splunkforwarder/etc/.kuttl-durable-marker)" = durable-etc ] &&
+        [ "$(kubectl exec -n "$NAMESPACE" "$POD" -- cat /opt/splunkforwarder/var/lib/splunk/fishbucket/.kuttl-durable-marker)" = durable-fishbucket ] &&
+        kubectl exec -n "$NAMESPACE" "$POD" -- test -f /opt/splunkforwarder/etc/auth/splunk.secret &&
+        echo PASS-pvc-state-survived-pod-replacement ||
+        (echo FAIL-pvc-state-did-not-survive; exit 1)
+  - script: |
+      for i in $(seq 1 24); do
+        sleep 15
+        POD=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=splunk-uf-durable -o jsonpath='{.items[0].metadata.name}')
+        if kubectl exec -n "$NAMESPACE" "$POD" -- /opt/splunkforwarder/bin/splunk list forward-server -auth admin:TestPassword1 2>/dev/null |
+          grep -q splunk-stdln-standalone-service; then
+          echo PASS-forwarding-reconnected-after-durable-restart
+          exit 0
+        fi
+      done
+      echo FAIL-forwarding-did-not-reconnect
+      exit 1

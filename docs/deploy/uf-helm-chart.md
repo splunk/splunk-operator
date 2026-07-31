@@ -94,7 +94,7 @@ kubectl exec -n my-namespace <pod-name> -- \
 
 ## 4. Workload Mode
 
-The chart deploys a **Deployment**. One or more replicas can be configured via `replicaCount`. Use cases:
+The chart deploys a **Deployment**. One or more replicas can be configured via `replicaCount` in stateless mode. Durable mode is limited to one replica because its two `ReadWriteOnce` PVCs are shared by the Deployment. Use cases:
 - Centralised syslog receiver (with `service.enabled=true`).
 - Forwarding application logs received over a network input.
 - General-purpose log forwarding to a downstream indexer.
@@ -279,19 +279,28 @@ helm upgrade my-uf ./helm-chart/splunk-universalforwarder \
 **Durable mode (`storage.emptyDir: false`):** password rotation requires deleting the PVCs so Splunk reinitialises with the new credential (the old passwd hash is stored on the PVC):
 
 ```sh
-# 1. Uninstall the release (PVCs are NOT deleted automatically)
+# 1. Uninstall the release. Helm deletes the durable-mode PVCs.
 helm uninstall my-uf --namespace my-namespace
 
-# 2. Delete the PVCs
-kubectl delete pvc \
-  my-uf-splunk-universalforwarder-etc \
-  my-uf-splunk-universalforwarder-var \
+# 2. Wait for the PVCs to finish terminating before reinstalling.
+kubectl wait --for=delete \
+  pvc/my-uf-splunk-universalforwarder-etc \
+  pvc/my-uf-splunk-universalforwarder-var \
+  --timeout=10m \
   --namespace my-namespace
 
-# 3. Reinstall with the new password
+# 3. Confirm that neither UF PVC is returned
+kubectl get pvc \
+  my-uf-splunk-universalforwarder-etc \
+  my-uf-splunk-universalforwarder-var \
+  --ignore-not-found \
+  --namespace my-namespace
+
+# 4. Reinstall with the new password
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --namespace my-namespace \
   --set storage.emptyDir=false \
+  --set updateStrategy.type=Recreate \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
   --set splunkConfig.password=NewSecurePassword1 \
   --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
@@ -354,7 +363,9 @@ helm install my-uf ./helm-chart/splunk-universalforwarder \
 
 ### 8.2 Durable mode (`storage.emptyDir: false`)
 
-Two PersistentVolumeClaims are created. They persist across pod restarts and `helm upgrade`. They are **not** deleted on `helm uninstall`.
+Two PersistentVolumeClaims are created. The same claims and their data persist across pod restarts and `helm upgrade`. Helm deletes the PVC resources on `helm uninstall`; they may remain in `Terminating` until the UF pod releases the mounted volumes. The StorageClass reclaim policy determines what happens to the bound PersistentVolumes and underlying storage: `Delete` removes them, while `Retain` leaves them available for manual recovery. A retained PV does not preserve the deleted PVC object automatically.
+
+Durable mode requires `replicaCount=1` and `updateStrategy.type=Recreate`; the chart rejects other combinations to prevent multiple Pods from contending for the shared `ReadWriteOnce` claims.
 
 | PVC | Mount | Default Size | Contains |
 |-----|-------|-------------|----------|
@@ -366,6 +377,7 @@ Use this when `splunkConfig.add` includes `monitor` inputs and you need the fish
 ```sh
 helm install my-uf ./helm-chart/splunk-universalforwarder \
   --set storage.emptyDir=false \
+  --set updateStrategy.type=Recreate \
   --set splunkConfig.forwardServer=indexer.example.com:9997 \
   --set splunkConfig.password=MySecurePassword1 \
   --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page> \
@@ -536,8 +548,8 @@ When `networkPolicy.enabled=true` with empty `ingress`/`egress` lists, the polic
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `replicaCount` | `1` | Number of Deployment replicas |
-| `updateStrategy` | `RollingUpdate maxSurge=1 maxUnavailable=0` | Deployment update strategy |
+| `replicaCount` | `1` | Number of Deployment replicas; must be `1` in durable mode |
+| `updateStrategy` | `RollingUpdate maxSurge=1 maxUnavailable=0` | Deployment update strategy; durable mode requires `type: Recreate` |
 | `minReadySeconds` | `0` | Seconds a new pod must be Ready before counted available |
 | `podAnnotations` | `{}` | Annotations added to each pod |
 | `deploymentAnnotations` | `{}` | Annotations added to the Deployment |
@@ -743,20 +755,21 @@ helm uninstall my-uf --namespace my-namespace
 
 **Stateless mode (`storage.emptyDir: true`, default):** no PVCs exist — uninstall is clean.
 
-**Durable mode (`storage.emptyDir: false`):** PVCs are retained after uninstall (Kubernetes default). Reinstalling with the same release name reuses them and their data.
+**Durable mode (`storage.emptyDir: false`):** Helm deletes both PVCs during uninstall. A claim may remain in `Terminating` until its volume is no longer mounted. The StorageClass reclaim policy independently controls whether the bound PV and underlying storage are deleted or retained.
 
-### Remove the release and delete PVCs (durable mode only)
+### Verify durable PVC deletion
 
 ```sh
 helm uninstall my-uf --namespace my-namespace
 
-kubectl delete pvc \
-  my-uf-splunk-universalforwarder-etc \
-  my-uf-splunk-universalforwarder-var \
+kubectl wait --for=delete \
+  pvc/my-uf-splunk-universalforwarder-etc \
+  pvc/my-uf-splunk-universalforwarder-var \
+  --timeout=10m \
   --namespace my-namespace
 ```
 
-PVC names follow the pattern `<release-name>-splunk-universalforwarder-etc` and `-var`. If you used a custom `fullnameOverride`, substitute that name.
+PVC names follow the pattern `<release-name>-splunk-universalforwarder-etc` and `-var`. If you used a custom `fullnameOverride`, substitute that name. With a `Retain` reclaim policy, inspect and clean up the released PV and underlying storage separately when they are no longer needed.
 
 ### Remove everything including the namespace
 
