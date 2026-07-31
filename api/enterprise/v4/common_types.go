@@ -229,6 +229,7 @@ type Probe struct {
 }
 
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
+// +kubebuilder:validation:XValidation:rule="!has(self.readinessProbe) || !has(self.readinessProbe.terminationGracePeriodSeconds)",message="readinessProbe.terminationGracePeriodSeconds is not supported; Kubernetes applies probe-level termination grace only to startup and liveness probes"
 type CommonSplunkSpec struct {
 	Spec `json:",inline"`
 

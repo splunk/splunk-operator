@@ -4644,6 +4644,11 @@ spec:
             - objectStorageRef
             - queueRef
             type: object
+            x-kubernetes-validations:
+            - message: readinessProbe.terminationGracePeriodSeconds is not supported;
+                Kubernetes applies probe-level termination grace only to startup and
+                liveness probes
+              rule: '!has(self.readinessProbe) || !has(self.readinessProbe.terminationGracePeriodSeconds)'
           status:
             description: IngestorClusterStatus defines the observed state of Ingestor
               Cluster

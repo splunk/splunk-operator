@@ -4373,6 +4373,11 @@ spec:
                   type: object
                 type: array
             type: object
+            x-kubernetes-validations:
+            - message: readinessProbe.terminationGracePeriodSeconds is not supported;
+                Kubernetes applies probe-level termination grace only to startup and
+                liveness probes
+              rule: '!has(self.readinessProbe) || !has(self.readinessProbe.terminationGracePeriodSeconds)'
           status:
             description: IndexerClusterStatus defines the observed state of a Splunk
               Enterprise indexer cluster
@@ -8940,6 +8945,10 @@ spec:
             x-kubernetes-validations:
             - message: queueRef and objectStorageRef must both be set or both be empty
               rule: has(self.queueRef) == has(self.objectStorageRef)
+            - message: readinessProbe.terminationGracePeriodSeconds is not supported;
+                Kubernetes applies probe-level termination grace only to startup and
+                liveness probes
+              rule: '!has(self.readinessProbe) || !has(self.readinessProbe.terminationGracePeriodSeconds)'
           status:
             description: IndexerClusterStatus defines the observed state of a Splunk
               Enterprise indexer cluster

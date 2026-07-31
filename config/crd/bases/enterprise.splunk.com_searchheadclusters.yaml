@@ -4554,6 +4554,11 @@ spec:
                   type: object
                 type: array
             type: object
+            x-kubernetes-validations:
+            - message: readinessProbe.terminationGracePeriodSeconds is not supported;
+                Kubernetes applies probe-level termination grace only to startup and
+                liveness probes
+              rule: '!has(self.readinessProbe) || !has(self.readinessProbe.terminationGracePeriodSeconds)'
           status:
             description: SearchHeadClusterStatus defines the observed state of a Splunk
               Enterprise search head cluster
@@ -9858,6 +9863,11 @@ spec:
                   type: object
                 type: array
             type: object
+            x-kubernetes-validations:
+            - message: readinessProbe.terminationGracePeriodSeconds is not supported;
+                Kubernetes applies probe-level termination grace only to startup and
+                liveness probes
+              rule: '!has(self.readinessProbe) || !has(self.readinessProbe.terminationGracePeriodSeconds)'
           status:
             description: SearchHeadClusterStatus defines the observed state of a Splunk
               Enterprise search head cluster

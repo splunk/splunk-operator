@@ -78,6 +78,45 @@ var _ = Describe("SearchHeadCluster Controller", Label("integration"), func() {
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
+		It("rejects probe-level termination grace on readiness", func() {
+			namespace := "ns-splunk-shc-readiness-grace"
+			nsSpecs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: namespace},
+			}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+
+			grace := int64(60)
+			searchHeadCluster := &enterpriseApi.SearchHeadCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "invalid-readiness-grace",
+					Namespace: namespace,
+				},
+				Spec: enterpriseApi.SearchHeadClusterSpec{
+					Replicas: 3,
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "IfNotPresent",
+						},
+						ReadinessProbe: &enterpriseApi.Probe{
+							InitialDelaySeconds:           10,
+							TimeoutSeconds:                5,
+							PeriodSeconds:                 5,
+							FailureThreshold:              3,
+							TerminationGracePeriodSeconds: &grace,
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), searchHeadCluster)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring(
+				"readinessProbe.terminationGracePeriodSeconds is not supported",
+			))
+
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
 		It("routes a deleting paused SearchHeadCluster to finalization without a status write", func() {
 			ctx := context.Background()
 			now := metav1.Now()
