@@ -225,6 +225,28 @@ The following completed successfully on macOS:
 - shell syntax and ShellCheck for both SHC-84 monitors; and
 - Docker-Splunk `make test_shutdown`: seven tests, zero failures.
 
+## Rejected first candidate
+
+The first Linux candidate was built from Operator commit `301215fc7` and
+published as immutable digest
+`sha256:21b0c301f91005ac4d89f7dcd4c08b222c4e7f047d8acf77bfb5315014095c19`.
+The image and generated CRDs deployed successfully, and the API server rejected
+probe-level termination grace on readiness as required.
+
+Live reconciliation of an existing v4 SHC then found a compatibility defect.
+The desired StatefulSet template resolved startup to failure threshold 60 and
+probe grace 660, but liveness retained no probe-level grace. StatefulSet merge
+logic compared only the four existing probe timing fields. Startup happened to
+converge because its threshold also changed, causing the complete revised probe
+to be copied. Liveness differed only by the newly introduced grace field, so
+that update was not detected.
+
+This image is rejected and must not be used as qualification evidence. The
+merge comparison now treats addition, removal, or value change of
+`terminationGracePeriodSeconds` as a Pod-template change and has direct and
+merge-level regression coverage. A replacement image must pass the full
+candidate matrix.
+
 ## Remaining acceptance gates
 
 SHC-84 is not complete until the exact pushed source is:

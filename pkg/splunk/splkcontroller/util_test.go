@@ -150,6 +150,17 @@ func TestMergePodUpdates(t *testing.T) {
 	}
 	podUpdateTester("Pod LivenessProbe changed")
 
+	// Check if the liveness probe termination grace is updated
+	probeTerminationGrace := int64(660)
+	revisedLivenessProbe := revised.Spec.Containers[0].LivenessProbe.DeepCopy()
+	revisedLivenessProbe.TerminationGracePeriodSeconds = &probeTerminationGrace
+	revised.Spec.Containers[0].LivenessProbe = revisedLivenessProbe
+	matcher = func() bool {
+		currentGrace := current.Spec.Containers[0].LivenessProbe.TerminationGracePeriodSeconds
+		return currentGrace != nil && *currentGrace == probeTerminationGrace
+	}
+	podUpdateTester("Pod LivenessProbe termination grace changed")
+
 	// Check if the readiness probe initalDelay is updated
 	revised.Spec.Containers[0].ReadinessProbe = &corev1.Probe{InitialDelaySeconds: 200}
 	current.Spec.Containers[0].ReadinessProbe = &corev1.Probe{InitialDelaySeconds: 30}
@@ -455,5 +466,27 @@ func TestHasProbeChanged(t *testing.T) {
 	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
 	if !result {
 		t.Errorf("FailureThreshold different. hasProbeChanged() returned %t; want %t", false, true)
+	}
+
+	// Check return is true when probe-level termination grace is added
+	current.Spec.Containers[0].LivenessProbe.FailureThreshold = revised.Spec.Containers[0].LivenessProbe.FailureThreshold
+	probeTerminationGrace := int64(660)
+	revised.Spec.Containers[0].LivenessProbe.TerminationGracePeriodSeconds = &probeTerminationGrace
+	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
+	if !result {
+		t.Errorf("TerminationGracePeriodSeconds different. hasProbeChanged() returned %t; want %t", false, true)
+	}
+
+	// Check return is false after probe-level termination grace converges
+	current.Spec.Containers[0].LivenessProbe.TerminationGracePeriodSeconds = &probeTerminationGrace
+	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
+	if result {
+		t.Errorf("Identical probes. hasProbeChanged() returned %t; want %t", true, false)
+	}
+
+	// Check return is true when the revised probe is removed
+	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, nil)
+	if !result {
+		t.Errorf("revised Probe nil. hasProbeChanged() returned %t; want %t", false, true)
 	}
 }

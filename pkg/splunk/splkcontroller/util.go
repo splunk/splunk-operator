@@ -347,6 +347,9 @@ func hasProbeChanged(currentProbe *corev1.Probe, revisedProbe *corev1.Probe) boo
 	if currentProbe == nil {
 		return revisedProbe != nil
 	}
+	if revisedProbe == nil {
+		return true
+	}
 	if currentProbe.InitialDelaySeconds != revisedProbe.InitialDelaySeconds {
 		return true
 	}
@@ -357,6 +360,14 @@ func hasProbeChanged(currentProbe *corev1.Probe, revisedProbe *corev1.Probe) boo
 		return true
 	}
 	if currentProbe.FailureThreshold != revisedProbe.FailureThreshold {
+		return true
+	}
+	if (currentProbe.TerminationGracePeriodSeconds == nil) !=
+		(revisedProbe.TerminationGracePeriodSeconds == nil) {
+		return true
+	}
+	if currentProbe.TerminationGracePeriodSeconds != nil &&
+		*currentProbe.TerminationGracePeriodSeconds != *revisedProbe.TerminationGracePeriodSeconds {
 		return true
 	}
 	return false
