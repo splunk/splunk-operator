@@ -169,3 +169,28 @@ The target must be resolved from the live
 `SearchHeadCluster.status.captain`; ordinal zero is not assumed to be captain.
 The candidate run must additionally show
 `livenessProbe.terminationGracePeriodSeconds: 660`.
+
+To qualify a supported-version upgrade, first form a fully serving v4 SHC on
+the supported source image and upgrade its referenced LicenseManager to the
+target image. After the LicenseManager is Ready on the target image, start the
+upgrade monitor before changing the SearchHeadCluster image:
+
+```bash
+SHC84_NAMESPACE=shc84-upgrade-candidate \
+SHC84_TARGET_IMAGE_DIGEST=sha256:<target-runtime-digest> \
+SHC84_EVIDENCE_FILE=build/_test/shc84/supported-upgrade.tsv \
+test/fixtures/shc-reliability/shc84_upgrade_monitor.sh &
+monitor_pid=$!
+kubectl -n shc84-upgrade-candidate patch searchheadcluster \
+  shc84-shc --type merge \
+  -p '{"spec":{"image":"<target-image-by-digest>"}}'
+wait "${monitor_pid}"
+```
+
+The monitor captures the StatefulSet strategy, partition and revisions; CR
+generation, conditions, upgrade phase, captain and members; Pod UIDs, images,
+image IDs, restart and termination states; EndpointSlice targets; rendered
+probe/grace values; and relevant Pod Events. It fails if fewer than two
+Search Heads remain endpoints, a retained container or replacement Pod
+restarts, the four-clock probe contract changes, or final Pods do not all use
+the target digest and rejoin registered and `Up`.
