@@ -251,6 +251,13 @@ setting the Deployment replica count to zero, the harness immediately removes
 any remaining controller Pod so it cannot cross the selected stage while
 terminating.
 
+The monitor rejects a contaminated baseline before changing the CR. The
+IndexerCluster must be Ready with every desired Pod Ready, serving, at zero
+restarts, and labeled with the StatefulSet `updateRevision`; any durable Pod
+update must already be terminal. This is deliberately stronger than checking
+the CR phase alone, especially for an `OnDelete` StatefulSet whose
+`currentRevision` is not a valid completion oracle.
+
 ```bash
 make shc85-incluster-workload
 kubectl -n shc85-lifecycle-hold logs -f job/shc85-incluster-workload &

@@ -192,6 +192,13 @@ if [[ "$(jq -r '.status.phase' <<<"${cr_json}")" != Ready ]] ||
     -ne "${desired_replicas}" ]]; then
   fail "baseline-indexercluster-not-ready"
 fi
+baseline_operation_stage="$(jq -r '.status.podUpdate.stage // ""' \
+  <<<"${cr_json}")"
+if [[ -n "${baseline_operation_stage}" &&
+  "${baseline_operation_stage}" != Completed &&
+  "${baseline_operation_stage}" != Cancelled ]]; then
+  fail "baseline-pod-update-still-active"
+fi
 if [[ "${hold_stage}" == TargetSelected ]] &&
   jq -e --arg annotation "${pause_annotation}" \
     '.metadata.annotations[$annotation] == "true"' \
@@ -201,6 +208,10 @@ fi
 
 baseline_pods="$(pods_json)"
 baseline_endpoints="$(endpoint_pods_json)"
+baseline_revision="$({
+  kubectl -n "${namespace}" get statefulset "${statefulset}" -o json |
+    jq -r '.status.updateRevision // ""'
+})"
 if [[ "$(jq 'length' <<<"${baseline_pods}")" -ne "${desired_replicas}" ]] ||
   [[ "$(jq '[.[] | select(any(.status.conditions[]?;
       .type == "Ready" and .status == "True"))] | length' \
@@ -209,6 +220,13 @@ if [[ "$(jq 'length' <<<"${baseline_pods}")" -ne "${desired_replicas}" ]] ||
   [[ "$(jq '[.[].status.containerStatuses[]?.restartCount] | add // 0' \
       <<<"${baseline_pods}")" -ne 0 ]]; then
   fail "baseline-pods-not-stable"
+fi
+if [[ -z "${baseline_revision}" ]] ||
+  ! jq -e --arg revision "${baseline_revision}" --argjson desired "${desired_replicas}" '
+    length == $desired and
+    all(.[]; .metadata.labels["controller-revision-hash"] == $revision)' \
+    <<<"${baseline_pods}" >/dev/null; then
+  fail "baseline-pods-not-on-update-revision"
 fi
 
 record_sample "baseline"
