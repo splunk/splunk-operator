@@ -604,12 +604,14 @@ func TestUpdateStatusRecordsCaptainMemberStateDuringCaptainTransition(
 		}, nil
 	}
 	captainMemberCalls := 0
+	captainMemberOrdinal := int32(-1)
 	GetSearchHeadCaptainMembersForStatus = func(
-		context.Context,
-		*searchHeadClusterPodManager,
-		int32,
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		n int32,
 	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
 		captainMemberCalls++
+		captainMemberOrdinal = n
 		return map[string]splclient.SearchHeadCaptainMemberInfo{
 			"splunk-example-search-head-0": {
 				Label:  "splunk-example-search-head-0",
@@ -642,6 +644,12 @@ func TestUpdateStatusRecordsCaptainMemberStateDuringCaptainTransition(
 
 	if captainMemberCalls != 1 {
 		t.Fatalf("captain member calls = %d, want 1", captainMemberCalls)
+	}
+	if captainMemberOrdinal != 2 {
+		t.Fatalf(
+			"captain member ordinal = %d, want newly elected captain ordinal 2",
+			captainMemberOrdinal,
+		)
 	}
 	if cr.Status.Members[0].Status != "Up" ||
 		cr.Status.Members[0].RestartState != "NoRestart" ||

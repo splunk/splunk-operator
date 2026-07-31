@@ -1150,10 +1150,21 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 
 	if observeCaptainMembers {
+		// GetSearchHeadCaptainInfo is proxied by any active member, but the
+		// captain/members endpoint must be queried on the captain itself. During
+		// a captain transfer, captainObservationOrdinal can still identify the
+		// old captain even though the returned label identifies the new one.
+		captainMembersOrdinal := captainObservationOrdinal
+		for n := range mgr.cr.Status.Members {
+			if mgr.cr.Status.Members[n].Name == mgr.cr.Status.Captain {
+				captainMembersOrdinal = int32(n)
+				break
+			}
+		}
 		captainMembers, err := GetSearchHeadCaptainMembersForStatus(
 			ctx,
 			mgr,
-			captainObservationOrdinal,
+			captainMembersOrdinal,
 		)
 		if err != nil {
 			shcLogger.ErrorContext(
