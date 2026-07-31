@@ -2533,11 +2533,12 @@ func setIndexerReadinessWithdrawalOnSplunkPod(
 	podExecClient splutil.PodExecClientImpl,
 ) error {
 	command := fmt.Sprintf(
-		"mkdir -p %s; printf 'export %s=%d\\nexport %s=true\\n' > %s",
+		"mkdir -p %s; printf 'export %s=%d\\nexport %s=true\\nexport %s=true\\n' > %s",
 		GetLivenessDriverFileDir(),
 		livenessProbeLevelName,
 		livenessProbeLevelOne,
 		indexerServingReadinessEnv,
+		lifecycleHoldEnv,
 		GetLivenessDriverFilePath(),
 	)
 	streamOptions := splutil.NewStreamOptionsObject(command)

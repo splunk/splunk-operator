@@ -1905,6 +1905,11 @@ func TestGetProbeConfigMapReconcilesExistingScripts(t *testing.T) {
 		"stale-liveness",
 		updated.Data[GetLivenessScriptName()],
 	)
+	require.Contains(
+		t,
+		updated.Data[GetLivenessScriptName()],
+		"SPLUNK_OPERATOR_LIFECYCLE_HOLD",
+	)
 	require.NotEqual(
 		t,
 		"stale-startup",
