@@ -30,6 +30,22 @@ A future Splunk-owned local traffic-readiness API could replace part of this
 compatibility adapter, but the Operator must not call or document an endpoint
 that the current product does not provide.
 
+Qualification of the supported 10.4-to-10.5 upgrade confirmed the current REST
+boundary on every post-upgrade member:
+
+- `/services/shcluster/member/info` returned HTTP 200 and the local registered,
+  `Up`, and restart-state facts;
+- `/services/shcluster/captain/info` returned HTTP 200 and identified the active
+  captain from both captain and non-captain members; and
+- `/services/shcluster/captain/members` returned HTTP 503 on non-captains and
+  HTTP 200 only on the active captain.
+
+Consequently, captain-members is not a universal readiness API and must not be
+called from the per-Pod kubelet probe. The supported
+`splunk show shcluster-status` command succeeded on all three members in this
+campaign, but a CLI command used for qualification is not a low-cost,
+per-probe readiness contract.
+
 ### Liveness
 
 Define the smallest local process-health signal that justifies kubelet restart.
@@ -132,6 +148,11 @@ The compatibility environment variable currently named
 `SPLUNK_SEARCH_HEAD_CAPTAIN_URL` is treated as bootstrap discovery input, not a
 durable captain fact. Search Head lifecycle decisions, captain transfer, and
 rollout gates use the captain observed from Splunk APIs.
+
+The active captain is discovered before a captain-only cluster-members request
+is made. A non-captain HTTP 503 from
+`/services/shcluster/captain/members` is a role response, not by itself a local
+liveness or readiness failure.
 
 App installation and bundle operations do not require ordinal zero. Both
 Operator-owned and image-owned bundle paths select a reachable, bundle-ready

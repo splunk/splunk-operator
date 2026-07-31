@@ -357,12 +357,15 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `sha256:22a4398917a3dc27bdbe68aa4513c70b2bfd4d62f05a474e55fd6f9600db7ae9`
   passed the recorded fresh-formation, non-captain recovery, active-captain
   recovery, and controller-restart EKS campaigns.
-- [ ] Complete SHC-84. Exact source `67c0d3bd2` and immutable Operator digest
+- [x] Complete SHC-84. Exact source `67c0d3bd2` and immutable Operator digest
   `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`
   passed the Linux source gate and EKS qualification for existing-v4
   reconciliation, fresh formation, forced liveness recovery, and planned
-  non-captain Pod deletion. The supported-version upgrade cell remains open;
-  absence of a suitable older supported source image is not an inferred pass.
+  non-captain Pod deletion. The supported
+  `10.4.2604.0/60dd7967c086 -> 10.5.2605.0/844c593e9c1d` upgrade rolled
+  `2 -> 1 -> 0`, retained at least two endpoints, recorded zero container
+  restarts and 200/200 successful sampled searches, and completed with three
+  registered `Up` target members.
 - [ ] Define and qualify SHC-86 so namespace-first deletion of a referenced
   LicenseManager performs no create after termination begins, removes its
   finalizer without manual intervention, and cleans its owned resources.
@@ -2292,10 +2295,22 @@ zero container restarts. Forced liveness restarted only the target container
 once with the same Pod UID while two peers stayed serving. Planned deletion
 replaced only the non-captain target while the peers stayed serving, then
 returned the replacement after registered/`Up` recovery. The supported-upgrade
-matrix cell remains open.
+matrix cell was still open at this checkpoint.
 
 2026-07-31 UTC: Registered SHC-87 after the same fresh formation temporarily
 reported SHC `Error` and upgrade-validation failure while its referenced
 LicenseManager was still starting, then recovered without user action through
 `Pending` to `Ready`. This is a retryable dependency-status classification and
 supportability requirement; no implementation or qualification is claimed.
+
+2026-07-31 UTC: Completed the bounded SHC-84 qualification with a supported
+Splunk `10.4.2604.0/60dd7967c086` to
+`10.5.2605.0/844c593e9c1d` upgrade. The source cluster retained zero restarts
+despite 29 startup failures on ordinal zero. The LicenseManager upgraded first
+without changing any Search Head UID, restart count, or endpoint. The Search
+Heads then rolled `2 -> 1 -> 0`, retained at least two endpoints, moved
+captaincy dynamically, recorded zero container restarts and 200/200 successful
+sampled searches, and finished `Ready`/`Complete`/`Upgraded` with three
+registered `Up` target members. The result is bounded to the exact current-v4
+version pair; it does not claim v3-to-v4 conversion, every future pair, SAML,
+or every workload.

@@ -58,7 +58,7 @@ without duplicating their full content.
 | SHC-81 | Make SHC CR deletion finalization safe after namespace termination begins | `d053ff65b`, `33ff143d1`, `58437e3ad` | OPS-004, OBS-001, OBS-005 | Source-qualified and EKS-qualified for direct namespace deletion of a paused, healthy three-member SHC: no create after namespace termination, no post-finalization status write, declared PVC deletion completed, and no workload or PV remained |
 | SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | First SH serving correction `0fc1bcf31`; SH drain work `632d9155c`; indexer lifecycle work under SHC-85 | OPS-006, OPS-011, K8S-007, OBS-001, OBS-003, OBS-005 | Partial EKS evidence: the SH correction removed the zero-endpoint captain-transition outage, but an already-admitted captain search still failed. Four-peer searchable indexer restart preserved RF/SF/searchability; existing readiness lost 7/55 HEC submissions, default HEC-aware readiness lost 1/55, and a fast experiment completed 55/55 exactly. SHC-85 later removed manual lifecycle advancement for tested Operator-owned four-peer rolls, including controller-Pod restart recovery during `Decommissioning`, with exact 80/80, 30/30, 100/100, and stable 30/30 records on the official fixed KV Store build. Splunk-managed App Framework target control, configuration variants, client delivery, conflict, and unhealthy-redundancy gates remain open |
 | SHC-83 | Prevent traffic readiness before image-owned SHC initialization, synchronization, and internal Splunk restarts are complete | `635b81bc4`, `daf6b0608`, `0a2465cbe`, `85b00fd9f`, `2889c8002` on `codex/shc-83-startup-readiness-qualification` | HLT-001, HLT-002, HLT-009, STS-012, OBS-001 | Source-qualified and EKS-qualified for a fresh three-member formation with zero premature client endpoints, exactly one initial-formation restart Event, and twelve stable three-endpoint samples after `Complete`. Established non-captain and active-captain replacements retained at least two endpoints and returned to three; captaincy moved dynamically from ordinal zero to ordinal two. Operator replacement retained all three endpoints, Search Head UIDs, durable formation state, and zero restarts. The EKS campaign also corrected a circular dependency by separating internal management target eligibility from client Service readiness during bounded first formation |
-| SHC-84 | Bound first-start and upgrade startup probes and guarantee prompt TERM exit for kubelet-initiated restarts | Policy `968e19b94`, API validation `c58ff86cd`, merge fix `67c0d3bd2`; candidate monitor hardening `cbaef60af` on `codex/shc-84-startup-term-qualification` | HLT-009, RUN-003, RUN-004, REJ-005, OBS-005 | Source-qualified and partially EKS-qualified with Operator digest `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`: existing-v4 reconciliation, fresh formation with zero restarts, one forced liveness restart with unchanged Pod UID and at least two endpoints, and planned non-captain deletion with only the target replaced all passed. Startup/liveness grace rendered 660, readiness grace remained unset, and Pod grace remained 1200. A supported-version upgrade capable of exercising image-owned upgrade work remains open |
+| SHC-84 | Bound first-start and upgrade startup probes and guarantee prompt TERM exit for kubelet-initiated restarts | Policy `968e19b94`, API validation `c58ff86cd`, merge fix `67c0d3bd2`; monitors `cbaef60af`, `524636f39`; source fixture `4718cef6f` on `codex/shc-84-startup-term-qualification` | HLT-009, RUN-003, RUN-004, REJ-005, OBS-005 | Source- and EKS-qualified with Operator digest `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`: existing-v4 reconciliation, fresh formation, forced liveness, planned deletion, and the supported `10.4.2604.0/60dd7967c086` to `10.5.2605.0/844c593e9c1d` upgrade passed. The upgrade replaced ordinals `2 -> 1 -> 0`, retained at least two endpoints, recorded zero container restarts, moved captaincy dynamically, completed 200/200 sampled searches, and finished with three registered `Up` target members. Startup/liveness grace rendered 660, readiness grace remained unset, and Pod grace remained 1200 |
 | SHC-85 | Separate indexer serving readiness from lifecycle progress and require previous-peer network-path recovery before authorizing another disruption | `3f60d9301`, `11d719f64`, `7ff844f4a` on `codex/shc-85-indexer-serving-lifecycle`; controller-restart evidence on `codex/shc-85-controller-restart-qualification` | OPS-011, K8S-007, OBS-001, OBS-002, OBS-003 | Source-qualified and EKS-qualified for Operator-owned four-peer RF3/SF2 `OnDelete` revision rolls on official Splunk build `10.5.2605.0/844c593e9c1d`: automatic `3 -> 2 -> 1 -> 0` progress, one withdrawn target at a time, previous-peer remote serving recovery before the next target, zero container restarts, four Ansible `failed=0` results, no prior KV Store failure signature, and final RF/SF/all-searchable health. A separate campaign deleted the Operator during persisted ordinal-3 `Decommissioning`; the replacement retained the exact operation/target without a duplicate decommission Event and completed the full roll. Principal and stable workload records completed exact 100/100 and 30/30 with zero failures; an overlapping 80/80 exact record transparently classified one valid initial empty result as a search failure. Longer disconnection, leader contention, conflict, redundancy, protocol/configuration variants, and Splunk-managed App Framework next-target control remain open |
 | SHC-86 | Make referenced LicenseManager finalization safe after namespace termination begins | Pending | OPS-012, OBS-001, OBS-005 | Registered after SHC-83 qualification teardown removed the Search Head workload and storage but a LicenseManager finalizer retained the namespace while reconciliation attempted to recreate a Secret. The finalizer was cleared only after the remaining resources were verified absent. This is a separate cross-resource deletion contract; no implementation or qualification is claimed |
 | SHC-87 | Distinguish retryable referenced-tier dependency convergence from terminal dependency or upgrade failure | Pending | OBS-001, OBS-004, OBS-005 | Registered after fresh SHC-84 formation temporarily reported `Error` and upgrade-path validation failure while its referenced LicenseManager was still starting, then recovered without user action through `Pending` to `Ready`. Normal dependency ordering must report Pending/Progressing with a bounded dependency reason; no implementation or qualification is claimed |
@@ -457,15 +457,23 @@ Splunkd change or weakened KV gate is part of SHC-78.
 - accepted Operator binary source:
   `67c0d3bd28c3d88a72d629ffb1245a139399fc0d`;
 - evidence-monitor source:
-  `cbaef60af652a17acdefe31a608cc8ced265c4f1`;
+  `cbaef60af652a17acdefe31a608cc8ced265c4f1` and
+  `524636f3938e87ae180b286d5ad4007aaef7de9e`;
+- supported-upgrade source fixture:
+  `4718cef6fd2c4a738dca80dc163b7f55e77525f4`;
 - Operator image digest:
   `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`;
 - EKS cluster: `vivek-spl-301372` in `us-west-2`, Kubernetes
   `v1.31.14-eks-8f14419`;
 - accepted namespace:
   `shc84-startup-term-candidate`;
-- runtime digest:
+- fixed target runtime digest:
   `sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`;
+- supported source runtime:
+  `10.4.2604.0/60dd7967c086`, digest
+  `sha256:04b0a011f27e4cfb9930d1dd8c430d5da11ef596d08c6b98f98184589d727a9a`;
+- supported upgrade namespace:
+  `shc84-upgrade-candidate`;
 - Linux gate: `make generate manifests`, `make fmt vet build`,
   `git diff --exit-code`, and `make test`: 41 suites, 156 specifications,
   zero failures, 78.6 percent composite coverage;
@@ -477,11 +485,28 @@ Splunkd change or weakened KV gate is part of SHC-78.
   unchanged Pod UID, while two peer endpoints remained serving;
 - planned deletion: only non-captain ordinal one changed Pod UID, while two
   peer endpoints remained serving, before registered/`Up` and client readiness
-  returned; and
+  returned;
+- supported source formation: ordinal zero accumulated 29 startup failures
+  without restarting, and the cluster reached twelve stable three-endpoint
+  samples with zero restarts;
+- LicenseManager prerequisite upgrade: the dependency changed to the target
+  digest while all Search Head UIDs, restart counts, and three endpoints
+  remained unchanged;
+- supported Search Head upgrade: ordinals `2 -> 1 -> 0` were replaced one at a
+  time, endpoint count never fell below two, captaincy moved from ordinal zero
+  to ordinal two, all replacement containers retained zero restarts, and final
+  state had three registered `Up` target members;
+- workload evidence: 200/200 authenticated Service searches returned HTTP 200
+  with non-empty responses during the sampled portion of the upgrade; and
 - evidence files on the qualification workstation:
   `build/_test/shc84/candidate-fresh-fixed.tsv`,
   `build/_test/shc84/candidate-forced-liveness-fixed.tsv`, and
-  `build/_test/shc84/candidate-planned-delete-fixed.tsv`.
+  `build/_test/shc84/candidate-planned-delete-fixed.tsv`,
+  `build/_test/shc84/upgrade-source-formation.tsv`,
+  `build/_test/shc84/license-manager-upgrade.tsv`,
+  `build/_test/shc84/supported-upgrade.tsv`,
+  `build/_test/shc84/supported-upgrade-search.tsv`, and
+  `build/_test/shc84/post-upgrade-validation.txt`.
 
 ## Next execution records
 
@@ -498,8 +523,9 @@ serving-readiness/lifecycle-progress gap exposed by SHC-82. SHC-85 is now
 source-qualified and EKS-qualified for the bounded Operator-owned path recorded
 above. SHC-82 remains selected on its isolated evidence branch. SHC-83 is
 source- and EKS-qualified for its bounded current-v4 contract. SHC-84 is
-source-qualified and partially EKS-qualified; its supported-upgrade matrix cell
-remains open. SHC-86 records the independently observed LicenseManager
+source- and EKS-qualified for its bounded current-v4 contract and the exact
+supported 10.4-to-10.5 upgrade recorded above. SHC-86 records the independently
+observed LicenseManager
 namespace-finalization gap and remains unassigned. SHC-87 records the separate
 retryable dependency-status classification gap and remains unassigned.
 Registration or assignment alone does not claim implementation. Each
@@ -665,7 +691,8 @@ non-captain recovery, active-captain recovery, and Operator replacement.
 Internal management target eligibility is intentionally independent of client
 Service readiness only during the bounded first-formation stages needed to
 complete that work. The separate SHC-84 startup-budget and TERM-exit contract
-remains open.
+was still open at this point and was subsequently closed by the bounded
+2026-07-31 qualification recorded below.
 
 2026-07-30 UTC: Registered OPS-012/SHC-86 after SHC-83 qualification teardown
 removed the Search Head Pods and storage but a LicenseManager finalizer
@@ -682,3 +709,17 @@ exact-once shutdown helper and PID-1 TERM correction. The campaign first
 measures current-v4 startup, liveness, and Pod termination defaults on the
 official fixed Splunk runtime. Selection does not claim a new policy,
 implementation, or qualification.
+
+2026-07-31 UTC: Closed the bounded SHC-84 matrix. Exact Operator source
+`67c0d3bd2` and digest
+`sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`
+passed existing-v4 reconciliation, fresh formation, forced liveness, planned
+deletion, and the supported Splunk
+`10.4.2604.0/60dd7967c086 -> 10.5.2605.0/844c593e9c1d` upgrade. The source
+formation retained zero restarts despite 29 startup failures on one member.
+The dependency-first LicenseManager upgrade changed no Search Head identity or
+restart count and retained three endpoints. The Search Heads then rolled
+`2 -> 1 -> 0`, retained at least two endpoints, dynamically moved captaincy,
+recorded zero container restarts and 200/200 successful sampled searches, and
+finished with three registered `Up` target members. This record does not
+generalize to every version pair, v3-to-v4 conversion, SAML, or every workload.

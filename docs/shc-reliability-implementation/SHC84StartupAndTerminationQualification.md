@@ -1,9 +1,8 @@
 # SHC-84 Startup and Termination Qualification
 
 Status: implementation source and candidate EKS behavior are qualified for
-existing-v4 reconciliation, fresh formation, forced liveness recovery, and
-planned Pod deletion. A supported-version upgrade remains an explicitly
-unqualified matrix cell.
+existing-v4 reconciliation, fresh formation, forced liveness recovery, planned
+Pod deletion, and the recorded supported 10.4-to-10.5 image upgrade.
 
 ## Scope
 
@@ -40,6 +39,8 @@ Operator branch:
 | `fb9f7b6dc` | Qualify the planned-deletion baseline and harden peer availability checks |
 | `67c0d3bd2` | Reconcile probe-grace-only Pod-template changes and add regression coverage |
 | `cbaef60af` | Make candidate monitors fail on peer replacement, peer restart, endpoint loss, or extra target restart |
+| `524636f39` | Add the supported-upgrade availability and replacement monitor |
+| `4718cef6f` | Pin the supported 10.4 source fixture used by the EKS upgrade |
 
 Docker-Splunk branch:
 `codex/shc-84-startup-term-qualification`
@@ -55,8 +56,10 @@ runtime code.
 The accepted Operator binary was built from exact commit
 `67c0d3bd28c3d88a72d629ffb1245a139399fc0d` and published at immutable digest
 `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`.
-Commit `cbaef60af652a17acdefe31a608cc8ced265c4f1` contains later evidence-monitor
-hardening only; it is not claimed as the binary source.
+Commits `cbaef60af652a17acdefe31a608cc8ced265c4f1`,
+`524636f3938e87ae180b286d5ad4007aaef7de9e`, and
+`4718cef6fd2c4a738dca80dc163b7f55e77525f4` contain later evidence fixtures,
+monitoring, and documentation only; they are not claimed as the binary source.
 
 ## Kubernetes contract
 
@@ -125,8 +128,10 @@ client endpoints at `2026-07-30T23:48:44Z`.
 This proves the fixed runtime can form under the old default in this
 environment. It does not make that approximately six-minute startup budget
 acceptable: an earlier supported first start took about 7 minutes 24 seconds
-and was killed by that budget, and supported upgrade duration has not yet been
-qualified against the candidate.
+and was killed by that budget. The supported source formation recorded later
+in this document required 29 startup-probe attempts on one member; the accepted
+candidate then completed the supported upgrade without a probe-triggered
+restart.
 
 ## Direct TERM result
 
@@ -385,7 +390,107 @@ Pod's hook output was not durably available after replacement. Availability,
 identity, and rejoin behavior are qualified; durable per-Pod shutdown-stage
 retention remains a separate observability requirement.
 
-## Remaining acceptance gates
+## Supported-upgrade immutable inputs
+
+The supported-upgrade campaign used only digest-pinned images:
+
+| Component | Qualified input |
+|---|---|
+| Operator | Source `67c0d3bd28c3d88a72d629ffb1245a139399fc0d`; image digest `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe` |
+| Source Splunk | `splunkcloud-10.4.2604.0-60dd7967c086`; image digest `sha256:04b0a011f27e4cfb9930d1dd8c430d5da11ef596d08c6b98f98184589d727a9a` |
+| Target Splunk | `splunkcloud-10.5.2605.0-844c593e9c1d`; image digest `sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2` |
+| Docker-Splunk runtime | Source `f063cfd3936c42428c0775783b8415c2fcfbb3ef`; Splunk Ansible `5e9e12fd46f2d24823b2b9a291cc5fa14abaf8f5` |
+| Kubernetes | EKS `v1.31.14-eks-8f14419`, namespace `shc84-upgrade-candidate` |
+
+The source fixture is
+`test/fixtures/shc-reliability/shc84-supported-upgrade-source.yaml`. The
+source and target images both contained the same qualified Docker-Splunk
+shutdown implementation. Only the Splunk build changed.
+
+## Supported source formation result
+
+The three-member v4 source cluster formed from Splunk
+`10.4.2604.0/60dd7967c086` and retained zero Kubernetes container restarts. One
+member accumulated 29 consecutive startup-probe failures from
+`2026-07-31T04:40:05Z` through `2026-07-31T04:54:05Z` before initialization
+completed. A failure threshold of 12 would have restarted that container before
+the observed work completed. The accepted threshold of 60 kept the container
+alive, and the first `Ready`/`Complete`, three-endpoint sample was
+`2026-07-31T05:09:26Z`, followed by twelve stable samples.
+
+The test environment separately reached an EC2 EBS attachment limit while the
+remaining Pods were scheduling. Old completed qualification namespaces and
+their PVCs were removed, after which scheduling resumed. This was cluster
+capacity exhaustion, not a Splunk or Operator lifecycle failure, and is not
+counted as upgrade availability evidence.
+
+## LicenseManager prerequisite upgrade result
+
+The referenced LicenseManager was upgraded to the target digest before the
+Search Head Cluster. From `2026-07-31T05:14:33Z` through
+`2026-07-31T05:18:22Z`:
+
+- the LicenseManager Pod UID changed and the replacement reached `Ready` on
+  Splunk `10.5.2605.0/844c593e9c1d`;
+- the LicenseManager replacement recorded zero container restarts;
+- all three Search Head Pod UIDs and restart counts remained unchanged; and
+- the SHC remained `Ready` with three client endpoints.
+
+This separates dependency-tier upgrade time from the Search Head rollout and
+proves that the prerequisite replacement did not consume Search Head
+availability.
+
+## Supported Search Head upgrade result
+
+After the LicenseManager was ready, the v4 SearchHeadCluster image was changed
+from the source digest to the target digest. The reusable monitor
+`test/fixtures/shc-reliability/shc84_upgrade_monitor.sh` captured 126 samples
+from `2026-07-31T05:18:53Z` through `2026-07-31T05:29:30Z`.
+
+The current `OnDelete` lifecycle replaced the Search Heads in reverse ordinal
+order:
+
+| Target | Endpoint withdrawn | Replacement observed | Three endpoints restored |
+|---|---|---|---|
+| Ordinal 2 | `05:19:03Z` | `05:20:04Z` | `05:22:23Z` |
+| Ordinal 1 | `05:22:28Z` | `05:23:33Z` | `05:25:26Z` |
+| Ordinal 0 | `05:25:32Z` | `05:26:38Z` | `05:28:33Z` |
+
+Measured invariants were:
+
+- client endpoints never fell below two;
+- all three old Pod UIDs were replaced, one target at a time;
+- no source or replacement Search Head container restarted;
+- startup threshold 60, startup/liveness grace 660, no readiness grace, and
+  Pod grace 1200 remained rendered throughout;
+- captaincy moved dynamically from ordinal zero to ordinal two before ordinal
+  zero was replaced; and
+- final status was `Ready`, formation `Complete`, upgrade phase `Upgraded`,
+  three registered `Up` members, three target-digest Pods, and three client
+  endpoints.
+
+An authenticated Service search sampled after the rollout had already begun
+recorded 200 HTTP 200 responses and zero failures from
+`2026-07-31T05:22:44Z` through `2026-07-31T05:29:41Z`. Response bodies were
+non-empty, from 609 through 1628 bytes.
+
+## Post-upgrade Splunk facts
+
+Every Search Head reported Splunk `10.5.2605.0/844c593e9c1d`.
+`/services/server/info`, `/services/shcluster/member/info`,
+`/services/shcluster/captain/info`, and `/services/kvstore/status` returned
+HTTP 200 on all three members. Every member was registered, `Up`, and
+`NoRestart`; KV Store reported `ready`, backup/restore `Ready`, three members,
+and three peers. The supported `splunk show shcluster-status` command succeeded
+on both captain and non-captain members.
+
+`/services/shcluster/captain/members` is role-specific. It returned HTTP 503 on
+the two non-captains and HTTP 200 with three `Up` members on the active captain.
+It must not be treated as a universal per-Pod readiness endpoint. The local
+member and captain-info APIs provide different facts, while the Operator-owned
+readiness gate remains responsible for combining the confirmed SHC state.
+
+## Acceptance matrix
 
 | Acceptance cell | Result |
 |---|---|
@@ -396,9 +501,12 @@ retention remains a separate observability requirement.
 | Same-version persistent-container restart | Passed |
 | Forced liveness failure with probe grace 660 | Passed |
 | Planned Pod deletion with Pod grace 1200 | Passed |
-| Supported-version upgrade exercising image-owned upgrade work | Open |
+| Supported 10.4.2604.0 to 10.5.2605.0 upgrade | Passed |
 
-No older supported source image was available in this campaign for the final
-upgrade comparison. That cell remains unqualified; it is not converted into an
-inferred pass. The candidate policy is qualified for the measured current-v4
-paths above, not for every future Splunk upgrade duration.
+This closes SHC-84 for the measured current-v4 paths and the exact supported
+10.4-to-10.5 upgrade above. It does not claim v3-to-v4 conversion, every
+supported source/target pair, every future Splunk upgrade duration, or every
+Search workload. The continuous search sampler began after ordinal two had
+already been selected for upgrade, and SAML was not configured in this
+fixture. Those boundaries remain separate matrix coverage rather than inferred
+passes.

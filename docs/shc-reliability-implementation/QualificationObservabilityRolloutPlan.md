@@ -157,16 +157,18 @@ ownership.
   retained at least two endpoints during established non-captain and
   active-captain recovery, and retained all three endpoints through an
   Operator restart.
-- [ ] Complete SHC-84 qualification. Exact Operator source `67c0d3bd2` and
+- [x] Complete SHC-84 qualification. Exact Operator source `67c0d3bd2` and
   immutable digest
   `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`
   passed the Linux source gate, existing-v4 reconciliation, fresh v4
   formation, forced liveness recovery, and planned non-captain Pod deletion
   on EKS. Startup/liveness probe grace rendered 660 seconds, readiness grace
   remained unset, Pod grace remained 1200 seconds, unaffected peers stayed
-  serving, and the only forced container restart was the target. The
-  supported-version upgrade cell remains open because no suitable older
-  supported source image was available.
+  serving, and the only forced container restart was the target. A supported
+  `10.4.2604.0/60dd7967c086` to `10.5.2605.0/844c593e9c1d` upgrade then rolled
+  `2 -> 1 -> 0`, retained at least two endpoints, recorded zero container
+  restarts and 200/200 successful sampled searches, and completed with three
+  registered `Up` target members.
 - [ ] Qualify SHC-86 with direct namespace-first deletion of a referenced
   LicenseManager, no post-termination create, automatic finalizer removal, and
   exact owned-resource cleanup.
@@ -1607,6 +1609,34 @@ qualification:
   without user action through `Pending` to `Ready`. SHC-87 records the
   requirement to classify normal dependency convergence as Pending/Progressing
   with a bounded dependency reason and reserve Error for terminal state.
+
+2026-07-31 SHC-84 supported-upgrade qualification:
+
+- the source image was Splunk `10.4.2604.0/60dd7967c086` at immutable digest
+  `sha256:04b0a011f27e4cfb9930d1dd8c430d5da11ef596d08c6b98f98184589d727a9a`;
+  the target was Splunk `10.5.2605.0/844c593e9c1d` at immutable digest
+  `sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`;
+- source formation retained zero container restarts even though ordinal zero
+  accumulated 29 startup failures, directly demonstrating why the previous
+  failure threshold of 12 was insufficient for this supported workload;
+- the LicenseManager upgraded first while all Search Head UIDs, restart counts,
+  and three client endpoints remained unchanged;
+- the Search Heads rolled in order `2 -> 1 -> 0`; all three source Pod UIDs
+  were replaced, no replacement container restarted, endpoint count never fell
+  below two, and captaincy moved from ordinal zero to ordinal two;
+- 126 lifecycle samples covered `2026-07-31T05:18:53Z` through
+  `2026-07-31T05:29:30Z`; final state was `Ready`, `Complete`, `Upgraded`, with
+  three registered `Up` target members and three endpoints;
+- 200/200 authenticated Service searches returned HTTP 200 with non-empty
+  results during the sampled portion of the rollout; and
+- post-upgrade validation returned HTTP 200 for server, member, captain-info,
+  and KV Store status on every member. Captain-members returned HTTP 503 on
+  non-captains and HTTP 200 on the captain, confirming that it is not a
+  universal per-Pod readiness endpoint.
+
+The result closes SHC-84 for the exact current-v4 source/target pair. It does
+not infer v3-to-v4 conversion, every future upgrade duration, SAML behavior, or
+every workload.
 
 ## Interfaces and Dependencies
 
