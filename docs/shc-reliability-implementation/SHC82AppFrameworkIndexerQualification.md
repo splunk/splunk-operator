@@ -267,8 +267,10 @@ The first long workload observer was workstation-driven. One Kubernetes API
 operation stalled for approximately 294 seconds between sequence 129 at
 `17:41:04Z` and sequence 130 at `17:45:58Z`. No request failed because the
 monitor attempted no HEC submission or search during that gap. Its final exact
-result can describe sampled request success, but it is not accepted as
-continuous workload evidence. Harness source `b2bf2e71d` therefore runs the
+result was 420 submissions, zero HEC request failures, zero search-request
+failures, and exact `count/min/max/distinct=420/1/420/420`. This can describe
+sampled request success, but it is not accepted as continuous workload
+evidence. Harness source `b2bf2e71d` therefore runs the
 HEC/search loop in an in-cluster Job and leaves Kubernetes and Splunk telemetry
 as separate observers.
 
