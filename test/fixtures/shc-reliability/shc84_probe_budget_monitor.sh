@@ -133,6 +133,11 @@ for ((sample = 1; sample <= samples; sample++)); do
     "${endpoint_count}" "${restarts}" "${pod_detail}" "${probe_events}" \
     "${runtime_artifacts}" >> "${evidence_file}"
 
+  if ((restarts != 0)); then
+    echo "FAIL: fresh formation incurred ${restarts} container restart(s)" >&2
+    exit 1
+  fi
+
   if [[ "${phase}" == "Ready" &&
         "${formation_stage}" == "Complete" &&
         "${desired}" -gt 0 &&

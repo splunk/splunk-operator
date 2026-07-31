@@ -11,14 +11,44 @@ interval_seconds="${SHC84_INTERVAL_SECONDS:-2}"
 stable_samples_required="${SHC84_STABLE_SAMPLES:-12}"
 evidence_file="${SHC84_EVIDENCE_FILE:-build/_test/shc84/term-exit.tsv}"
 service_name="splunk-${cr_name}-search-head-service"
+pod_prefix="splunk-${cr_name}-search-head-"
 
 mkdir -p "$(dirname "${evidence_file}")"
 
+baseline_cr_json="$(kubectl -n "${namespace}" get \
+  searchheadcluster.enterprise.splunk.com "${cr_name}" -o json)"
+desired="$(jq -r '.spec.replicas // 0' <<<"${baseline_cr_json}")"
 baseline_json="$(kubectl -n "${namespace}" get pod "${target_pod}" -o json)"
 baseline_uid="$(jq -r '.metadata.uid' <<<"${baseline_json}")"
 baseline_restarts="$(jq -r \
   '[.status.containerStatuses[]?.restartCount] | add // 0' \
   <<<"${baseline_json}")"
+baseline_pods_json="$(kubectl -n "${namespace}" get pods -o json | jq -c \
+  --arg prefix "${pod_prefix}" \
+  '[.items[] |
+    select(.metadata.name | startswith($prefix)) |
+    {
+      name: .metadata.name,
+      uid: .metadata.uid,
+      restarts: ([.status.containerStatuses[]?.restartCount] | add // 0)
+    }]')"
+baseline_peers_json="$(jq -c --arg target "${target_pod}" \
+  '[.[] | select(.name != $target)]' <<<"${baseline_pods_json}")"
+baseline_endpoint_pods="$(kubectl -n "${namespace}" get \
+  endpointslices.discovery.k8s.io -o json | \
+  jq -c --arg service "${service_name}" \
+    '[.items[] |
+      select(.metadata.labels["kubernetes.io/service-name"] == $service) |
+      .endpoints[]? |
+      select(.conditions.ready == true) |
+      .targetRef.name] | unique')"
+
+if [[ "${desired}" -lt 3 ||
+      "$(jq 'length' <<<"${baseline_pods_json}")" -ne "${desired}" ||
+      "$(jq 'length' <<<"${baseline_endpoint_pods}")" -ne "${desired}" ]]; then
+  echo "FAIL: ${scenario} requires an established, fully serving SHC" >&2
+  exit 1
+fi
 
 printf '%s\n' \
   $'timestamp\tphase\tformation_stage\tendpoints\ttarget\truntime_artifacts\tprobe_events\tprevious_shutdown_log' \
@@ -126,6 +156,31 @@ for ((sample = 1; sample <= samples; sample++)); do
   current_restarts="$(jq -r \
     '[.status.containerStatuses[]?.restartCount] | add // 0' \
     <<<"${pod_json}")"
+  current_pods_json="$(kubectl -n "${namespace}" get pods -o json | jq -c \
+    --arg prefix "${pod_prefix}" \
+    '[.items[] |
+      select(.metadata.name | startswith($prefix)) |
+      {
+        name: .metadata.name,
+        uid: .metadata.uid,
+        restarts: ([.status.containerStatuses[]?.restartCount] | add // 0)
+      }]')"
+  peer_drift="$(jq -cn \
+    --argjson baseline "${baseline_peers_json}" \
+    --argjson current "${current_pods_json}" \
+    '[
+      $baseline[] as $before |
+      $current[] |
+      select(.name == $before.name) |
+      select(.uid != $before.uid or .restarts != $before.restarts) |
+      {
+        name,
+        baselineUID: $before.uid,
+        currentUID: .uid,
+        baselineRestarts: $before.restarts,
+        currentRestarts: .restarts
+      }
+    ]')"
   pod_ready="$(jq -r \
     '[.status.conditions[]? |
       select(.type == "Ready") | .status][0] // "Unknown"' \
@@ -139,13 +194,32 @@ for ((sample = 1; sample <= samples; sample++)); do
     echo "FAIL: ${scenario} replaced the Pod instead of its container" >&2
     exit 1
   fi
+  if ((current_restarts > baseline_restarts + 1)); then
+    echo "FAIL: ${scenario} restarted the target more than once" >&2
+    exit 1
+  fi
+  if ((endpoint_count < desired - 1)); then
+    echo "FAIL: ${scenario} left fewer than $((desired - 1)) endpoints" >&2
+    exit 1
+  fi
+  while IFS= read -r peer_pod; do
+    if ! jq -e --arg pod "${peer_pod}" \
+      'index($pod) != null' >/dev/null <<<"${endpoint_pods}"; then
+      echo "FAIL: unaffected peer ${peer_pod} left the endpoints" >&2
+      exit 1
+    fi
+  done < <(jq -r '.[].name' <<<"${baseline_peers_json}")
+  if (( "$(jq 'length' <<<"${peer_drift}")" > 0 )); then
+    echo "FAIL: an unaffected peer changed identity or restart count: ${peer_drift}" >&2
+    exit 1
+  fi
 
   if ((current_restarts == baseline_restarts + 1)) &&
     [[ "${phase}" == "Ready" &&
       "${formation_stage}" == "Complete" &&
       "${pod_ready}" == "True" &&
       "${containers_ready}" == "True" ]] &&
-    ((endpoint_count == 3)); then
+    ((endpoint_count == desired)); then
     stable_samples=$((stable_samples + 1))
     if ((stable_samples >= stable_samples_required)); then
       echo "PASS: ${scenario} restarted the container exactly once and SHC recovered"
