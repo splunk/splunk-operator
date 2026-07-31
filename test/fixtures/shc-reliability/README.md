@@ -145,3 +145,27 @@ kubectl -n shc84-startup-term exec \
   splunk-shc84-shc-search-head-1 -c splunk -- /bin/kill -TERM 1
 wait
 ```
+
+To qualify the kubelet restart path, run the same recovery monitor against a
+current non-captain and make the image-owned state marker unhealthy. Readiness
+must first remove the member from the client Service. After three consecutive
+liveness failures, Kubernetes must restart only the container, `preStop` and
+TERM must converge on one runtime stop, and the persistent member must rejoin.
+
+```bash
+SHC84_TARGET_POD=splunk-shc84-shc-search-head-2 \
+SHC84_SCENARIO="forced liveness failure" \
+SHC84_EVIDENCE_FILE=build/_test/shc84/forced-liveness.tsv \
+test/fixtures/shc-reliability/shc84_term_exit_monitor.sh &
+monitor_pid=$!
+kubectl -n shc84-startup-term exec \
+  splunk-shc84-shc-search-head-2 -c splunk -- /bin/sh -ec \
+  'printf "%s\n" forced-liveness-failure > \
+    "${CONTAINER_ARTIFACT_DIR:-/opt/container_artifact}/splunk-container.state"'
+wait "${monitor_pid}"
+```
+
+The target must be resolved from the live
+`SearchHeadCluster.status.captain`; ordinal zero is not assumed to be captain.
+The candidate run must additionally show
+`livenessProbe.terminationGracePeriodSeconds: 660`.

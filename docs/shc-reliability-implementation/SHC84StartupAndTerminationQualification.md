@@ -145,6 +145,39 @@ splunk-shutdown: stop completed source=term result=0
 The reusable evidence monitor is
 `test/fixtures/shc-reliability/shc84_term_exit_monitor.sh`.
 
+## Forced-liveness current-runtime result
+
+At `2026-07-31T00:34:23Z`, the test replaced the established non-captain
+ordinal two's container state marker with an unhealthy value. This exercised
+the current kubelet liveness-failure path with the pre-candidate probe policy.
+
+Observed result:
+
+- readiness withdrew the member from the client Service by
+  `2026-07-31T00:34:37Z`, 14 seconds after the trigger;
+- the other two Search Heads remained client endpoints throughout the run;
+- after the configured consecutive liveness failures, `preStop` completed the
+  runtime shutdown helper and TERM observed
+  `shutdown already completed result=0 source=term`;
+- the old container exited with result zero at `2026-07-31T00:36:31Z`;
+- Kubernetes restarted the container exactly once without changing Pod UID
+  `4705f7ab-7b38-4440-850a-6cbeba8d03fb`;
+- the captain remained ordinal zero and all members returned registered and
+  `Up`; and
+- the first `Ready`, `Complete`, three-endpoint observation was
+  `2026-07-31T00:37:55Z`.
+
+The Pod did not retain a `Killing` Event for this restart. Qualification and
+support procedures therefore cannot use that Event as their only restart
+evidence. They must correlate readiness and liveness `Unhealthy` Events with
+the container restart count, `lastState.terminated`, the unchanged Pod UID,
+the previous container shutdown log, and the client EndpointSlice.
+
+This baseline proves the current runtime and hook converge on one stop when
+liveness kills a container. It does not qualify the candidate's 660-second
+probe-level grace, because the pre-candidate Pod had no probe-level override
+and used the 1200-second Pod grace.
+
 ## Source validation
 
 The following completed successfully on macOS:

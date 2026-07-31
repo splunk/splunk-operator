@@ -5,6 +5,7 @@ set -euo pipefail
 namespace="${SHC84_NAMESPACE:-shc84-startup-term}"
 cr_name="${SHC84_CR_NAME:-shc84-shc}"
 target_pod="${SHC84_TARGET_POD:?set SHC84_TARGET_POD}"
+scenario="${SHC84_SCENARIO:-direct TERM}"
 samples="${SHC84_SAMPLES:-360}"
 interval_seconds="${SHC84_INTERVAL_SECONDS:-2}"
 stable_samples_required="${SHC84_STABLE_SAMPLES:-12}"
@@ -135,7 +136,7 @@ for ((sample = 1; sample <= samples; sample++)); do
     <<<"${pod_json}")"
 
   if [[ "${current_uid}" != "${baseline_uid}" ]]; then
-    echo "FAIL: direct TERM replaced the Pod instead of its container" >&2
+    echo "FAIL: ${scenario} replaced the Pod instead of its container" >&2
     exit 1
   fi
 
@@ -147,7 +148,7 @@ for ((sample = 1; sample <= samples; sample++)); do
     ((endpoint_count == 3)); then
     stable_samples=$((stable_samples + 1))
     if ((stable_samples >= stable_samples_required)); then
-      echo "PASS: direct TERM restarted the container exactly once and SHC recovered"
+      echo "PASS: ${scenario} restarted the container exactly once and SHC recovered"
       exit 0
     fi
   else
@@ -157,5 +158,5 @@ for ((sample = 1; sample <= samples; sample++)); do
   sleep "${interval_seconds}"
 done
 
-echo "FAIL: direct TERM did not reach the stable recovery gate" >&2
+echo "FAIL: ${scenario} did not reach the stable recovery gate" >&2
 exit 1
