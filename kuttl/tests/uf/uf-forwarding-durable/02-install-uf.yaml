@@ -1,15 +1,15 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  # Install UF chart in stateless mode (default: storage.emptyDir=true).
-  # KUTTL_SPLUNK_UF_IMAGE is docker.io/splunk/universalforwarder:<tag> — falls back
-  # to chart default if env var is unset.
+  # Recreate avoids a surge pod contending with the existing pod for the two
+  # ReadWriteOnce volumes during replacement.
   - script: |
       EXTRA=''
       if [ -n "${KUTTL_SPLUNK_UF_IMAGE:-}" ]; then
         EXTRA="--set image.repository=${KUTTL_SPLUNK_UF_IMAGE%:*} --set image.tag=${KUTTL_SPLUNK_UF_IMAGE##*:}"
       fi
-      helm install splunk-uf ../../../../helm-chart/splunk-universalforwarder \
+      helm install splunk-uf-durable ../../../../helm-chart/splunk-universalforwarder \
+        -f uf_durable_config.yaml \
         --namespace "$NAMESPACE" \
         --wait \
         --timeout 15m \

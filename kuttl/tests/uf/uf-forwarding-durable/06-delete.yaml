@@ -1,0 +1,10 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: helm uninstall splunk-uf-durable
+    namespaced: true
+  - command: bash -c "kubectl delete pvc -n $NAMESPACE -l app.kubernetes.io/instance=splunk-uf-durable --ignore-not-found --wait=true"
+    namespaced: true
+  - command: helm uninstall splunk-uf-durable-test
+    namespaced: true
+  - command: kubectl delete storageclass uf-gp3 --ignore-not-found

@@ -15,7 +15,11 @@ spec:
     matchLabels:
       {{- include "splunk-universalforwarder.selectorLabels" . | nindent 6 }}
   strategy:
+    {{- if eq .Values.updateStrategy.type "Recreate" }}
+    type: Recreate
+    {{- else }}
     {{- toYaml .Values.updateStrategy | nindent 4 }}
+    {{- end }}
   minReadySeconds: {{ .Values.minReadySeconds }}
   template:
     metadata:
