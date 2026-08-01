@@ -19,6 +19,10 @@ api_fault_image="${SHC85_API_FAULT_IMAGE:-nicolaka/netshoot@sha256:a20c2531bf354
 api_fault_container="${SHC85_API_FAULT_CONTAINER:-shc85-api-disconnect-$(date -u +%s)}"
 api_fault_log="${SHC85_API_FAULT_LOG:-${evidence_file%.tsv}.api-fault.log}"
 api_fault_profile="${SHC85_API_FAULT_PROFILE:-test/fixtures/shc-reliability/shc85-api-fault-profile.json}"
+leader_election_lease="${SHC85_LEADER_ELECTION_LEASE:-270bec8c.splunk.com}"
+leader_failover_timeout_seconds="${SHC85_LEADER_FAILOVER_TIMEOUT_SECONDS:-180}"
+leader_stability_seconds="${SHC85_LEADER_STABILITY_SECONDS:-15}"
+leader_failover_log="${SHC85_LEADER_FAILOVER_LOG:-${evidence_file%.tsv}.leader-failover.log}"
 
 statefulset="splunk-${cr_name}-indexer"
 service_name="${statefulset}-service"
@@ -35,7 +39,8 @@ done
 
 for value in "${hold_seconds}" "${sample_seconds}" \
   "${stage_timeout_seconds}" "${roll_timeout_seconds}" \
-  "${stable_samples_required}"; do
+  "${stable_samples_required}" "${leader_failover_timeout_seconds}" \
+  "${leader_stability_seconds}"; do
   if ! printf '%s\n' "${value}" | grep -Eq '^[1-9][0-9]*$'; then
     printf 'SHC-85 timing values must be positive integers\n' >&2
     exit 2
@@ -53,18 +58,19 @@ TargetSelected | WithdrawingReadiness | Decommissioning | ReadyForReplacement) ;
 esac
 
 case "${controller_fault}" in
-ControllerAbsent | APIDisconnected) ;;
+ControllerAbsent | APIDisconnected | LeaderFailover) ;;
 *)
   printf '%s\n' \
-    'SHC85_CONTROLLER_FAULT must be ControllerAbsent or APIDisconnected' \
+    'SHC85_CONTROLLER_FAULT must be ControllerAbsent, APIDisconnected, or LeaderFailover' \
     >&2
   exit 2
   ;;
 esac
-if [[ "${controller_fault}" == APIDisconnected &&
+if [[ ("${controller_fault}" == APIDisconnected ||
+  "${controller_fault}" == LeaderFailover) &&
   "${hold_stage}" != Decommissioning ]]; then
   printf '%s\n' \
-    'APIDisconnected qualification currently requires SHC85_HOLD_STAGE=Decommissioning' \
+    "${controller_fault} qualification currently requires SHC85_HOLD_STAGE=Decommissioning" \
     >&2
   exit 2
 fi
@@ -77,7 +83,7 @@ fi
 
 mkdir -p "$(dirname "${evidence_file}")"
 printf '%s\n' \
-  $'timestamp\tphase\toperator_replicas\tpod_update\tpods\tendpoints\tliveness_failures\toperator_runtime' \
+  $'timestamp\tphase\toperator_replicas\tpod_update\tpods\tendpoints\tliveness_failures\toperator_runtime\tleader_election' \
   >"${evidence_file}"
 
 operator_scaled=false
@@ -89,6 +95,14 @@ api_fault_applied=false
 api_service_ip=""
 operator_fault_pod=""
 operator_fault_pod_uid=""
+leader_before_pod=""
+leader_before_uid=""
+leader_before_transitions=""
+leader_after_pod=""
+leader_after_uid=""
+leader_after_transitions=""
+leader_target_event_count_before=""
+leader_failover_seconds=0
 operator_original_replicas="$({
   kubectl -n "${operator_namespace}" get deployment \
     "${operator_deployment}" -o json | jq -r '.spec.replicas // 1'
@@ -121,6 +135,48 @@ operator_runtime_json() {
       restartCount: (.status.containerStatuses[0].restartCount // 0),
       state: .status.containerStatuses[0].state
     }]'
+}
+
+leader_election_json() {
+  kubectl -n "${operator_namespace}" get lease \
+    "${leader_election_lease}" -o json | jq -c '{
+      name: .metadata.name,
+      holderIdentity: (.spec.holderIdentity // ""),
+      holderPod: ((.spec.holderIdentity // "") | split("_")[0]),
+      acquireTime: (.spec.acquireTime // ""),
+      renewTime: (.spec.renewTime // ""),
+      durationSeconds: (.spec.leaseDurationSeconds // 0),
+      transitions: (.spec.leaseTransitions // 0)
+    }'
+}
+
+operator_ready_count() {
+  operator_runtime_json | jq '[.[] |
+    select(.ready == true and .restartCount == 0)] | length'
+}
+
+wait_operator_ready_count() {
+  local expected="$1"
+  local timeout_seconds="$2"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS < deadline)); do
+    if [[ "$(operator_ready_count)" -eq "${expected}" ]] &&
+      [[ "$(operator_runtime_json | jq 'length')" -eq "${expected}" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+decommission_event_count() {
+  local target="$1"
+  kubectl -n "${namespace}" get events -o json | jq \
+    --arg target "${target}" '[.items[] |
+      select(.reason == "IndexerDecommissionRequested") |
+      select((.message // "") | contains($target)) |
+      (.series.count // .count // 1)] | add // 0'
 }
 
 force_remove_api_disconnect() {
@@ -281,7 +337,7 @@ liveness_failure_count() {
 record_sample() {
   local phase="$1"
   local current_pods current_endpoints current_update operator_replicas
-  local current_operator_runtime
+  local current_operator_runtime current_leader_election
   current_pods="$(pods_json)"
   current_endpoints="$(endpoint_pods_json)"
   current_update="$(pod_update_json)"
@@ -290,11 +346,12 @@ record_sample() {
       "${operator_deployment}" -o json | jq -r '.status.replicas // 0'
   })"
   current_operator_runtime="$(operator_runtime_json)"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  current_leader_election="$(leader_election_json)"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${phase}" \
     "${operator_replicas}" "${current_update}" "${current_pods}" \
     "${current_endpoints}" "$(liveness_failure_count)" \
-    "${current_operator_runtime}" \
+    "${current_operator_runtime}" "${current_leader_election}" \
     >>"${evidence_file}"
 }
 
@@ -403,6 +460,272 @@ start_api_disconnect() {
   fi
 }
 
+prepare_leader_failover() {
+  local baseline_lease baseline_holder baseline_transitions
+  local current_lease current_runtime stable_deadline initial_renew
+  local renew_progressed=false
+
+  if [[ "${operator_original_replicas}" -ne 1 ]]; then
+    fail "leader-failover-requires-one-original-operator-replica"
+  fi
+  baseline_lease="$(leader_election_json)"
+  baseline_holder="$(jq -r '.holderPod' <<<"${baseline_lease}")"
+  baseline_transitions="$(jq -r '.transitions' <<<"${baseline_lease}")"
+  current_runtime="$(operator_runtime_json)"
+  if ! jq -e --arg holder "${baseline_holder}" '
+      length == 1 and
+      .[0].name == $holder and
+      .[0].ready == true and
+      .[0].restartCount == 0' <<<"${current_runtime}" >/dev/null; then
+    fail "single-operator-leader-baseline-not-stable"
+  fi
+
+  : >"${leader_failover_log}"
+  printf 'LEADER_CONTENDER_BASELINE holder=%s transitions=%s runtime=%s\n' \
+    "${baseline_holder}" "${baseline_transitions}" "${current_runtime}" \
+    >>"${leader_failover_log}"
+  kubectl -n "${operator_namespace}" scale deployment \
+    "${operator_deployment}" --replicas=2 >/dev/null
+  operator_scaled=true
+  if ! wait_operator_ready_count 2 "${leader_failover_timeout_seconds}"; then
+    fail "two-operator-contenders-did-not-become-ready"
+  fi
+
+  current_lease="$(leader_election_json)"
+  baseline_holder="$(jq -r '.holderPod' <<<"${current_lease}")"
+  baseline_transitions="$(jq -r '.transitions' <<<"${current_lease}")"
+  initial_renew="$(jq -r '.renewTime' <<<"${current_lease}")"
+  stable_deadline=$((SECONDS + leader_stability_seconds))
+  while ((SECONDS < stable_deadline)); do
+    current_lease="$(leader_election_json)"
+    current_runtime="$(operator_runtime_json)"
+    if [[ "$(jq -r '.holderPod' <<<"${current_lease}")" != \
+      "${baseline_holder}" ]] ||
+      [[ "$(jq -r '.transitions' <<<"${current_lease}")" -ne \
+        "${baseline_transitions}" ]] ||
+      ! jq -e --arg holder "${baseline_holder}" '
+        length == 2 and
+        all(.[]; .ready == true and .restartCount == 0) and
+        any(.[]; .name == $holder)' <<<"${current_runtime}" >/dev/null; then
+      fail "two-operator-contender-baseline-not-stable"
+    fi
+    if [[ "$(jq -r '.renewTime' <<<"${current_lease}")" != \
+      "${initial_renew}" ]]; then
+      renew_progressed=true
+    fi
+    sleep 1
+  done
+  if [[ "${renew_progressed}" != true ]]; then
+    fail "leader-lease-did-not-renew-with-two-contenders"
+  fi
+  printf 'LEADER_CONTENDERS_READY holder=%s transitions=%s runtime=%s\n' \
+    "${baseline_holder}" "${baseline_transitions}" "${current_runtime}" \
+    >>"${leader_failover_log}"
+  record_sample "leader-contenders-ready"
+}
+
+perform_leader_failover() {
+  local lease_before runtime_before delete_started failover_deadline
+  local current_lease current_runtime successor_found=false
+  local stability_deadline initial_renew renew_progressed=false
+  local current_update expected_decommission_requested successor_log
+
+  if ! wait_operator_ready_count 2 "${leader_failover_timeout_seconds}"; then
+    fail "operator-contenders-not-ready-at-failover-boundary"
+  fi
+  lease_before="$(leader_election_json)"
+  runtime_before="$(operator_runtime_json)"
+  leader_before_pod="$(jq -r '.holderPod' <<<"${lease_before}")"
+  leader_before_transitions="$(jq -r '.transitions' <<<"${lease_before}")"
+  leader_before_uid="$(jq -r --arg holder "${leader_before_pod}" '
+    [.[] | select(.name == $holder) | .uid][0] // ""' \
+    <<<"${runtime_before}")"
+  if [[ -z "${leader_before_pod}" || -z "${leader_before_uid}" ]] ||
+    ! jq -e --arg holder "${leader_before_pod}" '
+      length == 2 and
+      all(.[]; .ready == true and .restartCount == 0) and
+      any(.[]; .name == $holder)' <<<"${runtime_before}" >/dev/null; then
+    fail "active-leader-not-among-ready-contenders"
+  fi
+
+  expected_decommission_requested="$(jq -r '.decommissionRequestedAt // ""' \
+    <<<"${target_operation}")"
+  leader_target_event_count_before="$(decommission_event_count "${target_pod}")"
+  printf 'LEADER_FAILOVER_BEFORE holder=%s uid=%s transitions=%s operation=%s target=%s targetUID=%s decommissionRequestedAt=%s eventCount=%s runtime=%s\n' \
+    "${leader_before_pod}" "${leader_before_uid}" \
+    "${leader_before_transitions}" "${operation_id}" "${target_pod}" \
+    "${target_uid}" "${expected_decommission_requested}" \
+    "${leader_target_event_count_before}" "${runtime_before}" \
+    >>"${leader_failover_log}"
+
+  delete_started="$(date +%s)"
+  kubectl -n "${operator_namespace}" delete pod "${leader_before_pod}" \
+    --grace-period=0 --force --wait=false >/dev/null
+  record_sample "leader-delete-requested"
+
+  failover_deadline=$((SECONDS + leader_failover_timeout_seconds))
+  while ((SECONDS < failover_deadline)); do
+    current_lease="$(leader_election_json)"
+    current_runtime="$(operator_runtime_json)"
+    leader_after_pod="$(jq -r '.holderPod' <<<"${current_lease}")"
+    leader_after_transitions="$(jq -r '.transitions' <<<"${current_lease}")"
+    if [[ -n "${leader_after_pod}" &&
+      "${leader_after_pod}" != "${leader_before_pod}" &&
+      "${leader_after_transitions}" -gt "${leader_before_transitions}" ]] &&
+      jq -e --arg holder "${leader_after_pod}" '
+        any(.[];
+          .name == $holder and .ready == true and .restartCount == 0)' \
+        <<<"${current_runtime}" >/dev/null; then
+      successor_found=true
+      break
+    fi
+    sleep 1
+  done
+  if [[ "${successor_found}" != true ]]; then
+    fail "different-live-leader-was-not-elected"
+  fi
+  if ! wait_operator_ready_count 2 "${leader_failover_timeout_seconds}"; then
+    fail "two-operator-contenders-did-not-recover-after-leader-loss"
+  fi
+
+  current_runtime="$(operator_runtime_json)"
+  if jq -e --arg uid "${leader_before_uid}" \
+    'any(.[]; .uid == $uid)' <<<"${current_runtime}" >/dev/null; then
+    fail "deleted-leader-uid-survived-replacement"
+  fi
+  leader_after_uid="$(jq -r --arg holder "${leader_after_pod}" '
+    [.[] | select(.name == $holder) | .uid][0] // ""' \
+    <<<"${current_runtime}")"
+  if [[ -z "${leader_after_uid}" ]] ||
+    ! jq -e 'length == 2 and
+      all(.[]; .ready == true and .restartCount == 0)' \
+      <<<"${current_runtime}" >/dev/null; then
+    fail "operator-contenders-not-stable-after-leader-loss"
+  fi
+  successor_log="$(kubectl -n "${operator_namespace}" logs \
+    "${leader_after_pod}")"
+  if ! grep -Fq 'Successfully acquired lease' <<<"${successor_log}"; then
+    fail "successor-leader-acquisition-not-logged"
+  fi
+
+  current_lease="$(leader_election_json)"
+  initial_renew="$(jq -r '.renewTime' <<<"${current_lease}")"
+  stability_deadline=$((SECONDS + leader_stability_seconds))
+  while ((SECONDS < stability_deadline)); do
+    current_lease="$(leader_election_json)"
+    current_runtime="$(operator_runtime_json)"
+    if [[ "$(jq -r '.holderPod' <<<"${current_lease}")" != \
+      "${leader_after_pod}" ]] ||
+      [[ "$(jq -r '.transitions' <<<"${current_lease}")" -ne \
+        "${leader_after_transitions}" ]] ||
+      ! jq -e --arg holder "${leader_after_pod}" '
+        length == 2 and
+        all(.[]; .ready == true and .restartCount == 0) and
+        any(.[]; .name == $holder)' <<<"${current_runtime}" >/dev/null; then
+      fail "successor-leader-did-not-remain-stable"
+    fi
+    if [[ "$(jq -r '.renewTime' <<<"${current_lease}")" != \
+      "${initial_renew}" ]]; then
+      renew_progressed=true
+    fi
+    sleep 1
+  done
+  if [[ "${renew_progressed}" != true ]]; then
+    fail "successor-leader-lease-did-not-renew"
+  fi
+
+  current_update="$(pod_update_json)"
+  if ! jq -e --arg operation "${operation_id}" \
+    --arg pod "${target_pod}" --arg uid "${target_uid}" \
+    --arg source "${source_revision}" --arg desired "${desired_revision}" \
+    --arg requested "${expected_decommission_requested}" \
+    --argjson ordinal "${target_ordinal}" '
+      .stage != "Cancelled" and
+      .desiredRevision == $desired and
+      ((.operationID == $operation and
+        .sourceRevision == $source and
+        ((.targetOrdinal // -1) < $ordinal or
+         ((.targetOrdinal // -1) == $ordinal and
+          .targetPod == $pod and
+          .targetPodUID == $uid and
+          .decommissionRequestedAt == $requested))) or
+       (.operationID != $operation and
+        (.targetOrdinal // -1) < $ordinal))' \
+      <<<"${current_update}" >/dev/null; then
+    fail "durable-operation-was-not-resumed-after-leader-loss"
+  fi
+
+  leader_failover_seconds=$(($(date +%s) - delete_started))
+  printf 'LEADER_FAILOVER_AFTER holder=%s uid=%s transitions=%s durationSeconds=%s operation=%s podUpdate=%s runtime=%s\n' \
+    "${leader_after_pod}" "${leader_after_uid}" \
+    "${leader_after_transitions}" "${leader_failover_seconds}" \
+    "${operation_id}" "${current_update}" "${current_runtime}" \
+    >>"${leader_failover_log}"
+  record_sample "leader-failover-complete"
+}
+
+assert_leader_failover_stable() {
+  local current_lease current_runtime
+
+  current_lease="$(leader_election_json)"
+  current_runtime="$(operator_runtime_json)"
+  if [[ "$(jq -r '.holderPod' <<<"${current_lease}")" != \
+    "${leader_after_pod}" ]] ||
+    [[ "$(jq -r '.transitions' <<<"${current_lease}")" -ne \
+      "${leader_after_transitions}" ]] ||
+    ! jq -e --arg holder "${leader_after_pod}" '
+      length == 2 and
+      all(.[]; .ready == true and .restartCount == 0) and
+      any(.[]; .name == $holder)' <<<"${current_runtime}" >/dev/null; then
+    fail "leader-or-contender-changed-during-resumed-roll"
+  fi
+}
+
+restore_single_operator_leader() {
+  local deadline current_runtime current_lease only_pod candidate_holder=""
+  local candidate_renew="" stable_started=0 renew_progressed=false
+
+  kubectl -n "${operator_namespace}" scale deployment \
+    "${operator_deployment}" --replicas="${operator_original_replicas}" \
+    >/dev/null
+  if ! wait_operator_ready_count 1 "${leader_failover_timeout_seconds}"; then
+    fail "single-operator-replica-did-not-restore"
+  fi
+
+  deadline=$((SECONDS + leader_failover_timeout_seconds))
+  while ((SECONDS < deadline)); do
+    current_runtime="$(operator_runtime_json)"
+    current_lease="$(leader_election_json)"
+    only_pod="$(jq -r '.[0].name // ""' <<<"${current_runtime}")"
+    if [[ "$(jq -r '.holderPod' <<<"${current_lease}")" == \
+      "${only_pod}" ]] &&
+      jq -e 'length == 1 and .[0].ready == true and
+        .[0].restartCount == 0' <<<"${current_runtime}" >/dev/null; then
+      if [[ "${candidate_holder}" != "${only_pod}" ]]; then
+        candidate_holder="${only_pod}"
+        candidate_renew="$(jq -r '.renewTime' <<<"${current_lease}")"
+        stable_started="${SECONDS}"
+        renew_progressed=false
+      elif [[ "$(jq -r '.renewTime' <<<"${current_lease}")" != \
+        "${candidate_renew}" ]]; then
+        renew_progressed=true
+      fi
+      if ((SECONDS - stable_started >= leader_stability_seconds)) &&
+        [[ "${renew_progressed}" == true ]]; then
+        operator_scaled=false
+        record_sample "single-operator-leader-restored"
+        return 0
+      fi
+    else
+      candidate_holder=""
+      stable_started=0
+      renew_progressed=false
+    fi
+    sleep 1
+  done
+  fail "single-operator-leader-did-not-stabilize"
+}
+
 fail() {
   record_sample "FAIL-$1" || true
   printf 'FAIL: %s; evidence=%s\n' "$1" "${evidence_file}" >&2
@@ -457,6 +780,9 @@ if [[ -z "${baseline_revision}" ]] ||
 fi
 
 record_sample "baseline"
+if [[ "${controller_fault}" == LeaderFailover ]]; then
+  prepare_leader_failover
+fi
 
 if [[ "${hold_stage}" == TargetSelected ]]; then
   exec 3< <(
@@ -589,8 +915,10 @@ fi
 # Apply the requested controller fault immediately after observing the durable
 # boundary. ControllerAbsent removes all controller processes. APIDisconnected
 # leaves the scheduled Pod in place and rejects only traffic to the in-cluster
-# Kubernetes API Service from that Pod network namespace. In both modes, the
-# slower identity and runtime assertions happen only after the fault is proven.
+# Kubernetes API Service from that Pod network namespace. LeaderFailover force
+# deletes the active lease holder while another controller contender is ready.
+# In every mode, slower identity and runtime assertions happen only after the
+# fault is proven.
 if [[ "${controller_fault}" == ControllerAbsent ]]; then
   if [[ "${controller_stop_started}" != true ]]; then
     kubectl -n "${operator_namespace}" scale deployment \
@@ -622,11 +950,15 @@ if [[ "${controller_fault}" == ControllerAbsent ]]; then
   if [[ "${hold_stage}" == TargetSelected ]]; then
     record_sample "revision-triggered-target-selected-controller-absent"
   fi
-else
+elif [[ "${controller_fault}" == APIDisconnected ]]; then
   start_api_disconnect
+else
+  perform_leader_failover
 fi
 
-if [[ "${hold_stage}" == TargetSelected ]]; then
+if [[ "${controller_fault}" == LeaderFailover ]]; then
+  : # The resumed controller may already have replaced the original target.
+elif [[ "${hold_stage}" == TargetSelected ]]; then
   if kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
     /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
     >/dev/null 2>&1; then
@@ -673,9 +1005,12 @@ if [[ "${hold_stage}" == WithdrawingReadiness ]]; then
 fi
 record_sample "${hold_stage}-controller-${controller_fault}"
 
-controller_fault_start="$(date +%s)"
-hold_deadline=$((controller_fault_start + hold_seconds))
-while [[ "$(date +%s)" -lt "${hold_deadline}" ]]; do
+if [[ "${controller_fault}" == LeaderFailover ]]; then
+  actual_hold_seconds="${leader_failover_seconds}"
+else
+  controller_fault_start="$(date +%s)"
+  hold_deadline=$((controller_fault_start + hold_seconds))
+  while [[ "$(date +%s)" -lt "${hold_deadline}" ]]; do
   current_update="$(pod_update_json)"
   if ! jq -e \
     --arg operation "${operation_id}" \
@@ -792,24 +1127,25 @@ while [[ "$(date +%s)" -lt "${hold_deadline}" ]]; do
   if [[ "$(liveness_failure_count)" -ne 0 ]]; then
     fail "liveness-probe-failed-during-planned-hold"
   fi
-  record_sample "controller-${controller_fault}-hold"
-  sleep "${sample_seconds}"
-done
+    record_sample "controller-${controller_fault}-hold"
+    sleep "${sample_seconds}"
+  done
 
-actual_hold_seconds=$(($(date +%s) - controller_fault_start))
-if ((actual_hold_seconds < hold_seconds)); then
-  fail "controller-fault-shorter-than-requested"
-fi
-if [[ "${hold_stage}" == TargetSelected ]]; then
-  if kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
-    /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
-    >/dev/null 2>&1; then
-    fail "target-selected-gained-readiness-withdrawal-marker"
+  actual_hold_seconds=$(($(date +%s) - controller_fault_start))
+  if ((actual_hold_seconds < hold_seconds)); then
+    fail "controller-fault-shorter-than-requested"
   fi
-elif ! kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
-  /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
-  >/dev/null; then
+  if [[ "${hold_stage}" == TargetSelected ]]; then
+    if kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
+      /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
+      >/dev/null 2>&1; then
+      fail "target-selected-gained-readiness-withdrawal-marker"
+    fi
+  elif ! kubectl -n "${namespace}" exec "${target_pod}" -c splunk -- \
+    /bin/sh -ec "grep -Fx 'export SPLUNK_OPERATOR_LIFECYCLE_HOLD=true' '${driver_file}'" \
+    >/dev/null; then
     fail "lifecycle-hold-marker-lost-during-controller-fault"
+  fi
 fi
 record_sample "controller-${controller_fault}-complete"
 
@@ -826,7 +1162,7 @@ if [[ "${controller_fault}" == APIDisconnected ]]; then
     "${operator_fault_pod_uid}" ]]; then
     fail "operator-pod-replaced-during-api-disconnect"
   fi
-else
+elif [[ "${controller_fault}" == ControllerAbsent ]]; then
   restore_operator
 fi
 kubectl -n "${operator_namespace}" rollout status deployment \
@@ -846,6 +1182,9 @@ target_replaced=false
 stable_samples=0
 
 while ((SECONDS < roll_deadline)); do
+  if [[ "${controller_fault}" == LeaderFailover ]]; then
+    assert_leader_failover_stable
+  fi
   current_update="$(pod_update_json)"
   current_stage="$(jq -r '.stage // ""' <<<"${current_update}")"
   current_ordinal="$(jq -r '.targetOrdinal // -1' <<<"${current_update}")"
@@ -927,6 +1266,22 @@ while IFS= read -r pod; do
     fail "lifecycle-hold-marker-survived-pod-replacement"
   fi
 done < <(pods_json | jq -r '.[].metadata.name')
+
+if [[ "${controller_fault}" == LeaderFailover ]]; then
+  leader_target_event_count_after="$(decommission_event_count "${target_pod}")"
+  if [[ "${leader_target_event_count_after}" -ne \
+    "${leader_target_event_count_before}" ]]; then
+    fail "original-target-decommission-request-was-duplicated"
+  fi
+  assert_leader_failover_stable
+  printf 'LEADER_ROLL_COMPLETED holder=%s transitions=%s targetEventCountBefore=%s targetEventCountAfter=%s order=%s\n' \
+    "${leader_after_pod}" "${leader_after_transitions}" \
+    "${leader_target_event_count_before}" \
+    "${leader_target_event_count_after}" "${seen_ordinals}" \
+    >>"${leader_failover_log}"
+  record_sample "leader-failover-roll-complete"
+  restore_single_operator_leader
+fi
 
 record_sample "PASS"
 printf 'PASS: stage=%s controllerFault=%s duration=%ss order=%s stableSamples=%s evidence=%s\n' \

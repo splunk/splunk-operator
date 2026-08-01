@@ -242,13 +242,15 @@ in-cluster workload Job first, then run the lifecycle monitor. The Job sends
 numbered HEC events and searches through the Services without depending on a
 workstation `kubectl exec` connection. The lifecycle monitor owns the harmless
 `spec.podAnnotations` revision trigger, waits for ordinal three to reach
-the stage selected by `SHC85_HOLD_STAGE`, scales the Operator Deployment to
-zero, and observes an uninterrupted five-minute controller absence. The
-default stage is `ReadyForReplacement`; the other supported values are
-`TargetSelected`, `WithdrawingReadiness`, or `Decommissioning`. Its exit trap
-restores the original controller replica count on success or failure. After
-setting the Deployment replica count to zero, the harness immediately removes
-any remaining controller Pod so it cannot cross the selected stage while
+the stage selected by `SHC85_HOLD_STAGE`, and applies the fault selected by
+`SHC85_CONTROLLER_FAULT`. The default `ControllerAbsent` mode scales the
+Operator Deployment to zero and observes an uninterrupted five-minute
+controller absence. The default stage is `ReadyForReplacement`; the other
+supported values are `TargetSelected`, `WithdrawingReadiness`, or
+`Decommissioning`. Its exit trap restores the original controller replica
+count on success or failure. In `ControllerAbsent` mode, after setting the
+Deployment replica count to zero, the harness immediately removes any
+remaining controller Pod so it cannot cross the selected stage while
 terminating.
 
 The monitor rejects a contaminated baseline before changing the CR. The
@@ -363,3 +365,54 @@ The default `SHC85_CONTROLLER_FAULT=ControllerAbsent` retains the controller
 scale-to-zero campaign described above. API-disconnection qualification must
 not be inferred from NetworkPolicy unless the target CNI is independently
 proved to enforce the selected policy.
+
+### Active controller leader failover
+
+`SHC85_CONTROLLER_FAULT=LeaderFailover` qualifies loss of the active Operator
+controller while a second controller is contending for the Kubernetes
+leader-election Lease. This mode requires an uncontaminated one-replica
+Operator baseline and `SHC85_HOLD_STAGE=Decommissioning`. Before changing the
+IndexerCluster, the harness scales the Operator Deployment to two, requires
+both Pods to be Ready with zero restarts, and proves that one stable Lease
+holder continues to renew while the other Pod remains a contender.
+
+When ordinal three has durably recorded both the decommission request and an
+observed Splunk decommission state, the harness resolves the active Lease
+holder and force-deletes that exact Pod. It accepts any different live
+controller contender as the successor; Kubernetes leader election does not
+promise that the Pod which was already waiting will win instead of a newly
+created replacement. A passing run requires the Lease transition count to
+increase, the successor to log successful acquisition, its Lease renewal to
+remain stable, the Deployment to return to two Ready zero-restart Pods, and
+the durable indexer operation to resume without cancellation. The two
+controller Pods remain running for the complete `3 -> 2 -> 1 -> 0` roll. Every
+sample requires the same sole Lease holder, two healthy contenders, at most
+one unavailable indexer, and zero indexer container restarts.
+
+The monitor also records the target-specific
+`IndexerDecommissionRequested` Event count immediately before leader deletion
+and after convergence. The count must not increase, proving that takeover did
+not issue a duplicate decommission request for the interrupted target. At the
+end, the harness restores the original one-replica Operator configuration and
+requires the remaining Pod to hold and renew the Lease before reporting
+success. The main TSV adds a `leader_election` JSON column; a bounded
+`*.leader-failover.log` records the before/after holder UIDs, transition
+counts, durable operation, Event counts, failover duration, and contender
+runtime.
+
+Run the campaign with:
+
+```bash
+SHC85_NAMESPACE=shc85-lifecycle-hold \
+SHC85_HOLD_STAGE=Decommissioning \
+SHC85_CONTROLLER_FAULT=LeaderFailover \
+SHC85_LEADER_ELECTION_LEASE=270bec8c.splunk.com \
+SHC85_EVIDENCE_FILE=build/_test/shc85/leader-failover.tsv \
+test/fixtures/shc-reliability/shc85_lifecycle_hold_monitor.sh
+```
+
+This is a single-active-leader failover qualification using the Operator's
+normal Lease protocol. It does not inject two simultaneous active leaders,
+corrupt or delete the Lease, partition contenders from one another, or prove
+behavior under an API quorum loss. Those conflict and split-brain scenarios
+remain separate qualification work.
