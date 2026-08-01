@@ -59,7 +59,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	cr.Kind = "IngestorCluster"
 
 	// Initialize phase and conditions (must be before validation so we can set error messages)
-	isPaused := cr.GetAnnotations()[enterpriseApi.IngestorClusterPausedAnnotation] == "true"
+	isPaused := cr.GetDeletionTimestamp() == nil &&
+		cr.GetAnnotations()[enterpriseApi.IngestorClusterPausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
@@ -70,8 +71,32 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
+	// Update the CR Status unless successful finalization has already removed
+	// the finalizer and allowed the API server to delete the object.
+	updateStatusOnReturn := true
+	defer func() {
+		if updateStatusOnReturn {
+			updateCRStatus(ctx, client, cr, &err)
+		}
+	}()
+
+	// Finalization cannot depend on Queue/ObjectStorage validation, App
+	// Framework work, or ApplySplunkConfig because those normal paths may
+	// create namespace content.
+	if cr.GetDeletionTimestamp() != nil {
+		result, err = finalizeIngestorClusterDeletion(
+			ctx,
+			client,
+			cr,
+			eventPublisher,
+			setPhaseAndConditions,
+			result,
+		)
+		if err == nil {
+			updateStatusOnReturn = false
+		}
+		return result, err
+	}
 
 	// Validate and updates defaults for CR
 	err = validateIngestorClusterSpec(ctx, client, cr)
@@ -116,39 +141,6 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		eventPublisher.Warning(ctx, "ApplySplunkConfigFailed", "Apply of general config failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
 		return result, fmt.Errorf("apply splunk config: %w", err)
-	}
-
-	// Check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), false)
-			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailed", "Apply of monitoring console config map failed. Check operator logs for details.")
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
-				return result, err
-			}
-		}
-
-		// If this is the last of its kind getting deleted,
-		// remove the entry for this CR type from configMap or else
-		// just decrement the refCount for this CR type
-		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkIngestor)
-			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
-				return result, err
-			}
-		}
-
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIngestor)
-
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-		if terminating && err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
-		} else {
-			result.Requeue = false
-		}
-		return result, err
 	}
 
 	// Create or update a headless service for ingestor cluster
@@ -299,6 +291,72 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		result.RequeueAfter = 0
 	}
 
+	return result, nil
+}
+
+// finalizeIngestorClusterDeletion performs only deletion-safe cleanup and
+// declared finalizer work.
+func finalizeIngestorClusterDeletion(
+	ctx context.Context,
+	client client.Client,
+	cr *enterpriseApi.IngestorCluster,
+	eventPublisher *K8EventPublisher,
+	setPhaseAndConditions func(enterpriseApi.Phase, string),
+	result reconcile.Result,
+) (reconcile.Result, error) {
+	setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
+
+	if cr.Spec.MonitoringConsoleRef.Name != "" {
+		if _, err := ApplyMonitoringConsoleEnvConfigMap(
+			ctx,
+			client,
+			cr.GetNamespace(),
+			cr.GetName(),
+			cr.Spec.MonitoringConsoleRef.Name,
+			[]corev1.EnvVar{},
+			false,
+		); err != nil {
+			eventPublisher.Warning(
+				ctx,
+				"ApplyMonitoringConsoleEnvConfigMapFailed",
+				"Apply of monitoring console config map failed. Check operator logs for details.",
+			)
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to update Monitoring Console env ConfigMap during deletion",
+			)
+			return result, err
+		}
+	}
+
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		if err := UpdateOrRemoveEntryFromConfigMapLocked(
+			ctx,
+			client,
+			cr,
+			SplunkIngestor,
+		); err != nil {
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to clean up resources during deletion",
+			)
+			return result, err
+		}
+	}
+
+	_ = DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIngestor)
+
+	_, err := splctrl.CheckForDeletion(ctx, cr, client)
+	if err != nil {
+		eventPublisher.Warning(
+			ctx,
+			EventReasonDeleteFailed,
+			fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()),
+		)
+		return result, err
+	}
+
+	result.Requeue = false
 	return result, nil
 }
 

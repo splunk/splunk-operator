@@ -57,7 +57,8 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 
 	var err error
 	// Initialize phase and conditions
-	isPaused := cr.GetAnnotations()[enterpriseApi.MonitoringConsolePausedAnnotation] == "true"
+	isPaused := cr.GetDeletionTimestamp() == nil &&
+		cr.GetAnnotations()[enterpriseApi.MonitoringConsolePausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
@@ -68,8 +69,31 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
+	// Update the CR Status unless successful finalization has already removed
+	// the finalizer and allowed the API server to delete the object.
+	updateStatusOnReturn := true
+	defer func() {
+		if updateStatusOnReturn {
+			updateCRStatus(ctx, client, cr, &err)
+		}
+	}()
+
+	// Finalization cannot depend on validation, App Framework work, or
+	// ApplySplunkConfig because those paths may create namespace content.
+	if cr.GetDeletionTimestamp() != nil {
+		result, err = finalizeMonitoringConsoleDeletion(
+			ctx,
+			client,
+			cr,
+			eventPublisher,
+			setPhaseAndConditions,
+			result,
+		)
+		if err == nil {
+			updateStatusOnReturn = false
+		}
+		return result, err
+	}
 
 	// validate and updates defaults for CR
 	err = validateMonitoringConsoleSpec(ctx, client, cr)
@@ -107,28 +131,6 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
 		return result, fmt.Errorf("apply splunk config: %w", err)
-	}
-
-	// check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		// If this is the last of its kind getting deleted,
-		// remove the entry for this CR type from configMap or else
-		// just decrement the refCount for this CR type.
-		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkLicenseManager)
-			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
-				return result, err
-			}
-		}
-
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
-		} else {
-			result.Requeue = false
-		}
-		return result, err
 	}
 
 	// create or update a headless service
@@ -200,6 +202,47 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
+	return result, nil
+}
+
+// finalizeMonitoringConsoleDeletion performs only deletion-safe cleanup and
+// declared finalizer work.
+func finalizeMonitoringConsoleDeletion(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.MonitoringConsole,
+	eventPublisher *K8EventPublisher,
+	setPhaseAndConditions func(enterpriseApi.Phase, string),
+	result reconcile.Result,
+) (reconcile.Result, error) {
+	setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
+
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		if err := UpdateOrRemoveEntryFromConfigMapLocked(
+			ctx,
+			client,
+			cr,
+			SplunkLicenseManager,
+		); err != nil {
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to clean up resources during deletion",
+			)
+			return result, err
+		}
+	}
+
+	_, err := splctrl.CheckForDeletion(ctx, cr, client)
+	if err != nil {
+		eventPublisher.Warning(
+			ctx,
+			EventReasonDeleteFailed,
+			fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()),
+		)
+		return result, err
+	}
+
+	result.Requeue = false
 	return result, nil
 }
 

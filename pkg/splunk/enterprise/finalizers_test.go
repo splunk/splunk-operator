@@ -321,6 +321,43 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	if deleted != wantDeleted || err != nil {
 		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)
 	}
+
+	// The v4 deletion-first Apply paths intentionally bypass the normal
+	// reconciliation calls that used to create/update namespace Secrets and
+	// configuration ConfigMaps before finalization. Preserve the legacy call
+	// expectations below for v3, LicenseManager, and SearchHeadCluster, while
+	// asserting the stronger deletion contract for the tiers migrated here.
+	if cr.GetDeletionTimestamp() != nil {
+		switch cr.GetObjectKind().GroupVersionKind().Kind {
+		case "Standalone", "ClusterManager", "MonitoringConsole", "IndexerCluster", "IngestorCluster":
+			if got := len(c.Calls["Create"]); got != 0 {
+				t.Fatalf("deletion-first Apply made %d Create calls; want 0", got)
+			}
+			if got := len(c.Calls["Update"]); got != 1 {
+				t.Fatalf("deletion-first Apply made %d Update calls; want only the CR finalizer update", got)
+			}
+			updated := c.Calls["Update"][0].Obj
+			if updated.GetName() != cr.GetName() || updated.GetNamespace() != cr.GetNamespace() {
+				t.Fatalf(
+					"deletion-first Apply updated %s/%s; want CR %s/%s",
+					updated.GetNamespace(),
+					updated.GetName(),
+					cr.GetNamespace(),
+					cr.GetName(),
+				)
+			}
+			if got := len(c.Calls["List"]); got == 0 {
+				t.Fatal("deletion-first Apply did not list PVCs")
+			}
+			if got := len(c.Calls["Delete"]); got == 0 {
+				t.Fatal("deletion-first Apply did not delete PVCs")
+			}
+			if finalizers := cr.GetFinalizers(); len(finalizers) != 0 {
+				t.Fatalf("deletion-first Apply retained finalizers: %v", finalizers)
+			}
+			return
+		}
+	}
 	c.CheckCalls(t, "Testsplctrl.CheckForDeletion", mockCalls)
 }
 

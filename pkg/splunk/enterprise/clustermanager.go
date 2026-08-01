@@ -60,7 +60,8 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 	// Initialize phase and conditions
-	isPaused := cr.GetAnnotations()[enterpriseApi.ClusterManagerPausedAnnotation] == "true"
+	isPaused := cr.GetDeletionTimestamp() == nil &&
+		cr.GetAnnotations()[enterpriseApi.ClusterManagerPausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
@@ -71,8 +72,31 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
+	// Update the CR Status unless successful finalization has already removed
+	// the finalizer and allowed the API server to delete the object.
+	updateStatusOnReturn := true
+	defer func() {
+		if updateStatusOnReturn {
+			updateCRStatus(ctx, client, cr, &err)
+		}
+	}()
+
+	// Finalization cannot depend on validation, SmartStore or App Framework
+	// work, ApplySplunkConfig, or a live Cluster Manager process.
+	if cr.GetDeletionTimestamp() != nil {
+		result, err = finalizeClusterManagerDeletion(
+			ctx,
+			client,
+			cr,
+			eventPublisher,
+			setPhaseAndConditions,
+			result,
+		)
+		if err == nil {
+			updateStatusOnReturn = false
+		}
+		return result, err
+	}
 
 	// validate and updates defaults for CR
 	err = validateClusterManagerSpec(ctx, client, cr)
@@ -146,50 +170,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// Smart Store secrets get created manually and should not be managed by the Operator
 	if &cr.Spec.SmartStore != nil {
 		_ = DeleteOwnerReferencesForS3SecretObjects(ctx, client, cr, &cr.Spec.SmartStore)
-	}
-
-	// check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
-			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
-				return result, err
-			}
-		}
-
-		// If this is the last of its kind getting deleted,
-		// remove the entry for this CR type from configMap or else
-		// just decrement the refCount for this CR type.
-		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkClusterManager)
-			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up app framework ConfigMap during deletion")
-				return result, err
-			}
-		}
-
-		// Check if ClusterManager has any remaining references to other CRs, if so don't delete
-		err = checkCmRemainingReferences(ctx, client, cr)
-		if err != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Cluster Manager still has remaining CR references")
-			return result, err
-		}
-
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkClusterManager)
-
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-
-		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
-		} else {
-			result.Requeue = false
-		}
-		if err != nil {
-			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()))
-		}
-		return result, err
 	}
 
 	// create or update a regular service for the cluster manager
@@ -306,6 +286,89 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		result.RequeueAfter = 0
 	}
 
+	return result, nil
+}
+
+// finalizeClusterManagerDeletion avoids all normal-reconciliation creates and
+// runtime calls. The complete set of Monitoring Console keys is deterministic,
+// so cleanup does not need the namespace Secret or a live Splunk endpoint.
+func finalizeClusterManagerDeletion(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.ClusterManager,
+	eventPublisher *K8EventPublisher,
+	setPhaseAndConditions func(enterpriseApi.Phase, string),
+	result reconcile.Result,
+) (reconcile.Result, error) {
+	setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
+
+	if cr.Spec.MonitoringConsoleRef.Name != "" {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		extraEnv = append(
+			extraEnv,
+			corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"},
+			corev1.EnvVar{
+				Name: "SPLUNK_MULTISITE_MASTER",
+				Value: splcommon.GetSplunkServiceName(
+					SplunkClusterManager,
+					cr.GetName(),
+					false,
+				),
+			},
+		)
+		if _, err := ApplyMonitoringConsoleEnvConfigMap(
+			ctx,
+			client,
+			cr.GetNamespace(),
+			cr.GetName(),
+			cr.Spec.MonitoringConsoleRef.Name,
+			extraEnv,
+			false,
+		); err != nil {
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to update Monitoring Console env ConfigMap during deletion",
+			)
+			return result, err
+		}
+	}
+
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		if err := UpdateOrRemoveEntryFromConfigMapLocked(
+			ctx,
+			client,
+			cr,
+			SplunkClusterManager,
+		); err != nil {
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to clean up app framework ConfigMap during deletion",
+			)
+			return result, err
+		}
+	}
+
+	if err := checkCmRemainingReferences(ctx, client, cr); err != nil {
+		setPhaseAndConditions(
+			enterpriseApi.PhaseError,
+			"Cluster Manager still has remaining CR references",
+		)
+		return result, err
+	}
+
+	_ = DeleteOwnerReferencesForResources(ctx, client, cr, SplunkClusterManager)
+
+	_, err := splctrl.CheckForDeletion(ctx, cr, client)
+	if err != nil {
+		eventPublisher.Warning(
+			ctx,
+			EventReasonDeleteFailed,
+			fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()),
+		)
+		return result, err
+	}
+
+	result.Requeue = false
 	return result, nil
 }
 

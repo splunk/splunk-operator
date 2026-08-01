@@ -68,7 +68,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	var err error
 	// Initialize phase and conditions
-	isPaused := cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
+	isPaused := cr.GetDeletionTimestamp() == nil &&
+		cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
@@ -79,8 +80,33 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
+	// Update the CR Status unless successful finalization has already removed
+	// the finalizer and allowed the API server to delete the object.
+	updateStatusOnReturn := true
+	defer func() {
+		if updateStatusOnReturn {
+			updateCRStatus(ctx, client, cr, &err)
+		}
+	}()
+
+	// Finalization cannot depend on validation, ApplySplunkConfig, the
+	// referenced ClusterManager, or replication-factor runtime checks.
+	if cr.GetDeletionTimestamp() != nil {
+		result, err = finalizeIndexerClusterDeletion(
+			ctx,
+			client,
+			cr,
+			eventPublisher,
+			setPhaseAndConditions,
+			&cr.Status.ClusterManagerPhase,
+			"DeletionFailed",
+			result,
+		)
+		if err == nil {
+			updateStatusOnReturn = false
+		}
+		return result, err
+	}
 
 	// validate and updates defaults for CR
 	err = validateIndexerClusterSpec(ctx, client, cr)
@@ -145,22 +171,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 	}
 
-	// check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
-
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
-			cr.Status.ClusterManagerPhase = enterpriseApi.PhaseTerminating
-		} else {
-			result.Requeue = false
-		}
-		if err != nil {
-			eventPublisher.Warning(ctx, "DeletionFailed", "Deletion of custom resource failed. Check operator logs for details.")
-		}
-		return result, err
-	}
 	// create or update a headless service for indexer cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
@@ -371,6 +381,38 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	return result, nil
 }
 
+// finalizeIndexerClusterDeletion is shared by both currently supported v4
+// IndexerCluster reference paths. It performs no validation, configuration
+// creation, referenced-manager lookup, or Splunk runtime call.
+func finalizeIndexerClusterDeletion(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.IndexerCluster,
+	eventPublisher *K8EventPublisher,
+	setPhaseAndConditions func(enterpriseApi.Phase, string),
+	managerPhase *enterpriseApi.Phase,
+	deleteFailureReason string,
+	result reconcile.Result,
+) (reconcile.Result, error) {
+	setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
+	*managerPhase = enterpriseApi.PhaseTerminating
+
+	_ = DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
+
+	_, err := splctrl.CheckForDeletion(ctx, cr, client)
+	if err != nil {
+		eventPublisher.Warning(
+			ctx,
+			deleteFailureReason,
+			"Deletion of custom resource failed. Check operator logs for details.",
+		)
+		return result, err
+	}
+
+	result.Requeue = false
+	return result, nil
+}
+
 // ApplyIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster for Older CM CRDs.
 func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 
@@ -385,7 +427,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Kind = "IndexerCluster"
 
 	// Initialize phase and conditions
-	isPaused := cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
+	isPaused := cr.GetDeletionTimestamp() == nil &&
+		cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
@@ -396,8 +439,33 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	var err error
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
+	// Update the CR Status unless successful finalization has already removed
+	// the finalizer and allowed the API server to delete the object.
+	updateStatusOnReturn := true
+	defer func() {
+		if updateStatusOnReturn {
+			updateCRStatus(ctx, client, cr, &err)
+		}
+	}()
+
+	// The compatibility path for a v4 IndexerCluster that references a v3
+	// ClusterMaster has the same deletion contract as the ClusterManager path.
+	if cr.GetDeletionTimestamp() != nil {
+		result, err = finalizeIndexerClusterDeletion(
+			ctx,
+			client,
+			cr,
+			eventPublisher,
+			setPhaseAndConditions,
+			&cr.Status.ClusterMasterPhase,
+			"DeleteFailed",
+			result,
+		)
+		if err == nil {
+			updateStatusOnReturn = false
+		}
+		return result, err
+	}
 
 	// validate and updates defaults for CR
 	err = validateIndexerClusterSpec(ctx, client, cr)
@@ -458,23 +526,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			eventPublisher.Warning(ctx, "VerifyRFPeersFailed", "Verify RF peer failed. Check operator logs for details.")
 			return result, fmt.Errorf("verify RF peers: %w", err)
 		}
-	}
-
-	// check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
-
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
-			cr.Status.ClusterMasterPhase = enterpriseApi.PhaseTerminating
-		} else {
-			result.Requeue = false
-		}
-		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteFailed", "Delete custom resource failed. Check operator logs for details.")
-		}
-		return result, err
 	}
 
 	// create or update a headless service for indexer cluster

@@ -55,7 +55,8 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 	var err error
 	// Initialize phase and conditions
-	isPaused := cr.GetAnnotations()[enterpriseApi.StandalonePausedAnnotation] == "true"
+	isPaused := cr.GetDeletionTimestamp() == nil &&
+		cr.GetAnnotations()[enterpriseApi.StandalonePausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
@@ -66,8 +67,32 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
+	// Update the CR Status unless successful finalization has already removed
+	// the finalizer and allowed the API server to delete the object.
+	updateStatusOnReturn := true
+	defer func() {
+		if updateStatusOnReturn {
+			updateCRStatus(ctx, client, cr, &err)
+		}
+	}()
+
+	// Deletion finalization must run before validation, migration, remote app
+	// initialization, and ApplySplunkConfig. Those normal-reconciliation steps
+	// may create namespace content and cannot be prerequisites for finalization.
+	if cr.GetDeletionTimestamp() != nil {
+		result, err = finalizeStandaloneDeletion(
+			ctx,
+			client,
+			cr,
+			eventPublisher,
+			setPhaseAndConditions,
+			result,
+		)
+		if err == nil {
+			updateStatusOnReturn = false
+		}
+		return result, err
+	}
 
 	// validate and updates defaults for CR
 	err = validateStandaloneSpec(ctx, client, cr)
@@ -131,40 +156,6 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// Smart Store secrets get created manually and should not be managed by the Operator
 	if &cr.Spec.SmartStore != nil {
 		_ = DeleteOwnerReferencesForS3SecretObjects(ctx, client, cr, &cr.Spec.SmartStore)
-	}
-
-	// check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), false)
-			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
-				return result, err
-			}
-		}
-
-		// If this is the last of its kind getting deleted,
-		// remove the entry for this CR type from configMap or else
-		// just decrement the refCount for this CR type.
-		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkStandalone)
-			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
-				return result, err
-			}
-		}
-
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkStandalone)
-
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-
-		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
-		} else {
-			result.Requeue = false
-		}
-		return result, err
 	}
 
 	// create or update a headless service
@@ -307,6 +298,73 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		result.RequeueAfter = 0
 	}
 
+	return result, nil
+}
+
+// finalizeStandaloneDeletion performs only deletion-safe reads, updates,
+// deletes, and finalizer work. It must not create replacement namespace
+// content while Kubernetes is deleting the containing Namespace.
+func finalizeStandaloneDeletion(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.Standalone,
+	eventPublisher *K8EventPublisher,
+	setPhaseAndConditions func(enterpriseApi.Phase, string),
+	result reconcile.Result,
+) (reconcile.Result, error) {
+	setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
+
+	if cr.Spec.MonitoringConsoleRef.Name != "" {
+		if _, err := ApplyMonitoringConsoleEnvConfigMap(
+			ctx,
+			client,
+			cr.GetNamespace(),
+			cr.GetName(),
+			cr.Spec.MonitoringConsoleRef.Name,
+			getStandaloneExtraEnv(cr, cr.Spec.Replicas),
+			false,
+		); err != nil {
+			eventPublisher.Warning(
+				ctx,
+				"ApplyMonitoringConsoleEnvConfigMap",
+				fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()),
+			)
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to update Monitoring Console env ConfigMap during deletion",
+			)
+			return result, err
+		}
+	}
+
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		if err := UpdateOrRemoveEntryFromConfigMapLocked(
+			ctx,
+			client,
+			cr,
+			SplunkStandalone,
+		); err != nil {
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to clean up resources during deletion",
+			)
+			return result, err
+		}
+	}
+
+	_ = DeleteOwnerReferencesForResources(ctx, client, cr, SplunkStandalone)
+
+	_, err := splctrl.CheckForDeletion(ctx, cr, client)
+	if err != nil {
+		eventPublisher.Warning(
+			ctx,
+			EventReasonDeleteFailed,
+			fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()),
+		)
+		return result, err
+	}
+
+	result.Requeue = false
 	return result, nil
 }
 
