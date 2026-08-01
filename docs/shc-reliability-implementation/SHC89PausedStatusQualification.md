@@ -231,11 +231,11 @@ seven active v4 Splunk reconcilers.
   namespace-termination-to-CR-deletion propagation window. It was subsequently
   qualified at source `0c291c8c8`; no part of that fix is attributed to
   SHC-89.
-- SHC-91 records a separate deletion-order gap. LicenseManager and
-  SearchHeadCluster already route deletion before pause, but Standalone,
-  ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster do
-  not yet prove the same ordering. A paused existing resource with a finalizer
-  must not let pause prevent deletion-safe finalization.
+- SHC-91 records the separate deletion-order gap found by this audit. It was
+  subsequently corrected and qualified through both controller and real Apply
+  boundaries at source `a76c30e0c`; no part of that fix is attributed to
+  SHC-89. Detailed evidence is in
+  `SHC91DeletionBeforePauseQualification.md`.
 - Queue and ObjectStorage have no active enterprise reconcilers in this
   baseline, so no live pause/unpause behavior is claimed for them.
 - Controller restart while resources remain paused and a full mixed-tier

@@ -553,11 +553,17 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   error. Both deletion finalizers then ran, all ten PVC/PV claim references
   disappeared, and the Namespace completed naturally without a manual patch.
   Detailed evidence is in `SHC90NamespaceTerminationQualification.md`.
-- [ ] Define SHC-91 so CR deletion is handled before pause for Standalone,
-  ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster.
-  Preserve deletion-safe finalization, perform no paused-status write once
-  deletion starts, and prove every affected finalizer path. SHC-89 only
-  registered this adjacent ordering gap; no fix is claimed by SHC-89.
+- [x] Define and qualify SHC-91 so CR deletion is handled before pause and
+  ordinary Apply work for every active v4 Splunk tier. Commits `86a0bc80a` and
+  `a76c30e0c` correct the five affected controller entry points and six real
+  Apply entry points while retaining failed-finalization status/error handling.
+  Final Linux gates passed 42 suites, 185 controller specs, 78.3 percent
+  composite coverage, build, and 124 Helm tests. Immutable EKS digest
+  `sha256:4903f70a95b150c0a29bcd3ac70e063b5c55b6a030399a4636297586dea85cea`
+  passed all-seven-tier direct and namespace-first deletion plus real Ready
+  Standalone storage cleanup without a manual patch or status/Reconciler
+  error. Detailed evidence is in
+  `SHC91DeletionBeforePauseQualification.md`.
 - [ ] Define SHC-92 so namespace-scoped Helm installation placement and watch
   target are unambiguous when `namespaceOverride` is set. Decide the supported
   contract, align Deployment `WATCH_NAMESPACE`, Namespace-reader
@@ -2737,6 +2743,6 @@ PV reference to it. Exact evidence is in
 
 The same source audit registered SHC-91 for deletion-before-pause ordering in
 Standalone, ClusterManager, MonitoringConsole, IndexerCluster, and
-IngestorCluster. LicenseManager and SearchHeadCluster already route CR
-deletion before pause. No SHC-91 implementation or qualification is claimed
-here.
+IngestorCluster. SHC-91 was subsequently implemented and qualified through the
+controller and real Apply boundaries at source `a76c30e0c`; detailed evidence
+is in `SHC91DeletionBeforePauseQualification.md`.

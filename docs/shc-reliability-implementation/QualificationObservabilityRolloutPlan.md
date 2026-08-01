@@ -215,11 +215,18 @@ ownership.
   finalizer paths, all ten PVC/PV claim references disappeared, and the
   Namespace completed naturally without a manual finalizer patch. Provider,
   Kubernetes-version, and namespace-scoped Helm breadth remain separate gates.
-- [ ] Qualify SHC-91 deletion-before-pause behavior for Standalone,
-  ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster.
-  Existing paused resources with finalizers must enter deletion-safe
-  reconciliation, perform no paused-status write after deletion starts, and
-  complete without a manual finalizer patch.
+- [x] Qualify SHC-91 deletion-before-pause behavior across all seven active v4
+  Splunk tier controllers and deletion-before-ordinary-Apply behavior in the
+  six affected Apply entry points. Exact source `a76c30e0c` passed 42 Linux
+  suites, 185 controller specs, 78.3 percent composite coverage, build, and
+  124 Helm tests. Immutable Operator digest
+  `sha256:4903f70a95b150c0a29bcd3ac70e063b5c55b6a030399a4636297586dea85cea`
+  completed seven direct paused deletions in 5 seconds and an all-tier
+  namespace-first deletion in 13 seconds with zero status or Reconciler
+  errors. A real Ready Standalone then removed its StatefulSet, Pod, two PVCs,
+  and both delete-reclaim PVs naturally; the final PV was absent by 73 seconds.
+  No run used a manual pause or finalizer patch. Detailed evidence is in
+  `SHC91DeletionBeforePauseQualification.md`.
 - [ ] Qualify SHC-92 namespace-scoped Helm behavior with and without
   `namespaceOverride`. Prove the selected watch namespace, operator/service
   account placement, namespaced Role bindings, cluster-scoped Namespace-reader
@@ -2242,5 +2249,7 @@ observations, and boundaries are recorded in
 
 The controller audit registered SHC-91 for the adjacent deletion-before-pause
 ordering gap in Standalone, ClusterManager, MonitoringConsole, IndexerCluster,
-and IngestorCluster. LicenseManager and SearchHeadCluster already route CR
-deletion before pause. No SHC-91 correction or qualification is claimed here.
+and IngestorCluster. SHC-91 subsequently closed those controller boundaries
+and the affected real Apply boundaries at exact source `a76c30e0c`. The
+all-tier direct and namespace-first fixtures plus real Ready Standalone cleanup
+are recorded in `SHC91DeletionBeforePauseQualification.md`.

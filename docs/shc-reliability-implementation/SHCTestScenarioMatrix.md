@@ -300,8 +300,29 @@ observed the real Namespace-deleting/CR-not-deleting window for a Ready
 LicenseManager and three-member SHC. It produced five guard records per
 controller, zero fixture-level error, natural deletion finalization, zero
 remaining PVC/PV claim reference, and natural Namespace completion without a
-manual finalizer patch. SHC-91 still owns deletion-before-pause ordering in the
-five affected controllers.
+manual finalizer patch.
+
+### OPS-004 and OPS-012 SHC-91 deletion-order evidence
+
+The accepted 2026-08-01 source and EKS evidence is recorded in
+[SHC91DeletionBeforePauseQualification.md](SHC91DeletionBeforePauseQualification.md).
+Exact source `a76c30e0c` makes CR deletion authoritative over pause in all seven
+active v4 tier controllers and over normal validation, dependency,
+configuration, and workload processing in the six affected real Apply entry
+points. Successful finalization returns without a post-delete status write;
+failed finalization retains the existing observable error path.
+
+Immutable Operator digest
+`sha256:4903f70a95b150c0a29bcd3ac70e063b5c55b6a030399a4636297586dea85cea`
+deleted all seven paused tier resources directly in 5 seconds and completed an
+all-tier namespace-first deletion by the 13-second sample. Structured logs
+contained the expected finalizer, PVC deletion, and completion records with
+zero normal creates, status errors, or Reconciler errors. A real Ready
+Standalone then removed its StatefulSet, zero-restart Pod, two bound PVCs, and
+both delete-reclaim PVs naturally; the final PV was absent by the 73-second
+sample. No fixture used a manual pause or finalizer patch. Provider/version,
+legacy-v3, namespace-scoped Helm, and every-tier real runtime breadth remain
+open.
 
 ### OPS-013 LicenseManager qualification evidence
 
@@ -487,8 +508,9 @@ workload was created, and the scoped Operator audit found zero paused-status
 and zero Reconciler errors. Removing pause let a LicenseManager and a
 three-member SearchHeadCluster converge to Ready. Queue and ObjectStorage have
 no active enterprise reconcilers in this baseline and are not claimed as live
-OBS-008 targets. SHC-91 separately tracks deletion-before-pause ordering in
-the five active controllers whose deletion guard is not yet proved.
+OBS-008 targets. SHC-91 subsequently qualified deletion-before-pause and
+deletion-before-ordinary-Apply behavior; its independent evidence is recorded
+in `SHC91DeletionBeforePauseQualification.md`.
 
 ## Compatibility and qualification scenarios
 

@@ -19,8 +19,10 @@ Standalone, LicenseManager, ClusterManager, MonitoringConsole,
 IndexerCluster, SearchHeadCluster, and IngestorCluster. Legacy v3
 ClusterMaster/LicenseMaster, Telemetry, and Postgres controllers are not
 claimed by this work item. SHC-91 separately owns deletion-before-pause
-ordering in five v4 controllers. SHC-92 separately owns the existing Helm
-`namespaceOverride` and watch-target compatibility decision.
+ordering in five v4 controllers and was subsequently qualified at source
+`a76c30e0c`; no part of that correction is attributed to SHC-90. SHC-92
+separately owns the existing Helm `namespaceOverride` and watch-target
+compatibility decision.
 
 No Splunk Enterprise, Docker-Splunk, Ansible, CRD schema, StatefulSet,
 container lifecycle, probe, or persistent-data-format change is part of
@@ -73,8 +75,9 @@ When a CR receives its deletion timestamp, the controller event filter now
 accepts that lifecycle-only update even though Kubernetes does not increment
 `metadata.generation`. The reconcile bypasses the Namespace preflight stop and
 reaches the existing Apply/finalizer path. The separate SHC-91 ordering
-boundary remains where five controller entry points still inspect pause after
-the CR read but before their Apply logic.
+boundary was subsequently corrected at both the affected controller and real
+Apply entry points at source `a76c30e0c`; its evidence is recorded in
+`SHC91DeletionBeforePauseQualification.md`.
 
 ## Permission contract
 
@@ -254,8 +257,9 @@ cleanup patch was used.
 
 ## Remaining boundaries
 
-- SHC-91 remains pending for deletion-before-pause ordering in Standalone,
-  ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster.
+- SHC-91 subsequently qualified deletion-before-pause and
+  deletion-before-ordinary-Apply behavior at source `a76c30e0c`; it remains a
+  separate work item from this Namespace propagation guard.
 - SHC-92 remains pending for namespace-scoped Helm `namespaceOverride` and
   watched-namespace semantics.
 - Legacy v3, Telemetry, and Postgres controllers are outside this bounded v4

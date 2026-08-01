@@ -65,8 +65,40 @@ without duplicating their full content.
 | SHC-88 | Use a resolvable LicenseManager endpoint for license-health and expiration checks | `241ea3d91` on `codex/shc-88-license-health` | OPS-013, OBS-001, OBS-004, OBS-005 | Source-qualified and EKS-qualified for the bounded endpoint contract. The reconciler now creates the headless Service already named by the LicenseManager StatefulSet, waits for Kubernetes Pod readiness before calling the per-Pod management URL, and emits one aggregating `LicenseHealthCheckFailed` Warning Event series for retryable REST failures. Exact Operator digest `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e` created the missing Service without replacing a Splunk Pod, resolved the Pod FQDN from the controller, and received HTTP 200 from `/services/licenser/licenses`. A clean Operator restart retained the Service and LicenseManager Pod UIDs, added three successful checks, emitted no new failure, and left every managed tier Ready. Expired-license Event behavior is source-qualified; a deliberately expired production license was not installed on EKS |
 | SHC-89 | Initialize a schema-valid status when a custom resource is created already paused | `3e1716737` on `codex/shc-89-paused-status` | OBS-001, OBS-008 | Source-qualified with 41 Linux suites and 157 specs; EKS-qualified across all seven active v4 Splunk reconcilers with Operator digest `sha256:b83bbb97f89dca45e183e895e4be7e1d7bd11007f08babb41c4c94c97d18f145`. Every paused-at-creation resource reported current-generation `Pending/Paused` status once, created no managed workload, retained stable resourceVersion for 45 seconds, and produced no paused-status or Reconciler error. Annotation removal took a LicenseManager and three-member SearchHeadCluster to Ready; the SHC had three endpoints, all members Up, zero restarts, and direct search success on every member. Queue and ObjectStorage have no active enterprise reconcilers in this baseline and are not live targets |
 | SHC-90 | Stop normal reconciliation as soon as the namespace is terminating, including before a CR deletion timestamp is observed | `7ce2483f7`, `0c291c8c8` on `codex/shc-90-namespace-termination-guard` | OPS-004, OPS-012, OBS-001, OBS-005 | Source-, Linux-, image-, and EKS-qualified for the bounded contract. Authoritative uncached Namespace GET, Namespace `get`-only RBAC, zero-mutation stop across all seven active v4 tier controllers, explicit deletion-transition event acceptance, finalization bypass when the CR is already deleting, and typed `NamespaceTerminating` admission cancellation close the preflight and admission races. Final Linux source passed 42 suites, 180 JUnit nodes, 78.1% composite coverage, build/vet/generate, and 124 Helm tests. Immutable Operator digest `sha256:c2438c14e238e101cba52d758968a2cd7c64fc2798ed5a0a4781acb3e836e764` observed the real Namespace-deleting/CR-not-deleting interval for a Ready LicenseManager and 3/3 SHC, stopped five reconciles per controller with zero fixture error, preserved both deletion finalizers, removed all ten PVC/PV claim references, and completed the Namespace naturally without a manual patch. Provider/version breadth and namespace-scoped live Helm remain separate qualification gates |
-| SHC-91 | Route deletion-safe finalization before pause in every active v4 Splunk controller | Pending | OPS-004, OPS-012, OBS-001, OBS-005 | Registered during the SHC-89 controller audit. LicenseManager and SearchHeadCluster already inspect CR deletion before honoring pause. Standalone, ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster do not yet prove that ordering, so an existing paused resource with finalizers could bypass normal deletion work. The future correction must make CR deletion authoritative, perform no paused-status write after deletion starts, and test finalization for all five affected controllers; no implementation or qualification is claimed |
+| SHC-91 | Route deletion-safe finalization before pause and ordinary Apply work in every active v4 Splunk controller | `86a0bc80a`, `a76c30e0c` on `codex/shc-91-deletion-before-pause` | OPS-004, OPS-012, OBS-001, OBS-005 | Source-, Linux-, image-, and EKS-qualified for the bounded current-v4 contract. Five controller entry points now bypass pause for deletion, six real Apply entry points finalize before normal work, successful finalization suppresses post-delete status, and failure remains observable. Exact source passed 42 Linux suites, 185 controller specs, 78.3 percent composite coverage, build, and 124 Helm tests. Immutable Operator digest `sha256:4903f70a95b150c0a29bcd3ac70e063b5c55b6a030399a4636297586dea85cea` completed direct and namespace-first deletion across all seven tiers with zero status or Reconciler errors. A real Ready Standalone removed its workload and two PVC/PVs naturally, with the final PV absent by 73 seconds. Provider/version breadth, v3, namespace-scoped Helm, and every-tier real runtime shutdown remain open |
 | SHC-92 | Make namespace-scoped Helm watch-target and `namespaceOverride` semantics explicit and consistent | Pending | K8S-010, CMP-006, CMP-007 | Registered during SHC-90 Helm RBAC design. In namespace-scoped mode, workload metadata and the service-account namespace use `namespaceOverride`, while `WATCH_NAMESPACE` remains `.Release.Namespace`. Decide whether override changes only installation placement or also the watched namespace, then align Deployment environment, namespace-reader `resourceNames`, Role/RoleBinding subjects, documentation, upgrade behavior, and Helm/EKS tests. SHC-90 preserves the existing watch target and does not claim this compatibility decision |
+
+## SHC-91 immutable qualification inputs
+
+- source branch: `codex/shc-91-deletion-before-pause`;
+- source commits: `86a0bc80a` and `a76c30e0c`;
+- exact source tip:
+  `a76c30e0c2395506cbfbb8d9e2643c186df0a3ef`;
+- Operator image tag:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc91-a76c30e0c`;
+- Operator OCI index:
+  `sha256:4903f70a95b150c0a29bcd3ac70e063b5c55b6a030399a4636297586dea85cea`;
+- linux/amd64 manifest:
+  `sha256:6da77f0cdd1a4be2e2e8f6b9fa5f983f4a8824dab12942bb37f2df2cbd467008`;
+- EKS cluster/context: `vivek-spl-301372` in `us-west-2`, context
+  `shc85-vivek-spl-301372`;
+- disposable namespaces: `shc91-active-delete`,
+  `shc91-namespace-delete`, and `shc91-real-delete`;
+- runtime digest for the real Standalone:
+  `sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`;
+- Linux gate: 42 Ginkgo suites, 185 controller specs, zero failures, 78.3
+  percent composite coverage, successful build, and 124 Helm tests;
+- EKS result: all seven paused tiers finalized under direct and
+  namespace-first deletion without a manual patch or status/Reconciler error;
+  the direct fixture completed in 5 seconds and the Namespace fixture was
+  absent at 13 seconds;
+- real workload result: a Ready zero-restart Standalone finalized both bound
+  PVCs; Pod and PVCs were absent at 49 seconds and both delete-reclaim PVs were
+  absent at 73 seconds;
+- cleanup: all three disposable namespaces and every PV claim reference were
+  absent, while retained SHC-85 workloads remained Ready with zero restarts;
+  and
+- detailed evidence: `SHC91DeletionBeforePauseQualification.md`.
 
 ## SHC-90 immutable qualification inputs
 
@@ -603,7 +635,10 @@ isolated source and qualification branch; an intentionally expired-license
 EKS fixture and broader LicenseManager lifecycle work remain outside that
 bounded result. SHC-89 closes the bounded paused-at-creation status gap across
 the seven active v4 Splunk reconcilers. SHC-90 closes the bounded namespace
-propagation guard at source `0c291c8c8`; SHC-91 remains unassigned.
+propagation guard at source `0c291c8c8`. SHC-91 closes deletion-before-pause
+and deletion-before-ordinary-Apply ordering at source `a76c30e0c` for the
+seven active v4 tiers, with the bounded all-tier and real-Standalone EKS
+evidence recorded above.
 Registration or assignment alone does not claim implementation. Each
 remaining item must use its own branch and immutable source commit.
 
@@ -994,8 +1029,7 @@ on every member. Cleanup removed all ten PVCs, the namespace, and every PV
 claim reference to the namespace. Detailed evidence is in
 `SHC89PausedStatusQualification.md`.
 
-The source audit separately registered SHC-91. Deletion is inspected before
-pause in LicenseManager and SearchHeadCluster, but that ordering is not yet
-proved in Standalone, ClusterManager, MonitoringConsole, IndexerCluster, and
-IngestorCluster. SHC-91 owns deletion-safe finalization for those five active
-controllers; no implementation or qualification is claimed by this finding.
+The source audit separately registered SHC-91. It was subsequently completed
+on `codex/shc-91-deletion-before-pause` at exact source `a76c30e0c`. The final
+scope covers controller ordering plus the real Apply boundary and is recorded
+in `SHC91DeletionBeforePauseQualification.md`.

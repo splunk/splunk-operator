@@ -21,26 +21,24 @@ separate:
 
 ## Latest bounded qualification
 
-SHC-90 qualified the namespace-termination propagation guard. Exact source
-`0c291c8c8` passed 42 Linux suites, 180 JUnit nodes, build/vet/generation, and
-124 Helm tests. Immutable Operator digest
-`sha256:c2438c14e238e101cba52d758968a2cd7c64fc2798ed5a0a4781acb3e836e764`
-then observed the target EKS race: the Namespace was terminating while the
-LicenseManager and SearchHeadCluster deletion timestamps were still empty.
-Five reconciles per controller stopped before normal Apply, with zero
-fixture-level error or Reconciler error. CR deletion then reached the preserved
-finalizer paths, all ten PVC/PV claim references disappeared, and Kubernetes
-removed the Namespace naturally without a manual finalizer patch.
+SHC-91 qualified deletion-before-pause and deletion-before-ordinary-Apply
+ordering for all seven active v4 Splunk tiers. Exact source `a76c30e0c` passed
+42 Linux suites, 185 controller specs, 78.3 percent composite coverage, build,
+and 124 Helm tests. Immutable Operator digest
+`sha256:4903f70a95b150c0a29bcd3ac70e063b5c55b6a030399a4636297586dea85cea`
+then completed seven direct paused CR deletions in 5 seconds and an all-tier
+namespace-first deletion in 13 seconds, with the expected finalizer/PVC work
+and zero status or Reconciler errors. A real Ready Standalone subsequently
+removed its StatefulSet, Pod, two PVCs, and both delete-reclaim PVs naturally;
+the final PV disappeared by the 73-second sample.
 
 This remains bounded spike evidence; it is not a declaration that every
 scenario in the matrix is complete or that the feature is ready for default
 enablement. Queue and ObjectStorage have no active enterprise reconcilers in
-this source baseline and are not live qualification targets. SHC-91 remains
-pending for deletion-before-pause ordering in five active v4 controllers, and
-SHC-92 remains pending for namespace-scoped Helm `namespaceOverride` and watch
-semantics.
+this source baseline and are not live qualification targets. SHC-92 remains
+pending for namespace-scoped Helm `namespaceOverride` and watch semantics.
 Exact source, image, timing, and remaining-boundary evidence is in
-`SHC90NamespaceTerminationQualification.md`, `SHCWorkItemIndex.md`, and
+`SHC91DeletionBeforePauseQualification.md`, `SHCWorkItemIndex.md`, and
 `QualificationObservabilityRolloutPlan.md`.
 
 ## Review order
