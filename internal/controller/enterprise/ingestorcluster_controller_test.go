@@ -190,7 +190,7 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			}
 
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.IngestorCluster{})
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.IngestorCluster{}).WithObjects(nsSpecs)
 			c := builder.Build()
 			instance := IngestorClusterReconciler{
 				Client: c,

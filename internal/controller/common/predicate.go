@@ -53,6 +53,21 @@ func AnnotationChangedPredicate() predicate.Predicate {
 	}
 }
 
+// DeletionTimestampChangedPredicate ensures a resource entering deletion is
+// reconciled even though Kubernetes does not increment metadata.generation for
+// that lifecycle transition.
+func DeletionTimestampChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return !reflect.DeepEqual(e.ObjectOld.GetDeletionTimestamp(), e.ObjectNew.GetDeletionTimestamp())
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+	}
+}
+
 // SecretChangedPredicate .
 func SecretChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{

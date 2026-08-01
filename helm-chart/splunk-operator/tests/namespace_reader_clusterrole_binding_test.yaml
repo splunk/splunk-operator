@@ -1,0 +1,32 @@
+suite: namespace-scoped Namespace reader binding
+templates:
+  - templates/rbac/namespace_reader_clusterrole_binding.yaml
+tests:
+  - it: should not render when cluster-wide access is enabled
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should bind the Namespace reader to the operator service account
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: splunk-operator-namespace-reader-e2d1b065
+      - contains:
+          path: subjects
+          content:
+            kind: ServiceAccount
+            name: splunk-operator-controller-manager
+            namespace: watched-namespace

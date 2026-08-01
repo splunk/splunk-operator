@@ -102,6 +102,15 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		// Error reading the object - requeue the request.
 		return ctrl.Result{}, errors.Wrap(err, "could not load monitoring console data")
 	}
+	if instance.GetDeletionTimestamp() == nil {
+		stop, err := shouldStopForTerminatingNamespace(ctx, r.Client, instance.GetNamespace())
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if stop {
+			return ctrl.Result{}, nil
+		}
+	}
 
 	// If reconciliation is paused, persist the control state once and wait for
 	// an annotation change rather than polling an intentionally idle resource.
@@ -159,6 +168,7 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),
+			common.DeletionTimestampChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.ConfigMapChangedPredicate(),

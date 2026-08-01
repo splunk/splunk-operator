@@ -86,7 +86,7 @@ var _ = Describe("Standalone Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.Standalone{})
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.Standalone{}).WithObjects(nsSpecs)
 			c := builder.Build()
 			instance := StandaloneReconciler{
 				Client: c,

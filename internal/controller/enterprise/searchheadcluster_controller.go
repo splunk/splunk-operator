@@ -109,6 +109,13 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Pause applies only to ordinary reconciliation. A deleting resource must
 	// always reach ApplySearchHeadCluster so its finalizers can complete.
 	if instance.GetDeletionTimestamp() == nil {
+		stop, err := shouldStopForTerminatingNamespace(ctx, r.Client, instance.GetNamespace())
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if stop {
+			return ctrl.Result{}, nil
+		}
 		if instance.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true" {
 			statusChanged := preparePausedStatus(&instance.Status.Phase, &instance.Status.ObservedGeneration, &instance.Status.Conditions, instance.GetGeneration(), true)
 			if instance.Status.DeployerPhase == "" {
@@ -175,6 +182,7 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),
+			common.DeletionTimestampChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.ConfigMapChangedPredicate(),

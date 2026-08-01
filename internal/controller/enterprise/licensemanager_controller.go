@@ -105,6 +105,13 @@ func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Pause applies only to ordinary reconciliation. A deleting resource must
 	// always reach ApplyLicenseManager so its finalizers can complete.
 	if instance.GetDeletionTimestamp() == nil {
+		stop, err := shouldStopForTerminatingNamespace(ctx, r.Client, instance.GetNamespace())
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if stop {
+			return ctrl.Result{}, nil
+		}
 		if instance.GetAnnotations()[enterpriseApi.LicenseManagerPausedAnnotation] == "true" {
 			if preparePausedStatus(&instance.Status.Phase, &instance.Status.ObservedGeneration, &instance.Status.Conditions, instance.GetGeneration(), true) {
 				if err := r.Status().Update(ctx, instance); err != nil {
@@ -166,6 +173,7 @@ func (r *LicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),
+			common.DeletionTimestampChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.ConfigMapChangedPredicate(),

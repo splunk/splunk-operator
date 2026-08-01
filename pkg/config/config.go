@@ -20,8 +20,10 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -48,6 +50,23 @@ func GetWatchNamespaces() []string {
 
 // ManagerOptionsWithNamespaces returns an updated Options with namespaces information.
 func ManagerOptionsWithNamespaces(logger logr.Logger, opt ctrl.Options) ctrl.Options {
+	// Namespace termination is an authoritative safety boundary for controller
+	// writes. Read Namespace objects directly from the API server so the guard
+	// does not depend on cache propagation or require namespace list/watch.
+	if opt.Client.Cache == nil {
+		opt.Client.Cache = &client.CacheOptions{}
+	}
+	namespaceCacheDisabled := false
+	for _, object := range opt.Client.Cache.DisableFor {
+		if _, ok := object.(*corev1.Namespace); ok {
+			namespaceCacheDisabled = true
+			break
+		}
+	}
+	if !namespaceCacheDisabled {
+		opt.Client.Cache.DisableFor = append(opt.Client.Cache.DisableFor, &corev1.Namespace{})
+	}
+
 	opts := cache.Options{}
 	namespaces := GetWatchNamespaces()
 	switch {

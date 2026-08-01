@@ -81,7 +81,7 @@ var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.MonitoringConsole{})
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).WithObjects(nsSpecs)
 			c := builder.Build()
 			instance := MonitoringConsoleReconciler{
 				Client: c,

@@ -89,7 +89,7 @@ var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.IndexerCluster{})
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.IndexerCluster{}).WithObjects(nsSpecs)
 			c := builder.Build()
 			instance := IndexerClusterReconciler{
 				Client: c,

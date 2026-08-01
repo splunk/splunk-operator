@@ -1,0 +1,17 @@
+suite: cluster-wide manager RBAC
+templates:
+  - templates/rbac/clusterrole.yaml
+tests:
+  - it: should grant only get access to Namespaces
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - equal:
+          path: rules[0]
+          value:
+            apiGroups:
+              - ""
+            resources:
+              - namespaces
+            verbs:
+              - get

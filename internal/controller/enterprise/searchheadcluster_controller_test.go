@@ -382,7 +382,7 @@ var _ = Describe("SearchHeadCluster Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).WithObjects(nsSpecs)
 			c := builder.Build()
 			instance := SearchHeadClusterReconciler{
 				Client: c,

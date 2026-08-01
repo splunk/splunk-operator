@@ -73,6 +73,14 @@ Define namespace of release and allow for namespace override
 {{- end }}
 
 {{/*
+Create a cluster-scoped Namespace reader name that remains unique when
+namespace-scoped operator releases use the same operator name.
+*/}}
+{{- define "splunk-operator.namespaceReaderName" -}}
+{{- printf "%s-namespace-reader-%s" (include "splunk-operator.operator.fullname" .) (.Release.Namespace | sha256sum | trunc 8) | trunc 253 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
 Format splunkOperator.featureGates map into a --feature-gates arg value.
 Produces: Key1=true,Key2=false
 */}}
@@ -83,4 +91,3 @@ Produces: Key1=true,Key2=false
 {{- end -}}
 {{- join "," $pairs -}}
 {{- end }}
-

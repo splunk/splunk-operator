@@ -1,0 +1,31 @@
+suite: namespace-scoped Namespace reader RBAC
+templates:
+  - templates/rbac/namespace_reader_clusterrole.yaml
+tests:
+  - it: should not render when cluster-wide access is enabled
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should restrict Namespace get to the watched release namespace
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: rules[0]
+          value:
+            apiGroups:
+              - ""
+            resources:
+              - namespaces
+            resourceNames:
+              - release-namespace
+            verbs:
+              - get

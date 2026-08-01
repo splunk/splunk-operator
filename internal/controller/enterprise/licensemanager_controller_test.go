@@ -144,7 +144,7 @@ var _ = Describe("LicenseManager Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.LicenseManager{})
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.LicenseManager{}).WithObjects(nsSpecs)
 			c := builder.Build()
 			instance := LicenseManagerReconciler{
 				Client: c,

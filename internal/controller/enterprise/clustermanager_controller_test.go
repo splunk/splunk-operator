@@ -93,7 +93,7 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.ClusterManager{})
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.ClusterManager{}).WithObjects(nsSpecs)
 			c := builder.Build()
 			instance := ClusterManagerReconciler{
 				Client: c,
