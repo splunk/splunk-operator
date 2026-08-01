@@ -324,6 +324,9 @@ Service IP. It does not change node, cluster, or workload Pod networking. The
 utility image is pinned by digest, the monitor requires the original Operator
 Pod UID and the rule to remain present throughout the requested interval, and
 the evidence records its container identity, restart count, and runtime state.
+The checked-in custom debug profile explicitly overrides the Operator Pod's
+non-root runtime identity for this test container and grants `NET_ADMIN`;
+without that override the kernel rejects the Pod-local iptables operation.
 The ephemeral process has an independent timeout and EXIT trap that remove the
 rule even if the workstation monitor is interrupted. The run is accepted only
 after the log proves API access returned with HTTP 200.

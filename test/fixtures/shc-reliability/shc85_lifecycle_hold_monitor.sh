@@ -18,6 +18,7 @@ evidence_file="${SHC85_EVIDENCE_FILE:-build/_test/shc85/${run_id}.tsv}"
 api_fault_image="${SHC85_API_FAULT_IMAGE:-nicolaka/netshoot@sha256:a20c2531bf35436ed3766cd6cfe89d352b050ccc4d7005ce6400adf97503da1b}"
 api_fault_container="${SHC85_API_FAULT_CONTAINER:-shc85-api-disconnect-$(date -u +%s)}"
 api_fault_log="${SHC85_API_FAULT_LOG:-${evidence_file%.tsv}.api-fault.log}"
+api_fault_profile="${SHC85_API_FAULT_PROFILE:-test/fixtures/shc-reliability/shc85-api-fault-profile.json}"
 
 statefulset="splunk-${cr_name}-indexer"
 service_name="${statefulset}-service"
@@ -65,6 +66,12 @@ if [[ "${controller_fault}" == APIDisconnected &&
   printf '%s\n' \
     'APIDisconnected qualification currently requires SHC85_HOLD_STAGE=Decommissioning' \
     >&2
+  exit 2
+fi
+if [[ "${controller_fault}" == APIDisconnected &&
+  ! -r "${api_fault_profile}" ]]; then
+  printf 'SHC85_API_FAULT_PROFILE is not readable: %s\n' \
+    "${api_fault_profile}" >&2
   exit 2
 fi
 
@@ -280,7 +287,8 @@ start_api_disconnect() {
   kubectl -n "${operator_namespace}" debug \
     "pod/${operator_fault_pod}" --attach=true --quiet \
     --container="${api_fault_container}" --image="${api_fault_image}" \
-    --profile=sysadmin --target="${operator_fault_target_container}" -- \
+    --profile=sysadmin --custom="${api_fault_profile}" \
+    --target="${operator_fault_target_container}" -- \
     env API_SERVICE_IP="${api_service_ip}" \
     MAX_HOLD_SECONDS="${api_fault_max_seconds}" /bin/bash -lc '
       set -euo pipefail
