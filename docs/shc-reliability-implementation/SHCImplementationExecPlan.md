@@ -510,16 +510,37 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   passed adversarial and real referenced-LicenseManager EKS deletion
   campaigns with no manual finalizer patch, no forbidden create, and no
   post-finalization status error. Detailed evidence is in
-  `SHC86LicenseManagerNamespaceFinalizationQualification.md`.
-- [ ] Define and qualify SHC-87 so a referenced LicenseManager or other tier
-  that exists but is still starting is reported as Pending/Progressing with a
-  bounded dependency reason. Reserve Error for terminal incompatibility,
-  invalid configuration, or an expired wait.
+  `SHC86LicenseManagerNamespaceFinalizationQualification.md`. Later SHC-87
+  cleanup exposed the earlier namespace-termination-to-CR-deletion propagation
+  window tracked by SHC-90; the broader no-create contract remains open.
+- [x] (2026-08-01 UTC) Defined, implemented, and qualified bounded SHC-87 on
+  isolated branch `codex/shc-87-dependency-status`. Exact source `20d926658`
+  reports absent, Pending, missing-workload, and rolling-to-desired-image
+  dependencies as Pending/Progressing with stable reason
+  `DependencyNotReady`, a retained specific message, a Normal Event, structured
+  logs, and bounded requeue. Explicitly contradictory desired images remain a
+  terminal `UpgradeBlockedVersionMismatch`. The exact source passed 41 Linux
+  suites and 157 specs. Immutable Operator digest
+  `sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`
+  then passed an EKS absent-to-Pending-to-Ready LicenseManager campaign. The
+  dependent SHC never entered Error, cleared its dependency message, and
+  completed with Ready Deployer, 3/3 members, three endpoints, all members Up,
+  zero restarts, and 8/8 Service searches. No arbitrary fixed timeout was
+  introduced; sustained condition age is externally observable, and a future
+  timeout requires an explicit configurable product policy. Detailed evidence
+  is in `SHC87DependencyStatusQualification.md`.
 - [ ] Define SHC-89 so a custom resource created while already paused writes a
   schema-valid Pending/Paused status once, creates no managed workload, and
   does not enter an error retry loop. SHC-86 qualification observed v4
   LicenseManager and SearchHeadCluster pause writers attempting to persist
   empty required phase fields; no fix is claimed by SHC-86.
+- [ ] Define SHC-90 so normal reconciliation stops when the namespace is
+  terminating even if deletion propagation has not yet added a deletion
+  timestamp to the contained custom resource. Preserve deletion-safe
+  finalization and status rules. Cover LicenseManager, SearchHeadCluster, and
+  every supported CR controller with a namespace-termination race test. SHC-87
+  cleanup recorded six LicenseManager and nine SearchHeadCluster Reconciler
+  errors before ordinary finalization completed; no fix is claimed by SHC-87.
 - [x] (2026-08-01 UTC) Defined, implemented, and qualified SHC-88 on isolated
   branch `codex/shc-88-license-health`. Source `241ea3d91` reconciles the
   headless Service already named by the LicenseManager StatefulSet, waits for
@@ -2509,7 +2530,8 @@ matrix cell was still open at this checkpoint.
 reported SHC `Error` and upgrade-validation failure while its referenced
 LicenseManager was still starting, then recovered without user action through
 `Pending` to `Ready`. This is a retryable dependency-status classification and
-supportability requirement; no implementation or qualification is claimed.
+supportability requirement; no implementation or qualification was claimed at
+registration. The later 2026-08-01 record below completes the bounded item.
 
 2026-07-31 UTC: Completed the bounded SHC-84 qualification with a supported
 Splunk `10.4.2604.0/60dd7967c086` to
@@ -2645,3 +2667,28 @@ create, post-finalization status error, or LicenseManager reconcile error was
 recorded. SHC-89 separately tracks the newly observed invalid empty-phase
 status retries for LicenseManager and SearchHeadCluster CRs created already
 paused.
+
+2026-08-01 UTC: Completed bounded SHC-87 on
+`codex/shc-87-dependency-status`. Source `20d926658` classifies missing,
+Pending, missing-workload, and not-yet-rolled dependencies as retryable and
+retains contradictory desired images as terminal. All 41 Linux suites and 157
+specs passed. Operator OCI index digest
+`sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`
+qualified a disposable SHC created before its LicenseManager. The SHC retained
+Pending/Progressing `DependencyNotReady` conditions and specific Normal Event
+series for the absent and starting dependency, then cleared that state without
+Error when the LicenseManager became Ready. It completed with Ready Deployer,
+3/3 Ready members, three endpoints, all members Up, zero container restarts,
+direct search success on each member, and 8/8 service-routed searches. The
+scoped pre-cleanup Operator log audit found zero terminal mismatch and zero
+Reconciler error entries. Detailed evidence and remaining source-only boundaries are in
+`SHC87DependencyStatusQualification.md`.
+
+The SHC-87 cleanup registered SHC-90 after namespace termination preceded CR
+deletion visibility. During that propagation interval, LicenseManager and
+SearchHeadCluster entered normal Apply paths and Kubernetes rejected ConfigMap
+creation in the terminating namespace, producing six and nine Reconciler
+errors respectively. Existing finalization then completed without a patch;
+all ten PVCs and PVs disappeared and the namespace completed naturally.
+SHC-90 must add a namespace-termination guard without weakening the existing
+CR-deletion finalizers. No SHC-90 implementation is claimed here.

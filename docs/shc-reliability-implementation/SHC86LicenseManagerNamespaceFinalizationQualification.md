@@ -299,6 +299,23 @@ Paused condition exactly once, must not create its desired workload, and must
 not enter an error retry loop. No SHC-89 implementation or qualification is
 claimed here.
 
+## Later namespace-transition boundary
+
+SHC-87 cleanup on 2026-08-01 exposed an earlier timing window that the two
+SHC-86 fixtures did not exercise. Kubernetes can mark the namespace
+terminating before its deletion propagation has placed a deletion timestamp
+on each contained custom resource. During that interval, both LicenseManager
+and SearchHeadCluster briefly entered normal reconciliation and attempted
+ConfigMap creation. Kubernetes rejected the requests because the namespace was
+already terminating. Existing CR deletion and finalization then completed,
+and all content disappeared without a patch.
+
+SHC-90 owns the broader requirement to guard normal reconciliation from
+authoritative namespace-termination state even before the CR deletion
+timestamp is visible. The no-create result in this record remains valid for
+the two exact SHC-86 campaigns, but it must not be generalized across that
+newly observed propagation window.
+
 ## Remaining boundaries
 
 This record qualifies the current v4 LicenseManager namespace-first path on

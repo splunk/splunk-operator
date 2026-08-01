@@ -178,7 +178,27 @@ ownership.
   adversarial namespace disappeared in 14 seconds. A real Ready
   LicenseManager referenced by a paused SearchHeadCluster finalized in six
   seconds; its namespace completed naturally in 337 seconds after kubelet,
-  PVC protection, CSI reclaim, and the namespace controller finished.
+  PVC protection, CSI reclaim, and the namespace controller finished. This
+  proves the exact CR-deletion-visible paths; SHC-90 tracks the earlier
+  namespace-termination propagation window exposed by later cleanup.
+- [x] Qualify SHC-87 referenced-tier dependency classification. Exact source
+  `20d926658` and Operator OCI digest
+  `sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`
+  kept a SearchHeadCluster Pending/Progressing with reason
+  `DependencyNotReady` while its LicenseManager was absent and starting. The
+  specific message and two Normal Event series persisted; no terminal mismatch
+  or Reconciler error was emitted in the dependency and formation window.
+  Dependency recovery cleared the message
+  and the SHC completed with Ready Deployer, 3/3 members, three endpoints,
+  all members Up, zero restarts, direct member search success, and 8/8
+  service-routed searches. Terminal mismatch and cross-namespace paths are
+  source-qualified.
+- [ ] Qualify SHC-90 across every supported CR controller. Delete a namespace
+  while contained CRs are Ready and prove that no normal Apply or create path
+  runs after the namespace deletion timestamp, including before individual CR
+  deletion timestamps are visible. Deletion-safe finalization must still
+  remove declared resources, PVC/PV policy must complete, no status write may
+  follow successful finalizer removal, and no manual patch may be required.
 - [x] Qualify bounded OPS-013/SHC-88 LicenseManager health observation. Exact
   source `241ea3d91` and Operator digest
   `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`
@@ -1757,7 +1777,9 @@ qualification:
   LicenseManager as SHC `Error` with upgrade-validation failure, then recovered
   without user action through `Pending` to `Ready`. SHC-87 records the
   requirement to classify normal dependency convergence as Pending/Progressing
-  with a bounded dependency reason and reserve Error for terminal state.
+  with a bounded dependency reason and reserve Error for terminal state. The
+  bounded requirement was later completed by the 2026-08-01 SHC-87 record
+  below.
 
 2026-07-31 SHC-84 supported-upgrade qualification:
 
@@ -2144,3 +2166,31 @@ and SearchHeadCluster objects left required phase fields empty, making their
 pause-status writes fail schema validation and retry noisily. Detailed
 evidence is in
 `SHC86LicenseManagerNamespaceFinalizationQualification.md`.
+
+2026-08-01 UTC: Completed bounded SHC-87 on
+`codex/shc-87-dependency-status`. Exact source `20d926658` passed 41 Linux
+suites and 157 specs with zero failures. Operator OCI index digest
+`sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`
+qualified a disposable SearchHeadCluster submitted before its referenced
+LicenseManager. The missing and Pending intervals remained
+Pending/Progressing with stable reason `DependencyNotReady`, retained the
+specific status message, and accumulated two Normal Event series at counts 10
+and 15. When the LicenseManager became Ready, the SHC cleared the dependency
+message and continued normal first formation without a container restart. It
+finished Ready/Ready with 3/3 Search Heads, three endpoints, all members Up,
+zero restarts, successful direct search on each member, and 8/8 searches
+through the Kubernetes Service. The bounded log audit found zero terminal
+mismatch and zero Reconciler error entries. Internal member-info and Pod probe
+failures were limited to the supported image-owned first-formation restart and
+are retained as separate runtime observability evidence. Exact facts and
+remaining boundaries are in `SHC87DependencyStatusQualification.md`.
+
+The SHC-87 cleanup registered SHC-90. Namespace deletion began at
+`06:24:37Z`, and a short interval preceded CR deletion-timestamp observation.
+During that interval, normal LicenseManager and SearchHeadCluster Apply paths
+attempted ConfigMap creation and Kubernetes rejected it because the namespace
+was terminating. The log contained six LicenseManager and nine
+SearchHeadCluster Reconciler errors. Existing finalization then completed:
+ten PVCs were gone by `06:25:55Z`, ten PVs by `06:26:16Z`, and the namespace
+by `06:31:01Z` without a patch. SHC-90 owns the broader namespace-transition
+guard; no implementation or qualification is claimed by this finding.

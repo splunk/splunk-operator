@@ -285,6 +285,15 @@ completed naturally at 337 seconds. Neither run used a manual finalizer patch;
 the bounded log audit found no forbidden create, post-finalization status
 error, or LicenseManager reconcile error.
 
+Later SHC-87 cleanup showed that OPS-012 is not closed across the complete
+namespace transition. A namespace can become terminating before deletion
+timestamps appear on its custom resources. LicenseManager and
+SearchHeadCluster briefly attempted normal ConfigMap Apply work in that
+interval; Kubernetes rejected it, then existing finalization completed and all
+ten PVCs and PVs disappeared. SHC-90 tracks the missing namespace-termination
+guard. The SHC-86 evidence remains accepted for its exact fixtures, but the
+broader no-create assertion remains open.
+
 ### OPS-013 LicenseManager qualification evidence
 
 The accepted 2026-08-01 source and EKS evidence is recorded in
@@ -433,6 +442,26 @@ lifecycle stage.
 | OBS-006 | P0 | Secrets/search content injected in errors | No credential, authorization header, Secret data, or search text leaks |
 | OBS-007 | P1 | Operation history rollover | Bounded retention preserves current and most recent result |
 | OBS-008 | P1 | Custom resource is created with pause annotation already set | Every required phase field and a schema-valid Paused condition are persisted once, no managed workload is created, and reconciliation does not enter an error retry loop |
+
+### OBS-001, OBS-004, and OBS-005 SHC-87 evidence
+
+The accepted 2026-08-01 SHC-87 source and EKS evidence is recorded in
+[SHC87DependencyStatusQualification.md](SHC87DependencyStatusQualification.md).
+Exact source `20d926658` distinguishes normal referenced-tier convergence from
+explicitly contradictory desired state. Missing, Pending, missing-workload,
+and not-yet-rolled dependencies produce Pending/Progressing conditions with
+stable reason `DependencyNotReady`, a retained specific message, a Normal
+Event, structured dependency fields, and a bounded non-error retry. Explicit
+dependency and dependent desired-image disagreement remains terminal.
+
+On EKS, one SearchHeadCluster submitted before its LicenseManager accumulated
+two aggregating Normal Event series for the absent and Pending dependency,
+never entered Error, and recovered without a container restart. The final SHC
+had Ready Deployer, 3/3 members, three endpoints, every member registered and
+Up, and 8/8 service-routed searches. Cross-namespace references, reverse
+MonitoringConsole dependencies, and the terminal desired-image case passed
+source coverage but were not imposed on the live fixture. Sustained condition
+age is observable; no unsafe universal startup timeout is claimed.
 
 ## Compatibility and qualification scenarios
 

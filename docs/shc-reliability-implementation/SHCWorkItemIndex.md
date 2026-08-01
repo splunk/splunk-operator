@@ -60,10 +60,29 @@ without duplicating their full content.
 | SHC-83 | Prevent traffic readiness before image-owned SHC initialization, synchronization, and internal Splunk restarts are complete | `635b81bc4`, `daf6b0608`, `0a2465cbe`, `85b00fd9f`, `2889c8002` on `codex/shc-83-startup-readiness-qualification` | HLT-001, HLT-002, HLT-009, STS-012, OBS-001 | Source-qualified and EKS-qualified for a fresh three-member formation with zero premature client endpoints, exactly one initial-formation restart Event, and twelve stable three-endpoint samples after `Complete`. Established non-captain and active-captain replacements retained at least two endpoints and returned to three; captaincy moved dynamically from ordinal zero to ordinal two. Operator replacement retained all three endpoints, Search Head UIDs, durable formation state, and zero restarts. The EKS campaign also corrected a circular dependency by separating internal management target eligibility from client Service readiness during bounded first formation |
 | SHC-84 | Bound first-start and upgrade startup probes and guarantee prompt TERM exit for kubelet-initiated restarts | Policy `968e19b94`, API validation `c58ff86cd`, merge fix `67c0d3bd2`; monitors `cbaef60af`, `524636f39`; source fixture `4718cef6f` on `codex/shc-84-startup-term-qualification` | HLT-009, RUN-003, RUN-004, REJ-005, OBS-005 | Source- and EKS-qualified with Operator digest `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`: existing-v4 reconciliation, fresh formation, forced liveness, planned deletion, and the supported `10.4.2604.0/60dd7967c086` to `10.5.2605.0/844c593e9c1d` upgrade passed. The upgrade replaced ordinals `2 -> 1 -> 0`, retained at least two endpoints, recorded zero container restarts, moved captaincy dynamically, completed 200/200 sampled searches, and finished with three registered `Up` target members. Startup/liveness grace rendered 660, readiness grace remained unset, and Pod grace remained 1200 |
 | SHC-85 | Separate indexer serving readiness from lifecycle progress and require previous-peer network-path recovery before authorizing another disruption | `3f60d9301`, `11d719f64`, `7ff844f4a`; controller-restart evidence on `codex/shc-85-controller-restart-qualification`; lifecycle hold `5dbe7dac8`, `99da90390`, `ac1fe0db8`; harness `854a76b8d`, `b2bf2e71d`, `d610d4474`; observed-decommissioning absence harness `8d6a7dbc6`; readiness-withdrawal absence harness `978d71bc5`; target-selection absence harness `2d430748b`, `770a27799`; API-disconnection harness `8e21b9b1b` through `f78828cc1`; leader-failover harness `ba220677b` | OPS-011, STS-004, K8S-006, K8S-007, OBS-001, OBS-002, OBS-003 | Source-qualified and EKS-qualified for Operator-owned four-peer RF3/SF2 `OnDelete` revision rolls on official Splunk build `10.5.2605.0/844c593e9c1d`: automatic `3 -> 2 -> 1 -> 0` progress, one withdrawn target at a time, previous-peer remote serving recovery before the next target, zero container restarts, four Ansible `failed=0` results, no prior KV Store failure signature, and final RF/SF/all-searchable health. Separate campaigns qualified controller restart, five-minute controller absences at all four durable ordinal-3 stages, a 401-second Pod-local API-server disconnection at observed `Decommissioning`, and one normal two-contender Lease takeover at observed `Decommissioning`; each retained durable ownership and completed the full roll. The leader-failover run advanced the Lease once, preserved the exact interrupted operation, emitted no duplicate target decommission Event, kept one stable active leader and two Ready controller Pods through convergence, and restored the original single-controller topology. API-independent 1,800-event workloads spanning the long absences, API fault, and leader failover had zero HEC/search request failures and exact final completeness. The records exposed 24, 41, 37, 18, 30, and 13 successful-search count regressions, with maximum pending 362, 406, 404, 364, 417, and 329 during peer-address/authentication convergence and no partial-result signal. Immediate distributed-search completeness, other API-partition/leader-failover stages and topologies, split brain, conflict, redundancy, protocol/configuration variants, and Splunk-managed App Framework next-target control remain open |
-| SHC-86 | Make referenced LicenseManager finalization safe after namespace termination begins | `61b35aabf` on `codex/shc-86-license-finalization` | OPS-012, OBS-001, OBS-005 | Source-qualified with 41 Linux suites and 157 specs; EKS-qualified with immutable Operator digest `sha256:635d60fecdd203e7d158fb1f95c57d46c7062ed98b156caf8dc68da7515812ec`. A paused invalid fixture and a Ready LicenseManager referenced by a paused SearchHeadCluster both finalized after namespace termination with no create failure, no post-finalization status error, and no manual finalizer patch. The real fixture logged deletion of both bound PVCs, both delete-reclaim PVs disappeared, and the namespace completed naturally after Kubernetes cleanup |
-| SHC-87 | Distinguish retryable referenced-tier dependency convergence from terminal dependency or upgrade failure | Pending | OBS-001, OBS-004, OBS-005 | Registered after fresh SHC-84 formation temporarily reported `Error` and upgrade-path validation failure while its referenced LicenseManager was still starting, then recovered without user action through `Pending` to `Ready`. Normal dependency ordering must report Pending/Progressing with a bounded dependency reason; no implementation or qualification is claimed |
+| SHC-86 | Make referenced LicenseManager finalization safe after namespace termination begins | `61b35aabf` on `codex/shc-86-license-finalization` | OPS-012, OBS-001, OBS-005 | Source-qualified with 41 Linux suites and 157 specs; EKS-qualified with immutable Operator digest `sha256:635d60fecdd203e7d158fb1f95c57d46c7062ed98b156caf8dc68da7515812ec`. A paused invalid fixture and a Ready LicenseManager referenced by a paused SearchHeadCluster both finalized after namespace termination with no create failure, no post-finalization status error, and no manual finalizer patch. The real fixture logged deletion of both bound PVCs, both delete-reclaim PVs disappeared, and the namespace completed naturally after Kubernetes cleanup. Later SHC-87 cleanup exposed an earlier namespace-termination-to-CR-deletion propagation race, now tracked by SHC-90; the broader no-create contract remains open |
+| SHC-87 | Distinguish retryable referenced-tier dependency convergence from terminal dependency or upgrade failure | `20d926658` on `codex/shc-87-dependency-status` | OBS-001, OBS-004, OBS-005 | Source-qualified with 41 Linux suites and 157 specs; EKS-qualified for one SHC-to-LicenseManager absent, Pending, Ready, and full-formation path with Operator digest `sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`. The SHC remained Pending/Progressing with `DependencyNotReady`, specific status and Normal Event evidence, then cleared the dependency state and reached Ready/Ready, 3/3 replicas, three endpoints, all members Up, zero restarts, and 8/8 Service searches. Terminal desired-image contradiction and cross-namespace behavior are source-qualified |
 | SHC-88 | Use a resolvable LicenseManager endpoint for license-health and expiration checks | `241ea3d91` on `codex/shc-88-license-health` | OPS-013, OBS-001, OBS-004, OBS-005 | Source-qualified and EKS-qualified for the bounded endpoint contract. The reconciler now creates the headless Service already named by the LicenseManager StatefulSet, waits for Kubernetes Pod readiness before calling the per-Pod management URL, and emits one aggregating `LicenseHealthCheckFailed` Warning Event series for retryable REST failures. Exact Operator digest `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e` created the missing Service without replacing a Splunk Pod, resolved the Pod FQDN from the controller, and received HTTP 200 from `/services/licenser/licenses`. A clean Operator restart retained the Service and LicenseManager Pod UIDs, added three successful checks, emitted no new failure, and left every managed tier Ready. Expired-license Event behavior is source-qualified; a deliberately expired production license was not installed on EKS |
 | SHC-89 | Initialize a schema-valid status when a custom resource is created already paused | Pending | OBS-001, OBS-008 | Registered during SHC-86 EKS qualification. Newly created paused v4 LicenseManager and SearchHeadCluster objects retained empty required phase fields, so their pause-status updates were rejected by CRD validation and retried noisily. A previously Ready LicenseManager paused cleanly. The future correction must cover every supported paused CR type, create no workload, persist valid phase/Paused status once, and avoid a hot retry loop; no implementation or qualification is claimed |
+| SHC-90 | Stop normal reconciliation as soon as the namespace is terminating, including before a CR deletion timestamp is observed | Pending | OPS-004, OPS-012, OBS-001, OBS-005 | Registered during SHC-87 cleanup. For roughly the namespace-to-CR deletion propagation window, the LicenseManager and SearchHeadCluster normal Apply paths attempted ConfigMap creation in the terminating namespace. Kubernetes rejected the creates and the log recorded six LicenseManager and nine SearchHeadCluster Reconciler errors. Existing CR finalization then completed, ten PVCs and PVs disappeared, and the namespace completed naturally. The future correction must use authoritative namespace-termination state without weakening CR finalization; no implementation or qualification is claimed |
+
+## SHC-87 immutable qualification inputs
+
+- source branch: `codex/shc-87-dependency-status`;
+- source commit: `20d926658bdb7bd0a617a471acea1f83644149ce`;
+- Operator image tag:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc-87-20d926658`;
+- Operator OCI index digest:
+  `sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`;
+- Linux/amd64 manifest:
+  `sha256:ee4bf98bfc9c0bb8b56327ee0ae8223c9849a19462cf582ce75736d78ec716d5`;
+- EKS cluster: `vivek-spl-301372` in `us-west-2`;
+- disposable namespace: `shc87-dependency-status`;
+- runtime digest:
+  `sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`;
+  and
+- detailed evidence:
+  `SHC87DependencyStatusQualification.md`.
 
 ## SHC-75 immutable qualification inputs
 
@@ -530,13 +549,14 @@ that stage. SHC-82 remains selected on its isolated evidence branch. SHC-83 is
 source- and EKS-qualified for its bounded current-v4 contract. SHC-84 is
 source- and EKS-qualified for its bounded current-v4 contract and the exact
 supported 10.4-to-10.5 upgrade recorded above. SHC-86 records the independently
-observed LicenseManager
-namespace-finalization gap and remains unassigned. SHC-87 records the separate
-retryable dependency-status classification gap and remains unassigned.
+observed LicenseManager namespace-finalization gap and is bounded source- and
+EKS-qualified, with the earlier namespace-transition window now separated as
+SHC-90. SHC-87 closes the bounded retryable dependency-status classification
+gap on its isolated source and qualification branch.
 SHC-88 closes the bounded LicenseManager health-check endpoint mismatch on its
 isolated source and qualification branch; an intentionally expired-license
 EKS fixture and broader LicenseManager lifecycle work remain outside that
-bounded result.
+bounded result. SHC-89 and SHC-90 remain unassigned.
 Registration or assignment alone does not claim implementation. Each
 remaining item must use its own branch and immutable source commit.
 
@@ -884,3 +904,29 @@ create, post-finalization status error, or LicenseManager reconcile error.
 The campaign also registered SHC-89 for schema-valid initialization of
 LicenseManager and SearchHeadCluster objects created already paused; no SHC-89
 implementation is claimed.
+
+2026-08-01 UTC: Closed bounded SHC-87 on isolated branch
+`codex/shc-87-dependency-status`. Exact source `20d926658` passed 41 Linux
+suites and 157 specs with zero failures. Operator OCI index digest
+`sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`
+then qualified a SearchHeadCluster submitted before its LicenseManager. The
+absent and Pending intervals produced Pending/Progressing
+`DependencyNotReady` conditions, two aggregating Normal Event series with
+counts 10 and 15, a retained dependency message, and no terminal mismatch or
+reconcile error. The LicenseManager became Ready at `06:09:46Z`; the SHC left
+dependency wait by `06:10:05Z`, cleared the message, and completed at
+`06:20:39Z` with Ready Deployer, 3/3 Search Heads, three endpoints, all members
+Up, zero container restarts, direct search success on every member, and 8/8
+service-routed searches. Terminal desired-image contradiction,
+cross-namespace references, and reverse MonitoringConsole dependencies remain
+source-qualified boundaries rather than live EKS claims.
+
+The same cleanup registered SHC-90. Namespace deletion began at `06:24:37Z`.
+Before the LicenseManager and SearchHeadCluster deletion timestamps became
+visible, their normal Apply paths attempted ConfigMap creation in the already
+terminating namespace. Kubernetes rejected the creates, producing six
+LicenseManager and nine SearchHeadCluster Reconciler errors. Existing
+finalization then removed all custom resources and workloads; ten PVCs were
+gone by `06:25:55Z`, ten PVs by `06:26:16Z`, and the namespace by `06:31:01Z`
+without a manual patch. SHC-90 owns the namespace-transition guard; no fix is
+claimed by SHC-87.
