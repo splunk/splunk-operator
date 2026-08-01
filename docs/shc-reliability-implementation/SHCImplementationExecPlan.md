@@ -529,11 +529,15 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   introduced; sustained condition age is externally observable, and a future
   timeout requires an explicit configurable product policy. Detailed evidence
   is in `SHC87DependencyStatusQualification.md`.
-- [ ] Define SHC-89 so a custom resource created while already paused writes a
-  schema-valid Pending/Paused status once, creates no managed workload, and
-  does not enter an error retry loop. SHC-86 qualification observed v4
-  LicenseManager and SearchHeadCluster pause writers attempting to persist
-  empty required phase fields; no fix is claimed by SHC-86.
+- [x] (2026-08-01 UTC) Defined, implemented, and qualified bounded SHC-89 on
+  isolated branch `codex/shc-89-paused-status`. Exact source `3e1716737`
+  initializes current-generation `Pending/Paused` status for all seven active
+  v4 Splunk reconcilers, including SearchHeadCluster `deployerPhase`, writes
+  only on semantic change, creates no workload while paused, and returns
+  without a timer. It passed 41 Linux suites and 157 specs. Operator digest
+  `sha256:b83bbb97f89dca45e183e895e4be7e1d7bd11007f08babb41c4c94c97d18f145`
+  passed the all-kind EKS fixture and LicenseManager/SearchHeadCluster unpause
+  recovery. Detailed evidence is in `SHC89PausedStatusQualification.md`.
 - [ ] Define SHC-90 so normal reconciliation stops when the namespace is
   terminating even if deletion propagation has not yet added a deletion
   timestamp to the contained custom resource. Preserve deletion-safe
@@ -541,6 +545,11 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   every supported CR controller with a namespace-termination race test. SHC-87
   cleanup recorded six LicenseManager and nine SearchHeadCluster Reconciler
   errors before ordinary finalization completed; no fix is claimed by SHC-87.
+- [ ] Define SHC-91 so CR deletion is handled before pause for Standalone,
+  ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster.
+  Preserve deletion-safe finalization, perform no paused-status write once
+  deletion starts, and prove every affected finalizer path. SHC-89 only
+  registered this adjacent ordering gap; no fix is claimed by SHC-89.
 - [x] (2026-08-01 UTC) Defined, implemented, and qualified SHC-88 on isolated
   branch `codex/shc-88-license-health`. Source `241ea3d91` reconciles the
   headless Service already named by the LicenseManager StatefulSet, waits for
@@ -2664,9 +2673,9 @@ The real CR finalized by six seconds, its Ready zero-restart Pod exited around
 50 seconds, both bound PVCs and delete-reclaim PVs disappeared, and Kubernetes
 removed the namespace naturally at 337 seconds. No manual patch, forbidden
 create, post-finalization status error, or LicenseManager reconcile error was
-recorded. SHC-89 separately tracks the newly observed invalid empty-phase
+recorded. SHC-86 did not correct the separately observed invalid empty-phase
 status retries for LicenseManager and SearchHeadCluster CRs created already
-paused.
+paused; the later SHC-89 entry records that correction.
 
 2026-08-01 UTC: Completed bounded SHC-87 on
 `codex/shc-87-dependency-status`. Source `20d926658` classifies missing,
@@ -2692,3 +2701,25 @@ errors respectively. Existing finalization then completed without a patch;
 all ten PVCs and PVs disappeared and the namespace completed naturally.
 SHC-90 must add a namespace-termination guard without weakening the existing
 CR-deletion finalizers. No SHC-90 implementation is claimed here.
+
+2026-08-01 UTC: Completed bounded SHC-89 on
+`codex/shc-89-paused-status`. Exact source `3e1716737` passed 41 Linux suites,
+157 specs, `make build`, and a clean generated-tree check. Operator digest
+`sha256:b83bbb97f89dca45e183e895e4be7e1d7bd11007f08babb41c4c94c97d18f145`
+initialized schema-valid `Pending/Paused` status once for Standalone,
+LicenseManager, ClusterManager, MonitoringConsole, IndexerCluster,
+SearchHeadCluster, and IngestorCluster created already paused. All seven
+resourceVersions stayed stable for 45 seconds, no managed workload appeared,
+and the namespace-scoped Operator audit found zero paused-status and zero
+Reconciler errors. Removing pause let LicenseManager and SearchHeadCluster
+continue normally to Ready. The three-member SHC finished with three
+endpoints, all members Up, zero restarts, and direct search success on every
+member. Cleanup removed the disposable namespace, all ten claims, and every
+PV reference to it. Exact evidence is in
+`SHC89PausedStatusQualification.md`.
+
+The same source audit registered SHC-91 for deletion-before-pause ordering in
+Standalone, ClusterManager, MonitoringConsole, IndexerCluster, and
+IngestorCluster. LicenseManager and SearchHeadCluster already route CR
+deletion before pause. No SHC-91 implementation or qualification is claimed
+here.

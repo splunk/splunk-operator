@@ -463,6 +463,23 @@ MonitoringConsole dependencies, and the terminal desired-image case passed
 source coverage but were not imposed on the live fixture. Sustained condition
 age is observable; no unsafe universal startup timeout is claimed.
 
+### OBS-001 and OBS-008 SHC-89 evidence
+
+The accepted 2026-08-01 SHC-89 source and EKS evidence is recorded in
+[SHC89PausedStatusQualification.md](SHC89PausedStatusQualification.md).
+Exact source `3e1716737` initialized current-generation `Pending/Paused`
+status for Standalone, LicenseManager, ClusterManager, MonitoringConsole,
+IndexerCluster, SearchHeadCluster, and IngestorCluster created already paused.
+SearchHeadCluster additionally reported `deployerPhase=Pending`.
+
+All seven resource versions remained unchanged for 45 seconds, no managed
+workload was created, and the scoped Operator audit found zero paused-status
+and zero Reconciler errors. Removing pause let a LicenseManager and a
+three-member SearchHeadCluster converge to Ready. Queue and ObjectStorage have
+no active enterprise reconcilers in this baseline and are not claimed as live
+OBS-008 targets. SHC-91 separately tracks deletion-before-pause ordering in
+the five active controllers whose deletion guard is not yet proved.
+
 ## Compatibility and qualification scenarios
 
 | ID | Priority | Scenario | Required proof |

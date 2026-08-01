@@ -296,8 +296,9 @@ was paused.
 SHC-89 records the shared requirement: every supported custom resource created
 already paused must initialize all required phase fields and a schema-valid
 Paused condition exactly once, must not create its desired workload, and must
-not enter an error retry loop. No SHC-89 implementation or qualification is
-claimed here.
+not enter an error retry loop. SHC-86 did not implement or qualify that
+separate requirement; it was later completed in the bounded
+`SHC89PausedStatusQualification.md` record.
 
 ## Later namespace-transition boundary
 

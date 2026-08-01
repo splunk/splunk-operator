@@ -193,12 +193,27 @@ ownership.
   all members Up, zero restarts, direct member search success, and 8/8
   service-routed searches. Terminal mismatch and cross-namespace paths are
   source-qualified.
+- [x] Qualify OBS-008/SHC-89 across all seven active v4 Splunk reconcilers.
+  Exact source `3e1716737` and Operator digest
+  `sha256:b83bbb97f89dca45e183e895e4be7e1d7bd11007f08babb41c4c94c97d18f145`
+  initialized current-generation `Pending/Paused` status once, including SHC
+  `deployerPhase`, created no managed workload, retained all seven resource
+  versions for 45 seconds, and emitted no paused-status or Reconciler error.
+  Removing pause took a LicenseManager and three-member SHC to Ready with
+  three endpoints, all members Up, zero restarts, and direct search success on
+  every member. Queue and ObjectStorage have no active enterprise reconcilers
+  in this baseline and are not live targets.
 - [ ] Qualify SHC-90 across every supported CR controller. Delete a namespace
   while contained CRs are Ready and prove that no normal Apply or create path
   runs after the namespace deletion timestamp, including before individual CR
   deletion timestamps are visible. Deletion-safe finalization must still
   remove declared resources, PVC/PV policy must complete, no status write may
   follow successful finalizer removal, and no manual patch may be required.
+- [ ] Qualify SHC-91 deletion-before-pause behavior for Standalone,
+  ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster.
+  Existing paused resources with finalizers must enter deletion-safe
+  reconciliation, perform no paused-status write after deletion starts, and
+  complete without a manual finalizer patch.
 - [x] Qualify bounded OPS-013/SHC-88 LicenseManager health observation. Exact
   source `241ea3d91` and Operator digest
   `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`
@@ -2164,7 +2179,8 @@ create, post-finalization status error, or LicenseManager reconcile error.
 The same campaign registered SHC-89 after newly created paused LicenseManager
 and SearchHeadCluster objects left required phase fields empty, making their
 pause-status writes fail schema validation and retry noisily. Detailed
-evidence is in
+SHC-86 did not correct that separate issue; the later SHC-89 record below
+qualifies it. Original observation evidence is in
 `SHC86LicenseManagerNamespaceFinalizationQualification.md`.
 
 2026-08-01 UTC: Completed bounded SHC-87 on
@@ -2194,3 +2210,25 @@ SearchHeadCluster Reconciler errors. Existing finalization then completed:
 ten PVCs were gone by `06:25:55Z`, ten PVs by `06:26:16Z`, and the namespace
 by `06:31:01Z` without a patch. SHC-90 owns the broader namespace-transition
 guard; no implementation or qualification is claimed by this finding.
+
+2026-08-01 UTC: Completed bounded OBS-008/SHC-89 on
+`codex/shc-89-paused-status`. Exact source `3e1716737` passed 41 Linux suites
+and 157 specs with zero failures and 78.5 percent composite coverage.
+Operator digest
+`sha256:b83bbb97f89dca45e183e895e4be7e1d7bd11007f08babb41c4c94c97d18f145`
+initialized all seven active v4 Splunk resource kinds to current-generation
+`Pending/Paused`; SearchHeadCluster additionally reported
+`deployerPhase=Pending`. No managed workload appeared, all seven
+resourceVersions were stable for 45 seconds, and the scoped log audit found
+zero paused-status errors and zero Reconciler errors. Annotation removal let a
+LicenseManager and SearchHeadCluster continue through ordinary reconciliation
+to Ready. The SHC finished with three endpoints, all members Up, zero
+restarts, and direct search success on every member. Cleanup removed the
+namespace, all ten PVCs, and all PV references. Exact replay inputs,
+observations, and boundaries are recorded in
+`SHC89PausedStatusQualification.md`.
+
+The controller audit registered SHC-91 for the adjacent deletion-before-pause
+ordering gap in Standalone, ClusterManager, MonitoringConsole, IndexerCluster,
+and IngestorCluster. LicenseManager and SearchHeadCluster already route CR
+deletion before pause. No SHC-91 correction or qualification is claimed here.

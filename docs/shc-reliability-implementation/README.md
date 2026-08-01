@@ -21,24 +21,24 @@ separate:
 
 ## Latest bounded qualification
 
-SHC-87 qualified retryable referenced-tier dependency status. Exact source
-`20d926658` passed 41 Linux suites and 157 specs. Its immutable Operator image
-then held a SearchHeadCluster at `Pending/DependencyNotReady` while its
-referenced LicenseManager was absent and starting, retained a specific status
-message and aggregating Normal Events, and recovered automatically without an
-Error phase or Pod restart. The resulting three-member SHC reached Ready with
-three endpoints, all members Up, zero restarts, direct search success on every
-member, and 8/8 service-routed searches.
+SHC-89 qualified schema-valid, quiet status for custom resources created
+already paused. Exact source `3e1716737` passed 41 Linux suites and 157 specs.
+Its immutable Operator image initialized all seven active v4 Splunk resource
+kinds to `Pending/Paused`, including SearchHeadCluster `deployerPhase`, wrote
+the state once, created no managed workload, and emitted no Reconciler error.
+After annotation removal, a LicenseManager and three-member SHC followed
+ordinary reconciliation to Ready; the SHC finished with three endpoints, all
+members Up, zero restarts, and direct search success on every member.
 
 This remains bounded spike evidence; it is not a declaration that every
 scenario in the matrix is complete or that the feature is ready for default
-enablement. Terminal desired-image contradiction and cross-namespace
-dependency behavior are source-qualified rather than imposed on the live
-fixture. Cleanup also registered SHC-90 after exposing normal reconciliation
-in the namespace-termination-to-CR-deletion propagation window; finalization
-still completed naturally, but the broader no-create contract remains open.
+enablement. Queue and ObjectStorage have no active enterprise reconcilers in
+this source baseline and are not live qualification targets. The source audit
+also registered SHC-91 for deletion-before-pause ordering in five active v4
+controllers; SHC-90 remains the separate namespace-termination propagation
+guard.
 Exact source, image, timing, and remaining-boundary evidence is in
-`SHC87DependencyStatusQualification.md`, `SHCWorkItemIndex.md`, and
+`SHC89PausedStatusQualification.md`, `SHCWorkItemIndex.md`, and
 `QualificationObservabilityRolloutPlan.md`.
 
 ## Review order
