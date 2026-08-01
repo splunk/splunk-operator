@@ -141,9 +141,20 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	// create or update a service
+	// The StatefulSet uses this headless Service for stable per-Pod network
+	// identity. The license-health check below addresses the Pod through that
+	// identity, so reconcile the Service before the StatefulSet and REST call.
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, true))
+	if err != nil {
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply headless service for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
+		return result, err
+	}
+
+	// create or update the client-facing service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseManager, false))
 	if err != nil {
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply regular service for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
 		return result, err
 	}
@@ -277,9 +288,15 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 			continue
 		}
 
-		// Only check license if pod is running
+		// A Running Pod can still be absent from the headless Service's DNS
+		// records. Wait for Kubernetes readiness before calling the management
+		// endpoint so normal startup is not reported as a license-health fault.
 		if pod.Status.Phase != corev1.PodRunning {
 			logger.InfoContext(ctx, "pod not in running state, skipping license check", "podName", podName, "phase", pod.Status.Phase)
+			continue
+		}
+		if !isLicenseManagerPodReady(&pod) {
+			logger.InfoContext(ctx, "pod not ready, skipping license check", "podName", podName)
 			continue
 		}
 
@@ -303,13 +320,15 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 		licenses, err := splunkClient.GetLicenseInfo()
 		if err != nil {
 			logger.ErrorContext(ctx, "failed to get license information from Splunk API", "error", err, "podName", podName)
+			eventPublisher.Warning(ctx, EventReasonLicenseHealthCheckFailed,
+				fmt.Sprintf("Unable to query license health from Pod '%s'; reconciliation will retry", podName))
 			continue
 		}
 
 		// Check for expired licenses
 		for licenseName, licenseInfo := range licenses {
 			if licenseInfo.Status == "EXPIRED" {
-				eventPublisher.Warning(ctx, "LicenseExpired",
+				eventPublisher.Warning(ctx, EventReasonLicenseExpired,
 					fmt.Sprintf("License '%s' has expired", licenseName))
 				logger.ErrorContext(ctx, "detected expired license", "licenseName", licenseName, "title", licenseInfo.Title)
 			}
@@ -317,6 +336,16 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 	}
 
 	return nil
+}
+
+func isLicenseManagerPodReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+
+	return false
 }
 
 // helper function to get the list of LicenseManager types in the current namespace

@@ -82,6 +82,7 @@ const (
 	EventReasonPodExecFailed                   = "PodExecFailed"
 	EventReasonScalingBlockedRF                = "ScalingBlockedRF"
 	EventReasonLicenseExpired                  = "LicenseExpired"
+	EventReasonLicenseHealthCheckFailed        = "LicenseHealthCheckFailed"
 
 	// Warning event reasons — upgrade
 	EventReasonUpgradeCheckFailed            = "UpgradeCheckFailed"

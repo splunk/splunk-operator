@@ -56,6 +56,7 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-license-manager-stack1-configmap"},
+		{MetaName: "*v1.Service-test-splunk-stack1-license-manager-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-license-manager-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -81,9 +82,9 @@ func TestApplyLicenseManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[10], funcCalls[11]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13], funcCalls[13], funcCalls[14], funcCalls[15]}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[11], funcCalls[12]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13], funcCalls[14], funcCalls[14], funcCalls[15], funcCalls[16]}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseManager",
@@ -1355,6 +1356,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 		name           string
 		createPod      bool
 		podPhase       corev1.PodPhase
+		podReady       bool
 		createSecret   bool
 		password       string
 		mockHTTPBody   string
@@ -1414,17 +1416,27 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 			expectEvent: false,
 		},
 		{
-			name:         "Pod running but no secret",
+			name:         "Pod running but not ready skips license check",
 			createPod:    true,
 			podPhase:     corev1.PodRunning,
+			createSecret: false,
+			expectEvent:  false,
+			expectError:  false,
+		},
+		{
+			name:         "Pod ready but no secret",
+			createPod:    true,
+			podPhase:     corev1.PodRunning,
+			podReady:     true,
 			createSecret: false,
 			expectEvent:  false,
 			expectError:  true,
 		},
 		{
-			name:         "Pod running with empty password",
+			name:         "Pod ready with empty password",
 			createPod:    true,
 			podPhase:     corev1.PodRunning,
+			podReady:     true,
 			createSecret: true,
 			password:     "",
 			expectEvent:  false,
@@ -1434,29 +1446,33 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 			name:           "API call fails gracefully",
 			createPod:      true,
 			podPhase:       corev1.PodRunning,
+			podReady:       true,
 			createSecret:   true,
 			password:       "testpassword",
 			mockHTTPStatus: 500,
 			mockHTTPBody:   `{"error": "internal server error"}`,
 			mockHTTPErr:    nil,
-			expectEvent:    false,
+			expectEvent:    true,
+			expectedReason: EventReasonLicenseHealthCheckFailed,
 			expectError:    false,
 		},
 		{
 			name:           "Expired license emits LicenseExpired event",
 			createPod:      true,
 			podPhase:       corev1.PodRunning,
+			podReady:       true,
 			createSecret:   true,
 			password:       "testpassword",
 			mockHTTPStatus: 200,
 			mockHTTPBody:   string(expiredBody),
 			expectEvent:    true,
-			expectedReason: "LicenseExpired",
+			expectedReason: EventReasonLicenseExpired,
 		},
 		{
 			name:           "Valid license emits no event",
 			createPod:      true,
 			podPhase:       corev1.PodRunning,
+			podReady:       true,
 			createSecret:   true,
 			password:       "testpassword",
 			mockHTTPStatus: 200,
@@ -1499,7 +1515,16 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 					},
 					Status: corev1.PodStatus{
 						Phase: tc.podPhase,
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.PodReady,
+								Status: corev1.ConditionFalse,
+							},
+						},
 					},
+				}
+				if tc.podReady {
+					pod.Status.Conditions[0].Status = corev1.ConditionTrue
 				}
 				c.Create(ctx, pod)
 			}
