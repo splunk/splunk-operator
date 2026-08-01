@@ -179,8 +179,9 @@ ownership.
   LicenseManager referenced by a paused SearchHeadCluster finalized in six
   seconds; its namespace completed naturally in 337 seconds after kubelet,
   PVC protection, CSI reclaim, and the namespace controller finished. This
-  proves the exact CR-deletion-visible paths; SHC-90 tracks the earlier
-  namespace-termination propagation window exposed by later cleanup.
+  proves the exact CR-deletion-visible paths. The later SHC-90 qualification at
+  source `0c291c8c8` closes the earlier namespace-termination propagation
+  window exposed by cleanup; no SHC-90 fix is attributed to SHC-86.
 - [x] Qualify SHC-87 referenced-tier dependency classification. Exact source
   `20d926658` and Operator OCI digest
   `sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`
@@ -203,17 +204,28 @@ ownership.
   three endpoints, all members Up, zero restarts, and direct search success on
   every member. Queue and ObjectStorage have no active enterprise reconcilers
   in this baseline and are not live targets.
-- [ ] Qualify SHC-90 across every supported CR controller. Delete a namespace
-  while contained CRs are Ready and prove that no normal Apply or create path
-  runs after the namespace deletion timestamp, including before individual CR
-  deletion timestamps are visible. Deletion-safe finalization must still
-  remove declared resources, PVC/PV policy must complete, no status write may
-  follow successful finalizer removal, and no manual patch may be required.
+- [x] Qualify SHC-90 across every active v4 Splunk tier controller at the
+  source boundary and with a real LicenseManager/three-member SHC on EKS.
+  Exact source `0c291c8c8` passed 42 Linux suites, 180 JUnit nodes, and 124
+  Helm tests. Immutable Operator digest
+  `sha256:c2438c14e238e101cba52d758968a2cd7c64fc2798ed5a0a4781acb3e836e764`
+  directly observed a deleting Namespace while both live CR deletion
+  timestamps remained empty. Five reconciles per controller stopped before
+  normal Apply with zero fixture-level error; CR deletion then reached both
+  finalizer paths, all ten PVC/PV claim references disappeared, and the
+  Namespace completed naturally without a manual finalizer patch. Provider,
+  Kubernetes-version, and namespace-scoped Helm breadth remain separate gates.
 - [ ] Qualify SHC-91 deletion-before-pause behavior for Standalone,
   ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster.
   Existing paused resources with finalizers must enter deletion-safe
   reconciliation, perform no paused-status write after deletion starts, and
   complete without a manual finalizer patch.
+- [ ] Qualify SHC-92 namespace-scoped Helm behavior with and without
+  `namespaceOverride`. Prove the selected watch namespace, operator/service
+  account placement, namespaced Role bindings, cluster-scoped Namespace-reader
+  restriction, non-collision across two namespace-scoped installations, and
+  upgrade compatibility on the minimum and latest supported Kubernetes
+  versions.
 - [x] Qualify bounded OPS-013/SHC-88 LicenseManager health observation. Exact
   source `241ea3d91` and Operator digest
   `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`

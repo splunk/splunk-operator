@@ -21,24 +21,26 @@ separate:
 
 ## Latest bounded qualification
 
-SHC-89 qualified schema-valid, quiet status for custom resources created
-already paused. Exact source `3e1716737` passed 41 Linux suites and 157 specs.
-Its immutable Operator image initialized all seven active v4 Splunk resource
-kinds to `Pending/Paused`, including SearchHeadCluster `deployerPhase`, wrote
-the state once, created no managed workload, and emitted no Reconciler error.
-After annotation removal, a LicenseManager and three-member SHC followed
-ordinary reconciliation to Ready; the SHC finished with three endpoints, all
-members Up, zero restarts, and direct search success on every member.
+SHC-90 qualified the namespace-termination propagation guard. Exact source
+`0c291c8c8` passed 42 Linux suites, 180 JUnit nodes, build/vet/generation, and
+124 Helm tests. Immutable Operator digest
+`sha256:c2438c14e238e101cba52d758968a2cd7c64fc2798ed5a0a4781acb3e836e764`
+then observed the target EKS race: the Namespace was terminating while the
+LicenseManager and SearchHeadCluster deletion timestamps were still empty.
+Five reconciles per controller stopped before normal Apply, with zero
+fixture-level error or Reconciler error. CR deletion then reached the preserved
+finalizer paths, all ten PVC/PV claim references disappeared, and Kubernetes
+removed the Namespace naturally without a manual finalizer patch.
 
 This remains bounded spike evidence; it is not a declaration that every
 scenario in the matrix is complete or that the feature is ready for default
 enablement. Queue and ObjectStorage have no active enterprise reconcilers in
-this source baseline and are not live qualification targets. The source audit
-also registered SHC-91 for deletion-before-pause ordering in five active v4
-controllers; SHC-90 remains the separate namespace-termination propagation
-guard.
+this source baseline and are not live qualification targets. SHC-91 remains
+pending for deletion-before-pause ordering in five active v4 controllers, and
+SHC-92 remains pending for namespace-scoped Helm `namespaceOverride` and watch
+semantics.
 Exact source, image, timing, and remaining-boundary evidence is in
-`SHC89PausedStatusQualification.md`, `SHCWorkItemIndex.md`, and
+`SHC90NamespaceTerminationQualification.md`, `SHCWorkItemIndex.md`, and
 `QualificationObservabilityRolloutPlan.md`.
 
 ## Review order

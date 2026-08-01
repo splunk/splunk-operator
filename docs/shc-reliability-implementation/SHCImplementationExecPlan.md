@@ -512,7 +512,9 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   post-finalization status error. Detailed evidence is in
   `SHC86LicenseManagerNamespaceFinalizationQualification.md`. Later SHC-87
   cleanup exposed the earlier namespace-termination-to-CR-deletion propagation
-  window tracked by SHC-90; the broader no-create contract remains open.
+  window tracked by SHC-90. That separate propagation guard was subsequently
+  qualified at source `0c291c8c8`; SHC-86 remains the evidence anchor for its
+  original CR-deletion-visible fixtures.
 - [x] (2026-08-01 UTC) Defined, implemented, and qualified bounded SHC-87 on
   isolated branch `codex/shc-87-dependency-status`. Exact source `20d926658`
   reports absent, Pending, missing-workload, and rolling-to-desired-image
@@ -538,18 +540,31 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `sha256:b83bbb97f89dca45e183e895e4be7e1d7bd11007f08babb41c4c94c97d18f145`
   passed the all-kind EKS fixture and LicenseManager/SearchHeadCluster unpause
   recovery. Detailed evidence is in `SHC89PausedStatusQualification.md`.
-- [ ] Define SHC-90 so normal reconciliation stops when the namespace is
-  terminating even if deletion propagation has not yet added a deletion
-  timestamp to the contained custom resource. Preserve deletion-safe
-  finalization and status rules. Cover LicenseManager, SearchHeadCluster, and
-  every supported CR controller with a namespace-termination race test. SHC-87
-  cleanup recorded six LicenseManager and nine SearchHeadCluster Reconciler
-  errors before ordinary finalization completed; no fix is claimed by SHC-87.
+- [x] (2026-08-01 UTC) Completed SHC-90 at exact source `0c291c8c8`.
+  Authoritative uncached Namespace reads stop normal reconciliation across all
+  seven active v4 tier controllers, deletion-transition events keep finalizers
+  reachable, typed `NamespaceTerminating` admission cancellation closes the
+  remaining GET-to-create race, and RBAC grants only Namespace `get`. Final
+  macOS and Linux gates passed 42 suites, 180 Linux JUnit nodes, 78.1 percent
+  composite coverage, build/vet/generation, and 124 Helm tests. Immutable EKS
+  digest `sha256:c2438c14e238e101cba52d758968a2cd7c64fc2798ed5a0a4781acb3e836e764`
+  observed the Namespace-deleting/CR-not-deleting interval and stopped five
+  LicenseManager plus five SearchHeadCluster reconciles with zero fixture
+  error. Both deletion finalizers then ran, all ten PVC/PV claim references
+  disappeared, and the Namespace completed naturally without a manual patch.
+  Detailed evidence is in `SHC90NamespaceTerminationQualification.md`.
 - [ ] Define SHC-91 so CR deletion is handled before pause for Standalone,
   ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster.
   Preserve deletion-safe finalization, perform no paused-status write once
   deletion starts, and prove every affected finalizer path. SHC-89 only
   registered this adjacent ordering gap; no fix is claimed by SHC-89.
+- [ ] Define SHC-92 so namespace-scoped Helm installation placement and watch
+  target are unambiguous when `namespaceOverride` is set. Decide the supported
+  contract, align Deployment `WATCH_NAMESPACE`, Namespace-reader
+  `resourceNames`, Role/RoleBinding subjects, documentation, and upgrade
+  behavior, then qualify on supported Kubernetes versions. SHC-90 preserves
+  `.Release.Namespace` as the existing watch target and does not make this
+  compatibility decision.
 - [x] (2026-08-01 UTC) Defined, implemented, and qualified SHC-88 on isolated
   branch `codex/shc-88-license-health`. Source `241ea3d91` reconciles the
   headless Service already named by the LicenseManager StatefulSet, waits for
@@ -2699,8 +2714,10 @@ SearchHeadCluster entered normal Apply paths and Kubernetes rejected ConfigMap
 creation in the terminating namespace, producing six and nine Reconciler
 errors respectively. Existing finalization then completed without a patch;
 all ten PVCs and PVs disappeared and the namespace completed naturally.
-SHC-90 must add a namespace-termination guard without weakening the existing
-CR-deletion finalizers. No SHC-90 implementation is claimed here.
+This historical registration required SHC-90 to add a namespace-termination
+guard without weakening the existing CR-deletion finalizers. The later
+`SHC90NamespaceTerminationQualification.md` record qualifies that work at
+source `0c291c8c8`; no fix is retroactively attributed to SHC-87.
 
 2026-08-01 UTC: Completed bounded SHC-89 on
 `codex/shc-89-paused-status`. Exact source `3e1716737` passed 41 Linux suites,

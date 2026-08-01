@@ -315,7 +315,9 @@ SHC-90 owns the broader requirement to guard normal reconciliation from
 authoritative namespace-termination state even before the CR deletion
 timestamp is visible. The no-create result in this record remains valid for
 the two exact SHC-86 campaigns, but it must not be generalized across that
-newly observed propagation window.
+newly observed propagation window. The later
+`SHC90NamespaceTerminationQualification.md` record qualifies that broader
+guard at source `0c291c8c8`; no fix is retroactively attributed to SHC-86.
 
 ## Remaining boundaries
 

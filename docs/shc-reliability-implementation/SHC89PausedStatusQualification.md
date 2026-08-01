@@ -227,8 +227,10 @@ Active with its SearchHeadCluster at `Ready/Ready`, `3/3` replicas.
 SHC-89 closes only schema-valid, quiet paused-at-creation behavior for the
 seven active v4 Splunk reconcilers.
 
-- SHC-90 remains responsible for stopping normal Apply work during the short
-  namespace-termination-to-CR-deletion propagation window.
+- SHC-90 is the separate work item for stopping normal Apply during the short
+  namespace-termination-to-CR-deletion propagation window. It was subsequently
+  qualified at source `0c291c8c8`; no part of that fix is attributed to
+  SHC-89.
 - SHC-91 records a separate deletion-order gap. LicenseManager and
   SearchHeadCluster already route deletion before pause, but Standalone,
   ClusterManager, MonitoringConsole, IndexerCluster, and IngestorCluster do

@@ -285,14 +285,23 @@ completed naturally at 337 seconds. Neither run used a manual finalizer patch;
 the bounded log audit found no forbidden create, post-finalization status
 error, or LicenseManager reconcile error.
 
-Later SHC-87 cleanup showed that OPS-012 is not closed across the complete
-namespace transition. A namespace can become terminating before deletion
-timestamps appear on its custom resources. LicenseManager and
-SearchHeadCluster briefly attempted normal ConfigMap Apply work in that
-interval; Kubernetes rejected it, then existing finalization completed and all
-ten PVCs and PVs disappeared. SHC-90 tracks the missing namespace-termination
-guard. The SHC-86 evidence remains accepted for its exact fixtures, but the
-broader no-create assertion remains open.
+Later SHC-87 cleanup exposed the earlier namespace-transition interval: a
+Namespace can become terminating before deletion timestamps appear on its
+custom resources. LicenseManager and SearchHeadCluster briefly attempted
+normal ConfigMap Apply work in that interval; Kubernetes rejected it, then
+existing finalization completed.
+
+SHC-90 closes that bounded gap. Exact source `0c291c8c8` stops normal Apply
+from an authoritative Namespace read across all seven active v4 Splunk tier
+controllers and preserves finalization after the CR deletion timestamp is
+visible. Immutable EKS Operator digest
+`sha256:c2438c14e238e101cba52d758968a2cd7c64fc2798ed5a0a4781acb3e836e764`
+observed the real Namespace-deleting/CR-not-deleting window for a Ready
+LicenseManager and three-member SHC. It produced five guard records per
+controller, zero fixture-level error, natural deletion finalization, zero
+remaining PVC/PV claim reference, and natural Namespace completion without a
+manual finalizer patch. SHC-91 still owns deletion-before-pause ordering in the
+five affected controllers.
 
 ### OPS-013 LicenseManager qualification evidence
 
@@ -341,6 +350,7 @@ partial qualification results, not an OPS-011 pass.
 | K8S-007 | P2 | EndpointSlice propagation delay | Traffic observations and tolerance captured |
 | K8S-008 | P2 | Cluster autoscaler/zone movement | Scheduling/storage stages remain attributable |
 | K8S-009 | P1 | PDB across supported SHC sizes | The PDB selects only this SHC, retains at most one voluntarily unavailable member, is reconciled idempotently, and never takes over a user-owned name collision |
+| K8S-010 | P1 | Namespace-scoped Helm install with `namespaceOverride` | The documented watch target, Deployment and service-account placement, Role/RoleBinding namespaces, and cluster-scoped Namespace-reader `resourceNames` agree; two installations do not collide; an upgrade preserves the selected contract |
 
 ### STS-002 and bounded K8S-006 SHC-85 evidence
 

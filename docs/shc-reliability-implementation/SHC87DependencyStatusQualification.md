@@ -274,6 +274,9 @@ paths completed and all content disappeared.
 This is not caused or fixed by dependency classification. It is registered as
 SHC-90: normal reconciliation must also stop when the namespace is terminating,
 including the propagation interval before a CR deletion timestamp is observed.
+The later `SHC90NamespaceTerminationQualification.md` record qualifies that
+separate guard at source `0c291c8c8`; the failure remains valid historical
+evidence for this cleanup window.
 
 ## Acceptance assessment
 
@@ -327,6 +330,6 @@ source-only or separate scenarios.
 No Docker-Splunk or Splunk Enterprise source change was required for this
 classification. The member-info errors during first formation are a separate
 observability concern in the existing SHC lifecycle and must not be attributed
-to the dependency-status correction. The namespace-transition create race is
-separately tracked by SHC-90 and means the broader namespace-first no-create
-contract remains open even though cleanup completed naturally.
+to the dependency-status correction. The namespace-transition create race was
+separately tracked and later closed by SHC-90 at source `0c291c8c8`; cleanup in
+this SHC-87 campaign remains historical pre-fix evidence.
