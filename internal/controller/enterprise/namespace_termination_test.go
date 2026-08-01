@@ -3,11 +3,14 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -119,4 +122,36 @@ func TestShouldStopForNamespaceReadError(t *testing.T) {
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("error = %v, want wrapped %v", err, wantErr)
 	}
+}
+
+func TestNamespaceTerminatingAdmissionErrorClassification(t *testing.T) {
+	t.Parallel()
+
+	if !handleNamespaceTerminatingAdmissionError(context.Background(), "test", newNamespaceTerminatingAdmissionError()) {
+		t.Fatal("wrapped NamespaceTerminating admission error must be classified")
+	}
+	otherForbidden := k8serrors.NewForbidden(
+		schema.GroupResource{Resource: "configmaps"},
+		"test",
+		errors.New("policy denied"),
+	)
+	if handleNamespaceTerminatingAdmissionError(context.Background(), "test", otherForbidden) {
+		t.Fatal("an unrelated forbidden error must not be classified")
+	}
+	if handleNamespaceTerminatingAdmissionError(context.Background(), "test", nil) {
+		t.Fatal("nil must not be classified")
+	}
+}
+
+func newNamespaceTerminatingAdmissionError() error {
+	statusErr := k8serrors.NewForbidden(
+		schema.GroupResource{Resource: "configmaps"},
+		"test",
+		errors.New("unable to create new content because the namespace is being terminated"),
+	)
+	statusErr.ErrStatus.Details.Causes = []metav1.StatusCause{{
+		Type:    corev1.NamespaceTerminatingCause,
+		Message: "namespace test is being terminated",
+	}}
+	return fmt.Errorf("apply ConfigMap: %w", statusErr)
 }

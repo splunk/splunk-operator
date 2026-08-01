@@ -145,6 +145,9 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplySearchHeadCluster(ctx, r.Client, instance)
+	if handleNamespaceTerminatingAdmissionError(ctx, instance.GetNamespace(), err) {
+		return ctrl.Result{}, nil
+	}
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}

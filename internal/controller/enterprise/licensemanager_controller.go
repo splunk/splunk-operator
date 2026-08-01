@@ -136,6 +136,9 @@ func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplyLicenseManager(ctx, r.Client, instance)
+	if handleNamespaceTerminatingAdmissionError(ctx, instance.GetNamespace(), err) {
+		return ctrl.Result{}, nil
+	}
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}

@@ -46,3 +46,20 @@ func shouldStopForTerminatingNamespace(ctx context.Context, reader client.Reader
 	)
 	return true, nil
 }
+
+// handleNamespaceTerminatingAdmissionError identifies and records the narrow API admission
+// result that can still occur if a Namespace starts terminating after the
+// authoritative preflight GET but before a create reaches the API server.
+func handleNamespaceTerminatingAdmissionError(ctx context.Context, namespaceName string, err error) bool {
+	if err == nil || !k8serrors.IsForbidden(err) || !k8serrors.HasStatusCause(err, corev1.NamespaceTerminatingCause) {
+		return false
+	}
+
+	cause, _ := k8serrors.StatusCause(err, corev1.NamespaceTerminatingCause)
+	logging.FromContext(ctx).InfoContext(ctx,
+		"namespace began terminating during reconciliation; treating admission rejection as expected cancellation",
+		"targetNamespace", namespaceName,
+		"cause", cause.Message,
+	)
+	return true
+}
