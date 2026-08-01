@@ -93,6 +93,19 @@ The controller-recovery path therefore did not cause request failure, but it
 also did not establish immediate distributed-search completeness during the
 subsequent peer identity and address convergence.
 
+A sixth independent 1,800-event record ran across a normal Operator
+controller leader takeover and the resumed four-indexer replacement. Two
+healthy controller Pods contended through the Kubernetes Lease, the active
+leader was deleted at observed ordinal-3 `Decommissioning`, a different Pod
+acquired leadership, and the durable lifecycle completed `3 -> 2 -> 1 -> 0`.
+The Job again had zero HEC or search-request failures and exact eventual
+results on all three Search Heads, but reported 13 successful-search count
+regressions and maximum pending 329 at sequence 1239. Its log has SHA-256
+`e34ef36dd49a7f835028d13ebd3336fdd1090f7b7210bbc50d78f27f3ec1ed05`.
+The leader takeover itself resumed correctly and did not duplicate the
+interrupted decommission request. It also did not eliminate the later
+distributed-peer convergence gap after indexer address and identity changes.
+
 This is not evidence that RF or SF was configured incorrectly, and it is not
 yet a complete root-cause finding. It proves that HTTP request success, Cluster
 Manager `Up/searchable`, Kubernetes endpoint recovery, and remote HEC health

@@ -2001,6 +2001,55 @@ published, RF/SF/all-searchable/no-fixup health passed, and every indexer
 Ansible recap reported `failed=0`. The independent workload submitted 1,800
 events with zero HEC or search-request failures and exact eventual results on
 every Search Head, but observed 30 successful-search count regressions and
-maximum pending 417. This closes only API disconnection at observed
-`Decommissioning`; other stages/topologies, leader contention, conflict,
-redundancy, soak, and immediate distributed-search completeness remain open.
+maximum pending 417. At that checkpoint this closed only API disconnection at
+observed `Decommissioning`; other stages/topologies, leader contention,
+conflict, redundancy, soak, and immediate distributed-search completeness
+remained open. The following record closes one normal leader takeover only.
+
+2026-08-01 UTC: Recorded the bounded controller-leader-failover campaign on
+`codex/shc-85-leader-failover-qualification`. Harness source `ba220677b`
+established two Ready zero-restart Operator Pods under one stable renewing
+Lease holder before triggering the indexer revision. The EKS run used Operator
+digest `sha256:59fc2afdfafc7e0c2b9f49fceebf1862128521017311776b91f0ce3315eff608`
+and official Splunk runtime digest
+`sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`.
+At observed ordinal-3
+`Decommissioning`, it recorded the exact operation, target UID, revisions,
+request timestamp, and target-specific decommission Event count, then
+force-deleted the active leader UID. After Lease expiry a newly created
+replacement validly won the election; transitions advanced once from 80 to
+81, the successor logged acquisition, and the bounded failover check completed
+in 53 seconds. The same durable operation and timestamp survived.
+
+The successor completed `3 -> 2 -> 1 -> 0` while the second controller stayed
+a contender. The 149 observations in the 150-line lifecycle record retained
+one stable active holder, two Ready zero-restart controller Pods, maximum
+indexer unavailability one, zero
+indexer restarts, and ten final stable samples. The original target's
+decommission Event count remained one. Cleanup restored one controller; when
+that scale-down removed the successor, the retained Pod performed the expected
+second acquisition and transition `81 -> 82`, then renewed stably before
+`PASS`. The lifecycle and five-line leader records have SHA-256 values
+`9b7193931ac6c72f02edc45265a303d4f88a8e59da6967d6e03e368f837ae6f3`
+and `c6d662265eec4e5c5683f344c3f7e39a6532f23264253320d9db113ada66a409`.
+
+All final CRs were Ready, all four indexer and three Search Head endpoints were
+published, RF/SF/all-searchable/no-fixup health passed, all peers were `Up`,
+and all four indexer Ansible recaps reported `ok=111` and `failed=0`. No
+indexer liveness failure, prior KV Store precheck signature, or surviving
+lifecycle marker was present. Direct searches on all three Search Heads
+returned exact `1800/1/1800/1800`. The independent workload had zero HEC or
+search-request failures and exact eventual completeness; it recorded 13 count
+regressions and maximum pending 329 at sequence 1239. Its 1,802-line log has
+SHA-256
+`e34ef36dd49a7f835028d13ebd3336fdd1090f7b7210bbc50d78f27f3ec1ed05`.
+This closes one bounded STS-004 single-active-leader takeover. Split brain,
+Lease corruption, controller partition, repeated failover, other lifecycle
+stages, and immediate distributed-search completeness remain open.
+
+The cleanup leader start also logged a LicenseManager health-check DNS
+failure. Inspection proved that the reconciler creates only the regular
+LicenseManager Service while `checkLicenseRelatedPodFailures` constructs a
+Pod address below an absent headless Service; the query is skipped and the
+healthy workload remains Ready. This adjacent, pre-existing diagnostic gap is
+registered as SHC-88 and is not attributed to leader takeover or fixed here.

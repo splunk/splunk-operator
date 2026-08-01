@@ -348,6 +348,39 @@ Search Head, but 30 successful-search count regressions and maximum pending
 417. K8S-006 recovery therefore passes without converting the separate
 OPS-011 immediate distributed-search completeness requirement into a pass.
 
+### Bounded STS-004 SHC-85 evidence
+
+The 2026-08-01 controller-leader-failover campaign passes STS-004 for one
+normal Kubernetes Lease takeover at observed ordinal-3 `Decommissioning`.
+Starting from one Ready controller, the harness scaled the Deployment to two,
+required both zero-restart Pods to be Ready, and proved that one stable holder
+renewed Lease `270bec8c.splunk.com`. It then force-deleted that exact holder
+after the durable indexer operation had recorded the decommission request,
+target UID, revisions, timestamp, and observed Splunk decommission state.
+
+A newly created replacement, rather than the already-waiting follower,
+acquired the Lease after expiry. That is valid because Kubernetes leader
+election does not guarantee follower fairness. The transition count advanced
+exactly from 80 to 81, acquisition was logged, the successor renewed stably,
+and two Ready zero-restart contenders were restored. The same indexer
+operation resumed. The full roll completed `3 -> 2 -> 1 -> 0` while every
+sample retained the same sole leader, two healthy controller Pods, no more
+than one unavailable indexer, and zero indexer restarts. The original target's
+`IndexerDecommissionRequested` Event count remained one. Ten final stable
+samples passed.
+
+The lifecycle and bounded leader records have SHA-256 values
+`9b7193931ac6c72f02edc45265a303d4f88a8e59da6967d6e03e368f837ae6f3`
+and `c6d662265eec4e5c5683f344c3f7e39a6532f23264253320d9db113ada66a409`.
+The independent Job submitted 1,800 events with zero HEC/search request
+failures and exact final results, but retained 13 successful-search count
+regressions and maximum pending 329; its SHA-256 is
+`e34ef36dd49a7f835028d13ebd3336fdd1090f7b7210bbc50d78f27f3ec1ed05`.
+Cleanup restored the original one-replica topology and a stable renewed Lease.
+This does not pass simultaneous active leaders, Lease deletion/corruption,
+inter-contender network partition, repeated failovers, or leader loss at every
+lifecycle stage.
+
 ## Observability and security scenarios
 
 | ID | Priority | Scenario | Required proof |

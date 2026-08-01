@@ -422,10 +422,32 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   and `49dc69a31444997ddf5d5c8045bcfd840002937fd621bdbc4df700f2b1c1de7e`.
   The independent 1,800-event Job had zero HEC/search request failures and
   exact eventual results on all three Search Heads, but retained 30 count
-  regressions and maximum pending 417. This closes only the bounded K8S-006
-  API-disconnection gate at observed `Decommissioning`; stage variants,
-  leader contention, conflict, redundancy, and repeated/long faults remain
-  open.
+  regressions and maximum pending 417. At that checkpoint this closed only the
+  bounded K8S-006 API-disconnection gate at observed `Decommissioning`;
+  stage variants, leader contention, conflict, redundancy, and repeated/long
+  faults remained open. The next item closes one normal leader takeover only.
+- [x] (2026-08-01 UTC) Qualified normal Operator leader failover with two
+  healthy controller contenders during observed ordinal-3 `Decommissioning`.
+  Harness source `ba220677b` scaled the Operator from one to two Ready,
+  zero-restart Pods, proved one stable Lease holder, and force-deleted that
+  exact leader. A newly created replacement was allowed to win because
+  Kubernetes leader election has no follower-fairness guarantee. Lease
+  transitions increased exactly `80 -> 81`; the successor logged acquisition,
+  renewed stably, and retained the original operation ID, target UID,
+  revisions, and decommission timestamp. The full `3 -> 2 -> 1 -> 0` roll ran
+  with two Ready controllers, one stable active leader, no duplicate ordinal-3
+  decommission Event, at most one unavailable indexer, zero restarts, and ten
+  final stable samples. Cleanup restored one Ready controller and a renewed
+  Lease; removing the active successor caused the expected `81 -> 82` cleanup
+  transition. Lifecycle, leader, and workload SHA-256 values are
+  `9b7193931ac6c72f02edc45265a303d4f88a8e59da6967d6e03e368f837ae6f3`,
+  `c6d662265eec4e5c5683f344c3f7e39a6532f23264253320d9db113ada66a409`,
+  and `e34ef36dd49a7f835028d13ebd3336fdd1090f7b7210bbc50d78f27f3ec1ed05`.
+  The 1,800-event Job had zero request failures and exact final results on all
+  Search Heads, while 13 count regressions and maximum pending 329 retain the
+  immediate-completeness gap. This passes one normal single-active-leader
+  takeover, not split brain, Lease corruption, inter-contender partition,
+  repeated failover, or other lifecycle stages.
 - [x] (2026-07-31 UTC) Corrected two Search Head captain-transition defects
   exposed while forming the SHC-85 fixture. Source `99da90390` sends the
   captain-only authoritative member query to the newly elected captain instead
@@ -456,7 +478,10 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Heads still logged requests to old indexer Pod IPs. The later
   `TargetSelected` campaign recorded 18 regressions and maximum pending 364 at
   sequence 1481 after lifecycle `Completed`; all three Search Heads again
-  logged connection or authentication failures to old indexer Pod IPs.
+  logged connection or authentication failures to old indexer Pod IPs. The
+  later controller-leader-failover campaign recorded 13 regressions and
+  maximum pending 329 at sequence 1239, again with zero request failures and
+  exact eventual results.
 - [x] Define and qualify SHC-83 on isolated branch
   `codex/shc-83-startup-readiness-qualification`. During initial formation,
   no Search Head may enter the client Service until every desired Search Head
@@ -483,6 +508,14 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   that exists but is still starting is reported as Pending/Progressing with a
   bounded dependency reason. Reserve Error for terminal incompatibility,
   invalid configuration, or an expired wait.
+- [ ] Define and qualify SHC-88 so LicenseManager health and expiration checks
+  use a Service name that the LicenseManager reconciler actually creates. The
+  current reconciler creates the regular `-service`, while
+  `checkLicenseRelatedPodFailures` constructs a per-Pod FQDN beneath a missing
+  `-headless` Service, logs DNS `no such host`, skips the query, and still
+  reports the healthy workload Ready. The fix must use a resolvable endpoint,
+  distinguish connectivity failure from license state, and expose a bounded
+  diagnostic without turning a transient lookup into a false terminal phase.
 - [ ] Complete the remaining SHC-85 negative and compatibility qualification.
   The bounded Operator-owned lifecycle is source-qualified and EKS-qualified
   for steady-controller operation, one controller-Pod restart during
@@ -491,8 +524,10 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `ReadyForReplacement`, and five-minute controller absence during
   `WithdrawingReadiness`, and five-minute controller absence during
   `TargetSelected`, plus a 401-second API-server disconnection during observed
-  `Decommissioning`. Remaining gates include other API-partition stages and
-  topologies, leader contention, conflicting desired-state changes,
+  `Decommissioning`, and one normal two-contender leader takeover during
+  observed `Decommissioning`. Remaining gates include other API-partition and
+  leader-failover stages and topologies, split-brain/Lease corruption,
+  repeated failover, conflicting desired-state changes,
   insufficient RF/SF health, HEC-disabled Splunk-to-Splunk traffic, HTTP and
   HTTPS HEC variants, ingress TLS termination, service-mesh and no-mesh
   deployments, persistent-client connection behavior, and repeated/soak
@@ -2495,3 +2530,29 @@ regressions and maximum pending 417. This closes the bounded K8S-006 gate at
 one lifecycle stage; immediate completeness, other partition stages and
 topologies, leader contention, conflict, redundancy, and compatibility remain
 open.
+
+2026-08-01 UTC: Recorded the isolated SHC-85 controller-leader-failover
+campaign on `codex/shc-85-leader-failover-qualification`. Harness source
+`ba220677b` established two Ready zero-restart contenders under one stable
+Lease holder, then deleted the exact active leader while ordinal 3 retained an
+observed durable decommission operation. A newly created replacement acquired
+the Lease after expiry; transitions advanced once from 80 to 81 and takeover
+completed in 53 seconds. The same operation resumed, the original target's
+decommission Event count stayed one, and the successor completed
+`3 -> 2 -> 1 -> 0` plus ten stable samples with two healthy controllers,
+maximum indexer unavailability one, and zero restarts. The 150-line lifecycle
+record and five-line leader record have SHA-256 values
+`9b7193931ac6c72f02edc45265a303d4f88a8e59da6967d6e03e368f837ae6f3`
+and `c6d662265eec4e5c5683f344c3f7e39a6532f23264253320d9db113ada66a409`.
+The 1,800-event Job had zero request failures, exact final results on every
+Search Head, 13 count regressions, and maximum pending 329; workload SHA-256
+is `e34ef36dd49a7f835028d13ebd3336fdd1090f7b7210bbc50d78f27f3ec1ed05`.
+This closes bounded STS-004 for one normal takeover, not concurrent active
+leaders, Lease corruption, controller partition, or repeated failover.
+
+The cleanup leader start separately exposed that LicenseManager expiration
+checking targets a per-Pod FQDN under a headless Service which the
+LicenseManager reconciler does not create. The call logs DNS `no such host`,
+continues, and leaves the CR Ready without completing the license query. Code,
+Service, EndpointSlice, and cross-Pod DNS inspection confirmed the mismatch.
+SHC-88 records this adjacent requirement; no fix is part of SHC-85.

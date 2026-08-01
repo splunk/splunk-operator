@@ -179,6 +179,11 @@ unavailable Cluster Manager in a different retained test namespace. Those
 entries are not evidence from this qualification namespace and were excluded
 from the lifecycle result.
 
+The later leader-failover campaign reproduced the LicenseManager lookup on a
+new leader and traced it to a deterministic regular-Service/headless-FQDN
+mismatch. SHC-88 now retains that separate diagnostic requirement; its
+existence does not change the bounded controller-restart verdict above.
+
 This campaign qualifies controller-Pod replacement during one persisted
 Operator-owned indexer `Decommissioning` operation. By itself it does not
 qualify a long-duration API-server disconnection, leader failover with
@@ -617,6 +622,83 @@ boundary. It does not qualify concurrent leaders, API partitions at every
 stage, desired-state conflict, insufficient redundancy, or repeated and
 long-duration network faults.
 
+## Operator controller leader-failover qualification
+
+The isolated branch `codex/shc-85-leader-failover-qualification` exercises
+STS-004 using the Operator's normal Kubernetes Lease protocol. Harness source
+`ba220677b` starts from one Ready controller, scales the Deployment to two,
+requires both zero-restart Pods to remain Ready while one stable holder renews
+Lease `270bec8c.splunk.com`, and then starts a harmless four-indexer revision.
+This is different from the API-disconnection campaign: both contenders keep
+API connectivity and only the exact active leader Pod is removed.
+
+The run used EKS context `shc85-vivek-spl-301372`, namespace
+`shc85-lifecycle-hold`, Operator digest
+`sha256:59fc2afdfafc7e0c2b9f49fceebf1862128521017311776b91f0ce3315eff608`,
+and the official Splunk build `10.5.2605.0/844c593e9c1d` at runtime digest
+`sha256:2b6d0f3b316eca90f061bfc22be2f6fc59c960fcfaa6791a871c0a5d4ee0b2c2`.
+The four-indexer topology remained RF3/SF2 with three Search Heads and a
+referenced LicenseManager.
+
+At `2026-08-01T02:34:45Z`, ordinal 3 had durably recorded
+`Decommissioning`, `observedDecommissioning=true`, the original target UID,
+source and desired revisions, and a single decommission Event. The harness
+force-deleted active leader Pod UID
+`4535a36c-ec11-4a69-8d38-6855054148bd`. Kubernetes does not promise that an
+already-waiting follower wins an election. In this run, the newly created
+replacement Pod UID `0d250705-9af5-4fc2-a5e1-902608db1a93` legitimately
+acquired the Lease after expiry. The transition count increased once from 80
+to 81, the successor logged successful acquisition, and the bounded takeover
+check completed in 53 seconds. Both controller Pods were Ready with zero
+restarts afterward.
+
+The same ordinal-3 operation ID, target UID, revisions, and decommission
+timestamp survived takeover. The successor completed the exact
+`3 -> 2 -> 1 -> 0` order while the second controller remained only a
+contender. All 149 lifecycle observations in the 150-line record retained at
+most one unavailable indexer, zero indexer restarts, one stable successor
+Lease holder, and two Ready zero-restart controller Pods until convergence.
+The target-specific
+`IndexerDecommissionRequested` Event count remained one before and after the
+roll. Ten final stable samples passed, and no lifecycle marker remained.
+Scaling back to the original single replica removed the successor, so the
+retained controller correctly acquired the Lease and increased the transition
+count from 81 to 82 during cleanup. The harness required that final holder to
+renew before reporting `PASS`.
+
+The lifecycle TSV, bounded leader record, and 1,802-line workload log have
+SHA-256 values
+`9b7193931ac6c72f02edc45265a303d4f88a8e59da6967d6e03e368f837ae6f3`,
+`c6d662265eec4e5c5683f344c3f7e39a6532f23264253320d9db113ada66a409`,
+and `e34ef36dd49a7f835028d13ebd3336fdd1090f7b7210bbc50d78f27f3ec1ed05`.
+The workload submitted 1,800 events with zero HEC or search-request failures
+and exact eventual completeness. It recorded 13 successful-search count
+regressions and maximum pending 329 at sequence 1239, so immediate
+distributed-search completeness remains open. Direct final searches on all
+three Search Heads returned `count/min/max/distinct=1800/1/1800/1800` without
+a partial-result message.
+
+Final Cluster Manager health reported RF met, SF met, all data searchable,
+all four peers `Up`, no fixups, and readiness for searchable rolling restart.
+Every Splunk CR was Ready, all four indexer and three Search Head endpoints
+were published, all four Ansible recaps reported `ok=111` and `failed=0`, and
+no prior KV Store precheck-failure signature or indexer liveness failure was
+present. This passes one normal single-active-leader takeover with two healthy
+contenders at observed ordinal-3 `Decommissioning`. It does not inject two
+simultaneous active leaders, corrupt or delete the Lease, partition the
+contenders, exercise API quorum loss, or qualify repeated failovers and other
+lifecycle stages.
+
+The cleanup leader start also exposed one adjacent LicenseManager diagnostic
+gap. `licensemanager.go` creates only the regular LicenseManager Service, but
+`checkLicenseRelatedPodFailures` constructs a Pod FQDN below a nonexistent
+LicenseManager headless Service. The Operator logged DNS `no such host`,
+continued reconciliation, and left the healthy LicenseManager CR Ready; the
+license-expiration query was therefore skipped. Cluster inspection confirmed
+that the regular Service and endpoint existed while the headless Service and
+EndpointSlice did not. This is registered separately as SHC-88 and is not
+claimed as an SHC-85 implementation or failover defect.
+
 ## Search Head defects exposed while forming the fixture
 
 Fresh formation for this campaign exposed two independent Search Head captain
@@ -849,6 +931,7 @@ environment-qualified:
   `Decommissioning` restart and five-minute absences during
   `TargetSelected`, `WithdrawingReadiness`, observed `Decommissioning`, and
   `ReadyForReplacement`, plus API-server disconnection at observed
+  `Decommissioning`, and one normal two-contender leader takeover at observed
   `Decommissioning`; other stages and topologies remain open;
 - concurrent image rollout, app update, scale, node drain, and manual
   deletion;
@@ -859,8 +942,9 @@ environment-qualified:
   participate;
 - client retry and HEC acknowledgment behavior;
 - recovery stability before the next peer; and
-- leader failover, concurrent-controller contention, and desired-state
-  conflict recovery during the automatic serving-withdrawal lifecycle.
+- repeated leader failover, split-brain/concurrent-active-controller faults,
+  and desired-state conflict recovery during the automatic
+  serving-withdrawal lifecycle.
 
 ## Current recommendation
 
@@ -874,8 +958,10 @@ five-minute controller absence during each of `TargetSelected`,
 `WithdrawingReadiness`, observed `Decommissioning`, and `ReadyForReplacement`
 on the fixed Splunk build. A later campaign also demonstrates recovery from a
 401-second Pod-local API-server disconnection at observed `Decommissioning`,
-including the expected leader-lease-loss manager restart. Do not generalize
-those results to Splunk-managed App Framework restarts, other API-partition
-stages or topologies,
+including the expected leader-lease-loss manager restart. One further
+campaign demonstrates a normal two-contender Lease takeover after deleting
+the active controller at the same durable stage. Do not generalize those
+results to Splunk-managed App Framework restarts, split-brain faults, repeated
+failovers, other API-partition stages or topologies,
 conflicting disruptions, unsupported redundancy, or the remaining negative
 and compatibility gates above.
