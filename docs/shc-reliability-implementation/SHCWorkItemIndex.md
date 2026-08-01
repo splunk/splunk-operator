@@ -62,7 +62,7 @@ without duplicating their full content.
 | SHC-85 | Separate indexer serving readiness from lifecycle progress and require previous-peer network-path recovery before authorizing another disruption | `3f60d9301`, `11d719f64`, `7ff844f4a`; controller-restart evidence on `codex/shc-85-controller-restart-qualification`; lifecycle hold `5dbe7dac8`, `99da90390`, `ac1fe0db8`; harness `854a76b8d`, `b2bf2e71d`, `d610d4474`; observed-decommissioning absence harness `8d6a7dbc6`; readiness-withdrawal absence harness `978d71bc5`; target-selection absence harness `2d430748b`, `770a27799`; API-disconnection harness `8e21b9b1b` through `f78828cc1`; leader-failover harness `ba220677b` | OPS-011, STS-004, K8S-006, K8S-007, OBS-001, OBS-002, OBS-003 | Source-qualified and EKS-qualified for Operator-owned four-peer RF3/SF2 `OnDelete` revision rolls on official Splunk build `10.5.2605.0/844c593e9c1d`: automatic `3 -> 2 -> 1 -> 0` progress, one withdrawn target at a time, previous-peer remote serving recovery before the next target, zero container restarts, four Ansible `failed=0` results, no prior KV Store failure signature, and final RF/SF/all-searchable health. Separate campaigns qualified controller restart, five-minute controller absences at all four durable ordinal-3 stages, a 401-second Pod-local API-server disconnection at observed `Decommissioning`, and one normal two-contender Lease takeover at observed `Decommissioning`; each retained durable ownership and completed the full roll. The leader-failover run advanced the Lease once, preserved the exact interrupted operation, emitted no duplicate target decommission Event, kept one stable active leader and two Ready controller Pods through convergence, and restored the original single-controller topology. API-independent 1,800-event workloads spanning the long absences, API fault, and leader failover had zero HEC/search request failures and exact final completeness. The records exposed 24, 41, 37, 18, 30, and 13 successful-search count regressions, with maximum pending 362, 406, 404, 364, 417, and 329 during peer-address/authentication convergence and no partial-result signal. Immediate distributed-search completeness, other API-partition/leader-failover stages and topologies, split brain, conflict, redundancy, protocol/configuration variants, and Splunk-managed App Framework next-target control remain open |
 | SHC-86 | Make referenced LicenseManager finalization safe after namespace termination begins | Pending | OPS-012, OBS-001, OBS-005 | Registered after SHC-83 qualification teardown removed the Search Head workload and storage but a LicenseManager finalizer retained the namespace while reconciliation attempted to recreate a Secret. The finalizer was cleared only after the remaining resources were verified absent. This is a separate cross-resource deletion contract; no implementation or qualification is claimed |
 | SHC-87 | Distinguish retryable referenced-tier dependency convergence from terminal dependency or upgrade failure | Pending | OBS-001, OBS-004, OBS-005 | Registered after fresh SHC-84 formation temporarily reported `Error` and upgrade-path validation failure while its referenced LicenseManager was still starting, then recovered without user action through `Pending` to `Ready`. Normal dependency ordering must report Pending/Progressing with a bounded dependency reason; no implementation or qualification is claimed |
-| SHC-88 | Use a resolvable LicenseManager endpoint for license-health and expiration checks | Pending | OBS-001, OBS-004, OBS-005 | Registered after SHC-85 leader-failover cleanup started a new leader and exposed a deterministic DNS mismatch: the LicenseManager reconciler creates the regular `-service`, while `checkLicenseRelatedPodFailures` calls a per-Pod FQDN beneath an absent `-headless` Service. The lookup fails, the query is skipped, and reconciliation continues Ready. Endpoint selection, retry/status semantics, diagnostics, and source/EKS qualification remain open; no SHC-85 fix is claimed |
+| SHC-88 | Use a resolvable LicenseManager endpoint for license-health and expiration checks | `241ea3d91` on `codex/shc-88-license-health` | OPS-013, OBS-001, OBS-004, OBS-005 | Source-qualified and EKS-qualified for the bounded endpoint contract. The reconciler now creates the headless Service already named by the LicenseManager StatefulSet, waits for Kubernetes Pod readiness before calling the per-Pod management URL, and emits one aggregating `LicenseHealthCheckFailed` Warning Event series for retryable REST failures. Exact Operator digest `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e` created the missing Service without replacing a Splunk Pod, resolved the Pod FQDN from the controller, and received HTTP 200 from `/services/licenser/licenses`. A clean Operator restart retained the Service and LicenseManager Pod UIDs, added three successful checks, emitted no new failure, and left every managed tier Ready. Expired-license Event behavior is source-qualified; a deliberately expired production license was not installed on EKS |
 
 ## SHC-75 immutable qualification inputs
 
@@ -532,8 +532,10 @@ supported 10.4-to-10.5 upgrade recorded above. SHC-86 records the independently
 observed LicenseManager
 namespace-finalization gap and remains unassigned. SHC-87 records the separate
 retryable dependency-status classification gap and remains unassigned.
-SHC-88 records the separate LicenseManager health-check endpoint mismatch and
-remains unassigned.
+SHC-88 closes the bounded LicenseManager health-check endpoint mismatch on its
+isolated source and qualification branch; an intentionally expired-license
+EKS fixture and broader LicenseManager lifecycle work remain outside that
+bounded result.
 Registration or assignment alone does not claim implementation. Each
 remaining item must use its own branch and immutable source commit.
 
@@ -790,7 +792,9 @@ The cleanup leader start separately exposed that
 headless Service which the LicenseManager reconciler does not create. The
 regular Service and endpoint were healthy, the cross-Pod headless name did not
 resolve, the check logged `no such host`, and the CR remained Ready while the
-license query was skipped. Registered SHC-88; no implementation is claimed.
+license query was skipped. This observation registered SHC-88 and made no
+implementation claim at that checkpoint. Bounded implementation and
+qualification were completed later in the 2026-08-01 record below.
 
 2026-07-29 UTC: Selected SHC-80 on
 `codex/shc-80-authorized-revision-recovery` from integrated feature baseline
@@ -847,3 +851,19 @@ restart count and retained three endpoints. The Search Heads then rolled
 recorded zero container restarts and 200/200 successful sampled searches, and
 finished with three registered `Up` target members. This record does not
 generalize to every version pair, v3-to-v4 conversion, SAML, or every workload.
+
+2026-08-01 UTC: Closed bounded OPS-013/SHC-88 on isolated branch
+`codex/shc-88-license-health`. Exact source `241ea3d91` and Operator digest
+`sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`
+passed the Linux source gate and EKS endpoint campaign. The Operator created
+the headless Service already named by the LicenseManager StatefulSet, retained
+the existing Splunk Pod during that creation, resolved the per-Pod FQDN, and
+received HTTP 200 license responses. One DNS-publication race and a later
+test-induced LicenseManager replacement accumulated as five occurrences on
+one `LicenseHealthCheckFailed` Event object; PodReady gating suppressed checks
+through the unready interval. After the replacement returned Ready, a clean
+Operator restart kept the Service and LicenseManager Pod UIDs, generated three
+HTTP 200 checks, added no Event occurrence, and left all tiers Ready. The
+replacement Ansible recap was `failed=0`, all non-LicenseManager workload UIDs
+remained unchanged, and no container restart was recorded. Expired-license
+Event behavior is source-qualified rather than EKS-qualified.

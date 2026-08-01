@@ -172,6 +172,18 @@ ownership.
 - [ ] Qualify SHC-86 with direct namespace-first deletion of a referenced
   LicenseManager, no post-termination create, automatic finalizer removal, and
   exact owned-resource cleanup.
+- [x] Qualify bounded OPS-013/SHC-88 LicenseManager health observation. Exact
+  source `241ea3d91` and Operator digest
+  `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`
+  created the StatefulSet's missing headless Service, resolved the exact Pod
+  FQDN, and received HTTP 200 license responses. A DNS-publication race
+  produced one aggregating retryable Warning Event; a test-induced
+  LicenseManager replacement then proved REST calls were skipped while
+  PodReady was false. After recovery, a clean Operator restart retained the
+  Service and LicenseManager Pod UIDs, added three HTTP 200 checks, added no
+  failure occurrence, and left all managed tiers Ready. Expired-license Event
+  behavior is source-qualified and was not exercised with an expired EKS
+  license.
 - [ ] Complete cloud-provider qualification and release-readiness review.
 
 ## Surprises & Discoveries
@@ -577,7 +589,29 @@ ownership.
   Deployment and verifies its image digest. The Make target must be redesigned
   or guarded before it can represent an in-place Operator upgrade procedure.
 
+- Observation: the first SHC-88 headless-Service lookup raced DNS publication,
+  and a later attempt to trigger reconciliation by annotating the
+  LicenseManager changed its StatefulSet Pod template. The Event recorder
+  aggregated all five retryable failures into one Event object. Once the
+  propagated annotation revision replaced the LicenseManager Pod, the new
+  PodReady gate suppressed REST calls until the EndpointSlice returned ready.
+  Consequence: a just-created Service must tolerate retryable DNS propagation;
+  qualification must not use parent CR metadata as a supposedly no-op trigger.
+  Restart the Operator to test stable idempotent reconciliation, and classify
+  the one LicenseManager replacement as test-induced rather than a consequence
+  of reconciling the missing Service.
+
 ## Decision Log
+
+- Decision: qualify the LicenseManager health endpoint through the exact Pod
+  identity and its StatefulSet-named headless Service, while preserving the
+  regular Service for tier-to-LicenseManager client traffic.
+  Rationale: this matches the StatefulSet network identity already rendered by
+  the Operator, keeps each health result attributable to one Pod, and avoids
+  hiding a broken replica behind Service load balancing. A Pod must be Ready
+  before the request. Transport failures remain retryable and observable;
+  only a successfully parsed response can assert license expiration.
+  Date/Author: 2026-08-01, qualification team.
 
 - Decision: record internal splunkd identity and all four Kubernetes traffic
   signals separately for every App Framework run: container readiness, Pod
@@ -812,6 +846,15 @@ restart, then released the superseding queued revision and completed a
 captain-safe `2 -> 1 -> 0` rollout with all persistent GUIDs preserved. Its
 complete monitor recorded 187 successful searches and zero failures, and the
 converged cluster passed 369 seconds of final stability.
+
+The bounded SHC-88 campaign additionally reconciled the headless Service
+already named by the LicenseManager StatefulSet and proved the per-Pod
+management request on EKS. Service creation retained the existing
+LicenseManager Pod; valid license responses returned HTTP 200. A clean
+Operator restart later retained the Service and final LicenseManager Pod UIDs,
+added three successful checks, produced no new failure occurrence, and left
+all tiers Ready. The intentionally expired-license path is covered by source
+tests and was not exercised on EKS.
 
 The complete `OnDelete` and `RollingUpdate` gates remain open because the
 required repetitions, full-campaign soak around the new search cases,
@@ -2052,4 +2095,23 @@ failure. Inspection proved that the reconciler creates only the regular
 LicenseManager Service while `checkLicenseRelatedPodFailures` constructs a
 Pod address below an absent headless Service; the query is skipped and the
 healthy workload remains Ready. This adjacent, pre-existing diagnostic gap is
-registered as SHC-88 and is not attributed to leader takeover or fixed here.
+registered as SHC-88 and is not attributed to leader takeover or fixed by the
+SHC-85 branch. The following record captures its later isolated completion.
+
+2026-08-01 UTC: Completed bounded OPS-013/SHC-88 on
+`codex/shc-88-license-health`. Exact source `241ea3d91` passed 41 Linux test
+suites and 156 specs with zero failures and 78.6 percent composite coverage.
+Operator digest
+`sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`
+created the headless Service already named by the LicenseManager StatefulSet
+without replacing the existing Pod, then resolved the per-Pod FQDN and
+received HTTP 200 license responses. One initial DNS-publication race and a
+later qualification-induced Pod replacement produced five occurrences on one
+aggregating Warning Event. PodReady gating suppressed REST calls through the
+unready replacement interval. The final Pod completed Ansible with `failed=0`,
+became Ready with zero restarts, and returned HTTP 200. A subsequent clean
+Operator restart retained the Service and final Pod UIDs, generated three HTTP
+200 checks, added no failure occurrence, and left every managed tier Ready.
+The test-induced replacement is not attributed to the SHC-88 source change.
+Exact facts, commands, and remaining boundaries are recorded in
+`SHC88LicenseManagerHealthQualification.md`.

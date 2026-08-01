@@ -264,6 +264,27 @@ StatefulSet template.
 | OPS-010 | P2 | Private registry/air gap | Registry-qualified and digest-pinned image references plus all pull secrets survive rendering and rollout tracking unchanged; lifecycle and diagnostics add no helper image or undeclared external service |
 | OPS-011 | P1 | App Framework deploys an app whose bundle requires Search Head or indexer restart | The effective Splunk restart policy is observed and recorded; SHC and indexer restart work is serialized with every other planned disruption; insufficient redundancy fails closed; serving withdrawal is role-, protocol-, and configuration-aware; previous-peer Splunk and network-path recovery precedes the next target; continuous acknowledged ingest and representative real-time, historical, and scheduled searches prove that supported app deployment does not create a customer-visible search outage or silently incomplete result |
 | OPS-012 | P1 | Namespace-first deletion with a referenced LicenseManager | The LicenseManager performs no create after namespace termination, removes its finalizer without manual intervention, and leaves no owned Secret, workload, PVC, or PV |
+| OPS-013 | P1 | LicenseManager health and expiration observation | The StatefulSet's named headless Service exists before a per-Pod management request; the Operator waits for Pod readiness, resolves the exact Pod identity, receives and parses the license response, emits `LicenseExpired` only from a successful response proving expiration, and represents a retryable transport failure through an aggregating Warning Event without a terminal condition or false expiration result |
+
+### OPS-013 LicenseManager qualification evidence
+
+The accepted 2026-08-01 source and EKS evidence is recorded in
+[SHC88LicenseManagerHealthQualification.md](SHC88LicenseManagerHealthQualification.md).
+Exact source `241ea3d91` reconciled the headless Service already named by the
+LicenseManager StatefulSet and queried the per-Pod management endpoint only
+after Kubernetes Pod readiness. On EKS, the Service was created while the
+existing LicenseManager Pod retained its UID and zero restarts, controller DNS
+resolved the Pod FQDN, and Splunk recorded HTTP 200 responses for
+`/services/licenser/licenses?output_mode=json`.
+
+The first lookup raced initial DNS publication and produced the expected
+non-terminal `LicenseHealthCheckFailed` Event. A deliberately test-induced
+LicenseManager replacement later kept REST calls suppressed while PodReady was
+false. After recovery, a clean Operator restart retained both the Service and
+LicenseManager Pod UIDs, generated three successful HTTP 200 checks, and did
+not increase the failure Event count. Unit coverage separately proves the
+expired-license Event and invalid-secret error paths. No EKS claim is made for
+an intentionally expired production license.
 
 ### OPS-011 indexer qualification evidence
 

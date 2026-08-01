@@ -181,8 +181,10 @@ from the lifecycle result.
 
 The later leader-failover campaign reproduced the LicenseManager lookup on a
 new leader and traced it to a deterministic regular-Service/headless-FQDN
-mismatch. SHC-88 now retains that separate diagnostic requirement; its
-existence does not change the bounded controller-restart verdict above.
+mismatch. That observation registered the separate SHC-88 diagnostic
+requirement, which was later completed on its isolated branch; neither the
+finding nor its later correction changes the bounded controller-restart
+verdict above.
 
 This campaign qualifies controller-Pod replacement during one persisted
 Operator-owned indexer `Decommissioning` operation. By itself it does not
@@ -696,8 +698,9 @@ LicenseManager headless Service. The Operator logged DNS `no such host`,
 continued reconciliation, and left the healthy LicenseManager CR Ready; the
 license-expiration query was therefore skipped. Cluster inspection confirmed
 that the regular Service and endpoint existed while the headless Service and
-EndpointSlice did not. This is registered separately as SHC-88 and is not
-claimed as an SHC-85 implementation or failover defect.
+EndpointSlice did not. This was registered separately as SHC-88 and was later
+completed on its isolated branch. It is not claimed as an SHC-85
+implementation or failover defect.
 
 ## Search Head defects exposed while forming the fixture
 
