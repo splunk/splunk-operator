@@ -169,9 +169,16 @@ ownership.
   `2 -> 1 -> 0`, retained at least two endpoints, recorded zero container
   restarts and 200/200 successful sampled searches, and completed with three
   registered `Up` target members.
-- [ ] Qualify SHC-86 with direct namespace-first deletion of a referenced
-  LicenseManager, no post-termination create, automatic finalizer removal, and
-  exact owned-resource cleanup.
+- [x] Qualify SHC-86 with direct namespace-first deletion of a referenced
+  LicenseManager. Exact source `61b35aabf` and Operator digest
+  `sha256:635d60fecdd203e7d158fb1f95c57d46c7062ed98b156caf8dc68da7515812ec`
+  passed deletion-before-validation, pause bypass, no-create, no successful-
+  finalization status write, automatic finalizer removal, real workload
+  shutdown, two bound-PVC deletions, and two delete-reclaim PV removals. The
+  adversarial namespace disappeared in 14 seconds. A real Ready
+  LicenseManager referenced by a paused SearchHeadCluster finalized in six
+  seconds; its namespace completed naturally in 337 seconds after kubelet,
+  PVC protection, CSI reclaim, and the namespace controller finished.
 - [x] Qualify bounded OPS-013/SHC-88 LicenseManager health observation. Exact
   source `241ea3d91` and Operator digest
   `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`
@@ -472,9 +479,12 @@ ownership.
 - Observation: SHC-83 teardown removed the Search Head workload and storage,
   but a referenced LicenseManager retained the terminating namespace while
   reconciliation attempted to recreate its Secret.
-  Consequence: OPS-012/SHC-86 separately requires namespace-first
+  Consequence: OPS-012/SHC-86 separately required namespace-first
   LicenseManager finalization to perform no create, remove its finalizer
-  without manual intervention, and prove exact owned-resource cleanup.
+  without manual intervention, and prove exact owned-resource cleanup. Exact
+  source `61b35aabf` later closed this bounded requirement in two disposable
+  EKS campaigns recorded in
+  `SHC86LicenseManagerNamespaceFinalizationQualification.md`.
 
 - Observation: namespace-first deletion originally entered ordinary reconcile
   work after namespace termination, and successful finalizer removal was
@@ -2115,3 +2125,22 @@ Operator restart retained the Service and final Pod UIDs, generated three HTTP
 The test-induced replacement is not attributed to the SHC-88 source change.
 Exact facts, commands, and remaining boundaries are recorded in
 `SHC88LicenseManagerHealthQualification.md`.
+
+2026-08-01 UTC: Completed bounded OPS-012/SHC-86 on
+`codex/shc-86-license-finalization`. Exact source `61b35aabf` passed 41 Linux
+suites and 157 specs with zero failures and 78.6 percent composite coverage.
+Operator digest
+`sha256:635d60fecdd203e7d158fb1f95c57d46c7062ed98b156caf8dc68da7515812ec`
+passed two disposable EKS namespace-first campaigns. A paused invalid fixture
+finalized and removed its namespace in 14 seconds. A Ready LicenseManager with
+a real StatefulSet, Ready Pod, Secrets, Services, two bound gp3 claims, two
+delete-reclaim PVs, and a paused SearchHeadCluster reference removed both CR
+finalizers by the six-second sample. Its Pod exited at about 50 seconds, the
+PVCs and PVs disappeared, and the namespace controller completed naturally at
+337 seconds. Neither run used a finalizer patch; log audits found no forbidden
+create, post-finalization status error, or LicenseManager reconcile error.
+The same campaign registered SHC-89 after newly created paused LicenseManager
+and SearchHeadCluster objects left required phase fields empty, making their
+pause-status writes fail schema validation and retry noisily. Detailed
+evidence is in
+`SHC86LicenseManagerNamespaceFinalizationQualification.md`.

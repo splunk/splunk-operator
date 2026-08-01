@@ -266,6 +266,25 @@ StatefulSet template.
 | OPS-012 | P1 | Namespace-first deletion with a referenced LicenseManager | The LicenseManager performs no create after namespace termination, removes its finalizer without manual intervention, and leaves no owned Secret, workload, PVC, or PV |
 | OPS-013 | P1 | LicenseManager health and expiration observation | The StatefulSet's named headless Service exists before a per-Pod management request; the Operator waits for Pod readiness, resolves the exact Pod identity, receives and parses the license response, emits `LicenseExpired` only from a successful response proving expiration, and represents a retryable transport failure through an aggregating Warning Event without a terminal condition or false expiration result |
 
+### OPS-012 LicenseManager qualification evidence
+
+The accepted 2026-08-01 source and EKS evidence is recorded in
+[SHC86LicenseManagerNamespaceFinalizationQualification.md](SHC86LicenseManagerNamespaceFinalizationQualification.md).
+Exact source `61b35aabf` routes LicenseManager deletion ahead of pause and
+normal validation, performs no client Create, tolerates namespace-controller
+cleanup races, invokes declared PVC finalization, and suppresses successful-
+finalization status writes.
+
+An adversarial paused and invalid fixture disappeared with its namespace in 14
+seconds. A second fixture formed a Ready LicenseManager with a real StatefulSet,
+Ready zero-restart Pod, three Secrets, two Services, two bound gp3 PVCs, and
+two delete-reclaim PVs, then added a paused SearchHeadCluster reference. Both
+custom resources were gone by the six-second sample, the Pod exited at about
+50 seconds, the PVCs and PVs disappeared, and the namespace controller
+completed naturally at 337 seconds. Neither run used a manual finalizer patch;
+the bounded log audit found no forbidden create, post-finalization status
+error, or LicenseManager reconcile error.
+
 ### OPS-013 LicenseManager qualification evidence
 
 The accepted 2026-08-01 source and EKS evidence is recorded in
@@ -413,6 +432,7 @@ lifecycle stage.
 | OBS-005 | P0 | Diagnostic bundle | Stage-organized evidence is complete and redacted |
 | OBS-006 | P0 | Secrets/search content injected in errors | No credential, authorization header, Secret data, or search text leaks |
 | OBS-007 | P1 | Operation history rollover | Bounded retention preserves current and most recent result |
+| OBS-008 | P1 | Custom resource is created with pause annotation already set | Every required phase field and a schema-valid Paused condition are persisted once, no managed workload is created, and reconciliation does not enter an error retry loop |
 
 ## Compatibility and qualification scenarios
 

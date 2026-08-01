@@ -261,8 +261,10 @@ parent metadata can change the StatefulSet Pod template.
 
 ## Remaining boundaries
 
-This result does not close SHC-86 namespace-first LicenseManager finalization
-or SHC-87 referenced-tier dependency status. It does not qualify an expired
+This result itself did not close SHC-86 namespace-first LicenseManager
+finalization; that separate requirement was later qualified and is recorded in
+[SHC86LicenseManagerNamespaceFinalizationQualification.md](SHC86LicenseManagerNamespaceFinalizationQualification.md).
+It does not close SHC-87 referenced-tier dependency status or qualify an expired
 production license on EKS, dual-stack DNS, service-mesh interception, custom
 management TLS, a network partition, or repeated LicenseManager Pod failure.
 Those are independent test cases.

@@ -501,13 +501,25 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `2 -> 1 -> 0`, retained at least two endpoints, recorded zero container
   restarts and 200/200 successful sampled searches, and completed with three
   registered `Up` target members.
-- [ ] Define and qualify SHC-86 so namespace-first deletion of a referenced
+- [x] Define and qualify SHC-86 so namespace-first deletion of a referenced
   LicenseManager performs no create after termination begins, removes its
   finalizer without manual intervention, and cleans its owned resources.
+  Source `61b35aabf` passed 41 Linux suites and 157 specs. Immutable Operator
+  digest
+  `sha256:635d60fecdd203e7d158fb1f95c57d46c7062ed98b156caf8dc68da7515812ec`
+  passed adversarial and real referenced-LicenseManager EKS deletion
+  campaigns with no manual finalizer patch, no forbidden create, and no
+  post-finalization status error. Detailed evidence is in
+  `SHC86LicenseManagerNamespaceFinalizationQualification.md`.
 - [ ] Define and qualify SHC-87 so a referenced LicenseManager or other tier
   that exists but is still starting is reported as Pending/Progressing with a
   bounded dependency reason. Reserve Error for terminal incompatibility,
   invalid configuration, or an expired wait.
+- [ ] Define SHC-89 so a custom resource created while already paused writes a
+  schema-valid Pending/Paused status once, creates no managed workload, and
+  does not enter an error retry loop. SHC-86 qualification observed v4
+  LicenseManager and SearchHeadCluster pause writers attempting to persist
+  empty required phase fields; no fix is claimed by SHC-86.
 - [x] (2026-08-01 UTC) Defined, implemented, and qualified SHC-88 on isolated
   branch `codex/shc-88-license-health`. Source `241ea3d91` reconciles the
   headless Service already named by the LicenseManager StatefulSet, waits for
@@ -2617,3 +2629,19 @@ and LicenseManager Pod UID `60ba6aef-10da-41a1-a947-9e75efaf36bf`, added three
 HTTP 200 checks, added no failure Event occurrence, and left every managed tier
 Ready. Detailed evidence and replay boundaries are in
 `SHC88LicenseManagerHealthQualification.md`.
+
+2026-08-01 UTC: Completed bounded OPS-012/SHC-86 on
+`codex/shc-86-license-finalization`. Source `61b35aabf` routes LicenseManager
+deletion before pause and ordinary validation, performs only deletion-safe
+cleanup, invokes declared finalizers, and returns without a status refresh
+after success. All 41 Linux suites and 157 specs passed. Immutable Operator
+digest
+`sha256:635d60fecdd203e7d158fb1f95c57d46c7062ed98b156caf8dc68da7515812ec`
+passed adversarial and real referenced-LicenseManager EKS deletion campaigns.
+The real CR finalized by six seconds, its Ready zero-restart Pod exited around
+50 seconds, both bound PVCs and delete-reclaim PVs disappeared, and Kubernetes
+removed the namespace naturally at 337 seconds. No manual patch, forbidden
+create, post-finalization status error, or LicenseManager reconcile error was
+recorded. SHC-89 separately tracks the newly observed invalid empty-phase
+status retries for LicenseManager and SearchHeadCluster CRs created already
+paused.

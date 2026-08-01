@@ -21,21 +21,21 @@ separate:
 
 ## Latest bounded qualification
 
-SHC-76 qualified `STS-014`, the CR-driven case where a later desired
-StatefulSet revision arrives after Kubernetes replacement authorization. The
-already-authorized revision retains lifecycle and partition ownership until
-its replacement is recovered, Kubernetes Ready, and SHC-serving. The later
-template is then released behind a closed partition and receives a separate
-operation and authorization.
+SHC-86 qualified OPS-012 namespace-first finalization for a LicenseManager
+referenced by a SearchHeadCluster. Exact source `61b35aabf` passed 41 Linux
+suites and 157 specs. Its immutable Operator image then passed an adversarial
+paused/invalid fixture and a real Ready LicenseManager fixture with bound EBS
+storage. Both custom-resource finalizers cleared without a manual patch,
+normal-reconcile creation, or a post-finalization status error; the real Pod,
+PVCs, PVs, and namespace all disappeared through their normal Kubernetes
+lifecycle.
 
-The accepted three-member EKS run completed the queued revision in
-reverse-ordinal order, including dynamic captain transfer. It recorded 127
-uninterrupted service searches, maximum one unavailable Pod, zero restarts,
-healthy final Splunk and KV Store status, and a separate 300-second stability
-gate. This is bounded spike evidence; it is not a declaration that every
+This remains bounded spike evidence; it is not a declaration that every
 scenario in the matrix is complete or that the feature is ready for default
-enablement. Exact source, image, and evidence details are in
-`SHCWorkItemIndex.md` and `QualificationObservabilityRolloutPlan.md`.
+enablement. SHC-89 separately tracks the paused-new-CR status defect exposed by
+the campaign. Exact source, image, timing, and remaining-boundary evidence is
+in `SHC86LicenseManagerNamespaceFinalizationQualification.md`,
+`SHCWorkItemIndex.md`, and `QualificationObservabilityRolloutPlan.md`.
 
 ## Review order
 
