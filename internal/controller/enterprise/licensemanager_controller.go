@@ -102,25 +102,28 @@ func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, errors.Wrap(err, "could not load license manager data")
 	}
 
-	// If the reconciliation is paused, set the Paused condition and requeue
-	if instance.GetAnnotations()[enterpriseApi.LicenseManagerPausedAnnotation] == "true" {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
-		})
-		instance.Status.Conditions = result.Conditions
-		if err := r.Status().Update(ctx, instance); err != nil {
-			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
-	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
-		})
-		instance.Status.Conditions = result.Conditions
-		if err := r.Status().Update(ctx, instance); err != nil {
-			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
-			return ctrl.Result{}, err
+	// Pause applies only to ordinary reconciliation. A deleting resource must
+	// always reach ApplyLicenseManager so its finalizers can complete.
+	if instance.GetDeletionTimestamp() == nil {
+		if instance.GetAnnotations()[enterpriseApi.LicenseManagerPausedAnnotation] == "true" {
+			result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+				Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
+			})
+			instance.Status.Conditions = result.Conditions
+			if err := r.Status().Update(ctx, instance); err != nil {
+				logger.ErrorContext(ctx, "failed to update paused status", "error", err)
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+		} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
+			result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+				Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
+			})
+			instance.Status.Conditions = result.Conditions
+			if err := r.Status().Update(ctx, instance); err != nil {
+				logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -132,6 +135,12 @@ func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	result, err := ApplyLicenseManager(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
+	}
+	// Successful finalization may remove the object immediately. Do not race
+	// that deletion with the generic condition writer. Finalization failures
+	// still flow through the condition path so they remain observable.
+	if instance.GetDeletionTimestamp() != nil && err == nil {
+		return result, nil
 	}
 	fresh := &enterpriseApi.LicenseManager{}
 	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr == nil {

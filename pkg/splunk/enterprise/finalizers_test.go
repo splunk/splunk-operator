@@ -176,17 +176,11 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			case "LicenseManager":
 				mockCalls["Get"] = []spltest.MockFuncCall{
 					{MetaName: "*v1.Secret-test-splunk-test-secret"},
-					{MetaName: "*v1.Secret-test-splunk-test-secret"},
-					{MetaName: "*v1.Secret-test-splunk-test-secret"},
-					{MetaName: "*v1.ConfigMap-test-splunk-license-manager-stack1-configmap"},
-					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
-					{MetaName: "*v4.LicenseManager-test-stack1"},
-					{MetaName: "*v4.LicenseManager-test-stack1"},
 				}
-				mockCalls["Create"] = []spltest.MockFuncCall{
-					{MetaName: "*v1.Secret-test-splunk-test-secret"},
-					{MetaName: "*v1.ConfigMap-test-splunk-license-manager-stack1-configmap"},
+				mockCalls["Create"] = nil
+				mockCalls["Update"] = []spltest.MockFuncCall{
+					{MetaName: "*v4.LicenseManager-test-stack1"},
 				}
 
 			case "SearchHeadCluster":

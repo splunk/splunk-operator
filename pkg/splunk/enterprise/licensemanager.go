@@ -56,7 +56,8 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 
 	var err error
 	// Initialize phase and conditions
-	isPaused := cr.GetAnnotations()[enterpriseApi.LicenseManagerPausedAnnotation] == "true"
+	isPaused := cr.GetDeletionTimestamp() == nil &&
+		cr.GetAnnotations()[enterpriseApi.LicenseManagerPausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
@@ -68,7 +69,35 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
+	updateStatusOnReturn := true
+	defer func() {
+		if updateStatusOnReturn {
+			updateCRStatus(ctx, client, cr, &err)
+		}
+	}()
+
+	// Deletion finalization must run before normal reconciliation. A namespace
+	// with a deletion timestamp rejects creation of new namespaced resources,
+	// so validation, migration, remote app initialization, and ApplySplunkConfig
+	// cannot be prerequisites for removing the CR finalizer.
+	if cr.GetDeletionTimestamp() != nil {
+		result, err = finalizeLicenseManagerDeletion(
+			ctx,
+			client,
+			cr,
+			eventPublisher,
+			setPhaseAndConditions,
+			result,
+		)
+		// Successful finalization removes the finalizer and allows the API
+		// server to delete the CR immediately. A deferred status update would
+		// race that deletion. Retain status reporting only when finalization
+		// itself failed and the CR remains actionable.
+		if err == nil {
+			updateStatusOnReturn = false
+		}
+		return result, err
+	}
 
 	// validate and updates defaults for CR
 	err = validateLicenseManagerSpec(ctx, client, cr)
@@ -104,41 +133,6 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
 		return result, fmt.Errorf("apply splunk config: %w", err)
-	}
-
-	// check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
-			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
-				return result, err
-			}
-		}
-
-		// If this is the last of its kind getting deleted,
-		// remove the entry for this CR type from configMap or else
-		// just decrement the refCount for this CR type.
-		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkLicenseManager)
-			if err != nil {
-				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
-				return result, err
-			}
-		}
-
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkLicenseManager)
-
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
-		} else {
-			result.Requeue = false
-		}
-		if err != nil {
-			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
-		}
-		return result, err
 	}
 
 	// The StatefulSet uses this headless Service for stable per-Pod network
@@ -233,6 +227,85 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		result.RequeueAfter = 0
 	}
 
+	return result, nil
+}
+
+// finalizeLicenseManagerDeletion performs only deletion-safe operations. It
+// must not create replacement namespace content because Kubernetes rejects
+// creates after the Namespace enters Terminating.
+func finalizeLicenseManagerDeletion(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.LicenseManager,
+	eventPublisher *K8EventPublisher,
+	setPhaseAndConditions func(enterpriseApi.Phase, string),
+	result reconcile.Result,
+) (reconcile.Result, error) {
+	setPhaseAndConditions(
+		enterpriseApi.PhaseTerminating,
+		"Resource is being deleted",
+	)
+
+	if cr.Spec.MonitoringConsoleRef.Name != "" {
+		if _, err := ApplyMonitoringConsoleEnvConfigMap(
+			ctx,
+			client,
+			cr.GetNamespace(),
+			cr.GetName(),
+			cr.Spec.MonitoringConsoleRef.Name,
+			getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec),
+			false,
+		); err != nil {
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to update Monitoring Console env ConfigMap during deletion",
+			)
+			return result, err
+		}
+	}
+
+	// If this is the last of its kind getting deleted, remove the entry for
+	// this CR type from the shared app-framework ConfigMap. If the ConfigMap
+	// has already been removed, cleanup is already complete.
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		if err := UpdateOrRemoveEntryFromConfigMapLocked(
+			ctx,
+			client,
+			cr,
+			SplunkLicenseManager,
+		); err != nil {
+			setPhaseAndConditions(
+				enterpriseApi.PhaseError,
+				"Failed to clean up resources during deletion",
+			)
+			return result, err
+		}
+	}
+
+	// Missing Secrets or StatefulSets are expected when the namespace
+	// controller is deleting resources concurrently. This cleanup remains
+	// best-effort, matching the existing LicenseManager deletion contract.
+	_ = DeleteOwnerReferencesForResources(
+		ctx,
+		client,
+		cr,
+		SplunkLicenseManager,
+	)
+
+	_, err := splctrl.CheckForDeletion(ctx, cr, client)
+	if err != nil {
+		eventPublisher.Warning(
+			ctx,
+			EventReasonDeleteFailed,
+			fmt.Sprintf(
+				"Failed to delete custom resource %s — check operator logs",
+				cr.GetName(),
+			),
+		)
+		return result, err
+	}
+
+	result.Requeue = false
 	return result, nil
 }
 

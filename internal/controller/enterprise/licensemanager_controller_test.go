@@ -6,9 +6,9 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -27,6 +27,69 @@ var _ = Describe("LicenseManager Controller", Label("integration"), func() {
 	})
 
 	Context("LicenseManager Management", func() {
+		It("routes a deleting paused LicenseManager to finalization without a status write", func() {
+			ctx := context.Background()
+			now := metav1.Now()
+			licenseManager := testutils.NewLicenseManager(
+				"deleting-paused",
+				"ns-splunk-lm-deleting-paused",
+				"image",
+			)
+			licenseManager.Annotations = map[string]string{
+				enterpriseApi.LicenseManagerPausedAnnotation: "true",
+			}
+			licenseManager.DeletionTimestamp = &now
+			licenseManager.Finalizers = []string{
+				"enterprise.splunk.com/delete-pvc",
+			}
+
+			statusUpdates := 0
+			isolatedClient := fake.NewClientBuilder().
+				WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+				WithObjects(licenseManager).
+				WithInterceptorFuncs(interceptor.Funcs{
+					SubResourceUpdate: func(
+						ctx context.Context,
+						c client.Client,
+						subResourceName string,
+						obj client.Object,
+						opts ...client.SubResourceUpdateOption,
+					) error {
+						statusUpdates++
+						return c.SubResource(subResourceName).Update(ctx, obj, opts...)
+					},
+				}).
+				Build()
+			reconciler := &LicenseManagerReconciler{
+				Client: isolatedClient,
+				Scheme: scheme.Scheme,
+			}
+
+			originalApplyLicenseManager := ApplyLicenseManager
+			DeferCleanup(func() {
+				ApplyLicenseManager = originalApplyLicenseManager
+			})
+			applyCalls := 0
+			ApplyLicenseManager = func(
+				context.Context,
+				client.Client,
+				*enterpriseApi.LicenseManager,
+			) (reconcile.Result, error) {
+				applyCalls++
+				return reconcile.Result{}, nil
+			}
+
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      licenseManager.Name,
+					Namespace: licenseManager.Namespace,
+				},
+			}
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(applyCalls).To(Equal(1))
+			Expect(statusUpdates).To(BeZero())
+		})
 
 		It("Get LicenseManager custom resource should failed", func() {
 			namespace := "ns-splunk-lm-1"
