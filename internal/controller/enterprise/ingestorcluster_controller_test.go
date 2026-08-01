@@ -213,13 +213,21 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			icSpec.Annotations = annotations
 			Expect(c.Update(ctx, icSpec)).Should(Succeed())
 
-			_, err = instance.Reconcile(ctx, request)
+			result, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+			Expect(result.RequeueAfter).To(BeZero())
 			// verify Paused=True condition was written
 			Expect(c.Get(ctx, request.NamespacedName, icSpec)).Should(Succeed())
+			Expect(icSpec.Status.Phase).To(Equal(enterpriseApi.PhasePending))
+			Expect(icSpec.Status.ObservedGeneration).To(Equal(icSpec.Generation))
 			pausedCond := meta.FindStatusCondition(icSpec.Status.Conditions, string(enterpriseApi.ConditionPaused))
 			Expect(pausedCond).ToNot(BeNil())
 			Expect(pausedCond.Status).To(Equal(metav1.ConditionTrue))
+			progressingCond := meta.FindStatusCondition(icSpec.Status.Conditions, string(enterpriseApi.ConditionProgressing))
+			Expect(progressingCond).ToNot(BeNil())
+			Expect(progressingCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(progressingCond.Reason).To(Equal(string(enterpriseApi.ReasonPausedByAnnotation)))
 
 			annotations = map[string]string{}
 			icSpec.Annotations = annotations

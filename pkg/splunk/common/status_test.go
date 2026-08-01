@@ -138,20 +138,32 @@ func TestSetPhaseAndConditions_AllPhases(t *testing.T) {
 }
 
 func TestSetPhaseAndConditions_Paused(t *testing.T) {
-	result := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: enterpriseApi.PhaseReady, IsPaused: true, Message: "", Generation: 1})
+	for _, phase := range []enterpriseApi.Phase{enterpriseApi.PhasePending, enterpriseApi.PhaseReady, enterpriseApi.PhaseUpdating} {
+		t.Run(string(phase), func(t *testing.T) {
+			result := SetPhaseAndConditions(nil, PhaseConditionInput{Phase: phase, IsPaused: true, Message: "", Generation: 1})
 
-	pausedCondition := GetCondition(result.Conditions, enterpriseApi.ConditionPaused)
-	if pausedCondition == nil {
-		t.Errorf("SetPhaseAndConditions() Paused condition not found")
-		return
-	}
+			pausedCondition := GetCondition(result.Conditions, enterpriseApi.ConditionPaused)
+			if pausedCondition == nil {
+				t.Fatal("SetPhaseAndConditions() Paused condition not found")
+			}
+			if pausedCondition.Status != metav1.ConditionTrue {
+				t.Errorf("SetPhaseAndConditions() Paused.Status = %v, want %v", pausedCondition.Status, metav1.ConditionTrue)
+			}
+			if pausedCondition.Reason != string(enterpriseApi.ReasonPausedByAnnotation) {
+				t.Errorf("SetPhaseAndConditions() Paused.Reason = %v, want %v", pausedCondition.Reason, enterpriseApi.ReasonPausedByAnnotation)
+			}
 
-	if pausedCondition.Status != metav1.ConditionTrue {
-		t.Errorf("SetPhaseAndConditions() Paused.Status = %v, want %v", pausedCondition.Status, metav1.ConditionTrue)
-	}
-
-	if pausedCondition.Reason != string(enterpriseApi.ReasonPausedByAnnotation) {
-		t.Errorf("SetPhaseAndConditions() Paused.Reason = %v, want %v", pausedCondition.Reason, enterpriseApi.ReasonPausedByAnnotation)
+			progressingCondition := GetCondition(result.Conditions, enterpriseApi.ConditionProgressing)
+			if progressingCondition == nil {
+				t.Fatal("SetPhaseAndConditions() Progressing condition not found")
+			}
+			if progressingCondition.Status != metav1.ConditionFalse {
+				t.Errorf("SetPhaseAndConditions() Progressing.Status = %v, want %v", progressingCondition.Status, metav1.ConditionFalse)
+			}
+			if progressingCondition.Reason != string(enterpriseApi.ReasonPausedByAnnotation) {
+				t.Errorf("SetPhaseAndConditions() Progressing.Reason = %v, want %v", progressingCondition.Reason, enterpriseApi.ReasonPausedByAnnotation)
+			}
+		})
 	}
 }
 

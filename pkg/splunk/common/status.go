@@ -220,6 +220,17 @@ func deriveConditionsFromPhase(existingConditions []metav1.Condition, in PhaseCo
 		progressingCondition.Reason = string(in.Reason)
 	}
 
+	// A paused controller is deliberately not advancing the resource, even when
+	// the last recorded phase would ordinarily be progressing. Keep Ready tied
+	// to the observed workload phase, while making the controller's control
+	// state explicit through Progressing and Paused.
+	if isPaused {
+		progressingCondition.Status = metav1.ConditionFalse
+		progressingCondition.Reason = string(enterpriseApi.ReasonPausedByAnnotation)
+		progressingCondition.Message = "Reconciliation is paused via annotation"
+		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
+	}
+
 	// Carry forward the existing Stalled condition so that UpsertStalledCondition /
 	// ClearStalledCondition results are never overwritten by phase derivation.
 	// If no existing stalled condition is present, default to NotStalled.

@@ -104,13 +104,21 @@ var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 			annotations[enterpriseApi.MonitoringConsolePausedAnnotation] = "true"
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
-			_, err = instance.Reconcile(ctx, request)
+			result, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+			Expect(result.RequeueAfter).To(BeZero())
 			// verify Paused=True condition was written
 			Expect(c.Get(ctx, request.NamespacedName, ssSpec)).Should(Succeed())
+			Expect(ssSpec.Status.Phase).To(Equal(enterpriseApi.PhasePending))
+			Expect(ssSpec.Status.ObservedGeneration).To(Equal(ssSpec.Generation))
 			pausedCond := meta.FindStatusCondition(ssSpec.Status.Conditions, string(enterpriseApi.ConditionPaused))
 			Expect(pausedCond).ToNot(BeNil())
 			Expect(pausedCond.Status).To(Equal(metav1.ConditionTrue))
+			progressingCond := meta.FindStatusCondition(ssSpec.Status.Conditions, string(enterpriseApi.ConditionProgressing))
+			Expect(progressingCond).ToNot(BeNil())
+			Expect(progressingCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(progressingCond.Reason).To(Equal(string(enterpriseApi.ReasonPausedByAnnotation)))
 			// reconcile after removing annotations for pause
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
