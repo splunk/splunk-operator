@@ -86,7 +86,6 @@ controller_stop_started=false
 stage_watch_open=false
 stage_watch_pid=""
 api_fault_applied=false
-api_fault_pid=""
 api_service_ip=""
 operator_fault_pod=""
 operator_fault_pod_uid=""
@@ -163,21 +162,31 @@ force_remove_api_disconnect() {
 }
 
 release_api_disconnect() {
+  local fault_state
+
   if [[ "${api_fault_applied}" == true && -n "${operator_fault_pod}" ]]; then
     kubectl -n "${operator_namespace}" exec "${operator_fault_pod}" \
       -c "${api_fault_container}" -- \
       /bin/sh -ec 'touch /tmp/shc85-release' >/dev/null 2>&1 || true
-  fi
-  if [[ -n "${api_fault_pid}" ]]; then
     for _ in $(seq 1 30); do
-      if ! kill -0 "${api_fault_pid}" >/dev/null 2>&1; then
+      fault_state="$({
+        kubectl -n "${operator_namespace}" get pod \
+          "${operator_fault_pod}" -o json 2>/dev/null | jq -r \
+          --arg container "${api_fault_container}" '
+            [.status.ephemeralContainerStatuses[]? |
+              select(.name == $container) |
+              if .state.terminated != null then "terminated"
+              elif .state.running != null then "running"
+              else "waiting" end][0] // "missing"'
+      })" || fault_state=missing
+      if [[ "${fault_state}" == terminated ||
+        "${fault_state}" == missing ]]; then
         break
       fi
       sleep 1
     done
-    kill "${api_fault_pid}" >/dev/null 2>&1 || true
-    wait "${api_fault_pid}" >/dev/null 2>&1 || true
-    api_fault_pid=""
+    kubectl -n "${operator_namespace}" logs "${operator_fault_pod}" \
+      -c "${api_fault_container}" >"${api_fault_log}" 2>&1 || true
   fi
   if [[ -r "${api_fault_log}" ]] &&
     ! grep -q '^API_FAULT_REMOVED after=200$' "${api_fault_log}"; then
@@ -324,7 +333,7 @@ start_api_disconnect() {
   # The quoted program is evaluated inside the diagnostic container.
   # shellcheck disable=SC2016
   kubectl -n "${operator_namespace}" debug \
-    "pod/${operator_fault_pod}" --attach=true --quiet \
+    "pod/${operator_fault_pod}" --attach=false --quiet \
     --container="${api_fault_container}" --image="${api_fault_image}" \
     --profile=sysadmin --custom="${api_fault_profile}" \
     -- env API_SERVICE_IP="${api_service_ip}" \
@@ -359,19 +368,24 @@ start_api_disconnect() {
       after="$(curl -skS --connect-timeout 3 -o /dev/null \
         -w "%{http_code}" "https://${API_SERVICE_IP}/version")"
       echo "API_FAULT_REMOVED after=${after}"
-    ' >"${api_fault_log}" 2>&1 &
-  api_fault_pid="$!"
+    ' >"${api_fault_log}" 2>&1
   api_fault_applied=true
 
   fault_deadline=$((SECONDS + 180))
   fault_observed=false
   while ((SECONDS < fault_deadline)); do
-    if grep -q '^API_FAULT_APPLIED .*blocked=true$' \
-      "${api_fault_log}" 2>/dev/null; then
+    kubectl -n "${operator_namespace}" logs "${operator_fault_pod}" \
+      -c "${api_fault_container}" >"${api_fault_log}" 2>&1 || true
+    if grep -q '^API_FAULT_APPLIED .*blocked=true$' "${api_fault_log}"; then
       fault_observed=true
       break
     fi
-    if ! kill -0 "${api_fault_pid}" >/dev/null 2>&1; then
+    if kubectl -n "${operator_namespace}" get pod \
+      "${operator_fault_pod}" -o json | jq -e \
+      --arg container "${api_fault_container}" '
+        any(.status.ephemeralContainerStatuses[]?;
+          .name == $container and .state.terminated != null)' \
+      >/dev/null; then
       break
     fi
     sleep 1

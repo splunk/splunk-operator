@@ -339,6 +339,10 @@ container that removes only the exact tagged rule and verifies API recovery;
 that fallback is cleanup evidence, not a passing qualification result. The run
 is accepted only after the primary fault log proves API access returned with
 HTTP 200.
+The monitor creates the ephemeral container without attaching its stdout
+stream and reads its Kubernetes container log separately. This keeps the
+durable fault markers observable when leader-election loss restarts the
+manager container and interrupts an attached debug stream.
 
 This mode currently starts at observed `Decommissioning`, where the durable
 operation proves the Splunk command has taken effect before the API path is
