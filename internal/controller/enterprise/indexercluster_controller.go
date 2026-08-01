@@ -101,6 +101,8 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Error reading the object - requeue the request.
 		return ctrl.Result{}, errors.Wrap(err, "could not load indexer cluster data")
 	}
+	// Pause applies only to ordinary reconciliation. A deleting resource must
+	// always reach ApplyIndexerCluster so its finalizers can complete.
 	if instance.GetDeletionTimestamp() == nil {
 		stop, err := shouldStopForTerminatingNamespace(ctx, r.Client, instance.GetNamespace())
 		if err != nil {
@@ -109,23 +111,20 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if stop {
 			return ctrl.Result{}, nil
 		}
-	}
-
-	// If reconciliation is paused, persist the control state once and wait for
-	// an annotation change rather than polling an intentionally idle resource.
-	if instance.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true" {
-		if preparePausedStatus(&instance.Status.Phase, &instance.Status.ObservedGeneration, &instance.Status.Conditions, instance.GetGeneration(), true) {
-			if err := r.Status().Update(ctx, instance); err != nil {
-				logger.ErrorContext(ctx, "failed to update paused status", "error", err)
-				return ctrl.Result{}, err
+		if instance.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true" {
+			if preparePausedStatus(&instance.Status.Phase, &instance.Status.ObservedGeneration, &instance.Status.Conditions, instance.GetGeneration(), true) {
+				if err := r.Status().Update(ctx, instance); err != nil {
+					logger.ErrorContext(ctx, "failed to update paused status", "error", err)
+					return ctrl.Result{}, err
+				}
 			}
-		}
-		return ctrl.Result{}, nil
-	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
-		if preparePausedStatus(&instance.Status.Phase, &instance.Status.ObservedGeneration, &instance.Status.Conditions, instance.GetGeneration(), false) {
-			if err := r.Status().Update(ctx, instance); err != nil {
-				logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
-				return ctrl.Result{}, err
+			return ctrl.Result{}, nil
+		} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
+			if preparePausedStatus(&instance.Status.Phase, &instance.Status.ObservedGeneration, &instance.Status.Conditions, instance.GetGeneration(), false) {
+				if err := r.Status().Update(ctx, instance); err != nil {
+					logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
+					return ctrl.Result{}, err
+				}
 			}
 		}
 	}
@@ -141,6 +140,12 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
+	}
+	// Successful finalization may remove the object immediately. Do not race
+	// that deletion with the generic condition writer. Finalization failures
+	// still flow through the condition path so they remain observable.
+	if instance.GetDeletionTimestamp() != nil && err == nil {
+		return result, nil
 	}
 	fresh := &enterpriseApi.IndexerCluster{}
 	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr == nil {
