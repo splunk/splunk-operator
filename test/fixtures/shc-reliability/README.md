@@ -327,9 +327,18 @@ the evidence records its container identity, restart count, and runtime state.
 The checked-in custom debug profile explicitly overrides the Operator Pod's
 non-root runtime identity for this test container and grants `NET_ADMIN`;
 without that override the kernel rejects the Pod-local iptables operation.
+The ephemeral container deliberately uses its own process namespace rather
+than targeting the manager container. Both containers already share the Pod
+network namespace, while an ephemeral container joined to the manager's
+process namespace can be terminated when leader-election loss restarts the
+manager and would remove the fault prematurely.
 The ephemeral process has an independent timeout and EXIT trap that remove the
-rule even if the workstation monitor is interrupted. The run is accepted only
-after the log proves API access returned with HTTP 200.
+rule even if the workstation monitor is interrupted. If that process is
+force-killed before its trap runs, the monitor starts a separate root cleanup
+container that removes only the exact tagged rule and verifies API recovery;
+that fallback is cleanup evidence, not a passing qualification result. The run
+is accepted only after the primary fault log proves API access returned with
+HTTP 200.
 
 This mode currently starts at observed `Decommissioning`, where the durable
 operation proves the Splunk command has taken effect before the API path is

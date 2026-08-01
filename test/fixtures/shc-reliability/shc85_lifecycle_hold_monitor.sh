@@ -90,7 +90,6 @@ api_fault_pid=""
 api_service_ip=""
 operator_fault_pod=""
 operator_fault_pod_uid=""
-operator_fault_target_container=""
 operator_original_replicas="$({
   kubectl -n "${operator_namespace}" get deployment \
     "${operator_deployment}" -o json | jq -r '.spec.replicas // 1'
@@ -125,6 +124,44 @@ operator_runtime_json() {
     }]'
 }
 
+force_remove_api_disconnect() {
+  local cleanup_container current_uid
+
+  if [[ -z "${operator_fault_pod}" || -z "${operator_fault_pod_uid}" ||
+    -z "${api_service_ip}" ]]; then
+    return
+  fi
+  current_uid="$({
+    kubectl -n "${operator_namespace}" get pod \
+      "${operator_fault_pod}" -o jsonpath='{.metadata.uid}'
+  } 2>/dev/null)" || return
+  if [[ "${current_uid}" != "${operator_fault_pod_uid}" ]]; then
+    return
+  fi
+
+  cleanup_container="shc85-api-cleanup-$(date -u +%s)"
+  # The quoted program is evaluated inside the diagnostic container.
+  # shellcheck disable=SC2016
+  kubectl -n "${operator_namespace}" debug \
+    "pod/${operator_fault_pod}" --attach=true --quiet \
+    --container="${cleanup_container}" --image="${api_fault_image}" \
+    --profile=sysadmin --custom="${api_fault_profile}" -- \
+    env API_SERVICE_IP="${api_service_ip}" /bin/bash -lc '
+      set -euo pipefail
+      rule=(-p tcp -d "${API_SERVICE_IP}" --dport 443 -m comment
+        --comment shc85-api-disconnect -j REJECT)
+      removed=0
+      while iptables -C OUTPUT "${rule[@]}" >/dev/null 2>&1; do
+        iptables -D OUTPUT "${rule[@]}"
+        removed=$((removed + 1))
+      done
+      after="$(curl -skS --connect-timeout 3 -o /dev/null \
+        -w "%{http_code}" "https://${API_SERVICE_IP}/version")"
+      echo "API_FAULT_FORCE_REMOVED count=${removed} after=${after}"
+      test "${after}" = 200
+    ' >>"${api_fault_log}" 2>&1 || true
+}
+
 release_api_disconnect() {
   if [[ "${api_fault_applied}" == true && -n "${operator_fault_pod}" ]]; then
     kubectl -n "${operator_namespace}" exec "${operator_fault_pod}" \
@@ -141,6 +178,10 @@ release_api_disconnect() {
     kill "${api_fault_pid}" >/dev/null 2>&1 || true
     wait "${api_fault_pid}" >/dev/null 2>&1 || true
     api_fault_pid=""
+  fi
+  if [[ -r "${api_fault_log}" ]] &&
+    ! grep -q '^API_FAULT_REMOVED after=200$' "${api_fault_log}"; then
+    force_remove_api_disconnect
   fi
   api_fault_applied=false
 }
@@ -263,8 +304,6 @@ start_api_disconnect() {
     <<<"${operator_pod_json}")"
   operator_fault_pod_uid="$(jq -r '.items[0].metadata.uid' \
     <<<"${operator_pod_json}")"
-  operator_fault_target_container="$(jq -r \
-    '.items[0].spec.containers[0].name' <<<"${operator_pod_json}")"
   if ! jq -e 'any(.items[0].status.conditions[]?;
       .type == "Ready" and .status == "True")' \
     <<<"${operator_pod_json}" >/dev/null; then
@@ -288,8 +327,7 @@ start_api_disconnect() {
     "pod/${operator_fault_pod}" --attach=true --quiet \
     --container="${api_fault_container}" --image="${api_fault_image}" \
     --profile=sysadmin --custom="${api_fault_profile}" \
-    --target="${operator_fault_target_container}" -- \
-    env API_SERVICE_IP="${api_service_ip}" \
+    -- env API_SERVICE_IP="${api_service_ip}" \
     MAX_HOLD_SECONDS="${api_fault_max_seconds}" /bin/bash -lc '
       set -euo pipefail
       rule=(-p tcp -d "${API_SERVICE_IP}" --dport 443 -m comment
