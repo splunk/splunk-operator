@@ -247,6 +247,19 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// check if the IndexerCluster is ready for version upgrade
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
 		if err != nil || !continueReconcile {
+			if dependencyStatus, waiting := dependencyWaitPhaseAndConditions(
+				ctx,
+				cr,
+				cr.Status.Conditions,
+				isPaused,
+				err,
+			); waiting {
+				cr.Status.Phase = dependencyStatus.Phase
+				cr.Status.Conditions = dependencyStatus.Conditions
+				cr.Status.ObservedGeneration = cr.GetGeneration()
+				cr.Status.Message = err.Error()
+				return result, nil
+			}
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
 			}
@@ -547,6 +560,19 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		// check if the IndexerCluster is ready for version upgrade
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
 		if err != nil || !continueReconcile {
+			if dependencyStatus, waiting := dependencyWaitPhaseAndConditions(
+				ctx,
+				cr,
+				cr.Status.Conditions,
+				isPaused,
+				err,
+			); waiting {
+				cr.Status.Phase = dependencyStatus.Phase
+				cr.Status.Conditions = dependencyStatus.Conditions
+				cr.Status.ObservedGeneration = cr.GetGeneration()
+				cr.Status.Message = err.Error()
+				return result, nil
+			}
 			return result, err
 		}
 	}

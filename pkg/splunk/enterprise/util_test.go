@@ -3331,6 +3331,35 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("terminal status message = %q, want sanitized message", message)
 	}
 
+	// A dependency wait is an active, retryable state recorded by the Apply
+	// path rather than a returned reconcile error. Preserve its diagnostic
+	// message while the DependencyNotReady condition remains active, then clear
+	// it after the dependency wait has resolved.
+	shcCR.Status.Message = "LicenseManager dependency default/license is Pending"
+	shcCR.Status.Conditions = []metav1.Condition{
+		{
+			Type:   string(enterpriseApi.ConditionReady),
+			Status: metav1.ConditionFalse,
+			Reason: string(enterpriseApi.ReasonDependencyNotReady),
+		},
+	}
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, nil)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if message := receivedCR.(*enterpriseApi.SearchHeadCluster).
+		Status.Message; message != shcCR.Status.Message {
+		t.Errorf("dependency wait status message = %q, want %q", message, shcCR.Status.Message)
+	}
+
+	shcCR.Status.Conditions = nil
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, nil)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if message := receivedCR.(*enterpriseApi.SearchHeadCluster).
+		Status.Message; message != "" {
+		t.Errorf("resolved dependency status message = %q, want empty", message)
+	}
+
 	// IngestorCluster: should return a valid CR
 	ic := enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{

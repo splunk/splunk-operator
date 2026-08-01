@@ -35,6 +35,7 @@ const (
 	EventReasonSHCAuthorizedRevisionRecovered       = "SHCAuthorizedRevisionRecovered"
 	EventReasonSHCSearchDrainContinuationApproved   = "SHCSearchDrainContinuationApproved"
 	EventReasonSHCInitialFormationRestartStarted    = "SHCInitialFormationRestartStarted"
+	EventReasonDependencyNotReady                   = "DependencyNotReady"
 
 	// Warning event reasons — spec & config
 	EventReasonValidateSpecFailed      = "ValidateSpecFailed"

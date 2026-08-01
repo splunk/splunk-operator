@@ -1629,6 +1629,9 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	// create pods for license manager
 	lm.Status.TelAppInstalled = true
 	lm.Spec.Image = "splunk2"
+	if err = client.Update(ctx, &lm); err != nil {
+		t.Errorf("updating LicenseManager desired image should not have returned error; err=%v", err)
+	}
 	createPods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
 	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
 	// now the statefulset image in spec is updated to splunk2
@@ -1636,6 +1639,13 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 
 	// should be status ready now
 	ApplyLicenseManager(ctx, client, &lm)
+	if err = client.Get(ctx, namespacedName, &lm); err != nil {
+		t.Errorf("get upgraded LicenseManager should not have returned error; err=%v", err)
+	}
+	lm.Status.Phase = enterpriseApi.PhaseReady
+	if err = client.Status().Update(ctx, &lm); err != nil {
+		t.Errorf("marking upgraded LicenseManager ready should not have returned error; err=%v", err)
+	}
 
 	clusterManager := &enterpriseApi.ClusterManager{}
 	namespacedName = types.NamespacedName{

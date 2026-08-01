@@ -2,6 +2,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -9,10 +10,145 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// DependencyNotReadyError represents normal asynchronous dependency
+// convergence. Callers must translate it to Pending/Progressing status and a
+// bounded requeue, not a terminal Error phase.
+type DependencyNotReadyError struct {
+	Kind          string
+	Namespace     string
+	Name          string
+	Phase         enterpriseApi.Phase
+	ObservedImage string
+	DesiredImage  string
+	Detail        string
+}
+
+func (e *DependencyNotReadyError) Error() string {
+	message := fmt.Sprintf("Waiting for %s dependency %s/%s", e.Kind, e.Namespace, e.Name)
+	if e.Detail != "" {
+		return fmt.Sprintf("%s: %s", message, e.Detail)
+	}
+	if e.Phase != "" {
+		message = fmt.Sprintf("%s (phase: %s)", message, e.Phase)
+	}
+	if e.ObservedImage != "" || e.DesiredImage != "" {
+		message = fmt.Sprintf(
+			"%s (current image: %s, desired image: %s)",
+			message,
+			e.ObservedImage,
+			e.DesiredImage,
+		)
+	}
+	return message
+}
+
+// AsDependencyNotReady returns the typed dependency wait carried by err.
+func AsDependencyNotReady(err error) (*DependencyNotReadyError, bool) {
+	var wait *DependencyNotReadyError
+	if errors.As(err, &wait) {
+		return wait, true
+	}
+	return nil, false
+}
+
+func dependencyWaitPhaseAndConditions(
+	ctx context.Context,
+	cr splcommon.MetaObject,
+	existingConditions []metav1.Condition,
+	isPaused bool,
+	err error,
+) (splcommon.PhaseAndConditions, bool) {
+	wait, ok := AsDependencyNotReady(err)
+	if !ok {
+		return splcommon.PhaseAndConditions{}, false
+	}
+
+	message := wait.Error()
+	logging.FromContext(ctx).InfoContext(
+		ctx,
+		"waiting for dependency convergence",
+		"dependencyKind",
+		wait.Kind,
+		"dependencyNamespace",
+		wait.Namespace,
+		"dependencyName",
+		wait.Name,
+		"dependencyPhase",
+		wait.Phase,
+		"observedImage",
+		wait.ObservedImage,
+		"desiredImage",
+		wait.DesiredImage,
+	)
+	GetEventPublisher(ctx, cr).Normal(ctx, EventReasonDependencyNotReady, message)
+
+	return splcommon.SetPhaseAndConditions(existingConditions, splcommon.PhaseConditionInput{
+		Phase:      enterpriseApi.PhasePending,
+		IsPaused:   isPaused,
+		Message:    message,
+		Reason:     enterpriseApi.ReasonDependencyNotReady,
+		Generation: cr.GetGeneration(),
+	}), true
+}
+
+func dependencyNamespace(defaultNamespace string, ref corev1.ObjectReference) string {
+	if ref.Namespace != "" {
+		return ref.Namespace
+	}
+	return defaultNamespace
+}
+
+func newDependencyNotReady(
+	kind,
+	namespace,
+	name string,
+	phase enterpriseApi.Phase,
+	observedImage,
+	desiredImage,
+	detail string,
+) error {
+	return &DependencyNotReadyError{
+		Kind:          kind,
+		Namespace:     namespace,
+		Name:          name,
+		Phase:         phase,
+		ObservedImage: observedImage,
+		DesiredImage:  desiredImage,
+		Detail:        detail,
+	}
+}
+
+func dependencyImageMismatch(
+	ctx context.Context,
+	eventPublisher *K8EventPublisher,
+	kind,
+	namespace,
+	name,
+	dependencyDesiredImage,
+	dependentDesiredImage string,
+) error {
+	message := fmt.Sprintf(
+		"%s dependency %s/%s requests image %s but the dependent resource requests %s",
+		kind,
+		namespace,
+		name,
+		dependencyDesiredImage,
+		dependentDesiredImage,
+	)
+	eventPublisher.Warning(ctx, EventReasonUpgradeBlockedVersionMismatch, message)
+	return splcommon.NewTerminalError(
+		EventReasonUpgradeBlockedVersionMismatch,
+		message,
+		errors.New(message),
+	)
+}
 
 // helps in mock function
 var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
@@ -62,28 +198,78 @@ LicenseManager:
 			goto ClusterManager
 		}
 
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: licenseManagerRef.Name}
+		licenseManagerNamespace := dependencyNamespace(cr.GetNamespace(), licenseManagerRef)
+		namespacedName := types.NamespacedName{Namespace: licenseManagerNamespace, Name: licenseManagerRef.Name}
 		licenseManager := &enterpriseApi.LicenseManager{}
 		// get the license manager referred in CR
 		err := c.Get(ctx, namespacedName, licenseManager)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
-				goto ClusterManager
+				return false, newDependencyNotReady(
+					"LicenseManager",
+					licenseManagerNamespace,
+					licenseManagerRef.Name,
+					"",
+					"",
+					spec.Image,
+					"referenced object does not exist yet",
+				)
 			}
 			return false, err
+		}
+
+		if licenseManager.Spec.Image != "" && spec.Image != "" && licenseManager.Spec.Image != spec.Image {
+			return false, dependencyImageMismatch(
+				ctx,
+				eventPublisher,
+				"LicenseManager",
+				licenseManagerNamespace,
+				licenseManagerRef.Name,
+				licenseManager.Spec.Image,
+				spec.Image,
+			)
+		}
+
+		if licenseManager.Status.Phase != enterpriseApi.PhaseReady {
+			return false, newDependencyNotReady(
+				"LicenseManager",
+				licenseManagerNamespace,
+				licenseManagerRef.Name,
+				licenseManager.Status.Phase,
+				"",
+				spec.Image,
+				"",
+			)
 		}
 
 		// get current image of license manager
 		lmImage, err := getCurrentImage(ctx, c, licenseManager, SplunkLicenseManager)
 		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return false, newDependencyNotReady(
+					"LicenseManager",
+					licenseManagerNamespace,
+					licenseManagerRef.Name,
+					licenseManager.Status.Phase,
+					"",
+					spec.Image,
+					"workload has not been created yet",
+				)
+			}
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, "Could not get the License Manager image — check operator logs for details")
 			logger.ErrorContext(ctx, "unable to get LicenseManager current image", "error", err)
 			return false, err
 		}
-		// if license manager status is ready and CR spec and current license manager image are not same
-		// then return with error
-		if licenseManager.Status.Phase != enterpriseApi.PhaseReady || lmImage != spec.Image {
-			return false, fmt.Errorf("license manager is not ready or license manager current image is different than CR image")
+		if lmImage != spec.Image {
+			return false, newDependencyNotReady(
+				"LicenseManager",
+				licenseManagerNamespace,
+				licenseManagerRef.Name,
+				licenseManager.Status.Phase,
+				lmImage,
+				spec.Image,
+				"desired image has not reached the workload yet",
+			)
 		}
 		goto ClusterManager
 	}
@@ -106,7 +292,7 @@ ClusterManager:
 			if k8serrors.IsNotFound(err) {
 				return true, nil
 			}
-			return false, nil
+			return false, err
 		}
 		return true, nil
 	} else {
@@ -117,20 +303,67 @@ ClusterManager:
 			goto SearchHeadCluster
 		}
 
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterManagerRef.Name}
+		clusterManagerNamespace := dependencyNamespace(cr.GetNamespace(), clusterManagerRef)
+		namespacedName := types.NamespacedName{Namespace: clusterManagerNamespace, Name: clusterManagerRef.Name}
 		clusterManager := &enterpriseApi.ClusterManager{}
 
 		// get the cluster manager referred in custom resource
 		err := c.Get(ctx, namespacedName, clusterManager)
 		if err != nil {
-			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, "Could not find the Cluster Manager — check operator logs for details")
+			if k8serrors.IsNotFound(err) {
+				return false, newDependencyNotReady(
+					"ClusterManager",
+					clusterManagerNamespace,
+					clusterManagerRef.Name,
+					"",
+					"",
+					spec.Image,
+					"referenced object does not exist yet",
+				)
+			}
+			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, "Could not read the Cluster Manager — check operator logs for details")
 			logger.ErrorContext(ctx, "unable to get ClusterManager", "error", err)
-			goto SearchHeadCluster
+			return false, err
+		}
+
+		if clusterManager.Spec.Image != "" && spec.Image != "" && clusterManager.Spec.Image != spec.Image {
+			return false, dependencyImageMismatch(
+				ctx,
+				eventPublisher,
+				"ClusterManager",
+				clusterManagerNamespace,
+				clusterManagerRef.Name,
+				clusterManager.Spec.Image,
+				spec.Image,
+			)
+		}
+
+		if clusterManager.Status.Phase != enterpriseApi.PhaseReady {
+			return false, newDependencyNotReady(
+				"ClusterManager",
+				clusterManagerNamespace,
+				clusterManagerRef.Name,
+				clusterManager.Status.Phase,
+				"",
+				spec.Image,
+				"",
+			)
 		}
 
 		/// get the cluster manager image referred in custom resource
 		cmImage, err := getCurrentImage(ctx, c, clusterManager, SplunkClusterManager)
 		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return false, newDependencyNotReady(
+					"ClusterManager",
+					clusterManagerNamespace,
+					clusterManagerRef.Name,
+					clusterManager.Status.Phase,
+					"",
+					spec.Image,
+					"workload has not been created yet",
+				)
+			}
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, "Could not get the Cluster Manager image — check operator logs for details")
 			logger.ErrorContext(ctx, "unable to get ClusterManager current image", "error", err)
 			return false, err
@@ -138,16 +371,16 @@ ClusterManager:
 
 		// check if an image upgrade is happening and whether CM has finished updating yet, return false to stop
 		// further reconcile operations on custom resource until CM is ready
-		if clusterManager.Status.Phase != enterpriseApi.PhaseReady {
-			return false, fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", clusterManager.Name, clusterManager.Status.Phase)
-		}
 		if cmImage != spec.Image {
-			// Emit event when upgrade is blocked due to ClusterManager / IndexerCluster version mismatch
-			if eventPublisher != nil {
-				eventPublisher.Warning(ctx, EventReasonUpgradeBlockedVersionMismatch,
-					fmt.Sprintf("Upgrade blocked: ClusterManager version %s != IndexerCluster version %s. Upgrade ClusterManager first.", cmImage, spec.Image))
-			}
-			return false, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", clusterManager.Name, cmImage, spec.Image)
+			return false, newDependencyNotReady(
+				"ClusterManager",
+				clusterManagerNamespace,
+				clusterManagerRef.Name,
+				clusterManager.Status.Phase,
+				cmImage,
+				spec.Image,
+				"desired image has not reached the workload yet",
+			)
 		}
 		goto IndexerCluster
 	}
@@ -190,9 +423,53 @@ IndexerCluster:
 			}
 			if len(preIdx.Name) != 0 {
 				// check if previous indexer have completed before starting next one
-				image, _ := getCurrentImage(ctx, c, &preIdx, SplunkIndexer)
-				if preIdx.Status.Phase != enterpriseApi.PhaseReady || image != spec.Image {
-					return false, nil
+				if preIdx.Spec.Image != "" && spec.Image != "" && preIdx.Spec.Image != spec.Image {
+					return false, dependencyImageMismatch(
+						ctx,
+						eventPublisher,
+						"IndexerCluster",
+						preIdx.Namespace,
+						preIdx.Name,
+						preIdx.Spec.Image,
+						spec.Image,
+					)
+				}
+				if preIdx.Status.Phase != enterpriseApi.PhaseReady {
+					return false, newDependencyNotReady(
+						"IndexerCluster",
+						preIdx.Namespace,
+						preIdx.Name,
+						preIdx.Status.Phase,
+						"",
+						spec.Image,
+						"previous multisite peer group has not completed",
+					)
+				}
+				image, imageErr := getCurrentImage(ctx, c, &preIdx, SplunkIndexer)
+				if imageErr != nil {
+					if k8serrors.IsNotFound(imageErr) {
+						return false, newDependencyNotReady(
+							"IndexerCluster",
+							preIdx.Namespace,
+							preIdx.Name,
+							preIdx.Status.Phase,
+							"",
+							spec.Image,
+							"previous multisite workload has not been created yet",
+						)
+					}
+					return false, imageErr
+				}
+				if image != spec.Image {
+					return false, newDependencyNotReady(
+						"IndexerCluster",
+						preIdx.Namespace,
+						preIdx.Name,
+						preIdx.Status.Phase,
+						image,
+						spec.Image,
+						"previous multisite workload has not reached the desired image",
+					)
 				}
 			}
 
@@ -216,7 +493,7 @@ SearchHeadCluster:
 			if k8serrors.IsNotFound(err) {
 				return true, nil
 			}
-			return false, nil
+			return false, err
 		}
 		return true, nil
 	} else {
@@ -251,8 +528,43 @@ SearchHeadCluster:
 			goto MonitoringConsole
 		}
 
+		if searchHeadClusterInstance.Spec.Image != "" && spec.Image != "" && searchHeadClusterInstance.Spec.Image != spec.Image {
+			return false, dependencyImageMismatch(
+				ctx,
+				eventPublisher,
+				"SearchHeadCluster",
+				searchHeadClusterInstance.Namespace,
+				searchHeadClusterInstance.Name,
+				searchHeadClusterInstance.Spec.Image,
+				spec.Image,
+			)
+		}
+
+		if searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady {
+			return false, newDependencyNotReady(
+				"SearchHeadCluster",
+				searchHeadClusterInstance.Namespace,
+				searchHeadClusterInstance.Name,
+				searchHeadClusterInstance.Status.Phase,
+				"",
+				spec.Image,
+				"",
+			)
+		}
+
 		shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, SplunkSearchHead)
 		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return false, newDependencyNotReady(
+					"SearchHeadCluster",
+					searchHeadClusterInstance.Namespace,
+					searchHeadClusterInstance.Name,
+					searchHeadClusterInstance.Status.Phase,
+					"",
+					spec.Image,
+					"workload has not been created yet",
+				)
+			}
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, "Could not get the Search Head Cluster image — check operator logs for details")
 			logger.ErrorContext(ctx, "unable to get SearchHeadCluster current image", "error", err)
 			return false, err
@@ -260,8 +572,16 @@ SearchHeadCluster:
 
 		// check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
 		// further reconcile operations on IDX until SHC is ready
-		if searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != spec.Image {
-			return false, nil
+		if shcImage != spec.Image {
+			return false, newDependencyNotReady(
+				"SearchHeadCluster",
+				searchHeadClusterInstance.Namespace,
+				searchHeadClusterInstance.Name,
+				searchHeadClusterInstance.Status.Phase,
+				shcImage,
+				spec.Image,
+				"desired image has not reached the workload yet",
+			)
 		}
 		goto MonitoringConsole
 	}
@@ -285,7 +605,15 @@ MonitoringConsole:
 		for _, cm := range clusterManagerList.Items {
 			if cm.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if cm.Status.Phase != enterpriseApi.PhaseReady {
-					return false, fmt.Errorf("cluster manager %s is not ready", cm.Name)
+					return false, newDependencyNotReady(
+						"ClusterManager",
+						cm.Namespace,
+						cm.Name,
+						cm.Status.Phase,
+						"",
+						spec.Image,
+						"referenced tier must converge before MonitoringConsole upgrade",
+					)
 				}
 			}
 		}
@@ -303,7 +631,15 @@ MonitoringConsole:
 		for _, shc := range searchHeadClusterList.Items {
 			if shc.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if shc.Status.Phase != enterpriseApi.PhaseReady {
-					return false, fmt.Errorf("search head %s is not ready", shc.Name)
+					return false, newDependencyNotReady(
+						"SearchHeadCluster",
+						shc.Namespace,
+						shc.Name,
+						shc.Status.Phase,
+						"",
+						spec.Image,
+						"referenced tier must converge before MonitoringConsole upgrade",
+					)
 				}
 			}
 		}
@@ -319,15 +655,23 @@ MonitoringConsole:
 
 		// Run through list, if it has the MC reference, bail out if it is NOT ready
 		for _, idx := range indexerClusterList.Items {
-			if idx.Name == cr.GetName() {
+			if idx.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if idx.Status.Phase != enterpriseApi.PhaseReady {
-					return false, fmt.Errorf("indexer %s is not ready", idx.Name)
+					return false, newDependencyNotReady(
+						"IndexerCluster",
+						idx.Namespace,
+						idx.Name,
+						idx.Status.Phase,
+						"",
+						spec.Image,
+						"referenced tier must converge before MonitoringConsole upgrade",
+					)
 				}
 			}
 		}
 
 		// get the list of standalones
-		standaloneList := &enterpriseApi.IndexerClusterList{}
+		standaloneList := &enterpriseApi.StandaloneList{}
 		err = c.List(ctx, standaloneList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, EventReasonUpgradeCheckFailed, "Could not find the Standalone list — check operator logs for details")
@@ -337,9 +681,17 @@ MonitoringConsole:
 
 		// Run through list, if it has the MC reference, bail out if it is NOT ready
 		for _, stdln := range standaloneList.Items {
-			if stdln.Name == cr.GetName() {
+			if stdln.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if stdln.Status.Phase != enterpriseApi.PhaseReady {
-					return false, fmt.Errorf("standalone %s is not ready", stdln.Name)
+					return false, newDependencyNotReady(
+						"Standalone",
+						stdln.Namespace,
+						stdln.Name,
+						stdln.Status.Phase,
+						"",
+						spec.Image,
+						"referenced tier must converge before MonitoringConsole upgrade",
+					)
 				}
 			}
 		}

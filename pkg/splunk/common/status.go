@@ -31,9 +31,13 @@ type PhaseAndConditions struct {
 
 // PhaseConditionInput carries the desired-state inputs for SetPhaseAndConditions.
 type PhaseConditionInput struct {
-	Phase      enterpriseApi.Phase
-	IsPaused   bool
-	Message    string
+	Phase    enterpriseApi.Phase
+	IsPaused bool
+	Message  string
+	// Reason overrides the phase-derived Ready and Progressing reasons when a
+	// controller has a more specific, stable explanation for the same phase.
+	// Leave empty to retain the default phase mapping.
+	Reason     enterpriseApi.ConditionReason
 	Generation int64
 }
 
@@ -209,6 +213,11 @@ func deriveConditionsFromPhase(existingConditions []metav1.Condition, in PhaseCo
 		progressingCondition.Message = "Unknown phase"
 		progressingCondition.LastTransitionTime = getTransitionTime(progressingCondition.Type, progressingCondition.Status)
 
+	}
+
+	if in.Reason != "" {
+		readyCondition.Reason = string(in.Reason)
+		progressingCondition.Reason = string(in.Reason)
 	}
 
 	// Carry forward the existing Stalled condition so that UpsertStalledCondition /

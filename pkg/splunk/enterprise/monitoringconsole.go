@@ -160,6 +160,19 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		// check if the Monitoring Console is ready for version upgrade, if required
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if err != nil || !continueReconcile {
+			if dependencyStatus, waiting := dependencyWaitPhaseAndConditions(
+				ctx,
+				cr,
+				cr.Status.Conditions,
+				isPaused,
+				err,
+			); waiting {
+				cr.Status.Phase = dependencyStatus.Phase
+				cr.Status.Conditions = dependencyStatus.Conditions
+				cr.Status.ObservedGeneration = cr.GetGeneration()
+				cr.Status.Message = err.Error()
+				return result, nil
+			}
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
 			}

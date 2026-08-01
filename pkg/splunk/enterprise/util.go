@@ -2327,6 +2327,17 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 	}
 }
 
+func hasDependencyNotReadyCondition(conditions []metav1.Condition) bool {
+	for _, condition := range conditions {
+		if condition.Type == string(enterpriseApi.ConditionReady) &&
+			condition.Status == metav1.ConditionFalse &&
+			condition.Reason == string(enterpriseApi.ReasonDependencyNotReady) {
+			return true
+		}
+	}
+	return false
+}
+
 // fetchCurrentCRWithStatusUpdate returns a CR (fresh Read) with latest status copied
 // Use this API to update the CR status message with an error if any. This aviods multiple
 // hops of CR specific logic to determine CR type.
@@ -2422,7 +2433,8 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 			} else {
 				cr.Status.Message = (*crError).Error()
 			}
-		} else if !strings.HasPrefix(cr.Status.Message, shcRollingUpdateStatusPrefix) {
+		} else if !strings.HasPrefix(cr.Status.Message, shcRollingUpdateStatusPrefix) &&
+			!hasDependencyNotReadyCondition(cr.Status.Conditions) {
 			cr.Status.Message = ""
 		}
 		cr.Status.DeepCopyInto(&latestCR.Status)
@@ -2440,7 +2452,9 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		); err != nil {
 			return nil, err
 		}
-		cr.Status.Message = ""
+		if !hasDependencyNotReadyCondition(cr.Status.Conditions) {
+			cr.Status.Message = ""
+		}
 		if (crError != nil) && ((*crError) != nil) {
 			cr.Status.Message = (*crError).Error()
 		}
@@ -2460,7 +2474,9 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-		cr.Status.Message = ""
+		if !hasDependencyNotReadyCondition(cr.Status.Conditions) {
+			cr.Status.Message = ""
+		}
 		if (crError != nil) && ((*crError) != nil) {
 			cr.Status.Message = (*crError).Error()
 		}
@@ -2472,7 +2488,9 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
 			return nil, err
 		}
-		cr.Status.Message = ""
+		if !hasDependencyNotReadyCondition(cr.Status.Conditions) {
+			cr.Status.Message = ""
+		}
 		if (crError != nil) && ((*crError) != nil) {
 			cr.Status.Message = (*crError).Error()
 		}

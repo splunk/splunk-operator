@@ -209,6 +209,20 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if !statefulSet.CreationTimestamp.IsZero() {
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if err != nil || !continueReconcile {
+			if dependencyStatus, waiting := dependencyWaitPhaseAndConditions(
+				ctx,
+				cr,
+				cr.Status.Conditions,
+				isPaused,
+				err,
+			); waiting {
+				cr.Status.Phase = dependencyStatus.Phase
+				cr.Status.Conditions = dependencyStatus.Conditions
+				cr.Status.ObservedGeneration = cr.GetGeneration()
+				cr.Status.DeployerPhase = enterpriseApi.PhasePending
+				cr.Status.Message = err.Error()
+				return result, nil
+			}
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
 			}

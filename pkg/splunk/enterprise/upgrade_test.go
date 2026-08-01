@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -14,11 +15,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 )
 
 func TestUpgradePathValidation(t *testing.T) {
@@ -705,7 +708,7 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 			if event.eventType != corev1.EventTypeWarning {
 				t.Errorf("Expected Warning event type for UpgradeBlockedVersionMismatch, got %s", event.eventType)
 			}
-			expectedMessage := "Upgrade blocked: ClusterManager version splunk/splunk:old != IndexerCluster version splunk/splunk:new. Upgrade ClusterManager first."
+			expectedMessage := "ClusterManager dependency test/test-cm requests image splunk/splunk:old but the dependent resource requests splunk/splunk:new"
 			if event.message != expectedMessage {
 				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
 			}
@@ -829,4 +832,299 @@ func updateStatefulSetsInTest(t *testing.T, ctx context.Context, client common.C
 		t.Errorf("Unexpected update statefulset  %v", err)
 		debug.PrintStack()
 	}
+}
+
+func TestUpgradePathValidationClassifiesLicenseManagerDependency(t *testing.T) {
+	ctx := context.Background()
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+
+	newSHC := func() *enterpriseApi.SearchHeadCluster {
+		return &enterpriseApi.SearchHeadCluster{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterpriseApi.GroupVersion.String(),
+				Kind:       "SearchHeadCluster",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "search", Namespace: "test"},
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec:              enterpriseApi.Spec{Image: "splunk/enterprise:target"},
+					LicenseManagerRef: corev1.ObjectReference{Name: "license"},
+				},
+			},
+		}
+	}
+
+	newLicenseManager := func(phase enterpriseApi.Phase, desiredImage string) *enterpriseApi.LicenseManager {
+		return &enterpriseApi.LicenseManager{
+			ObjectMeta: metav1.ObjectMeta{Name: "license", Namespace: "test"},
+			Spec: enterpriseApi.LicenseManagerSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{Image: desiredImage},
+				},
+			},
+			Status: enterpriseApi.LicenseManagerStatus{Phase: phase},
+		}
+	}
+
+	newLicenseManagerStatefulSet := func(image string) *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      GetSplunkStatefulsetName(SplunkLicenseManager, "license"),
+				Namespace: "test",
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "splunk", Image: image}},
+					},
+				},
+			},
+		}
+	}
+
+	t.Run("missing referenced object is a retryable dependency wait", func(t *testing.T) {
+		client := newFakeClientBuilder(scheme).Build()
+		shc := newSHC()
+		continueReconcile, err := UpgradePathValidation(ctx, client, shc, shc.Spec.CommonSplunkSpec, nil)
+		if continueReconcile {
+			t.Fatal("continueReconcile = true, want false")
+		}
+		wait, ok := AsDependencyNotReady(err)
+		if !ok {
+			t.Fatalf("error = %T %v, want DependencyNotReadyError", err, err)
+		}
+		if wait.Kind != "LicenseManager" || wait.Name != "license" || wait.Namespace != "test" {
+			t.Fatalf("dependency = %#v, want LicenseManager test/license", wait)
+		}
+	})
+
+	t.Run("existing Pending object is a retryable dependency wait", func(t *testing.T) {
+		lm := newLicenseManager(enterpriseApi.PhasePending, "splunk/enterprise:target")
+		client := newFakeClientBuilder(scheme).WithObjects(lm).Build()
+		shc := newSHC()
+		continueReconcile, err := UpgradePathValidation(ctx, client, shc, shc.Spec.CommonSplunkSpec, nil)
+		if continueReconcile {
+			t.Fatal("continueReconcile = true, want false")
+		}
+		wait, ok := AsDependencyNotReady(err)
+		if !ok {
+			t.Fatalf("error = %T %v, want DependencyNotReadyError", err, err)
+		}
+		if wait.Phase != enterpriseApi.PhasePending {
+			t.Fatalf("observed phase = %q, want Pending", wait.Phase)
+		}
+	})
+
+	t.Run("desired target with old current image is a retryable convergence wait", func(t *testing.T) {
+		lm := newLicenseManager(enterpriseApi.PhaseReady, "splunk/enterprise:target")
+		sts := newLicenseManagerStatefulSet("splunk/enterprise:old")
+		client := newFakeClientBuilder(scheme).WithObjects(lm, sts).Build()
+		shc := newSHC()
+		continueReconcile, err := UpgradePathValidation(ctx, client, shc, shc.Spec.CommonSplunkSpec, nil)
+		if continueReconcile {
+			t.Fatal("continueReconcile = true, want false")
+		}
+		wait, ok := AsDependencyNotReady(err)
+		if !ok {
+			t.Fatalf("error = %T %v, want DependencyNotReadyError", err, err)
+		}
+		if wait.ObservedImage != "splunk/enterprise:old" || wait.DesiredImage != "splunk/enterprise:target" {
+			t.Fatalf("images = observed %q desired %q", wait.ObservedImage, wait.DesiredImage)
+		}
+	})
+
+	t.Run("different desired images are a terminal configuration mismatch", func(t *testing.T) {
+		lm := newLicenseManager(enterpriseApi.PhaseReady, "splunk/enterprise:old")
+		sts := newLicenseManagerStatefulSet("splunk/enterprise:old")
+		client := newFakeClientBuilder(scheme).WithObjects(lm, sts).Build()
+		shc := newSHC()
+		continueReconcile, err := UpgradePathValidation(ctx, client, shc, shc.Spec.CommonSplunkSpec, nil)
+		if continueReconcile {
+			t.Fatal("continueReconcile = true, want false")
+		}
+		if _, ok := AsDependencyNotReady(err); ok {
+			t.Fatalf("mismatch returned retryable dependency wait: %v", err)
+		}
+		reason, ok := splcommon.TerminalReason(err)
+		if !ok || reason != EventReasonUpgradeBlockedVersionMismatch {
+			t.Fatalf("terminal reason = %q, %t; want %q", reason, ok, EventReasonUpgradeBlockedVersionMismatch)
+		}
+	})
+}
+
+func TestDependencyWaitPhaseAndConditions(t *testing.T) {
+	cr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterpriseApi.GroupVersion.String(),
+			Kind:       "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "search",
+			Namespace:  "test",
+			Generation: 9,
+		},
+	}
+	recorder := record.NewFakeRecorder(1)
+	ctx := context.WithValue(
+		context.Background(),
+		splcommon.EventPublisherKey,
+		&K8EventPublisher{recorder: recorder, instance: cr},
+	)
+	waitErr := newDependencyNotReady(
+		"LicenseManager",
+		"test",
+		"license",
+		enterpriseApi.PhasePending,
+		"",
+		"splunk/enterprise:target",
+		"",
+	)
+
+	status, waiting := dependencyWaitPhaseAndConditions(ctx, cr, nil, false, waitErr)
+	if !waiting {
+		t.Fatal("waiting = false, want true")
+	}
+	if status.Phase != enterpriseApi.PhasePending {
+		t.Fatalf("phase = %q, want Pending", status.Phase)
+	}
+	ready := meta.FindStatusCondition(status.Conditions, string(enterpriseApi.ConditionReady))
+	progressing := meta.FindStatusCondition(status.Conditions, string(enterpriseApi.ConditionProgressing))
+	if ready == nil || ready.Reason != string(enterpriseApi.ReasonDependencyNotReady) {
+		t.Fatalf("Ready condition = %#v, want DependencyNotReady", ready)
+	}
+	if progressing == nil || progressing.Reason != string(enterpriseApi.ReasonDependencyNotReady) {
+		t.Fatalf("Progressing condition = %#v, want DependencyNotReady", progressing)
+	}
+	event := <-recorder.Events
+	if !strings.Contains(event, "Normal DependencyNotReady") || !strings.Contains(event, "LicenseManager dependency test/license") {
+		t.Fatalf("event = %q, want aggregatable DependencyNotReady detail", event)
+	}
+}
+
+func TestUpgradePathValidationClassifiesClusterManagerDependency(t *testing.T) {
+	ctx := context.Background()
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+
+	indexer := &enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterpriseApi.GroupVersion.String(),
+			Kind:       "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: "indexers", Namespace: "workload"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/enterprise:target"},
+				ClusterManagerRef: corev1.ObjectReference{
+					Name:      "manager",
+					Namespace: "dependencies",
+				},
+			},
+		},
+	}
+
+	t.Run("missing cross-namespace reference waits on the referenced namespace", func(t *testing.T) {
+		client := newFakeClientBuilder(scheme).Build()
+		continueReconcile, err := UpgradePathValidation(ctx, client, indexer, indexer.Spec.CommonSplunkSpec, &indexerClusterPodManager{})
+		if continueReconcile {
+			t.Fatal("continueReconcile = true, want false")
+		}
+		wait, ok := AsDependencyNotReady(err)
+		if !ok {
+			t.Fatalf("error = %T %v, want DependencyNotReadyError", err, err)
+		}
+		if wait.Kind != "ClusterManager" || wait.Namespace != "dependencies" || wait.Name != "manager" {
+			t.Fatalf("dependency = %#v, want ClusterManager dependencies/manager", wait)
+		}
+	})
+
+	t.Run("Pending cross-namespace reference reports observed phase", func(t *testing.T) {
+		manager := &enterpriseApi.ClusterManager{
+			ObjectMeta: metav1.ObjectMeta{Name: "manager", Namespace: "dependencies"},
+			Spec: enterpriseApi.ClusterManagerSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/enterprise:target"},
+				},
+			},
+			Status: enterpriseApi.ClusterManagerStatus{Phase: enterpriseApi.PhasePending},
+		}
+		client := newFakeClientBuilder(scheme).WithObjects(manager).Build()
+		continueReconcile, err := UpgradePathValidation(ctx, client, indexer, indexer.Spec.CommonSplunkSpec, &indexerClusterPodManager{})
+		if continueReconcile {
+			t.Fatal("continueReconcile = true, want false")
+		}
+		wait, ok := AsDependencyNotReady(err)
+		if !ok || wait.Phase != enterpriseApi.PhasePending {
+			t.Fatalf("dependency wait = %#v, %t, want Pending", wait, ok)
+		}
+	})
+}
+
+func TestUpgradePathValidationMonitoringConsoleReverseDependencies(t *testing.T) {
+	ctx := context.Background()
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+
+	newMonitoringConsole := func() *enterpriseApi.MonitoringConsole {
+		return &enterpriseApi.MonitoringConsole{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterpriseApi.GroupVersion.String(),
+				Kind:       "MonitoringConsole",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "monitor", Namespace: "test"},
+			Spec: enterpriseApi.MonitoringConsoleSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/enterprise:target"},
+				},
+			},
+		}
+	}
+
+	t.Run("IndexerCluster reference is not skipped when its name differs", func(t *testing.T) {
+		indexer := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "indexers", Namespace: "test"},
+			Spec: enterpriseApi.IndexerClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					MonitoringConsoleRef: corev1.ObjectReference{Name: "monitor"},
+				},
+			},
+			Status: enterpriseApi.IndexerClusterStatus{Phase: enterpriseApi.PhasePending},
+		}
+		client := newFakeClientBuilder(scheme).WithObjects(indexer).Build()
+		monitor := newMonitoringConsole()
+		continueReconcile, err := UpgradePathValidation(ctx, client, monitor, monitor.Spec.CommonSplunkSpec, nil)
+		if continueReconcile {
+			t.Fatal("continueReconcile = true, want false")
+		}
+		wait, ok := AsDependencyNotReady(err)
+		if !ok || wait.Kind != "IndexerCluster" || wait.Name != "indexers" {
+			t.Fatalf("dependency wait = %#v, %t, want IndexerCluster test/indexers", wait, ok)
+		}
+	})
+
+	t.Run("Standalone references are listed as Standalones", func(t *testing.T) {
+		standalone := &enterpriseApi.Standalone{
+			ObjectMeta: metav1.ObjectMeta{Name: "standalone", Namespace: "test"},
+			Spec: enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					MonitoringConsoleRef: corev1.ObjectReference{Name: "monitor"},
+				},
+			},
+			Status: enterpriseApi.StandaloneStatus{Phase: enterpriseApi.PhasePending},
+		}
+		client := newFakeClientBuilder(scheme).WithObjects(standalone).Build()
+		monitor := newMonitoringConsole()
+		continueReconcile, err := UpgradePathValidation(ctx, client, monitor, monitor.Spec.CommonSplunkSpec, nil)
+		if continueReconcile {
+			t.Fatal("continueReconcile = true, want false")
+		}
+		wait, ok := AsDependencyNotReady(err)
+		if !ok || wait.Kind != "Standalone" || wait.Name != "standalone" {
+			t.Fatalf("dependency wait = %#v, %t, want Standalone test/standalone", wait, ok)
+		}
+	})
 }

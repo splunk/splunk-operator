@@ -20,6 +20,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -431,6 +432,38 @@ func TestSetPhaseAndConditions_NotStalled(t *testing.T) {
 	}
 	if stalledCond.Message != "" {
 		t.Errorf("Stalled.Message = %q, want empty", stalledCond.Message)
+	}
+}
+
+func TestSetPhaseAndConditions_DependencyNotReady(t *testing.T) {
+	result := SetPhaseAndConditions(nil, PhaseConditionInput{
+		Phase:      enterpriseApi.PhasePending,
+		IsPaused:   false,
+		Message:    "Waiting for LicenseManager dependency test/license-manager (phase: Pending)",
+		Reason:     enterpriseApi.ReasonDependencyNotReady,
+		Generation: 7,
+	})
+
+	ready := meta.FindStatusCondition(result.Conditions, string(enterpriseApi.ConditionReady))
+	if ready == nil {
+		t.Fatal("Ready condition not found")
+	}
+	if ready.Status != metav1.ConditionFalse {
+		t.Fatalf("Ready status = %s, want False", ready.Status)
+	}
+	if ready.Reason != string(enterpriseApi.ReasonDependencyNotReady) {
+		t.Fatalf("Ready reason = %q, want %q", ready.Reason, enterpriseApi.ReasonDependencyNotReady)
+	}
+
+	progressing := meta.FindStatusCondition(result.Conditions, string(enterpriseApi.ConditionProgressing))
+	if progressing == nil {
+		t.Fatal("Progressing condition not found")
+	}
+	if progressing.Status != metav1.ConditionTrue {
+		t.Fatalf("Progressing status = %s, want True", progressing.Status)
+	}
+	if progressing.Reason != string(enterpriseApi.ReasonDependencyNotReady) {
+		t.Fatalf("Progressing reason = %q, want %q", progressing.Reason, enterpriseApi.ReasonDependencyNotReady)
 	}
 }
 
