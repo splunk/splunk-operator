@@ -1971,8 +1971,36 @@ final results on every Search Head; its 1,802-line log has SHA-256
 `d0d8de5eb851bea87a9057f0676e1b5d5f6e16a7ea134e0130d4af04ea6b2c3d`.
 It recorded 18 successful-search count regressions and maximum pending 364 at
 sequence 1481, after lifecycle `Completed`, while every Search Head still
-logged attempts to old indexer Pod IPs. API-server disconnection, conflict and
-redundancy variants, and the customer-visible distributed-search convergence
-contract remain open. The test-only pause is fault-injection coordination; it
-is not a production rollout requirement and does not qualify concurrent
-desired-state conflict behavior.
+logged attempts to old indexer Pod IPs. At this checkpoint API-server
+disconnection, conflict and redundancy variants, and the customer-visible
+distributed-search convergence contract remained open. The test-only pause is
+fault-injection coordination; it is not a production rollout requirement and
+does not qualify concurrent desired-state conflict behavior.
+
+2026-08-01 UTC: Recorded the bounded API-server disconnection campaign on
+`codex/shc-85-api-disconnection-qualification`. A pinned ephemeral diagnostic
+container with a checked-in test-only privileged root/`NET_ADMIN` profile
+installed one exact
+Pod-local `OUTPUT` reject rule for API Service port 443. The fault record
+proved HTTP 200 before the rule, a blocked request during it, fail-safe rule
+removal, and HTTP 200 afterward. Physical isolation lasted 401 seconds. The
+manager lost its leader-election lease and restarted once in the same Operator
+Pod; the durable ordinal-3 operation, target UID, revisions, and request
+timestamp remained exact. Thirty-six hold samples covered 302 seconds with
+one running, unready, non-serving target, three unchanged serving peers, and
+zero indexer restarts or liveness failures.
+
+After API recovery, a companion observer followed the same operation from
+`ReadyForReplacement` through `3 -> 2 -> 1 -> 0` and ten stable samples. The
+hold, fault, and resume record hashes are
+`aca61282531551a7ec970dd2b0139be35dde2c0e1494117ed33e03ff9add5510`,
+`a324e0bc639eaba052b475f1342a7595c42be479a38914ead4678b09cfb8876a`,
+and `49dc69a31444997ddf5d5c8045bcfd840002937fd621bdbc4df700f2b1c1de7e`.
+All final CRs were Ready, all four indexer and three Search Head endpoints were
+published, RF/SF/all-searchable/no-fixup health passed, and every indexer
+Ansible recap reported `failed=0`. The independent workload submitted 1,800
+events with zero HEC or search-request failures and exact eventual results on
+every Search Head, but observed 30 successful-search count regressions and
+maximum pending 417. This closes only API disconnection at observed
+`Decommissioning`; other stages/topologies, leader contention, conflict,
+redundancy, soak, and immediate distributed-search completeness remain open.

@@ -4,7 +4,7 @@
 
 This document records the indexer-side evidence first gathered for SHC-82 on
 2026-07-30 UTC and the bounded SHC-85 Operator-lifecycle follow-up through
-2026-07-31 UTC. It is not a production-readiness claim. The initial campaign
+2026-08-01 UTC. It is not a production-readiness claim. The initial campaign
 proved that Splunk's searchable rolling restart and Kubernetes traffic
 readiness address different parts of the availability problem and identified
 the controller-progress defect addressed by the later Operator-owned
@@ -180,9 +180,9 @@ entries are not evidence from this qualification namespace and were excluded
 from the lifecycle result.
 
 This campaign qualifies controller-Pod replacement during one persisted
-Operator-owned indexer `Decommissioning` operation. It does not qualify a
-long-duration API-server disconnection, leader failover with concurrent
-controllers, conflicting desired-state changes, insufficient redundancy,
+Operator-owned indexer `Decommissioning` operation. By itself it does not
+qualify a long-duration API-server disconnection, leader failover with
+concurrent controllers, conflicting desired-state changes, insufficient redundancy,
 other network/TLS/HEC configurations, or Splunk-managed App Framework
 next-peer selection.
 
@@ -473,9 +473,10 @@ Immediate completeness remains open. The Job reported 37 successful-search
 count regressions and maximum pending 404 at sequence 1522. Therefore this
 campaign closes only the bounded five-minute `WithdrawingReadiness`
 controller-absence gate. It does not turn a successful but incomplete search
-response into an availability success, qualify API-server disconnection, or
-remove the requirement for supported per-Search-Head peer convergence and
-partial-result signaling.
+response into an availability success or remove the requirement for supported
+per-Search-Head peer convergence and partial-result signaling. A later,
+separate campaign qualifies bounded API-server disconnection; this one does
+not.
 
 ## Five-minute target-selection absence qualification
 
@@ -546,6 +547,75 @@ different. The run therefore closes only the bounded five-minute
 `TargetSelected` controller-absence gate. It does not qualify a running
 controller losing API-server connectivity, desired-state conflict, or the
 customer-visible immediate distributed-search completeness contract.
+
+## Controller API-server disconnection qualification
+
+The isolated branch `codex/shc-85-api-disconnection-qualification` exercised
+the K8S-006 boundary that the controller-absence campaigns did not cover. The
+fault harness adds one exact Pod-local `OUTPUT` reject rule for the Kubernetes
+API Service address and port to a root, `NET_ADMIN` ephemeral container in the
+Operator Pod using a test-only privileged debug profile. It first proves an
+HTTP 200 API response, proves that the same
+request fails after the rule is installed, keeps a fail-safe removal timer,
+and proves HTTP 200 again after removal. It does not change node, workload-Pod,
+Service, DNS, or Splunk traffic. Harness commits `8e21b9b1b` through
+`f78828cc1` also pin the diagnostic image by digest and check in the narrow
+custom debug profile used by the campaign.
+
+The accepted 2026-08-01 UTC run isolated Operator Pod UID
+`450b9597-fffc-4b15-8907-09d8045e4fbd` from the API server for 401 seconds
+while ordinal 3 was durably in observed `Decommissioning`. The exact operation
+ID, target Pod UID, source revision, desired revision, request timestamp, and
+stage did not change. Thirty-six hold observations covered 302 seconds. In
+every sample the target remained running, unready, outside the EndpointSlice,
+and at zero restarts; the other three indexers remained Ready and serving;
+and no indexer liveness failure was observed.
+
+The manager could no longer renew its leader-election lease and exited with
+`leader election lost`. Kubernetes restarted only the manager container in
+the same Operator Pod. The replacement manager still had no API path until
+the fault timer removed the rule. This is expected controller-runtime
+behavior under lease loss, and the evidence requires both the stable Pod UID
+and the changed manager container identity so that a container restart cannot
+be mistaken for uninterrupted controller execution. The fault record proves
+`API_FAULT_APPLIED before=200 blocked=true` and
+`API_FAULT_REMOVED after=200`; its SHA-256 is
+`a324e0bc639eaba052b475f1342a7595c42be479a38914ead4678b09cfb8876a`.
+
+After API recovery, the restarted manager resumed the same ordinal-3
+operation at `ReadyForReplacement` and completed `3 -> 2 -> 1 -> 0`. The
+125-sample companion record ended with ten stable samples, one unavailable
+peer at most, four desired-revision Ready Pods, zero indexer restarts, and
+`PASS order=3,2,1,0 stable=10`; its SHA-256 is
+`49dc69a31444997ddf5d5c8045bcfd840002937fd621bdbc4df700f2b1c1de7e`.
+All four final Ansible recaps reported `ok=111` and `failed=0`. Cluster Manager
+health reported RF met, SF met, all data searchable, every peer Up, no fixups,
+and readiness for searchable rolling restart. Every Splunk CR was Ready, and
+direct searches on all three Search Heads returned
+`count/min/max/distinct=1800/1/1800/1800`.
+
+The API-independent Job submitted all 1,800 events with zero HEC failures,
+zero search-request failures, and exact eventual completeness. It recorded 30
+successful-search count regressions and maximum pending 417 at sequence 1507,
+so the immediate distributed-search completeness requirement remains open.
+The 1,802-line workload record has SHA-256
+`24328227463010c469cc73c5c24e1bf720f26fa001c804520eb46720d73255a4`.
+
+The accepted evidence is intentionally split between the 42-line hold record
+and the companion resume record. After the hold had completed, the test shell
+encountered an observer-only parse failure because its source file was edited
+in place while that process was still executing. The fail-safe fault container
+independently removed the rule and proved API recovery; the companion observer
+then captured the complete resumed roll. This was not an Operator or Splunk
+failure and is not hidden by treating the two records as one uninterrupted
+monitor. The hold-record SHA-256 is
+`aca61282531551a7ec970dd2b0139be35dde2c0e1494117ed33e03ff9add5510`.
+
+This closes the bounded K8S-006 API-disconnection gate for one Operator Pod,
+one manager container restart, and the observed ordinal-3 `Decommissioning`
+boundary. It does not qualify concurrent leaders, API partitions at every
+stage, desired-state conflict, insufficient redundancy, or repeated and
+long-duration network faults.
 
 ## Search Head defects exposed while forming the fixture
 
@@ -778,7 +848,8 @@ environment-qualified:
 - Operator restart or absence durations and topologies beyond the qualified
   `Decommissioning` restart and five-minute absences during
   `TargetSelected`, `WithdrawingReadiness`, observed `Decommissioning`, and
-  `ReadyForReplacement`; API-server disconnection remains open;
+  `ReadyForReplacement`, plus API-server disconnection at observed
+  `Decommissioning`; other stages and topologies remain open;
 - concurrent image rollout, app update, scale, node drain, and manual
   deletion;
 - previous supported Splunk and Operator/image combinations;
@@ -801,7 +872,10 @@ campaigns demonstrate that contract for one steady-controller RF3/SF2
 revision roll, one controller-Pod restart during `Decommissioning`, and one
 five-minute controller absence during each of `TargetSelected`,
 `WithdrawingReadiness`, observed `Decommissioning`, and `ReadyForReplacement`
-on the fixed Splunk build. Do not generalize those results to Splunk-managed
-App Framework restarts, API-server disconnection,
+on the fixed Splunk build. A later campaign also demonstrates recovery from a
+401-second Pod-local API-server disconnection at observed `Decommissioning`,
+including the expected leader-lease-loss manager restart. Do not generalize
+those results to Splunk-managed App Framework restarts, other API-partition
+stages or topologies,
 conflicting disruptions, unsupported redundancy, or the remaining negative
 and compatibility gates above.

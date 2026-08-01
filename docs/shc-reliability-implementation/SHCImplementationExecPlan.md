@@ -326,9 +326,9 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   finished with RF/SF met, all data searchable, all peers Up, and no fixups.
   The workload records completed 80/80 and 30/30 exact sequences with zero
   HEC or search-request failures. This closes manual advancement for the
-  tested steady-controller Operator path. Controller-Pod restart during
-  `Decommissioning` is qualified separately below; long controller or
-  API-server disconnection, conflict, insufficient-redundancy,
+  tested steady-controller Operator path. At this checkpoint, controller-Pod
+  restart during `Decommissioning` is qualified separately below; long
+  controller or API-server disconnection, conflict, insufficient-redundancy,
   configuration/protocol, persistent-client, and Splunk-managed App Framework
   target-control gates remain open.
 - [x] (2026-07-30 UTC) Qualified SHC-85 controller-Pod restart recovery on
@@ -402,8 +402,30 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   The overlapping 1,800-event Job had zero HEC/search request failures and
   exact eventual results on every Search Head; workload-log SHA-256 is
   `d0d8de5eb851bea87a9057f0676e1b5d5f6e16a7ea134e0130d4af04ea6b2c3d`.
-  This qualifies controller absence at `TargetSelected`, not API-server
-  disconnection or concurrent desired-state conflict.
+  This qualifies controller absence at `TargetSelected`, not concurrent
+  desired-state conflict; API-server disconnection is qualified separately
+  below.
+- [x] (2026-08-01 UTC) Qualified a running SHC-85 controller losing and
+  regaining its Kubernetes API path during observed ordinal-3
+  `Decommissioning`. A Pod-local, exact-destination `OUTPUT` reject rule
+  blocked only API Service port 443 for 401 seconds and independently proved
+  HTTP 200 before and after the fault. The exact operation, target UID,
+  revisions, request timestamp, and durable stage survived. The manager lost
+  its leader lease and restarted once in the same Operator Pod; 36 hold
+  observations covered 302 seconds with the target running, unready,
+  non-serving, and at zero restarts and the other three peers unchanged and
+  serving. After connectivity returned, the restarted manager resumed the
+  same operation and the companion monitor passed `3 -> 2 -> 1 -> 0` plus ten
+  stable samples. Lifecycle, fault, and resume SHA-256 values are
+  `aca61282531551a7ec970dd2b0139be35dde2c0e1494117ed33e03ff9add5510`,
+  `a324e0bc639eaba052b475f1342a7595c42be479a38914ead4678b09cfb8876a`,
+  and `49dc69a31444997ddf5d5c8045bcfd840002937fd621bdbc4df700f2b1c1de7e`.
+  The independent 1,800-event Job had zero HEC/search request failures and
+  exact eventual results on all three Search Heads, but retained 30 count
+  regressions and maximum pending 417. This closes only the bounded K8S-006
+  API-disconnection gate at observed `Decommissioning`; stage variants,
+  leader contention, conflict, redundancy, and repeated/long faults remain
+  open.
 - [x] (2026-07-31 UTC) Corrected two Search Head captain-transition defects
   exposed while forming the SHC-85 fixture. Source `99da90390` sends the
   captain-only authoritative member query to the newly elected captain instead
@@ -468,8 +490,9 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `Decommissioning`, five-minute controller absence during
   `ReadyForReplacement`, and five-minute controller absence during
   `WithdrawingReadiness`, and five-minute controller absence during
-  `TargetSelected`. Remaining gates include API-server disconnection, leader
-  contention, conflicting desired-state changes,
+  `TargetSelected`, plus a 401-second API-server disconnection during observed
+  `Decommissioning`. Remaining gates include other API-partition stages and
+  topologies, leader contention, conflicting desired-state changes,
   insufficient RF/SF health, HEC-disabled Splunk-to-Splunk traffic, HTTP and
   HTTPS HEC variants, ingress TLS termination, service-mesh and no-mesh
   deployments, persistent-client connection behavior, and repeated/soak
@@ -2455,5 +2478,20 @@ and
 `d0d8de5eb851bea87a9057f0676e1b5d5f6e16a7ea134e0130d4af04ea6b2c3d`.
 Request continuity and eventual exactness passed; 18 successful-search count
 regressions with maximum pending 364 keep immediate distributed-search
-completeness open. API-server disconnection and the remaining negative and
-compatibility variants are separate gates.
+completeness open. At this checkpoint, API-server disconnection and the
+remaining negative and compatibility variants were separate gates.
+
+2026-08-01 UTC: Recorded the isolated SHC-85 API-disconnection campaign on
+`codex/shc-85-api-disconnection-qualification`. Harness commits `8e21b9b1b`
+through `f78828cc1` blocked only the Operator Pod's API Service path for 401
+seconds with an exact, fail-safe rule. The manager lost its leader lease and
+restarted once in the same Pod while the durable ordinal-3 operation remained
+unchanged at observed `Decommissioning`. Thirty-six hold samples covered 302
+seconds with three serving peers and one unchanged non-serving target. API
+recovery resumed that operation and the companion monitor completed
+`3 -> 2 -> 1 -> 0` with ten stable samples. The 1,800-event workload retained
+zero request failures and exact eventual results but observed 30 count
+regressions and maximum pending 417. This closes the bounded K8S-006 gate at
+one lifecycle stage; immediate completeness, other partition stages and
+topologies, leader contention, conflict, redundancy, and compatibility remain
+open.

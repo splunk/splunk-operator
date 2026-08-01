@@ -293,7 +293,7 @@ partial qualification results, not an OPS-011 pass.
 | K8S-008 | P2 | Cluster autoscaler/zone movement | Scheduling/storage stages remain attributable |
 | K8S-009 | P1 | PDB across supported SHC sizes | The PDB selects only this SHC, retains at most one voluntarily unavailable member, is reconciled idempotently, and never takes over a user-owned name collision |
 
-### Partial STS-002 and K8S-006-adjacent SHC-85 evidence
+### STS-002 and bounded K8S-006 SHC-85 evidence
 
 The 2026-07-31 SHC-85 campaigns removed the sole Operator controller for a
 requested five minutes during all four durable indexer lifecycle stages. The
@@ -310,10 +310,27 @@ failures and container restarts, and resumed the same operation through
 `3 -> 2 -> 1 -> 0` after controller restoration.
 
 This qualifies the bounded STS-002 controller-absence behavior for all four
-stages. It is still adjacent evidence, not a K8S-006 pass: scaling the
+stages. By itself it is still only K8S-006-adjacent evidence: scaling the
 controller to zero does not exercise a running controller that loses and later
 regains API-server connectivity. The `TargetSelected` test-only pause also
 does not qualify a concurrent desired-state conflict.
+
+The separate 2026-08-01 campaign passes bounded K8S-006 at observed ordinal-3
+`Decommissioning`. A fail-safe Pod-local network rule blocked only the running
+Operator Pod's API Service destination for 401 seconds, proving HTTP 200 before
+the rule, connection failure during it, and HTTP 200 after removal. The
+manager lost its leader-election lease and restarted once in the same Pod.
+The exact durable operation, target UID, revisions, request timestamp, and
+stage remained unchanged; 36 observations covered 302 seconds with the target
+running, unready, outside the EndpointSlice, and at zero restarts and all
+three non-targets Ready and serving. After recovery, the restarted manager
+resumed the same operation and completed `3 -> 2 -> 1 -> 0` plus ten stable
+samples. The hold, fault, and resume records have SHA-256 values
+`aca61282531551a7ec970dd2b0139be35dde2c0e1494117ed33e03ff9add5510`,
+`a324e0bc639eaba052b475f1342a7595c42be479a38914ead4678b09cfb8876a`,
+and `49dc69a31444997ddf5d5c8045bcfd840002937fd621bdbc4df700f2b1c1de7e`.
+This does not pass API partitions at other stages or topologies, concurrent
+leaders, desired-state conflict, insufficient redundancy, or soak behavior.
 
 The independent workloads spanning all four long absences had zero HEC/search
 request failures and exact eventual completeness. They did not pass immediate
@@ -324,6 +341,12 @@ the target-selection run reported 18 regressions and maximum pending 364 after
 `Completed`. That observation remains an OPS-011 and Splunk Enterprise
 convergence requirement rather than a pass of the customer-visible
 availability invariant.
+
+The API-disconnection workload had the same bounded outcome: 1,800 successful
+HEC submissions, zero search-request failures, and exact final results on each
+Search Head, but 30 successful-search count regressions and maximum pending
+417. K8S-006 recovery therefore passes without converting the separate
+OPS-011 immediate distributed-search completeness requirement into a pass.
 
 ## Observability and security scenarios
 

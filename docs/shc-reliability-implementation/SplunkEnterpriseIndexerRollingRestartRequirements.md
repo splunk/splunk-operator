@@ -80,6 +80,19 @@ after exact final results were available. Its log has SHA-256
 The earlier lifecycle boundary did not eliminate the later distributed-peer
 convergence problem.
 
+A fifth independent 1,800-event record ran while the Operator Pod's
+Kubernetes API path was blocked for 401 seconds at observed indexer
+`Decommissioning`. The manager lost its leader-election lease and restarted in
+the same Pod; after API connectivity returned, it resumed the same durable
+operation and completed `3 -> 2 -> 1 -> 0`. The Job had zero HEC or
+search-request failures and exact eventual results on every Search Head, but
+reported 30 successful-search count regressions and maximum pending 417 at
+sequence 1507. Its log has SHA-256
+`24328227463010c469cc73c5c24e1bf720f26fa001c804520eb46720d73255a4`.
+The controller-recovery path therefore did not cause request failure, but it
+also did not establish immediate distributed-search completeness during the
+subsequent peer identity and address convergence.
+
 This is not evidence that RF or SF was configured incorrectly, and it is not
 yet a complete root-cause finding. It proves that HTTP request success, Cluster
 Manager `Up/searchable`, Kubernetes endpoint recovery, and remote HEC health

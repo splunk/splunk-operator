@@ -59,7 +59,7 @@ without duplicating their full content.
 | SHC-82 | Define and qualify App Framework restart-required app availability across Search Head and indexer clusters | First SH serving correction `0fc1bcf31`; SH drain work `632d9155c`; indexer lifecycle work under SHC-85 | OPS-006, OPS-011, K8S-007, OBS-001, OBS-003, OBS-005 | Partial EKS evidence: the SH correction removed the zero-endpoint captain-transition outage, but an already-admitted captain search still failed. Four-peer searchable indexer restart preserved RF/SF/searchability; existing readiness lost 7/55 HEC submissions, default HEC-aware readiness lost 1/55, and a fast experiment completed 55/55 exactly. SHC-85 later removed manual lifecycle advancement for tested Operator-owned four-peer rolls, including controller-Pod restart recovery during `Decommissioning`, with exact 80/80, 30/30, 100/100, and stable 30/30 records on the official fixed KV Store build. Splunk-managed App Framework target control, configuration variants, client delivery, conflict, and unhealthy-redundancy gates remain open |
 | SHC-83 | Prevent traffic readiness before image-owned SHC initialization, synchronization, and internal Splunk restarts are complete | `635b81bc4`, `daf6b0608`, `0a2465cbe`, `85b00fd9f`, `2889c8002` on `codex/shc-83-startup-readiness-qualification` | HLT-001, HLT-002, HLT-009, STS-012, OBS-001 | Source-qualified and EKS-qualified for a fresh three-member formation with zero premature client endpoints, exactly one initial-formation restart Event, and twelve stable three-endpoint samples after `Complete`. Established non-captain and active-captain replacements retained at least two endpoints and returned to three; captaincy moved dynamically from ordinal zero to ordinal two. Operator replacement retained all three endpoints, Search Head UIDs, durable formation state, and zero restarts. The EKS campaign also corrected a circular dependency by separating internal management target eligibility from client Service readiness during bounded first formation |
 | SHC-84 | Bound first-start and upgrade startup probes and guarantee prompt TERM exit for kubelet-initiated restarts | Policy `968e19b94`, API validation `c58ff86cd`, merge fix `67c0d3bd2`; monitors `cbaef60af`, `524636f39`; source fixture `4718cef6f` on `codex/shc-84-startup-term-qualification` | HLT-009, RUN-003, RUN-004, REJ-005, OBS-005 | Source- and EKS-qualified with Operator digest `sha256:d83ae44c825f13cb12117e72d2ca5415b4ffd9b7af36bcab7e81226e11e6cafe`: existing-v4 reconciliation, fresh formation, forced liveness, planned deletion, and the supported `10.4.2604.0/60dd7967c086` to `10.5.2605.0/844c593e9c1d` upgrade passed. The upgrade replaced ordinals `2 -> 1 -> 0`, retained at least two endpoints, recorded zero container restarts, moved captaincy dynamically, completed 200/200 sampled searches, and finished with three registered `Up` target members. Startup/liveness grace rendered 660, readiness grace remained unset, and Pod grace remained 1200 |
-| SHC-85 | Separate indexer serving readiness from lifecycle progress and require previous-peer network-path recovery before authorizing another disruption | `3f60d9301`, `11d719f64`, `7ff844f4a`; controller-restart evidence on `codex/shc-85-controller-restart-qualification`; lifecycle hold `5dbe7dac8`, `99da90390`, `ac1fe0db8`; harness `854a76b8d`, `b2bf2e71d`, `d610d4474`; observed-decommissioning absence harness `8d6a7dbc6`; readiness-withdrawal absence harness `978d71bc5`; target-selection absence harness `2d430748b`, `770a27799` | OPS-011, K8S-007, OBS-001, OBS-002, OBS-003 | Source-qualified and EKS-qualified for Operator-owned four-peer RF3/SF2 `OnDelete` revision rolls on official Splunk build `10.5.2605.0/844c593e9c1d`: automatic `3 -> 2 -> 1 -> 0` progress, one withdrawn target at a time, previous-peer remote serving recovery before the next target, zero container restarts, four Ansible `failed=0` results, no prior KV Store failure signature, and final RF/SF/all-searchable health. Separate campaigns qualified controller restart and five-minute controller absences during ordinal-3 `TargetSelected`, `WithdrawingReadiness`, observed `Decommissioning`, and `ReadyForReplacement`; all retained the durable operation and completed the full roll. API-independent 1,800-event workloads spanning the long absences had zero HEC/search request failures and exact final completeness. The records exposed 24, 41, 37, and 18 successful-search count regressions, with maximum pending 362, 406, 404, and 364 during peer-address/authentication convergence and no partial-result signal. Immediate distributed-search completeness, API-server disconnection, leader contention, conflict, redundancy, protocol/configuration variants, and Splunk-managed App Framework next-target control remain open |
+| SHC-85 | Separate indexer serving readiness from lifecycle progress and require previous-peer network-path recovery before authorizing another disruption | `3f60d9301`, `11d719f64`, `7ff844f4a`; controller-restart evidence on `codex/shc-85-controller-restart-qualification`; lifecycle hold `5dbe7dac8`, `99da90390`, `ac1fe0db8`; harness `854a76b8d`, `b2bf2e71d`, `d610d4474`; observed-decommissioning absence harness `8d6a7dbc6`; readiness-withdrawal absence harness `978d71bc5`; target-selection absence harness `2d430748b`, `770a27799`; API-disconnection harness `8e21b9b1b` through `f78828cc1` | OPS-011, K8S-006, K8S-007, OBS-001, OBS-002, OBS-003 | Source-qualified and EKS-qualified for Operator-owned four-peer RF3/SF2 `OnDelete` revision rolls on official Splunk build `10.5.2605.0/844c593e9c1d`: automatic `3 -> 2 -> 1 -> 0` progress, one withdrawn target at a time, previous-peer remote serving recovery before the next target, zero container restarts, four Ansible `failed=0` results, no prior KV Store failure signature, and final RF/SF/all-searchable health. Separate campaigns qualified controller restart and five-minute controller absences during ordinal-3 `TargetSelected`, `WithdrawingReadiness`, observed `Decommissioning`, and `ReadyForReplacement`; all retained the durable operation and completed the full roll. A bounded Pod-local API-server disconnection at observed `Decommissioning` lasted 401 seconds, caused the expected leader-lease-loss manager restart in the same Operator Pod, preserved the same durable operation, and completed the roll after connectivity returned. API-independent 1,800-event workloads spanning the long absences and API fault had zero HEC/search request failures and exact final completeness. The records exposed 24, 41, 37, 18, and 30 successful-search count regressions, with maximum pending 362, 406, 404, 364, and 417 during peer-address/authentication convergence and no partial-result signal. Immediate distributed-search completeness, other API-partition stages/topologies, leader contention, conflict, redundancy, protocol/configuration variants, and Splunk-managed App Framework next-target control remain open |
 | SHC-86 | Make referenced LicenseManager finalization safe after namespace termination begins | Pending | OPS-012, OBS-001, OBS-005 | Registered after SHC-83 qualification teardown removed the Search Head workload and storage but a LicenseManager finalizer retained the namespace while reconciliation attempted to recreate a Secret. The finalizer was cleared only after the remaining resources were verified absent. This is a separate cross-resource deletion contract; no implementation or qualification is claimed |
 | SHC-87 | Distinguish retryable referenced-tier dependency convergence from terminal dependency or upgrade failure | Pending | OBS-001, OBS-004, OBS-005 | Registered after fresh SHC-84 formation temporarily reported `Error` and upgrade-path validation failure while its referenced LicenseManager was still starting, then recovered without user action through `Pending` to `Ready`. Normal dependency ordering must report Pending/Progressing with a bounded dependency reason; no implementation or qualification is claimed |
 
@@ -685,7 +685,7 @@ the elected-captain query target and the ordering between fresh successful
 captain observation and transfer timeout. By itself it did not qualify
 API-server disconnection, controller absence at other stages, or
 Splunk-managed restart target selection; later records below qualify the
-other bounded controller-absence stages.
+other bounded controller-absence stages and API disconnection.
 
 The accepted repeat observed 302 seconds without a controller and stored
 lifecycle evidence SHA-256
@@ -729,8 +729,9 @@ The overlapping 1,800-event Job had zero HEC/search request failures and exact
 eventual results on every Search Head; workload-log SHA-256 is
 `7b2c7ae19ce41efda8ddb21a2e67d29192fb8589128511fbc17c57ebc034ac7a`.
 It reported 37 count regressions and maximum pending 404. This closes the
-bounded `WithdrawingReadiness` absence gate, not API-server disconnection or
-the immediate-completeness contract.
+bounded `WithdrawingReadiness` absence gate, not the immediate-completeness
+contract. A later record separately qualifies bounded API-server
+disconnection.
 
 2026-07-31 UTC: On isolated branch
 `codex/shc-85-target-selected-absence-qualification`, harness sources
@@ -745,8 +746,22 @@ eventual results on every Search Head; workload-log SHA-256 is
 `d0d8de5eb851bea87a9057f0676e1b5d5f6e16a7ea134e0130d4af04ea6b2c3d`.
 It reported 18 count regressions and maximum pending 364 after lifecycle
 `Completed`. This closes the bounded `TargetSelected` controller-absence gate,
-not API-server disconnection, desired-state conflict, or immediate
-distributed-search completeness.
+not desired-state conflict or immediate distributed-search completeness. The
+next record separately qualifies bounded API-server disconnection.
+
+2026-08-01 UTC: On isolated branch
+`codex/shc-85-api-disconnection-qualification`, harness commits `8e21b9b1b`
+through `f78828cc1` applied a fail-safe, exact-destination API Service block
+inside the Operator Pod. The API path was unavailable for 401 seconds at
+observed ordinal-3 `Decommissioning`; the manager lost its lease and restarted
+once in the same Pod, while 36 hold observations retained the exact operation
+and target for 302 seconds with three serving peers. API recovery resumed and
+completed `3 -> 2 -> 1 -> 0` with ten stable samples. The 1,800-event workload
+had zero request failures and exact eventual results on all three Search Heads,
+but reported 30 count regressions and maximum pending 417. This closes the
+bounded K8S-006 gate at one lifecycle stage, not the other API-partition
+variants, desired-state conflict, or immediate distributed-search
+completeness.
 
 2026-07-29 UTC: Selected SHC-80 on
 `codex/shc-80-authorized-revision-recovery` from integrated feature baseline
