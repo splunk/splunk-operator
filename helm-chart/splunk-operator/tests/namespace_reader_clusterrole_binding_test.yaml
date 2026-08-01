@@ -23,7 +23,7 @@ tests:
           value:
             apiGroup: rbac.authorization.k8s.io
             kind: ClusterRole
-            name: splunk-operator-namespace-reader-e2d1b065
+            name: splunk-operator-namespace-reader-7c7a408c
       - contains:
           path: subjects
           content:

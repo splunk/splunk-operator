@@ -1,0 +1,32 @@
+suite: namespace-scoped user Role placement
+templates:
+  - templates/rbac/clustermanager_editor_role.yaml
+  - templates/rbac/clustermanager_viewer_role.yaml
+tests:
+  - it: should place the ClusterManager editor Role in the effective namespace
+    template: templates/rbac/clustermanager_editor_role.yaml
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace
+
+  - it: should place the ClusterManager viewer Role in the effective namespace
+    template: templates/rbac/clustermanager_viewer_role.yaml
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace

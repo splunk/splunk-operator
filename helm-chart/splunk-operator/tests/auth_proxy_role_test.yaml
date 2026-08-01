@@ -1,0 +1,16 @@
+suite: namespace-scoped proxy Role placement
+templates:
+  - templates/rbac/auth_proxy_role.yaml
+tests:
+  - it: should place the proxy Role in the effective namespace
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace

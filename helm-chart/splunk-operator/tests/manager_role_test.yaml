@@ -1,0 +1,16 @@
+suite: namespace-scoped manager Role placement
+templates:
+  - templates/rbac/role.yaml
+tests:
+  - it: should place the manager Role in the effective watched namespace
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace

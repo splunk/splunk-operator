@@ -64,9 +64,9 @@ spec:
           env:
             - name: WATCH_NAMESPACE
 {{- if .Values.splunkOperator.clusterWideAccess  }}
-              value: {{ .Values.splunkOperator.watchNamespaces }}
+              value: {{ .Values.splunkOperator.watchNamespaces | quote }}
 {{- else }}
-              value: {{ .Release.Namespace }}
+              value: {{ include "splunk-operator.namespace" . | quote }}
 {{- end }}
             - name: POD_NAME
               valueFrom:

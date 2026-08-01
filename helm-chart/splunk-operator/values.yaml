@@ -1,6 +1,12 @@
 splunk-operator:
   enabled: true
 
+# Override the namespace for every namespaced chart resource.
+# In namespace-scoped mode, the Operator watches this namespace. When empty,
+# both placement and namespace-scoped watch behavior use the Helm release
+# namespace.
+namespaceOverride: ""
+
 # Splunk image
 image:
   repository: docker.io/splunk/splunk:10.0.0
@@ -17,11 +23,14 @@ splunkOperator:
   # Set image pull secrets to pull image from a private registry
   imagePullSecrets: []
 
-  # Give operator cluster-wide access, otherwise access is limited to operator namespace
+  # Give the Operator cluster-wide access. When false, access and watch scope
+  # are limited to namespaceOverride, or to the Helm release namespace when no
+  # override is set.
   clusterWideAccess: true
 
-  # List namespaces to be watched by Splunk Operator e.x "namespace1,namespace2", must have cluster-wide access
-  # Default watches the entire cluster
+  # Comma-separated namespaces watched in cluster-wide mode, for example
+  # "namespace1,namespace2". An empty value watches the entire cluster. This
+  # value is ignored when clusterWideAccess is false.
   watchNamespaces: ""
 
   # Add labels to Splunk Operator deployment

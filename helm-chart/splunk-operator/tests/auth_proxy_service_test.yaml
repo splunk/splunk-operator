@@ -1,0 +1,15 @@
+suite: proxy Service placement
+templates:
+  - templates/rbac/auth_proxy_service.yaml
+tests:
+  - it: should place the proxy Service in the effective namespace
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace

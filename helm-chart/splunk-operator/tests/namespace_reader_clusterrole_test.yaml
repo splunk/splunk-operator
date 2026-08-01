@@ -9,7 +9,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should restrict Namespace get to the watched release namespace
+  - it: should restrict Namespace get to the effective watched namespace
     release:
       namespace: release-namespace
     set:
@@ -19,6 +19,9 @@ tests:
       - isKind:
           of: ClusterRole
       - equal:
+          path: metadata.name
+          value: splunk-operator-namespace-reader-7c7a408c
+      - equal:
           path: rules[0]
           value:
             apiGroups:
@@ -26,6 +29,6 @@ tests:
             resources:
               - namespaces
             resourceNames:
-              - release-namespace
+              - watched-namespace
             verbs:
               - get

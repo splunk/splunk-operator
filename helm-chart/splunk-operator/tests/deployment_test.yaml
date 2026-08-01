@@ -112,6 +112,22 @@ tests:
             name: WATCH_NAMESPACE
             value: my-namespace
 
+  - it: should set WATCH_NAMESPACE to namespaceOverride when namespace scoped
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WATCH_NAMESPACE
+            value: watched-namespace
+
   - it: should add custom labels to deployment
     set:
       splunkOperator.labels:

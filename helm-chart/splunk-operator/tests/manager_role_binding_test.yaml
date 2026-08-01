@@ -1,0 +1,22 @@
+suite: namespace-scoped manager RoleBinding placement
+templates:
+  - templates/rbac/role_binding.yaml
+tests:
+  - it: should place the manager binding and subject in the effective watched namespace
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace
+      - contains:
+          path: subjects
+          content:
+            kind: ServiceAccount
+            name: splunk-operator-controller-manager
+            namespace: watched-namespace

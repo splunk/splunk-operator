@@ -1,0 +1,15 @@
+suite: leader-election Role placement
+templates:
+  - templates/rbac/leader_election_role.yaml
+tests:
+  - it: should place the Role in the effective namespace
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace

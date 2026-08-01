@@ -4,6 +4,7 @@ kind: Role
 metadata:
   creationTimestamp: null
   name: {{ include "splunk-operator.operator.fullname" . }}-manager-role
+  namespace: {{ include "splunk-operator.namespace" . }}
 rules:
 - apiGroups:
   - apiextensions.k8s.io

@@ -9,7 +9,7 @@ rules:
   resources:
   - namespaces
   resourceNames:
-  - {{ .Release.Namespace | quote }}
+  - {{ include "splunk-operator.namespace" . | quote }}
   verbs:
   - get
 {{- end }}

@@ -1,0 +1,21 @@
+suite: leader-election RoleBinding placement
+templates:
+  - templates/rbac/leader_election_role_binding.yaml
+tests:
+  - it: should place the binding and subject in the effective namespace
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace
+      - contains:
+          path: subjects
+          content:
+            kind: ServiceAccount
+            name: splunk-operator-controller-manager
+            namespace: watched-namespace

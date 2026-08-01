@@ -35,6 +35,16 @@ tests:
           path: metadata.namespace
           value: my-ns
 
+  - it: should use namespaceOverride
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace
+
   - it: should contain sokVersion from Chart.AppVersion
     asserts:
       - matchRegex:

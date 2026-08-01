@@ -1,0 +1,15 @@
+suite: App Framework download PVC placement
+templates:
+  - templates/app_download.yaml
+tests:
+  - it: should place the PVC in the effective namespace
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.namespace
+          value: watched-namespace

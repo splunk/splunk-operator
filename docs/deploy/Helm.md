@@ -99,6 +99,53 @@ STATUS: deployed
 REVISION: 2
 TEST SUITE: None
 ```
+
+### Namespace-scoped installation with a namespace override
+
+When `splunkOperator.clusterWideAccess=false`, the Operator watches one
+namespace. By default, this is the Helm release namespace. Setting the
+top-level `namespaceOverride` value changes the effective namespace for all
+namespaced Operator chart resources and makes that namespace the watch target.
+This includes the Deployment, service account, Services, ConfigMaps, PVCs,
+Roles, and RoleBindings. The Namespace-reader ClusterRole remains
+cluster-scoped but is restricted to `get` only the effective namespace.
+
+The Helm release record remains in the namespace passed with `-n`. Create the
+override namespace before installation because Helm's `--create-namespace`
+option only creates the release namespace.
+
+```
+kubectl create namespace splunk-operator-releases
+kubectl create namespace splunk-team-a
+
+helm install splunk-operator-team-a splunk/splunk-operator \
+  -n splunk-operator-releases \
+  --set splunkOperator.clusterWideAccess=false \
+  --set namespaceOverride=splunk-team-a
+```
+
+The resulting Operator Pod and its namespaced permissions are in
+`splunk-team-a`, and `WATCH_NAMESPACE` is `splunk-team-a`. Manage the Helm
+release from its release namespace:
+
+```
+helm list -n splunk-operator-releases
+helm upgrade splunk-operator-team-a splunk/splunk-operator \
+  -n splunk-operator-releases \
+  --reuse-values
+helm uninstall splunk-operator-team-a -n splunk-operator-releases
+```
+
+Keep `namespaceOverride` unchanged during an ordinary chart upgrade. Upgrading
+an existing namespace-scoped installation that already uses an override aligns
+its namespaced RBAC and watch target with that effective namespace.
+
+When `splunkOperator.clusterWideAccess=true`, `namespaceOverride` changes only
+the placement of the Operator's namespaced installation resources.
+`splunkOperator.watchNamespaces` independently controls watch scope; an empty
+value watches the whole cluster and a comma-separated value limits the
+cluster-wide Operator to those namespaces.
+
 Finally, let's terminate the Splunk Operator by uninstalling the ```splunk-operator-test``` release:
 ```
 helm uninstall splunk-operator-test -n splunk-operator
