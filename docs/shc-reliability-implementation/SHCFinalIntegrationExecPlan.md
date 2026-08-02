@@ -60,8 +60,26 @@ it is not converted into a qualified claim by documentation alone.
   or errors, composite coverage was 78.3 percent, and the Helm gates passed 60
   Operator plus 90 Universal Forwarder tests. Generation left the repository
   clean.
+- [x] (2026-08-02 UTC) Froze Splunk Ansible branch
+  `feature/shc-kubernetes-reliability` at `fa09e87f8e5bd61ed78da80af1cb8a1ef047acfd`.
+  Its reproducible `make shc-check` gate passed on macOS and Linux with
+  focused lint, full playbook syntax, and 25 Search Head clustering tests.
+- [x] (2026-08-02 UTC) Added repository-owned deterministic Search Head and
+  indexer restart-required App Framework sources and a standard-library
+  packager. Repeated archives are byte-identical on macOS; the two packager
+  tests and Operator `make build` pass at `0ea542801`.
+- [x] (2026-08-02 UTC) Added a reproducible final EKS manifest renderer at
+  `e65ac74b0`. It rejects mutable-only runtime image references and unresolved
+  tokens, renders the four-tier topology with the final digest, and passed
+  two unit tests plus Kubernetes client dry-run against the target context.
+- [x] (2026-08-02 UTC) Corrected a Docker-Splunk preStop/TERM overlap race at
+  `f44f1d8780cc4119c6d991c7bba309e6d0361d34`. A follower now waits for and
+  propagates its owner's exact result instead of allowing PID 1 to exit during
+  an in-progress stop. Fifteen shutdown tests, four exact-Ansible-ref tests,
+  the Red Hat signing-key test, shell syntax, and ShellCheck pass on macOS.
 - [ ] Audit and freeze the final Docker-Splunk branch and its exact Splunk
-  Ansible commit; pass source gates and build the runtime image on Linux.
+  Ansible commit; reproduce the final `f44f1d8` source gates and build the
+  runtime image on Linux.
 - [ ] Complete SHC-85 distributed-search convergence analysis and explicitly
   separate Operator/runtime corrections from Splunk Enterprise changes that
   are only identified for later ownership.
@@ -112,6 +130,23 @@ it is not converted into a qualified claim by documentation alone.
   final acceptance uses the complete Make target exit status plus package
   summaries rather than assuming one JUnit file is complete.
 
+- Observation: the existing SHC-82 app packager used GNU-specific `sed -i`,
+  deterministic-tar flags, and `sha256sum`.
+  Evidence: both app targets failed on the macOS review host even though the
+  source fixtures were valid.
+  Consequence: one standard-library packager now substitutes only the archived
+  version and normalizes ordering, timestamps, ownership, and modes without
+  changing checked-in source.
+
+- Observation: exact-once shutdown ownership was not sufficient when a
+  follower returned before its owner completed.
+  Evidence: the prior helper returned success immediately when TERM found a
+  preStop lock without a result, allowing the PID-1 TERM trap to exit while
+  the preStop-owned stop remained in progress.
+  Consequence: concurrent followers wait through the stop deadline and
+  TERM-to-KILL interval, reuse the atomic result, preserve failures, and time
+  out if an owner disappears.
+
 ## Decision Log
 
 - Decision: use `feature/shc-kubernetes-reliability` as the single final
@@ -145,6 +180,11 @@ it is not converted into a qualified claim by documentation alone.
   final clean campaign explicitly replaces disposable resources.
   Rationale: it is the stable reference environment for checking that branch
   assembly and source validation do not mutate live workloads.
+
+- Decision: generate the final qualification topology from a checked-in
+  template and require an immutable runtime digest before rendering.
+  Rationale: formation and App Framework results must be attributable to one
+  exact image; ad hoc live image patches are not reproducible evidence.
 
 ## Implementation and qualification sequence
 

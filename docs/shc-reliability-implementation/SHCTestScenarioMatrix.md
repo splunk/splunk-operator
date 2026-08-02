@@ -137,15 +137,16 @@ Store upgrade or backup, and zero container restarts.
 | ID | Priority | Scenario | Required proof |
 |---|---|---|---|
 | RUN-001 | P0 | `preStop` invokes shutdown | Explicit stopping state, one stop owner, bounded exit |
-| RUN-002 | P0 | TERM follows `preStop` | No concurrent second `splunk stop` |
+| RUN-002 | P0 | TERM follows or overlaps `preStop` | No concurrent second `splunk stop`; TERM waits and returns the owner's exact result |
 | RUN-003 | P0 | TERM without `preStop` | Same idempotent shutdown path runs |
 | RUN-004 | P0 | Grace expires | Forced termination is detected and reported |
 | RUN-005 | P1 | Stop command fails | Error is preserved; retry/exit behavior follows contract |
 | RUN-006 | P0 | Persistent member restart | Rejoin path selected; cluster-forming commands are not repeated |
 | RUN-007 | P1 | New empty member | Bootstrap/join intent is selected explicitly |
 | RUN-008 | P1 | Process crash/OOM | Recovery does not assume `preStop` ran |
-| RUN-009 | P1 | Concurrent lifecycle triggers | Lock/ownership produces exactly one local stop |
+| RUN-009 | P1 | Concurrent lifecycle triggers | Lock/ownership produces exactly one local stop and preserves success or failure for every caller |
 | RUN-010 | P2 | Single- and multi-container images | Shutdown contract holds for each supported layout |
+| RUN-011 | P1 | Shutdown owner disappears before recording a result | Follower remains bounded, returns timeout, and does not issue a second stop |
 
 ## StatefulSet and controller scenarios
 

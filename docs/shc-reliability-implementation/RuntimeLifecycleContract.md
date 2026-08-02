@@ -62,8 +62,9 @@ separate Operator gate.
 Startup- and liveness-triggered restarts use a 660-second container termination
 grace when the runtime lifecycle contract is enabled. Planned Pod deletion
 retains its separate 1200-second grace. The shorter probe-failure budget is
-sized for the image's 600-second bounded shutdown plus kubelet margin and does
-not change drain, captain-transfer, Pod-startup, or member-rejoin deadlines.
+sized for the image's 600-second stop deadline, its default 10-second
+TERM-to-KILL interval, and 50 seconds of kubelet margin. It does not change
+drain, captain-transfer, Pod-startup, or member-rejoin deadlines.
 
 ### Shutdown
 
@@ -73,6 +74,14 @@ stable runtime executable `/sbin/splunk-shutdown`. When present, the hook
 invokes it with `--source=prestop`. The image's TERM trap invokes the same
 operation with `--source=term`; its retained lock and result ensure the local
 stop runs once.
+
+If TERM overlaps a still-running preStop, TERM is a follower rather than a
+second stop owner. The follower waits through the configured stop deadline
+plus the configured TERM-to-KILL interval, returns the owner's exact result,
+and keeps PID 1 alive while that result is pending. If the owner disappears
+without writing a result, the follower returns `124` at the same bound. This
+prevents an apparently successful TERM handler from exiting the container
+while the preStop-owned `splunk stop` is still running.
 
 For an older image without that executable, `preStop` atomically writes
 `stopping` to `splunk-container.state` and returns. The readiness probe rejects
@@ -88,14 +97,20 @@ node loss remain recovery paths because they may skip the hook.
 The shared runtime shutdown contract provides:
 
 - explicit `stopping` state written before work begins;
-- lock/ownership behavior for concurrent triggers;
+- lock/ownership behavior for concurrent triggers, including a bounded
+  follower wait and exact owner-result propagation;
 - bounded commands and exit reporting;
-- a sanitized owner, result, and timestamp record exported outside the old
-  Pod's ephemeral filesystem and log stream before Pod deletion completes;
+- a sanitized owner and result retained for the remaining container lifetime
+  and repeated by the TERM path where the container log can capture it;
 - relationship to readiness withdrawal and endpoint propagation;
 - how remaining grace is preserved for splunkd shutdown;
 - behavior if the caller disappears or retries; and
 - sanitized stage logging.
+
+The files themselves are container-ephemeral. Product qualification and
+supportability still require the timestamped container log to be retained by
+the deployment's logging pipeline, or a future durable status/event export,
+before the old Pod disappears.
 
 ### Bootstrap and rejoin
 
