@@ -467,7 +467,7 @@ func (mgr *searchHeadClusterPodManager) reconcileAppFrameworkRestartRevision(
 	tracker := mgr.cr.Status.AppContext.BundlePushStatus
 	if tracker.BundlePushStage != enterpriseApi.BundlePushComplete ||
 		mgr.cr.Status.AppFrameworkBundleRevision == "" ||
-		mgr.cr.Status.AppFrameworkRestartRevision ==
+		mgr.cr.Status.AppFrameworkRestartObservedRevision ==
 			mgr.cr.Status.AppFrameworkBundleRevision ||
 		!mgr.cr.Status.CaptainMembersObserved {
 		return false, nil
@@ -483,6 +483,8 @@ func (mgr *searchHeadClusterPodManager) reconcileAppFrameworkRestartRevision(
 			)
 		}
 	}
+	mgr.cr.Status.AppFrameworkRestartObservedRevision =
+		mgr.cr.Status.AppFrameworkBundleRevision
 	if len(restartRequiredMembers) == 0 {
 		return false, nil
 	}
@@ -1142,6 +1144,14 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 		statefulSet,
 		mgr.cr.Status.LifecycleOperation,
 	)
+	appFrameworkRestartObservationPending, err :=
+		shcAppFrameworkRestartObservationPending(mgr.cr)
+	if err != nil {
+		return fmt.Errorf(
+			"resolve SHC App Framework restart observation: %w",
+			err,
+		)
+	}
 	gotCaptainInfo := false
 	captainObservationOrdinal := int32(-1)
 	observeCaptainMembers := false
@@ -1208,7 +1218,8 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				captainObservationOrdinal = n
 				observeCaptainMembers = captainInfo.RollingRestart ||
 					mgr.searchHeadInitialFormationPending() ||
-					(previousCaptain != "" && previousCaptain != captainInfo.Label)
+					(previousCaptain != "" && previousCaptain != captainInfo.Label) ||
+					appFrameworkRestartObservationPending
 
 				if previousCaptain != "" && previousCaptain != captainInfo.Label {
 					shcLogger.InfoContext(ctx, "captain election completed",

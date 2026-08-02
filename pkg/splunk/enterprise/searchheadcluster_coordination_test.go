@@ -174,6 +174,44 @@ func TestValidateSHCAppFrameworkRestartBaseline(t *testing.T) {
 	}
 }
 
+func TestSHCAppFrameworkRestartObservationPending(t *testing.T) {
+	replicas := int32(3)
+	setLifecyclePolicyTestGates(t, true, true)
+	base := &enterpriseApi.SearchHeadCluster{
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				PodUpdateStrategy: enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+			},
+		},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			LastStableReplicas:         &replicas,
+			AppFrameworkBundleRevision: "bundle-a",
+			AppContext: enterpriseApi.AppDeploymentContext{
+				BundlePushStatus: enterpriseApi.BundlePushTracker{
+					BundlePushStage: enterpriseApi.BundlePushComplete,
+				},
+			},
+		},
+	}
+	pending, err := shcAppFrameworkRestartObservationPending(base)
+	if err != nil || !pending {
+		t.Fatalf("completed unobserved bundle pending=%t error=%v, want true/nil", pending, err)
+	}
+	observed := base.DeepCopy()
+	observed.Status.AppFrameworkRestartObservedRevision = "bundle-a"
+	pending, err = shcAppFrameworkRestartObservationPending(observed)
+	if err != nil || pending {
+		t.Fatalf("observed bundle pending=%t error=%v, want false/nil", pending, err)
+	}
+	inProgress := base.DeepCopy()
+	inProgress.Status.AppContext.BundlePushStatus.BundlePushStage =
+		enterpriseApi.BundlePushInProgress
+	pending, err = shcAppFrameworkRestartObservationPending(inProgress)
+	if err != nil || pending {
+		t.Fatalf("in-progress bundle pending=%t error=%v, want false/nil", pending, err)
+	}
+}
+
 func TestSHCImageUpgradeActiveFailsClosed(t *testing.T) {
 	tests := []struct {
 		name      string

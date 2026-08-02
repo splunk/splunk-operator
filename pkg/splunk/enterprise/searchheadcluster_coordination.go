@@ -100,6 +100,24 @@ func shcAppFrameworkKubernetesRestartEnabled(
 		enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate, nil
 }
 
+// shcAppFrameworkRestartObservationPending identifies a completed operational
+// bundle whose restart requirement has not yet been read from the authoritative
+// captain-members endpoint. The observation revision is durable so a bundle
+// that requires no restart does not cause an unbounded REST poll.
+func shcAppFrameworkRestartObservationPending(
+	cr *enterpriseApi.SearchHeadCluster,
+) (bool, error) {
+	enabled, err := shcAppFrameworkKubernetesRestartEnabled(cr)
+	if err != nil || !enabled {
+		return false, err
+	}
+	return cr.Status.AppContext.BundlePushStatus.BundlePushStage ==
+		enterpriseApi.BundlePushComplete &&
+		cr.Status.AppFrameworkBundleRevision != "" &&
+		cr.Status.AppFrameworkRestartObservedRevision !=
+			cr.Status.AppFrameworkBundleRevision, nil
+}
+
 // validateSHCAppFrameworkRestartBaseline prevents the controller from
 // attributing an already-pending member restart to a newly sent App Framework
 // bundle. The post-send restart observation is meaningful only from a clean

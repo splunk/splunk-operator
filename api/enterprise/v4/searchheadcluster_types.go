@@ -562,6 +562,14 @@ type SearchHeadClusterStatus struct {
 	// +optional
 	AppFrameworkBundleRevision string `json:"appFrameworkBundleRevision,omitempty"`
 
+	// AppFrameworkRestartObservedRevision identifies the most recent bundle for
+	// which the Operator obtained an authoritative captain-members view of the
+	// restart requirement. It prevents a no-restart bundle from being observed
+	// indefinitely while keeping the observation resumable across controller
+	// replacement.
+	// +optional
+	AppFrameworkRestartObservedRevision string `json:"appFrameworkRestartObservedRevision,omitempty"`
+
 	// AppFrameworkRestartRevision identifies the most recent bundle for which
 	// Splunk advertised that Search Head members require a process restart. The
 	// Search Head StatefulSet retains this value as a Pod-template annotation so

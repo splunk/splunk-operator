@@ -10229,6 +10229,14 @@ spec:
                   durable app deployment records so an interrupted controller can resume the
                   same work.
                 type: string
+              appFrameworkRestartObservedRevision:
+                description: |-
+                  AppFrameworkRestartObservedRevision identifies the most recent bundle for
+                  which the Operator obtained an authoritative captain-members view of the
+                  restart requirement. It prevents a no-restart bundle from being observed
+                  indefinitely while keeping the observation resumable across controller
+                  replacement.
+                type: string
               appFrameworkRestartRevision:
                 description: |-
                   AppFrameworkRestartRevision identifies the most recent bundle for which

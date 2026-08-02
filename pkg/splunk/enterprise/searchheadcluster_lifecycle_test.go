@@ -158,6 +158,9 @@ func TestReconcileAppFrameworkRestartRevision(t *testing.T) {
 	if got := cr.Status.AppFrameworkRestartRevision; got != "bundle-a" {
 		t.Fatalf("restart revision=%q, want bundle-a", got)
 	}
+	if got := cr.Status.AppFrameworkRestartObservedRevision; got != "bundle-a" {
+		t.Fatalf("observed restart revision=%q, want bundle-a", got)
+	}
 	scheduled, err = mgr.reconcileAppFrameworkRestartRevision(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("reconcile same restart revision: %v", err)
@@ -196,6 +199,13 @@ func TestReconcileAppFrameworkRestartRevision(t *testing.T) {
 				t.Fatalf(
 					"restart revision=%q, want empty",
 					candidate.Status.AppFrameworkRestartRevision,
+				)
+			}
+			if name == "no member advertises restart" &&
+				candidate.Status.AppFrameworkRestartObservedRevision != "bundle-a" {
+				t.Fatalf(
+					"observed revision=%q, want bundle-a",
+					candidate.Status.AppFrameworkRestartObservedRevision,
 				)
 			}
 		})
@@ -772,6 +782,112 @@ func TestUpdateStatusRecordsCaptainMemberStateDuringCaptainTransition(
 			"captain restart state was not preserved: status=%#v",
 			cr.Status,
 		)
+	}
+}
+
+func TestUpdateStatusObservesCaptainMembersForCompletedAppFrameworkBundle(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	oldGetMemberInfo := GetSearchHeadClusterMemberInfo
+	oldGetCaptainInfo := GetSearchHeadCaptainInfo
+	oldGetCaptainMembers := GetSearchHeadCaptainMembersForStatus
+	t.Cleanup(func() {
+		GetSearchHeadClusterMemberInfo = oldGetMemberInfo
+		GetSearchHeadCaptainInfo = oldGetCaptainInfo
+		GetSearchHeadCaptainMembersForStatus = oldGetCaptainMembers
+	})
+
+	replicas := int32(3)
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "example"},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				PodUpdateStrategy: enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+			},
+		},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Captain:                    "splunk-example-search-head-2",
+			LastStableReplicas:         &replicas,
+			AppFrameworkBundleRevision: "bundle-a",
+			AppContext: enterpriseApi.AppDeploymentContext{
+				BundlePushStatus: enterpriseApi.BundlePushTracker{
+					BundlePushStage: enterpriseApi.BundlePushComplete,
+				},
+			},
+		},
+	}
+	mgr := &searchHeadClusterPodManager{cr: cr}
+	GetSearchHeadClusterMemberInfo = func(
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		_ int32,
+	) (*splclient.SearchHeadClusterMemberInfo, error) {
+		return &splclient.SearchHeadClusterMemberInfo{
+			Status:       "Up",
+			Registered:   true,
+			RestartState: "NoRestart",
+		}, nil
+	}
+	GetSearchHeadCaptainInfo = func(
+		context.Context,
+		*searchHeadClusterPodManager,
+		int32,
+	) (*splclient.SearchHeadCaptainInfo, error) {
+		return &splclient.SearchHeadCaptainInfo{
+			Label:          "splunk-example-search-head-2",
+			ServiceReady:   true,
+			Initialized:    true,
+			MinPeersJoined: true,
+			RollingRestart: false,
+		}, nil
+	}
+	captainMemberCalls := 0
+	GetSearchHeadCaptainMembersForStatus = func(
+		_ context.Context,
+		_ *searchHeadClusterPodManager,
+		n int32,
+	) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
+		captainMemberCalls++
+		if n != 2 {
+			t.Fatalf("captain member ordinal=%d, want 2", n)
+		}
+		members := make(map[string]splclient.SearchHeadCaptainMemberInfo)
+		for ordinal := int32(0); ordinal < replicas; ordinal++ {
+			name := GetSplunkStatefulsetPodName(
+				SplunkSearchHead,
+				cr.GetName(),
+				ordinal,
+			)
+			members[name] = splclient.SearchHeadCaptainMemberInfo{
+				Label:                    name,
+				Status:                   "Up",
+				AdvertiseRestartRequired: true,
+			}
+		}
+		return members, nil
+	}
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: replicas,
+		},
+	}
+	if err := mgr.updateStatus(context.Background(), statefulSet); err != nil {
+		t.Fatalf("update status: %v", err)
+	}
+	if captainMemberCalls != 1 || !cr.Status.CaptainMembersObserved {
+		t.Fatalf(
+			"captain member observation calls=%d observed=%t, want 1/true",
+			captainMemberCalls,
+			cr.Status.CaptainMembersObserved,
+		)
+	}
+	for _, member := range cr.Status.Members {
+		if !member.AdvertiseRestartRequired {
+			t.Fatalf("restart-required member observation missing: %#v", member)
+		}
 	}
 }
 
