@@ -74,11 +74,11 @@ search_sequences() {
       IFS= read -r password
       IFS= read -r run_id
       IFS= read -r service
-      curl -sk --connect-timeout 3 --max-time 20 \
+      curl -skS --connect-timeout 3 --max-time 20 \
         -u "admin:${password}" \
         -X POST "https://${service}:8089/services/search/jobs/export" \
         --data-urlencode "search=search index=main earliest=-24h shc82_run=\"${run_id}\" | stats count min(seq) as min max(seq) as max dc(seq) as distinct" \
-        --data "output_mode=json"
+        --data "output_mode=json" 2>&1
     ' 2>/dev/null || true
 }
 
