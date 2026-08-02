@@ -63,6 +63,14 @@ class RenderSHCFinalManifestTest(unittest.TestCase):
             rendered.count("path: qualification-bucket-123/campaign/final/"), 2
         )
         self.assertIn("podUpdateStrategy: RollingUpdate", rendered)
+        cluster_manager_document = rendered.split(
+            "kind: ClusterManager", maxsplit=1
+        )[1].split("\n---", maxsplit=1)[0]
+        self.assertIn(
+            "rolling_restart: searchable",
+            cluster_manager_document,
+            "ClusterManager must request searchable App Framework indexer rolls",
+        )
         indexer_document = rendered.split("kind: IndexerCluster", maxsplit=1)[1].split(
             "\n---", maxsplit=1
         )[0]
