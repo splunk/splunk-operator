@@ -236,6 +236,30 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		}
 	}
 
+	mgr := newSearchHeadClusterPodManager(
+		client,
+		cr,
+		namespaceScopedSecret,
+		splclient.NewSplunkClient,
+	)
+	continueReconcile, err := mgr.preflightImageTransitionBeforeDeployer(ctx)
+	if err != nil {
+		message := cr.Status.Message
+		if message == "" {
+			message = "Search Head image transition preflight failed"
+		}
+		setPhaseAndConditions(enterpriseApi.PhaseError, message)
+		return result, err
+	}
+	if !continueReconcile {
+		cr.Status.DeployerPhase = enterpriseApi.PhasePending
+		setPhaseAndConditions(
+			enterpriseApi.PhasePending,
+			"Waiting for Search Head image transition preflight",
+		)
+		return result, nil
+	}
+
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := deployerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {
@@ -266,7 +290,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	mgr := newSearchHeadClusterPodManager(client, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 	mgr.authorizedRevisionWithdrawalRequested =
 		authorizedRevisionWithdrawalRequested
 

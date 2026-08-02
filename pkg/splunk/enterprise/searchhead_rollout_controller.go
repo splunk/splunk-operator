@@ -63,6 +63,119 @@ var validateSearchHeadClusterImageUpgradePath = func(
 	return upgrade.SHCImageUpgradePathUnknown, nil
 }
 
+// preflightImageTransitionBeforeDeployer prevents the Deployer from reaching
+// a target image that the Search Head members are not yet authorized to use.
+// It observes the existing member StatefulSet and performs only classification;
+// it never applies a StatefulSet revision or starts lifecycle work.
+func (mgr *searchHeadClusterPodManager) preflightImageTransitionBeforeDeployer(
+	ctx context.Context,
+) (bool, error) {
+	if !searchHeadClusterLifecycleEnabled() {
+		return true, nil
+	}
+	policy, err := ResolveSearchHeadClusterLifecyclePolicy(&mgr.cr.Spec)
+	if err != nil {
+		return false, err
+	}
+	if policy.PodUpdateStrategy !=
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate {
+		return true, nil
+	}
+	current := &appsv1.StatefulSet{}
+	err = mgr.c.Get(ctx, types.NamespacedName{
+		Namespace: mgr.cr.GetNamespace(),
+		Name: GetSplunkStatefulsetName(
+			SplunkSearchHead,
+			mgr.cr.GetName(),
+		),
+	}, current)
+	if k8serrors.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	state, err := mgr.observeRollingStatefulSet(ctx, current)
+	if err != nil {
+		return false, err
+	}
+	targetImage := mgr.cr.Spec.Image
+	if targetImage == "" {
+		return false, fmt.Errorf(
+			"Search Head Cluster image transition has no desired image",
+		)
+	}
+	sourceImage, uniformSourceImage := uniformSHCRolloutPodImage(state.Pods)
+	if uniformSourceImage && sourceImage == targetImage {
+		return true, nil
+	}
+	if shcImageUpgradeActive(mgr.cr.Status.ImageUpgrade) {
+		if mgr.cr.Status.ImageUpgrade.TargetImage != targetImage {
+			return false, fmt.Errorf(
+				"active Search Head Cluster image upgrade targets a different image",
+			)
+		}
+		return true, nil
+	}
+	ordinaryRestart, intentErr :=
+		mgr.classifyDeclaredSameVersionImageRestart(state, targetImage)
+	if intentErr != nil {
+		mgr.recordImageUpgradeStatus(
+			enterpriseApi.SearchHeadClusterImageUpgradeReasonImageUpdateIntentMismatch,
+			intentErr.Error(),
+		)
+		return false, intentErr
+	}
+	if ordinaryRestart {
+		return true, nil
+	}
+	if !uniformSourceImage || sourceImage == "" {
+		message := "Search Head Pods have mixed or incomplete images without a recorded image workflow"
+		mgr.recordImageUpgradeStatus(
+			enterpriseApi.SearchHeadClusterImageUpgradeReasonMixedSourceImages,
+			message,
+		)
+		return false, fmt.Errorf("%s", message)
+	}
+	decision, err := validateSearchHeadClusterImageUpgradePath(
+		ctx,
+		sourceImage,
+		targetImage,
+	)
+	if err != nil {
+		return false, fmt.Errorf(
+			"validate Search Head Cluster image transition before Deployer update: %w",
+			err,
+		)
+	}
+	switch decision {
+	case upgrade.SHCImageUpgradePathSupported:
+		return true, nil
+	case upgrade.SHCImageUpgradePathUnsupported:
+		message := "the requested Search Head Cluster image transition is unsupported"
+		mgr.recordImageUpgradeStatus(
+			enterpriseApi.SearchHeadClusterImageUpgradeReasonUnsupportedUpgradePath,
+			message,
+		)
+		return false, fmt.Errorf(
+			"SHC image upgrade blocked (%s): %s",
+			enterpriseApi.SearchHeadClusterImageUpgradeReasonUnsupportedUpgradePath,
+			message,
+		)
+	default:
+		message := "the requested Search Head Cluster image transition has no authoritative support decision"
+		mgr.recordImageUpgradeStatus(
+			enterpriseApi.SearchHeadClusterImageUpgradeReasonUnknownUpgradePath,
+			message,
+		)
+		return false, fmt.Errorf(
+			"SHC image upgrade blocked (%s): %s",
+			enterpriseApi.SearchHeadClusterImageUpgradeReasonUnknownUpgradePath,
+			message,
+		)
+	}
+}
+
 // updateRollingStatefulSetPods adapts Kubernetes and durable SHC observations
 // to the pure rollout coordinator. It never deletes a Pod. Replica-count
 // changes remain on the existing lifecycle-aware scaling path.

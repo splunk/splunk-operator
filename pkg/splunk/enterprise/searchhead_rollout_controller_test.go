@@ -775,6 +775,121 @@ func TestRollingUpdateControllerRejectsSameVersionIntentOutsidePartitionBoundary
 	}
 }
 
+func TestDeployerPreflightBlocksUnknownSearchHeadImageTransition(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, _, client := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-1",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	mgr.cr.Spec.Image = "registry.example/splunk@sha256:target"
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	t.Cleanup(func() { validateSearchHeadClusterImageUpgradePath = oldValidate })
+	validateSearchHeadClusterImageUpgradePath = func(
+		context.Context,
+		string,
+		string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		return upgrade.SHCImageUpgradePathUnknown, nil
+	}
+
+	allowed, err := mgr.preflightImageTransitionBeforeDeployer(
+		context.Background(),
+	)
+	if allowed || err == nil ||
+		!strings.Contains(
+			mgr.cr.Status.Message,
+			string(enterpriseApi.SearchHeadClusterImageUpgradeReasonUnknownUpgradePath),
+		) || len(client.Calls["Update"]) != 0 {
+		t.Fatalf(
+			"unknown preflight allowed=%v error=%v message=%q updates=%v",
+			allowed,
+			err,
+			mgr.cr.Status.Message,
+			client.Calls["Update"],
+		)
+	}
+}
+
+func TestDeployerPreflightAcceptsExactSameVersionImageRestart(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, _ := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-1",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	setDeclaredSameVersionImageRestart(
+		mgr,
+		statefulSet,
+		"splunk/splunk:9.4.0",
+		"registry.example/splunk@sha256:target",
+	)
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	t.Cleanup(func() { validateSearchHeadClusterImageUpgradePath = oldValidate })
+	validationCalls := 0
+	validateSearchHeadClusterImageUpgradePath = func(
+		context.Context,
+		string,
+		string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		validationCalls++
+		return upgrade.SHCImageUpgradePathUnknown, nil
+	}
+
+	allowed, err := mgr.preflightImageTransitionBeforeDeployer(
+		context.Background(),
+	)
+	if !allowed || err != nil || validationCalls != 0 {
+		t.Fatalf(
+			"same-version preflight allowed=%v error=%v validations=%d",
+			allowed,
+			err,
+			validationCalls,
+		)
+	}
+}
+
+func TestDeployerPreflightPreservesOnDeleteCompatibility(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, _, _ := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-1",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	mgr.cr.Spec.LifecyclePolicy.PodUpdateStrategy =
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete
+	mgr.cr.Spec.Image = "registry.example/splunk@sha256:target"
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	t.Cleanup(func() { validateSearchHeadClusterImageUpgradePath = oldValidate })
+	validationCalls := 0
+	validateSearchHeadClusterImageUpgradePath = func(
+		context.Context,
+		string,
+		string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		validationCalls++
+		return upgrade.SHCImageUpgradePathUnknown, nil
+	}
+
+	allowed, err := mgr.preflightImageTransitionBeforeDeployer(
+		context.Background(),
+	)
+	if !allowed || err != nil || validationCalls != 0 {
+		t.Fatalf(
+			"OnDelete preflight allowed=%v error=%v validations=%d",
+			allowed,
+			err,
+			validationCalls,
+		)
+	}
+}
+
 func TestRollingUpdateControllerPersistsImageInitializationBeforeMemberLifecycle(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(
