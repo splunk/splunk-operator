@@ -820,6 +820,7 @@ func isAppAlreadyInstalled(rctx context.Context, cr splcommon.MetaObject, podExe
 	}
 
 	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:%s| grep ENABLED", appTopFolder, shellQuote(adminPwd))
+	safeCommand := redactSplunkAuth(command, adminPwd)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
@@ -835,7 +836,11 @@ func isAppAlreadyInstalled(rctx context.Context, cr splcommon.MetaObject, podExe
 
 	// Log any other stderr content for debugging but don't use it for error detection
 	if stdErr != "" {
-		scopedLog.InfoContext(rctx, "command stderr output (informational only)", "stderr", stdErr)
+		scopedLog.InfoContext(
+			rctx,
+			"command stderr output (informational only)",
+			"stderr", redactSplunkAuth(stdErr, adminPwd),
+		)
 	}
 
 	// Now check the actual command result
@@ -852,14 +857,23 @@ func isAppAlreadyInstalled(rctx context.Context, cr splcommon.MetaObject, podExe
 		}
 
 		// Any other exit code indicates a real error (splunk command failed, etc.)
-		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, error: %v, command: %s", stdOut, stdErr, err, command)
+		return false, fmt.Errorf(
+			"could not get installed app status stdOut: %s, stdErr: %s, error: %s, command: %s",
+			redactSplunkAuth(stdOut, adminPwd),
+			redactSplunkAuth(stdErr, adminPwd),
+			redactSplunkAuth(err.Error(), adminPwd),
+			safeCommand,
+		)
 	}
 
 	// If we reach here, grep found "ENABLED" (exit code 0)
 	// stdOut should contain the app status line with "ENABLED"
 	if stdOut == "" {
 		// This shouldn't happen if grep succeeded, but let's be safe
-		return false, fmt.Errorf("command succeeded but no output received, command: %s", command)
+		return false, fmt.Errorf(
+			"command succeeded but no output received, command: %s",
+			safeCommand,
+		)
 	}
 
 	scopedLog.InfoContext(rctx, "app installation state check successful - app is enabled", "appStatus", strings.TrimSpace(stdOut))

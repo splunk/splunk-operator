@@ -256,9 +256,16 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// redactSplunkAuth replaces adminPwd in cmd with **** for safe logging.
+// redactSplunkAuth replaces both raw and shell-quoted forms of adminPwd with
+// **** for safe logging. Replacing the quoted form first is required when a
+// password contains a single quote because the shell representation no longer
+// contains the raw password as one contiguous string.
 func redactSplunkAuth(cmd, adminPwd string) string {
-	return strings.ReplaceAll(cmd, adminPwd, "****")
+	if adminPwd == "" {
+		return cmd
+	}
+	redacted := strings.ReplaceAll(cmd, shellQuote(adminPwd), "'****'")
+	return strings.ReplaceAll(redacted, adminPwd, "****")
 }
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.

@@ -5031,6 +5031,14 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create namespace-scoped secret: %v", err)
 	}
+	adminPwd, err := splutil.GetAdminPasswordFromNamespaceScopedSecret(
+		ctx,
+		mockClient,
+		"test",
+	)
+	if err != nil {
+		t.Fatalf("failed to read namespace-scoped admin password: %v", err)
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -5064,6 +5072,13 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 			if tt.expectedError {
 				if err == nil {
 					t.Errorf("Expected error but got none for test: %s", tt.description)
+				} else {
+					if strings.Contains(err.Error(), adminPwd) {
+						t.Fatalf("error exposed the namespace admin password: %v", err)
+					}
+					if !strings.Contains(err.Error(), "admin:'****'") {
+						t.Fatalf("error did not retain a redacted command: %v", err)
+					}
 				}
 			} else {
 				if err != nil {
@@ -5075,6 +5090,21 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 				t.Errorf("Expected result %v but got %v for test: %s", tt.expectedResult, result, tt.description)
 			}
 		})
+	}
+}
+
+func TestRedactSplunkAuthHandlesShellQuotedPassword(t *testing.T) {
+	password := "before'after"
+	command := fmt.Sprintf(
+		"/opt/splunk/bin/splunk list app test -auth admin:%s",
+		shellQuote(password),
+	)
+	redacted := redactSplunkAuth(command, password)
+	if strings.Contains(redacted, "before") || strings.Contains(redacted, "after") {
+		t.Fatalf("shell-quoted password was not redacted: %s", redacted)
+	}
+	if !strings.Contains(redacted, "admin:'****'") {
+		t.Fatalf("redacted command lost its authentication placeholder: %s", redacted)
 	}
 }
 
