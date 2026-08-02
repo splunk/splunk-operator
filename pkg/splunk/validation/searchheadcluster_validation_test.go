@@ -542,8 +542,6 @@ func TestValidateSearchHeadClusterInlineDefaultsRestartSafety(t *testing.T) {
         shclustering:
           captain_is_adhoc_searchhead: false
           shcluster_label: old
-          rolling_restart: restart
-          decommission_search_jobs_wait_secs: 180
 `
 		allowedNew = `splunk:
   conf:
@@ -552,8 +550,6 @@ func TestValidateSearchHeadClusterInlineDefaultsRestartSafety(t *testing.T) {
         shclustering:
           captain_is_adhoc_searchhead: true
           shcluster_label: new
-          rolling_restart: searchable
-          decommission_search_jobs_wait_secs: 300
 `
 	)
 
@@ -628,7 +624,7 @@ func TestValidateSearchHeadClusterInlineDefaultsRestartSafety(t *testing.T) {
 `,
 		},
 		{
-			name: "adding searchable rolling restart is allowed",
+			name: "adding searchable rolling restart through member defaults is rejected",
 			defaults: `splunk:
   conf:
     server:
@@ -636,6 +632,7 @@ func TestValidateSearchHeadClusterInlineDefaultsRestartSafety(t *testing.T) {
         shclustering:
           rolling_restart: searchable
 `,
+			wantError: true,
 		},
 		{
 			name:        "unrelated defaults change with unchanged unsafe stanza is allowed",
