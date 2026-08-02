@@ -372,6 +372,7 @@ partial qualification results, not an OPS-011 pass.
 | K8S-008 | P2 | Cluster autoscaler/zone movement | Scheduling/storage stages remain attributable |
 | K8S-009 | P1 | PDB across supported SHC sizes | The PDB selects only this SHC, retains at most one voluntarily unavailable member, is reconciled idempotently, and never takes over a user-owned name collision |
 | K8S-010 | P1 | Namespace-scoped Helm install with `namespaceOverride` | The documented watch target, Deployment and service-account placement, Role/RoleBinding namespaces, and cluster-scoped Namespace-reader `resourceNames` agree; two installations do not collide; an upgrade preserves the selected contract |
+| K8S-011 | P1 | Operator manager is alive but cannot participate in reconciliation | Readiness distinguishes process health from cache/watch and leader-election participation; a single replica that cannot obtain required access is not falsely Available, a capable non-leading HA replica is not treated as failed, and recovery/takeover do not create a restart loop |
 
 ### K8S-010 and bounded CMP-006/CMP-007 SHC-92 evidence
 
@@ -394,6 +395,12 @@ delete-reclaim PV. The exact package rendered for Kubernetes 1.27.0 and
 bounded render/live evidence for CMP-006/CMP-007. It does not pass a live 1.27
 cluster, another provider, changing an established override during upgrade,
 or overlapping Operator watch scopes.
+
+The pre-fix K8S-010 fixture also registered K8S-011/SHC-93. Kubernetes marked
+the manager Ready while Lease authorization failed and no controllers started.
+SHC-92 removes that chart/RBAC cause but does not change the manager's probe
+contract; SHC-93 must qualify single-replica and HA leader/standby semantics
+without coupling readiness failure to liveness-driven restarts.
 
 ### STS-002 and bounded K8S-006 SHC-85 evidence
 

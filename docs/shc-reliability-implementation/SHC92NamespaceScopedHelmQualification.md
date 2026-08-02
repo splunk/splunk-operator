@@ -234,3 +234,8 @@ SHC-92 does not:
 Ordinary upgrades should retain the existing effective namespace. Moving an
 installation to a different effective namespace needs a separately designed
 migration and rollback contract.
+
+The pre-fix Pod's false-Ready state registers SHC-93. That work item must make
+Operator readiness distinguish a responding process from a manager able to
+participate in reconciliation, while preserving correct behavior for healthy
+non-leading HA contenders and keeping liveness restart policy separate.

@@ -244,6 +244,15 @@ ownership.
   render-only and EKS 1.31 is live-qualified; provider/version breadth,
   changing an established override, and overlapping watch scopes remain open.
   Detailed evidence is in `SHC92NamespaceScopedHelmQualification.md`.
+- [ ] Define and qualify SHC-93 Operator readiness semantics. Reproduce a
+  running manager that cannot get or update its leader Lease and prove it is
+  not falsely presented as a functioning single-replica control plane. Define
+  startup/cache/watch completion and normal non-leading HA contender behavior
+  without making readiness failure cause a liveness restart loop. Exercise
+  missing RBAC, API loss and recovery, normal takeover, repeated failure,
+  Events, logs, metrics, diagnostic collection, and alert timing. The SHC-92
+  false-Ready record is the immutable starting evidence; no SHC-93 fix is
+  attributed to SHC-92.
 - [x] Qualify bounded OPS-013/SHC-88 LicenseManager health observation. Exact
   source `241ea3d91` and Operator digest
   `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`

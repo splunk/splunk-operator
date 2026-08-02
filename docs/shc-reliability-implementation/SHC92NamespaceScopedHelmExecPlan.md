@@ -185,6 +185,11 @@ record. The work also made the overlapping-watch boundary explicit: SHC-92
 supports multiple disjoint namespace-scoped releases, not independent
 controllers racing over the same custom resources.
 
+The false-Ready manager is registered as SHC-93 rather than silently expanded
+into this chart-only change. SHC-93 owns single-replica failure, healthy
+non-leading HA contender, cache/watch startup, leader-election participation,
+recovery, and probe/alert semantics.
+
 ## Context and Orientation
 
 Helm stores a release record in the namespace passed with `helm install -n`;

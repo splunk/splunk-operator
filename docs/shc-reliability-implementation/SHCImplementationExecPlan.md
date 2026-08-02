@@ -579,6 +579,14 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   complete and retained workloads stayed healthy. Kubernetes 1.27 is
   render-only; live evidence is EKS 1.31. Detailed evidence is in
   `SHC92NamespaceScopedHelmQualification.md`.
+- [ ] Define SHC-93 so Operator Pod readiness represents the ability to
+  participate in reconciliation rather than only a responding health server.
+  Preserve process-level liveness and avoid restart loops. Specify the
+  single-replica failure contract and the distinct healthy non-leading HA
+  contender contract, then qualify Lease RBAC failure, cache/watch startup,
+  API loss/recovery, leader takeover, observable diagnostics, and alerting.
+  SHC-92 recorded the false-Ready evidence but intentionally did not change
+  the manager executable or probe semantics.
 - [x] (2026-08-01 UTC) Defined, implemented, and qualified SHC-88 on isolated
   branch `codex/shc-88-license-health`. Source `241ea3d91` reconciles the
   headless Service already named by the LicenseManager StatefulSet, waits for

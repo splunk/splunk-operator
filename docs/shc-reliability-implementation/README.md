@@ -44,6 +44,11 @@ authorization, upgrade, and cleanup evidence is in
 `SHC92NamespaceScopedHelmQualification.md`, `SHCWorkItemIndex.md`, and
 `QualificationObservabilityRolloutPlan.md`.
 
+SHC-92 also registered SHC-93 after proving that the old manager could report
+Kubernetes Ready while Lease authorization failed and no controllers had
+started. SHC-93 owns the separate Operator readiness and HA contender
+semantics; no probe implementation is attributed to SHC-92.
+
 ## Review order
 
 1. `CurrentDevelopBaseline.md` establishes what exists now.
