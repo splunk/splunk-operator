@@ -45,13 +45,28 @@ func shcAppFrameworkWorkActive(
 
 	// IsDeploymentInProgress is also used as a transient lock while the remote
 	// repository is being polled. It therefore cannot, by itself, distinguish
-	// active deployment work from an empty or read-only poll. The per-app
-	// statuses are durable and identify work that must finish before a Pod roll.
+	// active deployment work from an empty or read-only poll. Phase-3 app
+	// records retain the legacy DeployStatusPending value after a cluster-scoped
+	// bundle reaches install-complete, so the durable phase status is the
+	// completion boundary for pending or in-progress records.
 	for _, appSource := range appContext.AppsSrcDeployStatus {
 		for _, app := range appSource.AppDeploymentInfoList {
 			switch app.DeployStatus {
 			case enterpriseApi.DeployStatusPending,
 				enterpriseApi.DeployStatusInProgress:
+				if app.PhaseInfo.Phase == enterpriseApi.PhaseInstall &&
+					app.PhaseInfo.Status ==
+						enterpriseApi.AppPkgInstallComplete {
+					continue
+				}
+				switch app.PhaseInfo.Status {
+				case enterpriseApi.AppPkgDownloadError,
+					enterpriseApi.AppPkgPodCopyError,
+					enterpriseApi.AppPkgInstallError:
+					// App Framework retains terminal error records for
+					// diagnostics. They do not own an unrelated Pod rollout.
+					continue
+				}
 				return true
 			}
 		}

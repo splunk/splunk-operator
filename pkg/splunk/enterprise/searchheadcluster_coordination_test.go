@@ -309,6 +309,45 @@ func TestSHCAppFrameworkWorkActive(t *testing.T) {
 			),
 		},
 		{
+			name: "phase 3 cluster app complete with legacy pending status",
+			appContext: appDeploymentContextWithPhaseStatus(
+				enterpriseApi.DeployStatusPending,
+				enterpriseApi.PhaseInstall,
+				enterpriseApi.AppPkgInstallComplete,
+			),
+		},
+		{
+			name: "phase 3 terminal app error with legacy pending status",
+			appContext: appDeploymentContextWithPhaseStatus(
+				enterpriseApi.DeployStatusPending,
+				enterpriseApi.PhaseInstall,
+				enterpriseApi.AppPkgInstallError,
+			),
+		},
+		{
+			name: "phase 3 download complete still has copy work",
+			appContext: appDeploymentContextWithPhaseStatus(
+				enterpriseApi.DeployStatusPending,
+				enterpriseApi.PhaseDownload,
+				enterpriseApi.AppPkgDownloadComplete,
+			),
+			want: true,
+		},
+		{
+			name: "completed app with in-progress bundle",
+			appContext: func() *enterpriseApi.AppDeploymentContext {
+				appContext := appDeploymentContextWithPhaseStatus(
+					enterpriseApi.DeployStatusPending,
+					enterpriseApi.PhaseInstall,
+					enterpriseApi.AppPkgInstallComplete,
+				)
+				appContext.BundlePushStatus.BundlePushStage =
+					enterpriseApi.BundlePushInProgress
+				return appContext
+			}(),
+			want: true,
+		},
+		{
 			name: "bundle pending",
 			appContext: &enterpriseApi.AppDeploymentContext{
 				BundlePushStatus: enterpriseApi.BundlePushTracker{
@@ -352,12 +391,26 @@ func TestSHCAppFrameworkWorkActive(t *testing.T) {
 func appDeploymentContextWithStatus(
 	status enterpriseApi.AppDeploymentStatus,
 ) *enterpriseApi.AppDeploymentContext {
+	return appDeploymentContextWithPhaseStatus(status, "", 0)
+}
+
+func appDeploymentContextWithPhaseStatus(
+	status enterpriseApi.AppDeploymentStatus,
+	phase enterpriseApi.AppPhaseType,
+	phaseStatus enterpriseApi.AppPhaseStatusType,
+) *enterpriseApi.AppDeploymentContext {
 	return &enterpriseApi.AppDeploymentContext{
 		IsDeploymentInProgress: true,
 		AppsSrcDeployStatus: map[string]enterpriseApi.AppSrcDeployInfo{
 			"test-source": {
 				AppDeploymentInfoList: []enterpriseApi.AppDeploymentInfo{
-					{DeployStatus: status},
+					{
+						DeployStatus: status,
+						PhaseInfo: enterpriseApi.PhaseInfo{
+							Phase:  phase,
+							Status: phaseStatus,
+						},
+					},
 				},
 			},
 		},
