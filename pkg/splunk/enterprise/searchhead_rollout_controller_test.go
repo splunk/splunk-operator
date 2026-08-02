@@ -684,6 +684,130 @@ func TestRollingUpdateControllerAcceptsExactSameVersionImageRestartIntent(
 	}
 }
 
+func TestDeclaredSameVersionImageRestartResumesOwnedLifecycleTarget(
+	t *testing.T,
+) {
+	sourceImage := "splunk/splunk:9.4.0"
+	targetImage := "registry.example/splunk@sha256:target"
+	targetOrdinal := int32(2)
+	newState := func() upgrade.SHCRolloutState {
+		return upgrade.SHCRolloutState{
+			Replicas:        3,
+			Partition:       3,
+			CurrentRevision: "revision-1",
+			UpdateRevision:  "revision-2",
+			Pods: []upgrade.SHCRolloutPod{
+				{Ordinal: 0, Exists: true, Ready: true, Revision: "revision-1", Image: sourceImage},
+				{Ordinal: 1, Exists: true, Ready: true, Revision: "revision-1", Image: sourceImage},
+				{Ordinal: 2, Exists: true, Ready: true, Revision: "revision-1", Image: sourceImage},
+			},
+			Lifecycle: upgrade.SHCRolloutLifecycle{
+				TargetOrdinal:   &targetOrdinal,
+				DesiredRevision: "revision-2",
+				Stage: enterpriseApi.
+					SearchHeadClusterLifecycleStageValidatingCluster,
+			},
+		}
+	}
+	mgr := &searchHeadClusterPodManager{
+		cr: &enterpriseApi.SearchHeadCluster{
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{Image: targetImage},
+				},
+				LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+					ImageUpdateIntent: &enterpriseApi.SearchHeadClusterImageUpdateIntentSpec{
+						Intent: enterpriseApi.
+							SearchHeadClusterImageUpdateIntentSameVersionRestart,
+						SourceImage: sourceImage,
+						TargetImage: targetImage,
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		mutate  func(*upgrade.SHCRolloutState)
+		wantErr bool
+	}{
+		{
+			name: "owned source Pod after readiness withdrawal",
+			mutate: func(state *upgrade.SHCRolloutState) {
+				state.Pods[2].Ready = false
+			},
+		},
+		{
+			name: "owned terminating source Pod after partition advance",
+			mutate: func(state *upgrade.SHCRolloutState) {
+				state.Partition = 2
+				state.Pods[2].Ready = false
+				state.Pods[2].Deleting = true
+			},
+		},
+		{
+			name: "owned Pod absent during replacement",
+			mutate: func(state *upgrade.SHCRolloutState) {
+				state.Partition = 2
+				state.Pods[2] = upgrade.SHCRolloutPod{Ordinal: 2}
+			},
+		},
+		{
+			name: "owned target Pod starting",
+			mutate: func(state *upgrade.SHCRolloutState) {
+				state.Partition = 2
+				state.Pods[2].Ready = false
+				state.Pods[2].Revision = "revision-2"
+				state.Pods[2].Image = targetImage
+			},
+		},
+		{
+			name: "unowned member unavailable",
+			mutate: func(state *upgrade.SHCRolloutState) {
+				state.Pods[1].Ready = false
+			},
+			wantErr: true,
+		},
+		{
+			name: "owned target has undeclared image",
+			mutate: func(state *upgrade.SHCRolloutState) {
+				state.Pods[2].Ready = false
+				state.Pods[2].Image = "registry.example/splunk@sha256:unexpected"
+			},
+			wantErr: true,
+		},
+		{
+			name: "unowned target unavailable",
+			mutate: func(state *upgrade.SHCRolloutState) {
+				state.Lifecycle = upgrade.SHCRolloutLifecycle{}
+				state.Pods[2].Ready = false
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			state := newState()
+			test.mutate(&state)
+			accepted, err := mgr.classifyDeclaredSameVersionImageRestart(
+				state,
+				targetImage,
+			)
+			if test.wantErr {
+				if err == nil || accepted {
+					t.Fatalf("accepted=%v error=%v, want rejection", accepted, err)
+				}
+				return
+			}
+			if err != nil || !accepted {
+				t.Fatalf("accepted=%v error=%v, want accepted", accepted, err)
+			}
+		})
+	}
+}
+
 func TestRollingUpdateControllerContinuesExactSameVersionImageRestartAfterOrdinal(
 	t *testing.T,
 ) {

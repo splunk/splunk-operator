@@ -1043,9 +1043,46 @@ func (mgr *searchHeadClusterPodManager) classifyDeclaredSameVersionImageRestart(
 			"declared same-version image update has an incomplete partition observation",
 		)
 	}
+	ownedTarget := int32(-1)
+	if state.Lifecycle.TargetOrdinal != nil &&
+		state.Lifecycle.DesiredRevision == state.UpdateRevision {
+		ownedTarget = *state.Lifecycle.TargetOrdinal
+		if ownedTarget < 0 || ownedTarget >= state.Replicas {
+			return false, fmt.Errorf(
+				"declared same-version lifecycle target ordinal %d is outside the expected replica range",
+				ownedTarget,
+			)
+		}
+	}
 	for _, pod := range state.Pods {
-		if !pod.Exists || pod.Deleting || !pod.Ready || pod.Ordinal < 0 ||
-			pod.Ordinal >= state.Replicas {
+		if pod.Ordinal < 0 || pod.Ordinal >= state.Replicas {
+			return false, fmt.Errorf(
+				"declared same-version image update has an invalid Pod ordinal %d",
+				pod.Ordinal,
+			)
+		}
+		if pod.Ordinal == ownedTarget {
+			// Once lifecycle status owns a target, the Operator deliberately
+			// withdraws its readiness before detention and partition advance.
+			// Kubernetes may then expose the source Pod as terminating, no Pod,
+			// or the target Pod starting. Preserve the exact two-image contract
+			// while allowing that one durable transition to resume.
+			if !pod.Exists {
+				continue
+			}
+			sourcePod := pod.Image == intent.SourceImage &&
+				pod.Revision == state.CurrentRevision
+			targetPod := pod.Image == intent.TargetImage &&
+				pod.Revision == state.UpdateRevision
+			if !sourcePod && !targetPod {
+				return false, fmt.Errorf(
+					"declared same-version lifecycle target does not match the exact source or target revision at ordinal %d",
+					pod.Ordinal,
+				)
+			}
+			continue
+		}
+		if !pod.Exists || pod.Deleting || !pod.Ready {
 			return false, fmt.Errorf(
 				"declared same-version image update requires every expected Pod to be stably ready",
 			)
