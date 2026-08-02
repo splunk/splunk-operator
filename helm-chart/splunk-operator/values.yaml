@@ -73,7 +73,8 @@ splunkOperator:
   hostPID: false
   hostIPC: false
 
-  # Define liveness probe to check if manager container is running
+  # Define process liveness. This endpoint intentionally excludes Kubernetes
+  # API, cache, leader-election, and managed Splunk health.
   # reference: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#types-of-probe
   livenessProbe:
     httpGet:
@@ -82,7 +83,9 @@ splunkOperator:
     initialDelaySeconds: 15
     periodSeconds: 20
 
-  # Define readiness probe to check if manager container is ready for requests
+  # Define reconciliation participation readiness. This endpoint waits for
+  # cache synchronization and required leader-election Lease access; a healthy
+  # non-leading contender is Ready.
   # reference: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#types-of-probe
   readinessProbe:
     httpGet:

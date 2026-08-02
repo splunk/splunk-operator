@@ -32,6 +32,7 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	"github.com/splunk/splunk-operator/pkg/operatorreadiness"
 	"github.com/splunk/splunk-operator/pkg/splunk/validation"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -42,8 +43,10 @@ import (
 
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	authorizationv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
@@ -67,6 +70,8 @@ var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
+
+const leaderElectionID = "270bec8c.splunk.com"
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -226,7 +231,7 @@ func main() {
 		Scheme:                 scheme,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "270bec8c.splunk.com",
+		LeaderElectionID:       leaderElectionID,
 		LeaseDuration:          &leaseDuration,
 		RenewDeadline:          &renewDeadline,
 	}
@@ -238,6 +243,46 @@ func main() {
 
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	var accessReviewer operatorreadiness.AccessReviewer
+	if enableLeaderElection {
+		authorizationClient, err := authorizationv1client.NewForConfig(mgr.GetConfig())
+		if err != nil {
+			setupLog.Error(err, "unable to create authorization client for manager readiness")
+			os.Exit(1)
+		}
+		accessReviewer = authorizationClient.SelfSubjectAccessReviews()
+	}
+
+	podNamespace := os.Getenv("POD_NAMESPACE")
+	if enableLeaderElection {
+		podNamespace, err = operatorreadiness.ResolvePodNamespace(podNamespace)
+		if err != nil {
+			setupLog.Error(err, "unable to resolve leader-election namespace for manager readiness")
+			os.Exit(1)
+		}
+	}
+	managerReadiness, err := operatorreadiness.New(
+		accessReviewer,
+		ctrl.Log.WithName("operator-readiness"),
+		mgr.GetEventRecorderFor("operator-readiness"),
+		operatorreadiness.Options{
+			LeaderElectionEnabled: enableLeaderElection,
+			LeaseNamespace:        podNamespace,
+			LeaseName:             leaderElectionID,
+			PodNamespace:          podNamespace,
+			PodName:               os.Getenv("POD_NAME"),
+			PodUID:                types.UID(os.Getenv("POD_UID")),
+		},
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create manager readiness monitor")
+		os.Exit(1)
+	}
+	if err := mgr.Add(managerReadiness); err != nil {
+		setupLog.Error(err, "unable to add manager readiness monitor")
 		os.Exit(1)
 	}
 
@@ -405,7 +450,7 @@ func main() {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err := mgr.AddReadyzCheck("reconciliation-participation", managerReadiness.Check); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}

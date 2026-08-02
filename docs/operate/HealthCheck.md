@@ -14,6 +14,127 @@ Splunk Operator supports Startup, Liveness and Readiness Probes (with its own de
 * terminationGracePeriodSeconds (startup and liveness only)
 
 Please refer to [Kubernetes documentation](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) for more information on Startup, Liveness and Readiness Probes.
+
+## Splunk Operator manager health
+
+The probes on the Splunk Operator manager Pod have a different scope from the
+probes on Splunk Enterprise Pods. They answer whether the Kubernetes control
+plane component can participate in reconciliation; they do not report the
+health of a Search Head, indexer, KV Store, or another Splunk service.
+
+| Signal | Meaning | Must not be inferred |
+| :--- | :--- | :--- |
+| `GET /healthz` | The manager process and local probe server are alive | Kubernetes API access, leadership, controller progress, or Splunk health |
+| `GET /readyz` | The controller-runtime cache has synchronized and the service account is currently authorized to `get`, `create`, and `update` the exact leader-election Lease | That this replica is the current leader or that every managed Splunk resource is healthy |
+| `leader_election_master_status{name="270bec8c.splunk.com"}` | `1` for the current leader and `0` for a non-leading contender | A zero-valued contender is unhealthy |
+
+The readiness distinction is important for both single-replica and highly
+available Operator deployments. A process that cannot read or update its
+leader Lease must not make a single-replica Deployment look operational. In a
+multi-replica deployment, however, a synchronized and authorized standby is
+Ready even though it is not the current leader. Current leadership is a role
+that can transfer; it is not Pod health.
+
+The manager starts its health server before cache synchronization and leader
+election. `/readyz` therefore begins false. Controller-runtime starts the
+readiness monitor only after its cache synchronization boundary. When leader
+election is enabled, the monitor immediately submits three exact
+`SelfSubjectAccessReview` requests and repeats them every 10 seconds with one
+shared 3-second deadline. These reviews are read-only authorization decisions
+and do not create or modify the Lease. Kubernetes documents
+[`SelfSubjectAccessReview`](https://kubernetes.io/docs/reference/kubernetes-api/definitions/self-subject-access-review-v1-authorization/)
+as the API used to determine whether the current identity may perform a
+specific action.
+
+The `get` and `update` reviews include the Lease name. The `create` review
+targets the namespaced Lease collection without a resource name, matching the
+actual Kubernetes create request.
+
+The kubelet probe itself only reads the last in-memory result; it does not wait
+on an API request. With the default Operator chart timing, a continuing
+dependency failure is detected by the monitor within approximately 13 seconds
+and changes the Pod Ready condition after three failed probes at 10-second
+intervals. Recovery is detected by the next review and one successful
+readiness probe. Exact timing changes if the chart probe values are overridden.
+
+An API-server or Lease-authorization failure makes `/readyz` return HTTP 500,
+but `/healthz` remains HTTP 200 while the process is alive. Readiness failure
+does not cause kubelet to restart the container. This preserves logs, metrics,
+and diagnostic state and avoids a restart loop that cannot repair an external
+API or RBAC problem.
+
+The manager publishes these bounded metrics:
+
+- `splunk_operator_manager_readiness_status{check="cache_synchronized"}`;
+- `splunk_operator_manager_readiness_status{check="leader_election_access"}`;
+- `splunk_operator_manager_readiness_status{check="reconciliation_participation"}`;
+- `splunk_operator_manager_readiness_transitions_total{state,reason}`; and
+- `splunk_operator_manager_readiness_last_transition_timestamp_seconds`.
+
+The `check`, `state`, and `reason` labels use fixed values and do not contain
+resource names or error messages. Detailed API errors are written only to the
+structured manager log. On result transitions, the manager also attempts one
+Pod Event with reason `OperatorReconciliationReady`,
+`OperatorReconciliationNotReady`, or `OperatorReconciliationRecovered`.
+Repeated identical failures do not produce an Event or log for every probe.
+Event delivery is best effort: an API outage can prevent the failure Event,
+while local readiness, logs, and metrics still retain the signal.
+
+Example Prometheus alert boundaries are:
+
+```promql
+# No manager replica can participate in reconciliation. Alert after 2 minutes.
+max by (namespace) (
+  splunk_operator_manager_readiness_status{check="reconciliation_participation"}
+) == 0
+
+# Ready contenders exist, but none reports ownership of the leader Lease.
+# Alert after 1 minute, longer than the default 20-second renew deadline.
+sum by (namespace) (
+  leader_election_master_status{name="270bec8c.splunk.com"}
+) == 0
+and on (namespace)
+max by (namespace) (
+  splunk_operator_manager_readiness_status{check="reconciliation_participation"}
+) == 1
+
+# An HA deployment has at least one capable manager and at least one degraded
+# contender. Warn after 5 minutes; do not classify this as total unavailability.
+count by (namespace) (
+  splunk_operator_manager_readiness_status{check="reconciliation_participation"} == 0
+) > 0
+and on (namespace)
+max by (namespace) (
+  splunk_operator_manager_readiness_status{check="reconciliation_participation"}
+) == 1
+```
+
+The `namespace` label in these examples is normally attached by the Prometheus
+scrape target. Adapt the grouping label to the monitoring system's target
+metadata. Do not alert on `leader_election_master_status == 0` for each Pod;
+that is the expected value for every healthy standby.
+
+For diagnosis, correlate the same time window across the following views:
+
+```bash
+kubectl get deployment,pod -n <operator-namespace>
+kubectl get lease 270bec8c.splunk.com -n <operator-namespace> -o yaml
+kubectl get events -n <operator-namespace> --sort-by=.lastTimestamp
+kubectl logs -n <operator-namespace> deployment/splunk-operator-controller-manager
+kubectl auth can-i get leases.coordination.k8s.io -n <operator-namespace> \
+  --as=system:serviceaccount:<operator-namespace>:<operator-service-account>
+kubectl auth can-i create leases.coordination.k8s.io -n <operator-namespace> \
+  --as=system:serviceaccount:<operator-namespace>:<operator-service-account>
+kubectl auth can-i update leases.coordination.k8s.io -n <operator-namespace> \
+  --as=system:serviceaccount:<operator-namespace>:<operator-service-account>
+```
+
+The three authorization checks must all return `yes`. A Ready Pod with leader
+metric zero is a normal standby when another replica owns the Lease. A manager
+with both readiness prerequisites equal to one but no leader anywhere requires
+leader-election diagnosis rather than a liveness restart. Splunk workload
+conditions and Splunk Pod probes must be investigated separately.
+
 ## Default probe values
 
 | Probe Type | initialDelaySeconds | timeoutSeconds | periodSeconds | failureThreshold | terminationGracePeriodSeconds |
