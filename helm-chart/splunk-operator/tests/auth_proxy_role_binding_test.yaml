@@ -1,0 +1,38 @@
+suite: metrics authentication ClusterRoleBinding placement
+templates:
+  - templates/rbac/auth_proxy_role_binding.yaml
+tests:
+  - it: should bind namespace-scoped operators to their unique metrics authentication role
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: metadata.name
+          value: splunk-operator-proxy-rolebinding-7c7a408c
+      - equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: splunk-operator-proxy-role-7c7a408c
+      - contains:
+          path: subjects
+          content:
+            kind: ServiceAccount
+            name: splunk-operator-controller-manager
+            namespace: watched-namespace
+
+  - it: should preserve the existing cluster-wide proxy binding name
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: metadata.name
+          value: splunk-operator-proxy-rolebinding

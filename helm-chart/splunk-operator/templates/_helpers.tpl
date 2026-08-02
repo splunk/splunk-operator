@@ -81,6 +81,27 @@ namespace-scoped operator releases use the same operator name.
 {{- end }}
 
 {{/*
+Create unique cluster-scoped metrics authentication RBAC names for
+namespace-scoped releases. TokenReview and SubjectAccessReview are
+cluster-scoped APIs, so a namespaced Role cannot grant this access.
+*/}}
+{{- define "splunk-operator.metricsAuthRoleName" -}}
+{{- if .Values.splunkOperator.clusterWideAccess -}}
+{{- printf "%s-proxy-role" (include "splunk-operator.operator.fullname" .) | trunc 253 | trimSuffix "-" }}
+{{- else -}}
+{{- printf "%s-proxy-role-%s" (include "splunk-operator.operator.fullname" .) (include "splunk-operator.namespace" . | sha256sum | trunc 8) | trunc 253 | trimSuffix "-" }}
+{{- end -}}
+{{- end }}
+
+{{- define "splunk-operator.metricsAuthRoleBindingName" -}}
+{{- if .Values.splunkOperator.clusterWideAccess -}}
+{{- printf "%s-proxy-rolebinding" (include "splunk-operator.operator.fullname" .) | trunc 253 | trimSuffix "-" }}
+{{- else -}}
+{{- printf "%s-proxy-rolebinding-%s" (include "splunk-operator.operator.fullname" .) (include "splunk-operator.namespace" . | sha256sum | trunc 8) | trunc 253 | trimSuffix "-" }}
+{{- end -}}
+{{- end }}
+
+{{/*
 Format splunkOperator.featureGates map into a --feature-gates arg value.
 Produces: Key1=true,Key2=false
 */}}

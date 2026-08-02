@@ -1,8 +1,8 @@
-suite: namespace-scoped proxy Role placement
+suite: metrics authentication ClusterRole placement
 templates:
   - templates/rbac/auth_proxy_role.yaml
 tests:
-  - it: should place the proxy Role in the effective namespace
+  - it: should create cluster-scoped authentication review access for a namespace-scoped operator
     release:
       namespace: release-namespace
     set:
@@ -10,7 +10,17 @@ tests:
       splunkOperator.clusterWideAccess: false
     asserts:
       - isKind:
-          of: Role
+          of: ClusterRole
       - equal:
-          path: metadata.namespace
-          value: watched-namespace
+          path: metadata.name
+          value: splunk-operator-proxy-role-7c7a408c
+
+  - it: should preserve the existing cluster-wide proxy role name
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: splunk-operator-proxy-role
