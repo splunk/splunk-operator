@@ -213,8 +213,9 @@ ownership.
   timestamps remained empty. Five reconciles per controller stopped before
   normal Apply with zero fixture-level error; CR deletion then reached both
   finalizer paths, all ten PVC/PV claim references disappeared, and the
-  Namespace completed naturally without a manual finalizer patch. Provider,
-  Kubernetes-version, and namespace-scoped Helm breadth remain separate gates.
+  Namespace completed naturally without a manual finalizer patch. SHC-92
+  subsequently qualified the bounded namespace-scoped Helm contract;
+  provider/live-version breadth remains a separate gate.
 - [x] Qualify SHC-91 deletion-before-pause behavior across all seven active v4
   Splunk tier controllers and deletion-before-ordinary-Apply behavior in the
   six affected Apply entry points. Exact source `a76c30e0c` passed 42 Linux
@@ -227,12 +228,22 @@ ownership.
   and both delete-reclaim PVs naturally; the final PV was absent by 73 seconds.
   No run used a manual pause or finalizer patch. Detailed evidence is in
   `SHC91DeletionBeforePauseQualification.md`.
-- [ ] Qualify SHC-92 namespace-scoped Helm behavior with and without
-  `namespaceOverride`. Prove the selected watch namespace, operator/service
-  account placement, namespaced Role bindings, cluster-scoped Namespace-reader
-  restriction, non-collision across two namespace-scoped installations, and
-  upgrade compatibility on the minimum and latest supported Kubernetes
-  versions.
+- [x] Qualify SHC-92 namespace-scoped Helm behavior with and without
+  `namespaceOverride`. Exact source `91f742b52` passed 42 macOS and Linux
+  suites, 185 enterprise specs, 78.3 percent composite coverage, build, lints,
+  and 137 Helm tests. Packaged chart SHA-256
+  `23258a699126ae318fee287a5734d939521f3d32ef8741f936ff44b31ef9b5b8`
+  reproduced the preceding chart's Kubernetes-Ready but leaderless state and
+  recovered the same Deployment and service-account UIDs through Helm revision
+  2 without manual RBAC or environment edits. Fresh default and overridden
+  releases acquired leadership in their effective namespaces. Two releases
+  stored in one release namespace used distinct get-only Namespace readers
+  and had negative cross-namespace service-account authorization. Normal
+  uninstall removed every reader, namespaced object, PVC, and delete-reclaim
+  PV; retained workloads stayed Ready with zero restarts. Kubernetes 1.27 is
+  render-only and EKS 1.31 is live-qualified; provider/version breadth,
+  changing an established override, and overlapping watch scopes remain open.
+  Detailed evidence is in `SHC92NamespaceScopedHelmQualification.md`.
 - [x] Qualify bounded OPS-013/SHC-88 LicenseManager health observation. Exact
   source `241ea3d91` and Operator digest
   `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`

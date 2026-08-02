@@ -320,9 +320,9 @@ contained the expected finalizer, PVC deletion, and completion records with
 zero normal creates, status errors, or Reconciler errors. A real Ready
 Standalone then removed its StatefulSet, zero-restart Pod, two bound PVCs, and
 both delete-reclaim PVs naturally; the final PV was absent by the 73-second
-sample. No fixture used a manual pause or finalizer patch. Provider/version,
-legacy-v3, namespace-scoped Helm, and every-tier real runtime breadth remain
-open.
+sample. No fixture used a manual pause or finalizer patch. SHC-92 subsequently
+closed the bounded namespace-scoped Helm contract. Provider/live-version,
+legacy-v3, and every-tier real runtime breadth remain open.
 
 ### OPS-013 LicenseManager qualification evidence
 
@@ -372,6 +372,28 @@ partial qualification results, not an OPS-011 pass.
 | K8S-008 | P2 | Cluster autoscaler/zone movement | Scheduling/storage stages remain attributable |
 | K8S-009 | P1 | PDB across supported SHC sizes | The PDB selects only this SHC, retains at most one voluntarily unavailable member, is reconciled idempotently, and never takes over a user-owned name collision |
 | K8S-010 | P1 | Namespace-scoped Helm install with `namespaceOverride` | The documented watch target, Deployment and service-account placement, Role/RoleBinding namespaces, and cluster-scoped Namespace-reader `resourceNames` agree; two installations do not collide; an upgrade preserves the selected contract |
+
+### K8S-010 and bounded CMP-006/CMP-007 SHC-92 evidence
+
+The accepted 2026-08-02 evidence is recorded in
+[SHC92NamespaceScopedHelmQualification.md](SHC92NamespaceScopedHelmQualification.md).
+Exact source `91f742b52` defines one effective namespace for chart placement,
+namespace-scoped watch, service-account authorization, leader election, and
+the get-only Namespace reader. The preceding chart reproduced a false-Ready
+manager that could not acquire its Lease. Exact packaged chart SHA-256
+`23258a699126ae318fee287a5734d939521f3d32ef8741f936ff44b31ef9b5b8`
+recovered the same Deployment and service-account identities through a normal
+Helm upgrade without a manual patch.
+
+Fresh default and overridden releases acquired leadership in their effective
+namespaces. Two releases stored in one Helm release namespace used distinct
+reader names and could not access each other's Namespace or Splunk custom
+resources. Normal uninstall removed every chart object and the bound
+delete-reclaim PV. The exact package rendered for Kubernetes 1.27.0 and
+1.31.14; live qualification covers only EKS 1.31.14. This passes K8S-010 and
+bounded render/live evidence for CMP-006/CMP-007. It does not pass a live 1.27
+cluster, another provider, changing an established override during upgrade,
+or overlapping Operator watch scopes.
 
 ### STS-002 and bounded K8S-006 SHC-85 evidence
 

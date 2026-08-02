@@ -564,13 +564,21 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Standalone storage cleanup without a manual patch or status/Reconciler
   error. Detailed evidence is in
   `SHC91DeletionBeforePauseQualification.md`.
-- [ ] Define SHC-92 so namespace-scoped Helm installation placement and watch
-  target are unambiguous when `namespaceOverride` is set. Decide the supported
-  contract, align Deployment `WATCH_NAMESPACE`, Namespace-reader
-  `resourceNames`, Role/RoleBinding subjects, documentation, and upgrade
-  behavior, then qualify on supported Kubernetes versions. SHC-90 preserves
-  `.Release.Namespace` as the existing watch target and does not make this
-  compatibility decision.
+- [x] (2026-08-02 UTC) Defined, implemented, and qualified SHC-92 on isolated
+  branch `codex/shc-92-namespace-scoped-helm`. Exact source `91f742b52`
+  defines the effective namespace as non-empty `namespaceOverride`, otherwise
+  the release namespace, and applies it to every namespaced chart resource,
+  namespace-scoped `WATCH_NAMESPACE`, Role/RoleBinding, leader Lease, service
+  account, and get-only Namespace reader. It passed 42 macOS and Linux suites,
+  185 enterprise specs, 78.3 percent composite coverage, build, lints, and 137
+  Helm tests. Packaged chart SHA-256 `23258a699126` reproduced the preceding
+  false-Ready leader-election failure, recovered the same Deployment and
+  service-account UIDs through an unpatched Helm upgrade, qualified fresh
+  default and override paths, and proved same-release-namespace reader
+  non-collision and negative cross-namespace authorization. Cleanup was
+  complete and retained workloads stayed healthy. Kubernetes 1.27 is
+  render-only; live evidence is EKS 1.31. Detailed evidence is in
+  `SHC92NamespaceScopedHelmQualification.md`.
 - [x] (2026-08-01 UTC) Defined, implemented, and qualified SHC-88 on isolated
   branch `codex/shc-88-license-health`. Source `241ea3d91` reconciles the
   headless Service already named by the LicenseManager StatefulSet, waits for

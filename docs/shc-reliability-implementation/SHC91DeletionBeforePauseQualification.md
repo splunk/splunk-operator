@@ -301,7 +301,8 @@ time spent inside the controller finalizer.
 
 - EKS is the only provider in this qualification. AKS, GKE, OpenShift, and
   supported Kubernetes minimum/latest version breadth remain open.
-- Namespace-scoped Helm and `namespaceOverride` behavior remain SHC-92.
+- Namespace-scoped Helm and `namespaceOverride` behavior were subsequently
+  qualified separately by SHC-92 at source `91f742b52`.
 - Legacy v3 ClusterMaster/LicenseMaster, Telemetry, Postgres, Queue, and
   ObjectStorage controller behavior is not claimed. Queue and ObjectStorage do
   not have active enterprise reconcilers in this source baseline.

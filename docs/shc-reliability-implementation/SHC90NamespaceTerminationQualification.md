@@ -22,7 +22,7 @@ claimed by this work item. SHC-91 separately owns deletion-before-pause
 ordering in five v4 controllers and was subsequently qualified at source
 `a76c30e0c`; no part of that correction is attributed to SHC-90. SHC-92
 separately owns the existing Helm `namespaceOverride` and watch-target
-compatibility decision.
+compatibility decision and was subsequently qualified at source `91f742b52`.
 
 No Splunk Enterprise, Docker-Splunk, Ansible, CRD schema, StatefulSet,
 container lifecycle, probe, or persistent-data-format change is part of
@@ -93,10 +93,11 @@ account. The cluster-scoped object names contain a stable digest of the release
 namespace to avoid collisions between namespace-scoped installations using
 the default operator name.
 
-This preserves the chart's existing behavior: `WATCH_NAMESPACE` remains
+SHC-90 preserved the chart's then-existing behavior: `WATCH_NAMESPACE` remains
 `.Release.Namespace` even when `namespaceOverride` changes where the Operator
-Deployment and service account are placed. SHC-92 will decide whether that is
-the intended product contract and align all affected templates and docs.
+Deployment and service account are placed. SHC-92 subsequently selected and
+qualified the effective-namespace contract and aligned the affected templates
+and documentation at source `91f742b52`.
 
 ## Test-first and local qualification
 
@@ -260,12 +261,14 @@ cleanup patch was used.
 - SHC-91 subsequently qualified deletion-before-pause and
   deletion-before-ordinary-Apply behavior at source `a76c30e0c`; it remains a
   separate work item from this Namespace propagation guard.
-- SHC-92 remains pending for namespace-scoped Helm `namespaceOverride` and
-  watched-namespace semantics.
+- SHC-92 subsequently qualified namespace-scoped Helm `namespaceOverride` and
+  watched-namespace semantics at source `91f742b52`; it remains a separate
+  work item from SHC-90.
 - Legacy v3, Telemetry, and Postgres controllers are outside this bounded v4
   Splunk-tier work item.
-- Provider breadth, Kubernetes minimum/latest versions, and namespace-scoped
-  live Helm installation remain part of the broader qualification plan.
+- Provider breadth and live Kubernetes-version breadth remain part of the
+  broader qualification plan. SHC-92 later added render-only 1.27 and live EKS
+  1.31 evidence for the namespace-scoped chart contract.
 
 ## Rollback and cleanup
 

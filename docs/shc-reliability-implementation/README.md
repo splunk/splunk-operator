@@ -21,24 +21,27 @@ separate:
 
 ## Latest bounded qualification
 
-SHC-91 qualified deletion-before-pause and deletion-before-ordinary-Apply
-ordering for all seven active v4 Splunk tiers. Exact source `a76c30e0c` passed
-42 Linux suites, 185 controller specs, 78.3 percent composite coverage, build,
-and 124 Helm tests. Immutable Operator digest
-`sha256:4903f70a95b150c0a29bcd3ac70e063b5c55b6a030399a4636297586dea85cea`
-then completed seven direct paused CR deletions in 5 seconds and an all-tier
-namespace-first deletion in 13 seconds, with the expected finalizer/PVC work
-and zero status or Reconciler errors. A real Ready Standalone subsequently
-removed its StatefulSet, Pod, two PVCs, and both delete-reclaim PVs naturally;
-the final PV disappeared by the 73-second sample.
+SHC-92 qualified one effective-namespace contract for namespace-scoped Helm
+installations. Exact source `91f742b52` passed 42 macOS and Linux suites, 185
+enterprise-controller specs, 78.3 percent composite coverage, build, lints,
+and 137 Helm tests. Packaged chart SHA-256
+`23258a699126ae318fee287a5734d939521f3d32ef8741f936ff44b31ef9b5b8`
+reproduced the preceding chart's false-Ready leader-election failure and
+recovered the same Deployment and service-account identities through an
+ordinary unpatched Helm upgrade. Fresh default and overridden releases became
+leaders in their effective namespaces; two releases stored in one release
+namespace used distinct target-derived Namespace readers and were denied
+cross-namespace access. Normal uninstall and namespace deletion removed every
+fixture and delete-reclaim PV while the retained Operator and SHC stayed Ready
+with zero restarts.
 
-This remains bounded spike evidence; it is not a declaration that every
+This remains bounded chart qualification; it is not a declaration that every
 scenario in the matrix is complete or that the feature is ready for default
-enablement. Queue and ObjectStorage have no active enterprise reconcilers in
-this source baseline and are not live qualification targets. SHC-92 remains
-pending for namespace-scoped Helm `namespaceOverride` and watch semantics.
-Exact source, image, timing, and remaining-boundary evidence is in
-`SHC91DeletionBeforePauseQualification.md`, `SHCWorkItemIndex.md`, and
+enablement. Kubernetes 1.27 evidence is render-only, live evidence covers EKS
+1.31, and changing an established override, overlapping watch scopes, and
+provider/version breadth remain separate boundaries. Exact source, chart,
+authorization, upgrade, and cleanup evidence is in
+`SHC92NamespaceScopedHelmQualification.md`, `SHCWorkItemIndex.md`, and
 `QualificationObservabilityRolloutPlan.md`.
 
 ## Review order
