@@ -55,30 +55,32 @@ work. Exact evidence and rejected intermediate designs are in
 ## Review order
 
 1. `CurrentDevelopBaseline.md` establishes what exists now.
-2. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
+2. `SHCFinalIntegrationExecPlan.md` records the assembly of the final Operator
+   and runtime feature branches and the exact remaining qualification gates.
+3. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
    acceptance evidence.
-3. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
+4. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
    immutable commits and stable scenario identifiers.
-4. `SHC93OperatorReadinessQualification.md` and
+5. `SHC93OperatorReadinessQualification.md` and
    `SHC93OperatorReadinessExecPlan.md` record the latest manager-readiness
    contract, exact evidence, rejected candidates, and remaining boundaries.
-5. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
+6. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
    machine, StatefulSet strategy, and durable status contract.
-6. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
+7. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
    cluster-wide image-upgrade workflow and its composition with per-member
    lifecycle orchestration.
-7. `RuntimeLifecycleContract.md` defines the contract between the Operator,
+8. `RuntimeLifecycleContract.md` defines the contract between the Operator,
    Pod lifecycle, probe scripts, Docker-Splunk/Splunk Ansible, and splunkd.
-8. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
+9. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
    Splunk-managed indexer restart boundary and the remote serving-recovery
    contract that cannot be completed by an Operator readiness probe.
-9. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
+10. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
    integration rules, and conflict prevention.
-10. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
+11. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
    and common pass invariants.
-11. `QualificationObservabilityRolloutPlan.md` is the executable test,
+12. `QualificationObservabilityRolloutPlan.md` is the executable test,
    evidence, migration, release, and rollback plan.
-12. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
+13. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
    contract for Docker-Splunk image construction on a supported Linux host.
 
 The Operator design is a Wave 0 spike contract and the runtime design now
