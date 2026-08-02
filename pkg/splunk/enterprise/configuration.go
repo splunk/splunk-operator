@@ -1302,11 +1302,12 @@ func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceTyp
 	readinessProbe := getProbeWithConfigUpdates(&defaultReadinessProbe, spec.ReadinessProbe, spec.ReadinessInitialDelaySeconds)
 	if instanceType == SplunkIndexer &&
 		indexerClusterLifecycleEnabled() &&
-		spec.ReadinessProbe == nil {
+		isLegacyDefaultReadinessProbe(spec.ReadinessProbe) {
 		// This Alpha lifecycle contract uses the serving-path check in
 		// readinessProbe.sh. A single failed HEC check withdraws the peer
-		// promptly; customers who explicitly configure a readiness probe retain
-		// their exact values.
+		// promptly. The CRD persists its legacy default tuple even when the field
+		// is omitted, so resolve that exact tuple to the lifecycle profile just
+		// as the Search Head path does below. Other custom values remain exact.
 		readinessProbe = readinessProbe.DeepCopy()
 		readinessProbe.TimeoutSeconds = 2
 		readinessProbe.PeriodSeconds = 2

@@ -211,6 +211,12 @@ func TestIndexerLifecycleRendersHECServingReadiness(t *testing.T) {
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: "manager",
 				},
+				ReadinessProbe: &enterpriseApi.Probe{
+					InitialDelaySeconds: 10,
+					TimeoutSeconds:      5,
+					PeriodSeconds:       5,
+					FailureThreshold:    3,
+				},
 			},
 		},
 	}
@@ -249,6 +255,20 @@ func TestIndexerLifecycleRendersHECServingReadiness(t *testing.T) {
 			container.ReadinessProbe,
 		)
 	}
+
+	cr.Spec.ReadinessProbe = &enterpriseApi.Probe{
+		InitialDelaySeconds: 7,
+		TimeoutSeconds:      4,
+		PeriodSeconds:       6,
+		FailureThreshold:    2,
+	}
+	statefulSet, err = getIndexerStatefulSet(ctx, c, cr)
+	require.NoError(t, err)
+	container = statefulSet.Spec.Template.Spec.Containers[0]
+	require.Equal(t, int32(7), container.ReadinessProbe.InitialDelaySeconds)
+	require.Equal(t, int32(4), container.ReadinessProbe.TimeoutSeconds)
+	require.Equal(t, int32(6), container.ReadinessProbe.PeriodSeconds)
+	require.Equal(t, int32(2), container.ReadinessProbe.FailureThreshold)
 }
 
 func TestIndexerPodUpdateAdoptsNewRevisionBeforeDecommission(t *testing.T) {
