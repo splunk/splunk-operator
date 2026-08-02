@@ -71,6 +71,14 @@ The final live gate still requires the Cluster Manager bundle status to prove
 that the selected Splunk build classified the app as restart-required before
 availability conclusions are accepted.
 
+The final IndexerCluster manifest intentionally does not override
+`readinessProbe`. With the indexer lifecycle gate enabled, the Operator uses
+the serving-readiness profile (`timeoutSeconds: 2`, `periodSeconds: 2`, and
+`failureThreshold: 1`). Startup and liveness retain their separate extended
+budgets. Increasing readiness failure tolerance does not protect a slow
+startup; it only leaves an indexer that has stopped serving HEC in Service
+endpoints longer.
+
 Both SHC-82 app targets use the same standard-library packager. It replaces
 only the archived `default/app.conf` version, leaves the checked-in source
 unchanged, and normalizes archive order, timestamps, ownership, and modes.

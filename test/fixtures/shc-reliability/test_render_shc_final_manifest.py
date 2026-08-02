@@ -63,6 +63,14 @@ class RenderSHCFinalManifestTest(unittest.TestCase):
             rendered.count("path: qualification-bucket-123/campaign/final/"), 2
         )
         self.assertIn("podUpdateStrategy: RollingUpdate", rendered)
+        indexer_document = rendered.split("kind: IndexerCluster", maxsplit=1)[1].split(
+            "\n---", maxsplit=1
+        )[0]
+        self.assertNotIn(
+            "readinessProbe:",
+            indexer_document,
+            "IndexerCluster must inherit the lifecycle serving-readiness profile",
+        )
 
     def test_mutable_image_is_rejected_without_output(self) -> None:
         output = self.root / "invalid.yaml"

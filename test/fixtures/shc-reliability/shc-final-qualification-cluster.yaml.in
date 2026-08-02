@@ -138,11 +138,6 @@ spec:
     periodSeconds: 30
     failureThreshold: 10
     terminationGracePeriodSeconds: 660
-  readinessProbe:
-    initialDelaySeconds: 10
-    timeoutSeconds: 5
-    periodSeconds: 5
-    failureThreshold: 3
   terminationGracePeriodSeconds: 1200
 ---
 apiVersion: enterprise.splunk.com/v4
