@@ -1005,8 +1005,12 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 			return enterpriseApi.PhaseError, err
 		}
 	} else {
-		mgr.log.InfoContext(ctx, "ClusterManager is not ready yet", "error", err)
-		return enterpriseApi.PhaseError, err
+		dependencyPhase := enterpriseApi.PhasePending
+		if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseError || mgr.cr.Status.ClusterMasterPhase == enterpriseApi.PhaseError {
+			dependencyPhase = enterpriseApi.PhaseError
+		}
+		mgr.log.InfoContext(ctx, "ClusterManager is not ready yet", "clusterManagerPhase", mgr.cr.Status.ClusterManagerPhase)
+		return dependencyPhase, nil
 	}
 
 	// Get the podExecClient with empty targetPodName.

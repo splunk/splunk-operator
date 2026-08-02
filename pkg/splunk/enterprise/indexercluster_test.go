@@ -842,6 +842,37 @@ func indexerClusterPodManagerUpdateTester(t *testing.T, method string, mockHandl
 	mockSplunkClient.CheckRequests(t, method)
 }
 
+func TestIndexerClusterPodManagerWaitsForClusterManager(t *testing.T) {
+	tests := []struct {
+		name                string
+		clusterManagerPhase enterpriseApi.Phase
+		wantPhase           enterpriseApi.Phase
+	}{
+		{
+			name:                "pending dependency keeps IndexerCluster pending",
+			clusterManagerPhase: enterpriseApi.PhasePending,
+			wantPhase:           enterpriseApi.PhasePending,
+		},
+		{
+			name:                "failed dependency keeps IndexerCluster in error",
+			clusterManagerPhase: enterpriseApi.PhaseError,
+			wantPhase:           enterpriseApi.PhaseError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mgr := getIndexerClusterPodManager(tt.name, nil, &spltest.MockHTTPClient{}, 1)
+			mgr.cr.Status.ClusterManagerPhase = tt.clusterManagerPhase
+
+			phase, err := mgr.Update(context.Background(), spltest.NewMockClient(), &appsv1.StatefulSet{}, 1)
+
+			require.NoError(t, err)
+			require.Equal(t, tt.wantPhase, phase)
+		})
+	}
+}
+
 func TestIndexerClusterPodManager(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	var replicas int32 = 1
