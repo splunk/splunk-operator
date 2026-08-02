@@ -808,6 +808,59 @@ func TestDeclaredSameVersionImageRestartResumesOwnedLifecycleTarget(
 	}
 }
 
+func TestDeclaredSameVersionImageIntentDoesNotClaimConvergedTargetImage(
+	t *testing.T,
+) {
+	sourceImage := "splunk/splunk:9.4.0"
+	targetImage := "registry.example/splunk@sha256:target"
+	targetOrdinal := int32(0)
+	mgr := &searchHeadClusterPodManager{
+		cr: &enterpriseApi.SearchHeadCluster{
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{Image: targetImage},
+				},
+				LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+					ImageUpdateIntent: &enterpriseApi.SearchHeadClusterImageUpdateIntentSpec{
+						Intent: enterpriseApi.
+							SearchHeadClusterImageUpdateIntentSameVersionRestart,
+						SourceImage: sourceImage,
+						TargetImage: targetImage,
+					},
+				},
+			},
+		},
+	}
+	state := upgrade.SHCRolloutState{
+		Replicas:        3,
+		Partition:       3,
+		CurrentRevision: "image-revision",
+		UpdateRevision:  "app-revision",
+		Pods: []upgrade.SHCRolloutPod{
+			{Ordinal: 0, Exists: true, Ready: true, Revision: "image-revision", Image: targetImage},
+			{Ordinal: 1, Exists: true, Ready: true, Revision: "image-revision", Image: targetImage},
+			{Ordinal: 2, Exists: true, Ready: true, Revision: "image-revision", Image: targetImage},
+		},
+		Lifecycle: upgrade.SHCRolloutLifecycle{
+			TargetOrdinal:   &targetOrdinal,
+			DesiredRevision: "image-revision",
+			Stage: enterpriseApi.
+				SearchHeadClusterLifecycleStageCompleted,
+		},
+	}
+	accepted, err := mgr.classifyDeclaredSameVersionImageRestart(
+		state,
+		targetImage,
+	)
+	if err != nil || accepted {
+		t.Fatalf(
+			"converged stale intent accepted=%t error=%v, want false/nil",
+			accepted,
+			err,
+		)
+	}
+}
+
 func TestRollingUpdateControllerContinuesExactSameVersionImageRestartAfterOrdinal(
 	t *testing.T,
 ) {

@@ -1018,6 +1018,16 @@ func (mgr *searchHeadClusterPodManager) classifyDeclaredSameVersionImageRestart(
 		// a later ordinary-restart declaration cannot take over its identity.
 		return false, nil
 	}
+	observedImage, uniformObservedImage :=
+		uniformSHCRolloutPodImage(state.Pods)
+	if uniformObservedImage &&
+		len(state.Pods) == int(state.Replicas) &&
+		observedImage == targetImage {
+		// The declared image transition has already converged. A retained exact
+		// intent must not claim a later annotation, configuration, Secret, or
+		// App Framework Pod-template revision whose image is unchanged.
+		return false, nil
+	}
 	intent := mgr.cr.Spec.LifecyclePolicy.ImageUpdateIntent
 	if intent.Intent !=
 		enterpriseApi.SearchHeadClusterImageUpdateIntentSameVersionRestart {
