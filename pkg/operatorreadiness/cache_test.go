@@ -5,12 +5,21 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type informerRegistrarFunc func(context.Context) error
+
+func (f informerRegistrarFunc) Register(ctx context.Context) error {
+	return f(ctx)
+}
 
 type fakeInformerGetter struct {
 	objects          []client.Object
@@ -86,5 +95,68 @@ func TestNewInformerRegistrarValidatesInputs(t *testing.T) {
 	}
 	if _, err := NewInformerRegistrar(&fakeInformerGetter{}, []client.Object{nil}); err == nil {
 		t.Fatal("nil informer object error = nil")
+	}
+}
+
+func TestInformerCacheBarrierRetriesRegistrationBeforeCacheSync(t *testing.T) {
+	synchronized := true
+	baseCache := &informertest.FakeInformers{Synced: &synchronized}
+	calls := 0
+	registrar := informerRegistrarFunc(func(context.Context) error {
+		calls++
+		if calls == 1 {
+			return errors.New("API discovery unavailable")
+		}
+		return nil
+	})
+	barrier, err := newInformerCacheBarrier(baseCache, registrar, logr.Discard(), time.Millisecond)
+	if err != nil {
+		t.Fatalf("newInformerCacheBarrier() error = %v", err)
+	}
+	if !barrier.GetCache().WaitForCacheSync(context.Background()) {
+		t.Fatal("WaitForCacheSync() = false, want true")
+	}
+	if calls != 2 {
+		t.Fatalf("registrar calls = %d, want 2", calls)
+	}
+}
+
+func TestInformerCacheBarrierStartStopsWithManagerContext(t *testing.T) {
+	synchronized := true
+	barrier, err := newInformerCacheBarrier(
+		&informertest.FakeInformers{Synced: &synchronized},
+		informerRegistrarFunc(func(context.Context) error { return nil }),
+		logr.Discard(),
+		time.Millisecond,
+	)
+	if err != nil {
+		t.Fatalf("newInformerCacheBarrier() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- barrier.Start(ctx) }()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Start() did not stop after context cancellation")
+	}
+}
+
+func TestNewInformerCacheBarrierValidatesInputs(t *testing.T) {
+	synchronized := true
+	baseCache := &informertest.FakeInformers{Synced: &synchronized}
+	registrar := informerRegistrarFunc(func(context.Context) error { return nil })
+	if _, err := newInformerCacheBarrier(nil, registrar, logr.Discard(), time.Second); err == nil {
+		t.Fatal("nil cache error = nil")
+	}
+	if _, err := newInformerCacheBarrier(baseCache, nil, logr.Discard(), time.Second); err == nil {
+		t.Fatal("nil registrar error = nil")
+	}
+	if _, err := newInformerCacheBarrier(baseCache, registrar, logr.Discard(), 0); err == nil {
+		t.Fatal("non-positive retry interval error = nil")
 	}
 }

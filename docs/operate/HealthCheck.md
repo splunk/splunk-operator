@@ -35,17 +35,19 @@ multi-replica deployment, however, a synchronized and authorized standby is
 Ready even though it is not the current leader. Current leadership is a role
 that can transfer; it is not Pod health.
 
-The complete informer set used by the registered controllers is requested,
-without waiting, before the manager starts. The manager then starts its health
-server before informer synchronization and leader election, so `/readyz`
-begins false while `/healthz` is available. Controller-runtime's cache startup
-barrier waits for every pre-registered informer to complete its initial list;
-only after that barrier succeeds can it start the readiness monitor and enter
-leader election. Pre-registration is required because an otherwise empty
-controller-runtime cache is technically synchronized even though no controller
-watch has completed its initial list. The same barrier applies to a future
-leader and every standby, which prevents a contender from being advertised as
-ready or entering leader election while its controller watches are still cold.
+An informer cache-barrier runnable containing the complete controller informer
+set is added before manager startup. The manager starts its health server
+first, so `/readyz` begins false while `/healthz` is available even when API
+discovery or initial lists are unavailable. In controller-runtime's cache
+startup group, the barrier requests the informer set without blocking each
+request and then waits for all of those informers to complete their initial
+lists. Only after that barrier succeeds can the manager start the readiness
+monitor and enter leader election. This explicit barrier is required because
+an otherwise empty controller-runtime cache is technically synchronized even
+though no controller watch has completed its initial list. The same barrier
+applies to a future leader and every standby, which prevents a contender from
+being advertised as ready or entering leader election while its controller
+watches are still cold.
 
 When leader election is enabled, the monitor also immediately submits three
 exact `SelfSubjectAccessReview` requests and repeats them every 10 seconds with

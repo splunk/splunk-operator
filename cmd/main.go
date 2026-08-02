@@ -525,13 +525,21 @@ func main() {
 		setupLog.Error(err, "unable to create manager informer registrar")
 		os.Exit(1)
 	}
-
-	managerContext := ctrl.SetupSignalHandler()
-	if err := informerRegistrar.Register(managerContext); err != nil {
-		setupLog.Error(err, "unable to register manager informer set")
+	informerCacheBarrier, err := operatorreadiness.NewInformerCacheBarrier(
+		mgr.GetCache(),
+		informerRegistrar,
+		ctrl.Log.WithName("informer-cache-barrier"),
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create manager informer cache barrier")
+		os.Exit(1)
+	}
+	if err := mgr.Add(informerCacheBarrier); err != nil {
+		setupLog.Error(err, "unable to add manager informer cache barrier")
 		os.Exit(1)
 	}
 
+	managerContext := ctrl.SetupSignalHandler()
 	setupLog.Info("starting manager")
 	if err := mgr.Start(managerContext); err != nil {
 		setupLog.Error(err, "problem running manager")
