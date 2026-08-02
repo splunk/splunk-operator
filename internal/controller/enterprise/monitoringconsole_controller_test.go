@@ -145,7 +145,8 @@ var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
 			namespace := "ns-splunk-mc-stalled"
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.MonitoringConsole{})
+			nsSpec := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).WithObjects(nsSpec)
 			c := builder.Build()
 			recorder := record.NewFakeRecorder(10)
 			reconciler := MonitoringConsoleReconciler{

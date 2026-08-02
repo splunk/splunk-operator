@@ -150,7 +150,8 @@ var _ = Describe("Standalone Controller", Label("integration"), func() {
 		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
 			namespace := "ns-splunk-st-stalled"
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.Standalone{})
+			nsSpec := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.Standalone{}).WithObjects(nsSpec)
 			c := builder.Build()
 			recorder := record.NewFakeRecorder(10)
 			reconciler := StandaloneReconciler{

@@ -208,7 +208,8 @@ var _ = Describe("LicenseManager Controller", Label("integration"), func() {
 		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
 			namespace := "ns-splunk-lm-stalled"
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.LicenseManager{})
+			nsSpec := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.LicenseManager{}).WithObjects(nsSpec)
 			c := builder.Build()
 			recorder := record.NewFakeRecorder(10)
 			reconciler := LicenseManagerReconciler{

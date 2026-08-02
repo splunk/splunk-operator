@@ -155,7 +155,8 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
 			namespace := "ns-splunk-cm-stalled"
 			ctx := context.TODO()
-			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.ClusterManager{})
+			nsSpec := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.ClusterManager{}).WithObjects(nsSpec)
 			c := builder.Build()
 			recorder := record.NewFakeRecorder(10)
 			reconciler := ClusterManagerReconciler{

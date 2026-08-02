@@ -627,9 +627,9 @@ func TestUpgradePathValidation(t *testing.T) {
 }
 
 // TestUpgradePathValidation_LicenseManagerGate verifies that the LicenseManager
-// gate in UpgradePathValidation distinguishes a transient not-Ready phase (soft
-// wait, no error) from a genuine image mismatch (hard error), instead of
-// conflating both into a single fatal error.
+// gate classifies normal runtime convergence as a retryable dependency wait.
+// A desired-image contradiction between the two CR specs is terminal and is
+// covered separately by TestUpgradePathValidationClassifiesLicenseManagerDependency.
 func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
@@ -684,23 +684,27 @@ func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
 		t.Fatalf("Failed to create LicenseManager StatefulSet: %v", err)
 	}
 
-	// LicenseManager image matches, but it's not yet Ready (e.g. mid pod recycle):
-	// expect a soft wait, not an error.
+	// LicenseManager desired image matches, but it is not yet Ready (for example,
+	// during a Pod recycle): expect a typed retryable wait.
 	lm.Status.Phase = enterpriseApi.PhaseUpdating
 	if err := client.Status().Update(ctx, &lm); err != nil {
 		t.Fatalf("Failed to update LicenseManager status: %v", err)
 	}
 
 	continueReconcile, err := UpgradePathValidation(ctx, client, &cm, cm.Spec.CommonSplunkSpec, nil)
-	if err != nil {
-		t.Errorf("Expected no error when LicenseManager is transiently not Ready, got: %v", err)
+	wait, waiting := AsDependencyNotReady(err)
+	if !waiting {
+		t.Fatalf("Expected a retryable dependency wait when LicenseManager is transiently not Ready, got: %v", err)
+	}
+	if wait.Phase != enterpriseApi.PhaseUpdating {
+		t.Errorf("Expected dependency phase Updating, got: %s", wait.Phase)
 	}
 	if continueReconcile {
 		t.Errorf("Expected continueReconcile to be false while LicenseManager is not Ready")
 	}
 
-	// LicenseManager is Ready, but its current image differs from the CR spec
-	// image: expect a hard error.
+	// LicenseManager is Ready, but its workload has not converged to the desired
+	// CR image: this is also a typed retryable wait, not a terminal spec error.
 	lm.Status.Phase = enterpriseApi.PhaseReady
 	if err := client.Status().Update(ctx, &lm); err != nil {
 		t.Fatalf("Failed to update LicenseManager status: %v", err)
@@ -711,11 +715,15 @@ func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
 	}
 
 	continueReconcile, err = UpgradePathValidation(ctx, client, &cm, cm.Spec.CommonSplunkSpec, nil)
-	if err == nil {
-		t.Errorf("Expected an error when LicenseManager image differs from CR image")
+	wait, waiting = AsDependencyNotReady(err)
+	if !waiting {
+		t.Fatalf("Expected a retryable dependency wait when LicenseManager workload image differs, got: %v", err)
+	}
+	if wait.ObservedImage != "splunk/splunk:new" || wait.DesiredImage != "splunk/splunk:old" {
+		t.Errorf("Unexpected dependency image observation: current=%q desired=%q", wait.ObservedImage, wait.DesiredImage)
 	}
 	if continueReconcile {
-		t.Errorf("Expected continueReconcile to be false when LicenseManager image mismatches CR image")
+		t.Errorf("Expected continueReconcile to be false while LicenseManager workload image converges")
 	}
 }
 
