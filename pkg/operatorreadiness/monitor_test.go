@@ -21,6 +21,14 @@ type accessReviewResult struct {
 	err     error
 }
 
+type cacheSynchronizerFunc func(context.Context) error
+
+func (f cacheSynchronizerFunc) Synchronize(ctx context.Context) error {
+	return f(ctx)
+}
+
+var synchronizedCache = cacheSynchronizerFunc(func(context.Context) error { return nil })
+
 type scriptedAccessReviewer struct {
 	mu      sync.Mutex
 	results []accessReviewResult
@@ -123,10 +131,20 @@ func newTestMonitor(
 	leaderElection bool,
 	refreshInterval time.Duration,
 ) (*Monitor, *record.FakeRecorder, *fakeTelemetry) {
+	return newTestMonitorWithCache(t, reviewer, synchronizedCache, leaderElection, refreshInterval)
+}
+
+func newTestMonitorWithCache(
+	t *testing.T,
+	reviewer AccessReviewer,
+	cacheSynchronizer CacheSynchronizer,
+	leaderElection bool,
+	refreshInterval time.Duration,
+) (*Monitor, *record.FakeRecorder, *fakeTelemetry) {
 	t.Helper()
 	events := record.NewFakeRecorder(20)
 	telemetry := newFakeTelemetry()
-	monitor, err := newMonitor(reviewer, logr.Discard(), events, Options{
+	monitor, err := newMonitor(reviewer, cacheSynchronizer, logr.Discard(), events, Options{
 		LeaderElectionEnabled: leaderElection,
 		LeaseNamespace:        "operator-system",
 		LeaseName:             "270bec8c.splunk.com",
@@ -140,6 +158,13 @@ func newTestMonitor(
 		t.Fatalf("newMonitor() error = %v", err)
 	}
 	return monitor, events, telemetry
+}
+
+func warmupMonitor(t *testing.T, ctx context.Context, monitor *Monitor) {
+	t.Helper()
+	if err := monitor.Warmup(ctx); err != nil {
+		t.Fatalf("Warmup() error = %v", err)
+	}
 }
 
 func checkError(monitor *Monitor) error {
@@ -181,6 +206,7 @@ func TestMonitorBecomesReadyAfterCacheAndExactLeaseReviews(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- monitor.Start(ctx) }()
+	warmupMonitor(t, ctx, monitor)
 
 	waitFor(t, time.Second, func() bool { return checkError(monitor) == nil })
 	if reviewer.callCount() != 3 {
@@ -227,6 +253,7 @@ func TestMonitorSkipsLeaseReviewWhenLeaderElectionIsDisabled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- monitor.Start(ctx) }()
+	warmupMonitor(t, ctx, monitor)
 
 	waitFor(t, time.Second, func() bool { return checkError(monitor) == nil })
 	if reviewer.callCount() != 0 {
@@ -258,6 +285,7 @@ func TestMonitorDeniedVerbThenRecoveryDoesNotRestartRunnable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- monitor.Start(ctx) }()
+	warmupMonitor(t, ctx, monitor)
 
 	waitFor(t, time.Second, func() bool {
 		_, transitions := telemetry.snapshot()
@@ -290,6 +318,7 @@ func TestMonitorRepeatedAPIFailureIsTransitionBounded(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- monitor.Start(ctx) }()
+	warmupMonitor(t, ctx, monitor)
 
 	waitFor(t, time.Second, func() bool { return reviewer.callCount() >= 3 })
 	if err := checkError(monitor); err == nil || !strings.Contains(err.Error(), ReasonAuthorizationReviewError) {
@@ -328,6 +357,7 @@ func TestMonitorStopsReviewCycleAtFirstDeniedVerb(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- monitor.Start(ctx) }()
+	warmupMonitor(t, ctx, monitor)
 
 	waitFor(t, time.Second, func() bool { return reviewer.callCount() == 2 })
 	if err := checkError(monitor); err == nil || !strings.Contains(err.Error(), ReasonLeaseAccessDenied) {
@@ -350,6 +380,7 @@ func TestMonitorCheckIsConcurrentWithRefresh(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- monitor.Start(ctx) }()
+	warmupMonitor(t, ctx, monitor)
 	waitFor(t, time.Second, func() bool { return checkError(monitor) == nil })
 
 	var workers sync.WaitGroup
@@ -371,12 +402,57 @@ func TestMonitorCheckIsConcurrentWithRefresh(t *testing.T) {
 }
 
 func TestNewMonitorValidatesLeaderElectionInputs(t *testing.T) {
-	_, err := newMonitor(nil, logr.Discard(), nil, Options{
+	_, err := newMonitor(nil, synchronizedCache, logr.Discard(), nil, Options{
 		LeaderElectionEnabled: true,
 		RefreshInterval:       time.Second,
 		RequestTimeout:        time.Second,
 	}, newFakeTelemetry())
 	if err == nil {
 		t.Fatal("newMonitor() error = nil, want invalid configuration")
+	}
+}
+
+func TestMonitorWaitsForExplicitInformerSynchronization(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{})
+	synchronizer := cacheSynchronizerFunc(func(ctx context.Context) error {
+		close(started)
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
+	monitor, _, telemetry := newTestMonitorWithCache(t,
+		&scriptedAccessReviewer{results: allowedReviews(3)}, synchronizer, true, time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- monitor.Start(ctx) }()
+	warmDone := make(chan error, 1)
+	go func() { warmDone <- monitor.Warmup(ctx) }()
+
+	<-started
+	waitFor(t, time.Second, func() bool {
+		checks, _ := telemetry.snapshot()
+		return checks[CheckLeaderElectionAccess]
+	})
+	if err := checkError(monitor); err == nil || !strings.Contains(err.Error(), ReasonCacheStarting) {
+		t.Fatalf("Check() before informer sync error = %v, want %q", err, ReasonCacheStarting)
+	}
+	checks, transitions := telemetry.snapshot()
+	if checks[CheckCacheSynchronized] || checks[CheckReconciliationParticipation] || len(transitions) != 0 {
+		t.Fatalf("pre-sync telemetry = (%#v, %#v), want cache and aggregate false with no transition", checks, transitions)
+	}
+
+	close(release)
+	if err := <-warmDone; err != nil {
+		t.Fatalf("Warmup() error = %v", err)
+	}
+	waitFor(t, time.Second, func() bool { return checkError(monitor) == nil })
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Start() error = %v", err)
 	}
 }

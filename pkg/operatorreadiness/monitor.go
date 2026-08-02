@@ -37,6 +37,7 @@ const (
 	EventReasonRecovered           = "OperatorReconciliationRecovered"
 	defaultRefreshInterval         = 10 * time.Second
 	defaultRequestTimeout          = 3 * time.Second
+	defaultCacheRetryInterval      = 10 * time.Second
 	coordinationAPIGroup           = "coordination.k8s.io"
 	leaseResource                  = "leases"
 )
@@ -61,6 +62,12 @@ type AccessReviewer interface {
 	) (*authorizationv1.SelfSubjectAccessReview, error)
 }
 
+// CacheSynchronizer establishes and synchronizes the informer set required by
+// every registered controller before this manager may become a leader.
+type CacheSynchronizer interface {
+	Synchronize(ctx context.Context) error
+}
+
 // Options configures one manager readiness monitor.
 type Options struct {
 	LeaderElectionEnabled bool
@@ -71,6 +78,7 @@ type Options struct {
 	PodUID                types.UID
 	RefreshInterval       time.Duration
 	RequestTimeout        time.Duration
+	CacheRetryInterval    time.Duration
 }
 
 type readinessState struct {
@@ -78,14 +86,19 @@ type readinessState struct {
 	leaseAccess       bool
 	reason            string
 	reviewObserved    bool
+	reportObserved    bool
+	reportedReady     bool
+	reportedReason    string
 	everFailed        bool
+	cause             error
 }
 
-// Monitor starts after controller-runtime's cache synchronization boundary,
+// Monitor warms the registered controller informers before leader election,
 // periodically checks the current service account's leader-Lease capability,
 // and serves a non-blocking healthz.Checker snapshot.
 type Monitor struct {
 	reviewer  AccessReviewer
+	cache     CacheSynchronizer
 	logger    logr.Logger
 	recorder  record.EventRecorder
 	options   Options
@@ -99,15 +112,17 @@ type Monitor struct {
 // registry.
 func New(
 	reviewer AccessReviewer,
+	cacheSynchronizer CacheSynchronizer,
 	logger logr.Logger,
 	recorder record.EventRecorder,
 	options Options,
 ) (*Monitor, error) {
-	return newMonitor(reviewer, logger, recorder, options, prometheusTelemetry{})
+	return newMonitor(reviewer, cacheSynchronizer, logger, recorder, options, prometheusTelemetry{})
 }
 
 func newMonitor(
 	reviewer AccessReviewer,
+	cacheSynchronizer CacheSynchronizer,
 	logger logr.Logger,
 	recorder record.EventRecorder,
 	options Options,
@@ -118,6 +133,12 @@ func newMonitor(
 	}
 	if options.RequestTimeout <= 0 {
 		options.RequestTimeout = defaultRequestTimeout
+	}
+	if options.CacheRetryInterval <= 0 {
+		options.CacheRetryInterval = defaultCacheRetryInterval
+	}
+	if cacheSynchronizer == nil {
+		return nil, errors.New("operator readiness requires a cache synchronizer")
 	}
 	if options.LeaderElectionEnabled {
 		switch {
@@ -135,6 +156,7 @@ func newMonitor(
 
 	monitor := &Monitor{
 		reviewer:  reviewer,
+		cache:     cacheSynchronizer,
 		logger:    logger,
 		recorder:  recorder,
 		options:   options,
@@ -150,21 +172,14 @@ func newMonitor(
 }
 
 // NeedLeaderElection keeps the monitor running on both the leader and every
-// non-leading contender. Controller-runtime starts non-leader runnables after
-// its caches have synchronized.
+// non-leading contender.
 func (*Monitor) NeedLeaderElection() bool {
 	return false
 }
 
-// Start marks the controller-runtime cache boundary, performs an immediate
-// authorization review, and refreshes it without blocking kubelet probes.
+// Start performs an immediate authorization review and refreshes it without
+// blocking kubelet probes. Informer synchronization is owned by Warmup.
 func (m *Monitor) Start(ctx context.Context) error {
-	m.mu.Lock()
-	m.state.cacheSynchronized = true
-	m.state.reason = ReasonLeaseAccessNotChecked
-	m.mu.Unlock()
-	m.telemetry.SetCheck(CheckCacheSynchronized, true)
-
 	if !m.options.LeaderElectionEnabled {
 		m.applyLeaseAccess(true, ReasonLeaderElectionDisabled, nil)
 		<-ctx.Done()
@@ -180,6 +195,31 @@ func (m *Monitor) Start(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			m.refresh(ctx)
+		}
+	}
+}
+
+// Warmup explicitly creates and synchronizes every controller informer on
+// every manager replica before leader election begins. Waiting only on the
+// manager cache runnable is insufficient when no informer has been requested
+// yet, because an empty informer set is considered synchronized.
+func (m *Monitor) Warmup(ctx context.Context) error {
+	for {
+		err := m.cache.Synchronize(ctx)
+		if err == nil {
+			m.applyCacheSynchronized()
+			return nil
+		}
+		if ctx.Err() != nil {
+			return nil
+		}
+		m.logger.Error(err, "Operator controller informer warmup is not ready")
+		timer := time.NewTimer(m.options.CacheRetryInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case <-timer.C:
 		}
 	}
 }
@@ -247,21 +287,48 @@ func (m *Monitor) refresh(parent context.Context) {
 
 func (m *Monitor) applyLeaseAccess(allowed bool, reason string, cause error) {
 	m.mu.Lock()
-	previousObserved := m.state.reviewObserved
-	previousReady := m.state.cacheSynchronized && m.state.leaseAccess
-	previousReason := m.state.reason
 	m.state.leaseAccess = allowed
 	m.state.reason = reason
 	m.state.reviewObserved = true
-	ready := m.state.cacheSynchronized && m.state.leaseAccess
-	changed := !previousObserved || previousReady != ready || previousReason != reason
-	if !ready {
-		m.state.everFailed = true
-	}
-	everFailed := m.state.everFailed
+	m.state.cause = cause
 	m.mu.Unlock()
 
 	m.telemetry.SetCheck(CheckLeaderElectionAccess, allowed)
+	m.evaluateAndReport()
+}
+
+func (m *Monitor) applyCacheSynchronized() {
+	m.mu.Lock()
+	m.state.cacheSynchronized = true
+	m.mu.Unlock()
+	m.telemetry.SetCheck(CheckCacheSynchronized, true)
+	m.evaluateAndReport()
+}
+
+func (m *Monitor) evaluateAndReport() {
+	m.mu.Lock()
+	ready := m.state.cacheSynchronized && m.state.leaseAccess
+	reason := m.state.reason
+	if !m.state.cacheSynchronized {
+		reason = ReasonCacheStarting
+	} else if reason == "" {
+		reason = ReasonLeaseAccessNotChecked
+	}
+	observed := m.state.cacheSynchronized && m.state.reviewObserved
+	changed := observed && (!m.state.reportObserved || m.state.reportedReady != ready || m.state.reportedReason != reason)
+	previousReported := m.state.reportObserved
+	if changed && !ready {
+		m.state.everFailed = true
+	}
+	recovered := changed && ready && m.state.everFailed && previousReported
+	if changed {
+		m.state.reportObserved = true
+		m.state.reportedReady = ready
+		m.state.reportedReason = reason
+	}
+	cause := m.state.cause
+	m.mu.Unlock()
+
 	m.telemetry.SetCheck(CheckReconciliationParticipation, ready)
 	if !changed {
 		return
@@ -296,7 +363,7 @@ func (m *Monitor) applyLeaseAccess(allowed bool, reason string, cause error) {
 	if ready {
 		eventReason := EventReasonReady
 		message := "Operator cache is synchronized and leader-election Lease access is available"
-		if everFailed && previousObserved {
+		if recovered {
 			eventReason = EventReasonRecovered
 			message = "Operator reconciliation participation recovered"
 		}

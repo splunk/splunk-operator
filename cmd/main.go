@@ -42,6 +42,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 
 	"go.uber.org/zap/zapcore"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -50,6 +52,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -72,6 +75,37 @@ var (
 )
 
 const leaderElectionID = "270bec8c.splunk.com"
+
+func managerInformerObjects(postgresEnabled bool) []client.Object {
+	objects := []client.Object{
+		&enterpriseApi.ClusterManager{},
+		&enterpriseApiV3.ClusterMaster{},
+		&enterpriseApi.IndexerCluster{},
+		&enterpriseApiV3.LicenseMaster{},
+		&enterpriseApi.LicenseManager{},
+		&enterpriseApi.MonitoringConsole{},
+		&enterpriseApi.SearchHeadCluster{},
+		&enterpriseApi.Standalone{},
+		&enterpriseApi.IngestorCluster{},
+		&enterpriseApi.Queue{},
+		&enterpriseApi.ObjectStorage{},
+		&appsv1.StatefulSet{},
+		&corev1.Secret{},
+		&corev1.ConfigMap{},
+		&corev1.Pod{},
+	}
+	if postgresEnabled {
+		objects = append(objects,
+			&enterpriseApi.PostgresDatabase{},
+			&enterpriseApi.PostgresCluster{},
+			&cnpgv1.Database{},
+			&cnpgv1.Cluster{},
+			&cnpgv1.Pooler{},
+			&cnpgv1.ScheduledBackup{},
+		)
+	}
+	return objects
+}
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -255,6 +289,14 @@ func main() {
 		}
 		accessReviewer = authorizationClient.SelfSubjectAccessReviews()
 	}
+	cacheSynchronizer, err := operatorreadiness.NewInformerCacheSynchronizer(
+		mgr.GetCache(),
+		managerInformerObjects(config.DefaultMutableFeatureGate.Enabled(config.PostgresController)),
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create manager informer cache synchronizer")
+		os.Exit(1)
+	}
 
 	podNamespace := os.Getenv("POD_NAMESPACE")
 	if enableLeaderElection {
@@ -266,6 +308,7 @@ func main() {
 	}
 	managerReadiness, err := operatorreadiness.New(
 		accessReviewer,
+		cacheSynchronizer,
 		ctrl.Log.WithName("operator-readiness"),
 		mgr.GetEventRecorderFor("operator-readiness"),
 		operatorreadiness.Options{

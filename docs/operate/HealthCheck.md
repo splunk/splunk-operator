@@ -25,7 +25,7 @@ health of a Search Head, indexer, KV Store, or another Splunk service.
 | Signal | Meaning | Must not be inferred |
 | :--- | :--- | :--- |
 | `GET /healthz` | The manager process and local probe server are alive | Kubernetes API access, leadership, controller progress, or Splunk health |
-| `GET /readyz` | The controller-runtime cache has synchronized and the service account is currently authorized to `get`, `create`, and `update` the exact leader-election Lease | That this replica is the current leader or that every managed Splunk resource is healthy |
+| `GET /readyz` | Every registered controller informer has completed its initial synchronization and the service account is currently authorized to `get`, `create`, and `update` the exact leader-election Lease | That this replica is the current leader or that every managed Splunk resource is healthy |
 | `leader_election_master_status{name="270bec8c.splunk.com"}` | `1` for the current leader and `0` for a non-leading contender | A zero-valued contender is unhealthy |
 
 The readiness distinction is important for both single-replica and highly
@@ -35,13 +35,19 @@ multi-replica deployment, however, a synchronized and authorized standby is
 Ready even though it is not the current leader. Current leadership is a role
 that can transfer; it is not Pod health.
 
-The manager starts its health server before cache synchronization and leader
-election. `/readyz` therefore begins false. Controller-runtime starts the
-readiness monitor only after its cache synchronization boundary. When leader
-election is enabled, the monitor immediately submits three exact
-`SelfSubjectAccessReview` requests and repeats them every 10 seconds with one
-shared 3-second deadline. These reviews are read-only authorization decisions
-and do not create or modify the Lease. Kubernetes documents
+The manager starts its health server before informer synchronization and leader
+election, so `/readyz` begins false. Before any replica can enter leader
+election, the readiness warmup explicitly requests and synchronizes the
+informer types used by the registered controllers. This is required because an
+otherwise empty controller-runtime cache is technically synchronized even
+though no controller watch has completed its initial list. The same warmup is
+performed by a future leader and every standby, which prevents a contender
+from being advertised as ready while its controller watches are still cold.
+
+When leader election is enabled, the monitor also immediately submits three
+exact `SelfSubjectAccessReview` requests and repeats them every 10 seconds with
+one shared 3-second deadline. These reviews are read-only authorization
+decisions and do not create or modify the Lease. Kubernetes documents
 [`SelfSubjectAccessReview`](https://kubernetes.io/docs/reference/kubernetes-api/definitions/self-subject-access-review-v1-authorization/)
 as the API used to determine whether the current identity may perform a
 specific action.
@@ -79,6 +85,15 @@ Pod Event with reason `OperatorReconciliationReady`,
 Repeated identical failures do not produce an Event or log for every probe.
 Event delivery is best effort: an API outage can prevent the failure Event,
 while local readiness, logs, and metrics still retain the signal.
+
+The metrics endpoint uses delegated Kubernetes authentication and
+authorization. The chart creates a `ClusterRole` that grants only
+`get` on the non-resource `/metrics` path. Its name is
+`splunk-operator-metrics-reader` for a cluster-wide installation and includes
+an effective-namespace hash for a namespace-scoped installation. Bind the
+Prometheus service account to that role; do not make the endpoint anonymous or
+grant the Operator service account permission to read its own metrics merely
+for scraping.
 
 Example Prometheus alert boundaries are:
 
@@ -134,6 +149,14 @@ metric zero is a normal standby when another replica owns the Lease. A manager
 with both readiness prerequisites equal to one but no leader anywhere requires
 leader-election diagnosis rather than a liveness restart. Splunk workload
 conditions and Splunk Pod probes must be investigated separately.
+
+`cache_synchronized` is an initial informer-synchronization latch. A later
+selective removal of non-Lease list/watch RBAC is reported by controller-runtime
+watch errors in the manager log; controller-runtime does not expose a supported
+per-informer ongoing-health signal to this probe. A general API outage also
+causes the periodic Lease reviews to fail and withdraws readiness. Treat a
+post-start stream of `Failed to watch` or `forbidden` messages as a controller
+availability incident even if only selective non-Lease access was removed.
 
 ## Default probe values
 
