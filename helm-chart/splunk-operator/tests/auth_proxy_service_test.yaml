@@ -20,3 +20,6 @@ tests:
             port: 8443
             protocol: TCP
             targetPort: https
+      - equal:
+          path: spec.publishNotReadyAddresses
+          value: true

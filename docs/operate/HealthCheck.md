@@ -93,6 +93,10 @@ while local readiness, logs, and metrics still retain the signal.
 
 The chart serves the metrics endpoint over HTTPS on port `8443` and protects
 it with delegated Kubernetes authentication and authorization. The chart
+publishes manager addresses to the metrics Service even while a Pod is
+NotReady, allowing monitoring to collect the failure signal that withdrew
+readiness. This setting affects only the metrics Service; it does not route
+managed Splunk traffic to a NotReady Pod. The chart
 creates a `ClusterRole` that grants only `get` on the non-resource `/metrics`
 path. Its name is
 `splunk-operator-metrics-reader` for a cluster-wide installation and includes
