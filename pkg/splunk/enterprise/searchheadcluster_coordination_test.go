@@ -277,11 +277,36 @@ func TestSHCAppFrameworkWorkActive(t *testing.T) {
 		{name: "nil"},
 		{name: "empty", appContext: &enterpriseApi.AppDeploymentContext{}},
 		{
-			name: "deployment in progress",
+			name: "empty repository poll lock",
 			appContext: &enterpriseApi.AppDeploymentContext{
 				IsDeploymentInProgress: true,
 			},
+		},
+		{
+			name: "app pending",
+			appContext: appDeploymentContextWithStatus(
+				enterpriseApi.DeployStatusPending,
+			),
 			want: true,
+		},
+		{
+			name: "app in progress",
+			appContext: appDeploymentContextWithStatus(
+				enterpriseApi.DeployStatusInProgress,
+			),
+			want: true,
+		},
+		{
+			name: "app complete",
+			appContext: appDeploymentContextWithStatus(
+				enterpriseApi.DeployStatusComplete,
+			),
+		},
+		{
+			name: "app error",
+			appContext: appDeploymentContextWithStatus(
+				enterpriseApi.DeployStatusError,
+			),
 		},
 		{
 			name: "bundle pending",
@@ -321,5 +346,20 @@ func TestSHCAppFrameworkWorkActive(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func appDeploymentContextWithStatus(
+	status enterpriseApi.AppDeploymentStatus,
+) *enterpriseApi.AppDeploymentContext {
+	return &enterpriseApi.AppDeploymentContext{
+		IsDeploymentInProgress: true,
+		AppsSrcDeployStatus: map[string]enterpriseApi.AppSrcDeployInfo{
+			"test-source": {
+				AppDeploymentInfoList: []enterpriseApi.AppDeploymentInfo{
+					{DeployStatus: status},
+				},
+			},
+		},
 	}
 }

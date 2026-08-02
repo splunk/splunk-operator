@@ -38,13 +38,24 @@ func shcAppFrameworkWorkActive(
 	if appContext == nil {
 		return false
 	}
-	if appContext.IsDeploymentInProgress {
-		return true
-	}
 	switch appContext.BundlePushStatus.BundlePushStage {
 	case enterpriseApi.BundlePushPending, enterpriseApi.BundlePushInProgress:
 		return true
-	default:
-		return false
 	}
+
+	// IsDeploymentInProgress is also used as a transient lock while the remote
+	// repository is being polled. It therefore cannot, by itself, distinguish
+	// active deployment work from an empty or read-only poll. The per-app
+	// statuses are durable and identify work that must finish before a Pod roll.
+	for _, appSource := range appContext.AppsSrcDeployStatus {
+		for _, app := range appSource.AppDeploymentInfoList {
+			switch app.DeployStatus {
+			case enterpriseApi.DeployStatusPending,
+				enterpriseApi.DeployStatusInProgress:
+				return true
+			}
+		}
+	}
+
+	return false
 }

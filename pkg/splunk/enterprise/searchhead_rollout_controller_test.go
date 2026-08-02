@@ -42,14 +42,14 @@ func TestRollingUpdateControllerLetsDurableAppWorkFinishFirst(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 
 	tests := []struct {
-		name                 string
-		deploymentInProgress bool
-		bundleStage          enterpriseApi.BundlePushStageType
+		name        string
+		appStatus   enterpriseApi.AppDeploymentStatus
+		bundleStage enterpriseApi.BundlePushStageType
 	}{
 		{
-			name:                 "App Framework deployment",
-			deploymentInProgress: true,
-			bundleStage:          enterpriseApi.BundlePushComplete,
+			name:        "App Framework deployment",
+			appStatus:   enterpriseApi.DeployStatusPending,
+			bundleStage: enterpriseApi.BundlePushComplete,
 		},
 		{
 			name:        "pending bundle",
@@ -70,8 +70,11 @@ func TestRollingUpdateControllerLetsDurableAppWorkFinishFirst(t *testing.T) {
 				"revision-2",
 				[]string{"revision-1", "revision-1", "revision-1"},
 			)
-			mgr.cr.Status.AppContext.IsDeploymentInProgress =
-				test.deploymentInProgress
+			if test.appStatus != 0 {
+				mgr.cr.Status.AppContext = *appDeploymentContextWithStatus(
+					test.appStatus,
+				)
+			}
 			mgr.cr.Status.AppContext.BundlePushStatus.BundlePushStage =
 				test.bundleStage
 
@@ -114,7 +117,7 @@ func TestRollingUpdateControllerLetsDurableAppWorkFinishFirst(t *testing.T) {
 			}
 			assertNoRollingUpdatePodDelete(t, client)
 
-			mgr.cr.Status.AppContext.IsDeploymentInProgress = false
+			mgr.cr.Status.AppContext.AppsSrcDeployStatus = nil
 			mgr.cr.Status.AppContext.BundlePushStatus.BundlePushStage =
 				enterpriseApi.BundlePushComplete
 			phase, err = mgr.updateRollingStatefulSetPods(
@@ -142,6 +145,38 @@ func TestRollingUpdateControllerLetsDurableAppWorkFinishFirst(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestRollingUpdateControllerDoesNotBlockOnEmptyAppRepositoryPoll(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, _ := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	mgr.cr.Status.AppContext.IsDeploymentInProgress = true
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("start rollout during empty App Framework poll: %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("phase = %q, want %q", phase, enterpriseApi.PhaseUpdating)
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil || operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != 2 {
+		t.Fatalf("operation = %#v, want ordinal 2", operation)
+	}
+	if strings.Contains(mgr.cr.Status.Message, "AppFrameworkOperationActive") {
+		t.Fatalf("empty App Framework poll blocked rollout: %q", mgr.cr.Status.Message)
 	}
 }
 
@@ -309,7 +344,9 @@ func TestRollingUpdateControllerRecordsSupportedImageWorkflowBeforeInitializatio
 
 	// The durable image owner does not yield to App Framework work that
 	// appears after workflow creation, and it does not initialize concurrently.
-	mgr.cr.Status.AppContext.IsDeploymentInProgress = true
+	mgr.cr.Status.AppContext = *appDeploymentContextWithStatus(
+		enterpriseApi.DeployStatusPending,
+	)
 	phase, err = mgr.updateRollingStatefulSetPods(
 		context.Background(),
 		statefulSet,
@@ -330,7 +367,7 @@ func TestRollingUpdateControllerRecordsSupportedImageWorkflowBeforeInitializatio
 			mgr.cr.Status.LifecycleOperation,
 		)
 	}
-	mgr.cr.Status.AppContext.IsDeploymentInProgress = false
+	mgr.cr.Status.AppContext.AppsSrcDeployStatus = nil
 
 	// The next reconciliation records intent but still cannot call Splunk.
 	phase, err = mgr.updateRollingStatefulSetPods(
