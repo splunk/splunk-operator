@@ -39,7 +39,12 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 			},
 			Replicas: 3,
 			LifecyclePolicy: &SearchHeadClusterLifecyclePolicy{
-				PodUpdateStrategy:             SearchHeadClusterPodUpdateStrategyRollingUpdate,
+				PodUpdateStrategy: SearchHeadClusterPodUpdateStrategyRollingUpdate,
+				ImageUpdateIntent: &SearchHeadClusterImageUpdateIntentSpec{
+					Intent:      SearchHeadClusterImageUpdateIntentSameVersionRestart,
+					SourceImage: "registry.example/splunk@sha256:source",
+					TargetImage: "registry.example/splunk@sha256:target",
+				},
 				DetentionTimeoutSeconds:       lifecycleTestInt64Pointer(179),
 				SearchDrainTimeoutSeconds:     lifecycleTestInt64Pointer(180),
 				CaptainTransferTimeoutSeconds: lifecycleTestInt64Pointer(181),
@@ -118,6 +123,9 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 		t.Fatalf("JSON round trip changed representation:\ninput: %s\ndecoded: %s", encoded, reencoded)
 	}
 	if decoded.Spec.LifecyclePolicy == nil ||
+		decoded.Spec.LifecyclePolicy.ImageUpdateIntent == nil ||
+		decoded.Spec.LifecyclePolicy.ImageUpdateIntent.Intent !=
+			SearchHeadClusterImageUpdateIntentSameVersionRestart ||
 		decoded.Status.ImageUpgrade == nil ||
 		decoded.Status.ImageUpgrade.Phase != SearchHeadClusterImageUpgradePhaseRollingMembers ||
 		decoded.Status.LifecycleOperation == nil ||
@@ -130,6 +138,8 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 	*copied.Spec.LifecyclePolicy.DetentionTimeoutSeconds = 19
 	*copied.Spec.LifecyclePolicy.SearchDrainTimeoutSeconds = 20
 	*copied.Spec.LifecyclePolicy.PodStartupTimeoutSeconds = 30
+	copied.Spec.LifecyclePolicy.ImageUpdateIntent.TargetImage =
+		"registry.example/splunk@sha256:changed"
 	copied.Status.LifecycleOperation.ReplacementPodObservedAt = nil
 	copied.Status.LifecycleOperation.KVStoreNotReadyMembers[0] =
 		"example-search-head-2=failed"
@@ -139,6 +149,8 @@ func TestSearchHeadClusterLifecycleJSONRoundTripAndDeepCopy(t *testing.T) {
 		*input.Spec.LifecyclePolicy.DetentionTimeoutSeconds != 179 ||
 		*input.Spec.LifecyclePolicy.SearchDrainTimeoutSeconds != 180 ||
 		*input.Spec.LifecyclePolicy.PodStartupTimeoutSeconds != 182 ||
+		input.Spec.LifecyclePolicy.ImageUpdateIntent.TargetImage !=
+			"registry.example/splunk@sha256:target" ||
 		input.Status.LifecycleOperation.ReplacementPodObservedAt == nil ||
 		input.Status.LifecycleOperation.KVStoreNotReadyMembers[0] !=
 			"example-search-head-1=starting" ||

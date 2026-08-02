@@ -115,6 +115,77 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 	})
 }
 
+func TestValidateSearchHeadClusterImageUpdateIntent(t *testing.T) {
+	source := "registry.example/splunk@sha256:source"
+	target := "registry.example/splunk@sha256:target"
+	valid := func() *enterpriseApi.SearchHeadClusterSpec {
+		return &enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: target},
+			},
+			LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+				PodUpdateStrategy: enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+				ImageUpdateIntent: &enterpriseApi.SearchHeadClusterImageUpdateIntentSpec{
+					Intent:      enterpriseApi.SearchHeadClusterImageUpdateIntentSameVersionRestart,
+					SourceImage: source,
+					TargetImage: target,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		mutate  func(*enterpriseApi.SearchHeadClusterSpec)
+		wantErr bool
+	}{
+		{name: "omitted"},
+		{name: "exact pair", mutate: func(*enterpriseApi.SearchHeadClusterSpec) {}},
+		{
+			name: "requires RollingUpdate",
+			mutate: func(spec *enterpriseApi.SearchHeadClusterSpec) {
+				spec.LifecyclePolicy.PodUpdateStrategy = enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete
+			},
+			wantErr: true,
+		},
+		{
+			name: "requires source",
+			mutate: func(spec *enterpriseApi.SearchHeadClusterSpec) {
+				spec.LifecyclePolicy.ImageUpdateIntent.SourceImage = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "requires different images",
+			mutate: func(spec *enterpriseApi.SearchHeadClusterSpec) {
+				spec.LifecyclePolicy.ImageUpdateIntent.SourceImage = target
+			},
+			wantErr: true,
+		},
+		{
+			name: "binds target to spec image",
+			mutate: func(spec *enterpriseApi.SearchHeadClusterSpec) {
+				spec.Image = "registry.example/splunk@sha256:other"
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var spec *enterpriseApi.SearchHeadClusterSpec
+			if test.mutate != nil {
+				spec = valid()
+				test.mutate(spec)
+			}
+			err := validateSearchHeadClusterImageUpdateIntent(spec)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validation error = %v, wantErr=%v", err, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestResolveTerminationGracePeriodSeconds(t *testing.T) {
 	t.Run("nil spec does not panic", func(t *testing.T) {
 		setLifecyclePolicyTestGates(t, true, false)

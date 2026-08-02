@@ -109,3 +109,47 @@ func ResolveSearchHeadClusterLifecyclePolicy(spec *enterpriseApi.SearchHeadClust
 	}
 	return resolved, nil
 }
+
+// validateSearchHeadClusterImageUpdateIntent validates the exact-pair
+// contract before reconciliation mutates configuration or workload objects.
+// The declaration is deliberately not a general compatibility override.
+func validateSearchHeadClusterImageUpdateIntent(
+	spec *enterpriseApi.SearchHeadClusterSpec,
+) error {
+	if spec == nil || spec.LifecyclePolicy == nil ||
+		spec.LifecyclePolicy.ImageUpdateIntent == nil {
+		return nil
+	}
+	policy := spec.LifecyclePolicy
+	intent := policy.ImageUpdateIntent
+	if policy.PodUpdateStrategy !=
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate {
+		return fmt.Errorf(
+			"imageUpdateIntent requires podUpdateStrategy=%s",
+			enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+		)
+	}
+	if intent.Intent !=
+		enterpriseApi.SearchHeadClusterImageUpdateIntentSameVersionRestart {
+		return fmt.Errorf(
+			"unsupported Search Head Cluster image update intent %q",
+			intent.Intent,
+		)
+	}
+	if intent.SourceImage == "" || intent.TargetImage == "" {
+		return fmt.Errorf(
+			"imageUpdateIntent sourceImage and targetImage are required",
+		)
+	}
+	if intent.SourceImage == intent.TargetImage {
+		return fmt.Errorf(
+			"imageUpdateIntent sourceImage and targetImage must differ",
+		)
+	}
+	if intent.TargetImage != spec.Image {
+		return fmt.Errorf(
+			"imageUpdateIntent targetImage must exactly match spec.image",
+		)
+	}
+	return nil
+}

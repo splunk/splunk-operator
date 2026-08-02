@@ -667,6 +667,20 @@ func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeInitialization(
 	if err != nil {
 		return false, err
 	}
+	ordinaryImageRestart, err := mgr.classifyDeclaredSameVersionImageRestart(
+		state,
+		targetImage,
+	)
+	if err != nil {
+		mgr.recordImageUpgradeStatus(
+			enterpriseApi.SearchHeadClusterImageUpgradeReasonImageUpdateIntentMismatch,
+			err.Error(),
+		)
+		return false, err
+	}
+	if ordinaryImageRestart {
+		return true, nil
+	}
 	now := searchHeadClusterImageUpgradeNow()
 	pathDecision := upgrade.SHCImageUpgradePathUnknown
 	sourceImage := ""
@@ -872,6 +886,71 @@ func (mgr *searchHeadClusterPodManager) reconcileImageUpgradeInitialization(
 			initialization.Action,
 		)
 	}
+}
+
+// classifyDeclaredSameVersionImageRestart accepts only one exact image pair
+// and only while every Pod agrees with the StatefulSet partition boundary.
+// This makes runtime-only image replacement durable across reconciler restarts
+// without treating a customer declaration as general upgrade compatibility.
+func (mgr *searchHeadClusterPodManager) classifyDeclaredSameVersionImageRestart(
+	state upgrade.SHCRolloutState,
+	targetImage string,
+) (bool, error) {
+	if mgr.cr.Spec.LifecyclePolicy == nil ||
+		mgr.cr.Spec.LifecyclePolicy.ImageUpdateIntent == nil {
+		return false, nil
+	}
+	if shcImageUpgradeActive(mgr.cr.Status.ImageUpgrade) {
+		// A previously recorded version-upgrade workflow remains authoritative;
+		// a later ordinary-restart declaration cannot take over its identity.
+		return false, nil
+	}
+	intent := mgr.cr.Spec.LifecyclePolicy.ImageUpdateIntent
+	if intent.Intent !=
+		enterpriseApi.SearchHeadClusterImageUpdateIntentSameVersionRestart {
+		return false, fmt.Errorf(
+			"unsupported declared image update intent %q",
+			intent.Intent,
+		)
+	}
+	if intent.TargetImage != targetImage ||
+		intent.TargetImage != mgr.cr.Spec.Image {
+		return false, fmt.Errorf(
+			"declared same-version target image does not match the desired StatefulSet image",
+		)
+	}
+	if intent.SourceImage == intent.TargetImage {
+		return false, fmt.Errorf(
+			"declared same-version source and target images must differ",
+		)
+	}
+	if state.Partition < 0 || state.Partition > state.Replicas ||
+		len(state.Pods) != int(state.Replicas) {
+		return false, fmt.Errorf(
+			"declared same-version image update has an incomplete partition observation",
+		)
+	}
+	for _, pod := range state.Pods {
+		if !pod.Exists || pod.Deleting || !pod.Ready || pod.Ordinal < 0 ||
+			pod.Ordinal >= state.Replicas {
+			return false, fmt.Errorf(
+				"declared same-version image update requires every expected Pod to be stably ready",
+			)
+		}
+		expectedImage := intent.SourceImage
+		expectedRevision := state.CurrentRevision
+		if pod.Ordinal >= state.Partition {
+			expectedImage = intent.TargetImage
+			expectedRevision = state.UpdateRevision
+		}
+		if pod.Image != expectedImage || pod.Revision != expectedRevision {
+			return false, fmt.Errorf(
+				"declared same-version image update does not match the StatefulSet partition boundary at ordinal %d",
+				pod.Ordinal,
+			)
+		}
+	}
+	return true, nil
 }
 
 func (mgr *searchHeadClusterPodManager) selectImageUpgradeManagementTarget(

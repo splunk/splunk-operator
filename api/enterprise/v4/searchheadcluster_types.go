@@ -49,6 +49,38 @@ const (
 	SearchHeadClusterPodUpdateStrategyRollingUpdate SearchHeadClusterPodUpdateStrategy = "RollingUpdate"
 )
 
+// SearchHeadClusterImageUpdateIntent identifies an explicit classification
+// for one exact Search Head Cluster image transition.
+// +kubebuilder:validation:Enum=SameVersionRestart
+type SearchHeadClusterImageUpdateIntent string
+
+const (
+	// SearchHeadClusterImageUpdateIntentSameVersionRestart declares that the
+	// exact source and target images contain the same Splunk Enterprise build.
+	// The Operator may therefore use the ordinary per-Pod lifecycle without
+	// invoking Splunk's version-upgrade initialization or finalization APIs.
+	SearchHeadClusterImageUpdateIntentSameVersionRestart SearchHeadClusterImageUpdateIntent = "SameVersionRestart"
+)
+
+// SearchHeadClusterImageUpdateIntentSpec binds one declared image-update
+// intent to an exact immutable source and target pair. Retaining both values
+// prevents a declaration from authorizing a later unrelated image change.
+type SearchHeadClusterImageUpdateIntentSpec struct {
+	// Intent classifies the exact source-to-target transition.
+	Intent SearchHeadClusterImageUpdateIntent `json:"intent"`
+
+	// SourceImage must equal the image declared by every not-yet-replaced
+	// Search Head Pod.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	SourceImage string `json:"sourceImage"`
+
+	// TargetImage must equal spec.image and the desired StatefulSet image.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	TargetImage string `json:"targetImage"`
+}
+
 // SearchHeadClusterLifecycleApprovalAction identifies one explicitly approved
 // exception to the default fail-closed lifecycle policy.
 // +kubebuilder:validation:Enum=ContinueAfterSearchDrainTimeout
@@ -85,6 +117,12 @@ type SearchHeadClusterLifecyclePolicy struct {
 	// OnDelete.
 	// +optional
 	PodUpdateStrategy SearchHeadClusterPodUpdateStrategy `json:"podUpdateStrategy,omitempty"`
+
+	// ImageUpdateIntent explicitly classifies one exact source-to-target image
+	// transition. Omission preserves fail-closed image-upgrade classification.
+	// SameVersionRestart is valid only with podUpdateStrategy=RollingUpdate.
+	// +optional
+	ImageUpdateIntent *SearchHeadClusterImageUpdateIntentSpec `json:"imageUpdateIntent,omitempty"`
 
 	// DetentionTimeoutSeconds bounds the wait for traffic withdrawal and
 	// authoritative confirmation that the target entered manual detention.
@@ -322,6 +360,7 @@ const (
 	SearchHeadClusterImageUpgradeReasonFinalizationSucceeded        SearchHeadClusterImageUpgradeReason = "FinalizationSucceeded"
 	SearchHeadClusterImageUpgradeReasonUnsupportedUpgradePath       SearchHeadClusterImageUpgradeReason = "UnsupportedUpgradePath"
 	SearchHeadClusterImageUpgradeReasonUnknownUpgradePath           SearchHeadClusterImageUpgradeReason = "UnknownUpgradePath"
+	SearchHeadClusterImageUpgradeReasonImageUpdateIntentMismatch    SearchHeadClusterImageUpgradeReason = "ImageUpdateIntentMismatch"
 	SearchHeadClusterImageUpgradeReasonRevisionConflict             SearchHeadClusterImageUpgradeReason = "RevisionConflict"
 	SearchHeadClusterImageUpgradeReasonTargetImageConflict          SearchHeadClusterImageUpgradeReason = "TargetImageConflict"
 	SearchHeadClusterImageUpgradeReasonReplicaConflict              SearchHeadClusterImageUpgradeReason = "ReplicaConflict"

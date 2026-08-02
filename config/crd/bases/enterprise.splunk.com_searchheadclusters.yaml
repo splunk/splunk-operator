@@ -6910,6 +6910,32 @@ spec:
                     maximum: 86400
                     minimum: 1
                     type: integer
+                  imageUpdateIntent:
+                    description: |-
+                      ImageUpdateIntent explicitly classifies one exact source-to-target image
+                      transition. Omission preserves fail-closed image-upgrade classification.
+                      SameVersionRestart is valid only with podUpdateStrategy=RollingUpdate.
+                    properties:
+                      intent:
+                        description: Intent classifies the exact source-to-target
+                          transition.
+                        enum:
+                        - SameVersionRestart
+                        type: string
+                      sourceImage:
+                        description: |-
+                          SourceImage must equal the image declared by every not-yet-replaced
+                          Search Head Pod.
+                        maxLength: 2048
+                        minLength: 1
+                        type: string
+                      targetImage:
+                        description: TargetImage must equal spec.image and the desired
+                          StatefulSet image.
+                        maxLength: 2048
+                        minLength: 1
+                        type: string
+                    type: object
                   memberRejoinTimeoutSeconds:
                     description: |-
                       MemberRejoinTimeoutSeconds bounds the wait for a replaced member to

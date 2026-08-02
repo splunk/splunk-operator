@@ -631,6 +631,150 @@ func TestRollingUpdateControllerTreatsSameImageAsOrdinaryRollout(t *testing.T) {
 	}
 }
 
+func TestRollingUpdateControllerAcceptsExactSameVersionImageRestartIntent(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, _ := rollingUpdateControllerFixture(
+		t,
+		3,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-1"},
+	)
+	sourceImage := "splunk/splunk:9.4.0"
+	targetImage := "registry.example/splunk@sha256:target"
+	setDeclaredSameVersionImageRestart(
+		mgr,
+		statefulSet,
+		sourceImage,
+		targetImage,
+	)
+
+	oldValidate := validateSearchHeadClusterImageUpgradePath
+	t.Cleanup(func() { validateSearchHeadClusterImageUpgradePath = oldValidate })
+	validationCalls := 0
+	validateSearchHeadClusterImageUpgradePath = func(
+		context.Context,
+		string,
+		string,
+	) (upgrade.SHCImageUpgradePathDecision, error) {
+		validationCalls++
+		return upgrade.SHCImageUpgradePathUnknown, nil
+	}
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil || phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("same-version restart phase=%q error=%v", phase, err)
+	}
+	if validationCalls != 0 || mgr.cr.Status.ImageUpgrade != nil ||
+		mgr.cr.Status.LifecycleOperation == nil ||
+		mgr.cr.Status.LifecycleOperation.TargetOrdinal == nil ||
+		*mgr.cr.Status.LifecycleOperation.TargetOrdinal != 2 {
+		t.Fatalf(
+			"same-version restart validations=%d image=%#v lifecycle=%#v",
+			validationCalls,
+			mgr.cr.Status.ImageUpgrade,
+			mgr.cr.Status.LifecycleOperation,
+		)
+	}
+}
+
+func TestRollingUpdateControllerContinuesExactSameVersionImageRestartAfterOrdinal(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, client := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-2"},
+	)
+	sourceImage := "splunk/splunk:9.4.0"
+	targetImage := "registry.example/splunk@sha256:target"
+	setDeclaredSameVersionImageRestart(
+		mgr,
+		statefulSet,
+		sourceImage,
+		targetImage,
+	)
+	setCompletedSameVersionOrdinal(mgr, 2, "revision-2")
+	pod := &corev1.Pod{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Namespace: statefulSet.GetNamespace(),
+		Name:      statefulSet.GetName() + "-2",
+	}, pod); err != nil {
+		t.Fatalf("get replaced Pod: %v", err)
+	}
+	pod.Spec.Containers[0].Image = targetImage
+	if err := client.Update(context.Background(), pod); err != nil {
+		t.Fatalf("update replaced Pod: %v", err)
+	}
+	client.ResetCalls()
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	if err != nil || phase != enterpriseApi.PhaseUpdating {
+		t.Fatalf("continued same-version restart phase=%q error=%v", phase, err)
+	}
+	operation := mgr.cr.Status.LifecycleOperation
+	if operation == nil || operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != 1 || mgr.cr.Status.ImageUpgrade != nil {
+		t.Fatalf("continued same-version lifecycle=%#v image=%#v", operation, mgr.cr.Status.ImageUpgrade)
+	}
+}
+
+func TestRollingUpdateControllerRejectsSameVersionIntentOutsidePartitionBoundary(
+	t *testing.T,
+) {
+	setLifecyclePolicyTestGates(t, true, true)
+	mgr, statefulSet, _ := rollingUpdateControllerFixture(
+		t,
+		2,
+		"revision-1",
+		"revision-2",
+		[]string{"revision-1", "revision-1", "revision-2"},
+	)
+	setDeclaredSameVersionImageRestart(
+		mgr,
+		statefulSet,
+		"splunk/splunk:9.4.0",
+		"registry.example/splunk@sha256:target",
+	)
+	setCompletedSameVersionOrdinal(mgr, 2, "revision-2")
+
+	phase, err := mgr.updateRollingStatefulSetPods(
+		context.Background(),
+		statefulSet,
+		3,
+	)
+	operation := mgr.cr.Status.LifecycleOperation
+	if err == nil || phase != enterpriseApi.PhaseError ||
+		operation == nil || operation.TargetOrdinal == nil ||
+		*operation.TargetOrdinal != 2 ||
+		operation.Stage != enterpriseApi.SearchHeadClusterLifecycleStageCompleted ||
+		!strings.Contains(
+			mgr.cr.Status.Message,
+			string(enterpriseApi.SearchHeadClusterImageUpgradeReasonImageUpdateIntentMismatch),
+		) {
+		t.Fatalf(
+			"partition mismatch phase=%q error=%v lifecycle=%#v message=%q",
+			phase,
+			err,
+			operation,
+			mgr.cr.Status.Message,
+		)
+	}
+}
+
 func TestRollingUpdateControllerPersistsImageInitializationBeforeMemberLifecycle(t *testing.T) {
 	setLifecyclePolicyTestGates(t, true, true)
 	mgr, statefulSet, client := rollingUpdateControllerFixture(
@@ -5113,6 +5257,38 @@ func configureImageUpgradeControllerFixture(
 			StartedAt:          &startedAt,
 			PhaseStartedAt:     &startedAt,
 			LastTransitionTime: &startedAt,
+		}
+}
+
+func setDeclaredSameVersionImageRestart(
+	mgr *searchHeadClusterPodManager,
+	statefulSet *appsv1.StatefulSet,
+	sourceImage string,
+	targetImage string,
+) {
+	mgr.cr.Spec.Image = targetImage
+	mgr.cr.Spec.LifecyclePolicy.ImageUpdateIntent =
+		&enterpriseApi.SearchHeadClusterImageUpdateIntentSpec{
+			Intent:      enterpriseApi.SearchHeadClusterImageUpdateIntentSameVersionRestart,
+			SourceImage: sourceImage,
+			TargetImage: targetImage,
+		}
+	statefulSet.Spec.Template.Spec.Containers[0].Image = targetImage
+}
+
+func setCompletedSameVersionOrdinal(
+	mgr *searchHeadClusterPodManager,
+	ordinal int32,
+	desiredRevision string,
+) {
+	authorizedAt := metav1.Now()
+	mgr.cr.Status.LifecycleOperation =
+		&enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+			Intent:                  enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+			DesiredRevision:         desiredRevision,
+			TargetOrdinal:           &ordinal,
+			Stage:                   enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+			ReplacementAuthorizedAt: &authorizedAt,
 		}
 }
 
