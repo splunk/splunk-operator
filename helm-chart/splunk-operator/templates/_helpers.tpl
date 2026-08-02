@@ -101,6 +101,14 @@ cluster-scoped APIs, so a namespaced Role cannot grant this access.
 {{- end -}}
 {{- end }}
 
+{{- define "splunk-operator.metricsReaderRoleName" -}}
+{{- if .Values.splunkOperator.clusterWideAccess -}}
+{{- printf "%s-metrics-reader" (include "splunk-operator.operator.fullname" .) | trunc 253 | trimSuffix "-" }}
+{{- else -}}
+{{- printf "%s-metrics-reader-%s" (include "splunk-operator.operator.fullname" .) (include "splunk-operator.namespace" . | sha256sum | trunc 8) | trunc 253 | trimSuffix "-" }}
+{{- end -}}
+{{- end }}
+
 {{/*
 Format splunkOperator.featureGates map into a --feature-gates arg value.
 Produces: Key1=true,Key2=false

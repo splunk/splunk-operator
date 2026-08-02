@@ -1,11 +1,9 @@
-{{- if .Values.splunkOperator.clusterWideAccess }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "splunk-operator.operator.fullname" . }}-metrics-reader
+  name: {{ include "splunk-operator.metricsReaderRoleName" . }}
 rules:
 - nonResourceURLs:
   - "/metrics"
   verbs:
   - get
-{{- end }}

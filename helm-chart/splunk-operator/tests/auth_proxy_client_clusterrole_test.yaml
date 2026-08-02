@@ -1,0 +1,33 @@
+suite: metrics reader ClusterRole placement
+templates:
+  - templates/rbac/auth_proxy_client_clusterrole.yaml
+tests:
+  - it: should create a unique metrics reader role for a namespace-scoped operator
+    release:
+      namespace: release-namespace
+    set:
+      namespaceOverride: watched-namespace
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: splunk-operator-metrics-reader-7c7a408c
+      - equal:
+          path: rules[0]
+          value:
+            nonResourceURLs:
+              - /metrics
+            verbs:
+              - get
+
+  - it: should preserve the existing cluster-wide metrics reader name
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: splunk-operator-metrics-reader
