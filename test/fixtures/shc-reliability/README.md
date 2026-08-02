@@ -109,10 +109,6 @@ tokens. `make shc-final-manifest-test` validates reproducible rendering. Before
 applying the output, create `shcfinal-license` with `enterprise.lic` and
 `s3-secret` with `s3_access_key` and `s3_secret_key` in the rendered namespace.
 The credentials and license are never written to the manifest or evidence.
-The Cluster Manager fixture explicitly sets
-`server.conf/[clustering]/rolling_restart=searchable`; qualification must
-still verify the effective setting and the Cluster Manager's `searchable=1`
-restart record at runtime.
 
 ## SHC-83 initial-formation readiness
 

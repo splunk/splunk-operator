@@ -62,11 +62,6 @@ spec:
       idxc:
         replication_factor: 3
         search_factor: 2
-      conf:
-        server:
-          content:
-            clustering:
-              rolling_restart: searchable
   appRepo:
     appsRepoPollIntervalSeconds: 60
     defaults:
