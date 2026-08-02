@@ -27,12 +27,24 @@ class PackageRestartAppTest(unittest.TestCase):
             "[splunktcp://9997]\ndisabled = false\n",
             encoding="utf-8",
         )
+        (self.source / "default" / "health.conf").write_text(
+            "[clustering]\ndisabled = 0\nhealth_report_period = 24\n",
+            encoding="utf-8",
+        )
         self.original_app_conf = (self.source / "default" / "app.conf").read_bytes()
+        self.original_health_conf = (self.source / "default" / "health.conf").read_bytes()
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
 
-    def run_packager(self, output: Path, version: str = "2.3.4") -> subprocess.CompletedProcess[str]:
+    def run_packager(
+        self,
+        output: Path,
+        version: str = "2.3.4",
+        *,
+        vary_health_report_period: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        extra_arguments = ["--vary-health-report-period"] if vary_health_report_period else []
         return subprocess.run(
             [
                 sys.executable,
@@ -43,6 +55,7 @@ class PackageRestartAppTest(unittest.TestCase):
                 version,
                 "--output",
                 str(output),
+                *extra_arguments,
             ],
             check=False,
             capture_output=True,
@@ -60,6 +73,10 @@ class PackageRestartAppTest(unittest.TestCase):
         self.assertEqual(first.read_bytes(), second.read_bytes())
         self.assertIn(hashlib.sha256(first.read_bytes()).hexdigest(), first_result.stdout)
         self.assertEqual((self.source / "default" / "app.conf").read_bytes(), self.original_app_conf)
+        self.assertEqual(
+            (self.source / "default" / "health.conf").read_bytes(),
+            self.original_health_conf,
+        )
 
         with tarfile.open(first, mode="r:gz") as archive:
             names = archive.getnames()
@@ -74,6 +91,33 @@ class PackageRestartAppTest(unittest.TestCase):
                 self.assertEqual(member.uname, "")
                 self.assertEqual(member.gname, "")
                 self.assertEqual(member.mode, 0o755 if member.isdir() else 0o644)
+
+    def test_health_report_period_varies_with_patch_version(self) -> None:
+        first = self.root / "first-health.tgz"
+        second = self.root / "second-health.tgz"
+
+        first_result = self.run_packager(
+            first, version="1.0.2", vary_health_report_period=True
+        )
+        second_result = self.run_packager(
+            second, version="1.0.3", vary_health_report_period=True
+        )
+
+        self.assertEqual(first_result.returncode, 0, first_result.stderr)
+        self.assertEqual(second_result.returncode, 0, second_result.stderr)
+        self.assertNotEqual(first.read_bytes(), second.read_bytes())
+        with tarfile.open(first, mode="r:gz") as archive:
+            health_conf = archive.extractfile("qualification_app/default/health.conf")
+            self.assertIsNotNone(health_conf)
+            self.assertIn(b"health_report_period = 26", health_conf.read())
+        with tarfile.open(second, mode="r:gz") as archive:
+            health_conf = archive.extractfile("qualification_app/default/health.conf")
+            self.assertIsNotNone(health_conf)
+            self.assertIn(b"health_report_period = 27", health_conf.read())
+        self.assertEqual(
+            (self.source / "default" / "health.conf").read_bytes(),
+            self.original_health_conf,
+        )
 
     def test_invalid_version_is_rejected_without_output(self) -> None:
         output = self.root / "invalid.tgz"

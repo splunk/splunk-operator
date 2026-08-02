@@ -16,6 +16,9 @@ import tempfile
 
 VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 APP_CONF_VERSION_PATTERN = re.compile(r"^version\s*=.*$", re.MULTILINE)
+HEALTH_REPORT_PERIOD_PATTERN = re.compile(
+    r"^health_report_period\s*=.*$", re.MULTILINE
+)
 
 
 def _archive_info(name: str, *, directory: bool, executable: bool = False) -> tarfile.TarInfo:
@@ -35,22 +38,45 @@ def _archive_info(name: str, *, directory: bool, executable: bool = False) -> ta
     return info
 
 
-def _file_data(path: Path, relative_path: Path, version: str) -> bytes:
+def _file_data(
+    path: Path,
+    relative_path: Path,
+    version: str,
+    *,
+    vary_health_report_period: bool,
+) -> bytes:
     data = path.read_bytes()
-    if relative_path.as_posix() != "default/app.conf":
+    relative_name = relative_path.as_posix()
+    if relative_name not in {"default/app.conf", "default/health.conf"}:
         return data
 
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as error:
         raise ValueError(f"{path} must be UTF-8 text") from error
-    text, replacements = APP_CONF_VERSION_PATTERN.subn(f"version = {version}", text)
-    if replacements != 1:
-        raise ValueError(f"{path} must contain exactly one version setting")
+    if relative_name == "default/app.conf":
+        text, replacements = APP_CONF_VERSION_PATTERN.subn(f"version = {version}", text)
+        if replacements != 1:
+            raise ValueError(f"{path} must contain exactly one version setting")
+    elif vary_health_report_period:
+        patch_version = int(version.rsplit(".", maxsplit=1)[1])
+        text, replacements = HEALTH_REPORT_PERIOD_PATTERN.subn(
+            f"health_report_period = {24 + patch_version}", text
+        )
+        if replacements != 1:
+            raise ValueError(
+                f"{path} must contain exactly one health_report_period setting"
+            )
     return text.encode("utf-8")
 
 
-def build_archive(source_dir: Path, version: str, output: Path) -> str:
+def build_archive(
+    source_dir: Path,
+    version: str,
+    output: Path,
+    *,
+    vary_health_report_period: bool = False,
+) -> str:
     """Create the archive and return its SHA-256 digest."""
     source_dir = source_dir.resolve()
     if not source_dir.is_dir():
@@ -82,7 +108,12 @@ def build_archive(source_dir: Path, version: str, output: Path) -> str:
                             continue
                         if not path.is_file():
                             raise ValueError(f"unsupported fixture entry: {path}")
-                        data = _file_data(path, relative_path, version)
+                        data = _file_data(
+                            path,
+                            relative_path,
+                            version,
+                            vary_health_report_period=vary_health_report_period,
+                        )
                         executable = bool(path.stat().st_mode & 0o111)
                         info = _archive_info(archive_name, directory=False, executable=executable)
                         info.size = len(data)
@@ -102,10 +133,23 @@ def main() -> int:
     parser.add_argument("--source-dir", required=True, type=Path)
     parser.add_argument("--version", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--vary-health-report-period",
+        action="store_true",
+        help=(
+            "derive health_report_period from the patch version so successive "
+            "indexer fixture versions exercise restart-required bundle updates"
+        ),
+    )
     arguments = parser.parse_args()
 
     try:
-        digest = build_archive(arguments.source_dir, arguments.version, arguments.output)
+        digest = build_archive(
+            arguments.source_dir,
+            arguments.version,
+            arguments.output,
+            vary_health_report_period=arguments.vary_health_report_period,
+        )
     except ValueError as error:
         parser.error(str(error))
     print(f"{digest}  {arguments.output}")

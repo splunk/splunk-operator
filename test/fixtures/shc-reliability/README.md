@@ -54,11 +54,14 @@ and `curl`.
 The evidence log is written below `build/_test/shc82` unless
 `SHC82_EVIDENCE_FILE` specifies another location.
 
-`shc82_indexer_restart_required` is the separate indexer-cluster fixture. It
-uses the `health.conf` change observed by the live 10.5 qualification to set
-`restart_required_for_apply_bundle=true`; it must not be substituted with the
-Search Head fixture because that app reloaded on the tested indexers without a
-restart. Build a versioned indexer archive with:
+`shc82_indexer_restart_required` is the separate indexer-cluster fixture. Its
+packaging target deterministically derives `health_report_period` from the
+requested patch version, so overwriting one stable remote object key with a
+new fixture version changes `health.conf`. That change was observed by the live
+10.5 qualification to set `restart_required_for_apply_bundle=true`; the
+fixture must not be substituted with the Search Head fixture because that app
+reloaded on the tested indexers without a restart. Build a versioned indexer
+archive with:
 
 ```text
 make shc82-indexer-app-package SHC82_INDEXER_APP_VERSION=1.0.0

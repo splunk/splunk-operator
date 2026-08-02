@@ -180,6 +180,7 @@ shc82-indexer-app-package: ## Package the deterministic SHC-82 indexer restart-r
 	$(SHC_RELIABILITY_PYTHON) "$(SHC82_APP_PACKAGER)" \
 		--source-dir "$(SHC82_INDEXER_APP_SOURCE_DIR)" \
 		--version "$(SHC82_INDEXER_APP_VERSION)" \
+		--vary-health-report-period \
 		--output "$(SHC82_INDEXER_APP_OUTPUT)"
 
 shc82-app-package-test: ## Test deterministic SHC-82 app archive generation.
