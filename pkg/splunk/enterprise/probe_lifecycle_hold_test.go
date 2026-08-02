@@ -53,6 +53,31 @@ func TestIndexerReadinessWithdrawalSetsLifecycleHold(t *testing.T) {
 	)
 }
 
+func TestIndexerReadinessWithdrawalRequiresExplicitLifecycleHold(t *testing.T) {
+	scriptPath := filepath.Join(
+		"..",
+		"..",
+		"..",
+		"tools",
+		"k8_probes",
+		"readinessProbe.sh",
+	)
+	script, err := os.ReadFile(scriptPath)
+	require.NoError(t, err)
+
+	require.Contains(
+		t,
+		string(script),
+		`if [[ "true" == "$SPLUNK_OPERATOR_LIFECYCLE_HOLD" ]]; then`,
+	)
+	require.NotContains(
+		t,
+		string(script),
+		`if [[ "1" == "$K8_OPERATOR_LIVENESS_LEVEL" ]]; then
+            echo "Indexer is in an Operator-owned lifecycle transition"`,
+	)
+}
+
 func TestLivenessProbeLifecycleHold(t *testing.T) {
 	scriptPath := filepath.Join(
 		"..",

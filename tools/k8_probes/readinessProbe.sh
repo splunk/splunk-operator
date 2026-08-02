@@ -34,7 +34,12 @@ if [[ "" == "$NO_HEALTHCHECK" ]]; then
     # before the legacy liveness-level bypass because that bypass is used
     # during intentional indexer decommission.
     if [[ "true" == "$SPLUNK_OPERATOR_INDEXER_SERVING_READINESS" && "splunk_indexer" == "$SPLUNK_ROLE" ]]; then
-        if [[ "1" == "$K8_OPERATOR_LIVENESS_LEVEL" ]]; then
+        # K8_OPERATOR_LIVENESS_LEVEL is also set on every peer while App
+        # Framework owns a Splunk-managed cluster-bundle restart. It is a
+        # liveness policy, not proof that this peer is the one Operator-owned
+        # lifecycle target. Only the explicit target hold marker withdraws the
+        # peer before decommission and Kubernetes replacement.
+        if [[ "true" == "$SPLUNK_OPERATOR_LIFECYCLE_HOLD" ]]; then
             echo "Indexer is in an Operator-owned lifecycle transition"
             exit 1
         fi
