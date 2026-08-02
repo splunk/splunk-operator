@@ -1,0 +1,213 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: __NAMESPACE__
+  labels:
+    qualification.splunk.com/campaign: shc-final
+---
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: shcfinal
+  namespace: __NAMESPACE__
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: __RUNTIME_IMAGE__
+  imagePullPolicy: IfNotPresent
+  volumes:
+    - name: licenses
+      secret:
+        secretName: shcfinal-license
+  licenseUrl: /mnt/licenses/enterprise.lic
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 80
+    terminationGracePeriodSeconds: 660
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+    terminationGracePeriodSeconds: 660
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 2
+    periodSeconds: 2
+    failureThreshold: 1
+  terminationGracePeriodSeconds: 1200
+---
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: shcfinal
+  namespace: __NAMESPACE__
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: __RUNTIME_IMAGE__
+  imagePullPolicy: IfNotPresent
+  licenseManagerRef:
+    name: shcfinal
+  defaults: |-
+    splunk:
+      idxc:
+        replication_factor: 3
+        search_factor: 2
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_indexer_app_repo
+      scope: cluster
+    appSources:
+      - name: indexerApps
+        location: apps/
+    volumes:
+      - name: volume_indexer_app_repo
+        storageType: s3
+        provider: aws
+        path: __S3_BUCKET__/__S3_PREFIX__/indexer/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: s3-secret
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 80
+    terminationGracePeriodSeconds: 660
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+    terminationGracePeriodSeconds: 660
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 2
+    periodSeconds: 2
+    failureThreshold: 1
+  terminationGracePeriodSeconds: 1200
+---
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: shcfinal-idxc
+  namespace: __NAMESPACE__
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: __RUNTIME_IMAGE__
+  imagePullPolicy: IfNotPresent
+  replicas: 4
+  clusterManagerRef:
+    name: shcfinal
+  licenseManagerRef:
+    name: shcfinal
+  podAnnotations:
+    qualification.splunk.com/shc-final-revision: baseline
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 80
+    terminationGracePeriodSeconds: 660
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+    terminationGracePeriodSeconds: 660
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 2
+    periodSeconds: 2
+    failureThreshold: 1
+  terminationGracePeriodSeconds: 1200
+---
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shcfinal-shc
+  namespace: __NAMESPACE__
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: __RUNTIME_IMAGE__
+  imagePullPolicy: IfNotPresent
+  replicas: 3
+  clusterManagerRef:
+    name: shcfinal
+  licenseManagerRef:
+    name: shcfinal
+  defaults: |-
+    splunk:
+      shc:
+        prestart_config: true
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_search_head_app_repo
+      scope: cluster
+    appSources:
+      - name: searchHeadApps
+        location: apps/
+    volumes:
+      - name: volume_search_head_app_repo
+        storageType: s3
+        provider: aws
+        path: __S3_BUCKET__/__S3_PREFIX__/search-head/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: s3-secret
+  lifecyclePolicy:
+    podUpdateStrategy: RollingUpdate
+    detentionTimeoutSeconds: 300
+    searchDrainTimeoutSeconds: 900
+    captainTransferTimeoutSeconds: 300
+    podStartupTimeoutSeconds: 2400
+    memberRejoinTimeoutSeconds: 2400
+  etcVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    storageClassName: gp3
+    storageCapacity: 10Gi
+  startupProbe:
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 80
+    terminationGracePeriodSeconds: 660
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 10
+    terminationGracePeriodSeconds: 660
+  readinessProbe:
+    initialDelaySeconds: 10
+    timeoutSeconds: 2
+    periodSeconds: 2
+    failureThreshold: 1
+  terminationGracePeriodSeconds: 1200

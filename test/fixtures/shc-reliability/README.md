@@ -66,6 +66,32 @@ only the archived `default/app.conf` version, leaves the checked-in source
 unchanged, and normalizes archive order, timestamps, ownership, and modes.
 Run `make shc82-app-package-test` to validate determinism on the current host.
 
+## Final integrated qualification manifest
+
+`shc-final-qualification-cluster.yaml.in` is the clean-campaign topology: one
+License Manager, one Cluster Manager, four RF3/SF2 indexers, and three Search
+Heads using opt-in partition-gated `RollingUpdate`. Both App Framework paths
+are configured but must be empty during cluster formation. The manifest uses
+extended startup, liveness-termination, Pod-termination, and lifecycle
+budgets so a slow persistent-volume restart or KV Store check is not restarted
+from the beginning by an undersized kubelet clock.
+
+Render it only with the final runtime image resolved by digest:
+
+```text
+make shc-final-manifest \
+  SHC_FINAL_RUNTIME_IMAGE=<repository>:<tag>@sha256:<digest> \
+  SHC_FINAL_NAMESPACE=shc-final-qualification \
+  SHC_FINAL_S3_BUCKET=vivekr-shc82-afw-667741767953-us-west-2 \
+  SHC_FINAL_S3_PREFIX=shc-final
+```
+
+The renderer rejects mutable-only image references and unresolved template
+tokens. `make shc-final-manifest-test` validates reproducible rendering. Before
+applying the output, create `shcfinal-license` with `enterprise.lic` and
+`s3-secret` with `s3_access_key` and `s3_secret_key` in the rendered namespace.
+The credentials and license are never written to the manifest or evidence.
+
 ## SHC-83 initial-formation readiness
 
 `shc83-startup-readiness-cluster.yaml` creates an isolated LicenseManager and

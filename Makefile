@@ -153,6 +153,13 @@ SHC82_INDEXER_APP_VERSION ?= 1.0.0
 SHC82_INDEXER_APP_OUTPUT ?= build/_test/shc82/shc82_indexer_restart_required-$(SHC82_INDEXER_APP_VERSION).tgz
 SHC82_APP_PACKAGER ?= test/fixtures/shc-reliability/package_restart_app.py
 SHC_RELIABILITY_PYTHON ?= python3
+SHC_FINAL_MANIFEST_RENDERER ?= test/fixtures/shc-reliability/render_shc_final_manifest.py
+SHC_FINAL_MANIFEST_TEMPLATE ?= test/fixtures/shc-reliability/shc-final-qualification-cluster.yaml.in
+SHC_FINAL_MANIFEST_OUTPUT ?= build/_test/shc-final/shc-final-qualification-cluster.yaml
+SHC_FINAL_NAMESPACE ?= shc-final-qualification
+SHC_FINAL_RUNTIME_IMAGE ?=
+SHC_FINAL_S3_BUCKET ?= vivekr-shc82-afw-667741767953-us-west-2
+SHC_FINAL_S3_PREFIX ?= shc-final
 SHC82_NAMESPACE ?= shc82-afw-baseline
 SHC82_LICENSE_FILE ?=
 SHC83_NAMESPACE ?= shc83-startup-readiness
@@ -162,7 +169,7 @@ SHC84_LICENSE_FILE ?=
 SHC85_NAMESPACE ?= shc85-lifecycle-hold
 SHC85_LICENSE_FILE ?=
 
-.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload
+.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
 	$(SHC_RELIABILITY_PYTHON) "$(SHC82_APP_PACKAGER)" \
 		--source-dir "$(SHC82_APP_SOURCE_DIR)" \
@@ -179,6 +186,20 @@ shc82-app-package-test: ## Test deterministic SHC-82 app archive generation.
 	$(SHC_RELIABILITY_PYTHON) -m unittest discover \
 		-s test/fixtures/shc-reliability \
 		-p 'test_package_restart_app.py' -v
+
+shc-final-manifest: ## Render a digest-pinned final SHC qualification manifest.
+	$(SHC_RELIABILITY_PYTHON) "$(SHC_FINAL_MANIFEST_RENDERER)" \
+		--template "$(SHC_FINAL_MANIFEST_TEMPLATE)" \
+		--output "$(SHC_FINAL_MANIFEST_OUTPUT)" \
+		--namespace "$(SHC_FINAL_NAMESPACE)" \
+		--runtime-image "$(SHC_FINAL_RUNTIME_IMAGE)" \
+		--s3-bucket "$(SHC_FINAL_S3_BUCKET)" \
+		--s3-prefix "$(SHC_FINAL_S3_PREFIX)"
+
+shc-final-manifest-test: ## Test final SHC qualification manifest rendering.
+	$(SHC_RELIABILITY_PYTHON) -m unittest discover \
+		-s test/fixtures/shc-reliability \
+		-p 'test_render_shc_final_manifest.py' -v
 
 shc82-license-secret: ## Create or update the SHC-82 LicenseManager license Secret.
 	@test -n "$(SHC82_LICENSE_FILE)" || \
