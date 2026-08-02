@@ -54,8 +54,12 @@ it is not converted into a qualified claim by documentation alone.
   specifications passed with 78.3 percent composite coverage. Formatting,
   vet, manifests, and generation ran through the Make prerequisites, and
   `git diff --check` passed.
-- [ ] Reproduce the exact Operator commit on the Linux vWorkstation with the
-  repository Makefile gates.
+- [x] (2026-08-02 UTC) Reproduced exact Operator commit `6108b04d9` on the
+  Linux vWorkstation. `make build`, full `make test`, and `make helm-check`
+  passed; the controller JUnit report contained 194 nodes with zero failures
+  or errors, composite coverage was 78.3 percent, and the Helm gates passed 60
+  Operator plus 90 Universal Forwarder tests. Generation left the repository
+  clean.
 - [ ] Audit and freeze the final Docker-Splunk branch and its exact Splunk
   Ansible commit; pass source gates and build the runtime image on Linux.
 - [ ] Complete SHC-85 distributed-search convergence analysis and explicitly
@@ -199,13 +203,13 @@ The final record must include:
 
 The final outcome is not yet claimed. Current evidence establishes that the
 cumulative SHC-93 source can be combined with the current upstream branch and
-that the complete macOS source gate passes after resolving the two
-merge-boundary test/contract conflicts. Linux reproduction, final
-Docker-Splunk freezing, immutable image builds, SHC-82/SHC-85 closure, and the
-clean EKS campaign remain required before this plan can be marked complete.
+that the complete macOS and Linux source gates pass after resolving the two
+merge-boundary test/contract conflicts. Final Docker-Splunk freezing,
+immutable image builds, SHC-82/SHC-85 closure, and the clean EKS campaign
+remain required before this plan can be marked complete.
 
 Revision note (2026-08-02 UTC): created this integration ExecPlan after the
 branch/patch audit and during the first complete post-merge source gate; then
-updated it with merge commits and the passing macOS result. The plan records
-facts already established and leaves all incomplete qualification as unchecked
-work.
+updated it with merge commits and the passing macOS and Linux results. The plan
+records facts already established and leaves all incomplete qualification as
+unchecked work.
