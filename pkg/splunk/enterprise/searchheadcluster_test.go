@@ -88,7 +88,7 @@ func TestValidateSHCDefaultsRestartSafetyFromObservedState(t *testing.T) {
     server:
       content:
         shclustering:
-          shcluster_label: production
+          rolling_restart: searchable
 `
 	)
 

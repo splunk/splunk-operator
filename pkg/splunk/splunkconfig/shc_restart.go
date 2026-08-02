@@ -51,8 +51,11 @@ type inlineDefaultsConfFile struct {
 
 // ClassifySHCDefaultsRestart compares two inline defaults documents. Splunk
 // permits captain_is_adhoc_searchhead and shcluster_label to change through a
-// rolling restart. A change to any other [shclustering] setting requires an
-// approximately simultaneous restart and must not enter a phased rollout.
+// rolling restart. Splunk documents rolling_restart and
+// decommission_search_jobs_wait_secs as live-editable settings that do not
+// require a member restart. A change to any other [shclustering] setting
+// requires an approximately simultaneous restart and must not enter a phased
+// rollout.
 func ClassifySHCDefaultsRestart(
 	defaults string,
 	previousDefaults string,
@@ -90,7 +93,11 @@ func ClassifySHCDefaultsRestart(
 	sort.Strings(changedNames)
 
 	for _, name := range changedNames {
-		if name == "captain_is_adhoc_searchhead" || name == "shcluster_label" {
+		switch name {
+		case "captain_is_adhoc_searchhead",
+			"shcluster_label",
+			"rolling_restart",
+			"decommission_search_jobs_wait_secs":
 			continue
 		}
 		return SHCDefaultsRestartClassification{

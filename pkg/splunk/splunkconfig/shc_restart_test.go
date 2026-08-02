@@ -46,11 +46,15 @@ func TestClassifySHCDefaultsRestart(t *testing.T) {
 			name: "rolling compatible settings",
 			previous: defaults(
 				"          captain_is_adhoc_searchhead: false\n" +
-					"          shcluster_label: old\n",
+					"          shcluster_label: old\n" +
+					"          rolling_restart: restart\n" +
+					"          decommission_search_jobs_wait_secs: 180\n",
 			),
 			current: defaults(
 				"          captain_is_adhoc_searchhead: true\n" +
-					"          shcluster_label: new\n",
+					"          shcluster_label: new\n" +
+					"          rolling_restart: searchable\n" +
+					"          decommission_search_jobs_wait_secs: 300\n",
 			),
 		},
 		{
