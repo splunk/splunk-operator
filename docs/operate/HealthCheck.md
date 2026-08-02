@@ -35,14 +35,17 @@ multi-replica deployment, however, a synchronized and authorized standby is
 Ready even though it is not the current leader. Current leadership is a role
 that can transfer; it is not Pod health.
 
-The manager starts its health server before informer synchronization and leader
-election, so `/readyz` begins false. Before any replica can enter leader
-election, the readiness warmup explicitly requests and synchronizes the
-informer types used by the registered controllers. This is required because an
-otherwise empty controller-runtime cache is technically synchronized even
-though no controller watch has completed its initial list. The same warmup is
-performed by a future leader and every standby, which prevents a contender
-from being advertised as ready while its controller watches are still cold.
+The complete informer set used by the registered controllers is requested,
+without waiting, before the manager starts. The manager then starts its health
+server before informer synchronization and leader election, so `/readyz`
+begins false while `/healthz` is available. Controller-runtime's cache startup
+barrier waits for every pre-registered informer to complete its initial list;
+only after that barrier succeeds can it start the readiness monitor and enter
+leader election. Pre-registration is required because an otherwise empty
+controller-runtime cache is technically synchronized even though no controller
+watch has completed its initial list. The same barrier applies to a future
+leader and every standby, which prevents a contender from being advertised as
+ready or entering leader election while its controller watches are still cold.
 
 When leader election is enabled, the monitor also immediately submits three
 exact `SelfSubjectAccessReview` requests and repeats them every 10 seconds with

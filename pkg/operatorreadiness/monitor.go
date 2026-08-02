@@ -37,7 +37,6 @@ const (
 	EventReasonRecovered           = "OperatorReconciliationRecovered"
 	defaultRefreshInterval         = 10 * time.Second
 	defaultRequestTimeout          = 3 * time.Second
-	defaultCacheRetryInterval      = 10 * time.Second
 	coordinationAPIGroup           = "coordination.k8s.io"
 	leaseResource                  = "leases"
 )
@@ -62,12 +61,6 @@ type AccessReviewer interface {
 	) (*authorizationv1.SelfSubjectAccessReview, error)
 }
 
-// CacheSynchronizer establishes and synchronizes the informer set required by
-// every registered controller before this manager may become a leader.
-type CacheSynchronizer interface {
-	Synchronize(ctx context.Context) error
-}
-
 // Options configures one manager readiness monitor.
 type Options struct {
 	LeaderElectionEnabled bool
@@ -78,7 +71,6 @@ type Options struct {
 	PodUID                types.UID
 	RefreshInterval       time.Duration
 	RequestTimeout        time.Duration
-	CacheRetryInterval    time.Duration
 }
 
 type readinessState struct {
@@ -93,12 +85,11 @@ type readinessState struct {
 	cause             error
 }
 
-// Monitor warms the registered controller informers before leader election,
-// periodically checks the current service account's leader-Lease capability,
-// and serves a non-blocking healthz.Checker snapshot.
+// Monitor is started by controller-runtime only after its registered informer
+// cache has synchronized. It periodically checks the current service account's
+// leader-Lease capability and serves a non-blocking healthz.Checker snapshot.
 type Monitor struct {
 	reviewer  AccessReviewer
-	cache     CacheSynchronizer
 	logger    logr.Logger
 	recorder  record.EventRecorder
 	options   Options
@@ -112,17 +103,15 @@ type Monitor struct {
 // registry.
 func New(
 	reviewer AccessReviewer,
-	cacheSynchronizer CacheSynchronizer,
 	logger logr.Logger,
 	recorder record.EventRecorder,
 	options Options,
 ) (*Monitor, error) {
-	return newMonitor(reviewer, cacheSynchronizer, logger, recorder, options, prometheusTelemetry{})
+	return newMonitor(reviewer, logger, recorder, options, prometheusTelemetry{})
 }
 
 func newMonitor(
 	reviewer AccessReviewer,
-	cacheSynchronizer CacheSynchronizer,
 	logger logr.Logger,
 	recorder record.EventRecorder,
 	options Options,
@@ -133,12 +122,6 @@ func newMonitor(
 	}
 	if options.RequestTimeout <= 0 {
 		options.RequestTimeout = defaultRequestTimeout
-	}
-	if options.CacheRetryInterval <= 0 {
-		options.CacheRetryInterval = defaultCacheRetryInterval
-	}
-	if cacheSynchronizer == nil {
-		return nil, errors.New("operator readiness requires a cache synchronizer")
 	}
 	if options.LeaderElectionEnabled {
 		switch {
@@ -156,7 +139,6 @@ func newMonitor(
 
 	monitor := &Monitor{
 		reviewer:  reviewer,
-		cache:     cacheSynchronizer,
 		logger:    logger,
 		recorder:  recorder,
 		options:   options,
@@ -177,9 +159,11 @@ func (*Monitor) NeedLeaderElection() bool {
 	return false
 }
 
-// Start performs an immediate authorization review and refreshes it without
-// blocking kubelet probes. Informer synchronization is owned by Warmup.
+// Start records the cache synchronization barrier crossed by the manager,
+// performs an immediate authorization review, and refreshes it without
+// blocking kubelet probes.
 func (m *Monitor) Start(ctx context.Context) error {
+	m.applyCacheSynchronized()
 	if !m.options.LeaderElectionEnabled {
 		m.applyLeaseAccess(true, ReasonLeaderElectionDisabled, nil)
 		<-ctx.Done()
@@ -195,31 +179,6 @@ func (m *Monitor) Start(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			m.refresh(ctx)
-		}
-	}
-}
-
-// Warmup explicitly creates and synchronizes every controller informer on
-// every manager replica before leader election begins. Waiting only on the
-// manager cache runnable is insufficient when no informer has been requested
-// yet, because an empty informer set is considered synchronized.
-func (m *Monitor) Warmup(ctx context.Context) error {
-	for {
-		err := m.cache.Synchronize(ctx)
-		if err == nil {
-			m.applyCacheSynchronized()
-			return nil
-		}
-		if ctx.Err() != nil {
-			return nil
-		}
-		m.logger.Error(err, "Operator controller informer warmup is not ready")
-		timer := time.NewTimer(m.options.CacheRetryInterval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil
-		case <-timer.C:
 		}
 	}
 }

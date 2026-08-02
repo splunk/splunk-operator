@@ -44,6 +44,8 @@ import (
 	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -64,6 +66,7 @@ import (
 	enterpriseController "github.com/splunk/splunk-operator/internal/controller/enterprise"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -105,6 +108,19 @@ func managerInformerObjects(postgresEnabled bool) []client.Object {
 		)
 	}
 	return objects
+}
+
+func optionalObjectStoreInformer(restMapper meta.RESTMapper) (client.Object, error) {
+	gvk := clustercore.ObjectStoreGVK
+	if _, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version); err != nil {
+		if meta.IsNoMatchError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("discover optional %s informer: %w", gvk.String(), err)
+	}
+	objectStore := &unstructured.Unstructured{}
+	objectStore.SetGroupVersionKind(gvk)
+	return objectStore, nil
 }
 
 func init() {
@@ -289,15 +305,6 @@ func main() {
 		}
 		accessReviewer = authorizationClient.SelfSubjectAccessReviews()
 	}
-	cacheSynchronizer, err := operatorreadiness.NewInformerCacheSynchronizer(
-		mgr.GetCache(),
-		managerInformerObjects(config.DefaultMutableFeatureGate.Enabled(config.PostgresController)),
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to create manager informer cache synchronizer")
-		os.Exit(1)
-	}
-
 	podNamespace := os.Getenv("POD_NAMESPACE")
 	if enableLeaderElection {
 		podNamespace, err = operatorreadiness.ResolvePodNamespace(podNamespace)
@@ -308,7 +315,6 @@ func main() {
 	}
 	managerReadiness, err := operatorreadiness.New(
 		accessReviewer,
-		cacheSynchronizer,
 		ctrl.Log.WithName("operator-readiness"),
 		mgr.GetEventRecorderFor("operator-readiness"),
 		operatorreadiness.Options{
@@ -503,8 +509,31 @@ func main() {
 		os.Exit(1)
 	}
 
+	informerObjects := managerInformerObjects(config.DefaultMutableFeatureGate.Enabled(config.PostgresController))
+	if config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
+		objectStore, err := optionalObjectStoreInformer(mgr.GetRESTMapper())
+		if err != nil {
+			setupLog.Error(err, "unable to discover optional manager informer")
+			os.Exit(1)
+		}
+		if objectStore != nil {
+			informerObjects = append(informerObjects, objectStore)
+		}
+	}
+	informerRegistrar, err := operatorreadiness.NewInformerRegistrar(mgr.GetCache(), informerObjects)
+	if err != nil {
+		setupLog.Error(err, "unable to create manager informer registrar")
+		os.Exit(1)
+	}
+
+	managerContext := ctrl.SetupSignalHandler()
+	if err := informerRegistrar.Register(managerContext); err != nil {
+		setupLog.Error(err, "unable to register manager informer set")
+		os.Exit(1)
+	}
+
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(managerContext); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
