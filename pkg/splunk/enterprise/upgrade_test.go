@@ -727,7 +727,7 @@ func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
 	}
 }
 
-func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
+func TestUpgradeDesiredImageMismatchIsRetryable(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	sch := pkgruntime.NewScheme()
@@ -802,22 +802,27 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 		t.Errorf("Expected error when CM image mismatches IDX image")
 	}
 
-	found := false
-	for _, event := range recorder.events {
-		if event.reason == "UpgradeBlockedVersionMismatch" {
-			found = true
-			if event.eventType != corev1.EventTypeWarning {
-				t.Errorf("Expected Warning event type for UpgradeBlockedVersionMismatch, got %s", event.eventType)
-			}
-			expectedMessage := "ClusterManager dependency test/test-cm requests image splunk/splunk:old but the dependent resource requests splunk/splunk:new"
-			if event.message != expectedMessage {
-				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
-			}
-			break
-		}
+	wait, waiting := AsDependencyNotReady(err)
+	if !waiting {
+		t.Fatalf("Expected a retryable dependency wait for a non-atomic desired-image update, got: %T %v", err, err)
 	}
-	if !found {
-		t.Errorf("Expected UpgradeBlockedVersionMismatch event to be published")
+	if wait.Kind != "ClusterManager" || wait.Namespace != "test" || wait.Name != "test-cm" {
+		t.Fatalf("Unexpected dependency identity: %#v", wait)
+	}
+	if wait.Phase != enterpriseApi.PhaseReady {
+		t.Errorf("Expected dependency phase Ready, got: %s", wait.Phase)
+	}
+	if wait.ObservedImage != "splunk/splunk:old" || wait.DesiredImage != "splunk/splunk:new" {
+		t.Errorf("Unexpected desired-image mismatch: dependency=%q dependent=%q", wait.ObservedImage, wait.DesiredImage)
+	}
+	if !strings.Contains(wait.Detail, "waiting for coordinated desired state") {
+		t.Errorf("Expected coordinated desired-state detail, got: %q", wait.Detail)
+	}
+
+	for _, event := range recorder.events {
+		if event.eventType == corev1.EventTypeWarning {
+			t.Errorf("Desired-image convergence must not emit a Warning event: %#v", event)
+		}
 	}
 }
 
@@ -1036,7 +1041,7 @@ func TestUpgradePathValidationClassifiesLicenseManagerDependency(t *testing.T) {
 		}
 	})
 
-	t.Run("different desired images are a terminal configuration mismatch", func(t *testing.T) {
+	t.Run("different desired images are a retryable coordinated update window", func(t *testing.T) {
 		lm := newLicenseManager(enterpriseApi.PhaseReady, "splunk/enterprise:old")
 		sts := newLicenseManagerStatefulSet("splunk/enterprise:old")
 		client := newFakeClientBuilder(scheme).WithObjects(lm, sts).Build()
@@ -1045,12 +1050,15 @@ func TestUpgradePathValidationClassifiesLicenseManagerDependency(t *testing.T) {
 		if continueReconcile {
 			t.Fatal("continueReconcile = true, want false")
 		}
-		if _, ok := AsDependencyNotReady(err); ok {
-			t.Fatalf("mismatch returned retryable dependency wait: %v", err)
+		wait, ok := AsDependencyNotReady(err)
+		if !ok {
+			t.Fatalf("error = %T %v, want DependencyNotReadyError", err, err)
 		}
-		reason, ok := splcommon.TerminalReason(err)
-		if !ok || reason != EventReasonUpgradeBlockedVersionMismatch {
-			t.Fatalf("terminal reason = %q, %t; want %q", reason, ok, EventReasonUpgradeBlockedVersionMismatch)
+		if wait.Phase != enterpriseApi.PhaseReady || wait.ObservedImage != "splunk/enterprise:old" || wait.DesiredImage != "splunk/enterprise:target" {
+			t.Fatalf("unexpected dependency wait: %#v", wait)
+		}
+		if _, terminal := splcommon.TerminalReason(err); terminal {
+			t.Fatalf("desired-image update window was classified as terminal: %v", err)
 		}
 	})
 }

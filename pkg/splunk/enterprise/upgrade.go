@@ -125,28 +125,26 @@ func newDependencyNotReady(
 	}
 }
 
-func dependencyImageMismatch(
-	ctx context.Context,
-	eventPublisher *K8EventPublisher,
+func dependencyImageMismatchWait(
 	kind,
 	namespace,
 	name,
 	dependencyDesiredImage,
 	dependentDesiredImage string,
+	phase enterpriseApi.Phase,
 ) error {
-	message := fmt.Sprintf(
-		"%s dependency %s/%s requests image %s but the dependent resource requests %s",
+	return newDependencyNotReady(
 		kind,
 		namespace,
 		name,
+		phase,
 		dependencyDesiredImage,
 		dependentDesiredImage,
-	)
-	eventPublisher.Warning(ctx, EventReasonUpgradeBlockedVersionMismatch, message)
-	return splcommon.NewTerminalError(
-		EventReasonUpgradeBlockedVersionMismatch,
-		message,
-		errors.New(message),
+		fmt.Sprintf(
+			"dependency desired image %s does not match dependent desired image %s; waiting for coordinated desired state",
+			dependencyDesiredImage,
+			dependentDesiredImage,
+		),
 	)
 }
 
@@ -219,14 +217,13 @@ LicenseManager:
 		}
 
 		if licenseManager.Spec.Image != "" && spec.Image != "" && licenseManager.Spec.Image != spec.Image {
-			return false, dependencyImageMismatch(
-				ctx,
-				eventPublisher,
+			return false, dependencyImageMismatchWait(
 				"LicenseManager",
 				licenseManagerNamespace,
 				licenseManagerRef.Name,
 				licenseManager.Spec.Image,
 				spec.Image,
+				licenseManager.Status.Phase,
 			)
 		}
 
@@ -327,14 +324,13 @@ ClusterManager:
 		}
 
 		if clusterManager.Spec.Image != "" && spec.Image != "" && clusterManager.Spec.Image != spec.Image {
-			return false, dependencyImageMismatch(
-				ctx,
-				eventPublisher,
+			return false, dependencyImageMismatchWait(
 				"ClusterManager",
 				clusterManagerNamespace,
 				clusterManagerRef.Name,
 				clusterManager.Spec.Image,
 				spec.Image,
+				clusterManager.Status.Phase,
 			)
 		}
 
@@ -424,14 +420,13 @@ IndexerCluster:
 			if len(preIdx.Name) != 0 {
 				// check if previous indexer have completed before starting next one
 				if preIdx.Spec.Image != "" && spec.Image != "" && preIdx.Spec.Image != spec.Image {
-					return false, dependencyImageMismatch(
-						ctx,
-						eventPublisher,
+					return false, dependencyImageMismatchWait(
 						"IndexerCluster",
 						preIdx.Namespace,
 						preIdx.Name,
 						preIdx.Spec.Image,
 						spec.Image,
+						preIdx.Status.Phase,
 					)
 				}
 				if preIdx.Status.Phase != enterpriseApi.PhaseReady {
@@ -529,14 +524,13 @@ SearchHeadCluster:
 		}
 
 		if searchHeadClusterInstance.Spec.Image != "" && spec.Image != "" && searchHeadClusterInstance.Spec.Image != spec.Image {
-			return false, dependencyImageMismatch(
-				ctx,
-				eventPublisher,
+			return false, dependencyImageMismatchWait(
 				"SearchHeadCluster",
 				searchHeadClusterInstance.Namespace,
 				searchHeadClusterInstance.Name,
 				searchHeadClusterInstance.Spec.Image,
 				spec.Image,
+				searchHeadClusterInstance.Status.Phase,
 			)
 		}
 
