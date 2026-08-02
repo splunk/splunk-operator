@@ -396,11 +396,29 @@ bounded render/live evidence for CMP-006/CMP-007. It does not pass a live 1.27
 cluster, another provider, changing an established override during upgrade,
 or overlapping Operator watch scopes.
 
-The pre-fix K8S-010 fixture also registered K8S-011/SHC-93. Kubernetes marked
-the manager Ready while Lease authorization failed and no controllers started.
-SHC-92 removes that chart/RBAC cause but does not change the manager's probe
-contract; SHC-93 must qualify single-replica and HA leader/standby semantics
-without coupling readiness failure to liveness-driven restarts.
+### K8S-011 SHC-93 evidence
+
+The accepted 2026-08-02 evidence is recorded in
+[SHC93OperatorReadinessQualification.md](SHC93OperatorReadinessQualification.md).
+Exact source `90103bef5` keeps `/healthz` process-local and makes `/readyz`
+require the complete initial enabled-controller informer barrier plus current
+authorization for the leader Lease. Current leadership is a separate metric,
+so an authorized, synchronized standby remains Ready.
+
+Cold list/watch denial kept health/readiness at HTTP 200/500 and readiness
+metrics at `0/0/0`; cold Lease denial reported `1/0/0`. Restoring either
+dependency recovered the same Pod without a kubelet restart. The metrics
+Service retained the NotReady Pod endpoint for authenticated diagnosis. Two
+Ready contenders retained exactly one leader, and deleting that leader moved
+the Lease to the existing standby in 35 seconds without replacing or
+restarting it. When the active leader lost API access, controller-runtime
+exited after its Lease-renewal deadline; its API-isolated restart served health
+and remained NotReady behind the informer barrier instead of entering a
+CrashLoop. Removing the fault recovered that same Pod in place.
+
+This passes bounded K8S-011 on one EKS 1.31.14 cluster. It does not qualify
+other providers or versions, productized manager replica/rollout settings,
+ongoing post-start per-informer health, or production alert delivery.
 
 ### STS-002 and bounded K8S-006 SHC-85 evidence
 

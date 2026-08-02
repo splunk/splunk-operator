@@ -67,7 +67,44 @@ without duplicating their full content.
 | SHC-90 | Stop normal reconciliation as soon as the namespace is terminating, including before a CR deletion timestamp is observed | `7ce2483f7`, `0c291c8c8` on `codex/shc-90-namespace-termination-guard` | OPS-004, OPS-012, OBS-001, OBS-005 | Source-, Linux-, image-, and EKS-qualified for the bounded contract. Authoritative uncached Namespace GET, Namespace `get`-only RBAC, zero-mutation stop across all seven active v4 tier controllers, explicit deletion-transition event acceptance, finalization bypass when the CR is already deleting, and typed `NamespaceTerminating` admission cancellation close the preflight and admission races. Final Linux source passed 42 suites, 180 JUnit nodes, 78.1% composite coverage, build/vet/generate, and 124 Helm tests. Immutable Operator digest `sha256:c2438c14e238e101cba52d758968a2cd7c64fc2798ed5a0a4781acb3e836e764` observed the real Namespace-deleting/CR-not-deleting interval for a Ready LicenseManager and 3/3 SHC, stopped five reconciles per controller with zero fixture error, preserved both deletion finalizers, removed all ten PVC/PV claim references, and completed the Namespace naturally without a manual patch. SHC-92 subsequently qualified namespace-scoped live Helm; provider/live-version breadth remains a separate gate |
 | SHC-91 | Route deletion-safe finalization before pause and ordinary Apply work in every active v4 Splunk controller | `86a0bc80a`, `a76c30e0c` on `codex/shc-91-deletion-before-pause` | OPS-004, OPS-012, OBS-001, OBS-005 | Source-, Linux-, image-, and EKS-qualified for the bounded current-v4 contract. Five controller entry points now bypass pause for deletion, six real Apply entry points finalize before normal work, successful finalization suppresses post-delete status, and failure remains observable. Exact source passed 42 Linux suites, 185 controller specs, 78.3 percent composite coverage, build, and 124 Helm tests. Immutable Operator digest `sha256:4903f70a95b150c0a29bcd3ac70e063b5c55b6a030399a4636297586dea85cea` completed direct and namespace-first deletion across all seven tiers with zero status or Reconciler errors. A real Ready Standalone removed its workload and two PVC/PVs naturally, with the final PV absent by 73 seconds. SHC-92 subsequently qualified namespace-scoped Helm; provider/live-version breadth, v3, and every-tier real runtime shutdown remain open |
 | SHC-92 | Make namespace-scoped Helm watch-target and `namespaceOverride` semantics explicit and consistent | `91f742b52` on `codex/shc-92-namespace-scoped-helm` | K8S-010, CMP-006, CMP-007 | Source-, chart-, Linux-, and EKS-qualified for the bounded effective-namespace contract. `namespaceOverride` when non-empty, otherwise the release namespace, now controls every namespaced chart resource, namespace-scoped watch target, Role/RoleBinding placement, service-account identity, leader Lease, and get-only Namespace reader. Exact source passed 42 macOS and Linux suites, 185 enterprise specs, 78.3 percent composite coverage, build, lints, and 137 Helm tests. Packaged chart SHA-256 `23258a699126ae318fee287a5734d939521f3d32ef8741f936ff44b31ef9b5b8` reproduced the old false-Ready/leader-election failure, recovered the same Deployment and service-account UIDs through an unpatched Helm upgrade, qualified fresh default and overridden installs, and ran two releases from one release namespace with distinct target-derived readers. Uninstall removed every fixture and delete-reclaim PV while the retained Operator and SHC remained Ready with zero restarts. Kubernetes 1.27 evidence is render-only; live evidence is EKS 1.31. Changing an established override, overlapping watch scopes, and provider/version breadth remain separate boundaries |
-| SHC-93 | Make Operator Pod readiness distinguish a live health server from the ability to participate in reconciliation | Pending | K8S-011, OBS-001, OBS-004, OBS-005 | Registered from the SHC-92 pre-fix EKS fixture. The manager Pod and Deployment reported Ready/Available while the service account received repeated Forbidden responses for its leader Lease, never acquired leadership, and never started controllers. Define process liveness, startup completion, cache/watch establishment, leader-election participation, single-replica failure, and healthy HA-standby semantics separately. Readiness must not trigger a restart loop or incorrectly mark a capable non-leading replica unhealthy. Qualification must cover missing Lease RBAC, API unavailability, cache/startup failure, normal leader/standby operation, takeover, recovery, Events/logs/metrics, and alert timing. SHC-92 removes the observed Helm/RBAC cause but does not claim this probe contract |
+| SHC-93 | Make Operator Pod readiness distinguish a live health server from the ability to participate in reconciliation | Core `47cd2d3ba`; cache barrier `262e37265`; secure metrics `3f7b3ee34`; final `90103bef5` on `codex/shc-93-operator-readiness` | K8S-011, OBS-001, OBS-004, OBS-005 | Source-, chart-, Linux-, and EKS-qualified for the bounded manager contract. `/healthz` remains process-local; `/readyz` requires the complete initial enabled-controller informer barrier plus current exact Lease authorization and does not require current leadership. Exact final source passed 43 macOS and Linux suites, all 185 enterprise specs, build, focused race, Kustomize, and 145 Helm tests. Immutable Operator OCI index `sha256:b5a022a788c7cacf8b7ee33e7132eae56d82b14eb631809ddd116c8b816e9d63` and chart SHA-256 `008abda67d13775ce6cd7e0f8e77365edce01af82f6ad9c12ecf34911a2f6925` qualified cold informer and Lease denial, same-Pod recovery, secure failure metrics, normal startup, active-leader API interruption, two Ready contenders, and 35-second takeover on EKS 1.31.14. Cleanup was complete and the retained SHC stayed 3/3 Ready with zero restarts. Other providers/versions, productized manager HA, ongoing post-start per-informer health, and production alert delivery remain open |
+
+## SHC-93 immutable qualification inputs
+
+- source branch: `codex/shc-93-operator-readiness`;
+- exact qualified source:
+  `90103bef5d87546cadc419738752a0d6b0cd813e`;
+- accepted Operator tag:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc93-90103bef5`;
+- Operator OCI index:
+  `sha256:b5a022a788c7cacf8b7ee33e7132eae56d82b14eb631809ddd116c8b816e9d63`;
+- linux/amd64 manifest:
+  `sha256:2302269199434b738979a199e56bd7fcb2d9539b4c5f523b6233c3f41db01afc`;
+- linux/amd64 manager SHA-256:
+  `55914940988b05b4ba00c2d74dbabdd03f4cce4f9b30a2b04aeec894f7e72d74`;
+- packaged chart: `splunk-operator-3.1.0.tgz`, 11,266 bytes, SHA-256
+  `008abda67d13775ce6cd7e0f8e77365edce01af82f6ad9c12ecf34911a2f6925`;
+- EKS context:
+  `arn:aws:eks:us-west-2:667741767953:cluster/vivek-spl-301372`;
+- EKS server `v1.31.14-eks-8f14419`; Helm `v3.18.4`;
+- source gates: 43 macOS and Linux suites, 187 JUnit nodes, all 185
+  enterprise-controller specs, zero failures, 78.3/78.4 percent composite
+  coverage, build, focused race, three Kustomize renders, 60 Operator Helm
+  tests, and 85 Universal Forwarder Helm tests;
+- failure/recovery: cold list/watch denial held health/readiness at 200/500 and
+  metrics at `0/0/0`; cold Lease denial retained the NotReady endpoint and
+  reported `1/0/0`; restoring access recovered the same Pod UIDs with zero
+  restarts;
+- HA/API behavior: two authorized, synchronized contenders were Ready while
+  exactly one led; deletion transferred leadership to the existing standby in
+  35 seconds; API isolation caused the active leader to exit only after Lease
+  renewal loss, and its restarted manager remained healthy/NotReady without a
+  CrashLoop until in-place recovery;
+- cleanup: the Helm release, disposable namespace, metrics-reader binding, and
+  SHC-93 cluster-scoped RBAC were absent; the retained SHC remained 3/3 Ready
+  with zero restarts; and
+- detailed evidence: `SHC93OperatorReadinessQualification.md` and
+  `SHC93OperatorReadinessExecPlan.md`.
 
 ## SHC-92 immutable qualification inputs
 
@@ -1067,3 +1104,18 @@ The source audit separately registered SHC-91. It was subsequently completed
 on `codex/shc-91-deletion-before-pause` at exact source `a76c30e0c`. The final
 scope covers controller ordering plus the real Apply boundary and is recorded
 in `SHC91DeletionBeforePauseQualification.md`.
+
+2026-08-02 UTC: Closed bounded K8S-011/OBS-001/OBS-004/OBS-005 SHC-93 on
+`codex/shc-93-operator-readiness`. Exact source `90103bef5` passed final macOS
+and Linux build/test gates, 43 suites, all 185 enterprise specs, focused race,
+three Kustomize renders, and 145 Helm tests. Operator OCI index
+`sha256:b5a022a788c7cacf8b7ee33e7132eae56d82b14eb631809ddd116c8b816e9d63`
+and chart SHA-256
+`008abda67d13775ce6cd7e0f8e77365edce01af82f6ad9c12ecf34911a2f6925`
+proved that informer or Lease denial makes the manager NotReady without using
+liveness to restart it, restored access recovers the same Pod, a healthy
+standby remains Ready, and takeover completes without a restart loop. Secure
+metrics retained the NotReady manager endpoint for diagnosis. Cleanup removed
+all disposable resources and retained the existing SHC at 3/3 Ready with zero
+restarts. Exact evidence and bounded limitations are in
+`SHC93OperatorReadinessQualification.md`.

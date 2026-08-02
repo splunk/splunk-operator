@@ -21,33 +21,36 @@ separate:
 
 ## Latest bounded qualification
 
-SHC-92 qualified one effective-namespace contract for namespace-scoped Helm
-installations. Exact source `91f742b52` passed 42 macOS and Linux suites, 185
-enterprise-controller specs, 78.3 percent composite coverage, build, lints,
-and 137 Helm tests. Packaged chart SHA-256
-`23258a699126ae318fee287a5734d939521f3d32ef8741f936ff44b31ef9b5b8`
-reproduced the preceding chart's false-Ready leader-election failure and
-recovered the same Deployment and service-account identities through an
-ordinary unpatched Helm upgrade. Fresh default and overridden releases became
-leaders in their effective namespaces; two releases stored in one release
-namespace used distinct target-derived Namespace readers and were denied
-cross-namespace access. Normal uninstall and namespace deletion removed every
-fixture and delete-reclaim PV while the retained Operator and SHC stayed Ready
+SHC-93 qualified the bounded Operator reconciliation-readiness contract at
+exact source `90103bef5`. `/healthz` remains a process-local signal;
+`/readyz` now requires the complete initial controller informer barrier and a
+current exact authorization review for the leader Lease. Current leadership
+remains a separate metric, so a synchronized and authorized HA standby is
+Ready. The final source passed 43 macOS and Linux suites, all 185 enterprise
+controller specs, build, focused race, Kustomize, and Helm gates. Immutable
+Operator OCI index
+`sha256:b5a022a788c7cacf8b7ee33e7132eae56d82b14eb631809ddd116c8b816e9d63`
+and chart SHA-256
+`008abda67d13775ce6cd7e0f8e77365edce01af82f6ad9c12ecf34911a2f6925`
+were exercised on EKS 1.31.14.
+
+Cold informer and Lease denials kept the manager process healthy but the
+Deployment unavailable, and restored access recovered the same Pod without a
+restart. Two Ready contenders completed leader takeover in 35 seconds. During
+an active-leader API interruption, controller-runtime exited after loss of
+Lease renewal as designed; the API-isolated restart served health, remained
+NotReady behind the informer barrier, and did not CrashLoop. The secure
+manager metrics Service retained the NotReady endpoint for diagnosis. Normal
+cleanup removed every SHC-93 fixture while the retained SHC stayed 3/3 Ready
 with zero restarts.
 
-This remains bounded chart qualification; it is not a declaration that every
-scenario in the matrix is complete or that the feature is ready for default
-enablement. Kubernetes 1.27 evidence is render-only, live evidence covers EKS
-1.31, and changing an established override, overlapping watch scopes, and
-provider/version breadth remain separate boundaries. Exact source, chart,
-authorization, upgrade, and cleanup evidence is in
-`SHC92NamespaceScopedHelmQualification.md`, `SHCWorkItemIndex.md`, and
-`QualificationObservabilityRolloutPlan.md`.
-
-SHC-92 also registered SHC-93 after proving that the old manager could report
-Kubernetes Ready while Lease authorization failed and no controllers had
-started. SHC-93 owns the separate Operator readiness and HA contender
-semantics; no probe implementation is attributed to SHC-92.
+This is bounded manager qualification, not completion of every scenario in
+the program. Live evidence covers one EKS 1.31.14 cluster. Other providers and
+versions, productized manager replica/rollout configuration, ongoing
+post-start per-informer health, and production alert delivery remain separate
+work. Exact evidence and rejected intermediate designs are in
+`SHC93OperatorReadinessQualification.md` and
+`SHC93OperatorReadinessExecPlan.md`.
 
 ## Review order
 
@@ -56,23 +59,26 @@ semantics; no probe implementation is attributed to SHC-92.
    acceptance evidence.
 3. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
    immutable commits and stable scenario identifiers.
-4. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
+4. `SHC93OperatorReadinessQualification.md` and
+   `SHC93OperatorReadinessExecPlan.md` record the latest manager-readiness
+   contract, exact evidence, rejected candidates, and remaining boundaries.
+5. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
    machine, StatefulSet strategy, and durable status contract.
-5. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
+6. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
    cluster-wide image-upgrade workflow and its composition with per-member
    lifecycle orchestration.
-6. `RuntimeLifecycleContract.md` defines the contract between the Operator,
+7. `RuntimeLifecycleContract.md` defines the contract between the Operator,
    Pod lifecycle, probe scripts, Docker-Splunk/Splunk Ansible, and splunkd.
-7. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
+8. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
    Splunk-managed indexer restart boundary and the remote serving-recovery
    contract that cannot be completed by an Operator readiness probe.
-8. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
+9. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
    integration rules, and conflict prevention.
-9. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
+10. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
    and common pass invariants.
-10. `QualificationObservabilityRolloutPlan.md` is the executable test,
+11. `QualificationObservabilityRolloutPlan.md` is the executable test,
    evidence, migration, release, and rollback plan.
-11. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
+12. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
    contract for Docker-Splunk image construction on a supported Linux host.
 
 The Operator design is a Wave 0 spike contract and the runtime design now

@@ -579,14 +579,25 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   complete and retained workloads stayed healthy. Kubernetes 1.27 is
   render-only; live evidence is EKS 1.31. Detailed evidence is in
   `SHC92NamespaceScopedHelmQualification.md`.
-- [ ] Define SHC-93 so Operator Pod readiness represents the ability to
-  participate in reconciliation rather than only a responding health server.
-  Preserve process-level liveness and avoid restart loops. Specify the
-  single-replica failure contract and the distinct healthy non-leading HA
-  contender contract, then qualify Lease RBAC failure, cache/watch startup,
-  API loss/recovery, leader takeover, observable diagnostics, and alerting.
-  SHC-92 recorded the false-Ready evidence but intentionally did not change
-  the manager executable or probe semantics.
+- [x] (2026-08-02 UTC) Defined, implemented, and qualified SHC-93 on isolated
+  branch `codex/shc-93-operator-readiness`. Exact source `90103bef5` separates
+  process-local `/healthz`, reconciliation-participation `/readyz`, and current
+  leader role. Readiness requires the complete initial enabled-controller
+  informer barrier and current exact Lease authorization, while an authorized
+  non-leading contender remains Ready. Final macOS and Linux gates passed 43
+  suites, all 185 enterprise specs, focused race, Kustomize, and 145 Helm
+  tests. Immutable Operator OCI index
+  `sha256:b5a022a788c7cacf8b7ee33e7132eae56d82b14eb631809ddd116c8b816e9d63`
+  and chart SHA-256
+  `008abda67d13775ce6cd7e0f8e77365edce01af82f6ad9c12ecf34911a2f6925`
+  qualified cold informer and Lease denial, recovery of the same Pod without
+  restart, secure failure metrics, active-leader API interruption without a
+  restart CrashLoop, two Ready contenders, and a 35-second takeover on EKS
+  1.31.14. Cleanup removed all disposable resources and retained the SHC at
+  3/3 Ready with zero restarts. Other providers/versions, chart-level manager
+  HA configuration, ongoing post-start per-informer health, and production
+  alert delivery remain open. Detailed evidence is in
+  `SHC93OperatorReadinessQualification.md`.
 - [x] (2026-08-01 UTC) Defined, implemented, and qualified SHC-88 on isolated
   branch `codex/shc-88-license-health`. Source `241ea3d91` reconciles the
   headless Service already named by the LicenseManager StatefulSet, waits for

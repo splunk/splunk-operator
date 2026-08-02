@@ -244,15 +244,26 @@ ownership.
   render-only and EKS 1.31 is live-qualified; provider/version breadth,
   changing an established override, and overlapping watch scopes remain open.
   Detailed evidence is in `SHC92NamespaceScopedHelmQualification.md`.
-- [ ] Define and qualify SHC-93 Operator readiness semantics. Reproduce a
-  running manager that cannot get or update its leader Lease and prove it is
-  not falsely presented as a functioning single-replica control plane. Define
-  startup/cache/watch completion and normal non-leading HA contender behavior
-  without making readiness failure cause a liveness restart loop. Exercise
-  missing RBAC, API loss and recovery, normal takeover, repeated failure,
-  Events, logs, metrics, diagnostic collection, and alert timing. The SHC-92
-  false-Ready record is the immutable starting evidence; no SHC-93 fix is
-  attributed to SHC-92.
+- [x] Qualify bounded SHC-93 Operator readiness semantics. Exact source
+  `90103bef5`, Operator OCI index
+  `sha256:b5a022a788c7cacf8b7ee33e7132eae56d82b14eb631809ddd116c8b816e9d63`,
+  and chart SHA-256
+  `008abda67d13775ce6cd7e0f8e77365edce01af82f6ad9c12ecf34911a2f6925`
+  separate process liveness, full initial informer synchronization, current
+  Lease authorization, and current leader role. Cold list/watch denial held
+  health/readiness at 200/500 and readiness metrics at `0/0/0`; cold Lease
+  denial reported `1/0/0` and retained its NotReady metrics endpoint. Both
+  recovered the same Pod without a restart. Two authorized contenders stayed
+  Ready while one led, and the existing standby took over in 35 seconds. An
+  API-isolated active leader exited after Lease-renewal loss, while its
+  restarted process stayed healthy/NotReady behind the informer barrier rather
+  than CrashLooping. Logs and Events were transition-bounded; authenticated
+  metrics exposed cache, Lease, aggregate, transition, timestamp, and leader
+  signals. Final macOS/Linux, race, Kustomize, and 145 Helm tests passed;
+  cleanup was complete and retained workloads stayed healthy. Production
+  alert delivery, provider/version breadth, productized manager HA, and an
+  ongoing post-start per-informer signal remain open. Detailed evidence is in
+  `SHC93OperatorReadinessQualification.md`.
 - [x] Qualify bounded OPS-013/SHC-88 LicenseManager health observation. Exact
   source `241ea3d91` and Operator digest
   `sha256:545910a6b769ad399fea42fdb31ddb79af11d38b5e5691ed3a59786a7606180e`
@@ -2273,3 +2284,18 @@ and IngestorCluster. SHC-91 subsequently closed those controller boundaries
 and the affected real Apply boundaries at exact source `a76c30e0c`. The
 all-tier direct and namespace-first fixtures plus real Ready Standalone cleanup
 are recorded in `SHC91DeletionBeforePauseQualification.md`.
+
+2026-08-02 UTC: Completed bounded K8S-011/SHC-93 on
+`codex/shc-93-operator-readiness`. Exact source `90103bef5` passed final
+macOS/Linux source, race, Kustomize, and Helm gates. Immutable Operator OCI
+index `sha256:b5a022a788c7cacf8b7ee33e7132eae56d82b14eb631809ddd116c8b816e9d63`
+and chart SHA-256
+`008abda67d13775ce6cd7e0f8e77365edce01af82f6ad9c12ecf34911a2f6925`
+qualified initial informer and Lease authorization failures, same-Pod
+recovery, secure failure telemetry, healthy leader/standby readiness,
+35-second takeover, and active-leader API interruption on EKS 1.31.14. The
+manager remained live but NotReady during recoverable dependency failures;
+readiness did not drive a kubelet restart. Final cleanup removed all
+disposable objects and retained the existing SHC at 3/3 Ready with zero
+restarts. Detailed commands, observations, rejected candidates, and remaining
+boundaries are recorded in `SHC93OperatorReadinessQualification.md`.
