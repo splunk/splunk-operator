@@ -13,3 +13,10 @@ tests:
       - equal:
           path: metadata.namespace
           value: watched-namespace
+      - equal:
+          path: spec.ports[0]
+          value:
+            name: https
+            port: 8443
+            protocol: TCP
+            targetPort: https

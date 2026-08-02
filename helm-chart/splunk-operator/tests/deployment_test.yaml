@@ -26,6 +26,8 @@ tests:
           value:
             - --leader-elect
             - --pprof
+            - --metrics-bind-address=:8443
+            - --metrics-secure
 
   - it: should include feature-gates arg with a single gate
     set:
@@ -43,13 +45,13 @@ tests:
         MyNewFeature: false
     asserts:
       - matchRegex:
-          path: spec.template.spec.containers[0].args[2]
+          path: spec.template.spec.containers[0].args[4]
           pattern: "^--feature-gates="
       - matchRegex:
-          path: spec.template.spec.containers[0].args[2]
+          path: spec.template.spec.containers[0].args[4]
           pattern: "ValidationWebhook=true"
       - matchRegex:
-          path: spec.template.spec.containers[0].args[2]
+          path: spec.template.spec.containers[0].args[4]
           pattern: "MyNewFeature=false"
 
   - it: should not include feature-gates arg when featureGates is empty
@@ -61,6 +63,8 @@ tests:
           value:
             - --leader-elect
             - --pprof
+            - --metrics-bind-address=:8443
+            - --metrics-secure
 
   - it: should always include --leader-elect and --pprof even with feature gates
     set:
@@ -153,6 +157,20 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
           value: /readyz
+
+  - it: should expose authenticated HTTPS metrics on the proxy Service target
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-bind-address=:8443
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-secure
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 8443
+            name: https
 
   - it: should add custom labels to deployment
     set:

@@ -91,9 +91,10 @@ Repeated identical failures do not produce an Event or log for every probe.
 Event delivery is best effort: an API outage can prevent the failure Event,
 while local readiness, logs, and metrics still retain the signal.
 
-The metrics endpoint uses delegated Kubernetes authentication and
-authorization. The chart creates a `ClusterRole` that grants only
-`get` on the non-resource `/metrics` path. Its name is
+The chart serves the metrics endpoint over HTTPS on port `8443` and protects
+it with delegated Kubernetes authentication and authorization. The chart
+creates a `ClusterRole` that grants only `get` on the non-resource `/metrics`
+path. Its name is
 `splunk-operator-metrics-reader` for a cluster-wide installation and includes
 an effective-namespace hash for a namespace-scoped installation. Bind the
 Prometheus service account to that role; do not make the endpoint anonymous or

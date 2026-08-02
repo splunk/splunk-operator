@@ -48,6 +48,8 @@ spec:
           args:
             - --leader-elect
             - --pprof
+            - --metrics-bind-address=:8443
+            - --metrics-secure
 {{- if .Values.splunkOperator.featureGates }}
             - --feature-gates={{ include "splunk-operator.featureGates" . }}
 {{- end }}
@@ -92,6 +94,8 @@ spec:
 {{- toYaml . | trim | nindent 12 }}
 {{- end }}
           ports:
+            - containerPort: 8443
+              name: https
             {{- range .Values.splunkOperator.service.ports }}
             - containerPort: {{ .port }}
               name: {{ .name }}
