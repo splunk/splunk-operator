@@ -39,7 +39,10 @@ it is not converted into a qualified claim by documentation alone.
   individually qualified SHC history.
 - [x] (2026-08-02 UTC) Preserved typed retryable dependency convergence during
   merge resolution, including License Manager phase and workload-image lag,
-  while retaining terminal classification for contradictory desired images.
+  while initially retaining SHC-87's terminal classification for contradictory
+  desired images. The later clean campaign disproved immediate terminal
+  classification as a safe Kubernetes assumption; `14047127c`, recorded
+  below, supersedes that merge-time decision.
 - [x] (2026-08-02 UTC) Preserved namespace-termination safety and corrected the
   newly merged terminal-event tests to create the namespace required by the
   production preflight contract. The focused controller suite passed 192 of
@@ -77,6 +80,36 @@ it is not converted into a qualified claim by documentation alone.
   propagates its owner's exact result instead of allowing PID 1 to exit during
   an in-progress stop. Fifteen shutdown tests, four exact-Ansible-ref tests,
   the Red Hat signing-key test, shell syntax, and ShellCheck pass on macOS.
+- [x] (2026-08-02 UTC) Completed the clean campaign's dependency and runtime
+  image rollout through License Manager, Cluster Manager, Deployer, and four
+  RF3/SF2 indexers. The Operator advanced indexers `3 -> 2 -> 1 -> 0`, required
+  previous-peer serving recovery, retained at least three indexer endpoints,
+  and finished with four Ready peers on runtime digest
+  `sha256:d6e11fe00dcadb6a3b168b23081950f85265daf0c923a314034160a495a6db4b`
+  and zero container restarts.
+- [x] (2026-08-02 UTC) Completed workload run
+  `shc-final-runtime-upgrade-v3`: 150 HEC submissions, zero submission
+  failures, zero search-request failures, and exact final
+  `count/min/max/distinct=150/1/150/150`. The evidence SHA-256 is
+  `b8d328954d66716afda5c48aa4cbf0b7168869fc9ada6a88ee94c9db7bcacb9e`.
+  Successful aggregate results briefly lagged accepted events and later
+  converged; this is not claimed as immediate distributed-search completeness.
+- [x] (2026-08-02 UTC) Corrected a false terminal dependency classification at
+  `14047127c`. A multi-object Kubernetes apply can expose a short desired-image
+  mismatch between a referenced tier and its dependent; this is now typed as
+  retryable coordinated convergence rather than emitting a false stalled
+  condition and terminal upgrade-mismatch Warning.
+- [x] (2026-08-02 UTC) Registered and source-qualified SHC-94 at `9500d8d34`.
+  The live SHC repeatedly listed an empty repository, retained no pending app
+  or bundle record, and nevertheless remained at partition three because the
+  transient poll lock was treated as active deployment work. The correction
+  blocks only on durable pending/in-progress app or bundle state. The exact
+  source passed 43 suites, all 192 enterprise specifications, 78.3 percent
+  composite coverage, 60 Operator and 90 Universal Forwarder Helm tests,
+  `make build`, package tests, and generated-tree checks on macOS.
+- [ ] Build and qualify the updated `9500d8d34` Operator on Linux, replace the
+  controller image by immutable digest, and prove that the already-pending SHC
+  revision resumes without CR or StatefulSet mutation.
 - [ ] Audit and freeze the final Docker-Splunk branch and its exact Splunk
   Ansible commit; reproduce the final `f44f1d8` source gates and build the
   runtime image on Linux.
@@ -147,6 +180,26 @@ it is not converted into a qualified claim by documentation alone.
   TERM-to-KILL interval, reuse the atomic result, preserve failures, and time
   out if an owner disappears.
 
+- Observation: applying several dependent custom resources is not an atomic
+  Kubernetes transaction.
+  Evidence: the License Manager desired image became visible milliseconds
+  before the dependent Cluster Manager desired image. The prior controller
+  emitted both a retryable dependency Event and a false terminal
+  `UpgradeBlockedVersionMismatch`/`Stalled` sequence; the same manifest then
+  updated the dependent and convergence continued without customer action.
+  Consequence: desired-image disagreement during dependency convergence is a
+  typed retryable wait with both desired images retained in status detail.
+
+- Observation: the App Framework deployment flag is also a repository-poll
+  lock, not a durable statement that an app mutation exists.
+  Evidence: from 14:25 through 14:35 UTC the SearchHeadCluster listed an empty
+  repository every 60 to 62 seconds, ran zero app workers, and cleared the flag
+  in the same reconcile. Each next poll set the flag before rollout planning,
+  so the StatefulSet stayed at partition three with no lifecycle operation.
+  Consequence: rollout ownership is derived from durable pending/in-progress
+  per-app or bundle state; an empty poll, completed app, or app error does not
+  own the disruption boundary.
+
 ## Decision Log
 
 - Decision: use `feature/shc-kubernetes-reliability` as the single final
@@ -180,6 +233,14 @@ it is not converted into a qualified claim by documentation alone.
   final clean campaign explicitly replaces disposable resources.
   Rationale: it is the stable reference environment for checking that branch
   assembly and source validation do not mutate live workloads.
+
+- Decision: do not serialize a StatefulSet rollout behind the transient App
+  Framework poll lock alone.
+  Rationale: actual remote changes are materialized as durable pending app
+  records before rollout planning, and pending/in-progress bundle state is
+  already durable. Those are safe mutual-exclusion signals. A completed or
+  failed app remains diagnosable but cannot starve Kubernetes convergence
+  indefinitely.
 
 - Decision: generate the final qualification topology from a checked-in
   template and require an immutable runtime digest before rendering.

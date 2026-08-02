@@ -258,12 +258,12 @@ StatefulSet template.
 | OPS-003 | P0 | Permanent scale down of captain | Transfer precedes membership removal |
 | OPS-004 | P1 | Complete CR deletion | Explicit deletion policy; no confusion with recycle |
 | OPS-005 | P1 | App/bundle operation while ordinal zero unavailable | Dynamic reachable target succeeds |
-| OPS-006 | P1 | App/bundle operation during rollout | Coordination prevents conflicting planned disruption |
+| OPS-006 | P1 | App/bundle operation during rollout | Durable pending or in-progress app/bundle work prevents a conflicting planned disruption; an empty or unchanged repository poll does not claim lifecycle ownership or starve the rollout |
 | OPS-007 | P1 | Supported image upgrade | Init/finalize and per-member lifecycle complete |
 | OPS-008 | P1 | Unsupported simultaneous-restart configuration | Admission or controller blocks rolling treatment |
 | OPS-009 | P2 | TLS, ingress termination, and optional service mesh | No mesh is required; local readiness follows Splunkd TLS rather than ingress TLS, bypasses configured HTTP proxies, and management traffic remains valid in each qualified mesh mode |
 | OPS-010 | P2 | Private registry/air gap | Registry-qualified and digest-pinned image references plus all pull secrets survive rendering and rollout tracking unchanged; lifecycle and diagnostics add no helper image or undeclared external service |
-| OPS-011 | P1 | App Framework deploys an app whose bundle requires Search Head or indexer restart | The effective Splunk restart policy is observed and recorded; SHC and indexer restart work is serialized with every other planned disruption; insufficient redundancy fails closed; serving withdrawal is role-, protocol-, and configuration-aware; previous-peer Splunk and network-path recovery precedes the next target; continuous acknowledged ingest and representative real-time, historical, and scheduled searches prove that supported app deployment does not create a customer-visible search outage or silently incomplete result |
+| OPS-011 | P1 | App Framework deploys an app whose bundle requires Search Head or indexer restart | The effective Splunk restart policy is observed and recorded; durable app and bundle stages distinguish mutation from repository polling; SHC and indexer restart work is serialized with every other planned disruption; insufficient redundancy fails closed; serving withdrawal is role-, protocol-, and configuration-aware; previous-peer Splunk and network-path recovery precedes the next target; continuous acknowledged ingest and representative real-time, historical, and scheduled searches prove that supported app deployment does not create a customer-visible search outage or silently incomplete result |
 | OPS-012 | P1 | Namespace-first deletion with a referenced LicenseManager | The LicenseManager performs no create after namespace termination, removes its finalizer without manual intervention, and leaves no owned Secret, workload, PVC, or PV |
 | OPS-013 | P1 | LicenseManager health and expiration observation | The StatefulSet's named headless Service exists before a per-Pod management request; the Operator waits for Pod readiness, resolves the exact Pod identity, receives and parses the license response, emits `LicenseExpired` only from a successful response proving expiration, and represents a retryable transport failure through an aggregating Warning Event without a terminal condition or false expiration result |
 
@@ -531,7 +531,16 @@ explicitly contradictory desired state. Missing, Pending, missing-workload,
 and not-yet-rolled dependencies produce Pending/Progressing conditions with
 stable reason `DependencyNotReady`, a retained specific message, a Normal
 Event, structured dependency fields, and a bounded non-error retry. Explicit
-dependency and dependent desired-image disagreement remains terminal.
+dependency and dependent desired-image disagreement was terminal at that
+historical source.
+
+Final integration source `14047127c` supersedes the immediate-terminal part of
+that contract. A Kubernetes apply across referenced resources is not atomic,
+so desired-image disagreement is represented as retryable
+`DependencyNotReady`, retains both desired images in status/log detail, and can
+be alerted from sustained condition age. It does not emit a Warning or
+`Stalled` condition for a transient apply window. No workload advances while
+the disagreement exists.
 
 On EKS, one SearchHeadCluster submitted before its LicenseManager accumulated
 two aggregating Normal Event series for the absent and Pending dependency,

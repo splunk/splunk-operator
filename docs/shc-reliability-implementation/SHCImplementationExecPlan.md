@@ -521,7 +521,10 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   dependencies as Pending/Progressing with stable reason
   `DependencyNotReady`, a retained specific message, a Normal Event, structured
   logs, and bounded requeue. Explicitly contradictory desired images remain a
-  terminal `UpgradeBlockedVersionMismatch`. The exact source passed 41 Linux
+  terminal `UpgradeBlockedVersionMismatch` at that historical source. Final
+  integration source `14047127c` later supersedes the immediate-terminal case
+  after a normal non-atomic apply reproduced the same observation. The exact
+  source passed 41 Linux
   suites and 157 specs. Immutable Operator digest
   `sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`
   then passed an EKS absent-to-Pending-to-Ready LicenseManager campaign. The
@@ -613,6 +616,18 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   produced three more HTTP 200 checks, emitted no new failure, and left all
   tiers Ready. An actual expired license was not installed on EKS; that Event
   path is source-qualified by unit test.
+- [x] (2026-08-02 UTC) Registered and source-qualified SHC-94 on the final
+  integration branch at `9500d8d34`. A pending SHC StatefulSet revision was
+  starved because the App Framework repository-poll lock was treated as active
+  app deployment work even when the repository and durable app/bundle status
+  were empty. The coordination helper now uses durable pending/in-progress
+  per-app and bundle state. Focused regression tests, `make build`, complete
+  enterprise package tests, and the full 43-suite/192-enterprise-spec/150-Helm-
+  test macOS gate passed.
+- [ ] Complete SHC-94 EKS recovery and conflict qualification with an immutable
+  Operator image: resume the already-pending empty-repository rollout, then
+  prove that a real pending restart-required app or bundle still prevents a
+  conflicting Kubernetes-owned Pod disruption.
 - [ ] Complete the remaining SHC-85 negative and compatibility qualification.
   The bounded Operator-owned lifecycle is source-qualified and EKS-qualified
   for steady-controller operation, one controller-Pod restart during
@@ -2728,7 +2743,9 @@ paused; the later SHC-89 entry records that correction.
 2026-08-01 UTC: Completed bounded SHC-87 on
 `codex/shc-87-dependency-status`. Source `20d926658` classifies missing,
 Pending, missing-workload, and not-yet-rolled dependencies as retryable and
-retains contradictory desired images as terminal. All 41 Linux suites and 157
+retains contradictory desired images as terminal at that historical source;
+final integration source `14047127c` later supersedes immediate terminal
+classification using live non-atomic-apply evidence. All 41 Linux suites and 157
 specs passed. Operator OCI index digest
 `sha256:fbb1a53c45da509fee47edc618eefd93923fc3864df9533dc85dbcbc8914c2a3`
 qualified a disposable SHC created before its LicenseManager. The SHC retained

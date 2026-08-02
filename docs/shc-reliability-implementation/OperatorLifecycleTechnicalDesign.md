@@ -89,6 +89,16 @@ qualified member from observed SHC status. They do not store ordinal zero or a
 previous captain as a durable target. Image-owned deployer operations have the
 same requirement through the runtime contract.
 
+App Framework polling and App Framework mutation are separate coordination
+facts. The repository-poll lock is transient: it is also held while an empty
+or unchanged remote repository is listed, so it cannot by itself own the SHC
+disruption boundary. A StatefulSet rollout waits only when durable per-app
+status is `Pending` or `InProgress`, or when the durable bundle-push stage is
+`Pending` or `InProgress`. Completed work and an app-specific error remain
+observable but do not permanently starve an unrelated rollout. This preserves
+single-disruption ownership without allowing the poll interval to prevent
+Kubernetes desired-state convergence.
+
 ## Customer spec contract
 
 ### Common workload termination grace

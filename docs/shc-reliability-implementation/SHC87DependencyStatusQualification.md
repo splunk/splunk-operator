@@ -35,6 +35,15 @@ The deliberately contradictory desired-image case is source-qualified and was
 not imposed on the live EKS workload. This record therefore does not claim an
 EKS terminal-mismatch test.
 
+Supersession note (2026-08-02 UTC): this document remains the historical
+qualification record for source `20d926658`. Final integration source
+`14047127c` later proved that desired-image disagreement can occur during a
+normal non-atomic multi-resource apply and therefore changed this one case to
+retryable `DependencyNotReady`. The dependent remains blocked, both desired
+images remain observable, and sustained condition age can be alerted, but a
+transient apply window no longer emits `UpgradeBlockedVersionMismatch` or
+`Stalled`.
+
 ## Problem and classification boundary
 
 Before SHC-87, some expected dependency states returned ordinary errors or a
@@ -45,7 +54,7 @@ which stopped work without a durable reason. This made GitOps ordering and
 slow Splunk startup look like product failure, and made support evidence
 ambiguous.
 
-The accepted classification is:
+The classification accepted at historical source `20d926658` was:
 
 | Observed state | Classification | Required behavior |
 |---|---|---|
@@ -53,7 +62,7 @@ The accepted classification is:
 | Referenced object exists but its phase is not Ready | Retryable dependency convergence | Pending/Progressing, include kind, namespace, name, and phase |
 | Referenced object is Ready but its workload is not created yet | Retryable dependency convergence | Pending/Progressing, identify the absent workload |
 | Dependency desired image agrees, but the workload still runs the previous image | Retryable dependency convergence | Pending/Progressing until the desired image reaches the workload |
-| Dependency and dependent custom resources explicitly request different images | Terminal desired-state contradiction | terminal `UpgradeBlockedVersionMismatch` and Warning Event |
+| Dependency and dependent custom resources explicitly request different images | Historical source: terminal desired-state contradiction; final integration: retryable non-atomic desired-state convergence | Historical source emitted terminal `UpgradeBlockedVersionMismatch`; final integration source `14047127c` blocks progress with observable `DependencyNotReady` and no immediate Warning/Stalled signal |
 | Kubernetes API or data error is neither NotFound nor a known convergence state | Reconciliation error | preserve the underlying error; do not relabel it as dependency convergence |
 
 A fixed elapsed-time failure was deliberately not introduced. Splunk startup,
@@ -85,9 +94,12 @@ normal ordering. The dependency message survives the status merge while the
 condition remains active and clears on the first ordinary reconcile after the
 dependency is ready.
 
-A terminal image contradiction retains the existing
-`UpgradeBlockedVersionMismatch` Warning Event and terminal error. SHC-87 does
-not weaken that fail-closed boundary.
+At historical SHC-87 source, an image contradiction retained the existing
+`UpgradeBlockedVersionMismatch` Warning Event and terminal error. Final
+integration source `14047127c` supersedes that immediate-terminal behavior as
+described above: dependent progress still fails closed, but the observation is
+retryable because Kubernetes does not update several custom resources
+atomically.
 
 ## Source scope and corrections
 
@@ -287,7 +299,7 @@ evidence for this cleanup window.
 | Dependency detail survives status update | Specific message remained present across repeated status writes | Pass |
 | Recovery clears dependency state | Ready LicenseManager caused ordinary `ReplicasNotReady`; message cleared | Pass |
 | Retry does not restart workloads | All observed Kubernetes container restart counts remained zero | Pass |
-| Contradictory desired images fail closed | Focused test retained terminal mismatch and Warning Event | Source pass; not imposed on EKS |
+| Contradictory desired images fail closed | Focused test retained terminal mismatch and Warning Event | Historical source pass; immediate-terminal classification superseded by final integration source `14047127c` after live non-atomic-apply evidence |
 | Cross-namespace reference is honored | Focused missing/Pending ClusterManager coverage | Source pass |
 | MonitoringConsole reverse references are correct | Focused ClusterManager, SHC, indexer, and Standalone coverage | Source pass |
 | Full three-member SHC converges | Ready/Ready, 3/3 replicas, three endpoints, all members Up, zero restarts, direct member searches and 8/8 Service searches | Pass |
