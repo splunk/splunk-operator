@@ -1312,8 +1312,30 @@ func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceTyp
 		readinessProbe.PeriodSeconds = 2
 		readinessProbe.FailureThreshold = 1
 	}
+	if instanceType == SplunkSearchHead &&
+		searchHeadClusterLifecycleEnabled() &&
+		isLegacyDefaultReadinessProbe(spec.ReadinessProbe) {
+		// A Splunk-managed rolling restart stops and starts splunkd inside the
+		// same Pod. Withdraw a Search Head after the first failed local
+		// management-endpoint observation instead of routing traffic through
+		// the legacy three-failure window. The Operator-owned serving gate is
+		// still responsible for SHC membership and captain readiness.
+		readinessProbe = readinessProbe.DeepCopy()
+		readinessProbe.TimeoutSeconds = 2
+		readinessProbe.PeriodSeconds = 2
+		readinessProbe.FailureThreshold = 1
+	}
 	logger.DebugContext(ctx, "readinessProbe", "Configured", readinessProbe)
 	return readinessProbe
+}
+
+func isLegacyDefaultReadinessProbe(probe *enterpriseApi.Probe) bool {
+	return probe == nil ||
+		(probe.InitialDelaySeconds == readinessProbeDefaultDelaySec &&
+			probe.TimeoutSeconds == readinessProbeTimeoutSec &&
+			probe.PeriodSeconds == readinessProbePeriodSec &&
+			probe.FailureThreshold == readinessProbeFailureThreshold &&
+			probe.TerminationGracePeriodSeconds == nil)
 }
 
 // getStartupProbe the probe for checking the first start of splunk on the Pod

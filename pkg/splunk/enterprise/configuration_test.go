@@ -1857,6 +1857,76 @@ func TestGetIndexerLifecycleReadinessProbe(t *testing.T) {
 	}
 }
 
+func TestGetSearchHeadLifecycleReadinessProbe(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shc",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
+	probe := getReadinessProbe(
+		context.Background(),
+		cr,
+		SplunkSearchHead,
+		spec,
+	)
+	if probe.TimeoutSeconds != 2 ||
+		probe.PeriodSeconds != 2 ||
+		probe.FailureThreshold != 1 {
+		t.Fatalf(
+			"lifecycle Search Head readiness = timeout %d, period %d, failure %d; want 2/2/1",
+			probe.TimeoutSeconds,
+			probe.PeriodSeconds,
+			probe.FailureThreshold,
+		)
+	}
+
+	// A v4 object may already contain the legacy CRD default tuple. Treat it
+	// as the lifecycle default while preserving a genuinely custom tuple.
+	spec.ReadinessProbe = &enterpriseApi.Probe{
+		InitialDelaySeconds: readinessProbeDefaultDelaySec,
+		TimeoutSeconds:      readinessProbeTimeoutSec,
+		PeriodSeconds:       readinessProbePeriodSec,
+		FailureThreshold:    readinessProbeFailureThreshold,
+	}
+	legacy := getReadinessProbe(
+		context.Background(),
+		cr,
+		SplunkSearchHead,
+		spec,
+	)
+	if legacy.TimeoutSeconds != 2 ||
+		legacy.PeriodSeconds != 2 ||
+		legacy.FailureThreshold != 1 {
+		t.Fatalf("legacy readiness default was not resolved to 2/2/1: %#v", legacy)
+	}
+
+	spec.ReadinessProbe = &enterpriseApi.Probe{
+		TimeoutSeconds:   7,
+		PeriodSeconds:    11,
+		FailureThreshold: 4,
+	}
+	configured := getReadinessProbe(
+		context.Background(),
+		cr,
+		SplunkSearchHead,
+		spec,
+	)
+	if configured.TimeoutSeconds != 7 ||
+		configured.PeriodSeconds != 11 ||
+		configured.FailureThreshold != 4 {
+		t.Fatalf(
+			"explicit readiness = timeout %d, period %d, failure %d; want 7/11/4",
+			configured.TimeoutSeconds,
+			configured.PeriodSeconds,
+			configured.FailureThreshold,
+		)
+	}
+}
+
 func TestGetProbeConfigMapReconcilesExistingScripts(t *testing.T) {
 	ctx := context.Background()
 	cr := &enterpriseApi.IndexerCluster{

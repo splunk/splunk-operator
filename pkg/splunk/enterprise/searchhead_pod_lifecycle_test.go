@@ -125,6 +125,9 @@ func TestSearchHeadStatefulSetUsesSupportedRuntimeLifecycle(t *testing.T) {
 		strings.Contains(strings.Join(container.ReadinessProbe.Exec.Command, " "),
 			"/services/shcluster/member/ready"),
 		"the Operator must not render an unsupported SHC readiness endpoint")
+	require.Equal(t, int32(2), container.ReadinessProbe.TimeoutSeconds)
+	require.Equal(t, int32(2), container.ReadinessProbe.PeriodSeconds)
+	require.Equal(t, int32(1), container.ReadinessProbe.FailureThreshold)
 	require.Equal(
 		t,
 		int32(60),
