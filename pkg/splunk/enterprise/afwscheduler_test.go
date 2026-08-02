@@ -5091,6 +5091,45 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("credential in command diagnostics is redacted", func(t *testing.T) {
+		cr := &enterpriseApi.Standalone{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-standalone",
+				Namespace: "test",
+			},
+		}
+		mockPodExecClient := &spltest.MockPodExecClient{
+			Cr:     cr,
+			Client: mockClient,
+		}
+		mockPodExecClient.SetTargetPodName(ctx, "test-pod")
+		mockPodExecClient.AddMockPodExecReturnContexts(
+			ctx,
+			[]string{"/opt/splunk/bin/splunk list app testapp -auth admin:"},
+			&spltest.MockPodExecReturnContext{
+				StdOut: "synthetic stdout " + adminPwd,
+				StdErr: "synthetic stderr " + adminPwd,
+				Err:    fmt.Errorf("synthetic exec error %s", adminPwd),
+			},
+		)
+
+		_, err := isAppAlreadyInstalled(
+			ctx,
+			cr,
+			mockPodExecClient,
+			"testapp",
+		)
+		if err == nil {
+			t.Fatal("expected the synthetic execution error")
+		}
+		if strings.Contains(err.Error(), adminPwd) {
+			t.Fatalf("error exposed the namespace admin password: %v", err)
+		}
+		if strings.Count(err.Error(), "****") < 4 {
+			t.Fatalf("expected command and diagnostic fields to be redacted: %v", err)
+		}
+	})
 }
 
 func TestRedactSplunkAuthHandlesShellQuotedPassword(t *testing.T) {

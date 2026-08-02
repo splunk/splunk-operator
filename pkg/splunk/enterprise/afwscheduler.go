@@ -825,6 +825,8 @@ func isAppAlreadyInstalled(rctx context.Context, cr splcommon.MetaObject, podExe
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
+	safeStdOut := redactSplunkAuth(stdOut, adminPwd)
+	safeStdErr := redactSplunkAuth(stdErr, adminPwd)
 
 	// Handle specific stderr cases first
 	if strings.Contains(stdErr, "Could not find object") {
@@ -839,7 +841,7 @@ func isAppAlreadyInstalled(rctx context.Context, cr splcommon.MetaObject, podExe
 		scopedLog.InfoContext(
 			rctx,
 			"command stderr output (informational only)",
-			"stderr", redactSplunkAuth(stdErr, adminPwd),
+			"stderr", safeStdErr,
 		)
 	}
 
@@ -852,15 +854,20 @@ func isAppAlreadyInstalled(rctx context.Context, cr splcommon.MetaObject, podExe
 		// Check for grep exit code 1 (pattern not found)
 		if strings.Contains(errMsg, "exit status 1") || strings.Contains(errMsg, "command terminated with exit code 1") {
 			// grep exit code 1 means "ENABLED" pattern not found - app exists but is not enabled
-			scopedLog.InfoContext(rctx, "app not enabled - grep pattern not found", "stdout", stdOut, "stderr", stdErr)
+			scopedLog.InfoContext(
+				rctx,
+				"app not enabled - grep pattern not found",
+				"stdout", safeStdOut,
+				"stderr", safeStdErr,
+			)
 			return false, nil
 		}
 
 		// Any other exit code indicates a real error (splunk command failed, etc.)
 		return false, fmt.Errorf(
 			"could not get installed app status stdOut: %s, stdErr: %s, error: %s, command: %s",
-			redactSplunkAuth(stdOut, adminPwd),
-			redactSplunkAuth(stdErr, adminPwd),
+			safeStdOut,
+			safeStdErr,
 			redactSplunkAuth(err.Error(), adminPwd),
 			safeCommand,
 		)
@@ -876,7 +883,11 @@ func isAppAlreadyInstalled(rctx context.Context, cr splcommon.MetaObject, podExe
 		)
 	}
 
-	scopedLog.InfoContext(rctx, "app installation state check successful - app is enabled", "appStatus", strings.TrimSpace(stdOut))
+	scopedLog.InfoContext(
+		rctx,
+		"app installation state check successful - app is enabled",
+		"appStatus", strings.TrimSpace(safeStdOut),
+	)
 	return true, nil
 }
 
