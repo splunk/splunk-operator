@@ -218,6 +218,22 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 			return enterpriseApi.PhasePending, nil
 		}
 	}
+	appFrameworkRestartScheduled := false
+	if err == nil {
+		appFrameworkRestartScheduled, err =
+			mgr.reconcileAppFrameworkRestartRevision(
+				ctx,
+				eventPublisher,
+			)
+	}
+	if err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+	if appFrameworkRestartScheduled {
+		// Persist the bundle-to-revision handoff before rendering and applying
+		// the new StatefulSet Pod template on the next reconciliation.
+		return enterpriseApi.PhaseUpdating, nil
+	}
 	if err == nil &&
 		mgr.cr.Status.LifecycleOperation != nil &&
 		mgr.cr.Status.LifecycleOperation.Intent ==
@@ -428,6 +444,71 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	)
 
 	return phase, nil
+}
+
+// reconcileAppFrameworkRestartRevision converts Splunk's durable
+// advertise-restart-required observation into one StatefulSet revision. The
+// App Framework send path does not start Splunk's internal rolling restart, so
+// no member is disrupted before this handoff is persisted.
+func (mgr *searchHeadClusterPodManager) reconcileAppFrameworkRestartRevision(
+	ctx context.Context,
+	eventPublisher *K8EventPublisher,
+) (bool, error) {
+	enabled, err := shcAppFrameworkKubernetesRestartEnabled(mgr.cr)
+	if err != nil {
+		return false, fmt.Errorf(
+			"resolve SHC App Framework restart ownership: %w",
+			err,
+		)
+	}
+	if !enabled {
+		return false, nil
+	}
+	tracker := mgr.cr.Status.AppContext.BundlePushStatus
+	if tracker.BundlePushStage != enterpriseApi.BundlePushComplete ||
+		mgr.cr.Status.AppFrameworkBundleRevision == "" ||
+		mgr.cr.Status.AppFrameworkRestartRevision ==
+			mgr.cr.Status.AppFrameworkBundleRevision ||
+		!mgr.cr.Status.CaptainMembersObserved {
+		return false, nil
+	}
+
+	restartRequiredMembers := make([]string, 0)
+	for i := range mgr.cr.Status.Members {
+		member := mgr.cr.Status.Members[i]
+		if member.AdvertiseRestartRequired {
+			restartRequiredMembers = append(
+				restartRequiredMembers,
+				member.Name,
+			)
+		}
+	}
+	if len(restartRequiredMembers) == 0 {
+		return false, nil
+	}
+
+	mgr.cr.Status.AppFrameworkRestartRevision =
+		mgr.cr.Status.AppFrameworkBundleRevision
+	if eventPublisher != nil {
+		eventPublisher.Normal(
+			ctx,
+			EventReasonSHCAppFrameworkRestartScheduled,
+			fmt.Sprintf(
+				"Scheduling Kubernetes-owned Search Head restart for App Framework bundle %s; restart-required members: %s",
+				mgr.cr.Status.AppFrameworkBundleRevision,
+				strings.Join(restartRequiredMembers, ", "),
+			),
+		)
+	}
+	logging.FromContext(ctx).InfoContext(
+		ctx,
+		"App Framework bundle requires Kubernetes-owned Search Head restart",
+		"bundleRevision",
+		mgr.cr.Status.AppFrameworkBundleRevision,
+		"members",
+		restartRequiredMembers,
+	)
+	return true, nil
 }
 
 func (mgr *searchHeadClusterPodManager) startAuthorizedRevisionRecovery(

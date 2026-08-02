@@ -10222,6 +10222,20 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
+              appFrameworkBundleRevision:
+                description: |-
+                  AppFrameworkBundleRevision identifies the exact cluster-scoped App
+                  Framework bundle currently being staged or sent. It is derived from the
+                  durable app deployment records so an interrupted controller can resume the
+                  same work.
+                type: string
+              appFrameworkRestartRevision:
+                description: |-
+                  AppFrameworkRestartRevision identifies the most recent bundle for which
+                  Splunk advertised that Search Head members require a process restart. The
+                  Search Head StatefulSet retains this value as a Pod-template annotation so
+                  Kubernetes owns the replacement.
+                type: string
               captain:
                 description: name or label of the search head captain
                 type: string

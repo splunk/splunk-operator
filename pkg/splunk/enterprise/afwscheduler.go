@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1792,7 +1793,7 @@ func getClusterScopePlaybookContext(ctx context.Context, client splcommon.Contro
 func (shcPlaybookContext *SHCPlaybookContext) removeSHCBundlePushStatusFile(ctx context.Context) error {
 	var err error
 
-	cmd := fmt.Sprintf("rm %s", shcBundlePushStatusCheckFile)
+	cmd := fmt.Sprintf("rm -f %s %s", shcBundlePushStatusCheckFile, shcBundleStageStatusFile)
 	streamOptions := splutil.NewStreamOptionsObject(cmd)
 
 	_, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
@@ -1919,7 +1920,44 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 		scopedLog.ErrorContext(ctx, "failed to retrieve admin password", "error", err)
 		return err
 	}
-	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadTargetURL, shellQuote(adminPwd), shcBundlePushStatusCheckFile)
+	cmd := ""
+	shc, isSHC := shcPlaybookContext.cr.(*enterpriseApi.SearchHeadCluster)
+	kubernetesOwnedRestart, err :=
+		shcAppFrameworkKubernetesRestartEnabled(shc)
+	if err != nil {
+		return fmt.Errorf(
+			"resolve SHC App Framework restart ownership: %w",
+			err,
+		)
+	}
+	if isSHC && kubernetesOwnedRestart {
+		if err := validateSHCAppFrameworkRestartBaseline(shc); err != nil {
+			return err
+		}
+		appDeployContext := &shc.Status.AppContext
+		if shcPlaybookContext.afwPipeline != nil &&
+			shcPlaybookContext.afwPipeline.appDeployContext != nil {
+			appDeployContext =
+				shcPlaybookContext.afwPipeline.appDeployContext
+		}
+		shc.Status.AppFrameworkBundleRevision = appFrameworkBundleRevision(
+			appDeployContext,
+		)
+		cmd = fmt.Sprintf(
+			sendSHCBundleWithoutRestartCmdStr,
+			shcPlaybookContext.searchHeadTargetURL,
+			shellQuote(adminPwd),
+			shcBundlePushStatusCheckFile,
+			shcBundleStageStatusFile,
+		)
+	} else {
+		cmd = fmt.Sprintf(
+			applySHCBundleCmdStr,
+			shcPlaybookContext.searchHeadTargetURL,
+			shellQuote(adminPwd),
+			shcBundlePushStatusCheckFile,
+		)
+	}
 	scopedLog.Info("Triggering bundle push", "command", redactSplunkAuth(cmd, adminPwd))
 
 	streamOptions := splutil.NewStreamOptionsObject(cmd)
@@ -1929,6 +1967,40 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 		return err
 	}
 	return nil
+}
+
+// appFrameworkBundleRevision returns a stable identity for the bundle described
+// by App Framework status. Map iteration order and transient phase counters are
+// intentionally excluded; the remote object identity and requested repository
+// state are sufficient to distinguish the desired bundle across retries.
+func appFrameworkBundleRevision(
+	appDeployContext *enterpriseApi.AppDeploymentContext,
+) string {
+	if appDeployContext == nil {
+		return ""
+	}
+	records := make([]string, 0)
+	for appSource, sourceStatus := range appDeployContext.AppsSrcDeployStatus {
+		for _, app := range sourceStatus.AppDeploymentInfoList {
+			records = append(records, fmt.Sprintf(
+				"%s\x00%s\x00%s\x00%d",
+				appSource,
+				app.AppName,
+				app.ObjectHash,
+				app.RepoState,
+			))
+		}
+	}
+	if len(records) == 0 {
+		return ""
+	}
+	sort.Strings(records)
+	hash := sha256.New()
+	for _, record := range records {
+		_, _ = hash.Write([]byte(record))
+		_, _ = hash.Write([]byte{0})
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
 // setLivenessProbeLevel sets the liveness probe level across all the Search Head Pods.

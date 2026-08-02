@@ -107,9 +107,26 @@ const (
 
 	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:%s --answer-yes -push-default-apps true &> %s &"
 
+	// Stage and send an App Framework SHC bundle without allowing Splunk to
+	// start an in-process rolling restart. If members advertise
+	// restart-required after the send, the Search Head StatefulSet lifecycle
+	// owns the restart with the normal Kubernetes readiness, detention,
+	// captain-transfer, and preStop sequence. The initial telemetry-bundle path
+	// retains applySHCBundleCmdStr and its separately qualified formation flow.
+	// Keep stage output out of the monitored push-status file. The status poller
+	// treats non-final, meaningful output as a failure, while a successful stage
+	// can print before the send has finished. The wrapper creates the monitored
+	// file empty while staging, copies stage diagnostics there only on failure,
+	// and otherwise lets only the send result reach the monitored file.
+	sendSHCBundleWithoutRestartCmdStr = "( /opt/splunk/bin/splunk apply shcluster-bundle -action stage -auth admin:%[2]s --answer-yes -push-default-apps true > %[4]s 2>&1 || { cat %[4]s; exit 1; }; /opt/splunk/bin/splunk apply shcluster-bundle -action send -target https://%[1]s:8089 -auth admin:%[2]s --answer-yes -push-default-apps true ) > %[3]s 2>&1 &"
+
 	shcBundlePushCompleteStr = "Bundle has been pushed successfully to all the cluster members.\n"
 
 	shcBundlePushStatusCheckFile = "/operator-staging/appframework/.shcluster_bundle_status.txt"
+
+	shcBundleStageStatusFile = "/operator-staging/appframework/.shcluster_bundle_stage_status.txt"
+
+	shcAppFrameworkRestartRevisionAnnotation = "enterprise.splunk.com/appframework-restart-revision"
 
 	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:%s --skip-validation --answer-yes"
 

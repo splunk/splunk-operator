@@ -81,6 +81,99 @@ func TestSHCPodRolloutActiveFailsClosed(t *testing.T) {
 	}
 }
 
+func TestSHCAppFrameworkKubernetesRestartOwnership(t *testing.T) {
+	replicas := int32(3)
+	tests := []struct {
+		name         string
+		podGate      bool
+		shcGate      bool
+		strategy     enterpriseApi.SearchHeadClusterPodUpdateStrategy
+		initialStage enterpriseApi.SearchHeadClusterInitialFormationStage
+		stable       *int32
+		want         bool
+	}{
+		{
+			name:     "feature gates disabled retains Splunk restart",
+			strategy: enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+			stable:   &replicas,
+		},
+		{
+			name:     "OnDelete compatibility retains Splunk restart",
+			podGate:  true,
+			shcGate:  true,
+			strategy: enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete,
+			stable:   &replicas,
+		},
+		{
+			name:         "initial formation retains bundle-owned restart",
+			podGate:      true,
+			shcGate:      true,
+			strategy:     enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+			initialStage: enterpriseApi.SearchHeadClusterInitialFormationStageAppFrameworkPending,
+		},
+		{
+			name:     "operational RollingUpdate uses Kubernetes restart",
+			podGate:  true,
+			shcGate:  true,
+			strategy: enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+			stable:   &replicas,
+			want:     true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setLifecyclePolicyTestGates(t, test.podGate, test.shcGate)
+			cr := &enterpriseApi.SearchHeadCluster{
+				Spec: enterpriseApi.SearchHeadClusterSpec{
+					LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+						PodUpdateStrategy: test.strategy,
+					},
+				},
+				Status: enterpriseApi.SearchHeadClusterStatus{
+					InitialFormationStage: test.initialStage,
+					LastStableReplicas:    test.stable,
+				},
+			}
+			got, err := shcAppFrameworkKubernetesRestartEnabled(cr)
+			if err != nil {
+				t.Fatalf("resolve restart ownership: %v", err)
+			}
+			if got != test.want {
+				t.Fatalf("Kubernetes restart ownership=%t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestValidateSHCAppFrameworkRestartBaseline(t *testing.T) {
+	clean := &enterpriseApi.SearchHeadCluster{
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+				{Name: "search-head-0", RestartState: "NoRestart"},
+				{Name: "search-head-1"},
+			},
+		},
+	}
+	if err := validateSHCAppFrameworkRestartBaseline(clean); err != nil {
+		t.Fatalf("clean restart baseline rejected: %v", err)
+	}
+
+	advertised := clean.DeepCopy()
+	advertised.Status.Members[0].AdvertiseRestartRequired = true
+	if err := validateSHCAppFrameworkRestartBaseline(advertised); err == nil ||
+		!strings.Contains(err.Error(), "already advertises restart-required") {
+		t.Fatalf("advertised restart baseline error=%v", err)
+	}
+
+	restarting := clean.DeepCopy()
+	restarting.Status.Members[0].RestartState = "Restarting"
+	if err := validateSHCAppFrameworkRestartBaseline(restarting); err == nil ||
+		!strings.Contains(err.Error(), "restart state") {
+		t.Fatalf("active restart baseline error=%v", err)
+	}
+}
+
 func TestSHCImageUpgradeActiveFailsClosed(t *testing.T) {
 	tests := []struct {
 		name      string

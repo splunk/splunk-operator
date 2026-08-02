@@ -118,6 +118,111 @@ func TestLifecycleBlockedErrorIsTerminalAndEmitsOnce(t *testing.T) {
 	}
 }
 
+func TestReconcileAppFrameworkRestartRevision(t *testing.T) {
+	setLifecyclePolicyTestGates(t, true, true)
+	base := func() *enterpriseApi.SearchHeadCluster {
+		return &enterpriseApi.SearchHeadCluster{
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+					PodUpdateStrategy: enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+				},
+			},
+			Status: enterpriseApi.SearchHeadClusterStatus{
+				CaptainMembersObserved:     true,
+				AppFrameworkBundleRevision: "bundle-a",
+				AppContext: enterpriseApi.AppDeploymentContext{
+					BundlePushStatus: enterpriseApi.BundlePushTracker{
+						BundlePushStage: enterpriseApi.BundlePushComplete,
+					},
+				},
+				Members: []enterpriseApi.SearchHeadClusterMemberStatus{
+					{
+						Name:                     "splunk-example-search-head-0",
+						AdvertiseRestartRequired: true,
+					},
+					{Name: "splunk-example-search-head-1"},
+				},
+			},
+		}
+	}
+
+	cr := base()
+	mgr := &searchHeadClusterPodManager{cr: cr}
+	scheduled, err := mgr.reconcileAppFrameworkRestartRevision(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("schedule restart revision: %v", err)
+	}
+	if !scheduled {
+		t.Fatal("restart-required completed bundle was not scheduled")
+	}
+	if got := cr.Status.AppFrameworkRestartRevision; got != "bundle-a" {
+		t.Fatalf("restart revision=%q, want bundle-a", got)
+	}
+	scheduled, err = mgr.reconcileAppFrameworkRestartRevision(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("reconcile same restart revision: %v", err)
+	}
+	if scheduled {
+		t.Fatal("same bundle scheduled more than once")
+	}
+
+	for name, mutate := range map[string]func(*enterpriseApi.SearchHeadCluster){
+		"bundle in progress": func(candidate *enterpriseApi.SearchHeadCluster) {
+			candidate.Status.AppContext.BundlePushStatus.BundlePushStage =
+				enterpriseApi.BundlePushInProgress
+		},
+		"captain view unavailable": func(candidate *enterpriseApi.SearchHeadCluster) {
+			candidate.Status.CaptainMembersObserved = false
+		},
+		"no member advertises restart": func(candidate *enterpriseApi.SearchHeadCluster) {
+			candidate.Status.Members[0].AdvertiseRestartRequired = false
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := base()
+			mutate(candidate)
+			candidateMgr := &searchHeadClusterPodManager{cr: candidate}
+			scheduled, err := candidateMgr.reconcileAppFrameworkRestartRevision(
+				context.Background(),
+				nil,
+			)
+			if err != nil {
+				t.Fatalf("reconcile restart revision: %v", err)
+			}
+			if scheduled {
+				t.Fatal("unsafe or unnecessary restart revision was scheduled")
+			}
+			if candidate.Status.AppFrameworkRestartRevision != "" {
+				t.Fatalf(
+					"restart revision=%q, want empty",
+					candidate.Status.AppFrameworkRestartRevision,
+				)
+			}
+		})
+	}
+}
+
+func TestApplySHCAppFrameworkRestartRevision(t *testing.T) {
+	template := &corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{"existing": "value"},
+		},
+	}
+	applySHCAppFrameworkRestartRevision(template, "bundle-a")
+	if got := template.Annotations[shcAppFrameworkRestartRevisionAnnotation]; got != "bundle-a" {
+		t.Fatalf("restart annotation=%q, want bundle-a", got)
+	}
+	if template.Annotations["existing"] != "value" {
+		t.Fatal("existing Pod-template annotation was not preserved")
+	}
+
+	withoutRevision := &corev1.PodTemplateSpec{}
+	applySHCAppFrameworkRestartRevision(withoutRevision, "")
+	if withoutRevision.Annotations != nil {
+		t.Fatalf("empty revision created annotations: %v", withoutRevision.Annotations)
+	}
+}
+
 func TestNormalizeSearchHeadClusterPodUpdatePhase(t *testing.T) {
 	target := int32(2)
 	active := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{

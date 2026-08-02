@@ -555,6 +555,20 @@ type SearchHeadClusterStatus struct {
 	// App Framework Context
 	AppContext AppDeploymentContext `json:"appContext"`
 
+	// AppFrameworkBundleRevision identifies the exact cluster-scoped App
+	// Framework bundle currently being staged or sent. It is derived from the
+	// durable app deployment records so an interrupted controller can resume the
+	// same work.
+	// +optional
+	AppFrameworkBundleRevision string `json:"appFrameworkBundleRevision,omitempty"`
+
+	// AppFrameworkRestartRevision identifies the most recent bundle for which
+	// Splunk advertised that Search Head members require a process restart. The
+	// Search Head StatefulSet retains this value as a Pod-template annotation so
+	// Kubernetes owns the replacement.
+	// +optional
+	AppFrameworkRestartRevision string `json:"appFrameworkRestartRevision,omitempty"`
+
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
 

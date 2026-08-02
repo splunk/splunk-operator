@@ -70,6 +70,90 @@ func TestIsFanOutApplicableToCR(t *testing.T) {
 
 }
 
+func TestAppFrameworkBundleRevisionIsStableAndContentAddressed(t *testing.T) {
+	if got := appFrameworkBundleRevision(&enterpriseApi.AppDeploymentContext{}); got != "" {
+		t.Fatalf("empty App Framework bundle revision=%q, want empty", got)
+	}
+	first := &enterpriseApi.AppDeploymentContext{
+		AppsSrcDeployStatus: map[string]enterpriseApi.AppSrcDeployInfo{
+			"source-b": {
+				AppDeploymentInfoList: []enterpriseApi.AppDeploymentInfo{
+					{
+						AppName:    "second.tgz",
+						ObjectHash: "hash-b",
+						RepoState:  enterpriseApi.RepoStateActive,
+					},
+				},
+			},
+			"source-a": {
+				AppDeploymentInfoList: []enterpriseApi.AppDeploymentInfo{
+					{
+						AppName:    "first.tgz",
+						ObjectHash: "hash-a",
+						RepoState:  enterpriseApi.RepoStateActive,
+					},
+				},
+			},
+		},
+	}
+	second := &enterpriseApi.AppDeploymentContext{
+		AppsSrcDeployStatus: map[string]enterpriseApi.AppSrcDeployInfo{
+			"source-a": first.AppsSrcDeployStatus["source-a"],
+			"source-b": first.AppsSrcDeployStatus["source-b"],
+		},
+	}
+
+	firstRevision := appFrameworkBundleRevision(first)
+	secondRevision := appFrameworkBundleRevision(second)
+	if firstRevision == "" || firstRevision != secondRevision {
+		t.Fatalf(
+			"bundle revisions first=%q second=%q, want stable non-empty identity",
+			firstRevision,
+			secondRevision,
+		)
+	}
+
+	changed := second.AppsSrcDeployStatus["source-b"]
+	changed.AppDeploymentInfoList[0].ObjectHash = "hash-b-updated"
+	second.AppsSrcDeployStatus["source-b"] = changed
+	if changedRevision := appFrameworkBundleRevision(second); changedRevision == firstRevision {
+		t.Fatalf(
+			"changed bundle revision=%q, want value different from %q",
+			changedRevision,
+			firstRevision,
+		)
+	}
+}
+
+func TestSHCAppFrameworkBundleCommandSeparatesSendFromRestart(t *testing.T) {
+	for _, expected := range []string{
+		"apply shcluster-bundle -action stage",
+		"apply shcluster-bundle -action send",
+	} {
+		if !strings.Contains(sendSHCBundleWithoutRestartCmdStr, expected) {
+			t.Fatalf("SHC bundle command %q does not contain %q", sendSHCBundleWithoutRestartCmdStr, expected)
+		}
+	}
+	if strings.Contains(sendSHCBundleWithoutRestartCmdStr, "-action restart") {
+		t.Fatalf("SHC App Framework command must not start Splunk's internal restart: %q", sendSHCBundleWithoutRestartCmdStr)
+	}
+	if strings.Contains(applySHCBundleCmdStr, "-action send") {
+		t.Fatalf("initial telemetry bundle command unexpectedly changed to send-only mode: %q", applySHCBundleCmdStr)
+	}
+	command := fmt.Sprintf(
+		sendSHCBundleWithoutRestartCmdStr,
+		"shc-service",
+		"password",
+		shcBundlePushStatusCheckFile,
+		shcBundleStageStatusFile,
+	)
+	if !strings.Contains(command, "> "+shcBundleStageStatusFile+" 2>&1") ||
+		!strings.Contains(command, "{ cat "+shcBundleStageStatusFile+"; exit 1; }") ||
+		!strings.Contains(command, ") > "+shcBundlePushStatusCheckFile+" 2>&1 &") {
+		t.Fatalf("SHC App Framework command does not isolate intermediate stage output: %q", command)
+	}
+}
+
 func TestCreateAndAddPipelineWorker(t *testing.T) {
 	ctx := context.TODO()
 	appDeployInfo := &enterpriseApi.AppDeploymentInfo{
@@ -2898,7 +2982,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 		fmt.Sprintf(cmdSetFilePermissionsToRW, shcAppsLocationOnDeployer),
 		"/opt/splunk/bin/splunk apply shcluster-bundle",
 		fmt.Sprintf("cat %s", shcBundlePushStatusCheckFile),
-		fmt.Sprintf("rm %s", shcBundlePushStatusCheckFile),
+		fmt.Sprintf("rm -f %s %s", shcBundlePushStatusCheckFile, shcBundleStageStatusFile),
 	}
 
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
@@ -4647,14 +4731,14 @@ func TestSHCBundlePushUsesReachableMemberWhenOrdinalZeroIsUnavailable(t *testing
 		Cr:     shc,
 		Client: mockClient,
 	}
+	shc.Spec.LifecyclePolicy = &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+		PodUpdateStrategy: enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+	}
 	appFrameworkExec.AddMockPodExecReturnContexts(
 		ctx,
 		[]string{
 			"mkdir -p /tmp/splunk_operator_k8s/probes/; echo \"export K8_OPERATOR_LIVENESS_LEVEL=1\" > /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh",
-			fmt.Sprintf(
-				"/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:",
-				targetURL,
-			),
+			"/opt/splunk/bin/splunk apply shcluster-bundle -action stage -auth admin:",
 		},
 		&spltest.MockPodExecReturnContext{},
 		&spltest.MockPodExecReturnContext{},
@@ -5009,7 +5093,7 @@ func TestSHCIsBundlePushComplete(t *testing.T) {
 	c := spltest.NewMockClient()
 
 	catCmd := fmt.Sprintf("cat %s", shcBundlePushStatusCheckFile)
-	rmCmd := fmt.Sprintf("rm %s", shcBundlePushStatusCheckFile)
+	rmCmd := fmt.Sprintf("rm -f %s %s", shcBundlePushStatusCheckFile, shcBundleStageStatusFile)
 
 	tests := []struct {
 		name           string

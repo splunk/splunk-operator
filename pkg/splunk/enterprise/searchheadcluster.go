@@ -772,6 +772,10 @@ func getSearchHeadStatefulSetForReconcile(
 	if err != nil {
 		return nil, false, err
 	}
+	applySHCAppFrameworkRestartRevision(
+		&ss.Spec.Template,
+		cr.Status.AppFrameworkRestartRevision,
+	)
 
 	authorizedRevisionWithdrawalRequested, err :=
 		holdSearchHeadStatefulSetTemplateForActiveReplacement(
@@ -796,6 +800,22 @@ func getSearchHeadStatefulSetForReconcile(
 	ss.Spec.UpdateStrategy = updateStrategy
 
 	return ss, authorizedRevisionWithdrawalRequested, nil
+}
+
+// applySHCAppFrameworkRestartRevision makes a restart-required bundle a normal
+// StatefulSet Pod-template revision. The value is durable in SHC status and is
+// retained after member recovery so the desired template does not roll back.
+func applySHCAppFrameworkRestartRevision(
+	template *corev1.PodTemplateSpec,
+	revision string,
+) {
+	if template == nil || revision == "" {
+		return
+	}
+	if template.Annotations == nil {
+		template.Annotations = make(map[string]string)
+	}
+	template.Annotations[shcAppFrameworkRestartRevisionAnnotation] = revision
 }
 
 // holdSearchHeadStatefulSetTemplateForActiveReplacement serializes desired

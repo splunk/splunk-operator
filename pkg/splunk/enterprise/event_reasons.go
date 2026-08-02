@@ -83,6 +83,7 @@ const (
 	EventReasonRetrieveCMSpecFailed            splcommon.EventReason = "RetrieveCMSpecFailed"
 	EventReasonConfFileUpdateFailed            splcommon.EventReason = "ConfFileUpdateFailed"
 	EventReasonBundlePushFailed                splcommon.EventReason = "BundlePushFailed"
+	EventReasonSHCAppFrameworkRestartScheduled splcommon.EventReason = "SHCAppFrameworkRestartScheduled"
 	EventReasonPodExecFailed                   splcommon.EventReason = "PodExecFailed"
 	EventReasonScalingBlockedRF                splcommon.EventReason = "ScalingBlockedRF"
 	EventReasonLicenseExpired                  splcommon.EventReason = "LicenseExpired"

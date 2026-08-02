@@ -14,7 +14,11 @@
 
 package enterprise
 
-import enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+import (
+	"fmt"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+)
 
 func shcPodRolloutActive(
 	operation *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
@@ -73,4 +77,54 @@ func shcAppFrameworkWorkActive(
 	}
 
 	return false
+}
+
+// shcAppFrameworkKubernetesRestartEnabled identifies the fully qualified
+// runtime contract for converting an App Framework restart requirement into a
+// StatefulSet revision. Compatibility-mode OnDelete clusters, disabled feature
+// gates, and initial formation continue to use Splunk's supported bundle-owned
+// restart path.
+func shcAppFrameworkKubernetesRestartEnabled(
+	cr *enterpriseApi.SearchHeadCluster,
+) (bool, error) {
+	if cr == nil ||
+		!searchHeadClusterLifecycleEnabled() ||
+		searchHeadCanRunInitialAppFramework(cr) {
+		return false, nil
+	}
+	policy, err := ResolveSearchHeadClusterLifecyclePolicy(&cr.Spec)
+	if err != nil {
+		return false, err
+	}
+	return policy.PodUpdateStrategy ==
+		enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate, nil
+}
+
+// validateSHCAppFrameworkRestartBaseline prevents the controller from
+// attributing an already-pending member restart to a newly sent App Framework
+// bundle. The post-send restart observation is meaningful only from a clean
+// member baseline.
+func validateSHCAppFrameworkRestartBaseline(
+	cr *enterpriseApi.SearchHeadCluster,
+) error {
+	if cr == nil {
+		return fmt.Errorf("SHC App Framework restart baseline requires a SearchHeadCluster")
+	}
+	for i := range cr.Status.Members {
+		member := cr.Status.Members[i]
+		if member.AdvertiseRestartRequired {
+			return fmt.Errorf(
+				"SHC member %s already advertises restart-required before App Framework bundle send",
+				member.Name,
+			)
+		}
+		if member.RestartState != "" && member.RestartState != "NoRestart" {
+			return fmt.Errorf(
+				"SHC member %s has restart state %q before App Framework bundle send",
+				member.Name,
+				member.RestartState,
+			)
+		}
+	}
+	return nil
 }
