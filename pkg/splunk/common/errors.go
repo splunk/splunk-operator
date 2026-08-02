@@ -28,13 +28,19 @@ import (
 // errors.Is(err, reconcile.TerminalError(nil)) check succeeds and the
 // controller does not requeue.
 type TerminalError struct {
-	Reason  string // PascalCase, machine readable
-	Message string // concise, user-facing; MUST NOT contain the full trace
-	Err     error  // full detail, for logs
+	Reason  EventReason // PascalCase, machine readable; use an EventReasonXxx constant
+	Message string      // concise, user-facing; MUST NOT contain the full trace
+	Err     error       // full detail, for logs
 }
 
-// NewTerminalError wraps cause with a PascalCase machine-readable reason and a short condition message.
-func NewTerminalError(reason, message string, cause error) error {
+// NewTerminalError wraps cause with a PascalCase machine-readable reason and a
+// short condition message.
+//
+//   - reason must be a predefined EventReasonXxx constant (PascalCase,
+//     machine-readable, no spaces — appears in CR status conditions and K8s events).
+//   - message must be concise and user-facing; it MUST NOT include stack traces
+//     or internal details (those belong in cause).
+func NewTerminalError(reason EventReason, message string, cause error) error {
 	return &TerminalError{Reason: reason, Message: message, Err: cause}
 }
 
@@ -63,7 +69,7 @@ func TerminalMessage(err error) (string, bool) {
 
 // TerminalReason returns the PascalCase machine-readable reason if err (or
 // anything it wraps) is a *TerminalError.
-func TerminalReason(err error) (string, bool) {
+func TerminalReason(err error) (EventReason, bool) {
 	var te *TerminalError
 	if errors.As(err, &te) {
 		return te.Reason, true

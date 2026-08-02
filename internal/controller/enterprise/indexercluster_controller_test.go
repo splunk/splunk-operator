@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
@@ -21,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 )
 
 var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
@@ -141,6 +145,39 @@ var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
 			ssSpec.DeletionTimestamp = &metav1.Time{}
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
+			namespace := "ns-splunk-ic-stalled"
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.IndexerCluster{})
+			c := builder.Build()
+			recorder := record.NewFakeRecorder(10)
+			reconciler := IndexerClusterReconciler{
+				Client:   c,
+				Scheme:   scheme.Scheme,
+				Recorder: recorder,
+			}
+			ssSpec := testutils.NewIndexerCluster("test", namespace, "image")
+			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
+
+			ApplyIndexerCluster = func(ctx context.Context, cl client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("missing ClusterManagerRef"))
+			}
+
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "test", Namespace: namespace},
+			}
+
+			// First reconcile: Stalled=False → Stalled=True — Stalled event expected
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+
+			// Second reconcile: Stalled=True → Stalled=True — Warning fires on every stalled reconcile
+			_, err = reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
 		})
 
 	})

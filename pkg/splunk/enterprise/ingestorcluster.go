@@ -202,7 +202,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
 		if apierrors.IsNotFound(err) {
-			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue or ObjectStorage CR not found", err)
+			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
 		}
 		return result, fmt.Errorf("ensure defaults: %w", err)
 	}
@@ -434,7 +434,7 @@ func ensureIngestorDefaults(ctx context.Context, c splcommon.ControllerClient, c
 func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, cr.Spec.Replicas, []corev1.EnvVar{}, certMounts, opts...)
 	if err != nil {

@@ -18,6 +18,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+
+	"fmt"
+
+	"github.com/pkg/errors"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
@@ -135,6 +142,39 @@ var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
+		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
+			namespace := "ns-splunk-mc-stalled"
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.MonitoringConsole{})
+			c := builder.Build()
+			recorder := record.NewFakeRecorder(10)
+			reconciler := MonitoringConsoleReconciler{
+				Client:   c,
+				Scheme:   scheme.Scheme,
+				Recorder: recorder,
+			}
+			ssSpec := testutils.NewMonitoringConsole("test", namespace, "image")
+			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
+
+			ApplyMonitoringConsole = func(ctx context.Context, cl client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
+			}
+
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "test", Namespace: namespace},
+			}
+
+			// First reconcile: Stalled=False → Stalled=True — Stalled event expected
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+
+			// Second reconcile: Stalled=True → Stalled=True — Warning fires on every stalled reconcile
+			_, err = reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+		})
+
 	})
 })
 
@@ -162,13 +202,16 @@ func CreateMonitoringConsole(name string, namespace string, annotations map[stri
 
 	By("Expecting MonitoringConsole custom resource to be created successfully")
 	ss := &enterpriseApi.MonitoringConsole{}
-	Eventually(func() bool {
-		return k8sClient.Get(context.Background(), key, ss) == nil
-	}, timeout, interval).Should(BeTrue())
-	if status != "" {
-		ss.Status.Phase = status
-		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-	}
+	Eventually(func() error {
+		if err := k8sClient.Get(context.Background(), key, ss); err != nil {
+			return err
+		}
+		if status != "" {
+			ss.Status.Phase = status
+			return k8sClient.Status().Update(context.Background(), ss)
+		}
+		return nil
+	}, timeout, interval).Should(Succeed())
 
 	return ss
 }
@@ -185,13 +228,16 @@ func UpdateMonitoringConsole(instance *enterpriseApi.MonitoringConsole, status e
 
 	By("Expecting MonitoringConsole custom resource to be updated successfully")
 	ss := &enterpriseApi.MonitoringConsole{}
-	Eventually(func() bool {
-		return k8sClient.Get(context.Background(), key, ss) == nil
-	}, timeout, interval).Should(BeTrue())
-	if status != "" {
-		ss.Status.Phase = status
-		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-	}
+	Eventually(func() error {
+		if err := k8sClient.Get(context.Background(), key, ss); err != nil {
+			return err
+		}
+		if status != "" {
+			ss.Status.Phase = status
+			return k8sClient.Status().Update(context.Background(), ss)
+		}
+		return nil
+	}, timeout, interval).Should(Succeed())
 
 	return ss
 }

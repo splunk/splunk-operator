@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -12,9 +13,10 @@ from pathlib import Path
 
 GITHUB_RELEASE_URL = "https://api.github.com/repos/splunk/splunk-operator/releases/latest"
 DEFAULT_HELM_REPO_URL = "https://splunk.github.io/splunk-operator"
-DOCKER_AUTH_URL = "https://auth.docker.io/token"
 DOCKER_REGISTRY_URL = "https://registry-1.docker.io"
+DOCKER_HUB_PROXY_REGISTRY = "docker-hub.repo.splunkdev.net"
 DEFAULT_OPERATOR_REPOSITORY = "docker.io/splunk/splunk-operator"
+DOCKER_HUB_REGISTRIES = {"docker.io", "registry-1.docker.io", "index.docker.io"}
 
 
 def utc_now() -> str:
@@ -35,12 +37,6 @@ def fetch_text(url: str) -> str:
 
 def fetch_json(url: str) -> dict:
     return json.loads(fetch_text(url))
-
-
-def fetch_json_with_headers(url: str, headers: dict[str, str]) -> dict:
-    request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
 
 
 def env_first(*names: str, default: str = "") -> str:
@@ -71,6 +67,10 @@ def split_image_repository(repository: str) -> tuple[str, str]:
 
 def build_image_ref(registry: str, repository_path: str, version: str) -> str:
     return f"{registry}/{repository_path}:{version}"
+
+
+def is_docker_hub_registry(registry: str) -> bool:
+    return registry in DOCKER_HUB_REGISTRIES
 
 
 def released_operator_repository() -> tuple[str, str]:
@@ -135,55 +135,38 @@ def require_chart_release(repo_url: str, helm_index: str, chart_name: str, versi
     return indexed_chart_url
 
 
-def fetch_docker_registry_token(repository: str) -> str:
-    query = urllib.parse.urlencode(
-        {
-            "service": "registry.docker.io",
-            "scope": f"repository:{repository}:pull",
-        }
-    )
-    payload = fetch_json_with_headers(f"{DOCKER_AUTH_URL}?{query}", {"User-Agent": "sok-gitlab-qualification"})
-    token = payload.get("token", "")
-    if not token:
-        raise RuntimeError(f"Unable to get Docker registry token for {repository}")
-    return token
-
-
-def require_image_tag_release(repository: str, tag: str) -> str:
-    token = fetch_docker_registry_token(repository)
-    manifest_url = f"{DOCKER_REGISTRY_URL}/v2/{repository}/manifests/{tag}"
-    request = urllib.request.Request(
-        manifest_url,
-        headers={
-            "Accept": ",".join(
-                [
-                    "application/vnd.oci.image.index.v1+json",
-                    "application/vnd.docker.distribution.manifest.list.v2+json",
-                    "application/vnd.oci.image.manifest.v1+json",
-                    "application/vnd.docker.distribution.manifest.v2+json",
-                ]
-            ),
-            "Authorization": f"Bearer {token}",
-            "User-Agent": "sok-gitlab-qualification",
-        },
-        method="HEAD",
-    )
+def require_image_ref(image_ref: str) -> None:
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            if response.status != 200:
-                raise RuntimeError(
-                    f"Released operator image is not available for {repository}:{tag}: HTTP {response.status}"
-                )
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(
-            f"Released operator image is not available for {repository}:{tag}: HTTP {exc.code}"
-        ) from exc
-    return f"docker.io/{repository}:{tag}"
+        result = subprocess.run(
+            ["docker", "manifest", "inspect", image_ref],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=60,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Unable to inspect released operator image: {image_ref}: {exc}") from exc
+
+    if result.returncode != 0:
+        detail = result.stderr.strip()
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(f"Released operator image is not available: {image_ref}{suffix}")
 
 
 def require_released_operator_image(registry: str, repository_path: str, tag: str) -> str:
-    if registry in {"docker.io", "registry-1.docker.io", "index.docker.io"}:
-        return require_image_tag_release(repository_path, tag)
+    if is_docker_hub_registry(registry):
+        # GitHub release metadata remains the version source of truth, while
+        # image validation and pulls use Splunk Artifactory's authenticated
+        # Docker Hub pull-through cache.
+        image_ref = build_image_ref(DOCKER_HUB_PROXY_REGISTRY, repository_path, tag)
+        require_image_ref(image_ref)
+        return image_ref
+
+    if registry == DOCKER_HUB_PROXY_REGISTRY:
+        image_ref = build_image_ref(registry, repository_path, tag)
+        require_image_ref(image_ref)
+        return image_ref
 
     # Non-Docker Hub repositories are configuration-driven. The release lane
     # and the released-SOK contract now share the same repository variable
@@ -222,7 +205,12 @@ def build_contract() -> dict:
             "helm_repo_index": helm_index_url,
             "helm_repo_url": helm_repo_url,
             "helm_publish_base": helm_publish_base,
-            "docker_registry": operator_registry if operator_registry != "docker.io" else DOCKER_REGISTRY_URL,
+            "docker_registry": DOCKER_REGISTRY_URL
+            if is_docker_hub_registry(operator_registry)
+            else operator_registry,
+            "docker_pull_registry": DOCKER_HUB_PROXY_REGISTRY
+            if is_docker_hub_registry(operator_registry)
+            else operator_registry,
         },
         "released_sok": {
             "version": released_version,
@@ -287,6 +275,7 @@ def write_contract_artifacts(output_dir: Path, contract: dict) -> None:
                 f"- github_release_html: {contract['release_source']['github_release_html']}",
                 f"- helm_repo_url: {contract['release_source']['helm_repo_url']}",
                 f"- helm_publish_base: {contract['release_source']['helm_publish_base']}",
+                f"- docker_pull_registry: {contract['release_source']['docker_pull_registry']}",
                 f"- enterprise_chart_url: {contract['released_sok']['enterprise_chart_url']}",
                 f"- operator_chart_url: {contract['released_sok']['operator_chart_url']}",
             ]

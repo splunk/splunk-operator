@@ -1,0 +1,42 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Readiness only proves splunkd is running. Wait until Ansible has configured
+  # the forwarding target before recording state for the replacement check.
+  - script: |
+      for i in $(seq 1 30); do
+        sleep 15
+        POD=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=splunk-uf-durable -o jsonpath='{.items[0].metadata.name}')
+        if kubectl exec -n "$NAMESPACE" "$POD" -- grep -q tcpout /opt/splunkforwarder/etc/system/local/outputs.conf >/dev/null 2>&1; then
+          echo outputs-conf-tcpout-ready
+          exit 0
+        fi
+      done
+      echo FAIL-outputs-conf-tcpout-not-ready
+      exit 1
+  - script: |
+      POD=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=splunk-uf-durable -o jsonpath='{.items[0].metadata.name}')
+      kubectl exec -n "$NAMESPACE" "$POD" -- grep -q splunk-stdln-standalone-service /opt/splunkforwarder/etc/system/local/outputs.conf &&
+        echo PASS-outputs-conf-has-correct-forward-target ||
+        (echo FAIL-outputs-conf-missing-forward-target; exit 1)
+  - script: |
+      for i in $(seq 1 24); do
+        sleep 15
+        POD=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=splunk-uf-durable -o jsonpath='{.items[0].metadata.name}')
+        if kubectl exec -n "$NAMESPACE" "$POD" -- /opt/splunkforwarder/bin/splunk list forward-server -auth admin:TestPassword1 2>/dev/null |
+          grep -q splunk-stdln-standalone-service; then
+          echo forwarding-connection-active
+          exit 0
+        fi
+      done
+      echo FAIL-no-active-forwarding-connection
+      exit 1
+  # Put markers on both PVC-backed paths, including the fishbucket checkpoint
+  # directory, and retain the original Pod UID for replacement verification.
+  - script: |
+      POD=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=splunk-uf-durable -o jsonpath='{.items[0].metadata.name}')
+      kubectl exec -n "$NAMESPACE" "$POD" -- test -d /opt/splunkforwarder/var/lib/splunk/fishbucket
+      kubectl exec -n "$NAMESPACE" "$POD" -- sh -c \
+        'printf durable-etc > /opt/splunkforwarder/etc/.kuttl-durable-marker && printf durable-fishbucket > /opt/splunkforwarder/var/lib/splunk/fishbucket/.kuttl-durable-marker'
+      OLD_UID=$(kubectl get pod -n "$NAMESPACE" "$POD" -o jsonpath='{.metadata.uid}')
+      kubectl create configmap uf-durable-restart-state -n "$NAMESPACE" --from-literal="old-pod-uid=$OLD_UID"

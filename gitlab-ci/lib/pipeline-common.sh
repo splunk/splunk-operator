@@ -5,6 +5,10 @@
 # - Centralize tool bootstrapping, artifact checks, naming normalization, and context capture.
 # - Runtime scripts should prefer these helpers instead of duplicating parsing or bootstrap logic.
 
+# Internal per-shell guard. Reset any inherited value so a pipeline variable
+# cannot bypass the actual creds-helper initialization.
+SOK_ARTIFACTORY_DOCKER_READER_CREDS_READY="false"
+
 append_context() {
   context_file="$1"
   key="$2"
@@ -405,11 +409,12 @@ append_operator_runtime_context() {
   append_context "${context_file}" "operator_image_source" "${RUNTIME_OPERATOR_SOURCE_KIND}"
 }
 
+# Callers authenticate source registries before the destination registry login
+# so every login is retained in the creds-helper-selected Docker config.
 mirror_operator_image_to_ecr_if_needed() {
   if [ "${RUNTIME_OPERATOR_SOURCE_KIND}" = "official-release" ]; then
     RUNTIME_OPERATOR_FULL_IMAGE_REF="${RUNTIME_ECR_REGISTRY}/${RUNTIME_OPERATOR_MIRROR_PATH}"
     log_step "registry:mirror-operator:start ${RUNTIME_OPERATOR_SOURCE_IMAGE}"
-    login_source_registry_for_image "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
     docker pull "${RUNTIME_OPERATOR_SOURCE_IMAGE}"
     docker tag "${RUNTIME_OPERATOR_SOURCE_IMAGE}" "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
     docker push "${RUNTIME_OPERATOR_FULL_IMAGE_REF}"
@@ -423,14 +428,22 @@ login_source_registry_for_image() {
   source_username="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_USERNAME:-}" "${PIPELINE_RELEASE_REGISTRY_USERNAME:-}" "${PIPELINE_DOCKER_USERNAME:-}" "")"
   source_password="$(first_nonempty "${PIPELINE_RELEASED_OPERATOR_REGISTRY_PASSWORD:-}" "${PIPELINE_RELEASE_REGISTRY_PASSWORD:-}" "${PIPELINE_DOCKER_PASSWORD:-}" "")"
 
-  # Released SOK images on Docker Hub are public. Do not let stale optional
-  # project credentials turn an anonymous pull into an authentication failure.
+  # The released-SOK default uses the authenticated Artifactory proxy. Keep an
+  # anonymous path for an explicit direct-Docker-Hub override, and do not let
+  # stale optional credentials turn that path into an auth failure.
   case "${source_registry}" in
     ""|docker.io|registry-1.docker.io|index.docker.io)
       log_step "registry:source-login:skipped-public ${source_registry:-docker.io}"
       return 0
       ;;
   esac
+
+  if is_splunk_artifactory_registry "${source_registry}"; then
+    log_step "registry:source-login ${source_registry} via=creds-helper"
+    ensure_artifactory_docker_reader_creds || return 1
+    log_step "registry:source-login:complete ${source_registry}"
+    return 0
+  fi
 
   if printf '%s' "${source_registry}" | grep -Eq '\.dkr\.ecr\..*\.amazonaws\.com$'; then
     docker_login_registry "${source_registry}" "" "" || return 1
@@ -443,22 +456,32 @@ login_source_registry_for_image() {
 }
 
 ensure_artifactory_docker_reader_creds() {
+  if [ "${SOK_ARTIFACTORY_DOCKER_READER_CREDS_READY:-false}" = "true" ]; then
+    require_nonempty "${DOCKER_CONFIG:-}" "DOCKER_CONFIG from Artifactory reader authentication" || return 1
+    if [ ! -d "${DOCKER_CONFIG}" ]; then
+      echo "Artifactory Docker config directory no longer exists: ${DOCKER_CONFIG}" >&2
+      return 1
+    fi
+    return 0
+  fi
+
   if [ "${CI_COMMIT_REF_PROTECTED:-false}" = "true" ]; then
-    enterprise_artifactory_role_path="artifactory:v2/cloud/role/docker-prod-read-role"
+    artifactory_docker_reader_role_path="artifactory:v2/cloud/role/docker-prod-read-role"
   else
-    enterprise_artifactory_role_path="artifactory:v2/cloud/role/docker-nonprod-read-role"
+    artifactory_docker_reader_role_path="artifactory:v2/cloud/role/docker-nonprod-read-role"
   fi
   require_commands creds-helper || return 1
   creds-helper init || return 1
 
-  enterprise_artifactory_docker_env="$(creds-helper docker --eval "${enterprise_artifactory_role_path}")" || return 1
-  eval "${enterprise_artifactory_docker_env}" || return 1
-  unset enterprise_artifactory_docker_env
-  require_nonempty "${DOCKER_CONFIG:-}" "DOCKER_CONFIG from ${enterprise_artifactory_role_path}" || return 1
+  artifactory_docker_reader_env="$(creds-helper docker --eval "${artifactory_docker_reader_role_path}")" || return 1
+  eval "${artifactory_docker_reader_env}" || return 1
+  unset artifactory_docker_reader_env
+  require_nonempty "${DOCKER_CONFIG:-}" "DOCKER_CONFIG from ${artifactory_docker_reader_role_path}" || return 1
   if [ ! -d "${DOCKER_CONFIG}" ]; then
-    echo "Docker config directory from ${enterprise_artifactory_role_path} does not exist: ${DOCKER_CONFIG}" >&2
+    echo "Docker config directory from ${artifactory_docker_reader_role_path} does not exist: ${DOCKER_CONFIG}" >&2
     return 1
   fi
+  SOK_ARTIFACTORY_DOCKER_READER_CREDS_READY="true"
   export DOCKER_CONFIG
 }
 

@@ -285,7 +285,7 @@ func getClusterMasterStatefulSet(ctx context.Context, client splcommon.Controlle
 
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar, certMounts)
 	if err != nil {

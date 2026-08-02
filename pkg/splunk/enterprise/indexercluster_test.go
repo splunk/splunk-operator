@@ -1574,6 +1574,32 @@ func TestIndexerClusterSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	}
 }
 
+func TestApplyIndexerClusterValidationFailureReturnsTerminalError(t *testing.T) {
+	os.Unsetenv("SPLUNK_GENERAL_TERMS")
+
+	idxc := enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "stack1", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas: 1,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterMasterRef: corev1.ObjectReference{Name: "master1"},
+				Mock:             true,
+			},
+		},
+	}
+	c := spltest.NewMockClient()
+
+	_, err := ApplyIndexerCluster(context.TODO(), c, &idxc)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Fatalf("expected terminal error from validation failure, got: %v", err)
+	}
+
+	_, err = ApplyIndexerCluster(context.TODO(), c, &idxc)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Fatalf("expected terminal error from persisting validation failure, got: %v", err)
+	}
+}
+
 func TestGetIndexerClusterList(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()

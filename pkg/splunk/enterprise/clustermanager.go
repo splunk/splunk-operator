@@ -214,6 +214,10 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
+			} else {
+				// waiting on a dependency (e.g. LicenseManager recycling) is not an error,
+				// so don't leave the earlier-staged PhaseError as the persisted status
+				setPhaseAndConditions(enterpriseApi.PhasePending, "Waiting for upgrade path dependency to become ready")
 			}
 			return result, err
 		}
@@ -412,7 +416,7 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterManager, 1, extraEnvVar, certMounts)
 	if err != nil {

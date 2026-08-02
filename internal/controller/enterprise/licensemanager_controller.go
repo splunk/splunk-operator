@@ -149,18 +149,33 @@ func (r *LicenseManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return result, nil
 	}
 	fresh := &enterpriseApi.LicenseManager{}
-	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr == nil {
-		if msg, ok := splcommon.TerminalMessage(err); ok {
-			reason, _ := splcommon.TerminalReason(err)
-			fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, msg, fresh.GetGeneration())
-		} else {
-			fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
+	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr != nil {
+		if k8serrors.IsNotFound(fetchErr) {
+			return result, nil
 		}
-		if updateErr := r.Status().Update(ctx, fresh); updateErr != nil {
-			logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
-		}
+		logger.WarnContext(ctx, "failed to refetch CR for stalled condition update", "error", fetchErr)
+		return result, fetchErr
 	}
-
+	oldConditions := append([]metav1.Condition(nil), fresh.Status.Conditions...)
+	if msg, ok := splcommon.TerminalMessage(err); ok {
+		reason, _ := splcommon.TerminalReason(err)
+		fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, msg, fresh.GetGeneration())
+	} else {
+		fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
+	}
+	ep, epErr := enterprise.NewK8EventPublisherWithRecorder(r.Recorder, fresh)
+	if epErr != nil {
+		logger.WarnContext(ctx, "failed to create event publisher", "error", epErr)
+		return result, epErr
+	}
+	enterprise.EmitStalledTransitionEvents(ctx, ep, fresh.GetName(), oldConditions, fresh.Status.Conditions)
+	if updateErr := r.Status().Update(ctx, fresh); updateErr != nil {
+		logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
+		return result, updateErr
+	}
+	if _, ok := splcommon.TerminalMessage(err); ok {
+		return reconcile.Result{}, err
+	}
 	return result, err
 }
 

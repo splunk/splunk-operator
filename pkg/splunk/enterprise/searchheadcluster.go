@@ -225,6 +225,12 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			}
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
+			} else {
+				// waiting on a dependency (e.g. ClusterManager recycling) is not an error,
+				// so don't leave the earlier-staged PhaseError as the persisted status on
+				// either the SHC phase or the deployer phase staged at function entry
+				cr.Status.DeployerPhase = enterpriseApi.PhasePending
+				setPhaseAndConditions(enterpriseApi.PhasePending, "Waiting for upgrade path dependency to become ready")
 			}
 			return result, err
 		}
@@ -732,7 +738,7 @@ func getSearchHeadStatefulSetForReconcile(
 ) (*appsv1.StatefulSet, bool, error) {
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("reconcile certs: %w", err)
 	}
 
 	// get search head env variables with deployer
@@ -1318,7 +1324,7 @@ func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster,
 func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas), certMounts)
 	if err != nil {

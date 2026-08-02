@@ -31,6 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/pkg/errors"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	"k8s.io/client-go/tools/record"
 )
 
 var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
@@ -244,6 +249,50 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			icSpec.DeletionTimestamp = &metav1.Time{}
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
+			namespace := "ns-splunk-ing-stalled"
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.IngestorCluster{})
+			c := builder.Build()
+			recorder := record.NewFakeRecorder(10)
+			reconciler := IngestorClusterReconciler{
+				Client:   c,
+				Scheme:   scheme.Scheme,
+				Recorder: recorder,
+			}
+			objStorage := &enterpriseApi.ObjectStorage{
+				ObjectMeta: metav1.ObjectMeta{Name: "os", Namespace: namespace},
+				Spec:       enterpriseApi.ObjectStorageSpec{Provider: "s3", S3: enterpriseApi.S3Spec{Path: "test/path"}},
+			}
+			queue := &enterpriseApi.Queue{
+				ObjectMeta: metav1.ObjectMeta{Name: "queue", Namespace: namespace},
+				Spec: enterpriseApi.QueueSpec{
+					Provider: "sqs",
+					SQS:      enterpriseApi.SQSSpec{Name: "q", AuthRegion: "us-west-2", DLQ: "dlq"},
+				},
+			}
+			icSpec := testutils.NewIngestorCluster("test", namespace, "image", objStorage, queue)
+			Expect(c.Create(ctx, icSpec)).Should(Succeed())
+
+			ApplyIngestorCluster = func(ctx context.Context, cl client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
+			}
+
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "test", Namespace: namespace},
+			}
+
+			// First reconcile: Stalled=False → Stalled=True — Stalled event expected
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+
+			// Second reconcile: Stalled=True → Stalled=True — Warning fires on every stalled reconcile
+			_, err = reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
 		})
 
 	})

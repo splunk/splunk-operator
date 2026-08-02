@@ -177,6 +177,10 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 			}
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
+			} else {
+				// waiting on a dependency (e.g. ClusterManager recycling) is not an error,
+				// so don't leave the earlier-staged PhaseError as the persisted status
+				setPhaseAndConditions(enterpriseApi.PhasePending, "Waiting for upgrade path dependency to become ready")
 			}
 			return result, err
 		}
@@ -253,7 +257,7 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	configMap := GetSplunkMonitoringconsoleConfigMapName(cr.GetName(), SplunkMonitoringConsole)
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, 1, []corev1.EnvVar{}, certMounts)
 	if err != nil {
