@@ -44,6 +44,13 @@ SHC82_SAMPLES=180 \
 test/fixtures/shc-reliability/shc82_appframework_monitor.sh
 ```
 
+The default request source is the stack's LicenseManager Pod. When the
+qualification itself replaces that Pod, use a separate, stable in-cluster
+client and set both `SHC82_PROBE_POD` and `SHC82_PROBE_CONTAINER`. This keeps
+loss of the test client distinct from loss of the Splunk Services being
+measured. The client image should be pinned by digest and must provide `sh`
+and `curl`.
+
 The evidence log is written below `build/_test/shc82` unless
 `SHC82_EVIDENCE_FILE` specifies another location.
 

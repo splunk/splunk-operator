@@ -11,7 +11,8 @@ stack_name="${SHC82_STACK_NAME:-shc82}"
 indexercluster_name="${SHC82_IDXC_NAME:-${stack_name}-idxc}"
 searchheadcluster_name="${SHC82_SHC_NAME:-${stack_name}-shc}"
 
-probe_pod="splunk-${stack_name}-license-manager-0"
+probe_pod="${SHC82_PROBE_POD:-splunk-${stack_name}-license-manager-0}"
+probe_container="${SHC82_PROBE_CONTAINER:-splunk}"
 secret_name="splunk-${namespace}-secret"
 hec_service="splunk-${indexercluster_name}-indexer-service"
 shc_service="splunk-${searchheadcluster_name}-search-head-service"
@@ -51,7 +52,7 @@ submit_event() {
   # shellcheck disable=SC2016
   response="$(
     printf '%s\n%s\n%s\n' "${hec_token}" "${payload}" "${hec_service}" |
-      kubectl -n "${namespace}" exec -i "${probe_pod}" -c splunk -- sh -c '
+      kubectl -n "${namespace}" exec -i "${probe_pod}" -c "${probe_container}" -- sh -c '
         IFS= read -r token
         IFS= read -r payload
         IFS= read -r service
@@ -69,7 +70,7 @@ search_sequences() {
   # Variables in this command are intentionally expanded inside the Pod.
   # shellcheck disable=SC2016
   printf '%s\n%s\n%s\n' "${admin_password}" "${run_id}" "${shc_service}" |
-    kubectl -n "${namespace}" exec -i "${probe_pod}" -c splunk -- sh -c '
+    kubectl -n "${namespace}" exec -i "${probe_pod}" -c "${probe_container}" -- sh -c '
       IFS= read -r password
       IFS= read -r run_id
       IFS= read -r service
