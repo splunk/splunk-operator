@@ -47,6 +47,25 @@ test/fixtures/shc-reliability/shc82_appframework_monitor.sh
 The evidence log is written below `build/_test/shc82` unless
 `SHC82_EVIDENCE_FILE` specifies another location.
 
+`shc82_indexer_restart_required` is the separate indexer-cluster fixture. It
+uses the `health.conf` change observed by the live 10.5 qualification to set
+`restart_required_for_apply_bundle=true`; it must not be substituted with the
+Search Head fixture because that app reloaded on the tested indexers without a
+restart. Build a versioned indexer archive with:
+
+```text
+make shc82-indexer-app-package SHC82_INDEXER_APP_VERSION=1.0.0
+```
+
+The final live gate still requires the Cluster Manager bundle status to prove
+that the selected Splunk build classified the app as restart-required before
+availability conclusions are accepted.
+
+Both SHC-82 app targets use the same standard-library packager. It replaces
+only the archived `default/app.conf` version, leaves the checked-in source
+unchanged, and normalizes archive order, timestamps, ownership, and modes.
+Run `make shc82-app-package-test` to validate determinism on the current host.
+
 ## SHC-83 initial-formation readiness
 
 `shc83-startup-readiness-cluster.yaml` creates an isolated LicenseManager and

@@ -148,6 +148,11 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 SHC82_APP_SOURCE_DIR ?= test/fixtures/shc-reliability/shc82_restart_required
 SHC82_APP_VERSION ?= 1.0.0
 SHC82_APP_OUTPUT ?= build/_test/shc82/shc82_restart_required-$(SHC82_APP_VERSION).tgz
+SHC82_INDEXER_APP_SOURCE_DIR ?= test/fixtures/shc-reliability/shc82_indexer_restart_required
+SHC82_INDEXER_APP_VERSION ?= 1.0.0
+SHC82_INDEXER_APP_OUTPUT ?= build/_test/shc82/shc82_indexer_restart_required-$(SHC82_INDEXER_APP_VERSION).tgz
+SHC82_APP_PACKAGER ?= test/fixtures/shc-reliability/package_restart_app.py
+SHC_RELIABILITY_PYTHON ?= python3
 SHC82_NAMESPACE ?= shc82-afw-baseline
 SHC82_LICENSE_FILE ?=
 SHC83_NAMESPACE ?= shc83-startup-readiness
@@ -157,22 +162,23 @@ SHC84_LICENSE_FILE ?=
 SHC85_NAMESPACE ?= shc85-lifecycle-hold
 SHC85_LICENSE_FILE ?=
 
-.PHONY: shc82-app-package shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload
+.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
-	@printf '%s\n' "$(SHC82_APP_VERSION)" | \
-		grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || \
-		{ echo "SHC82_APP_VERSION must use numeric major.minor.patch form"; exit 1; }
-	@mkdir -p "$(dir $(SHC82_APP_OUTPUT))"
-	@staging_dir="$$(mktemp -d)"; \
-		trap 'rm -rf "$${staging_dir}"' EXIT; \
-		cp -R "$(SHC82_APP_SOURCE_DIR)" \
-			"$${staging_dir}/$(notdir $(SHC82_APP_SOURCE_DIR))"; \
-		sed -i "s/^version = .*/version = $(SHC82_APP_VERSION)/" \
-			"$${staging_dir}/$(notdir $(SHC82_APP_SOURCE_DIR))/default/app.conf"; \
-		tar --sort=name --mtime="@0" --owner=0 --group=0 --numeric-owner \
-			-cf - -C "$${staging_dir}" "$(notdir $(SHC82_APP_SOURCE_DIR))" | \
-			gzip -n > "$(SHC82_APP_OUTPUT)"
-	sha256sum "$(SHC82_APP_OUTPUT)"
+	$(SHC_RELIABILITY_PYTHON) "$(SHC82_APP_PACKAGER)" \
+		--source-dir "$(SHC82_APP_SOURCE_DIR)" \
+		--version "$(SHC82_APP_VERSION)" \
+		--output "$(SHC82_APP_OUTPUT)"
+
+shc82-indexer-app-package: ## Package the deterministic SHC-82 indexer restart-required test app.
+	$(SHC_RELIABILITY_PYTHON) "$(SHC82_APP_PACKAGER)" \
+		--source-dir "$(SHC82_INDEXER_APP_SOURCE_DIR)" \
+		--version "$(SHC82_INDEXER_APP_VERSION)" \
+		--output "$(SHC82_INDEXER_APP_OUTPUT)"
+
+shc82-app-package-test: ## Test deterministic SHC-82 app archive generation.
+	$(SHC_RELIABILITY_PYTHON) -m unittest discover \
+		-s test/fixtures/shc-reliability \
+		-p 'test_package_restart_app.py' -v
 
 shc82-license-secret: ## Create or update the SHC-82 LicenseManager license Secret.
 	@test -n "$(SHC82_LICENSE_FILE)" || \
