@@ -260,6 +260,8 @@ StatefulSet template.
 | OPS-005 | P1 | App/bundle operation while ordinal zero unavailable | Dynamic reachable target succeeds |
 | OPS-006 | P1 | App/bundle operation during rollout | Durable pending or in-progress app/bundle work prevents a conflicting planned disruption; an empty or unchanged repository poll does not claim lifecycle ownership or starve the rollout |
 | OPS-007 | P1 | Supported image upgrade | Init/finalize and per-member lifecycle complete |
+| OPS-007A | P0 | Exact same-version image replacement | Explicit immutable source/target intent uses ordinary per-member lifecycle, survives controller restart and mixed in-progress images at the partition boundary, permits only the durably owned target to be unready, terminating, absent, or starting, rejects any unavailable unowned member or third image/revision, and never calls version-upgrade init/finalize |
+| OPS-007B | P0 | Missing or stale same-version image intent | Image difference remains fail closed; no member lifecycle or partition advancement begins |
 | OPS-008 | P1 | Unsupported simultaneous-restart configuration | Admission or controller blocks rolling treatment |
 | OPS-009 | P2 | TLS, ingress termination, and optional service mesh | No mesh is required; local readiness follows Splunkd TLS rather than ingress TLS, bypasses configured HTTP proxies, and management traffic remains valid in each qualified mesh mode |
 | OPS-010 | P2 | Private registry/air gap | Registry-qualified and digest-pinned image references plus all pull secrets survive rendering and rollout tracking unchanged; lifecycle and diagnostics add no helper image or undeclared external service |
@@ -358,6 +360,22 @@ non-serving/advertised and next-peer/recovery boundaries. The same experiment
 exposed a controller deadlock when intentional serving withdrawal made the
 target container unready during an `OnDelete` template update. These are
 partial qualification results, not an OPS-011 pass.
+
+The final integrated 2026-08-02 policy-effectiveness run added a four-peer
+RF3/SF2 `searchable=1`, `force=0` result on the official
+`10.5.2605.0/844c593e9c1d` build. Splunk restarted peers internally in order
+`3 -> 2 -> 1 -> 0`; every peer passed through primary reassignment, at least
+three indexer endpoints and all three Search Head endpoints remained
+available, and Pod UIDs and indexer restart counts did not change. The
+20-minute monitor completed 90/90 HEC submissions and distributed-search
+requests with zero request failures and exact final completeness. It observed
+three successful-search count regressions with maximum lag three before
+convergence. Evidence SHA-256 is
+`9b24bd3de6521a0814b3886706ad0b8ec489ad317611508f9c22ae6bf1379820`.
+This qualifies the effective searchable-policy behavior for the bounded
+topology, not the generic inline configuration experiment used to establish
+that policy. Typed policy delivery, immediate search completeness, negative
+redundancy, conflict, protocol, and client-retry variants keep OPS-011 open.
 
 ## Kubernetes disruption scenarios
 
@@ -521,6 +539,28 @@ lifecycle stage.
 | OBS-006 | P0 | Secrets/search content injected in errors | No credential, authorization header, Secret data, or search text leaks |
 | OBS-007 | P1 | Operation history rollover | Bounded retention preserves current and most recent result |
 | OBS-008 | P1 | Custom resource is created with pause annotation already set | Every required phase field and a schema-valid Paused condition are persisted once, no managed workload is created, and reconciliation does not enter an error retry loop |
+
+### OBS-006 App Framework credential finding
+
+The exact Linux source gate for SHC-95 exercised an existing App Framework
+failure path with a synthetic namespace admin password. When `splunk list app`
+returned a real execution error or succeeded without output, the returned error
+included the complete `-auth admin:<password>` command. Production supplies the
+namespace-scoped admin credential to the same function, so this is a real
+diagnostic-boundary defect even though the observed test value was not a
+customer secret.
+
+Sources `fdcc772d8` and `8aebfb0cc` redact both raw and shell-quoted password
+forms from the command and from command output or nested errors before those
+values can be returned to higher-level App Framework logging. Focused tests
+prove that both failure branches retain a useful redacted command and do not
+retain the actual credential, including when the password contains a single
+quote and when the credential is injected into stdout, stderr, and the nested
+execution error. Exact final source `8aebfb0cc` passed native Linux AMD64
+`make test` with all 192 enterprise/controller specs, `make build`, chart
+lints, and all 150 Helm tests. An immutable live no-regression deployment and
+the broader diagnostic-canary matrix remain required before OBS-006 as a whole
+is closed.
 
 ### OBS-001, OBS-004, and OBS-005 SHC-87 evidence
 

@@ -61,6 +61,54 @@ version transition. The exact product-source change in the official artifact
 was not inferred from runtime success; source review and broader upgrade
 coverage remain separate product gates.
 
+## Separate Docker-Splunk start-retry failure found during final qualification
+
+The official build did not reproduce the original KV Store version-marker
+precheck failure. A later same-image Cluster Manager replacement nevertheless
+exposed a different startup failure at the Docker-Splunk/Ansible boundary.
+This second finding must not be described as a regression of the product fix
+above.
+
+On 2 August 2026, Cluster Manager Pod
+`splunk-shcfinal-cluster-manager-0` was replaced while preserving both PVCs and
+the exact `10.5.2605.0/844c593e9c1d` runtime image. The replacement Pod retained
+UID `b48942e5-d016-46ad-a8b0-8f639a53f524` across its container attempts. Its
+container exited twice and then succeeded on the third attempt. The two failed
+attempts ended in the
+Ansible `Start Splunk via CLI` task with exit code 2 and:
+
+```text
+ERROR: kvstore port [8191] - port is already bound. Splunk needs to use this port.
+```
+
+The same attempt's Splunk log showed that `splunkd` had already started and
+launched MongoDB on port 8191. The existing Ansible task retried the complete
+`splunk start` command five times whenever that command returned non-zero.
+Reissuing `splunk start` while the process from the first invocation was still
+initializing converted the live KV Store listener into a false port-conflict
+failure. Kubernetes startup-probe budget was not the terminating clock; the
+container entrypoint exited after Ansible declared the task failed.
+
+The third container attempt completed and the cluster returned to Ready. RF
+and SF were met, all data was searchable, all four peers were Up, no fixups
+were active, and continuous HEC and distributed-search requests remained
+available. That eventual recovery does not make two avoidable container
+crashes an acceptable startup contract.
+
+The bounded Docker-Splunk/Ansible correction is therefore to invoke
+`splunk start` once. If that invocation returns non-zero, startup polls
+`splunk status` for the already-launched process using the existing bounded
+wait policy; it does not issue a second start, kill MongoDB, remove customer
+data, fabricate a KV Store marker, or weaken a Kubernetes probe. Source commits
+`e0fed1c1a45269ac4f5e4f35c4ad11e4c1ab6300` and
+`ae8ecf4af1eb4c143a441e440626a17a5dfeaf6a`, together with Docker-Splunk
+pin commit `118cae68a8fdecbac1286582d32eecd996510564`, passed Ansible
+syntax/lint execution plus 25 existing SHC unit tests and two new single-start
+regression tests. The second source commit also makes exhaustion of the status
+poll fatal; it cannot fall through to later startup tasks as a successful
+poll. Linux image and same-PVC EKS qualification of that exact dependency
+remains required before this separate correction can be called complete.
+
 ## Environment and exact identity
 
 Observed on 27 July 2026 in a three-member Search Head Cluster on Kubernetes.

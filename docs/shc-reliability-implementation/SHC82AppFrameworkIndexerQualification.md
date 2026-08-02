@@ -30,6 +30,65 @@ The accepted final run used:
 No credential, license content, HEC token, or authorization header is part of
 the recorded evidence.
 
+## Final integrated searchable-policy evidence
+
+A 2026-08-02 UTC run revalidated the indexer App Framework path on the final
+integrated EKS topology rather than extrapolating from the earlier isolated
+campaigns. The bounded environment was EKS cluster `vivek-spl-301372`,
+namespace `shc-final-qualification`, four indexers at RF3/SF2, three Search
+Heads, one Cluster Manager, one deployer, and one License Manager. It used
+Splunk Cloud `10.5.2605.0/844c593e9c1d`, runtime OCI index
+`sha256:381fd7a878765d8ff7a222c04fb2dd26d150bc7f71375fa90485cf09445e56de`,
+Operator source `14d885390`, and Operator OCI index
+`sha256:a9f2125097fa823d5182e8729683e5099116a889fdae8e892f0bd3110a8cdf3d`.
+The deterministic app archive was
+`shc82_indexer_restart_required-1.0.5.tgz`, SHA-256
+`accecba7feb81e589bdc948b4a4f799c6b759a6c5d30d41425a26e2376b23b43`.
+
+The effective Cluster Manager policy was `rolling_restart = searchable`.
+Splunk logged `searchable=1`, `force=0`, and successful RF, SF, and
+all-searchable preflight at `22:41:22.511Z`. It then processed indexers
+`3 -> 2 -> 1 -> 0`; every peer followed
+`Up -> ReassigningPrimaries -> Restarting -> Up`. The internal operation
+finished at `22:48:44.725Z`, after approximately 7 minutes 22 seconds. App
+Framework finished with deployment-in-progress false, bundle-push stage 3,
+object hash `88bf08727101a1efa7000bc6242870a3`, and bundle checksum
+`E79E90C18913A3871877875CBE1E607F` on every active peer.
+
+This was a Splunk-internal restart, not a Kubernetes Pod replacement. All four
+indexer Pod UIDs remained unchanged and every indexer container retained
+restart count zero. The indexer EndpointSlice never dropped below three ready
+endpoints, all three Search Head endpoints remained present, and the final
+IndexerCluster was Ready with four of four replicas. Final Cluster Manager
+observation had RF and SF met, all data searchable, every peer Up, no pending
+fixups, and no restart-required peer.
+
+The continuous record submitted 90 numbered HEC events and issued 90
+distributed searches through the Search Head Service. It had zero HEC request
+failures and zero search-request failures and converged exactly to `count=90`,
+`min=1`, `max=90`, and `distinct=90`. Three successful aggregate results
+regressed relative to the immediately preceding count and the maximum lag was
+three events; later results converged. The record therefore proves continuous
+request handling and exact eventual completeness for this workload, not
+instantaneous completeness of every search. The evidence file is
+`shc-final-indexer-app-searchable-105-v2.log`, SHA-256
+`9b24bd3de6521a0814b3886706ad0b8ec489ad317611508f9c22ae6bf1379820`.
+
+A same-topology default-policy run separately logged `searchable=0`,
+`force=0`, despite successful RF/SF/all-searchable preflight, and completed
+substantially faster. This confirms that searchable restart is an effective
+Splunk policy decision with a measurable primary-reassignment cost; it must
+not be inferred from RF/SF health alone.
+
+The policy-delivery method used to create this evidence is not accepted as a
+product design. A generic inline Cluster Manager configuration experiment
+caused a transient `pass4SymmKey` signature mismatch and Cluster Manager Pod
+replacement. After the CR change was reverted, `rolling_restart = searchable`
+remained on the persistent Cluster Manager volume while the CR no longer
+declared it. The run above qualifies the behavior of an already-effective
+searchable policy only. A typed, validated, upgrade-safe, idempotent delivery
+contract and its negative cases remain required.
+
 ## Official-build Operator lifecycle qualification
 
 A later 2026-07-30 UTC campaign qualified the Operator-owned indexer Pod

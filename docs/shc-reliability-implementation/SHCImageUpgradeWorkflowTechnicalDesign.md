@@ -345,6 +345,51 @@ The Operator must not infer an upgrade from a runtime image ID mismatch without
 an approved digest or explicit image-intent contract. Qualification should use
 immutable image references or distinct declared versions.
 
+### Exact same-version image intent
+
+A private-registry or air-gapped deployment can replace Docker-Splunk,
+Splunk-Ansible, certificates, or operating-system content while retaining the
+same Splunk Enterprise build. The source and target image references differ,
+but Splunk's version-upgrade initialization and finalization APIs are not the
+correct workflow. An image reference alone cannot prove this distinction.
+
+The bounded contract is an explicit `SameVersionRestart` declaration tied to
+one exact source image and one exact target image. The target must also equal
+the CR's desired image. The declaration is valid only for the
+partition-controlled `RollingUpdate` path and is not a general compatibility
+override. It becomes stale when either endpoint of the pair changes.
+
+Before starting a lifecycle operation, the Operator must prove that the Pod
+population matches the StatefulSet partition boundary: ordinals below the
+partition use the declared source image and current revision; ordinals at or
+above the partition use the declared target image and update revision. Every
+Pod must be present, non-deleting, and stably ready. Once one exact target is
+durably owned by a matching `PodUpdate` lifecycle operation, that target is
+the sole exception to the readiness and presence requirement. The Operator
+itself withdraws its readiness before detention and Kubernetes subsequently
+exposes a terminating source Pod, a temporarily absent Pod, or a starting
+target Pod. During that interval the observed target, when present, must still
+match either the exact declared source/current pair or the exact declared
+target/update pair. Every unowned ordinal remains present, non-deleting,
+stably ready, and aligned with the partition. Any third image, unexpected
+revision, unavailable unowned member, or invalid target ordinal blocks. This
+invariant makes the intent resumable across controller replacement without
+allowing a stale declaration to authorize an unrelated transition.
+
+A valid declaration runs the ordinary per-member lifecycle and does not create
+an image-upgrade status or invoke `upgrade-init`/`upgrade-finalize`. Omission or
+mismatch retains the authoritative compatibility decision described below.
+
+Image classification must precede Deployer mutation. An unsupported or unknown
+member transition cannot safely run a newer Deployer first, because that
+Deployer may produce or push bundles that are incompatible with the current
+members. On the lifecycle-enabled `RollingUpdate` path, the controller performs
+a read-only observation of existing member Pod images and the partition before
+applying the desired Deployer StatefulSet. Only an unchanged member image, the
+exact same-version declaration, an already recorded matching upgrade workflow,
+or an authoritative `Supported` decision may pass this gate. This preflight is
+not applied to the retained `OnDelete` compatibility path.
+
 ### Upgrade-path support
 
 Introduce a side-effect-free validator boundary conceptually equivalent to:
