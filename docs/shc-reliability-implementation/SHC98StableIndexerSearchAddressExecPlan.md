@@ -99,6 +99,12 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   changed. The rollout plan therefore pauses every target CR before changing
   the Operator or desired runtime and converges dependencies before the
   IndexerCluster is unpaused.
+- [x] (2026-08-03 02:10Z) Composed exact SHC-98 tip `9e3b24761` with only the
+  isolated SHC-99 process-matcher source `184061106` in a disposable detached
+  worktree. `make test` passed all 43 suites, including all 192 controller
+  specs, with zero failures and 78.3 percent composite coverage. This proves
+  local composition; the review branches remain separate and native Linux
+  qualification is still required.
 - [ ] Run the authoritative Splunk Ansible `make shc-check`, Operator
   `make test` and `make build`, and Docker-Splunk dependency/build gates on a
   clean Linux AMD64 vWorkstation. The Coder API currently returns EOF before
@@ -235,9 +241,11 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
 In progress. No production recommendation or EKS qualification is claimed.
 The source candidate is isolated and pushed. Splunk Ansible's complete local
 SHC Make gate, Docker-Splunk's dependency checkout/ref gates, Operator focused
-tests, ten repeated feature-gate/override runs, and Operator `make build` pass,
-and pre-EKS compatibility and rollout-scope defects have been corrected.
-Acceptance still requires clean Linux full gates,
+tests, ten repeated feature-gate/override runs, and Operator `make build` pass.
+A disposable composition with the independent SHC-99 probe correction also
+passed all 43 local suites and 192 controller specs. Pre-EKS compatibility and
+rollout-scope defects have been corrected. Acceptance still requires clean
+Linux full gates,
 immutable images, an exact-image EKS rollout, and evidence from every Search
 Head.
 
