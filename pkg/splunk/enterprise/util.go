@@ -1506,7 +1506,11 @@ func GetNextRequeueTime(ctx context.Context, appRepoPollInterval, lastCheckTime 
 
 	var nextRequeueTimeInSec int64
 	nextRequeueTimeInSec = appRepoPollInterval - (currentEpoch - lastCheckTime)
-	if nextRequeueTimeInSec < 0 {
+	// A reconcile can evaluate the repository timer immediately before its
+	// second-level boundary and calculate the next delay immediately after it.
+	// Treat both the exact boundary and an overdue timer as the existing bounded
+	// retry instead of passing a zero duration to the shared requeue helper.
+	if nextRequeueTimeInSec <= 0 {
 		nextRequeueTimeInSec = 5
 	}
 
