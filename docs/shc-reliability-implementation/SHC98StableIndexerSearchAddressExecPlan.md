@@ -151,13 +151,97 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   built from clean exact tip `55d0c748ab2d6a836d3a4905ea00bd0d56f68ec6`.
   Both remote indexes expose one `linux/amd64` image plus its provenance
   attestation, and their ECR digests match the local build results.
-- [ ] Deploy one combined desired indexer revision so stable-address
-  configuration and runtime image do not cause two separate rolls.
-- [ ] Run continuous acknowledged ingest, distributed search, per-Search-Head
-  peer inventory, cluster health, endpoint, restart, and lifecycle observation
-  through the complete Operator-owned `3 -> 2 -> 1 -> 0` indexer roll.
-- [ ] Accept, revise, or reject the candidate from evidence. Update all
-  program documents and integrate accepted commits only after that decision.
+- [x] (2026-08-03 05:04Z) Paused all four target CRs through their supported
+  per-kind pause annotations, deployed the immutable Operator, and changed all
+  four desired runtime images without changing a workload while paused. Then
+  converged LicenseManager, ClusterManager, and SearchHeadCluster in dependency
+  order. The SearchHeadCluster initially failed closed on a stale exact-image
+  intent before changing a Pod; after the same-version source/target intent
+  was corrected while paused, it completed the Kubernetes-owned roll with
+  dynamic captain transfer, all three members `Up`, and zero container
+  restarts.
+- [x] (2026-08-03 05:26Z) Deployed one combined desired indexer revision and
+  completed the Operator-owned `3 -> 2 -> 1 -> 0` roll. At most one indexer
+  was unready, every replacement kept its PVCs, all four replacement
+  containers had zero restarts, and Cluster Manager reported each FQDN peer
+  `Up` and searchable with all four RF/SF factors met.
+- [x] (2026-08-03 05:37Z) Ran continuous acknowledged ingest, distributed
+  search, per-Search-Head peer inventory, cluster health, endpoint, restart,
+  and lifecycle observation
+  through the roll. The experiment found a customer-visible regression: all
+  requests returned transport success, but 735 observed samples were
+  incomplete, with 45 major count regressions and a peak gap of 641
+  acknowledged events. The gap continued growing after lifecycle `Completed`.
+  Every Search Head accumulated old Pod-IP and new FQDN entries for the same
+  GUID. Splunk rejected one
+  identity as a duplicate until its delayed stale-peer cleanup ran.
+- [x] (2026-08-03 05:38Z) Rejected automatic in-place enablement and created
+  `codex/shc-100-safe-stable-indexer-address-opt-in`. The corrective source
+  removes the Operator lifecycle gate's implicit `auto` value, preserves an
+  explicit customer `extraEnv` value, and makes the monitor reject a next
+  ordinal unless the prior GUID has exactly one `Up` FQDN identity on every
+  Search Head. Focused Go tests, formatting, Bash syntax, ShellCheck, and the
+  monitor's `jq` predicate pass. Authoritative Linux and rollback/new-cluster
+  qualification remain open.
+- [x] (2026-08-03 05:50Z) Composed SHC-100 with the isolated SHC-99 exact
+  process matcher in a disposable worktree. Exact disposable tip
+  `5a5b503b2dbd462e75e82eefec78a77cb92eedbb` passed all 43 Make suites,
+  all 192 controller specs, 78.3 percent composite coverage, formatting, vet,
+  generation, compilation, and `make build`. The worktree was moved to the
+  Trash after evidence capture; the two review branches remain separate.
+- [x] (2026-08-03 05:55Z) Completed the 3,600-sample forward workload. All
+  3,600 HEC submissions and distributed-search requests succeeded, but 735
+  search results were incomplete, 45 count drops exceeded ten acknowledged
+  events, and peak pending was 641. The first incomplete result was
+  `05:05:59Z`; the last was `05:36:02Z`; exact workload completeness recovered
+  at `05:36:03Z`. Search Head peer inventories did not return to exactly four
+  FQDN entries until `05:52:19Z`, 26 minutes after lifecycle `Completed`.
+- [x] (2026-08-03 05:57Z) Extended the read-only monitor with strict `fqdn`
+  and `pod-ip` expected-address modes for forward and rollback evidence. Both
+  live snapshot smoke tests pass in their applicable state; the rollback mode
+  correctly reports the still-configured FQDN as a mismatch before rollback.
+  A per-ordinal violation is recorded immediately, but the monitor continues
+  gathering the full roll and fails final qualification after writing final
+  configuration and Event evidence. Follow-up source `c952d242a` ignores a
+  stale `Completed` lifecycle target until a roll has been observed for the
+  StatefulSet's current desired revision.
+- [x] (2026-08-03 06:32Z) Completed the controlled configuration rollback on
+  the retained PVCs with explicit
+  `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=absent`. The Operator replaced indexers
+  in order `3 -> 2 -> 1 -> 0`, kept at least three Ready endpoints, preserved
+  every ordinal's PVCs, and recorded zero container restarts. Every replacement
+  has an empty effective `register_search_address`, and Cluster Manager reports
+  its current Pod-IP address `Up` and searchable with all RF/SF factors met.
+  The monitor recorded the expected fail-closed violation when ordinal 2 was
+  selected before every Search Head had converged ordinal 3. At lifecycle
+  completion, every Search Head held four current Pod-IP entries plus four
+  stale FQDN aliases; the observation window remains open for Splunk's delayed
+  stale-peer removal and final workload quantification.
+- [x] (2026-08-03 06:58Z) Observed automatic stale-alias removal without
+  deleting peers or PVCs. Every Search Head moved from eight entries to seven
+  at `06:42:24Z`, to six at `06:47:47Z`, and to five by `06:53:19Z`; Search
+  Heads 1 and 2 made the third transition 12 seconds before Search Head 0.
+  All three reached exactly four current Pod-IP entries, all `Up`, at
+  `06:58:37Z`, exactly 26 minutes after lifecycle `Completed`. This matches the
+  delayed forward-migration cleanup and proves that address rollback is also
+  an independently converging retained-peer identity migration rather than a
+  Kubernetes rollout-completion signal.
+- [x] (2026-08-03 07:17Z) Completed the 3,600-sample rollback workload and
+  monitor finalization. All 3,600 HEC submissions and distributed-search
+  requests succeeded, and the final result contained the exact 3,600-event
+  set. Nevertheless, 221 successful samples omitted more than the just-written
+  event, 32 count drops exceeded ten acknowledged events, and peak pending was
+  345 at `06:32:34Z`. The last materially incomplete sample was `07:04:52Z`,
+  after peer inventories had reached four entries. The monitor collected 295
+  lifecycle/peer samples, retained 62 exact-convergence samples, wrote final
+  Event and configuration evidence, and then failed as designed with
+  `next-target-before-search-head-peer-3-converged`. The complete rollback
+  therefore proves recoverability without PVC deletion but rejects controller
+  lifecycle completion as a Search Head peer-convergence gate.
+- [ ] Build and deploy the exact SHC-100 safety source on native Linux, restore
+  the accepted runtime and Operator images through the controlled lifecycle,
+  and separately qualify explicit stable addressing during initial cluster
+  formation, customer takeover, and one later same-address Pod replacement.
 
 ## Surprises & Discoveries
 
@@ -271,6 +355,65 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   set `SPLUNK_PRODUCT=splunkcloud`, `SPLUNK_VERSION=10.5.2605.0`, and
   `SPLUNK_BUILD=844c593e9c1d`; inspection then matched the OCI label and
   `/opt/splunk-etc/splunk.version` before push.
+- Observation: changing `register_search_address` on retained peers is an
+  identity migration, not a normal Pod replacement optimization.
+  Evidence: every Search Head retained an old Pod-IP entry and added a new
+  FQDN entry with the same peer GUID and server name. Splunk reported `Peer is
+  member of multiple clusters` and `Duplicate Servername`; the new ordinal-0
+  FQDN was `Down` even though all three Pods resolved it to the current
+  EndpointSlice address and reached `/services/server/info` in about 10 ms.
+  Consequence: Kubernetes DNS, routing, and readiness were not the fault. An
+  Operator feature gate cannot safely make this change to an existing cluster.
+- Observation: Splunk deliberately retains a cluster-managed peer omitted
+  from the latest Cluster Manager generation for more than 1,800 seconds.
+  Evidence: `DistributedPeerManager::locked_diffClusterPeers` sets a missing
+  timestamp and removes the peer only after that interval; the distributed
+  peer REST handler refuses removal when `isClusterPeer` is true. Live old-IP
+  entries began disappearing on that schedule, after which all four FQDN
+  identities could become `Up`.
+  Consequence: waiting for eventual convergence would turn an ordinary
+  four-peer upgrade into a long, customer-visible migration window. Controller
+  gating can prevent compounding the problem but cannot eliminate the first
+  peer's duplicate-identity interval.
+- Observation: the current Indexer lifecycle completes on Cluster Manager
+  serving recovery before Search Head distributed-peer convergence.
+  Evidence: lifecycle reached `Completed` at `05:26:11Z` with four Ready
+  indexers and all RF/SF factors met, while each Search Head still listed eight
+  entries, only three `Up`, and the workload remained hundreds of events
+  incomplete.
+  Consequence: the evidence monitor now checks per-GUID identity convergence
+  before accepting a later target. This is a qualification guard, not a claim
+  that controller gating alone repairs Splunk's in-place identity migration.
+- Observation: stale distributed-peer removal converges independently on each
+  Search Head even when every member ultimately agrees.
+  Evidence: during rollback, Search Heads 1 and 2 removed the ordinal-1 FQDN
+  at `06:53:07Z`, while Search Head 0 retained it until `06:53:19Z`. All four
+  current Pod-IP identities remained `Up` throughout that difference.
+  Consequence: a single Search Head, Cluster Manager health, or lifecycle
+  `Completed` cannot stand in for cluster-wide peer convergence. Qualification
+  and future product observability must report every Search Head's view.
+- Observation: the retained indexer startup still performs an internal Splunk
+  restart after initial start when clustering configuration reports a change.
+  Evidence: the replacement play configured and verified the stable address
+  before `start_splunk.yml`, then `Set current node as indexer cluster peer`
+  notified `Restart splunkd service - Via CLI`; one observed handler took
+  between 52.98 and 54.40 seconds on the four replacements while every Ansible
+  recap remained `failed=0` and Kubernetes recorded zero container restarts.
+  Consequence: this pre-existing Docker-Splunk/Ansible startup cost remains a
+  separate reliability requirement; it was not caused by the address task.
+- Observation: Splunk documentation supports selecting a reachable registered
+  search address, but does not define a retained-peer address migration.
+  Evidence: the official `server.conf` reference permits an IP address or
+  fully qualified domain name and defines no default; the SHC/indexer-cluster
+  guide says the Cluster Manager supplies the peer list automatically. The
+  documented manager-side peer removal requires a down peer GUID, while the
+  live replacement preserves that GUID and is `Up`. The generic distributed
+  search removal procedure is therefore not a documented substitute for
+  migrating this cluster-managed identity, and the exact runtime REST handler
+  rejects it as a cluster peer.
+  Consequence: do not add an Operator workaround that manually deletes search
+  peers. A supported in-place solution requires an atomic address-update or
+  stale-alias replacement contract from Splunk Enterprise.
 
 ## Decision Log
 
@@ -359,27 +502,55 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   defaults. Both embedded payload metadata and registry metadata must describe
   the same immutable candidate before publication.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: supersede the earlier Operator automatic-`auto` decision. Keep
+  Docker-Splunk/Ansible support explicit, but do not make lifecycle enablement
+  migrate search-peer identities on existing IndexerClusters.
+  Rationale: the EKS campaign directly produced duplicate cluster-managed
+  identities, silent incomplete results, and a Splunk-enforced delayed cleanup
+  window. The Alpha gate limits exposure but does not make that migration safe.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: treat new-cluster stable identity and retained-cluster migration as
+  separate qualification cases.
+  Rationale: setting the supported value before the first peer joins avoids an
+  address change, while changing it on a retained GUID invokes Splunk's stale
+  generation and collision behavior. Only the first case remains a viable
+  Docker-Splunk experiment without a Splunk Enterprise migration facility.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: preserve the rollback monitor's ordinal-convergence failure after
+  eventual peer cleanup instead of treating final recovery as a pass.
+  Rationale: the controller selected ordinal 2 before ordinal 3 had exactly one
+  `Up` Pod-IP identity on every Search Head. Later automatic cleanup proves
+  recoverability, but it cannot make that earlier planned overlap safe or undo
+  the materially incomplete successful search results observed during it.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
-In progress. No production recommendation or EKS qualification is claimed.
-The source candidates are isolated and pushed. Native Linux source gates,
-exact dependency verification, immutable runtime and Operator builds, embedded
-payload inspection, manager-binary smoke execution, and ECR publication all
-pass. The independent SHC-99 probe correction remains on its separate review
-branch and also passes its serialized Linux gate. Pre-EKS compatibility,
-customer-ownership, rollout-scope, image-metadata, and reproducibility defects
-found so far have been corrected. Acceptance still requires the exact-image
-EKS rollout and evidence from every Search Head.
+The in-place automatic candidate is rejected. Native Linux source gates, exact
+dependency verification, immutable builds, and the Kubernetes/Splunk lifecycle
+mechanics all passed, but the customer-visible contract did not. The exact
+image EKS rollout proved that stable DNS was reachable and Cluster Manager was
+healthy while Search Heads held duplicate identities and successful searches
+returned incomplete results. The safe follow-up preserves the explicit
+Docker-Splunk mechanism, removes implicit Operator migration, and separates a
+new-cluster experiment from any future retained-cluster migration design.
+Final forward and rollback evidence capture is complete. Controlled rollback
+restored Pod-IP registration without deleting PVCs, but reproduced the same
+silent partial-result behavior and delayed Search Head convergence. Exact
+SHC-100 Linux image qualification, accepted-image restoration, and the
+separate initial-formation experiment remain in progress; no production
+recommendation for stable search addressing is claimed.
 
 ## Context and Orientation
 
 The Splunk Operator creates the clustered indexer StatefulSet in
 `pkg/splunk/enterprise/indexercluster.go`. Environment variables provided by
 the Operator are merged with `CommonSplunkSpec.ExtraEnv`; customer values take
-precedence. SHC-98 adds `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=auto` only to
-clustered indexer Pods when the existing combined Pod and Indexer lifecycle
-Alpha gate is enabled. With those gates off, no new value is injected.
+precedence. The rejected SHC-98 experiment added
+`SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=auto` when the combined Pod and Indexer
+lifecycle Alpha gates were enabled. SHC-100 removes that implicit value. The
+safe source preserves an explicit `CommonSplunkSpec.ExtraEnv` value without
+changing a retained cluster merely because lifecycle orchestration is enabled.
 
 Docker-Splunk consumes an exact Splunk Ansible source through the ref pinned in
 its `Makefile`. Splunk Ansible reads container environment in
@@ -410,8 +581,9 @@ replacement; that behavior is not assumed from source configuration alone.
 First, preserve the three repositories as separate review units. Splunk
 Ansible owns parsing, pre-start configuration, validation, and effective-value
 verification. Docker-Splunk owns only the immutable Ansible dependency pin and
-runtime build. Splunk Operator owns only the clustered-indexer default and
-customer override behavior.
+runtime build. The rejected Splunk Operator experiment owned the implicit
+clustered-indexer value and customer override behavior; the SHC-100 safety
+branch removes the implicit value and preserves only explicit customer input.
 
 Second, run deterministic source gates on native Linux AMD64. Start from clean
 worktrees, fetch the pushed SHC-98 branches, and run Splunk Ansible
@@ -602,6 +774,29 @@ reproducible.
   `sha256:d2bcf6a49a3f0ede2cf5719636b0c57a65b2c7303b1323c63b7ca1c4a7301ae6`.
 - SHC-98 Operator Linux AMD64 manifest:
   `sha256:ff8f0f4392b9fdd2b7fa3d313434eaab9e1a76c8c1c74494df5fff1239bfaaae`.
+- Forward workload log SHA-256:
+  `495dff9e140ee3495cc0cac20e1073213c6fbe0b6b34c113181f81ea0f391313`.
+- Forward workload summary SHA-256:
+  `31dbc1637e4483fc5dd3828dae367cfec4e7e23458c35d4e4cd349c08f70f029`.
+- Forward peer/lifecycle evidence SHA-256 as captured at workload completion:
+  `eb03cc0414f91b673d5ff0577f859e7e1c7ab7debcb975583dfaa71d31bc8638`.
+- SHC-100 safe Operator source: `ca8c5eab6`.
+- SHC-100 per-ordinal monitor guard: `cc63afe81`.
+- SHC-100 rollback evidence mode: `bbeaa5644`.
+- SHC-100 evidence-preserving violation handling: `91c39b89b`.
+- SHC-100 stale lifecycle-target isolation: `c952d242a`.
+- Rollback peer/lifecycle evidence SHA-256:
+  `dd2b22308d95ee953fdbe2efb906f95986d6b48d638032792d76022651b5b2ed`.
+- Rollback Kubernetes Event evidence SHA-256:
+  `fb69419fd6b1d8deaa7f0d576ceab72baa534341dd20b96b33e0361fb88248a2`.
+- Rollback effective-config evidence SHA-256:
+  `e76c96daadd732e5e5af0e536eeaf80d7f9d65e0fb9c6ffee32c8c8c3e43253a`.
+- Rollback invariant summary SHA-256:
+  `4bad33822b39db8a2b823868df7606ab45911568fc5417805ad1365011dca6a8`.
+- Rollback workload log SHA-256:
+  `aed254098ec6555e5272fafcb5e139f7f496bc7c76a91ddefcf0149da0ed3e2f`.
+- Rollback workload summary SHA-256:
+  `997c09bc1f00e3dc9731bff60d8bff9785508163b7c00739af5cfed62dac3271`.
 
 Do not put admin credentials, HEC tokens, registry credentials, or raw Secret
 content in this document or evidence bundles.
@@ -624,10 +819,16 @@ or the feature already owns the setting. Explicit input becomes managed.
 record exists and the effective value still matches its last managed value.
 A different value is preserved and stale ownership is relinquished.
 Undefined, null, and empty inputs remain unmanaged.
-The Operator supplies `auto` for clustered indexers only under the combined
-Pod and Indexer lifecycle Alpha gate and retains the existing
-`CommonSplunkSpec.ExtraEnv` override contract. Customers can explicitly supply
-the environment value when the gates are disabled.
+The rejected candidate supplied `auto` under the combined Pod and Indexer
+lifecycle Alpha gate. The safe correction does not synthesize that value.
+`CommonSplunkSpec.ExtraEnv` remains the explicit input for a coordinated
+new-cluster experiment; it is not yet a supported in-place migration workflow.
+
+Official contract references:
+
+- [server.conf `register_search_address`](https://help.splunk.com/en/splunk-enterprise/administer/admin-manual/10.4/configuration-file-reference/10.4.0-configuration-file-reference/server.conf)
+- [Search Head Cluster connection to clustered search peers](https://help.splunk.com/en/splunk-enterprise/administer/distributed-search/9.4/deploy-search-head-clustering/connect-the-search-heads-in-clusters-to-search-peers)
+- [Manager-side removal of a down peer GUID](https://help.splunk.com/en/splunk-enterprise/administer/manage-indexers-and-indexer-clusters/9.1/manage-the-indexer-cluster/remove-a-peer-from-the-manager-nodes-list)
 
 The candidate depends on StatefulSet hostname/subdomain identity, the
 indexer's existing headless Service, Kubernetes cluster DNS, Cluster Manager
@@ -640,3 +841,10 @@ search behavior. If Splunk accepts an unreachable or incomplete peer set and
 returns an unmarked successful partial aggregate, Operator readiness cannot
 repair that semantic gap; it can only avoid progressing another planned
 disruption and expose the evidence.
+
+Revision note (2026-08-03 07:18Z): Updated the living plan with the rejected
+forward experiment, the safe SHC-100 correction, controlled Pod-IP rollback,
+per-Search-Head stale-peer cleanup timing, final workload measurements, and
+content checksums. The revision separates eventual recoverability from safe
+ordinal progression because successful transport and lifecycle completion did
+not prevent materially incomplete distributed-search results.
