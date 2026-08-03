@@ -36,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/util/retry"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -682,8 +683,27 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 		if reflect.DeepEqual(existing.Data, configMap.Data) {
 			return &existing, nil
 		}
-		existing.Data = configMap.Data
-		if err := splutil.UpdateResource(ctx, client, &existing); err != nil {
+
+		desiredData := configMap.Data
+		dataUpdated := false
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			var latest corev1.ConfigMap
+			if err := client.Get(ctx, namespacedName, &latest); err != nil {
+				return err
+			}
+			if reflect.DeepEqual(latest.Data, desiredData) {
+				existing = latest
+				return nil
+			}
+
+			latest.Data = desiredData
+			if err := client.Update(ctx, &latest); err != nil {
+				return err
+			}
+			existing = latest
+			dataUpdated = true
+			return nil
+		}); err != nil {
 			return &existing, err
 		}
 		logger.DebugContext(
@@ -694,7 +714,7 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 			"configMapNamespace",
 			configMapNamespace,
 			"dataUpdated",
-			true,
+			dataUpdated,
 		)
 		return &existing, nil
 	}

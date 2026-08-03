@@ -38,11 +38,35 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type conflictOnceControllerClient struct {
+	splcommon.ControllerClient
+	updateCalls int
+}
+
+func (c *conflictOnceControllerClient) Update(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.UpdateOption,
+) error {
+	c.updateCalls++
+	if c.updateCalls == 1 {
+		return apierrors.NewConflict(
+			schema.GroupResource{Resource: "configmaps"},
+			obj.GetName(),
+			errors.New("simulated concurrent probe ConfigMap update"),
+		)
+	}
+	return c.ControllerClient.Update(ctx, obj, opts...)
+}
 
 func TestValidateSpecResourceDefaulting(t *testing.T) {
 	defaultResources := corev1.ResourceRequirements{
@@ -1985,6 +2009,50 @@ func TestGetProbeConfigMapReconcilesExistingScripts(t *testing.T) {
 		"stale-startup",
 		updated.Data[GetStartupScriptName()],
 	)
+}
+
+func TestGetProbeConfigMapRetriesConcurrentUpdateConflict(t *testing.T) {
+	ctx := context.Background()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idxc",
+			Namespace: "test",
+		},
+	}
+	name := GetProbeConfigMapName(cr.Namespace)
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+		},
+		Data: map[string]string{
+			GetReadinessScriptName(): "stale-readiness",
+			GetLivenessScriptName():  "stale-liveness",
+			GetStartupScriptName():   "stale-startup",
+		},
+	}
+	baseClient := spltest.NewMockClient()
+	baseClient.AddObject(existing)
+	conflictClient := &conflictOnceControllerClient{
+		ControllerClient: baseClient,
+	}
+
+	desired, err := getProbeConfigMap(ctx, conflictClient, cr)
+	require.NoError(t, err)
+	require.Equal(t, 2, conflictClient.updateCalls)
+	require.Contains(
+		t,
+		desired.Data[GetLivenessScriptName()],
+		"SPLUNK_OPERATOR_LIFECYCLE_HOLD",
+	)
+
+	var updated corev1.ConfigMap
+	require.NoError(t, baseClient.Get(
+		ctx,
+		types.NamespacedName{Namespace: cr.Namespace, Name: name},
+		&updated,
+	))
+	require.Equal(t, desired.Data, updated.Data)
 }
 
 func TestGetStartupProbe(t *testing.T) {
