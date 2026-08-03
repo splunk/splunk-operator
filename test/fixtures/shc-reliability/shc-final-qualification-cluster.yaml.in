@@ -125,7 +125,7 @@ spec:
     storageCapacity: 10Gi
   varVolumeStorageConfig:
     storageClassName: gp3
-    storageCapacity: 10Gi
+    storageCapacity: 20Gi
   startupProbe:
     initialDelaySeconds: 40
     timeoutSeconds: 30

@@ -92,7 +92,11 @@ Heads using opt-in partition-gated `RollingUpdate`. Both App Framework paths
 are configured but must be empty during cluster formation. The manifest uses
 extended startup, liveness-termination, Pod-termination, and lifecycle
 budgets so a slow persistent-volume restart or KV Store check is not restarted
-from the beginning by an undersized kubelet clock.
+from the beginning by an undersized kubelet clock. The indexer `/opt/splunk/var`
+volumes are 20 Gi because the sustained evidence workload must retain capacity
+above Splunk's effective `diskUsage.minFreeSpace` threshold; the workload
+monitor refuses to start when an indexer does not also have the configurable
+free-space headroom (`SHC82_MIN_FREE_HEADROOM_MB`, 1024 MB by default).
 
 Render it only with the final runtime image resolved by digest:
 

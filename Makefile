@@ -168,12 +168,13 @@ SHC84_NAMESPACE ?= shc84-startup-term
 SHC84_LICENSE_FILE ?=
 SHC85_NAMESPACE ?= shc85-lifecycle-hold
 SHC85_LICENSE_FILE ?=
+SHC82_MONITOR ?= test/fixtures/shc-reliability/shc82_appframework_monitor.sh
 SHC98_MONITOR ?= test/fixtures/shc-reliability/shc98_stable_address_monitor.sh
 SHC98_NAMESPACE ?= shc-final-qualification
 SHC98_KUBECTL ?= kubectl
 SHC98_WORKLOAD_MANIFEST ?= test/fixtures/shc-reliability/shc98-incluster-workload-job.yaml
 
-.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload shc98-monitor-check shc98-workload-check shc98-incluster-workload
+.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc82-monitor-check shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload shc98-monitor-check shc98-workload-check shc98-incluster-workload
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
 	$(SHC_RELIABILITY_PYTHON) "$(SHC82_APP_PACKAGER)" \
 		--source-dir "$(SHC82_APP_SOURCE_DIR)" \
@@ -191,6 +192,10 @@ shc82-app-package-test: ## Test deterministic SHC-82 app archive generation.
 	$(SHC_RELIABILITY_PYTHON) -m unittest discover \
 		-s test/fixtures/shc-reliability \
 		-p 'test_package_restart_app.py' -v
+
+shc82-monitor-check: ## Validate the SHC-82 HEC/search evidence monitor.
+	bash -n "$(SHC82_MONITOR)"
+	shellcheck "$(SHC82_MONITOR)"
 
 shc-final-manifest: ## Render a digest-pinned final SHC qualification manifest.
 	$(SHC_RELIABILITY_PYTHON) "$(SHC_FINAL_MANIFEST_RENDERER)" \

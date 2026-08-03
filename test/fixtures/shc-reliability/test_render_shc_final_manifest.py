@@ -71,6 +71,13 @@ class RenderSHCFinalManifestTest(unittest.TestCase):
             indexer_document,
             "IndexerCluster must inherit the lifecycle serving-readiness profile",
         )
+        self.assertIn(
+            "varVolumeStorageConfig:\n"
+            "    storageClassName: gp3\n"
+            "    storageCapacity: 20Gi",
+            indexer_document,
+            "long-running indexer qualification requires minFreeSpace headroom",
+        )
 
     def test_mutable_image_is_rejected_without_output(self) -> None:
         output = self.root / "invalid.yaml"

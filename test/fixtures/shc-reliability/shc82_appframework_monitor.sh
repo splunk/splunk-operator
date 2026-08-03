@@ -5,6 +5,7 @@ namespace="${SHC82_NAMESPACE:-shc82-afw-baseline}"
 samples="${SHC82_SAMPLES:-180}"
 interval_seconds="${SHC82_INTERVAL_SECONDS:-5}"
 settle_attempts="${SHC82_SETTLE_ATTEMPTS:-24}"
+min_free_headroom_mb="${SHC82_MIN_FREE_HEADROOM_MB:-1024}"
 run_id="${SHC82_RUN_ID:-shc82-afw-$(date -u +%Y%m%dT%H%M%SZ)}"
 evidence_file="${SHC82_EVIDENCE_FILE:-build/_test/shc82/${run_id}.log}"
 stack_name="${SHC82_STACK_NAME:-shc82}"
@@ -17,6 +18,7 @@ secret_name="splunk-${namespace}-secret"
 hec_service="splunk-${indexercluster_name}-indexer-service"
 shc_service="splunk-${searchheadcluster_name}-search-head-service"
 shc_instance="splunk-${searchheadcluster_name}-search-head"
+idxc_instance="splunk-${indexercluster_name}-indexer"
 
 for value in "${samples}" "${interval_seconds}" "${settle_attempts}"; do
   if ! printf '%s\n' "${value}" | grep -Eq '^[1-9][0-9]*$'; then
@@ -24,6 +26,10 @@ for value in "${samples}" "${interval_seconds}" "${settle_attempts}"; do
     exit 2
   fi
 done
+if ! printf '%s\n' "${min_free_headroom_mb}" | grep -Eq '^[0-9]+$'; then
+  printf 'minimum free-space headroom must be a non-negative integer in MB\n' >&2
+  exit 2
+fi
 
 mkdir -p "$(dirname "${evidence_file}")"
 : >"${evidence_file}"
@@ -39,6 +45,54 @@ admin_password="$(
 
 log_line() {
   printf '%s\n' "$*" | tee -a "${evidence_file}"
+}
+
+preflight_indexer_storage() {
+  local pod storage_state available_kb min_free_mb required_kb
+  local failed=0
+  local indexer_pods
+
+  indexer_pods="$(
+    kubectl -n "${namespace}" get pods \
+      -l app.kubernetes.io/component=indexer,app.kubernetes.io/instance="${idxc_instance}" \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true
+  )"
+  if [ -z "${indexer_pods}" ]; then
+    log_line "preflight=indexer-storage status=fail reason=no-indexer-pods"
+    return 1
+  fi
+
+  while IFS= read -r pod; do
+    # Variables in this command are intentionally evaluated inside the Pod.
+    # shellcheck disable=SC2016
+    storage_state="$(
+      kubectl -n "${namespace}" exec "${pod}" -c splunk -- sh -c '
+        available_kb="$(df -Pk /opt/splunk/var | awk "NR == 2 {print \$4}")"
+        min_free_mb="$(/opt/splunk/bin/splunk btool server list diskUsage | awk "\$1 == \"minFreeSpace\" {print \$3; exit}")"
+        printf "%s %s\n" "${available_kb}" "${min_free_mb}"
+      ' 2>/dev/null || true
+    )"
+    available_kb="${storage_state%% *}"
+    min_free_mb="${storage_state#* }"
+    if ! printf '%s\n' "${available_kb}" | grep -Eq '^[0-9]+$' ||
+      ! printf '%s\n' "${min_free_mb}" | grep -Eq '^[0-9]+$'; then
+      log_line "preflight=indexer-storage pod=${pod} status=fail reason=unreadable-state"
+      failed=1
+      continue
+    fi
+
+    required_kb=$(((min_free_mb + min_free_headroom_mb) * 1024))
+    if [ "${available_kb}" -le "${required_kb}" ]; then
+      log_line "preflight=indexer-storage pod=${pod} status=fail availableKB=${available_kb} minFreeMB=${min_free_mb} headroomMB=${min_free_headroom_mb} requiredKB=${required_kb}"
+      failed=1
+    else
+      log_line "preflight=indexer-storage pod=${pod} status=ok availableKB=${available_kb} minFreeMB=${min_free_mb} headroomMB=${min_free_headroom_mb} requiredKB=${required_kb}"
+    fi
+  done <<EOF
+${indexer_pods}
+EOF
+
+  [ "${failed}" -eq 0 ]
 }
 
 submit_event() {
@@ -104,6 +158,10 @@ baseline_uids="$(
 )"
 log_line "run=${run_id} start=$(date -u +%Y-%m-%dT%H:%M:%SZ) namespace=${namespace}"
 log_line "baselinePodUIDs=${baseline_uids}"
+if ! preflight_indexer_storage; then
+  log_line "run=${run_id} end=$(date -u +%Y-%m-%dT%H:%M:%SZ) complete=false reason=indexer-storage-preflight"
+  exit 2
+fi
 
 hec_failures=0
 search_failures=0
