@@ -168,8 +168,9 @@ SHC84_NAMESPACE ?= shc84-startup-term
 SHC84_LICENSE_FILE ?=
 SHC85_NAMESPACE ?= shc85-lifecycle-hold
 SHC85_LICENSE_FILE ?=
+SHC98_MONITOR ?= test/fixtures/shc-reliability/shc98_stable_address_monitor.sh
 
-.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload
+.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload shc98-monitor-check
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
 	$(SHC_RELIABILITY_PYTHON) "$(SHC82_APP_PACKAGER)" \
 		--source-dir "$(SHC82_APP_SOURCE_DIR)" \
@@ -247,6 +248,10 @@ shc85-incluster-workload: ## Recreate the API-independent SHC-85 HEC/search work
 	kubectl -n "$(SHC85_NAMESPACE)" delete pod \
 		-l job-name=shc85-incluster-workload --ignore-not-found --wait=true
 	kubectl apply -f test/fixtures/shc-reliability/shc85-incluster-workload-job.yaml
+
+shc98-monitor-check: ## Validate the read-only SHC-98 stable-address evidence monitor.
+	bash -n "$(SHC98_MONITOR)"
+	shellcheck "$(SHC98_MONITOR)"
 
 
 ##@ Documentation

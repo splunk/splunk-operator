@@ -479,3 +479,44 @@ normal Lease protocol. It does not inject two simultaneous active leaders,
 corrupt or delete the Lease, partition contenders from one another, or prove
 behavior under an API quorum loss. Those conflict and split-brain scenarios
 remain separate qualification work.
+
+## SHC-98 stable indexer search-address evidence
+
+`shc98_stable_address_monitor.sh` is a read-only monitor for the SHC-98
+experiment. It does not patch a Custom Resource, change an image, delete a
+Pod, or advance lifecycle status. Start it before the staged IndexerCluster is
+unpaused. It records the StatefulSet revisions, durable lifecycle operation,
+Pod UIDs/IPs/PVC claims, EndpointSlices, Cluster Manager health and registered
+search addresses, and the independently observed distributed-peer inventory
+from every Search Head. Snapshot and final configuration artifacts also record
+each indexer's effective `register_search_address`, system FQDN, and resolved
+Pod IP without recording a credential.
+
+The normal mode waits for one complete Operator-owned reverse-ordinal roll and
+then requires five minutes of stable samples. It fails if more than one indexer
+is unavailable, a container restarts, the target order is not `3,2,1,0`, a Pod
+or PVC identity transition is invalid, Cluster Manager or any Search Head does
+not retain the expected per-ordinal FQDNs, or effective indexer configuration
+and system DNS identity disagree. Run the API-independent SHC-85 workload Job
+at the same time; the two evidence streams deliberately remain separate.
+
+Validate the script before use:
+
+```sh
+make shc98-monitor-check
+```
+
+Capture a single non-mutating baseline from the retained qualification
+cluster:
+
+```sh
+SHC98_KUBE_CONTEXT=shc85-vivek-spl-301372 \
+SHC98_SNAPSHOT_ONLY=true \
+SHC98_EVIDENCE_FILE=build/_test/shc98/baseline.tsv \
+test/fixtures/shc-reliability/shc98_stable_address_monitor.sh
+```
+
+For the rollout, omit `SHC98_SNAPSHOT_ONLY=true` and start the monitor before
+unpausing `shcfinal-idxc`. The namespace credential is read from the existing
+namespace Secret and passed to in-Pod REST calls over standard input. It is
+never written to the evidence files or placed in a command argument.
