@@ -115,11 +115,11 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Secret reference
-			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
-				"queue-secret-ref-volume",
-				testcaseEnvInst.GetIndexIngestSepSecretName(),
-			)}
-			queue.SQS.VolList = volumeSpec
+			secretName := testcaseEnvInst.GetIndexIngestSepSecretName()
+			queue.SQS.SecretKeyRef = &enterpriseApi.SQSSecretKeyRef{
+				AwsAccessKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_access_key"},
+				AwsSecretKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_secret_key"},
+			}
 
 			// Deploy Queue and ObjectStorage
 			q, objStorage, err := testenv.DeployQueueAndObjectStorage(ctx, deployment, queue, objectStorage)
@@ -342,11 +342,11 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 	Context("Ingestor deployment with user-supplied ConfigMap volume", func() {
 		It("Operator rolls IngestorCluster pods when a user-supplied ConfigMap volume changes", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			// Secret reference
-			volumeSpec := []enterpriseApi.SQSVolumeSpec{testenv.GenerateQueueVolumeSpec(
-				"queue-secret-ref-volume",
-				testcaseEnvInst.GetIndexIngestSepSecretName(),
-			)}
-			queue.SQS.VolList = volumeSpec
+			secretName := testcaseEnvInst.GetIndexIngestSepSecretName()
+			queue.SQS.SecretKeyRef = &enterpriseApi.SQSSecretKeyRef{
+				AwsAccessKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_access_key"},
+				AwsSecretKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_secret_key"},
+			}
 
 			// Deploy Queue and ObjectStorage using shared helper
 			testcaseEnvInst.Log.Info("Deploy Queue and ObjectStorage")

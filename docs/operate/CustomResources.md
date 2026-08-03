@@ -323,6 +323,7 @@ SQS message queue inputs can be found in the table below.
 | region   | string | [Required] Region where the queue is located  |
 | endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
+| secretKeyRef | object | [Optional] Per-key selectors for AWS credentials. Contains `awsAccessKey` and `awsSecretKey`, each a `SecretKeySelector` with `name` (Secret name) and `key` (key within the Secret). When not set, IRSA / workload identity is assumed. |
 
 Change of any of the queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 

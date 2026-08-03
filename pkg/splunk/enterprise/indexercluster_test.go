@@ -2925,7 +2925,10 @@ func newQueueOSFixture(t *testing.T, ctx context.Context, c client.Client, queue
 				AuthRegion: "us-west-2",
 				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 				DLQ:        "sqs-dlq-test",
-				VolList:    []enterpriseApi.SQSVolumeSpec{{SecretRef: credsSecretName}},
+				SecretKeyRef: &enterpriseApi.SQSSecretKeyRef{
+					AwsAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: credsSecretName}, Key: "s3_access_key"},
+					AwsSecretKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: credsSecretName}, Key: "s3_secret_key"},
+				},
 			},
 		},
 	}
@@ -3405,7 +3408,10 @@ func TestIdxcQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 			SQS: enterpriseApi.SQSSpec{
 				Name: "old-queue", AuthRegion: "us-west-2",
 				Endpoint: "https://sqs.us-west-2.amazonaws.com", DLQ: "old-dlq",
-				VolList: []enterpriseApi.SQSVolumeSpec{{SecretRef: "queue-secrets"}},
+				SecretKeyRef: &enterpriseApi.SQSSecretKeyRef{
+					AwsAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "queue-secrets"}, Key: "s3_access_key"},
+					AwsSecretKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "queue-secrets"}, Key: "s3_secret_key"},
+				},
 			},
 		},
 	}
@@ -3418,7 +3424,10 @@ func TestIdxcQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 			SQS: enterpriseApi.SQSSpec{
 				Name: "new-queue", AuthRegion: "us-east-1",
 				Endpoint: "https://sqs.us-east-1.amazonaws.com", DLQ: "new-dlq",
-				VolList: []enterpriseApi.SQSVolumeSpec{{SecretRef: "queue-secrets"}},
+				SecretKeyRef: &enterpriseApi.SQSSecretKeyRef{
+					AwsAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "queue-secrets"}, Key: "s3_access_key"},
+					AwsSecretKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "queue-secrets"}, Key: "s3_secret_key"},
+				},
 			},
 		},
 	}
@@ -3647,7 +3656,10 @@ func TestIdxcQueueRefRemovedGCsResources(t *testing.T) {
 			SQS: enterpriseApi.SQSSpec{
 				Name: "my-queue", AuthRegion: "us-west-2",
 				Endpoint: "https://sqs.us-west-2.amazonaws.com", DLQ: "my-dlq",
-				VolList: []enterpriseApi.SQSVolumeSpec{{SecretRef: "queue-secrets"}},
+				SecretKeyRef: &enterpriseApi.SQSSecretKeyRef{
+					AwsAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "queue-secrets"}, Key: "s3_access_key"},
+					AwsSecretKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "queue-secrets"}, Key: "s3_secret_key"},
+				},
 			},
 		},
 	}

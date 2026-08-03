@@ -50,9 +50,9 @@ SQS message queue inputs can be found in the table below.
 | authRegion   | string | [Required] Region where the queue is located  |
 | endpoint   | string | [Optional, if not provided formed based on authRegion] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
-| volumes | []VolumeSpec | [Optional] List of remote storage volumes used to mount the credentials for queue and bucket access (must contain s3_access_key and s3_secret_key) |
+| secretKeyRef | object | [Optional] Per-key selectors for AWS credentials. When not set, IRSA / workload identity is assumed. Contains `awsAccessKey` and `awsSecretKey`, each a `SecretKeySelector` (`name`, `key`). |
 
-**SOK doesn't support update of any of the Queue inputs except from the volumes which allow the change of secrets.**
+**SOK doesn't support update of any of the Queue inputs except `secretKeyRef` which allows the change of credential secrets.**
 
 ## Example
 ```
@@ -67,9 +67,13 @@ spec:
     authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
-    volumes:
-      - name: s3-sqs-volume
-        secretRef: s3-secret
+    secretKeyRef:
+      awsAccessKey:
+        name: s3-secret
+        key: s3_access_key
+      awsSecretKey:
+        name: s3-secret
+        key: s3_secret_key
 ```
 
 # ObjectStorage
@@ -219,9 +223,13 @@ queue:
     authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
-    volumes:
-        - name: s3-sqs-volume
-          secretRef: s3-secret
+    secretKeyRef:
+      awsAccessKey:
+        name: s3-secret
+        key: s3_access_key
+      awsSecretKey:
+        name: s3-secret
+        key: s3_secret_key
 ```
 
 ```
