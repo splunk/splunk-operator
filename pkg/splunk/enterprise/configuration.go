@@ -50,6 +50,12 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
+// probeConfigMapContentHashAnnotation records the last probe-script content
+// written by the Operator. Its presence alone is not sufficient for ownership:
+// the value must still match the ConfigMap data. This lets a customer take
+// ownership by editing any script without the Operator overwriting that edit.
+const probeConfigMapContentHashAnnotation = "enterprise.splunk.com/probe-configmap-content-hash"
+
 var defaultLivenessProbe corev1.Probe = corev1.Probe{
 	InitialDelaySeconds: livenessProbeDefaultDelaySec,
 	TimeoutSeconds:      livenessProbeTimeoutSec,
@@ -674,13 +680,29 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 		return &configMap, err
 	}
 	configMap.Data[GetStartupScriptName()] = data
+	desiredHash := configDataHash(configMap.Data)
+	configMap.Annotations = map[string]string{
+		probeConfigMapContentHashAnnotation: desiredHash,
+	}
 
-	// Reconcile probe data on every pass. Probe ConfigMaps are namespace-scoped
-	// and outlive individual workloads, so returning an existing object without
-	// applying the desired scripts leaves upgraded Operators running stale
-	// readiness and liveness logic.
+	// Existing unmarked ConfigMaps are customer-owned. An Operator-created
+	// ConfigMap remains managed only while its recorded hash matches its current
+	// data. Any manual data edit therefore relinquishes management without an
+	// additional API or a race-prone heuristic.
 	if getErr == nil {
-		if reflect.DeepEqual(existing.Data, configMap.Data) {
+		recordedHash, managed := existing.Annotations[probeConfigMapContentHashAnnotation]
+		if !managed || recordedHash != configDataHash(existing.Data) {
+			logger.DebugContext(
+				ctx,
+				"preserving customer-managed probe config map",
+				"configMapName",
+				configMapName,
+				"configMapNamespace",
+				configMapNamespace,
+			)
+			return &existing, nil
+		}
+		if reflect.DeepEqual(existing.Data, configMap.Data) && recordedHash == desiredHash {
 			return &existing, nil
 		}
 
@@ -691,12 +713,24 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 			if err := client.Get(ctx, namespacedName, &latest); err != nil {
 				return err
 			}
-			if reflect.DeepEqual(latest.Data, desiredData) {
+			latestRecordedHash, latestManaged := latest.Annotations[probeConfigMapContentHashAnnotation]
+			if !latestManaged || latestRecordedHash != configDataHash(latest.Data) {
+				// A customer may edit the ConfigMap between retries. Preserve the
+				// latest data and treat that ownership transition as success.
+				existing = latest
+				return nil
+			}
+			if reflect.DeepEqual(latest.Data, desiredData) && latestRecordedHash == desiredHash {
 				existing = latest
 				return nil
 			}
 
+			latest = *latest.DeepCopy()
 			latest.Data = desiredData
+			if latest.Annotations == nil {
+				latest.Annotations = make(map[string]string)
+			}
+			latest.Annotations[probeConfigMapContentHashAnnotation] = desiredHash
 			if err := client.Update(ctx, &latest); err != nil {
 				return err
 			}
@@ -719,8 +753,21 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 		return &existing, nil
 	}
 
-	updated, err := splctrl.ApplyConfigMap(ctx, client, &configMap)
-	if err != nil {
+	// Create directly so a concurrent customer or controller creation cannot be
+	// mistaken for an object the Operator is allowed to update.
+	var beforeCreate corev1.ConfigMap
+	if err := client.Get(ctx, namespacedName, &beforeCreate); err == nil {
+		return &beforeCreate, nil
+	} else if !k8serrors.IsNotFound(err) {
+		return &configMap, err
+	}
+	if err := client.Create(ctx, &configMap); err != nil {
+		if !k8serrors.IsAlreadyExists(err) {
+			return &configMap, err
+		}
+	}
+	var created corev1.ConfigMap
+	if err := client.Get(ctx, namespacedName, &created); err != nil {
 		return &configMap, err
 	}
 	logger.DebugContext(
@@ -731,9 +778,9 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 		"configMapNamespace",
 		configMapNamespace,
 		"dataUpdated",
-		updated,
+		true,
 	)
-	return &configMap, nil
+	return &created, nil
 }
 
 func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.StatefulSet) {

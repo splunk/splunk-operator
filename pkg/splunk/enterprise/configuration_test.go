@@ -68,6 +68,50 @@ func (c *conflictOnceControllerClient) Update(
 	return c.ControllerClient.Update(ctx, obj, opts...)
 }
 
+type probeConfigMapCreateRaceClient struct {
+	splcommon.ControllerClient
+	concurrent *corev1.ConfigMap
+}
+
+func (c *probeConfigMapCreateRaceClient) Create(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.CreateOption,
+) error {
+	if err := c.ControllerClient.Create(ctx, c.concurrent, opts...); err != nil {
+		return err
+	}
+	return apierrors.NewAlreadyExists(
+		schema.GroupResource{Resource: "configmaps"},
+		obj.GetName(),
+	)
+}
+
+type probeConfigMapCustomerEditConflictClient struct {
+	splcommon.ControllerClient
+	customerEdit *corev1.ConfigMap
+	updateCalls  int
+}
+
+func (c *probeConfigMapCustomerEditConflictClient) Update(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.UpdateOption,
+) error {
+	c.updateCalls++
+	if c.updateCalls == 1 {
+		if err := c.ControllerClient.Update(ctx, c.customerEdit.DeepCopy(), opts...); err != nil {
+			return err
+		}
+		return apierrors.NewConflict(
+			schema.GroupResource{Resource: "configmaps"},
+			obj.GetName(),
+			errors.New("simulated concurrent customer probe ConfigMap edit"),
+		)
+	}
+	return c.ControllerClient.Update(ctx, obj, opts...)
+}
+
 func TestValidateSpecResourceDefaulting(t *testing.T) {
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -1951,7 +1995,7 @@ func TestGetSearchHeadLifecycleReadinessProbe(t *testing.T) {
 	}
 }
 
-func TestGetProbeConfigMapReconcilesExistingScripts(t *testing.T) {
+func TestGetProbeConfigMapPreservesExistingCustomScripts(t *testing.T) {
 	ctx := context.Background()
 	cr := &enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1977,37 +2021,106 @@ func TestGetProbeConfigMapReconcilesExistingScripts(t *testing.T) {
 	desired, err := getProbeConfigMap(ctx, c, cr)
 	require.NoError(t, err)
 	require.Equal(t, name, desired.Name)
+	require.Equal(t, existing.Data, desired.Data)
+	require.NotContains(t, desired.Annotations, probeConfigMapContentHashAnnotation)
 
-	var updated corev1.ConfigMap
+	var preserved corev1.ConfigMap
 	require.NoError(t, c.Get(
 		ctx,
 		types.NamespacedName{Namespace: cr.Namespace, Name: name},
-		&updated,
+		&preserved,
 	))
-	require.NotEqual(
+	require.Equal(t, existing.Data, preserved.Data)
+}
+
+func TestGetProbeConfigMapCreatesManagedDefaults(t *testing.T) {
+	ctx := context.Background()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idxc", Namespace: "test"},
+	}
+	c := spltest.NewMockClient()
+
+	created, err := getProbeConfigMap(ctx, c, cr)
+	require.NoError(t, err)
+	require.Equal(
 		t,
-		"stale-readiness",
-		updated.Data[GetReadinessScriptName()],
+		configDataHash(created.Data),
+		created.Annotations[probeConfigMapContentHashAnnotation],
 	)
-	require.Contains(
+	require.Contains(t, created.Data[GetReadinessScriptName()], "SPLUNK_OPERATOR_INDEXER_SERVING_READINESS")
+	require.Contains(t, created.Data[GetLivenessScriptName()], "SPLUNK_OPERATOR_LIFECYCLE_HOLD")
+}
+
+func TestGetProbeConfigMapReconcilesUnmodifiedManagedScripts(t *testing.T) {
+	ctx := context.Background()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idxc", Namespace: "test"},
+	}
+	name := GetProbeConfigMapName(cr.Namespace)
+	staleData := map[string]string{
+		GetReadinessScriptName(): "stale-readiness",
+		GetLivenessScriptName():  "stale-liveness",
+		GetStartupScriptName():   "stale-startup",
+	}
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+			Annotations: map[string]string{
+				probeConfigMapContentHashAnnotation: configDataHash(staleData),
+			},
+		},
+		Data: staleData,
+	}
+	c := spltest.NewMockClient()
+	c.AddObject(existing)
+
+	desired, err := getProbeConfigMap(ctx, c, cr)
+	require.NoError(t, err)
+	require.Contains(t, desired.Data[GetReadinessScriptName()], "SPLUNK_OPERATOR_INDEXER_SERVING_READINESS")
+	require.Contains(t, desired.Data[GetLivenessScriptName()], "SPLUNK_OPERATOR_LIFECYCLE_HOLD")
+	require.Equal(
 		t,
-		updated.Data[GetReadinessScriptName()],
-		"SPLUNK_OPERATOR_INDEXER_SERVING_READINESS",
+		configDataHash(desired.Data),
+		desired.Annotations[probeConfigMapContentHashAnnotation],
 	)
-	require.NotEqual(
+}
+
+func TestGetProbeConfigMapPreservesCustomerEditToManagedDefaults(t *testing.T) {
+	ctx := context.Background()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idxc", Namespace: "test"},
+	}
+	name := GetProbeConfigMapName(cr.Namespace)
+	operatorData := map[string]string{
+		GetReadinessScriptName(): "operator-readiness",
+		GetLivenessScriptName():  "operator-liveness",
+		GetStartupScriptName():   "operator-startup",
+	}
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+			Annotations: map[string]string{
+				probeConfigMapContentHashAnnotation: configDataHash(operatorData),
+			},
+		},
+		Data: map[string]string{
+			GetReadinessScriptName(): "customer-readiness",
+			GetLivenessScriptName():  operatorData[GetLivenessScriptName()],
+			GetStartupScriptName():   operatorData[GetStartupScriptName()],
+		},
+	}
+	c := spltest.NewMockClient()
+	c.AddObject(existing)
+
+	preserved, err := getProbeConfigMap(ctx, c, cr)
+	require.NoError(t, err)
+	require.Equal(t, "customer-readiness", preserved.Data[GetReadinessScriptName()])
+	require.Equal(
 		t,
-		"stale-liveness",
-		updated.Data[GetLivenessScriptName()],
-	)
-	require.Contains(
-		t,
-		updated.Data[GetLivenessScriptName()],
-		"SPLUNK_OPERATOR_LIFECYCLE_HOLD",
-	)
-	require.NotEqual(
-		t,
-		"stale-startup",
-		updated.Data[GetStartupScriptName()],
+		configDataHash(operatorData),
+		preserved.Annotations[probeConfigMapContentHashAnnotation],
 	)
 }
 
@@ -2024,6 +2137,13 @@ func TestGetProbeConfigMapRetriesConcurrentUpdateConflict(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: cr.Namespace,
+			Annotations: map[string]string{
+				probeConfigMapContentHashAnnotation: configDataHash(map[string]string{
+					GetReadinessScriptName(): "stale-readiness",
+					GetLivenessScriptName():  "stale-liveness",
+					GetStartupScriptName():   "stale-startup",
+				}),
+			},
 		},
 		Data: map[string]string{
 			GetReadinessScriptName(): "stale-readiness",
@@ -2053,6 +2173,82 @@ func TestGetProbeConfigMapRetriesConcurrentUpdateConflict(t *testing.T) {
 		&updated,
 	))
 	require.Equal(t, desired.Data, updated.Data)
+	require.Equal(
+		t,
+		configDataHash(updated.Data),
+		updated.Annotations[probeConfigMapContentHashAnnotation],
+	)
+}
+
+func TestGetProbeConfigMapPreservesCustomerEditDuringConflictRetry(t *testing.T) {
+	ctx := context.Background()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idxc", Namespace: "test"},
+	}
+	name := GetProbeConfigMapName(cr.Namespace)
+	staleData := map[string]string{
+		GetReadinessScriptName(): "stale-readiness",
+		GetLivenessScriptName():  "stale-liveness",
+		GetStartupScriptName():   "stale-startup",
+	}
+	managed := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+			Annotations: map[string]string{
+				probeConfigMapContentHashAnnotation: configDataHash(staleData),
+			},
+		},
+		Data: staleData,
+	}
+	customerEdit := managed.DeepCopy()
+	customerEdit.Data = map[string]string{
+		GetReadinessScriptName(): "customer-readiness",
+		GetLivenessScriptName():  "customer-liveness",
+		GetStartupScriptName():   "customer-startup",
+	}
+	baseClient := spltest.NewMockClient()
+	baseClient.AddObject(managed)
+	conflictClient := &probeConfigMapCustomerEditConflictClient{
+		ControllerClient: baseClient,
+		customerEdit:     customerEdit,
+	}
+
+	preserved, err := getProbeConfigMap(ctx, conflictClient, cr)
+	require.NoError(t, err)
+	require.Equal(t, 1, conflictClient.updateCalls)
+	require.Equal(t, customerEdit.Data, preserved.Data)
+	require.Equal(
+		t,
+		configDataHash(staleData),
+		preserved.Annotations[probeConfigMapContentHashAnnotation],
+	)
+}
+
+func TestGetProbeConfigMapPreservesConcurrentCustomerCreation(t *testing.T) {
+	ctx := context.Background()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idxc", Namespace: "test"},
+	}
+	name := GetProbeConfigMapName(cr.Namespace)
+	baseClient := spltest.NewMockClient()
+	concurrent := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cr.Namespace},
+		Data: map[string]string{
+			GetReadinessScriptName(): "customer-readiness",
+			GetLivenessScriptName():  "customer-liveness",
+			GetStartupScriptName():   "customer-startup",
+		},
+	}
+	raceClient := &probeConfigMapCreateRaceClient{
+		ControllerClient: baseClient,
+		concurrent:       concurrent,
+	}
+
+	preserved, err := getProbeConfigMap(ctx, raceClient, cr)
+	require.NoError(t, err)
+	require.Equal(t, concurrent.Data, preserved.Data)
+	require.NotContains(t, preserved.Annotations, probeConfigMapContentHashAnnotation)
 }
 
 func TestGetStartupProbe(t *testing.T) {
