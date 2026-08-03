@@ -499,10 +499,12 @@ or PVC identity transition is invalid, Cluster Manager or any Search Head does
 not retain the expected per-ordinal FQDNs, or effective indexer configuration
 and system DNS identity disagree. Run the API-independent SHC-85 workload Job
 at the same time; the two evidence streams deliberately remain separate. The
-monitor also fails before a later ordinal can qualify when the prior ordinal's
-GUID is not represented by exactly one `Up` FQDN peer on every Search Head.
-This catches stale Pod-IP aliases and divergent peer selection even when the
-Cluster Manager already reports the replacement searchable. The
+monitor records a qualification violation as soon as a later ordinal appears
+before the prior ordinal's GUID is represented by exactly one `Up` expected
+peer on every Search Head. It preserves the rest of the rollout evidence and
+ultimately fails the run even if the deployment later converges. This catches
+stale aliases and divergent peer selection when the Cluster Manager already
+reports the replacement searchable. The
 SHC-98 Job is pinned to the previously accepted runtime OCI index, uses the
 Pod hostname as a unique workload run ID, and does not mount a Kubernetes
 service-account token.

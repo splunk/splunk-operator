@@ -490,6 +490,7 @@ fi
 roll_started=false
 seen_ordinals='[]'
 previous_ordinal=-1
+ordinal_convergence_violation=''
 stable_samples=0
 deadline=$((SECONDS + roll_timeout_seconds))
 
@@ -518,7 +519,10 @@ while ((SECONDS < deadline)); do
   if ((current_ordinal >= 0 && previous_ordinal >= 0 &&
     current_ordinal != previous_ordinal)) &&
     ! rolled_peer_converged_on_all_search_heads "${previous_ordinal}"; then
-    fail "next-target-before-search-head-peer-${previous_ordinal}-converged"
+    if [[ -z "${ordinal_convergence_violation}" ]]; then
+      ordinal_convergence_violation="next-target-before-search-head-peer-${previous_ordinal}-converged"
+      record_sample "VIOLATION-${ordinal_convergence_violation}"
+    fi
   fi
 
   if ((current_ordinal >= 0)) &&
@@ -604,6 +608,10 @@ k -n "${namespace}" get events -o json | jq \
           lastObserved:
             (.series.lastObservedTime // .lastTimestamp // .eventTime // "")
         }] | sort_by(.lastObserved, .objectName, .reason)' >"${events_file}"
+
+if [[ -n "${ordinal_convergence_violation}" ]]; then
+  fail "${ordinal_convergence_violation}"
+fi
 
 printf 'PASS: SHC-98 address roll converged; mode=%s revision=%s ordinals=%s stableSamples=%s finalConfig=%s evidence=%s events=%s config=%s\n' \
   "${expected_address_mode}" \
