@@ -106,8 +106,29 @@ pin commit `118cae68a8fdecbac1286582d32eecd996510564`, passed Ansible
 syntax/lint execution plus 25 existing SHC unit tests and two new single-start
 regression tests. The second source commit also makes exhaustion of the status
 poll fatal; it cannot fall through to later startup tasks as a successful
-poll. Linux image and same-PVC EKS qualification of that exact dependency
-remains required before this separate correction can be called complete.
+poll.
+
+That exact dependency has now passed a Linux image build and bounded same-PVC
+EKS qualification. Docker-Splunk verified the official artifact checksum,
+embedded the exact Ansible source, and published runtime OCI index
+`sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd`
+with Linux AMD64 manifest
+`sha256:e790463feefcde666a4ea20e6a602f912feec99786c72c7b2cb7223f80964452`.
+Two Cluster Manager replacements reused the same persistent `etc` and `var`
+claims. Each issued one initial start, completed Ansible with `failed=0`,
+reported no port 8191 conflict, became Ready, and recorded zero container
+restarts. The same image then converged across LicenseManager, four indexers,
+the Deployer, and three Search Heads. All managed tiers finished Ready with
+unchanged PVC identities and zero container restarts; final indexer health had
+RF/SF met, all data searchable, all peers Up, and no fixups, while final SHC
+health had dynamic captaincy and all three members Up.
+
+The live initial starts returned zero, so the conditional nonzero status-poll
+branch was not forced inside a production-style Pod. Its single-start and
+fatal-exhaustion behavior remains established by the executable source gate.
+The complete immutable inputs, workload evidence, and qualification limits are
+recorded in
+`shc-reliability-implementation/SHC97DockerSplunkStartupQualification.md`.
 
 ## Environment and exact identity
 

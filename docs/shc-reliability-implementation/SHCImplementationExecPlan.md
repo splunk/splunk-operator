@@ -624,6 +624,23 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   per-app and bundle state. Focused regression tests, `make build`, complete
   enterprise package tests, and the full 43-suite/192-enterprise-spec/150-Helm-
   test macOS gate passed.
+- [x] (2026-08-03 UTC) Completed bounded SHC-97 source, packaging, and EKS
+  qualification. Splunk Ansible source `ae8ecf4a` issues `splunk start` once,
+  polls the existing process only after a nonzero result, and treats exhausted
+  polling as fatal; Docker-Splunk source `118cae68` pins that exact dependency.
+  Their focused Make gates passed, including the executable exhaustion check.
+  Linux-built runtime OCI index
+  `sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd`
+  passed two same-PVC Cluster Manager replacements and dependency-ordered
+  convergence of the LicenseManager, four-indexer cluster, Deployer, and
+  three-member SHC. Every replacement issued one start, reported no port 8191
+  conflict, became Ready, and retained zero container restarts. Workload
+  windows ended exactly at 120/120 and 240/240 with zero HEC and search-request
+  failures. The live starts returned zero, so the conditional status-poll path
+  is source-qualified rather than live-forced. Four transient successful-search
+  count regressions during indexer replacement remain the open SHC-85/OPS-011
+  boundary. Detailed evidence is in
+  `SHC97DockerSplunkStartupQualification.md`.
 - [ ] Complete SHC-94 EKS recovery and conflict qualification with an immutable
   Operator image: resume the already-pending empty-repository rollout, then
   prove that a real pending restart-required app or bundle still prevents a

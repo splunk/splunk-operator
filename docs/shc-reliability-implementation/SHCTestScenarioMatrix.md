@@ -56,6 +56,25 @@ Unless a scenario explicitly tests loss of majority, assert:
 | HLT-012 | P2 | TLS terminates at ingress | External TLS mode does not select the local management scheme; readiness follows the actual Splunkd `enableSplunkdSSL` configuration |
 | HLT-013 | P2 | Mesh mTLS, passthrough, or re-encryption | Local readiness bypasses proxy routing while supported inter-Pod management traffic retains its qualified TLS policy |
 
+### HLT-009 SHC-97 evidence
+
+Exact Splunk-Ansible source `ae8ecf4a` and Docker-Splunk source `118cae68`
+passed the bounded single-start source and packaging gates. Runtime OCI index
+`sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd`
+then completed two same-PVC Cluster Manager replacements on EKS 1.31.14. Each
+replacement issued one start, completed Ansible with `failed=0`, became Ready,
+and recorded zero port 8191 conflicts and zero container restarts. The same
+image subsequently converged across the complete retained topology with every
+managed tier Ready and all persistent claim identities unchanged.
+
+The live initial starts returned zero, so the conditional status-poll branch
+was not forced in a production-style Pod. Executable source qualification
+establishes both nonzero-result status polling and fatal bounded exhaustion.
+This closes bounded HLT-009 no-regression coverage for the exact image and EKS
+topology, not every slow-start timing or storage/provider combination. Detailed
+evidence is in
+[SHC97DockerSplunkStartupQualification.md](SHC97DockerSplunkStartupQualification.md).
+
 ## Drain and captain scenarios
 
 | ID | Priority | Scenario | Required proof |

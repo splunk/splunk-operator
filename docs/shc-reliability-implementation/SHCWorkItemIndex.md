@@ -71,7 +71,7 @@ without duplicating their full content.
 | SHC-94 | Distinguish empty App Framework repository polling from durable app work when coordinating an SHC StatefulSet rollout | `9500d8d34` on `feature/shc-kubernetes-reliability` | OPS-006, OPS-011, STS-003, OBS-001 | Source-qualified on macOS: focused regression tests, complete enterprise package tests, `make build`, and the full 43-suite/192-enterprise-spec/150-Helm-test gate passed. The defect is reproduced on EKS: an empty repository was listed once per poll interval, durable app and bundle status remained empty, yet the pending SHC revision remained at partition three with `AppFrameworkOperationActive`. The correction uses durable pending/in-progress app or bundle state as the ownership signal. Updated-image recovery and actual restart-required App Framework qualification remain open. |
 | SHC-95 | Qualify Search Head availability across restart-required App Framework work and separate replicated SHC policy from member-local configuration | Phase-three convergence `3903e01df`; workload error preservation `70db3cf83`; readiness withdrawal `3f8881f52`; fail-closed policy delivery `d9742547b`; exact same-version image intent `ea844b0e0`; Deployer preflight `a92a93d8e`; owned-target resume `bb4f59819`; Kubernetes-owned App Framework path `dda3142f5`; authoritative restart observation `4c54c1bf8`; converged stale-intent isolation `71beda7b5` on `feature/shc-kubernetes-reliability` | OPS-006, OPS-011, HLT-003, HLT-004, OBS-001, OBS-005 | EKS-qualified for the bounded Search Head app-restart path; broader OPS-011 remains open. Exact source `71beda7b5` staged and sent deterministic app `1.0.2` without an internal restart, persisted one content-addressed restart revision, survived controller replacement, dynamically transferred captaincy, and completed the Kubernetes-owned `2 -> 1 -> 0` StatefulSet roll. The 240-sample record passed 240 HEC and 240 distributed-search requests with zero failures and exact convergence. The SHC recovered 3/3 Ready with equal current/update revisions, partition three, all members `Up/NoRestart`, exact runtime digest, zero container restarts, and no image-upgrade workflow. Exact final branch source `8aebfb0cc`, which adds only the separate SHC-96 diagnostic correction, passed native Linux AMD64 `make test` with all 192 enterprise/controller specs, `make build`, chart lints, and all 150 Helm tests. Indexer app qualification and negative/fault breadth remain open. See `SHC95SearchHeadAppRestartQualification.md`. |
 | SHC-96 | Prevent App Framework errors from exposing the namespace admin credential | `fdcc772d8`, `8aebfb0cc` on `feature/shc-kubernetes-reliability` | OBS-006 | Source-qualified. The exact Linux gate for SHC-95 exposed that `isAppAlreadyInstalled` returned the full `splunk list app ... -auth` command on a real execution error or an empty successful response. The test password was synthetic, but production uses the namespace-scoped admin credential in the same path. The correction redacts raw and shell-quoted password forms from the command, stdout, stderr, and nested error before returning or logging them. Focused tests cover a password containing a single quote and credentials injected into every diagnostic field. Exact final source passed native Linux AMD64 `make test`, `make build`, chart lints, and all 150 Helm tests; immutable live no-regression deployment remains open. |
-| SHC-97 | Prevent Docker-Splunk startup from reissuing `splunk start` while the process created by the first invocation is still initializing KV Store | Splunk Ansible `e0fed1c1`, `ae8ecf4a`; Docker-Splunk pin `118cae68` on `feature/shc-kubernetes-reliability` | HLT-009, OBS-001, OBS-005 | Source-qualified for the bounded orchestration correction: start is issued once, a nonzero result polls status under the existing bounded policy, and poll exhaustion remains fatal. The focused Make gate passed Ansible syntax/lint execution, 25 existing SHC tests, and two new regression tests; an executable Ansible exhaustion check failed after the configured retries. A Linux-built image, immutable registry digest, and same-PVC Cluster Manager replacement on EKS remain required. No Splunkd change, marker fabrication, process kill, data deletion, or probe weakening is part of this work. |
+| SHC-97 | Prevent Docker-Splunk startup from reissuing `splunk start` while the process created by the first invocation is still initializing KV Store | Splunk Ansible `e0fed1c1`, `ae8ecf4a`; Docker-Splunk pin `118cae68` on `feature/shc-kubernetes-reliability` | HLT-009, OBS-001, OBS-005 | Source- and EKS-qualified for the bounded single-start contract. The focused Make gates passed, an executable exhausted status poll remained fatal, and the Linux-built runtime OCI index `sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd` completed two same-PVC Cluster Manager replacements and full dependency-ordered convergence with one start per replacement, no port 8191 conflict, and zero container restarts. Two workload windows ended exactly complete with zero HEC or search-request failures. The live starts returned zero, so the conditional nonzero status-poll branch is source-qualified rather than live-forced. Transient successful-search count regressions during indexer replacement remain the open SHC-85/OPS-011 boundary. No Splunkd change, marker fabrication, process kill, data deletion, or probe weakening is part of this work. See [SHC97DockerSplunkStartupQualification.md](SHC97DockerSplunkStartupQualification.md). |
 
 ## SHC-93 immutable qualification inputs
 
@@ -1124,14 +1124,22 @@ all disposable resources and retained the existing SHC at 3/3 Ready with zero
 restarts. Exact evidence and bounded limitations are in
 `SHC93OperatorReadinessQualification.md`.
 
-2026-08-02 UTC: Registered SHC-97 after the final same-PVC Cluster Manager
-campaign exposed a Docker-Splunk/Ansible failure distinct from the fixed
-Splunk KV Store version-marker precheck. A nonzero first `splunk start` had
-already launched splunkd and MongoDB, but Ansible repeated the complete start
-command and converted the live port 8191 listener into a false port-conflict
-failure. The source correction issues start once, polls status for the
-existing process, and fails if that bounded poll is exhausted. Splunk Ansible
-source `ae8ecf4af1eb4c143a441e440626a17a5dfeaf6a` and Docker-Splunk pin
-`118cae68a8fdecbac1286582d32eecd996510564` passed the focused source gate.
-The exact Linux image and same-PVC EKS qualification remain pending and no
-runtime completion claim is made.
+2026-08-03 UTC: Completed the bounded SHC-97 source, packaging, and EKS
+qualification after a same-PVC Cluster Manager campaign exposed a
+Docker-Splunk/Ansible failure distinct from the fixed Splunk KV Store
+version-marker precheck. Splunk Ansible source
+`ae8ecf4af1eb4c143a441e440626a17a5dfeaf6a` and Docker-Splunk source
+`118cae68a8fdecbac1286582d32eecd996510564` passed their focused Make gates.
+Linux-built runtime OCI index
+`sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd`
+completed image convergence and a controlled same-image Cluster Manager
+deletion on unchanged PVCs, then converged the four-indexer and three-member
+Search Head topology in dependency order. Every replacement issued one start,
+reported no port 8191 conflict, became Ready, and retained zero container
+restarts. Workload windows completed exactly at 120/120 and 240/240 with zero
+HEC and search-request failures. Four transient successful-search count
+regressions during indexer replacement, with maximum pending 13 in the tier
+window, remain the open SHC-85/OPS-011 boundary. Because each live start
+returned zero, the nonzero status-poll path remains established by executable
+source tests rather than by an induced live failure. Exact evidence and
+limitations are in `SHC97DockerSplunkStartupQualification.md`.

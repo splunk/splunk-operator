@@ -21,36 +21,29 @@ separate:
 
 ## Latest bounded qualification
 
-SHC-93 qualified the bounded Operator reconciliation-readiness contract at
-exact source `90103bef5`. `/healthz` remains a process-local signal;
-`/readyz` now requires the complete initial controller informer barrier and a
-current exact authorization review for the leader Lease. Current leadership
-remains a separate metric, so a synchronized and authorized HA standby is
-Ready. The final source passed 43 macOS and Linux suites, all 185 enterprise
-controller specs, build, focused race, Kustomize, and Helm gates. Immutable
-Operator OCI index
-`sha256:b5a022a788c7cacf8b7ee33e7132eae56d82b14eb631809ddd116c8b816e9d63`
-and chart SHA-256
-`008abda67d13775ce6cd7e0f8e77365edce01af82f6ad9c12ecf34911a2f6925`
-were exercised on EKS 1.31.14.
+SHC-97 qualified the bounded Docker-Splunk single-start contract using exact
+Splunk-Ansible source `ae8ecf4a` and Docker-Splunk source `118cae68`. The
+Linux-built runtime OCI index
+`sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd`
+was exercised on EKS 1.31.14 with official Splunk build
+`10.5.2605.0/844c593e9c1d`.
 
-Cold informer and Lease denials kept the manager process healthy but the
-Deployment unavailable, and restored access recovered the same Pod without a
-restart. Two Ready contenders completed leader takeover in 35 seconds. During
-an active-leader API interruption, controller-runtime exited after loss of
-Lease renewal as designed; the API-isolated restart served health, remained
-NotReady behind the informer barrier, and did not CrashLoop. The secure
-manager metrics Service retained the NotReady endpoint for diagnosis. Normal
-cleanup removed every SHC-93 fixture while the retained SHC stayed 3/3 Ready
-with zero restarts.
+Two same-PVC Cluster Manager replacements each issued one initial start,
+completed Ansible with `failed=0`, reported no port 8191 conflict, became
+Ready, and recorded zero container restarts. The same immutable runtime then
+converged across LicenseManager, four indexers, the Deployer, and three Search
+Heads. Every managed tier finished Ready with unchanged PVC identities and
+zero container restarts. The Search Head rollout retained at least two serving
+endpoints and transferred captaincy before each active-captain replacement.
 
-This is bounded manager qualification, not completion of every scenario in
-the program. Live evidence covers one EKS 1.31.14 cluster. Other providers and
-versions, productized manager replica/rollout configuration, ongoing
-post-start per-informer health, and production alert delivery remain separate
-work. Exact evidence and rejected intermediate designs are in
-`SHC93OperatorReadinessQualification.md` and
-`SHC93OperatorReadinessExecPlan.md`.
+This is a bounded source, packaging, same-PVC startup, and full-topology
+startup qualification, not completion of every runtime scenario. The
+live initial starts returned zero, so the conditional nonzero status-poll path
+is established by executable source tests rather than a deliberately failed
+production-style Pod. Immediate distributed-search completeness during
+indexer replacement and provider/version breadth remain separate work. Exact
+evidence and limits are in
+`SHC97DockerSplunkStartupQualification.md`.
 
 ## Review order
 
@@ -61,26 +54,28 @@ work. Exact evidence and rejected intermediate designs are in
    acceptance evidence.
 4. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
    immutable commits and stable scenario identifiers.
-5. `SHC93OperatorReadinessQualification.md` and
+5. `SHC97DockerSplunkStartupQualification.md` records the latest bounded
+   runtime startup and full-topology qualification.
+6. `SHC93OperatorReadinessQualification.md` and
    `SHC93OperatorReadinessExecPlan.md` record the latest manager-readiness
    contract, exact evidence, rejected candidates, and remaining boundaries.
-6. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
+7. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
    machine, StatefulSet strategy, and durable status contract.
-7. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
+8. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
    cluster-wide image-upgrade workflow and its composition with per-member
    lifecycle orchestration.
-8. `RuntimeLifecycleContract.md` defines the contract between the Operator,
+9. `RuntimeLifecycleContract.md` defines the contract between the Operator,
    Pod lifecycle, probe scripts, Docker-Splunk/Splunk Ansible, and splunkd.
-9. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
+10. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
    Splunk-managed indexer restart boundary and the remote serving-recovery
    contract that cannot be completed by an Operator readiness probe.
-10. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
+11. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
    integration rules, and conflict prevention.
-11. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
+12. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
    and common pass invariants.
-12. `QualificationObservabilityRolloutPlan.md` is the executable test,
+13. `QualificationObservabilityRolloutPlan.md` is the executable test,
    evidence, migration, release, and rollback plan.
-13. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
+14. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
    contract for Docker-Splunk image construction on a supported Linux host.
 
 The Operator design is a Wave 0 spike contract and the runtime design now

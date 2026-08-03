@@ -276,6 +276,20 @@ ownership.
   failure occurrence, and left all managed tiers Ready. Expired-license Event
   behavior is source-qualified and was not exercised with an expired EKS
   license.
+- [x] Qualify bounded HLT-009/OBS-001/OBS-005 SHC-97 startup orchestration.
+  Exact Splunk Ansible source `ae8ecf4a`, Docker-Splunk source `118cae68`, and
+  Linux-built runtime OCI index
+  `sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd`
+  passed source, packaging, two same-PVC Cluster Manager replacements, and
+  full-topology EKS gates. Every replacement issued one initial start, had no
+  port 8191 conflict, reached Ready, and recorded zero container restarts.
+  Two continuous workload records had zero HEC and search-request failures and
+  reached exact final completeness at 120/120 and 240/240. The live starts
+  returned zero; executable source tests, not a deliberately failed live Pod,
+  establish conditional nonzero status polling and fatal exhaustion. Four
+  transient successful-search count regressions during indexer replacement
+  remain the open SHC-85/OPS-011 boundary. Exact timing, identities, hashes,
+  and limitations are in `SHC97DockerSplunkStartupQualification.md`.
 - [ ] Complete cloud-provider qualification and release-readiness review.
 
 ## Surprises & Discoveries
