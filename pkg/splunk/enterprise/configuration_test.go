@@ -87,6 +87,40 @@ func (c *probeConfigMapCreateRaceClient) Create(
 	)
 }
 
+type probeConfigMapCreateCacheLagClient struct {
+	splcommon.ControllerClient
+	created            bool
+	postCreateGetCalls int
+}
+
+func (c *probeConfigMapCreateCacheLagClient) Create(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.CreateOption,
+) error {
+	if err := c.ControllerClient.Create(ctx, obj, opts...); err != nil {
+		return err
+	}
+	c.created = true
+	return nil
+}
+
+func (c *probeConfigMapCreateCacheLagClient) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
+	if c.created {
+		c.postCreateGetCalls++
+		return apierrors.NewNotFound(
+			schema.GroupResource{Resource: "configmaps"},
+			key.Name,
+		)
+	}
+	return c.ControllerClient.Get(ctx, key, obj, opts...)
+}
+
 type probeConfigMapCustomerEditConflictClient struct {
 	splcommon.ControllerClient
 	customerEdit *corev1.ConfigMap
@@ -2049,6 +2083,39 @@ func TestGetProbeConfigMapCreatesManagedDefaults(t *testing.T) {
 	)
 	require.Contains(t, created.Data[GetReadinessScriptName()], "SPLUNK_OPERATOR_INDEXER_SERVING_READINESS")
 	require.Contains(t, created.Data[GetLivenessScriptName()], "SPLUNK_OPERATOR_LIFECYCLE_HOLD")
+}
+
+func TestGetProbeConfigMapCreateSucceedsBeforeCacheObservation(t *testing.T) {
+	ctx := context.Background()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idxc", Namespace: "test"},
+	}
+	baseClient := spltest.NewMockClient()
+	cacheLagClient := &probeConfigMapCreateCacheLagClient{
+		ControllerClient: baseClient,
+	}
+
+	created, err := getProbeConfigMap(ctx, cacheLagClient, cr)
+	require.NoError(t, err)
+	require.True(t, cacheLagClient.created)
+	require.Equal(t, 1, cacheLagClient.postCreateGetCalls)
+	require.Equal(
+		t,
+		configDataHash(created.Data),
+		created.Annotations[probeConfigMapContentHashAnnotation],
+	)
+
+	var persisted corev1.ConfigMap
+	require.NoError(t, baseClient.Get(
+		ctx,
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      GetProbeConfigMapName(cr.Namespace),
+		},
+		&persisted,
+	))
+	require.Equal(t, created.Data, persisted.Data)
+	require.Equal(t, created.Annotations, persisted.Annotations)
 }
 
 func TestGetProbeConfigMapReconcilesUnmodifiedManagedScripts(t *testing.T) {
