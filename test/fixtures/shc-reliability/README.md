@@ -31,6 +31,11 @@ separate signals so an internal Splunk restart cannot be mistaken for a
 healthy Kubernetes traffic endpoint. Each sample also records the exact
 EndpointSlice target Pods, each serving-gate reason, and the local and
 captain-reported member/restart states exposed by the SearchHeadCluster.
+For App Framework coordination tests, every sample also includes the
+StatefulSet partition and revisions, the durable bundle/observation/restart
+revision triple, and each package's deploy, phase, repository, and object-hash
+state. This makes a real durable app hold distinguishable from transient
+repository polling without relying on controller process memory.
 Failed searches retain a bounded, whitespace-normalized response detail
 without logging credentials.
 The monitor exits successfully only when every submitted sequence is present

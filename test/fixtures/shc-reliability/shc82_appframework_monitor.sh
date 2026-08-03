@@ -269,12 +269,24 @@ for sequence in $(seq 1 "${samples}"); do
     resource_state searchheadcluster.enterprise.splunk.com "${searchheadcluster_name}" \
       '{.status.appContext.isDeploymentInProgress}/{.status.appContext.bundlePushStatus.bundlePushStage}'
   )"
+  shc_app_packages="$(
+    resource_state searchheadcluster.enterprise.splunk.com "${searchheadcluster_name}" \
+      '{range .status.appContext.appSrcDeployStatus.*.appDeploymentInfo[*]}{.appName}={.deployStatus}/{.phaseInfo.phase}/{.phaseInfo.status}/{.repoState}/{.objectHash}{";"}{end}'
+  )"
+  shc_app_revisions="$(
+    resource_state searchheadcluster.enterprise.splunk.com "${searchheadcluster_name}" \
+      '{.status.appFrameworkBundleRevision}/{.status.appFrameworkRestartObservedRevision}/{.status.appFrameworkRestartRevision}'
+  )"
+  sh_revision="$(
+    resource_state statefulset.apps "${shc_instance}" \
+      '{.spec.updateStrategy.rollingUpdate.partition}/{.status.currentRevision}/{.status.updateRevision}/{.status.updatedReplicas}'
+  )"
   cm_app="$(
     resource_state clustermanager.enterprise.splunk.com "${stack_name}" \
       '{.status.appContext.isDeploymentInProgress}/{.status.appContext.bundlePushStatus.bundlePushStage}'
   )"
 
-  log_line "${timestamp} seq=${sequence} hec=${hec_state} search=${search_state}/${search_detail} count=${count} min=${minimum:-unknown} max=${maximum} distinct=${distinct} shContainersReady=${sh_containers_ready} shPodsReady=${sh_pods_ready} shServingReady=${sh_serving_ready} shEndpoints=${sh_endpoints} shEndpointPods=${sh_endpoint_pods} shServingConditions=${sh_serving_conditions} shMembers=${sh_member_states} idxEndpoints=${idx_endpoints} restarts=${restarts} shc=${shc} idxc=${idxc} shcApp=${shc_app} cmApp=${cm_app}"
+  log_line "${timestamp} seq=${sequence} hec=${hec_state} search=${search_state}/${search_detail} count=${count} min=${minimum:-unknown} max=${maximum} distinct=${distinct} shContainersReady=${sh_containers_ready} shPodsReady=${sh_pods_ready} shServingReady=${sh_serving_ready} shEndpoints=${sh_endpoints} shEndpointPods=${sh_endpoint_pods} shServingConditions=${sh_serving_conditions} shMembers=${sh_member_states} idxEndpoints=${idx_endpoints} restarts=${restarts} shc=${shc} shRevision=${sh_revision} idxc=${idxc} shcApp=${shc_app} shcAppRevisions=${shc_app_revisions} shcAppPackages=${shc_app_packages} cmApp=${cm_app}"
   sleep "${interval_seconds}"
 done
 
