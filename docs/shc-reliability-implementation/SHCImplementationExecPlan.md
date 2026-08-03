@@ -681,6 +681,14 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Splunk Enterprise, not the Operator, chooses the next peer inside that
   workflow. A supported Splunk Enterprise remote-serving readiness contract
   is still required before OPS-011 or SHC-85 can be closed end to end.
+- [ ] (2026-08-03 UTC) Complete SHC-99 Linux and immutable EKS qualification.
+  Local source `184061106` corrects the level-one probe's broad
+  `splunkd.*start` match, which accepted an unrelated Coder command containing
+  `splunkd` and `autostart`. Token-aware matching and deterministic synthetic
+  process tables pass ShellCheck, 20 focused repeats, the enterprise package,
+  `make build`, and complete `make test`. Keep this independent of SHC-98;
+  repeat gates on Linux and verify real positive/fail-closed behavior before
+  integration. See `SHC99ExactSplunkdProcessMatchExecPlan.md`.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
