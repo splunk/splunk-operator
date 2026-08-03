@@ -133,13 +133,24 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   A prefix-collision negative proves ownership requires exact `btool` line
   equality. Docker-Splunk's four dependency-ref tests and exact detached
   checkout passed against Ansible `9dff0999c` and Docker source `6ee266c1`.
-- [ ] Run the authoritative Splunk Ansible `make shc-check`, Operator
-  `make test` and `make build`, and Docker-Splunk dependency/build gates on a
-  clean Linux AMD64 vWorkstation. The Coder API currently returns EOF before
-  SSH establishment; retry without weakening any gate.
-- [ ] Build and publish immutable Linux AMD64 Docker-Splunk and Operator
-  images, record their source commits and OCI digests, and verify the runtime
-  contains the exact pinned Ansible commit.
+- [x] (2026-08-03 04:18Z) Passed the authoritative native-Linux source gates
+  from clean detached worktrees. Splunk Ansible `make shc-check` passed 62
+  environment tests, seven structural tests, eight executable ownership
+  scenarios, two startup tests, syntax, and the repository's legacy lint
+  target. Docker-Splunk passed all four dependency-ref tests and checked out
+  exact Ansible source `9dff0999c`. Operator SHC-98 `make test && make build`
+  passed all 43 suites, all 192 enterprise/controller specs, generation,
+  formatting, vet, and compilation with 78.3 percent composite coverage.
+  The independent SHC-99 source passed the same gate when run serially.
+- [x] (2026-08-03 04:28Z) Built, inspected, and published immutable
+  Linux AMD64 Docker-Splunk and Operator candidates using repository Make
+  targets. The runtime OCI index is `sha256:ee8cdf2edcc8f7cad9670308a65cfd625b1ac74543845e69a5431ca4584de20c`;
+  it contains Splunk `10.5.2605.0` build `844c593e9c1d` and exact Ansible
+  `9dff0999c93fd129d31ba08609423ac2bd600aeb`. The Operator OCI index is
+  `sha256:d2bcf6a49a3f0ede2cf5719636b0c57a65b2c7303b1323c63b7ca1c4a7301ae6`,
+  built from clean exact tip `55d0c748ab2d6a836d3a4905ea00bd0d56f68ec6`.
+  Both remote indexes expose one `linux/amd64` image plus its provenance
+  attestation, and their ECR digests match the local build results.
 - [ ] Deploy one combined desired indexer revision so stable-address
   configuration and runtime image do not cause two separate rolls.
 - [ ] Run continuous acknowledged ingest, distributed search, per-Search-Head
@@ -235,6 +246,31 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   Consequence: effective-setting discovery and ownership verification use
   exact `btool` output-line matches. The prefix-collision negative preserves
   the customer value and relinquishes the stale marker.
+- Observation: two complete Operator Make tests cannot share this Linux host
+  concurrently because the envtest managers both bind the fixed metrics port
+  `8080`.
+  Evidence: the SHC-99 parallel run failed only at metrics-server bind while
+  SHC-98 was active; the unchanged SHC-99 source passed all 43 suites and 192
+  specs immediately when rerun after SHC-98 completed.
+  Consequence: full Operator Make gates are serialized on a shared host. The
+  transient port collision is not classified as a source failure.
+- Observation: the retained named Buildx builder referenced a missing parent
+  snapshot after the vWorkstation restart.
+  Evidence: the first runtime build failed with `parent snapshot ... does not
+  exist`; the only named builder container was stopped and its cache record
+  was inconsistent.
+  Consequence: qualification removed only that stopped builder container and
+  pruned builder cache, preserving images, volumes, source, and cluster state,
+  then rebuilt through the same Docker-Splunk Make target from clean inputs.
+- Observation: overriding only `SPLUNK_LINUX_BUILD_URL` does not override the
+  Docker-Splunk Makefile's default `SPLUNK_VERSION`, so a correct downloaded
+  package can carry an incorrect OCI version label.
+  Evidence: the first local image checksum-validated and contained the
+  requested 10.5 payload but was labeled `9.4.0`.
+  Consequence: that image was not published. The accepted build explicitly
+  set `SPLUNK_PRODUCT=splunkcloud`, `SPLUNK_VERSION=10.5.2605.0`, and
+  `SPLUNK_BUILD=844c593e9c1d`; inspection then matched the OCI label and
+  `/opt/splunk-etc/splunk.version` before push.
 
 ## Decision Log
 
@@ -310,19 +346,31 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   Rationale: a client must not interpret an incomplete aggregate as complete
   merely because transport succeeded.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: serialize complete Operator Make gates on the shared Linux
+  vWorkstation.
+  Rationale: the existing test harness uses a fixed metrics port, so parallel
+  full-suite execution creates an environmental bind conflict and does not
+  provide independent source evidence.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: require explicit product, version, build, package URL, platform,
+  Docker-Splunk commit, and Ansible commit for every qualification runtime
+  build.
+  Rationale: a package URL alone did not replace the Makefile metadata
+  defaults. Both embedded payload metadata and registry metadata must describe
+  the same immutable candidate before publication.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
 In progress. No production recommendation or EKS qualification is claimed.
-The source candidate is isolated and pushed. Splunk Ansible's complete local
-SHC Make gate, Docker-Splunk's dependency checkout/ref gates, Operator focused
-tests, ten repeated feature-gate/override runs, and Operator `make build` pass.
-A disposable composition with the independent SHC-99 probe correction also
-passed all 43 local suites and 192 controller specs. Pre-EKS compatibility,
-customer-ownership, and rollout-scope defects have been corrected. Acceptance
-still requires clean Linux full gates,
-immutable images, an exact-image EKS rollout, and evidence from every Search
-Head.
+The source candidates are isolated and pushed. Native Linux source gates,
+exact dependency verification, immutable runtime and Operator builds, embedded
+payload inspection, manager-binary smoke execution, and ECR publication all
+pass. The independent SHC-99 probe correction remains on its separate review
+branch and also passes its serialized Linux gate. Pre-EKS compatibility,
+customer-ownership, rollout-scope, image-metadata, and reproducibility defects
+found so far have been corrected. Acceptance still requires the exact-image
+EKS rollout and evidence from every Search Head.
 
 ## Context and Orientation
 
@@ -540,6 +588,20 @@ reproducible.
   `sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd`.
 - Existing accepted Operator OCI index:
   `sha256:a9f2125097fa823d5182e8729683e5099116a889fdae8e892f0bd3110a8cdf3d`.
+- SHC-98 runtime image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk:shc98-docker-6ee266c-ansible-9dff099-splunkcloud-10.5.2605.0-844c593e9c1d`.
+- SHC-98 runtime OCI index:
+  `sha256:ee8cdf2edcc8f7cad9670308a65cfd625b1ac74543845e69a5431ca4584de20c`.
+- SHC-98 runtime Linux AMD64 manifest:
+  `sha256:18eefc3a25c8ad19bc213e6c5fb021a760d1f899f30c10f3195960c7c786c5f5`.
+- SHC-98 Operator exact tip:
+  `55d0c748ab2d6a836d3a4905ea00bd0d56f68ec6`.
+- SHC-98 Operator image:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc98-operator-55d0c748a`.
+- SHC-98 Operator OCI index:
+  `sha256:d2bcf6a49a3f0ede2cf5719636b0c57a65b2c7303b1323c63b7ca1c4a7301ae6`.
+- SHC-98 Operator Linux AMD64 manifest:
+  `sha256:ff8f0f4392b9fdd2b7fa3d313434eaab9e1a76c8c1c74494df5fff1239bfaaae`.
 
 Do not put admin credentials, HEC tokens, registry credentials, or raw Secret
 content in this document or evidence bundles.
