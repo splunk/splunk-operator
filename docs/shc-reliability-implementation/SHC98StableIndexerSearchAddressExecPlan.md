@@ -76,10 +76,7 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   detached at the exact pinned source, matching the Makefile and recorded
   version.
 - [x] (2026-08-03 01:56Z) Added and source-qualified an explicit `absent`
-  rollback value. It removes only
-  `server.conf/[clustering]/register_search_address`, verifies the effective
-  option is gone before start, and preserves undefined/null/empty as an
-  unmanaged no-op. Docker-Splunk now pins the reversible source.
+  rollback value while preserving undefined/null/empty as an unmanaged no-op.
 - [x] (2026-08-03 01:27Z) Operator focused generation tests, `make build`, Go
   formatting, vet, and compilation pass. The complete macOS Make test reached
   42 passing suites and one unrelated `pkg/splunk/enterprise` failure.
@@ -122,6 +119,14 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   uses a unique Pod-derived run ID, mounts no service-account token, and
   passed client and live server-side dry-run validation. The monitor's
   snapshot mode and expected no-roll failure path both execute successfully.
+- [x] (2026-08-03 02:40Z) Corrected the configuration ownership boundary before
+  Linux execution. `auto` now adopts an empty effective setting but preserves
+  an existing unmanaged customer value. Explicit input records persistent
+  Ansible ownership, and `absent` removes only a setting carrying that
+  ownership marker. The complete Ansible SHC Make gate passed with 61
+  clustering environment tests, six stable-address task tests, and two
+  startup tests. Docker-Splunk's four dependency-ref tests and exact detached
+  checkout passed against Ansible `7415805b0` and Docker source `49d9dc56`.
 - [ ] Run the authoritative Splunk Ansible `make shc-check`, Operator
   `make test` and `make build`, and Docker-Splunk dependency/build gates on a
   clean Linux AMD64 vWorkstation. The Coder API currently returns EOF before
@@ -201,6 +206,14 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   to report success without a Splunk process.
   Consequence: track the probe matcher as an independent work item and run
   SHC-98's authoritative source gate on a process-clean Linux host.
+- Observation: an automatic default must not overwrite a customer-supplied
+  effective `register_search_address`, and an unscoped rollback must not
+  delete one.
+  Consequence: the pre-start role persists an ownership marker only when this
+  feature writes the setting. `auto` preserves an existing unowned value and
+  `absent` removes only an owned system-local setting. A customer taking over
+  that same key after adoption must first relinquish automation ownership with
+  the controlled `absent` path; this transition remains an EKS negative test.
 
 ## Decision Log
 
@@ -266,7 +279,9 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   controlled rollback.
   Rationale: the setting is persisted on the indexer PVC. Reverting images
   alone would leave it active, while treating null or empty as removal would
-  unexpectedly mutate existing non-opted-in Ansible deployments.
+  unexpectedly mutate existing non-opted-in Ansible deployments. `absent`
+  acts only when the persistent feature-ownership marker exists, so an
+  unmanaged customer value is neither removed nor claimed.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: keep explicit partial-result semantics as a Splunk Enterprise
   requirement even if stable addresses improve the workload.
@@ -281,9 +296,9 @@ The source candidate is isolated and pushed. Splunk Ansible's complete local
 SHC Make gate, Docker-Splunk's dependency checkout/ref gates, Operator focused
 tests, ten repeated feature-gate/override runs, and Operator `make build` pass.
 A disposable composition with the independent SHC-99 probe correction also
-passed all 43 local suites and 192 controller specs. Pre-EKS compatibility and
-rollout-scope defects have been corrected. Acceptance still requires clean
-Linux full gates,
+passed all 43 local suites and 192 controller specs. Pre-EKS compatibility,
+customer-ownership, and rollout-scope defects have been corrected. Acceptance
+still requires clean Linux full gates,
 immutable images, an exact-image EKS rollout, and evidence from every Search
 Head.
 
@@ -303,6 +318,9 @@ its `Makefile`. Splunk Ansible reads container environment in
 `start_splunk.yml`. SHC-98 writes
 `$SPLUNK_HOME/etc/system/local/server.conf` stanza `[clustering]` option
 `register_search_address`, then verifies the effective value with `btool`.
+It records ownership beside the persistent `etc` tree when it writes the key.
+Automatic mode leaves a pre-existing unowned effective value unchanged, and
+controlled rollback removes only an owned system-local value.
 
 For `auto`, Splunk Ansible uses `SPLUNK_HOSTNAME` when explicitly available and
 otherwise uses `socket.getfqdn()`. Under the Operator's indexer StatefulSet,
@@ -447,10 +465,13 @@ App Framework-controlled restarts, and soak remain separate gates.
 
 ## Idempotence and Recovery
 
-The Ansible configuration is idempotent: the same effective
+The Ansible configuration is idempotent: the same managed
 `register_search_address` produces no change and no restart. Undefined, null,
-or empty input skips the task. Re-running the Operator reconcile preserves the
-same generated environment and StatefulSet revision after convergence.
+or empty input skips the task. Automatic mode preserves an existing unowned
+effective value. Explicit and newly adopted automatic values carry a
+persistent ownership marker; `absent` removes only a marker-owned system-local
+setting. Re-running the Operator reconcile preserves the same generated
+environment and StatefulSet revision after convergence.
 
 If image construction fails, do not patch the cluster. If the Operator image
 is deployed before the runtime is ready, keep the IndexerCluster paused using
@@ -475,11 +496,11 @@ reproducible.
 - Current gated Operator candidate:
   `2c607d6e295e164d4661dd832294d666c5a1d270`.
 - Splunk Ansible branch: `codex/shc-98-stable-indexer-search-address`.
-- Reversible Ansible source:
-  `8a3ac3b4f832427e81f074ec2b40bdb1937d3465`.
+- Customer-safe reversible Ansible source:
+  `7415805b081a392215476ea60d6f96f23dca7f2e`.
 - Docker-Splunk branch: `codex/shc-98-stable-indexer-search-address`.
-- Reversible dependency-pin source:
-  `cfd4fdee2a90f3cb70787dc915cddc299aaa7825`.
+- Customer-safe dependency-pin source:
+  `49d9dc5626a74ac9d7913eaff9396397ca3c018c`.
 - Read-only peer monitor source:
   `78ff404c727f562bd85656f0c65696393bf0cb7d`.
 - API-independent workload source:
@@ -511,12 +532,14 @@ It maps to:
     server.conf/[clustering]/register_search_address
 
 `auto` resolves to `SPLUNK_HOSTNAME` when non-empty, otherwise
-`socket.getfqdn()`. `absent` removes the option before start for controlled
-rollback. Undefined, null, and empty inputs remain unmanaged. The Operator
-supplies `auto` for clustered indexers only under the combined Pod and Indexer
-lifecycle Alpha gate and retains the existing `CommonSplunkSpec.ExtraEnv`
-override contract. Customers can explicitly supply the environment value when
-the gates are disabled.
+`socket.getfqdn()`, but writes it only when no unowned effective value exists
+or the feature already owns the setting. Explicit input becomes managed.
+`absent` removes the option before start only when the feature's persistent
+ownership marker exists. Undefined, null, and empty inputs remain unmanaged.
+The Operator supplies `auto` for clustered indexers only under the combined
+Pod and Indexer lifecycle Alpha gate and retains the existing
+`CommonSplunkSpec.ExtraEnv` override contract. Customers can explicitly supply
+the environment value when the gates are disabled.
 
 The candidate depends on StatefulSet hostname/subdomain identity, the
 indexer's existing headless Service, Kubernetes cluster DNS, Cluster Manager
