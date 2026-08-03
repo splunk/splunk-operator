@@ -33,6 +33,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1492,6 +1493,7 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 
 func TestGetIndexerStatefulSet(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	setIndexerLifecycleFeatureGates(t, false, false)
 
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1571,6 +1573,58 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 	if err := validateIndexerClusterSpec(ctx, c, &cr); err == nil {
 		t.Errorf("validateIndexerClusterSpec() error expected on multisite IndexerCluster referencing a cluster manager located in a different namespace")
 	}
+}
+
+func TestGetIndexerExtraEnvFollowsLifecycleGate(t *testing.T) {
+	setIndexerLifecycleFeatureGates(t, false, false)
+	require.Empty(t, getIndexerExtraEnv())
+
+	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
+		map[string]bool{
+			string(config.SplunkPodLifecycle):      true,
+			string(config.IndexerClusterLifecycle): false,
+		},
+	))
+	require.Empty(t, getIndexerExtraEnv())
+
+	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
+		map[string]bool{
+			string(config.SplunkPodLifecycle):      true,
+			string(config.IndexerClusterLifecycle): true,
+		},
+	))
+	require.Equal(t, []corev1.EnvVar{
+		{
+			Name:  indexerRegisterSearchAddressEnv,
+			Value: "auto",
+		},
+	}, getIndexerExtraEnv())
+}
+
+func setIndexerLifecycleFeatureGates(
+	t *testing.T,
+	podLifecycle bool,
+	indexerLifecycle bool,
+) {
+	t.Helper()
+	oldPodLifecycle :=
+		config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle)
+	oldIndexerLifecycle :=
+		config.DefaultMutableFeatureGate.Enabled(config.IndexerClusterLifecycle)
+	t.Cleanup(func() {
+		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
+			map[string]bool{
+				string(config.SplunkPodLifecycle):      oldPodLifecycle,
+				string(config.IndexerClusterLifecycle): oldIndexerLifecycle,
+			},
+		))
+	})
+	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
+		map[string]bool{
+			string(config.SplunkPodLifecycle):      podLifecycle,
+			string(config.IndexerClusterLifecycle): indexerLifecycle,
+		},
+	))
 }
 
 func TestIndexerClusterSpecNotCreatedWithoutGeneralTerms(t *testing.T) {

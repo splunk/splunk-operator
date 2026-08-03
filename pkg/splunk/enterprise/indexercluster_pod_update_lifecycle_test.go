@@ -235,6 +235,7 @@ func TestIndexerLifecycleRendersHECServingReadiness(t *testing.T) {
 	require.NoError(t, err)
 	container := statefulSet.Spec.Template.Spec.Containers[0]
 	found := false
+	foundStableSearchAddress := false
 	for _, env := range container.Env {
 		if env.Name == indexerServingReadinessEnv {
 			found = true
@@ -242,9 +243,16 @@ func TestIndexerLifecycleRendersHECServingReadiness(t *testing.T) {
 				t.Fatalf("%s = %q, want true", env.Name, env.Value)
 			}
 		}
+		if env.Name == indexerRegisterSearchAddressEnv {
+			foundStableSearchAddress = true
+			require.Equal(t, "auto", env.Value)
+		}
 	}
 	if !found {
 		t.Fatalf("%s was not rendered", indexerServingReadinessEnv)
+	}
+	if !foundStableSearchAddress {
+		t.Fatalf("%s was not rendered", indexerRegisterSearchAddressEnv)
 	}
 	if container.ReadinessProbe == nil ||
 		container.ReadinessProbe.TimeoutSeconds != 2 ||
@@ -269,6 +277,21 @@ func TestIndexerLifecycleRendersHECServingReadiness(t *testing.T) {
 	require.Equal(t, int32(4), container.ReadinessProbe.TimeoutSeconds)
 	require.Equal(t, int32(6), container.ReadinessProbe.PeriodSeconds)
 	require.Equal(t, int32(2), container.ReadinessProbe.FailureThreshold)
+
+	cr.Spec.ExtraEnv = []corev1.EnvVar{{
+		Name:  indexerRegisterSearchAddressEnv,
+		Value: "customer-indexer.example",
+	}}
+	statefulSet, err = getIndexerStatefulSet(ctx, c, cr)
+	require.NoError(t, err)
+	stableSearchAddressCount := 0
+	for _, env := range statefulSet.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == indexerRegisterSearchAddressEnv {
+			stableSearchAddressCount++
+			require.Equal(t, "customer-indexer.example", env.Value)
+		}
+	}
+	require.Equal(t, 1, stableSearchAddressCount)
 }
 
 func TestIndexerPodUpdateAdoptsNewRevisionBeforeDecommission(t *testing.T) {

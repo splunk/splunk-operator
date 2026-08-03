@@ -336,6 +336,10 @@ func getClusterManagerExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Comm
 // which is stable across StatefulSet Pod replacement, as the address used by
 // clustered Search Heads.
 func getIndexerExtraEnv() []corev1.EnvVar {
+	if !indexerClusterLifecycleEnabled() {
+		return nil
+	}
+
 	return []corev1.EnvVar{
 		{
 			Name:  indexerRegisterSearchAddressEnv,
