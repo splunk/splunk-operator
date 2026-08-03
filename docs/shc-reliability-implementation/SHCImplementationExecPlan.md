@@ -482,6 +482,19 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   later controller-leader-failover campaign recorded 13 regressions and
   maximum pending 329 at sequence 1239, again with zero request failures and
   exact eventual results.
+- [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
+  address experiment. Live and source inspection established that indexers
+  without `register_search_address` are distributed to Search Heads by Pod IP
+  even though their StatefulSet/headless-Service FQDN is stable across Pod
+  replacement. Isolated Operator, Splunk Ansible, and Docker-Splunk candidates
+  now use the supported pre-start setting, preserve non-Operator opt-in and
+  customer override behavior, and request no second Splunk start. Focused
+  source tests and Operator `make build` pass. Linux Make gates, immutable
+  images, one combined-revision EKS roll, per-Search-Head peer observation,
+  and continuous completeness comparison remain open. Do not claim SHC-85 or
+  OPS-011 closure from configuration alone; explicit Splunk partial-result
+  semantics remain required. The living plan is
+  `SHC98StableIndexerSearchAddressExecPlan.md`.
 - [x] Define and qualify SHC-83 on isolated branch
   `codex/shc-83-startup-readiness-qualification`. During initial formation,
   no Search Head may enter the client Service until every desired Search Head
