@@ -123,10 +123,12 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   Linux execution. `auto` now adopts an empty effective setting but preserves
   an existing unmanaged customer value. Explicit input records persistent
   Ansible ownership, and `absent` removes only a setting carrying that
-  ownership marker. The complete Ansible SHC Make gate passed with 61
+  ownership marker. A subsequent review corrected empty `SPLUNK_HOSTNAME` so
+  `auto` falls back to the system FQDN as specified. The complete Ansible SHC
+  Make gate passed with 62
   clustering environment tests, six stable-address task tests, and two
   startup tests. Docker-Splunk's four dependency-ref tests and exact detached
-  checkout passed against Ansible `7415805b0` and Docker source `49d9dc56`.
+  checkout passed against Ansible `c2b865134` and Docker source `549d4ab2`.
 - [ ] Run the authoritative Splunk Ansible `make shc-check`, Operator
   `make test` and `make build`, and Docker-Splunk dependency/build gates on a
   clean Linux AMD64 vWorkstation. The Coder API currently returns EOF before
@@ -214,6 +216,11 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   `absent` removes only an owned system-local setting. A customer taking over
   that same key after adoption must first relinquish automation ownership with
   the controlled `absent` path; this transition remains an EKS negative test.
+- Observation: `dict.get(key, fallback)` does not use the fallback when the
+  key exists with an empty string.
+  Consequence: automatic address selection uses non-empty `SPLUNK_HOSTNAME`
+  or `socket.getfqdn()` explicitly, and a regression test covers an empty
+  container hostname override.
 
 ## Decision Log
 
@@ -497,10 +504,10 @@ reproducible.
   `2c607d6e295e164d4661dd832294d666c5a1d270`.
 - Splunk Ansible branch: `codex/shc-98-stable-indexer-search-address`.
 - Customer-safe reversible Ansible source:
-  `7415805b081a392215476ea60d6f96f23dca7f2e`.
+  `c2b8651345b7d20426f9987cd7571b6840256d82`.
 - Docker-Splunk branch: `codex/shc-98-stable-indexer-search-address`.
 - Customer-safe dependency-pin source:
-  `49d9dc5626a74ac9d7913eaff9396397ca3c018c`.
+  `549d4ab2a99d93b34d266850edbe0c32cefb64da`.
 - Read-only peer monitor source:
   `78ff404c727f562bd85656f0c65696393bf0cb7d`.
 - API-independent workload source:
