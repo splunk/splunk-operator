@@ -309,6 +309,30 @@ peers_match_expected() {
     <<<"${current_search_head_peers}" >/dev/null
 }
 
+rolled_peer_converged_on_all_search_heads() {
+  local ordinal="$1" label expected guid
+  label="${indexer_pod_prefix}${ordinal}"
+  expected="${label}.${indexer_headless_service}.${namespace}.svc.cluster.local:8089"
+  guid="$(jq -r --arg label "${label}" '
+    [.peers[] | select(.label == $label) | .guid] | unique |
+    if length == 1 then .[0] else "" end' <<<"${current_cluster_peers}")"
+  if [[ -z "${guid}" ]]; then
+    return 1
+  fi
+
+  jq -e --arg guid "${guid}" --arg expected "${expected}" \
+    --argjson replicas "${search_head_replicas}" '
+      length == $replicas and
+      all(.[];
+        .available == true and
+        ([.peers[] | select(.guid == $guid)] as $identity |
+          ($identity | length) == 1 and
+          $identity[0].address == $expected and
+          $identity[0].status == "Up" and
+          $identity[0].disabled == false))' \
+    <<<"${current_search_head_peers}" >/dev/null
+}
+
 cluster_matches_expected() {
   jq -e --argjson expected "${expected_peer_addresses}" \
     --argjson replicas "${indexer_replicas}" '
@@ -429,6 +453,7 @@ fi
 
 roll_started=false
 seen_ordinals='[]'
+previous_ordinal=-1
 stable_samples=0
 deadline=$((SECONDS + roll_timeout_seconds))
 
@@ -454,11 +479,20 @@ while ((SECONDS < deadline)); do
     roll_started=true
   fi
 
+  if ((current_ordinal >= 0 && previous_ordinal >= 0 &&
+    current_ordinal != previous_ordinal)) &&
+    ! rolled_peer_converged_on_all_search_heads "${previous_ordinal}"; then
+    fail "next-target-before-search-head-peer-${previous_ordinal}-converged"
+  fi
+
   if ((current_ordinal >= 0)) &&
     ! jq -e --argjson ordinal "${current_ordinal}" \
       'index($ordinal) != null' <<<"${seen_ordinals}" >/dev/null; then
     seen_ordinals="$(jq -cn --argjson seen "${seen_ordinals}" \
       --argjson ordinal "${current_ordinal}" '$seen + [$ordinal]')"
+  fi
+  if ((current_ordinal >= 0)); then
+    previous_ordinal="${current_ordinal}"
   fi
 
   record_sample "roll-${current_stage:-none}"
