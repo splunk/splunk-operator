@@ -331,23 +331,6 @@ func getClusterManagerExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Comm
 	}
 }
 
-// getIndexerExtraEnv returns configuration that is specific to clustered
-// indexer Pods. "auto" asks Splunk-Ansible to register the Pod's system FQDN,
-// which is stable across StatefulSet Pod replacement, as the address used by
-// clustered Search Heads.
-func getIndexerExtraEnv() []corev1.EnvVar {
-	if !indexerClusterLifecycleEnabled() {
-		return nil
-	}
-
-	return []corev1.EnvVar{
-		{
-			Name:  indexerRegisterSearchAddressEnv,
-			Value: "auto",
-		},
-	}
-}
-
 // getStandaloneExtraEnv returns extra environment variables used by monitoring console
 func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
 	return []corev1.EnvVar{

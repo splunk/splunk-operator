@@ -2377,7 +2377,10 @@ func getIndexerStatefulSet(ctx context.Context, client splcommon.ControllerClien
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
-	return getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, cr.Spec.Replicas, getIndexerExtraEnv(), certMounts, opts...)
+	// A clustered indexer's distributed-search address is persistent Splunk
+	// identity. Do not change it as a side effect of enabling Pod lifecycle;
+	// an explicit extraEnv value remains available for coordinated deployments.
+	return getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, cr.Spec.Replicas, nil, certMounts, opts...)
 }
 
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.

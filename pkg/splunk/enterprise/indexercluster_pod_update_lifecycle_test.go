@@ -235,7 +235,7 @@ func TestIndexerLifecycleRendersHECServingReadiness(t *testing.T) {
 	require.NoError(t, err)
 	container := statefulSet.Spec.Template.Spec.Containers[0]
 	found := false
-	foundStableSearchAddress := false
+	stableSearchAddressCount := 0
 	for _, env := range container.Env {
 		if env.Name == indexerServingReadinessEnv {
 			found = true
@@ -244,16 +244,14 @@ func TestIndexerLifecycleRendersHECServingReadiness(t *testing.T) {
 			}
 		}
 		if env.Name == indexerRegisterSearchAddressEnv {
-			foundStableSearchAddress = true
-			require.Equal(t, "auto", env.Value)
+			stableSearchAddressCount++
 		}
 	}
 	if !found {
 		t.Fatalf("%s was not rendered", indexerServingReadinessEnv)
 	}
-	if !foundStableSearchAddress {
-		t.Fatalf("%s was not rendered", indexerRegisterSearchAddressEnv)
-	}
+	require.Zero(t, stableSearchAddressCount,
+		"lifecycle enablement must not migrate an existing cluster's search-peer addresses")
 	if container.ReadinessProbe == nil ||
 		container.ReadinessProbe.TimeoutSeconds != 2 ||
 		container.ReadinessProbe.PeriodSeconds != 2 ||
@@ -284,7 +282,7 @@ func TestIndexerLifecycleRendersHECServingReadiness(t *testing.T) {
 	}}
 	statefulSet, err = getIndexerStatefulSet(ctx, c, cr)
 	require.NoError(t, err)
-	stableSearchAddressCount := 0
+	stableSearchAddressCount = 0
 	for _, env := range statefulSet.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == indexerRegisterSearchAddressEnv {
 			stableSearchAddressCount++
