@@ -108,6 +108,9 @@ through three CRDs on the existing `enterprise.splunk.com/v4` group:
    credentials on a referenced cluster through a **linear condition pipeline**,
    declaring role intent for the cluster controller to arbitrate and merge-patch
    into CNPG `managed.roles`, and using direct SQL only for privilege grants.
+   (The `PostgresCluster` controller's managed-roles component has its own
+   residual direct-SQL path: a one-time post-restore credential sweep, see
+   [ADR-0003](adr/0003-cnpg-integration-and-drift-reconciliation.md).)
 
 Drift is healed via owner references and `Owns()` watches, comparing only a
 normalized operator-owned subset so the operator never fights CNPG over its own
