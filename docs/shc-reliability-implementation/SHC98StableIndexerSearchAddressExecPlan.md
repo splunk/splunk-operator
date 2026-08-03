@@ -59,9 +59,9 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS`. The value `auto` resolves an existing
   `SPLUNK_HOSTNAME` or the system FQDN. The supported setting is written and
   verified before the only Splunk start; it requests no restart.
-- [x] (2026-08-03 01:16Z) Added the Operator's clustered-indexer default of
-  `auto`, with golden and unit evidence that customer `spec.extraEnv` can
-  replace the default with an explicit address.
+- [x] (2026-08-03 01:16Z) Added the Operator's clustered-indexer candidate
+  default of `auto`, with golden and unit evidence that customer
+  `spec.extraEnv` can replace the default with an explicit address.
 - [x] (2026-08-03 01:17Z) Pinned Docker-Splunk to exact Splunk Ansible source
   and passed its deterministic four-test dependency-ref Make gate.
 - [x] (2026-08-03 01:27Z) Found and corrected a null-default compatibility
@@ -87,6 +87,18 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   test's broad `splunkd.*start` process match sees a local Coder command whose
   hostname contains `splunkd` and whose options contain `autostart`. Record
   and correct this independently; do not attribute it to stable addressing.
+- [x] (2026-08-03 02:02Z) Restricted automatic Operator delivery to the
+  existing combined `SplunkPodLifecycle` and `IndexerClusterLifecycle` Alpha
+  gate. With either gate disabled, the Operator adds no candidate default;
+  an explicit customer `spec.extraEnv` value remains available. Ten repeated
+  focused runs and `make build` pass at Operator source `2c607d6e2`.
+- [x] (2026-08-03 02:03Z) Revalidated the retained EKS control boundary. The
+  deployed Operator watches all namespaces, the target namespace contains the
+  only IndexerCluster in the cluster, all four managed tiers are Ready, and
+  the three lifecycle Alpha gates are enabled. No cluster resource was
+  changed. The rollout plan therefore pauses every target CR before changing
+  the Operator or desired runtime and converges dependencies before the
+  IndexerCluster is unpaused.
 - [ ] Run the authoritative Splunk Ansible `make shc-check`, Operator
   `make test` and `make build`, and Docker-Splunk dependency/build gates on a
   clean Linux AMD64 vWorkstation. The Coder API currently returns EOF before
@@ -139,6 +151,13 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   replacement process ready sooner. Search Heads may resolve the stable name
   to a starting Pod and must recover through normal connection retry. The EKS
   test must not infer serving readiness from DNS resolution.
+- Observation: the retained Operator watches all namespaces rather than only
+  the qualification namespace.
+  Evidence: its `WATCH_NAMESPACE` value is empty. A cluster-wide inventory
+  found one IndexerCluster, the intended `shc-final-qualification/shcfinal-idxc`.
+  Consequence: the experimental default must remain behind the existing Alpha
+  lifecycle gates, and the live rollout must use tier-specific pause controls
+  so deploying the candidate Operator cannot start an unintended revision.
 - Observation: Splunk Ansible's default `register_search_address` is defined
   as YAML null rather than undefined.
   Consequence: the role include must use `default("", true)` so existing
@@ -166,10 +185,12 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   contract on Kubernetes.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: keep Splunk Ansible behavior opt-in and make the Operator choose
-  `auto` only for clustered indexer StatefulSets.
+  `auto` only for clustered indexer StatefulSets when both
+  `SplunkPodLifecycle` and `IndexerClusterLifecycle` are enabled.
   Rationale: non-Kubernetes Ansible users may have DNS and routing assumptions
   that cannot be inferred safely. The Operator owns a stable per-ordinal DNS
-  identity and can supply the Kubernetes-specific default.
+  identity, but this remains an Alpha lifecycle experiment and must not alter
+  the current default-disabled contract.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: allow `spec.extraEnv` to override the Operator default.
   Rationale: customers with an explicit reachable address or different DNS
@@ -186,6 +207,16 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   indexer StatefulSet revision.
   Rationale: two revisions would introduce a second destructive roll and make
   the availability comparison ambiguous.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: pause the retained LicenseManager, ClusterManager,
+  SearchHeadCluster, and IndexerCluster before deploying the candidate
+  Operator or changing desired runtime images, then unpause and converge them
+  in dependency order with the IndexerCluster last.
+  Rationale: the Operator is cluster-wide, and the IndexerCluster dependency
+  check does not wait for Search Head convergence. This ordering keeps the
+  distributed-search front end stable and ensures the indexer image plus
+  stable-address environment appear in one desired revision before the
+  Operator can authorize replacement.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: reserve `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=absent` for
   controlled rollback.
@@ -204,8 +235,9 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
 In progress. No production recommendation or EKS qualification is claimed.
 The source candidate is isolated and pushed. Splunk Ansible's complete local
 SHC Make gate, Docker-Splunk's dependency checkout/ref gates, Operator focused
-tests, and Operator `make build` pass, and one pre-EKS compatibility defect has
-already been corrected. Acceptance still requires clean Linux full gates,
+tests, ten repeated feature-gate/override runs, and Operator `make build` pass,
+and pre-EKS compatibility and rollout-scope defects have been corrected.
+Acceptance still requires clean Linux full gates,
 immutable images, an exact-image EKS rollout, and evidence from every Search
 Head.
 
@@ -215,7 +247,8 @@ The Splunk Operator creates the clustered indexer StatefulSet in
 `pkg/splunk/enterprise/indexercluster.go`. Environment variables provided by
 the Operator are merged with `CommonSplunkSpec.ExtraEnv`; customer values take
 precedence. SHC-98 adds `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=auto` only to
-clustered indexer Pods.
+clustered indexer Pods when the existing combined Pod and Indexer lifecycle
+Alpha gate is enabled. With those gates off, no new value is injected.
 
 Docker-Splunk consumes an exact Splunk Ansible source through the ref pinned in
 its `Makefile`. Splunk Ansible reads container environment in
@@ -383,6 +416,8 @@ reproducible.
 
 - Operator branch: `codex/shc-98-stable-indexer-search-address`.
 - Initial Operator source: `5faeeb0e7a5c97750d6006d7d43da168996aab8e`.
+- Current gated Operator candidate:
+  `2c607d6e295e164d4661dd832294d666c5a1d270`.
 - Splunk Ansible branch: `codex/shc-98-stable-indexer-search-address`.
 - Reversible Ansible source:
   `8a3ac3b4f832427e81f074ec2b40bdb1937d3465`.
@@ -414,8 +449,10 @@ It maps to:
 `auto` resolves to `SPLUNK_HOSTNAME` when non-empty, otherwise
 `socket.getfqdn()`. `absent` removes the option before start for controlled
 rollback. Undefined, null, and empty inputs remain unmanaged. The Operator
-supplies `auto` for clustered indexers and retains the existing
-`CommonSplunkSpec.ExtraEnv` override contract.
+supplies `auto` for clustered indexers only under the combined Pod and Indexer
+lifecycle Alpha gate and retains the existing `CommonSplunkSpec.ExtraEnv`
+override contract. Customers can explicitly supply the environment value when
+the gates are disabled.
 
 The candidate depends on StatefulSet hostname/subdomain identity, the
 indexer's existing headless Service, Kubernetes cluster DNS, Cluster Manager
