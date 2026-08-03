@@ -151,6 +151,10 @@ it is not converted into a qualified claim by documentation alone.
   immutable Operator and runtime image digests.
 - [ ] Update the program index, scenario matrix, qualification record, and
   final branch manifests; commit and push documentation separately.
+- [ ] Complete SHC-104 by making Docker-Splunk `make test_setup` use a
+  repository-owned, isolated, reproducible dependency environment. The three
+  bounded SHC Make targets pass at canonical source `6ee266c1`; only the
+  aggregate legacy Python bootstrap is open.
 
 ## Surprises & Discoveries
 
@@ -258,6 +262,14 @@ it is not converted into a qualified claim by documentation alone.
   though Kubernetes had already accepted the write.
   Consequence: SHC-103 makes create success authoritative and bounds only the
   AlreadyExists-winner visibility window.
+
+- Observation: Docker-Splunk's aggregate test bootstrap is not reproducible
+  with the current Linux builder's Python packaging toolchain.
+  Evidence: all 20 bounded SHC tests passed, then `make test_setup` selected
+  PyYAML 5.4.1 through Docker Compose 1.29.2 and failed in isolated build
+  requirements with a missing `cython_sources` attribute.
+  Consequence: SHC-104 owns an isolated locked test environment; the failure
+  is not attributed to runtime or shutdown behavior.
 
 ## Decision Log
 
@@ -403,3 +415,7 @@ Revision note (2026-08-03 20:35Z): Added SHC-102/103 ownership and cache-
 visibility corrections, deterministic regression evidence, exact cumulative
 Linux/image provenance, live EKS creation, complete disposable cleanup,
 unchanged retained objects, and accepted restoration.
+
+Revision note (2026-08-03 20:45Z): Registered SHC-104 after canonical
+Docker-Splunk bounded tests passed but its aggregate legacy Python dependency
+bootstrap failed reproducibly on the current Linux builder.
