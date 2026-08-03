@@ -47,8 +47,14 @@ Splunk Ansible, or Splunk Enterprise failure.
   environment and a second time on local Python 3.10. Both runs passed; all 91
   broader image tests collected, the Compose configuration command succeeded,
   and the 15/4/1 bounded SHC tests retained their prior counts.
-- [ ] Qualify the corrected target on a clean native-Linux host and retain the
-  existing bounded SHC test counts.
+- [x] (2026-08-03 22:31Z) Qualified exact commit `0604eeb` twice in a clean
+  Linux/AMD64 Python 3.10.18 environment pinned by image digest
+  `sha256:ee0c7d26e2dba416773cb51c042496e9cffacc872459f57726935dd6833f2d96`.
+  Both aggregate runs passed 15 shutdown, four exact-Ansible-ref, one base-
+  image-security, and five bootstrap tests. All 91 broader image tests
+  collected, Compose configuration validated, and exact cleanup removed the
+  repository virtual environment. Fast-forwarded canonical Docker-Splunk
+  branch `feature/shc-kubernetes-reliability` to `0604eeb`.
 
 ## Surprises & Discoveries
 
@@ -117,12 +123,13 @@ Splunk Ansible, or Splunk Enterprise failure.
 
 ## Outcomes & Retrospective
 
-SHC-104 remains open only for the native-Linux acceptance run. The correction
-is isolated at Docker-Splunk commit `0604eeb`; local Python 3.10 clean and
-idempotent runs, 91-test collection, Compose configuration validation, and the
-bounded SHC tests pass. The Docker-Splunk SHC runtime source remains unchanged
-from `6ee266c1`, and no production source or image change has been made for
-this issue.
+SHC-104 is complete at canonical Docker-Splunk commit `0604eeb`. Clean and
+idempotent Python 3.10 runs passed locally and on Linux/AMD64. The Linux gate
+passed the unchanged 15/4/1 bounded contracts plus five bootstrap regressions,
+collected all 91 broader image tests, validated Docker Compose 1.29.2
+configuration, and removed the disposable repository environment. Production
+runtime source remains unchanged from `6ee266c1`; this commit changes only test
+infrastructure.
 
 ## Context and Orientation
 
@@ -181,15 +188,18 @@ bootstrap limitation explicitly.
 
 - Docker-Splunk canonical branch:
   `feature/shc-kubernetes-reliability`.
-- Exact source: `6ee266c14e25a1d5849a3d5b96cdaf155b09c696`.
-- Isolated SHC-104 candidate: `0604eeb` on
-  `codex/shc-104-docker-test-bootstrap`.
+- Qualified runtime source before SHC-104:
+  `6ee266c14e25a1d5849a3d5b96cdaf155b09c696`.
+- Canonical Docker-Splunk source after test-only SHC-104:
+  `0604eeb293832f9c0c19a24d7de8706b63c65031`.
 - Passing bounded gate: 15 shutdown, four exact-Ansible-ref, and one
   base-image-security tests.
 - Passing local bootstrap gate: clean and repeated `make test_setup`, five
   bootstrap regressions, 91 broader tests collected, and Compose 1.29.2
   configuration validation.
-- Remaining gate: repeat the clean and idempotent bootstrap on native Linux.
+- Linux/AMD64 qualification image:
+  `python@sha256:ee0c7d26e2dba416773cb51c042496e9cffacc872459f57726935dd6833f2d96`.
+- Final repository state: clean, `.test-venv` absent, canonical branch pushed.
 - Current builder: Python 3.10, pip 26.2, Linux AMD64.
 - Repository status after reproduction: clean.
 

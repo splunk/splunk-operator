@@ -151,10 +151,11 @@ it is not converted into a qualified claim by documentation alone.
   immutable Operator and runtime image digests.
 - [ ] Update the program index, scenario matrix, qualification record, and
   final branch manifests; commit and push documentation separately.
-- [ ] Complete SHC-104 by making Docker-Splunk `make test_setup` use a
-  repository-owned, isolated, reproducible dependency environment. The three
-  bounded SHC Make targets pass at canonical source `6ee266c1`; only the
-  aggregate legacy Python bootstrap is open.
+- [x] (2026-08-03 22:31Z) Completed SHC-104 at canonical Docker-Splunk source
+  `0604eeb`. A pinned Linux/AMD64 Python 3.10.18 environment passed clean and
+  idempotent aggregate setup, the unchanged 15/4/1 bounded contracts, five
+  bootstrap regressions, 91 broader test collections, Compose validation, and
+  exact cleanup without user site-package mutation.
 
 ## Surprises & Discoveries
 
