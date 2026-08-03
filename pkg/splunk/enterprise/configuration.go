@@ -761,26 +761,46 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 	} else if !k8serrors.IsNotFound(err) {
 		return &configMap, err
 	}
-	if err := client.Create(ctx, &configMap); err != nil {
-		if !k8serrors.IsAlreadyExists(err) {
-			return &configMap, err
+	if err := client.Create(ctx, &configMap); err == nil {
+		// A best-effort read keeps the established cache observation without
+		// making successful creation depend on informer visibility. The object
+		// returned by Create is already authoritative and contains the name used
+		// by the Pod volume.
+		var observed corev1.ConfigMap
+		if err := client.Get(ctx, namespacedName, &observed); err == nil {
+			configMap = observed
 		}
+		logger.DebugContext(
+			ctx,
+			"created probe config map",
+			"configMapName",
+			configMapName,
+			"configMapNamespace",
+			configMapNamespace,
+		)
+		return &configMap, nil
+	} else if !k8serrors.IsAlreadyExists(err) {
+		return &configMap, err
 	}
-	var created corev1.ConfigMap
-	if err := client.Get(ctx, namespacedName, &created); err != nil {
+
+	// Another controller or customer won the fixed-name create race. Its
+	// object may not be visible in the informer cache immediately, so retry
+	// only that expected NotFound window and preserve the winner unchanged.
+	var concurrent corev1.ConfigMap
+	if err := retry.OnError(retry.DefaultRetry, k8serrors.IsNotFound, func() error {
+		return client.Get(ctx, namespacedName, &concurrent)
+	}); err != nil {
 		return &configMap, err
 	}
 	logger.DebugContext(
 		ctx,
-		"reconciled probe config map",
+		"preserving concurrently created probe config map",
 		"configMapName",
 		configMapName,
 		"configMapNamespace",
 		configMapNamespace,
-		"dataUpdated",
-		true,
 	)
-	return &created, nil
+	return &concurrent, nil
 }
 
 func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.StatefulSet) {
