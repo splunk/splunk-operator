@@ -335,16 +335,16 @@ rolled_peer_converged_on_all_search_heads() {
     expected="${label}.${indexer_headless_service}.${namespace}.svc.cluster.local:8089"
     ;;
   pod-ip)
-    expected="$(jq -r --arg label "${label}" '
-      [.[] | select(.name == $label) | "\(.podIP):8089"] |
+    expected="$(jq -r --arg peer_label "${label}" '
+      [.[] | select(.name == $peer_label) | "\(.podIP):8089"] |
       if length == 1 then .[0] else "" end' <<<"${current_indexer_pods}")"
     ;;
   esac
   if [[ -z "${expected}" ]]; then
     return 1
   fi
-  guid="$(jq -r --arg label "${label}" '
-    [.peers[] | select(.label == $label) | .guid] | unique |
+  guid="$(jq -r --arg peer_label "${label}" '
+    [.peers[] | select(.label == $peer_label) | .guid] | unique |
     if length == 1 then .[0] else "" end' <<<"${current_cluster_peers}")"
   if [[ -z "${guid}" ]]; then
     return 1
