@@ -1555,6 +1555,10 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 			Name:  "TEST_ENV_VAR",
 			Value: "test_value",
 		},
+		{
+			Name:  indexerRegisterSearchAddressEnv,
+			Value: "customer-indexer.example",
+		},
 	}
 	test(loadFixture(t, "statefulset_stack1_indexer_with_service_account_1.json"))
 

@@ -74,9 +74,10 @@ const (
 
 	// livenessProbeLevelName
 	// NOTE: Changing this value must also reflect in ../tools/k9_probes/ directory script files
-	livenessProbeLevelName     = "K8_OPERATOR_LIVENESS_LEVEL"
-	indexerServingReadinessEnv = "SPLUNK_OPERATOR_INDEXER_SERVING_READINESS"
-	lifecycleHoldEnv           = "SPLUNK_OPERATOR_LIFECYCLE_HOLD"
+	livenessProbeLevelName          = "K8_OPERATOR_LIVENESS_LEVEL"
+	indexerServingReadinessEnv      = "SPLUNK_OPERATOR_INDEXER_SERVING_READINESS"
+	indexerRegisterSearchAddressEnv = "SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS"
+	lifecycleHoldEnv                = "SPLUNK_OPERATOR_LIFECYCLE_HOLD"
 
 	// livenessProbeDriverPath
 	// NOTE: Changing this value must also reflect in ../tools/k9_probes/ directory script files

@@ -96,6 +96,10 @@
             ],
             "env": [
               {
+                "name": "SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS",
+                "value": "auto"
+              },
+              {
                 "name": "SPLUNK_CLUSTER_MASTER_URL",
                 "value": "splunk-manager1-cluster-manager-service"
               },
