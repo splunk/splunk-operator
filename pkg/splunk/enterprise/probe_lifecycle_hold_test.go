@@ -132,14 +132,34 @@ func TestLivenessProbeLifecycleHold(t *testing.T) {
 	})
 
 	t.Run("level one without hold still requires splunkd", func(t *testing.T) {
+		fakeBin := writeFakeProcessTable(
+			t,
+			"32005 coder ssh vworkstation.splunkdev.net --disable-autostart\n",
+		)
 		output, err := runLivenessProbe(
 			t,
 			scriptPath,
 			"started\n",
 			"export K8_OPERATOR_LIVENESS_LEVEL=1\n",
+			"PATH="+fakeBin+":/usr/bin:/bin",
 		)
 		require.Error(t, err)
 		require.Contains(t, string(output), "Splunkd not running")
+	})
+
+	t.Run("level one accepts the real splunkd start command", func(t *testing.T) {
+		fakeBin := writeFakeProcessTable(
+			t,
+			"4242 ? S 0:00 /opt/splunk/bin/splunkd -p 8089 start\n",
+		)
+		output, err := runLivenessProbe(
+			t,
+			scriptPath,
+			"started\n",
+			"export K8_OPERATOR_LIVENESS_LEVEL=1\n",
+			"PATH="+fakeBin+":/usr/bin:/bin",
+		)
+		require.NoError(t, err, string(output))
 	})
 }
 
@@ -148,6 +168,7 @@ func runLivenessProbe(
 	scriptPath string,
 	state string,
 	driver string,
+	extraEnvironment ...string,
 ) ([]byte, error) {
 	t.Helper()
 	artifactDir := t.TempDir()
@@ -171,7 +192,21 @@ func runLivenessProbe(
 		"CONTAINER_ARTIFACT_DIR="+artifactDir,
 		"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH="+driverPath,
 	)
+	command.Env = append(command.Env, extraEnvironment...)
 	return command.CombinedOutput()
+}
+
+func writeFakeProcessTable(t *testing.T, processTable string) string {
+	t.Helper()
+	fakeBin := t.TempDir()
+	psPath := filepath.Join(fakeBin, "ps")
+	psScript := "#!/bin/bash\nprintf '%s' " + shellSingleQuote(processTable) + "\n"
+	require.NoError(t, os.WriteFile(psPath, []byte(psScript), 0o700))
+	return fakeBin
+}
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func filterProbeEnvironment(environment []string) []string {
@@ -179,6 +214,7 @@ func filterProbeEnvironment(environment []string) []string {
 	for _, variable := range environment {
 		if strings.HasPrefix(variable, "NO_HEALTHCHECK=") ||
 			strings.HasPrefix(variable, "CONTAINER_ARTIFACT_DIR=") ||
+			strings.HasPrefix(variable, "PATH=") ||
 			strings.HasPrefix(variable, "SPLUNK_OPERATOR_LIFECYCLE_HOLD=") ||
 			strings.HasPrefix(
 				variable,
