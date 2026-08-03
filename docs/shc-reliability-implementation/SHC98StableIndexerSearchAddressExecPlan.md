@@ -105,6 +105,23 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   specs, with zero failures and 78.3 percent composite coverage. This proves
   local composition; the review branches remain separate and native Linux
   qualification is still required.
+- [x] (2026-08-03 02:20Z) Added the read-only SHC-98 peer-convergence monitor
+  at `78ff404c7`. Its Make gate passes Bash syntax and ShellCheck. A live
+  snapshot queried all three Search Heads and Cluster Manager without a
+  cluster mutation: all four peers were `Up` and searchable, but both Cluster
+  Manager and every Search Head still exposed Pod-IP search addresses while
+  all four indexers resolved the expected stable per-ordinal FQDN.
+- [x] (2026-08-03 02:22Z) Corrected the qualification invariant after the live
+  snapshot showed current `OnDelete` semantics. All four Pods carried the
+  StatefulSet `updateRevision` and the lifecycle was `Completed`, while
+  Kubernetes retained the older `currentRevision`. The monitor now requires
+  every Pod to carry `updateRevision` for `OnDelete` and requires
+  `currentRevision == updateRevision` only for `RollingUpdate`.
+- [x] (2026-08-03 02:29Z) Added a separate API-independent SHC-98 workload Job
+  at `aa9a566aa`. It is pinned to the retained accepted runtime OCI index,
+  uses a unique Pod-derived run ID, mounts no service-account token, and
+  passed client and live server-side dry-run validation. The monitor's
+  snapshot mode and expected no-roll failure path both execute successfully.
 - [ ] Run the authoritative Splunk Ansible `make shc-check`, Operator
   `make test` and `make build`, and Docker-Splunk dependency/build gates on a
   clean Linux AMD64 vWorkstation. The Coder API currently returns EOF before
@@ -164,6 +181,15 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   Consequence: the experimental default must remain behind the existing Alpha
   lifecycle gates, and the live rollout must use tier-specific pause controls
   so deploying the candidate Operator cannot start an unintended revision.
+- Observation: `OnDelete` StatefulSet status does not provide revision
+  equality as a final convergence signal in the retained environment.
+  Evidence: the lifecycle is `Completed`, all four indexer Pods carry
+  `splunk-shcfinal-idxc-indexer-7d95fbc54b`, and
+  `updatedReplicas=4`, while status retains older `currentRevision`
+  `splunk-shcfinal-idxc-indexer-6968767b9b` and `currentReplicas=0`.
+  Consequence: current-design qualification must prove that every Pod carries
+  `updateRevision`; revision equality remains valid for the intended
+  `RollingUpdate` workflow, not for this `OnDelete` compatibility path.
 - Observation: Splunk Ansible's default `register_search_address` is defined
   as YAML null rather than undefined.
   Consequence: the role include must use `default("", true)` so existing
@@ -213,6 +239,18 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   indexer StatefulSet revision.
   Rationale: two revisions would introduce a second destructive roll and make
   the availability comparison ambiguous.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: keep the availability workload API-independent and the peer/K8s
+  monitor read-only as separate evidence streams.
+  Rationale: the workload must continue when Kubernetes observation is slow or
+  unavailable, while the monitor needs Kubernetes identity and direct REST
+  evidence from every Search Head and Cluster Manager. Combining them would
+  make API availability a hidden dependency of the customer-visible test.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: make StatefulSet convergence strategy-aware.
+  Rationale: `OnDelete` can retain an older `currentRevision` after every Pod
+  is manually replaced. Require all Pods on `updateRevision` for `OnDelete`;
+  additionally require current/update equality for `RollingUpdate`.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: pause the retained LicenseManager, ClusterManager,
   SearchHeadCluster, and IndexerCluster before deploying the candidate
@@ -308,7 +346,8 @@ the image and stable-address environment are present in the same desired Pod
 template. Verify the StatefulSet update revision before permitting lifecycle
 progress.
 
-Fifth, start the API-independent workload before the first replacement. Each
+Fifth, start the API-independent workload and read-only SHC-98 monitor before
+the first replacement. Each
 sample writes a unique acknowledged HEC event, runs a distributed search from
 the Search Head service, records result count and maximum sequence, and
 preserves all transport and Splunk messages. At the same cadence, query every
@@ -326,11 +365,12 @@ selection, the FQDN remains unchanged while the Pod UID and IP change, and all
 three Search Heads converge on the same four stable names.
 
 Seventh, retain a stable observation window after lifecycle completion. Stop
-the workload only after every tier is Ready, indexer StatefulSet current and
-update revisions agree, Cluster Manager reports RF/SF/all searchable, each
-Search Head reports the same four `Up` peers, old Pod IPs are absent from peer
-inventories and relevant new logs, and the final distributed search returns
-the exact acknowledged event set.
+the workload only after every tier is Ready, every indexer Pod carries the
+StatefulSet `updateRevision`, the strategy-specific revision invariant holds,
+Cluster Manager reports RF/SF/all searchable, each Search Head reports the
+same four `Up` peers, old Pod IPs are absent from peer inventories and
+relevant new logs, and the final distributed search returns the exact
+acknowledged event set.
 
 Finally, compare this campaign with the existing SHC-85 and SHC-97 evidence.
 Accept stable addressing only if it preserves all prior invariants and removes
@@ -365,6 +405,13 @@ Before rollout, capture the live baseline:
     kubectl -n shc-final-qualification get indexercluster,searchheadcluster,statefulset,pod,endpointslice -o wide
     kubectl -n shc-final-qualification get statefulset splunk-shcfinal-idxc-indexer -o yaml
 
+Validate and start the two independent evidence streams before unpausing the
+IndexerCluster:
+
+    make shc98-monitor-check shc98-workload-check
+    make shc98-incluster-workload SHC98_KUBECTL='kubectl --context shc85-vivek-spl-301372'
+    SHC98_KUBE_CONTEXT=shc85-vivek-spl-301372 test/fixtures/shc-reliability/shc98_stable_address_monitor.sh
+
 The management endpoint requests run inside each Search Head with the
 namespace admin credential supplied through the existing safe test harness;
 credentials must never be printed. Save normalized peer records containing
@@ -383,8 +430,9 @@ Runtime acceptance requires:
 - unchanged PVC and per-ordinal FQDN identity across each replacement;
 - new Pod UID and IP observed without an old peer identity remaining;
 - all Search Heads agreeing on four stable FQDN peer entries and `Up` status;
-- final RF met, SF met, all searchable, equal StatefulSet revisions, all Pods
-  Ready, and zero unexpected container restarts;
+- final RF met, SF met, all searchable, every Pod carrying the StatefulSet
+  `updateRevision`, current/update revision equality when the strategy is
+  `RollingUpdate`, all Pods Ready, and zero unexpected container restarts;
 - zero HEC request failures and zero distributed-search request failures;
 - exact final equality between acknowledged events and distributed-search
   results; and
@@ -432,6 +480,14 @@ reproducible.
 - Docker-Splunk branch: `codex/shc-98-stable-indexer-search-address`.
 - Reversible dependency-pin source:
   `cfd4fdee2a90f3cb70787dc915cddc299aaa7825`.
+- Read-only peer monitor source:
+  `78ff404c727f562bd85656f0c65696393bf0cb7d`.
+- API-independent workload source:
+  `aa9a566aaf8f1a6fb1993776ba1909f2cfb68b71`.
+- Pre-candidate snapshot SHA-256:
+  `e0524b714a311cb0da7d651f90e787d5e1c86091daf7cb808430edf53444d353`.
+- Pre-candidate effective-config snapshot SHA-256:
+  `6a421a55cb4637a1470e5505df4ed6eeeb5a663579c4f7fc421034e72efe46c0`.
 - EKS context:
   `arn:aws:eks:us-west-2:667741767953:cluster/vivek-spl-301372`.
 - Qualification namespace: `shc-final-qualification`.
