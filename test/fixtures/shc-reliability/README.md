@@ -507,6 +507,15 @@ SHC-98 Job is pinned to the previously accepted runtime OCI index, uses the
 Pod hostname as a unique workload run ID, and does not mount a Kubernetes
 service-account token.
 
+The default expected-address mode is `fqdn`. For a controlled rollback that
+uses `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=absent`, set
+`SHC98_EXPECTED_ADDRESS_MODE=pod-ip`. In that mode the monitor derives the
+current expected `PodIP:8089` values from the replacement Pods, requires one
+such identity per GUID on every Search Head, requires Cluster Manager to
+publish those same search addresses, and verifies that the effective
+`register_search_address` option is absent while the system FQDN remains the
+stable StatefulSet identity.
+
 Validate the script before use:
 
 ```sh

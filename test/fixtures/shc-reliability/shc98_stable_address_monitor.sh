@@ -11,6 +11,7 @@ sample_seconds="${SHC98_SAMPLE_SECONDS:-5}"
 roll_timeout_seconds="${SHC98_ROLL_TIMEOUT_SECONDS:-7200}"
 stable_samples_required="${SHC98_STABLE_SAMPLES:-60}"
 snapshot_only="${SHC98_SNAPSHOT_ONLY:-false}"
+expected_address_mode="${SHC98_EXPECTED_ADDRESS_MODE:-fqdn}"
 run_id="${SHC98_RUN_ID:-shc98-$(date -u +%Y%m%dT%H%M%SZ)}"
 evidence_file="${SHC98_EVIDENCE_FILE:-build/_test/shc98/${run_id}.tsv}"
 events_file="${SHC98_EVENTS_FILE:-${evidence_file%.tsv}.events.json}"
@@ -43,6 +44,14 @@ case "${snapshot_only}" in
 true | false) ;;
 *)
   printf 'SHC98_SNAPSHOT_ONLY must be true or false\n' >&2
+  exit 2
+  ;;
+esac
+
+case "${expected_address_mode}" in
+fqdn | pod-ip) ;;
+*)
+  printf 'SHC98_EXPECTED_ADDRESS_MODE must be fqdn or pod-ip\n' >&2
   exit 2
   ;;
 esac
@@ -86,14 +95,7 @@ for value in "${indexer_replicas}" "${search_head_replicas}"; do
   fi
 done
 
-expected_peer_addresses="$({
-  jq -cn --arg prefix "${indexer_pod_prefix}" \
-    --arg headless "${indexer_headless_service}" \
-    --arg namespace "${namespace}" \
-    --argjson replicas "${indexer_replicas}" '
-      [range(0; $replicas) |
-        "\($prefix)\(.).\($headless).\($namespace).svc.cluster.local:8089"]'
-})"
+expected_peer_addresses='[]'
 
 indexercluster_json() {
   k -n "${namespace}" get indexercluster.enterprise.splunk.com \
@@ -149,6 +151,21 @@ indexer_pods_json() {
             select(.persistentVolumeClaim != null) |
             .persistentVolumeClaim.claimName] | sort)
         }] | sort_by(.name)'
+}
+
+refresh_expected_peer_addresses() {
+  case "${expected_address_mode}" in
+  fqdn)
+    expected_peer_addresses="$(jq -c '
+      [.[] | "\(.expectedFQDN):8089"] | sort' \
+      <<<"${current_indexer_pods}")"
+    ;;
+  pod-ip)
+    expected_peer_addresses="$(jq -c '
+      [.[] | select(.podIP != "") | "\(.podIP):8089"] | sort' \
+      <<<"${current_indexer_pods}")"
+    ;;
+  esac
 }
 
 indexer_endpoints_json() {
@@ -280,6 +297,7 @@ collect_sample() {
   current_indexercluster="$(indexercluster_json)"
   current_statefulset="$(statefulset_json)"
   current_indexer_pods="$(indexer_pods_json)"
+  refresh_expected_peer_addresses
   current_indexer_endpoints="$(indexer_endpoints_json)"
   current_cluster_health="$(cluster_health_json)"
   current_cluster_peers="$(cluster_peers_json)"
@@ -312,7 +330,19 @@ peers_match_expected() {
 rolled_peer_converged_on_all_search_heads() {
   local ordinal="$1" label expected guid
   label="${indexer_pod_prefix}${ordinal}"
-  expected="${label}.${indexer_headless_service}.${namespace}.svc.cluster.local:8089"
+  case "${expected_address_mode}" in
+  fqdn)
+    expected="${label}.${indexer_headless_service}.${namespace}.svc.cluster.local:8089"
+    ;;
+  pod-ip)
+    expected="$(jq -r --arg label "${label}" '
+      [.[] | select(.name == $label) | "\(.podIP):8089"] |
+      if length == 1 then .[0] else "" end' <<<"${current_indexer_pods}")"
+    ;;
+  esac
+  if [[ -z "${expected}" ]]; then
+    return 1
+  fi
   guid="$(jq -r --arg label "${label}" '
     [.peers[] | select(.label == $label) | .guid] | unique |
     if length == 1 then .[0] else "" end' <<<"${current_cluster_peers}")"
@@ -404,13 +434,19 @@ print(socket.gethostbyname(fqdn))
     register_address="$(sed -n '3p' <<<"${output}")"
     entry="$(jq -cn --arg pod "${pod}" --arg expected "${expected}" \
       --arg configured "${register_address}" --arg fqdn "${system_fqdn}" \
-      --arg resolved "${resolved_ip}" '{
+      --arg resolved "${resolved_ip}" --arg mode "${expected_address_mode}" '{
         pod:$pod,
         expectedFQDN:$expected,
         registerSearchAddress:$configured,
         systemFQDN:$fqdn,
         resolvedIP:$resolved,
-        matches: ($configured == $expected and $fqdn == $expected)
+        matches: (
+          $fqdn == $expected and
+          (if $mode == "fqdn" then
+             $configured == $expected
+           else
+             $configured == ""
+           end))
       }')"
     inventory="$(jq -cn --argjson inventory "${inventory}" \
       --argjson entry "${entry}" '$inventory + [$entry]')"
@@ -569,7 +605,8 @@ k -n "${namespace}" get events -o json | jq \
             (.series.lastObservedTime // .lastTimestamp // .eventTime // "")
         }] | sort_by(.lastObserved, .objectName, .reason)' >"${events_file}"
 
-printf 'PASS: SHC-98 stable-address roll converged; revision=%s ordinals=%s stableSamples=%s finalConfig=%s evidence=%s events=%s config=%s\n' \
+printf 'PASS: SHC-98 address roll converged; mode=%s revision=%s ordinals=%s stableSamples=%s finalConfig=%s evidence=%s events=%s config=%s\n' \
+  "${expected_address_mode}" \
   "$(jq -r '.currentRevision' <<<"${current_statefulset}")" \
   "${seen_ordinals}" "${stable_samples}" "${final_config}" \
   "${evidence_file}" "${events_file}" "${config_file}"
