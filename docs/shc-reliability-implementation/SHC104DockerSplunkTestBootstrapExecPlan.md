@@ -35,11 +35,18 @@ Splunk Ansible, or Splunk Enterprise failure.
   `make test_setup`: pip 26.2 on Python 3.10 selected PyYAML 5.4.1 through
   Docker Compose 1.29.2, then its isolated wheel-requirements step failed with
   `AttributeError: 'build_ext' object has no attribute 'cython_sources'`.
-- [ ] Define a repository-owned, isolated, locked test environment compatible
-  with the supported builder and the tests that still require Docker Compose
-  1.x behavior.
-- [ ] Make `make test_setup` create and use that environment without changing
-  the caller's user site-packages.
+- [x] (2026-08-03 22:27Z) Defined a repository-owned Python 3.10 lock,
+  pinned the PyYAML source-build toolchain, and retained Docker Compose 1.29.2
+  compatibility on isolated Docker-Splunk branch
+  `codex/shc-104-docker-test-bootstrap` at `0604eeb`.
+- [x] (2026-08-03 22:27Z) Changed `make test_setup` to construct and verify
+  `.test-venv`, route all broader pytest targets through it, and provide an
+  exact cleanup target. Added five regression tests for the bootstrap
+  contract.
+- [x] (2026-08-03 22:27Z) Validated the corrected bootstrap from an empty
+  environment and a second time on local Python 3.10. Both runs passed; all 91
+  broader image tests collected, the Compose configuration command succeeded,
+  and the 15/4/1 bounded SHC tests retained their prior counts.
 - [ ] Qualify the corrected target on a clean native-Linux host and retain the
   existing bounded SHC test counts.
 
@@ -66,6 +73,19 @@ Splunk Ansible, or Splunk Enterprise failure.
   the legacy requirements.
   Consequence: SHC-104 must isolate the bootstrap so one repository's test
   dependencies do not alter another repository's tools.
+- Observation: the broader test modules invoke the `docker-compose` executable
+  but do not import Compose as a Python API.
+  Evidence: every Compose use in `tests/executor.py` and the two image-test
+  modules is a subprocess command; the isolated environment nevertheless
+  provides and validates the legacy executable.
+  Consequence: the correction can preserve existing command behavior without
+  coupling test source to Compose's internal Python modules.
+- Observation: pytest 4.4.0 cannot start under the supported Python 3.10
+  interpreter.
+  Evidence: after repairing the PyYAML build, pytest 4.4.0 failed assertion
+  rewriting with `TypeError: required field "lineno" missing from alias`.
+  Consequence: the test-only lock uses pytest 7.4.4 and compatible xdist and
+  rerun plugins; production image inputs are unchanged.
 
 ## Decision Log
 
@@ -84,13 +104,25 @@ Splunk Ansible, or Splunk Enterprise failure.
   has compatible packages installed does not establish repository
   reproducibility.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: retain Docker Compose 1.29.2 while pinning its complete dependency
+  graph and PyYAML build toolchain.
+  Rationale: existing tests execute the Compose 1.x command contract. Replacing
+  it with Compose v2 would broaden SHC-104 into a test-behavior migration.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: update only the incompatible pytest toolchain to supported pinned
+  versions.
+  Rationale: pytest 4.4 cannot run on Python 3.10, whereas pytest 7.4.4
+  successfully collected all 91 existing image tests without source changes.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
-SHC-104 is open. The Docker-Splunk SHC runtime source remains qualified at
-`6ee266c1`, and its bounded Make tests pass. Only the broader legacy Python
-test bootstrap is unqualified on the current Linux builder. No production
-source or image change has been made for this issue.
+SHC-104 remains open only for the native-Linux acceptance run. The correction
+is isolated at Docker-Splunk commit `0604eeb`; local Python 3.10 clean and
+idempotent runs, 91-test collection, Compose configuration validation, and the
+bounded SHC tests pass. The Docker-Splunk SHC runtime source remains unchanged
+from `6ee266c1`, and no production source or image change has been made for
+this issue.
 
 ## Context and Orientation
 
@@ -150,10 +182,14 @@ bootstrap limitation explicitly.
 - Docker-Splunk canonical branch:
   `feature/shc-kubernetes-reliability`.
 - Exact source: `6ee266c14e25a1d5849a3d5b96cdaf155b09c696`.
+- Isolated SHC-104 candidate: `0604eeb` on
+  `codex/shc-104-docker-test-bootstrap`.
 - Passing bounded gate: 15 shutdown, four exact-Ansible-ref, and one
   base-image-security tests.
-- Failing aggregate command: `make test_setup`.
-- Failure phase: dependency bootstrap, before broader test execution.
+- Passing local bootstrap gate: clean and repeated `make test_setup`, five
+  bootstrap regressions, 91 broader tests collected, and Compose 1.29.2
+  configuration validation.
+- Remaining gate: repeat the clean and idempotent bootstrap on native Linux.
 - Current builder: Python 3.10, pip 26.2, Linux AMD64.
 - Repository status after reproduction: clean.
 
