@@ -36,6 +36,16 @@ Head rollout sequencing.
 - [x] (2026-08-03 23:14Z) Passed `make fmt vet`, `make build`, all 43 Make test
   suites with zero failures and 78.3 percent composite coverage, Helm lint,
   and all 150 Helm unit tests.
+- [x] (2026-08-03 23:27Z) Passed the repository linter in new-change mode
+  relative to the SHC-105 base with zero issues. The complete repository lint
+  still reports the separately recorded 24 pre-existing issues.
+- [x] (2026-08-03 23:29Z) Passed 100 race-enabled exact-boundary repetitions
+  and 20 race-enabled repetitions of the three SHC-94 App Framework ownership
+  tests.
+- [x] (2026-08-03 23:31Z) Cross-compiled the complete manager through the
+  repository Make target for `linux/amd64`; the resulting binary is an x86-64
+  ELF executable. Native Linux container-image construction and execution are
+  still required.
 - [ ] Build an immutable Linux/AMD64 Operator image from exact source
   `0e638dac4`, deploy it to the EKS qualification cluster, and observe at least
   two App Framework poll boundaries during an active lifecycle without an

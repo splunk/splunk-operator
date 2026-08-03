@@ -716,11 +716,16 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   cleared on 2026-07-28 by publishing immutable source commits and pinned
   Linux images used by the EKS campaign.
 - [ ] Approve the capability/dependency map and assign technical owners.
-- [ ] Complete SHC-104 Docker-Splunk test-bootstrap reproducibility. Canonical
-  source `6ee266c1` passes the 15 shutdown, four exact-Ansible-ref, and one
-  base-image-security tests, but `make test_setup` fails later while building
-  legacy PyYAML 5.4.1 under the current Python 3.10/pip 26.2 environment. Keep
-  this separate from product runtime qualification.
+- [x] (2026-08-03 22:31Z) Completed SHC-104 Docker-Splunk test-bootstrap
+  reproducibility at canonical source `0604eeb`. A repository-local locked
+  environment passed clean and repeated Linux/AMD64 aggregate setup, the
+  unchanged 15 shutdown, four exact-Ansible-ref, and one base-image-security
+  tests, five bootstrap regressions, 91 broader test collections, Compose
+  validation, and exact cleanup. Production runtime source is unchanged.
+- [x] (2026-08-03 23:14Z) Registered and source-qualified SHC-105 at Operator
+  source `0e638dac4`. Exact-boundary and overdue App Framework timer values now
+  return the existing bounded five-second retry. The full local regression
+  gate passed; immutable Linux image and live EKS qualification remain open.
 - [ ] Resolve the blocking API and lifecycle policy decisions.
 - [ ] Complete and approve the Operator lifecycle technical design.
 - [ ] Complete and approve the runtime lifecycle contract.

@@ -156,6 +156,13 @@ it is not converted into a qualified claim by documentation alone.
   idempotent aggregate setup, the unchanged 15/4/1 bounded contracts, five
   bootstrap regressions, 91 broader test collections, Compose validation, and
   exact cleanup without user site-package mutation.
+- [x] (2026-08-03 23:14Z) Registered and source-qualified SHC-105 at exact
+  Operator source `0e638dac4`. The exact App Framework poll boundary now uses
+  the existing five-second overdue retry instead of emitting a false zero-
+  duration requeue error. One thousand focused repetitions, `make fmt vet`,
+  `make build`, all 43 Make test suites, Helm lint, and all 150 chart tests
+  passed. Immutable Linux image and live multi-boundary EKS qualification
+  remain open.
 
 ## Surprises & Discoveries
 
