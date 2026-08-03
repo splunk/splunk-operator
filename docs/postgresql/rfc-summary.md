@@ -69,8 +69,8 @@ guardrails. Policy changes ship as a new class in a catalog.
 **Manage users/databases via direct SQL.** Rejected as the primary mechanism. It
 duplicates CNPG's declarative `managed.roles` and `Database` CRs and would make
 the operator own connection management, retries, and idempotency. We chose
-**declarative-first**, using direct SQL only for the residual privilege grants
-CNPG can't express.
+**declarative-first**, using direct SQL only for the residual CNPG gaps —
+privilege grants CNPG can't express, and the post-restore credential sweep.
 
 **Full-object drift comparison against the live CNPG spec.** Rejected. CNPG
 mutates its own spec with defaults and runtime fields, so a full comparison

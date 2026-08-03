@@ -64,9 +64,13 @@ lifecycle go through CNPG's own declarative surfaces:
 - **Databases** via CNPG `Database` CRs owned by the `PostgresDatabase`.
 - **Direct SQL** (over the cluster's superuser secret — either a
   `spec.passwordConfig.superuserExternalSecretRef` or the operator-derived
-  `<cluster>-secret`) is used **only** for privilege grants that CNPG's
+  `<cluster>-secret`) is limited to CNPG gaps: privilege grants that CNPG's
   declarative model cannot express — e.g. granting the per-database `_rw` role
-  its object privileges. This keeps the SQL surface as small as possible.
+  its object privileges — and, for a cluster bootstrapped from a snapshot or
+  object-storage backup, the one-time post-restore credential sweep
+  (`runCredentialSweep`/`NewRoleSweeper` in `managed_roles_model.go`) that
+  disables the recovered roles' stale login credentials before managed roles
+  are re-enabled. This keeps the SQL surface as small as possible.
 
 **Phase projection, not self-diagnosis.** The cluster's status phase is a
 translation of CNPG's own cluster phase into our vocabulary
@@ -101,7 +105,8 @@ keys it sets and coexists with CNPG-owned parameters.
 - **Manage users/databases entirely via direct SQL.** Rejected: it duplicates
   what CNPG's `managed.roles` and `Database` CRs already do declaratively, and
   it would make the operator responsible for connection management, retries, and
-  idempotency that CNPG handles. SQL is kept to the residual (privilege grants).
+  idempotency that CNPG handles. SQL is kept to the residual (privilege grants
+  and the post-restore credential sweep).
 - **Full-object drift comparison** (compare the entire live CNPG spec to
   desired). Rejected: CNPG mutates its own spec with defaults and runtime fields,
   so a full comparison drifts on every reconcile and fights CNPG. Chosen:

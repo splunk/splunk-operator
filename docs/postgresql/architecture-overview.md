@@ -101,8 +101,9 @@ Key relationships (see [ADR-0003](adr/0003-cnpg-integration-and-drift-reconcilia
   arbitrated by the `PostgresCluster` controller (it collects intent from every
   `PostgresDatabase` and applies the full role list with a single merge patch —
   not per-database Server-Side Apply), databases through CNPG `Database` CRs.
-  Direct SQL is used **only** for privilege grants CNPG can't express
-  declaratively.
+  Direct SQL is limited to CNPG gaps: privilege grants CNPG can't express
+  declaratively, and a one-time post-restore credential sweep that disables
+  recovered roles' stale login credentials on snapshot/object-storage restores.
 - Pooling is a class-defined capability with per-cluster enablement; RW and RO
   poolers are separate CNPG `Pooler` CRs, RO gated on effective instances ≥ 2
   (see [ADR-0004](adr/0004-pgbouncer-integration-model.md)).
