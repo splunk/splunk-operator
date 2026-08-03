@@ -81,25 +81,75 @@ spec:
                     description: Name of the queue
                     minLength: 1
                     type: string
-                  volumes:
-                    description: List of remote storage volumes
-                    items:
-                      description: SQSVolumeSpec defines a volume reference for SQS
-                        queue authentication
-                      properties:
-                        name:
-                          description: Remote volume name
-                          minLength: 1
-                          type: string
-                        secretRef:
-                          description: Remote volume secret ref
-                          minLength: 1
-                          type: string
-                      required:
-                      - name
-                      - secretRef
-                      type: object
-                    type: array
+                  secretKeyRef:
+                    description: |-
+                      SecretKeyRef holds per-credential selectors for AWS credentials.
+                      When not set, IRSA / workload identity is assumed.
+                      Secrets are looked up in the Queue's own namespace.
+                    properties:
+                      awsAccessKey:
+                        description: AwsAccessKey selects the AWS access key ID from
+                          a Kubernetes Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      awsSecretKey:
+                        description: AwsSecretKey selects the AWS secret access key
+                          from a Kubernetes Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    required:
+                    - awsAccessKey
+                    - awsSecretKey
+                    type: object
+                    x-kubernetes-validations:
+                    - message: awsAccessKey.name must not be empty
+                      rule: size(self.awsAccessKey.name) > 0
+                    - message: awsSecretKey.name must not be empty
+                      rule: size(self.awsSecretKey.name) > 0
+                    - message: awsAccessKey.key must not be empty
+                      rule: size(self.awsAccessKey.key) > 0
+                    - message: awsSecretKey.key must not be empty
+                      rule: size(self.awsSecretKey.key) > 0
                 required:
                 - dlq
                 - name

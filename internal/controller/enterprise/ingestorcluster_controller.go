@@ -204,16 +204,15 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						continue
 					}
 
-					for _, vol := range queue.Spec.SQS.VolList {
-						if vol.SecretRef == secret.Name {
-							reqs = append(reqs, reconcile.Request{
-								NamespacedName: types.NamespacedName{
-									Name:      ic.Name,
-									Namespace: ic.Namespace,
-								},
-							})
-							break
-						}
+					if queue.Spec.SQS.SecretKeyRef != nil &&
+						(queue.Spec.SQS.SecretKeyRef.AwsAccessKey.Name == secret.Name ||
+							queue.Spec.SQS.SecretKeyRef.AwsSecretKey.Name == secret.Name) {
+						reqs = append(reqs, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      ic.Name,
+								Namespace: ic.Namespace,
+							},
+						})
 					}
 				}
 				return reqs

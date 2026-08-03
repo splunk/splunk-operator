@@ -15,6 +15,7 @@
 package v4
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -64,21 +65,25 @@ type SQSSpec struct {
 	Endpoint string `json:"endpoint,omitempty"`
 
 	// +optional
-	// List of remote storage volumes
-	VolList []SQSVolumeSpec `json:"volumes,omitempty"`
+	// SecretKeyRef holds per-credential selectors for AWS credentials.
+	// When not set, IRSA / workload identity is assumed.
+	// Secrets are looked up in the Queue's own namespace.
+	SecretKeyRef *SQSSecretKeyRef `json:"secretKeyRef,omitempty"`
 }
 
-// SQSVolumeSpec defines a volume reference for SQS queue authentication
-type SQSVolumeSpec struct {
-	// Remote volume name
+// SQSSecretKeyRef holds SecretKeySelectors for the AWS access key ID and secret access key.
+// +kubebuilder:validation:XValidation:rule="size(self.awsAccessKey.name) > 0",message="awsAccessKey.name must not be empty"
+// +kubebuilder:validation:XValidation:rule="size(self.awsSecretKey.name) > 0",message="awsSecretKey.name must not be empty"
+// +kubebuilder:validation:XValidation:rule="size(self.awsAccessKey.key) > 0",message="awsAccessKey.key must not be empty"
+// +kubebuilder:validation:XValidation:rule="size(self.awsSecretKey.key) > 0",message="awsSecretKey.key must not be empty"
+type SQSSecretKeyRef struct {
+	// AwsAccessKey selects the AWS access key ID from a Kubernetes Secret.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
+	AwsAccessKey corev1.SecretKeySelector `json:"awsAccessKey"`
 
-	// Remote volume secret ref
+	// AwsSecretKey selects the AWS secret access key from a Kubernetes Secret.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	SecretRef string `json:"secretRef"`
+	AwsSecretKey corev1.SecretKeySelector `json:"awsSecretKey"`
 }
 
 // QueueStatus defines the observed state of Queue

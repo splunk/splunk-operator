@@ -176,12 +176,12 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 		}
 	})
 
-	t.Run("queue with secret ref extracts credentials", func(t *testing.T) {
+	t.Run("queue with SecretKeyRef extracts credentials", func(t *testing.T) {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: "aws-creds", Namespace: "test"},
 			Data: map[string][]byte{
-				"s3_access_key": []byte("abc"),
-				"s3_secret_key": []byte("123"),
+				"access_key_id":     []byte("abc"),
+				"secret_access_key": []byte("123"),
 			},
 		}
 		queue := &enterpriseApi.Queue{
@@ -192,8 +192,9 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 					Name:     "my-queue",
 					DLQ:      "my-dlq",
 					Endpoint: "https://sqs.us-east-1.amazonaws.com",
-					VolList: []enterpriseApi.SQSVolumeSpec{
-						{Name: "vol1", SecretRef: "aws-creds"},
+					SecretKeyRef: &enterpriseApi.SQSSecretKeyRef{
+						AwsAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "aws-creds"}, Key: "access_key_id"},
+						AwsSecretKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "aws-creds"}, Key: "secret_access_key"},
 					},
 				},
 			},
@@ -216,7 +217,7 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 		}
 	})
 
-	t.Run("queue with empty VolList skips secret extraction (IRSA)", func(t *testing.T) {
+	t.Run("queue with nil SecretKeyRef skips secret extraction (IRSA)", func(t *testing.T) {
 		queue := &enterpriseApi.Queue{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-queue", Namespace: "test"},
 			Spec: enterpriseApi.QueueSpec{
@@ -239,10 +240,10 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 			t.Errorf("unexpected error = %v", err)
 		}
 		if cfg.AccessKey != "" {
-			t.Errorf("Expected empty AccessKey for IRSA (no VolList), got %q", cfg.AccessKey)
+			t.Errorf("Expected empty AccessKey for IRSA (no SecretKeyRef), got %q", cfg.AccessKey)
 		}
 		if cfg.SecretKey != "" {
-			t.Errorf("Expected empty SecretKey for IRSA (no VolList), got %q", cfg.SecretKey)
+			t.Errorf("Expected empty SecretKey for IRSA (no SecretKeyRef), got %q", cfg.SecretKey)
 		}
 	})
 
@@ -255,8 +256,9 @@ func TestResolveQueueAndObjectStorage(t *testing.T) {
 					Name:     "my-queue",
 					DLQ:      "my-dlq",
 					Endpoint: "https://sqs.us-east-1.amazonaws.com",
-					VolList: []enterpriseApi.SQSVolumeSpec{
-						{Name: "vol1", SecretRef: "nonexistent-secret"},
+					SecretKeyRef: &enterpriseApi.SQSSecretKeyRef{
+						AwsAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "nonexistent-secret"}, Key: "access_key_id"},
+						AwsSecretKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "nonexistent-secret"}, Key: "secret_access_key"},
 					},
 				},
 			},

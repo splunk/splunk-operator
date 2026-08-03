@@ -33,21 +33,22 @@ type QueueObjectStorageConfig struct {
 	OS        enterpriseApi.ObjectStorageSpec
 	AccessKey string
 	SecretKey string
-	Version   string
 }
 
 // ResolveQueueAndObjectStorage fetches Queue and ObjectStorage CRs, resolves
-// their endpoints, and extracts credentials from the referenced secret.
-// Credentials are resolved when the Queue's VolList is non-empty; an empty
-// VolList signals IRSA / workload identity.
+// their endpoints, and extracts credentials from the referenced secrets.
+// Credentials are resolved when the Queue's AwsAccessKey/AwsSecretKey are set; nil
+// values signal IRSA / workload identity.
 func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, queueRef, osRef corev1.ObjectReference) (*QueueObjectStorageConfig, error) {
 	cfg := &QueueObjectStorageConfig{}
 
+	var queueNamespace string
 	if queueRef.Name != "" {
 		ns := cr.GetNamespace()
 		if queueRef.Namespace != "" {
 			ns = queueRef.Namespace
 		}
+		queueNamespace = ns
 		var queue enterpriseApi.Queue
 		if err := c.Get(ctx, types.NamespacedName{Name: queueRef.Name, Namespace: ns}, &queue); err != nil {
 			return nil, err
@@ -85,38 +86,37 @@ func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerCli
 		}
 	}
 
-	if (cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp") && len(cfg.Queue.SQS.VolList) > 0 {
-		for _, vol := range cfg.Queue.SQS.VolList {
-			if vol.SecretRef != "" {
-				accessKey, secretKey, version, err := getQueueRemoteVolumeSecrets(ctx, vol, c, cr)
-				if err != nil {
-					return nil, err
-				}
-				cfg.AccessKey = accessKey
-				cfg.SecretKey = secretKey
-				cfg.Version = version
-			}
+	if (cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp") && cfg.Queue.SQS.SecretKeyRef != nil {
+		accessKey, secretKey, err := resolveCredentials(ctx, cfg.Queue.SQS.SecretKeyRef, queueNamespace, c)
+		if err != nil {
+			return nil, err
 		}
+		cfg.AccessKey = accessKey
+		cfg.SecretKey = secretKey
 	}
 
 	return cfg, nil
 }
 
-func getQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.SQSVolumeSpec, c splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, string, error) {
-	secret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), volume.SecretRef)
+func resolveCredentials(ctx context.Context, ref *enterpriseApi.SQSSecretKeyRef, namespace string, c splcommon.ControllerClient) (accessKey, secretKey string, err error) {
+	accessKey, err = resolveSecretKey(ctx, ref.AwsAccessKey.Name, namespace, ref.AwsAccessKey.Key, c)
 	if err != nil {
-		return "", "", "", err
+		return
+	}
+	secretKey, err = resolveSecretKey(ctx, ref.AwsSecretKey.Name, namespace, ref.AwsSecretKey.Key, c)
+	return
+}
+
+func resolveSecretKey(ctx context.Context, secretName, secretNamespace, key string, c splcommon.ControllerClient) (string, error) {
+	secret, err := splutil.GetSecretByName(ctx, c, secretNamespace, secretName)
+	if err != nil {
+		return "", err
 	}
 
-	accessKey := string(secret.Data["s3_access_key"])
-	secretKey := string(secret.Data["s3_secret_key"])
-
-	if accessKey == "" {
-		return "", "", "", fmt.Errorf("access Key is missing")
-	}
-	if secretKey == "" {
-		return "", "", "", fmt.Errorf("secret Key is missing")
+	val := string(secret.Data[key])
+	if val == "" {
+		return "", fmt.Errorf("key %q not found or empty in secret %q", key, secretName)
 	}
 
-	return accessKey, secretKey, secret.ResourceVersion, nil
+	return val, nil
 }
