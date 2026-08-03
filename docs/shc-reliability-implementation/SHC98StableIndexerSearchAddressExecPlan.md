@@ -68,6 +68,14 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   defect before Linux execution. Existing non-opted-in Ansible deployments
   have a defined YAML null value; the include guard now treats undefined,
   null, and empty values as a no-op. Sixty focused Python tests pass.
+- [x] (2026-08-03 01:50Z) Passed the complete local Splunk Ansible
+  `make shc-check` under the repository's pinned Ansible 5.10 environment on
+  Python 3.9: focused legacy lint, full playbook syntax, 60 clustering
+  environment tests, three stable-address task tests, and two startup tests.
+- [x] (2026-08-03 01:51Z) Ran Docker-Splunk `make ansible`; it cloned and
+  detached at exact null-safe source
+  `de208e179774e02ac054f50c468c7a4a8d57d644`, matching the Makefile pin and
+  recorded version.
 - [x] (2026-08-03 01:27Z) Operator focused generation tests, `make build`, Go
   formatting, vet, and compilation pass. The complete macOS Make test reached
   42 passing suites and one unrelated `pkg/splunk/enterprise` failure.
@@ -184,10 +192,12 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
 ## Outcomes & Retrospective
 
 In progress. No production recommendation or EKS qualification is claimed.
-The source candidate is isolated and pushed, its focused tests and Operator
-build pass, and one pre-EKS compatibility defect has already been corrected.
-Acceptance still requires clean Linux gates, immutable images, an exact-image
-EKS rollout, and evidence from every Search Head.
+The source candidate is isolated and pushed. Splunk Ansible's complete local
+SHC Make gate, Docker-Splunk's dependency checkout/ref gates, Operator focused
+tests, and Operator `make build` pass, and one pre-EKS compatibility defect has
+already been corrected. Acceptance still requires clean Linux full gates,
+immutable images, an exact-image EKS rollout, and evidence from every Search
+Head.
 
 ## Context and Orientation
 
