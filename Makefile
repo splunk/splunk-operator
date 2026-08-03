@@ -169,8 +169,11 @@ SHC84_LICENSE_FILE ?=
 SHC85_NAMESPACE ?= shc85-lifecycle-hold
 SHC85_LICENSE_FILE ?=
 SHC98_MONITOR ?= test/fixtures/shc-reliability/shc98_stable_address_monitor.sh
+SHC98_NAMESPACE ?= shc-final-qualification
+SHC98_KUBECTL ?= kubectl
+SHC98_WORKLOAD_MANIFEST ?= test/fixtures/shc-reliability/shc98-incluster-workload-job.yaml
 
-.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload shc98-monitor-check
+.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload shc98-monitor-check shc98-workload-check shc98-incluster-workload
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
 	$(SHC_RELIABILITY_PYTHON) "$(SHC82_APP_PACKAGER)" \
 		--source-dir "$(SHC82_APP_SOURCE_DIR)" \
@@ -252,6 +255,20 @@ shc85-incluster-workload: ## Recreate the API-independent SHC-85 HEC/search work
 shc98-monitor-check: ## Validate the read-only SHC-98 stable-address evidence monitor.
 	bash -n "$(SHC98_MONITOR)"
 	shellcheck "$(SHC98_MONITOR)"
+
+shc98-workload-check: ## Validate the API-independent SHC-98 workload Job manifest.
+	$(SHC98_KUBECTL) apply --dry-run=client --validate=false \
+		-f "$(SHC98_WORKLOAD_MANIFEST)" >/dev/null
+
+shc98-incluster-workload: shc98-workload-check ## Recreate the API-independent SHC-98 HEC/search workload Job.
+	$(SHC98_KUBECTL) -n "$(SHC98_NAMESPACE)" create configmap \
+		shc98-incluster-workload \
+		--from-file=shc85_incluster_workload.sh=test/fixtures/shc-reliability/shc85_incluster_workload.sh \
+		--dry-run=client -o yaml | $(SHC98_KUBECTL) apply -f -
+	$(SHC98_KUBECTL) -n "$(SHC98_NAMESPACE)" delete job \
+		shc98-incluster-workload --ignore-not-found --wait=true
+	$(SHC98_KUBECTL) -n "$(SHC98_NAMESPACE)" apply \
+		-f "$(SHC98_WORKLOAD_MANIFEST)"
 
 
 ##@ Documentation

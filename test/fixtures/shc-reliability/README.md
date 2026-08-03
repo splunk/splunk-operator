@@ -498,12 +498,16 @@ is unavailable, a container restarts, the target order is not `3,2,1,0`, a Pod
 or PVC identity transition is invalid, Cluster Manager or any Search Head does
 not retain the expected per-ordinal FQDNs, or effective indexer configuration
 and system DNS identity disagree. Run the API-independent SHC-85 workload Job
-at the same time; the two evidence streams deliberately remain separate.
+at the same time; the two evidence streams deliberately remain separate. The
+SHC-98 Job is pinned to the previously accepted runtime OCI index, uses the
+Pod hostname as a unique workload run ID, and does not mount a Kubernetes
+service-account token.
 
 Validate the script before use:
 
 ```sh
 make shc98-monitor-check
+make shc98-workload-check
 ```
 
 Capture a single non-mutating baseline from the retained qualification
@@ -514,6 +518,17 @@ SHC98_KUBE_CONTEXT=shc85-vivek-spl-301372 \
 SHC98_SNAPSHOT_ONLY=true \
 SHC98_EVIDENCE_FILE=build/_test/shc98/baseline.tsv \
 test/fixtures/shc-reliability/shc98_stable_address_monitor.sh
+```
+
+Immediately before the IndexerCluster is unpaused, recreate the in-cluster
+workload and follow its log. The Make target is intentionally scoped to the
+retained `shc-final-qualification` fixture:
+
+```sh
+make shc98-incluster-workload \
+  SHC98_KUBECTL='kubectl --context shc85-vivek-spl-301372'
+kubectl --context shc85-vivek-spl-301372 \
+  -n shc-final-qualification logs -f job/shc98-incluster-workload
 ```
 
 For the rollout, omit `SHC98_SNAPSHOT_ONLY=true` and start the monitor before

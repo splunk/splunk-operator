@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: shc98-incluster-workload
+  labels:
+    qualification.splunk.com/scenario: shc98-stable-indexer-address
+spec:
+  activeDeadlineSeconds: 7200
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        qualification.splunk.com/scenario: shc98-stable-indexer-address
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: workload
+          image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk@sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - /opt/qualification/shc85_incluster_workload.sh
+          env:
+            - name: HEC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: splunk-shc-final-qualification-secret
+                  key: hec_token
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: splunk-shc-final-qualification-secret
+                  key: password
+            - name: SHC85_WORKLOAD_SAMPLES
+              value: "3600"
+            - name: SHC85_WORKLOAD_INTERVAL_SECONDS
+              value: "1"
+            - name: SHC85_HEC_SERVICE
+              value: splunk-shcfinal-idxc-indexer-service
+            - name: SHC85_SEARCH_SERVICE
+              value: splunk-shcfinal-shc-search-head-service
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: workload
+              mountPath: /opt/qualification
+              readOnly: true
+      volumes:
+        - name: workload
+          configMap:
+            name: shc98-incluster-workload
+            defaultMode: 0555
