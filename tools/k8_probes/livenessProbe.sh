@@ -39,7 +39,7 @@ get_http_proto_type() {
 # Check if the Splunkd process is running or not
 liveness_probe_check_splunkd_process() {
   # shellcheck disable=SC2009
-  SPLUNK_PROCESS_ID="$(ps ax | grep -E '(^|[[:space:]/])splunkd([[:space:]]|$).*([[:space:]])start([[:space:]]|$)' | grep -v grep | head -1 | awk '{print $1}')"
+  SPLUNK_PROCESS_ID="$(ps ax | grep -E '(^|[[:space:]/])splunkd([[:space:]]|$).*([[:space:]])(start|restart)([[:space:]]|$)' | grep -v grep | head -1 | awk '{print $1}')"
 
   #If NO_HEALTHCHECK is NOT defined, then we want the healthcheck
   state="$(< "$CONTAINER_ARTIFACT_DIR"/splunk-container.state)"

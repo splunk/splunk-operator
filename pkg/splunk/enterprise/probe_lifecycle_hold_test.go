@@ -134,7 +134,9 @@ func TestLivenessProbeLifecycleHold(t *testing.T) {
 	t.Run("level one without hold still requires splunkd", func(t *testing.T) {
 		fakeBin := writeFakeProcessTable(
 			t,
-			"32005 coder ssh vworkstation.splunkdev.net --disable-autostart\n",
+			"32005 coder ssh vworkstation.splunkdev.net --disable-autostart\n"+
+				"32006 ? S 0:00 splunkd -p 8089 restartable\n"+
+				"32007 ? S 0:00 mysplunkd -p 8089 restart\n",
 		)
 		output, err := runLivenessProbe(
 			t,
@@ -151,6 +153,21 @@ func TestLivenessProbeLifecycleHold(t *testing.T) {
 		fakeBin := writeFakeProcessTable(
 			t,
 			"4242 ? S 0:00 /opt/splunk/bin/splunkd -p 8089 start\n",
+		)
+		output, err := runLivenessProbe(
+			t,
+			scriptPath,
+			"started\n",
+			"export K8_OPERATOR_LIVENESS_LEVEL=1\n",
+			"PATH="+fakeBin+":/usr/bin:/bin",
+		)
+		require.NoError(t, err, string(output))
+	})
+
+	t.Run("level one accepts the real splunkd restart command", func(t *testing.T) {
+		fakeBin := writeFakeProcessTable(
+			t,
+			"6980 ? Sl 2:55 splunkd -p 8089 restart\n",
 		)
 		output, err := runLivenessProbe(
 			t,
