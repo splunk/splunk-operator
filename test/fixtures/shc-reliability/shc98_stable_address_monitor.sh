@@ -500,6 +500,8 @@ while ((SECONDS < deadline)); do
     <<<"${current_indexercluster}")"
   current_ordinal="$(jq -r '.podUpdate.targetOrdinal // -1' \
     <<<"${current_indexercluster}")"
+  operation_revision="$(jq -r '.podUpdate.desiredRevision // ""' \
+    <<<"${current_indexercluster}")"
   update_revision="$(jq -r '.updateRevision' <<<"${current_statefulset}")"
   ready_count="$(jq '[.[] | select(.ready)] | length' \
     <<<"${current_indexer_pods}")"
@@ -516,8 +518,15 @@ while ((SECONDS < deadline)); do
     roll_started=true
   fi
 
-  if ((current_ordinal >= 0 && previous_ordinal >= 0 &&
-    current_ordinal != previous_ordinal)) &&
+  active_roll_ordinal=-1
+  if [[ "${roll_started}" == true &&
+    "${operation_revision}" == "${update_revision}" ]] &&
+    ((current_ordinal >= 0)); then
+    active_roll_ordinal="${current_ordinal}"
+  fi
+
+  if ((active_roll_ordinal >= 0 && previous_ordinal >= 0 &&
+    active_roll_ordinal != previous_ordinal)) &&
     ! rolled_peer_converged_on_all_search_heads "${previous_ordinal}"; then
     if [[ -z "${ordinal_convergence_violation}" ]]; then
       ordinal_convergence_violation="next-target-before-search-head-peer-${previous_ordinal}-converged"
@@ -525,14 +534,14 @@ while ((SECONDS < deadline)); do
     fi
   fi
 
-  if ((current_ordinal >= 0)) &&
-    ! jq -e --argjson ordinal "${current_ordinal}" \
+  if ((active_roll_ordinal >= 0)) &&
+    ! jq -e --argjson ordinal "${active_roll_ordinal}" \
       'index($ordinal) != null' <<<"${seen_ordinals}" >/dev/null; then
     seen_ordinals="$(jq -cn --argjson seen "${seen_ordinals}" \
-      --argjson ordinal "${current_ordinal}" '$seen + [$ordinal]')"
+      --argjson ordinal "${active_roll_ordinal}" '$seen + [$ordinal]')"
   fi
-  if ((current_ordinal >= 0)); then
-    previous_ordinal="${current_ordinal}"
+  if ((active_roll_ordinal >= 0)); then
+    previous_ordinal="${active_roll_ordinal}"
   fi
 
   record_sample "roll-${current_stage:-none}"

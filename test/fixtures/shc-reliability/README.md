@@ -509,6 +509,12 @@ SHC-98 Job is pinned to the previously accepted runtime OCI index, uses the
 Pod hostname as a unique workload run ID, and does not mount a Kubernetes
 service-account token.
 
+A retained `status.podUpdate` can describe the prior completed revision before
+a new StatefulSet revision is selected. The monitor counts an ordinal only
+after a roll is observed and `podUpdate.desiredRevision` exactly matches the
+current StatefulSet `updateRevision`; the stale completed ordinal is evidence,
+but is not part of the new target order.
+
 The default expected-address mode is `fqdn`. For a controlled rollback that
 uses `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=absent`, set
 `SHC98_EXPECTED_ADDRESS_MODE=pod-ip`. In that mode the monitor derives the
