@@ -319,9 +319,17 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   and one later steady-state sample were two events behind. The final snapshot
   retained four unique `Up` peers on every Search Head, four `Up` searchable
   Cluster Manager peers, all RF/SF factors, and zero container restarts.
-- [ ] Integrate the separately qualified SHC-99 exact process matcher, build
-  and exercise the exact integrated Operator image, restore the accepted
-  Operator image, and record final health before closing the bounded result.
+- [x] (2026-08-03 18:36Z) Integrated SHC-99, rejected its initial start-only
+  image after live Pods exposed the supported `restart` daemon form, accepted
+  exact `start|restart` source `05b7b3ea7`, and closed concurrent probe
+  ConfigMap conflicts at `0b56ec79b`. Exact source passed 43 Linux suites,
+  192/192 specs, 78.3 percent coverage, and `make build`. Immutable index
+  `sha256:0f2480b1e8e39d6e5a00e014df280c5aa3167abe5e498dd1deaac7399254f0f6`
+  passed the bounded live matrix and two-namespace concurrent script update
+  with zero candidate Warning Events, controller errors, or workload
+  restarts. Restored accepted Operator index `sha256:a9f2125097fa823d5182e8729683e5099116a889fdae8e892f0bd3110a8cdf3d`;
+  both final snapshots retained four searchable indexers and four Up peers on
+  every Search Head.
 
 ## Surprises & Discoveries
 
@@ -655,10 +663,11 @@ without ever creating a stale or duplicate Search Head peer identity. This
 supports an explicit, bounded new-cluster opt-in and rejects an automatic or
 in-place retained-cluster migration. The 3,600-event workload converged exactly
 without request failure, but all 21 successful-search count regressions and
-maximum pending 282 occurred during planned replacement. Accepted-Operator
-restoration and the final SHC-99 integration record remain in progress; no
-general production default, complete-result guarantee, or retained-cluster
-migration recommendation is claimed.
+maximum pending 282 occurred during planned replacement. Final SHC-99
+integration, exact immutable-image qualification, and accepted-Operator
+restoration passed without disturbing either cluster. No general production
+default, complete-result guarantee, or retained-cluster migration
+recommendation is claimed.
 
 ## Context and Orientation
 
@@ -929,6 +938,18 @@ reproducible.
   `3f12a7f19dcf328d2c4d5757370a96647b639d5b0efd2e50947b57be5801e2c0`.
 - Post-workload final peer/lifecycle snapshot SHA-256:
   `def3ac8cd474373d3df838a3b2e30b290a305d46f4d88b9af889afab3246adfd`.
+- Final integration source:
+  `0b56ec79b99cc4d58aa36eb1e8bb7f9ebf7e6932`.
+- Final integration Operator OCI index:
+  `sha256:0f2480b1e8e39d6e5a00e014df280c5aa3167abe5e498dd1deaac7399254f0f6`.
+- Final integration probe SHA-256:
+  `8faf8fac6bb133db53f4c6b9190495885f97bd494d9afd499d5e1b0a5fc98d66`.
+- Final candidate fresh/retained snapshot SHA-256:
+  `2c5736f4aa527e431e364726155b84a8a42bf9e3e51173f9479b9ba87ac06f6`
+  and `e05c08b2b6e68584cc0a77f075f844dccb3b1e2d43b4f0231613ff8b87bf22ab`.
+- Final accepted-restoration fresh/retained snapshot SHA-256:
+  `2cbf54d6b7d5e7f192775aa641aa5bd48a58c8148acaa598f9b6778f9ab5fa5b`
+  and `35ab757d3b5ef457c15bddedd012f02977240009e7be55d7239961989c309bd7`.
 - Rollback peer/lifecycle evidence SHA-256:
   `dd2b22308d95ee953fdbe2efb906f95986d6b48d638032792d76022651b5b2ed`.
 - Rollback Kubernetes Event evidence SHA-256:
@@ -1000,3 +1021,10 @@ The revision now distinguishes the rejected retained-address migration from
 the successful fresh-cluster stable-identity path, records the complete
 workload's transient-result boundary, and leaves final integration plus
 accepted-Operator restoration explicit rather than assumed.
+
+Revision note (2026-08-03 18:36Z): Closed the final-integration step with the
+live start/restart probe correction, conflict-safe shared probe ConfigMap
+reconciliation, complete Linux gate, immutable EKS matrix, final peer
+snapshots, and clean accepted-Operator restoration. The bounded stable-address
+result is complete; partial distributed-search semantics remain explicitly
+outside its claim.

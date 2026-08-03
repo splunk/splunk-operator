@@ -681,14 +681,35 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Splunk Enterprise, not the Operator, chooses the next peer inside that
   workflow. A supported Splunk Enterprise remote-serving readiness contract
   is still required before OPS-011 or SHC-85 can be closed end to end.
-- [ ] (2026-08-03 UTC) Complete SHC-99 Linux and immutable EKS qualification.
-  Local source `184061106` corrects the level-one probe's broad
-  `splunkd.*start` match, which accepted an unrelated Coder command containing
-  `splunkd` and `autostart`. Token-aware matching and deterministic synthetic
-  process tables pass ShellCheck, 20 focused repeats, the enterprise package,
-  `make build`, and complete `make test`. Keep this independent of SHC-98;
-  repeat gates on Linux and verify real positive/fail-closed behavior before
-  integration. See `SHC99ExactSplunkdProcessMatchExecPlan.md`.
+- [x] (2026-08-03 UTC) Completed SHC-99 Linux and immutable EKS qualification
+  at cumulative source `0b56ec79b`. The original broad match accepted an
+  unrelated Coder `autostart` command; the first start-only exact candidate
+  then failed safely when EKS showed that healthy Splunk daemons retain both
+  exact `start` and exact `restart` arguments. Commit `05b7b3ea7` accepts both
+  tokens while rejecting `autostart`, `restartable`, and `mysplunkd`.
+  Qualification also registered and closed SHC-101 at `0b56ec79b`: shared
+  namespace probe ConfigMap conflicts are re-read and retried instead of
+  producing false StatefulSet Warnings. The exact Linux gate passed 43 suites,
+  192/192 specs, 78.3 percent coverage, and `make build`. Immutable index
+  `sha256:0f2480b1e8e39d6e5a00e014df280c5aa3167abe5e498dd1deaac7399254f0f6`
+  passed real start/restart, false-positive rejection, lifecycle hold, and the
+  two-namespace concurrent hash transition with zero candidate Warning Events,
+  zero controller errors, unchanged Pod UIDs, and zero workload restarts.
+  Accepted Operator restoration left both clusters fully healthy. See
+  `SHC99ExactSplunkdProcessMatchExecPlan.md` and
+  `SHC101ProbeConfigMapConflictExecPlan.md`.
+- [x] (2026-08-03 UTC) Completed SHC-102 and SHC-103 at exact cumulative
+  source `070ca5f59`. The Operator now updates probe defaults only when its
+  complete-data marker still matches, preserves unmarked and edited customer
+  data through conflict retries, treats a successful API create as
+  authoritative across informer lag, and safely reads an AlreadyExists
+  winner. Deterministic post-create NotFound injection, 43 Linux suites,
+  192/192 specs, 78.3 percent coverage, `make build`, immutable Operator index
+  `sha256:2ae4db4155427ade5361f8a4d71f71d7ea0b4bdbf447a40e2dc1434815074308`,
+  and a real EKS new-namespace creation passed. Cleanup removed the namespace
+  and both PVs; all retained Pods and ConfigMaps remained exact and accepted
+  restoration snapshots passed. See `SHC102ProbeConfigMapOwnershipExecPlan.md`
+  and `SHC103ProbeConfigMapCreateCacheExecPlan.md`.
 - [x] (2026-07-25) Audited the local integration freeze inputs. Operator,
   Docker-Splunk, and Splunk Ansible worktrees were clean and descended from
   their recorded baselines. The publication gap found by this audit was
@@ -2828,3 +2849,13 @@ Standalone, ClusterManager, MonitoringConsole, IndexerCluster, and
 IngestorCluster. SHC-91 was subsequently implemented and qualified through the
 controller and real Apply boundaries at source `a76c30e0c`; detailed evidence
 is in `SHC91DeletionBeforePauseQualification.md`.
+
+Revision note (2026-08-03 18:36Z): Closed the SHC-99 implementation milestone
+with exact start/restart runtime evidence, registered and completed SHC-101 for
+concurrent shared probe ConfigMap updates, recorded the full Linux gate and
+immutable EKS results, and verified clean accepted-Operator restoration.
+
+Revision note (2026-08-03 20:35Z): Closed SHC-102/103 with fail-closed probe
+ConfigMap ownership, cache-independent create semantics, deterministic and
+native-Linux regression gates, immutable live EKS creation, complete
+disposable cleanup, and exact accepted restoration.

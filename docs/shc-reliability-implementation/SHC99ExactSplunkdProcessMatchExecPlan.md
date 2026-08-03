@@ -17,10 +17,10 @@ search accepted any process text containing `splunkd`, followed anywhere by
 hostname contained `splunkd` and a later option contained `autostart`.
 
 SHC-99 makes the match token-aware: `splunkd` must be a command/path basename
-followed by whitespace or end of input, and `start` must be a separate
-argument. A deterministic test supplies synthetic process tables for the
-known false positive and the real `/opt/splunk/bin/splunkd ... start` command.
-No readiness, lifecycle-hold, shutdown, or restart timing behavior changes.
+followed by whitespace or end of input, and either `start` or `restart` must
+be a separate argument. A deterministic test supplies synthetic process
+tables for the known false positive and both real daemon forms. No readiness,
+lifecycle-hold, shutdown, or restart timing behavior changes.
 
 ## Progress
 
@@ -41,9 +41,36 @@ No readiness, lifecycle-hold, shutdown, or restart timing behavior changes.
   `make shc98-monitor-check`, all 43 native-Linux Make suites and 192
   enterprise/controller specs, composite coverage 78.3 percent, and
   `make build` on Linux AMD64.
-- [ ] Exercise level-one liveness in the immutable EKS runtime during a normal
-  lifecycle stage and prove the Pod becomes unhealthy if splunkd is absent
-  without an explicit lifecycle hold.
+- [x] (2026-08-03 18:08Z) Deployed initial integrated image index
+  `sha256:e9ef83a9a50d90461d13e5634e744c0cded7806cac0bb8194e45aee84c4395b2`
+  and stopped qualification when a live initialized Search Head running
+  `splunkd -p 8089 restart` correctly exposed that the start-only exact match
+  returned `Splunkd not running`. Direct invocation left the Pod UID,
+  readiness, and restart count unchanged.
+- [x] (2026-08-03 18:15Z) Audited all 20 managed Splunk Pods and the pinned
+  Splunk Ansible source. Sixteen live Pods used the exact `restart` form, four
+  used exact `start`, and Ansible contains both supported commands. Commit
+  `05b7b3ea7` accepts both tokens while rejecting `autostart`, `restartable`,
+  and `mysplunkd`; focused repeats, the enterprise package, complete Linux
+  Make gates, and `make build` passed.
+- [x] (2026-08-03 18:21Z) Reproduced a separate namespace probe-ConfigMap
+  race during image restoration: concurrent controllers lost resource-version
+  updates and emitted misleading `GetIndexerStatefulSetFailed` Warnings.
+  Commit `0b56ec79b` re-reads and retries conflicts; 20 deterministic conflict
+  repetitions and the complete Linux gate passed.
+- [x] (2026-08-03 18:34Z) Qualified final immutable Operator index
+  `sha256:0f2480b1e8e39d6e5a00e014df280c5aa3167abe5e498dd1deaac7399254f0f6`
+  on EKS. Real `start` and `restart`, synthetic exact forms, false-positive
+  rejection, and lifecycle hold all returned the expected results. The
+  selected Pod UIDs, readiness, and restart counts were unchanged; both
+  environments stayed 10/10 Ready with zero restarts; concurrent ConfigMap
+  propagation produced zero Warning Events and zero controller ERROR/FATAL
+  logs.
+- [x] (2026-08-03 18:36Z) Restored accepted Operator index
+  `sha256:a9f2125097fa823d5182e8729683e5099116a889fdae8e892f0bd3110a8cdf3d`.
+  The restoration emitted no Warning or controller error, and both final
+  cluster snapshots remained Ready with four searchable indexers and four Up
+  distributed peers on every Search Head.
 
 ## Surprises & Discoveries
 
@@ -62,6 +89,21 @@ No readiness, lifecycle-hold, shutdown, or restart timing behavior changes.
   Consequence: the accepted SHC-85 behavior that keeps an initialized,
   responsive container live after an Operator-owned Splunk stop remains
   unchanged.
+- Observation: a healthy long-running Splunk daemon may retain either the
+  `start` or `restart` command that launched it.
+  Evidence: 16 of 20 live Pods used `splunkd -p 8089 restart`, while four used
+  `splunkd -p 8089 start`; the pinned Ansible source has distinct start and
+  restart tasks.
+  Consequence: exact matching must accept both tokens without falling back to
+  substring matching.
+- Observation: all Splunk CR controllers reconcile one namespace-scoped probe
+  ConfigMap after an Operator image change.
+  Evidence: the accepted-image restoration produced simultaneous Kubernetes
+  resource-version conflicts, six controller errors, and one misleading
+  `GetIndexerStatefulSetFailed` Warning per namespace even though both
+  StatefulSets were healthy.
+  Consequence: probe data reconciliation retries optimistic-lock conflicts
+  from the latest object and logs only a terminal retry failure.
 
 ## Decision Log
 
@@ -71,9 +113,16 @@ No readiness, lifecycle-hold, shutdown, or restart timing behavior changes.
   command availability assumptions already exercised by Docker-Splunk.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: require `splunkd` to be a whitespace- or slash-delimited basename
-  and `start` to be a separate token.
-  Rationale: this accepts the real absolute-path and basename command forms
-  while rejecting `splunkdev`, `autostart`, and similar substrings.
+  and `start` or `restart` to be a separate token.
+  Rationale: these are the two real runtime forms observed in the qualified
+  topology. Token boundaries still reject `splunkdev`, `mysplunkd`,
+  `autostart`, `restartable`, and similar substrings.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: retry shared probe ConfigMap update conflicts from a fresh
+  Kubernetes read.
+  Rationale: every writer has the same Operator-owned desired scripts, so an
+  identical concurrent winner is success; persistent or non-conflict errors
+  still return normally.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: keep SHC-99 separate from SHC-98.
   Rationale: stable distributed-peer addressing did not cause the probe bug;
@@ -82,12 +131,14 @@ No readiness, lifecycle-hold, shutdown, or restart timing behavior changes.
 
 ## Outcomes & Retrospective
 
-The source correction is complete and passes both the macOS and native-Linux
-source gates. The known false-positive command is rejected, the real Splunk
-daemon command is accepted, and the test no longer inspects unrelated host
-processes. The correction is integrated into cumulative source `aa3792287`.
-Immutable-image EKS evidence remains open, so SHC-99 is integrated and
-source-qualified but not yet EKS-qualified.
+SHC-99 is complete at cumulative source `0b56ec79b`. The known false-positive
+commands are rejected; real and synthetic exact `start` and `restart` forms
+are accepted; lifecycle hold remains live without inspecting the process
+table; and the test no longer depends on unrelated host processes. The exact
+source passed macOS and native-Linux gates, its immutable image passed EKS,
+and final accepted-image restoration preserved both healthy clusters. The
+qualification also found and closed the shared probe ConfigMap conflict in
+SHC-101 rather than hiding its false Warning Events.
 
 ## Context and Orientation
 
@@ -96,7 +147,9 @@ When `NO_HEALTHCHECK` is empty and
 `SPLUNK_OPERATOR_LIFECYCLE_HOLD` is not true, liveness level one calls
 `liveness_probe_check_splunkd_process`. That function reads
 `splunk-container.state` and requires both an initialized state and a matching
-Splunk daemon process.
+Splunk daemon process. Qualified containers retain either a `start` or
+`restart` daemon argument depending on whether startup automation most
+recently started or restarted Splunk.
 
 `pkg/splunk/enterprise/probe_lifecycle_hold_test.go` executes the real Bash
 script. SHC-99 places a test-owned `ps` executable first in `PATH`, while
@@ -123,7 +176,10 @@ Source acceptance requires:
 
 - the synthetic Coder command containing `splunkd` and `autostart` returns
   `Splunkd not running` and a nonzero probe exit;
-- `/opt/splunk/bin/splunkd -p 8089 start` returns success;
+- `/opt/splunk/bin/splunkd -p 8089 start` and
+  `splunkd -p 8089 restart` return success;
+- `autostart`, `restartable`, `mysplunkd`, and the observed Coder command
+  return `Splunkd not running` and a nonzero exit;
 - lifecycle-hold initialized, failed-initialization, and missing-state tests
   retain their prior results;
 - ShellCheck, focused repeat tests, enterprise package tests, `make build`,
@@ -138,21 +194,37 @@ no change to readiness or termination orchestration.
 ## Idempotence and Recovery
 
 The probe is read-only and every invocation recomputes process state. The
-change creates no durable state. Reverting exact commit `184061106` restores
-the old matcher, although that rollback also restores the known false-positive
-risk. If a Linux/container process format is not accepted, revise the bounded
-token expression and add that exact process table as a regression fixture
-before integration.
+change creates no durable state. The EKS fixture only replaced `ps` through a
+temporary `PATH` for direct script invocation and removed its `/tmp` files on
+exit. If another real daemon form is found, add that exact process table as a
+regression fixture before broadening the token expression. The accepted
+Operator digest is the tested environment rollback; reverting `05b7b3ea7`
+would restore the rejected start-only behavior.
 
 ## Artifacts and Notes
 
 - Branch: `codex/shc-99-exact-splunkd-process-match`.
 - Exact source: `184061106`.
 - Final-integration functional commit: `9bb94c929`.
-- Final-integration cumulative source: `aa3792287`.
+- Start/restart correction: `05b7b3ea7`.
+- Concurrent probe ConfigMap correction: `0b56ec79b`.
+- Final-integration cumulative source:
+  `0b56ec79b99cc4d58aa36eb1e8bb7f9ebf7e6932`.
 - Focused repeats: 20 passes.
-- Full controller JUnit: 194 nodes, zero failures.
+- Native-Linux Make gate: 43 suites, 192/192 specs, zero failures.
 - Composite coverage: 78.3 percent.
+- Linux manager SHA-256:
+  `0064e7fd7372a59669be01ed7a906ec6e37cbe904e870571ddc9d255b3922758`.
+- Final probe SHA-256:
+  `8faf8fac6bb133db53f4c6b9190495885f97bd494d9afd499d5e1b0a5fc98d66`.
+- Final Operator OCI index:
+  `sha256:0f2480b1e8e39d6e5a00e014df280c5aa3167abe5e498dd1deaac7399254f0f6`.
+- Candidate fresh/retained snapshot SHA-256:
+  `2c5736f4aa527e431e364726155b84a8a42bf9e3e51173f9479b9ba87ac06f6`
+  and `e05c08b2b6e68584cc0a77f075f844dccb3b1e2d43b4f0231613ff8b87bf22ab`.
+- Accepted-restoration fresh/retained snapshot SHA-256:
+  `2cbf54d6b7d5e7f192775aa641aa5bd48a58c8148acaa598f9b6778f9ab5fa5b`
+  and `35ab757d3b5ef457c15bddedd012f02977240009e7be55d7239961989c309bd7`.
 - No Splunkd, Docker-Splunk, Ansible, CRD, or persistent-data change.
 
 ## Interfaces and Dependencies
@@ -160,9 +232,17 @@ before integration.
 The accepted process forms are equivalent to:
 
     splunkd ... start
+    splunkd ... restart
     /some/path/splunkd ... start
+    /some/path/splunkd ... restart
 
-Both `splunkd` and `start` are tokens; `splunkdev`, `mysplunkd`, `autostart`,
-and `starter` do not qualify. The script continues to depend on `ps`, extended
-`grep`, `head`, and `awk`, which were already runtime dependencies before
-SHC-99.
+Both the executable basename and action are tokens; `splunkdev`, `mysplunkd`,
+`autostart`, `restartable`, and `starter` do not qualify. The script continues
+to depend on `ps`, extended `grep`, `head`, and `awk`, which were already
+runtime dependencies before SHC-99.
+
+Revision note (2026-08-03 18:36Z): Replaced the source-only start assumption
+with the two process forms observed across 20 live Pods, recorded the rejected
+initial EKS image, added the start/restart correction and bounded runtime
+matrix, registered the shared ConfigMap conflict as SHC-101, and closed the
+plan with exact Linux, OCI, EKS, and accepted-restoration evidence.

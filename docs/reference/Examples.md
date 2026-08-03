@@ -937,19 +937,21 @@ Use the kubectl command to delete the global kubernetes secret object:
 
 ## Creating Custom Probe Scripts
 
-The default liveness, readiness, and startup probe scripts are housed in the tools/k8_probes/ directory. During the creation of a CR, the Splunk Operator will create a configmap named `splunk-<CR namespace>-probe-configmap` in the namespace of the CR with these scripts to mount to the pod for the liveness probe, readiness probe, and startup probe. If you would like to use a custom probe script, there are two options to edit these scripts.
+The default liveness, readiness, and startup probe scripts are housed in the tools/k8_probes/ directory. During the creation of a CR, the Splunk Operator will create a ConfigMap named `splunk-<CR namespace>-probe-configmap` in the namespace of the CR with these scripts to mount to the pod for the liveness probe, readiness probe, and startup probe. If you would like to use a custom probe script, there are two options to edit these scripts.
 
 NOTE: Liveness, readiness, and startup probe scripts must be used by all CRs in the same namespace. Different namespaces can have different probe scripts.
 
-### Edit the configmap after it is automatically created
+### Edit the ConfigMap after it is automatically created
 
-When a CR is created for the first time in a specific namespace, and the probe configmap for that namespace is not yet created, the Splunk Operator will automatically create the `splunk-<CR namespace>-probe-configmap` configmap with the default scripts from the tools/k8_probes/ directory. Once it is created, you can edit the data in the configmap manually. The operator will not overwrite the data in the configmap if it is changed.
+When a CR is created for the first time in a specific namespace, and the probe ConfigMap for that namespace is not yet created, the Splunk Operator will automatically create the `splunk-<CR namespace>-probe-configmap` ConfigMap with the default scripts from the tools/k8_probes/ directory. The Operator can update an unchanged set of generated defaults when a later Operator image includes revised scripts. Once you edit any data in the ConfigMap, the Operator preserves the complete ConfigMap data and does not overwrite your customization. All Splunk CRs in that namespace continue to share the customized scripts.
 
-### Create the configmap before deploying CRs
+Probe ConfigMaps created by an earlier Operator version might not contain the internal content marker that distinguishes unchanged generated defaults from customer-managed data. The Operator preserves every ConfigMap without that marker because it cannot safely determine who created or changed it. If you deliberately want to replace an unmodified legacy ConfigMap with the current generated defaults, first back it up, delete it, and allow the Operator to recreate it during reconciliation. Do not delete a ConfigMap that contains required custom scripts.
 
-Before deploying any Custom Resources to a specific namespace, you can manually create the configmap with your unique scripts as the data. All three scripts must be included in the configmap whether you are using a custom script for one or all of the probes. The scripts must be named exactly `livenessProbe.sh`, `readinessProbe.sh`, and `startupProbe.sh`. If you only require a custom script for one or two probes, please make sure to add the default script for the other probes to your configmap. **The operator will never overwrite the data in the existing `splunk-<CR namespace>-probe-configmap` configmap.** Only a user can manually update the scripts if needed.
+### Create the ConfigMap before deploying CRs
 
-To create the configmap, run the following command:
+Before deploying any Custom Resources to a specific namespace, you can manually create the ConfigMap with your unique scripts as the data. All three scripts must be included in the ConfigMap whether you are using a custom script for one or all of the probes. The scripts must be named exactly `livenessProbe.sh`, `readinessProbe.sh`, and `startupProbe.sh`. If you only require a custom script for one or two probes, please make sure to add the default script for the other probes to your ConfigMap. **The Operator will never overwrite the data in a pre-created `splunk-<CR namespace>-probe-configmap` ConfigMap.** Only a user can manually update the scripts if needed.
+
+To create the ConfigMap, run the following command:
 ```
 kubectl create configmap splunk-<CR namespace>-probe-configmap --from-file=livenessProbe.sh,readinessProbe.sh,startupProbe.sh -n <CR namespace>
 ```

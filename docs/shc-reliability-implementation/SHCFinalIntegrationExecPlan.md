@@ -107,6 +107,35 @@ it is not converted into a qualified claim by documentation alone.
   source passed 43 suites, all 192 enterprise specifications, 78.3 percent
   composite coverage, 60 Operator and 90 Universal Forwarder Helm tests,
   `make build`, package tests, and generated-tree checks on macOS.
+- [x] (2026-08-03 UTC) Integrated and EKS-qualified bounded SHC-100. The safe
+  source removed implicit retained-cluster address migration, preserved an
+  explicit customer value, restored the retained topology, and qualified a
+  fresh-cluster FQDN identity roll `3 -> 2 -> 1 -> 0`. All 157 peer samples
+  retained exactly four addresses and GUIDs; final results converged exactly,
+  while successful-search partial-result behavior during replacement remains
+  an explicit Splunk Enterprise boundary.
+- [x] (2026-08-03 UTC) Integrated and EKS-qualified SHC-99 plus SHC-101 at
+  exact cumulative source `0b56ec79b`. Live Pods required exact `start` and
+  `restart` process forms; shared probe ConfigMap updates required
+  optimistic-lock retry. The exact Linux gate passed 43 suites, 192/192 specs,
+  78.3 percent coverage, and `make build`. Immutable index
+  `sha256:0f2480b1e8e39d6e5a00e014df280c5aa3167abe5e498dd1deaac7399254f0f6`
+  passed both live process forms, false-positive rejection, lifecycle hold,
+  concurrent two-namespace script propagation, and final snapshots with zero
+  candidate Warning Events, controller errors, or workload restarts. The
+  accepted Operator was restored cleanly.
+- [x] (2026-08-03 UTC) Integrated and EKS-qualified SHC-102 plus SHC-103 at
+  exact cumulative source `070ca5f59`. Content-integrity ownership preserves
+  every unmarked or customer-edited probe ConfigMap while allowing unchanged
+  generated defaults to advance. Successful creation no longer depends on
+  immediate informer visibility, and deterministic post-create NotFound
+  injection prevents regression. The exact Linux gate passed 43 suites,
+  192/192 specs, 78.3 percent coverage, and `make build`. Immutable index
+  `sha256:2ae4db4155427ade5361f8a4d71f71d7ea0b4bdbf447a40e2dc1434815074308`
+  created a real three-script ConfigMap with equal full Data hash and marker,
+  zero candidate manager errors, complete disposable namespace/PV cleanup,
+  unchanged retained objects, healthy final snapshots, and clean accepted-
+  Operator restoration.
 - [ ] Build and qualify the updated `9500d8d34` Operator on Linux, replace the
   controller image by immutable digest, and prove that the already-pending SHC
   revision resumes without CR or StatefulSet mutation.
@@ -200,6 +229,36 @@ it is not converted into a qualified claim by documentation alone.
   per-app or bundle state; an empty poll, completed app, or app error does not
   own the disruption boundary.
 
+- Observation: exact process identity still needs to account for supported
+  runtime invocation history.
+  Evidence: the first exact SHC-99 image accepted `start` but failed direct
+  level-one liveness on a healthy Pod whose daemon retained `restart`; both
+  forms existed across the same 20-Pod campaign.
+  Consequence: the final matcher accepts two exact action tokens and retains
+  strict executable/action boundaries.
+
+- Observation: an Operator image change makes multiple tier controllers
+  reconcile one namespace probe ConfigMap concurrently.
+  Evidence: accepted-image restoration produced resource-version conflicts,
+  six controller errors, and false Indexer StatefulSet Warnings although both
+  StatefulSets were 4/4 Ready.
+  Consequence: SHC-101 retries conflicts from current state and treats an
+  identical concurrent winner as success.
+
+- Observation: the shared ConfigMap name cannot distinguish generated
+  defaults from supported customer scripts.
+  Evidence: pre-created overrides and Operator-generated defaults use the same
+  namespace-scoped name, and older objects have no durable origin marker.
+  Consequence: SHC-102 treats every unmarked or content-mismatched object as
+  customer-managed and updates only an unchanged marked default.
+
+- Observation: a successful API-server create can precede informer-cache
+  visibility.
+  Evidence: SHC-102's first create path required an immediate cached read even
+  though Kubernetes had already accepted the write.
+  Consequence: SHC-103 makes create success authoritative and bounds only the
+  AlreadyExists-winner visibility window.
+
 ## Decision Log
 
 - Decision: use `feature/shc-kubernetes-reliability` as the single final
@@ -246,6 +305,22 @@ it is not converted into a qualified claim by documentation alone.
   template and require an immutable runtime digest before rendering.
   Rationale: formation and App Framework results must be attributable to one
   exact image; ad hoc live image patches are not reproducible evidence.
+
+- Decision: reject a source-qualified probe assumption when an immutable live
+  runtime shows another supported process form.
+  Rationale: liveness controls destructive kubelet restarts. Runtime evidence
+  across the qualified image has priority over an incomplete synthetic
+  process table, and the correction must remain exact rather than broad.
+
+- Decision: make shared probe script upgrades conflict-safe before final
+  integration.
+  Rationale: expected Kubernetes optimistic-lock races must not emit false
+  workload failure Events that obscure real lifecycle problems.
+
+- Decision: fail closed on probe ConfigMap ownership and cache visibility.
+  Rationale: preserving an ambiguous legacy/custom object is recoverable;
+  overwriting supported customer scripts is not. A successful API write is
+  authoritative, while a concurrent winner is re-read and preserved.
 
 ## Implementation and qualification sequence
 
@@ -302,15 +377,29 @@ The final record must include:
 
 ## Outcomes & Retrospective
 
-The final outcome is not yet claimed. Current evidence establishes that the
-cumulative SHC-93 source can be combined with the current upstream branch and
-that the complete macOS and Linux source gates pass after resolving the two
-merge-boundary test/contract conflicts. Final Docker-Splunk freezing,
-immutable image builds, SHC-82/SHC-85 closure, and the clean EKS campaign
-remain required before this plan can be marked complete.
+The full program outcome remains open only for the unchecked compatibility and
+negative gates above; those gaps are not converted into claims. The cumulative
+integration now additionally closes bounded SHC-99 through SHC-103, with the
+latest exact source `070ca5f59`: complete Linux gates, immutable Operator
+deployment, real start/restart liveness, fail-closed false-positive behavior,
+lifecycle hold, conflict-safe and ownership-safe probe propagation,
+cache-independent creation, healthy final peer snapshots, and accepted-
+Operator restoration all passed. The observed successful-search partial-
+result behavior during indexer replacement remains an explicit SHC-85/OPS-011
+and Splunk Enterprise boundary.
 
 Revision note (2026-08-02 UTC): created this integration ExecPlan after the
 branch/patch audit and during the first complete post-merge source gate; then
 updated it with merge commits and the passing macOS and Linux results. The plan
 records facts already established and leaves all incomplete qualification as
 unchecked work.
+
+Revision note (2026-08-03 18:36Z): Added bounded SHC-99 through SHC-101 final
+integration evidence, including the rejected start-only image, exact
+start/restart correction, conflict-safe probe ConfigMap upgrade, complete
+Linux and immutable EKS gates, healthy snapshots, and accepted restoration.
+
+Revision note (2026-08-03 20:35Z): Added SHC-102/103 ownership and cache-
+visibility corrections, deterministic regression evidence, exact cumulative
+Linux/image provenance, live EKS creation, complete disposable cleanup,
+unchanged retained objects, and accepted restoration.
