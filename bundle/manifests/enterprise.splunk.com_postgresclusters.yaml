@@ -78,6 +78,104 @@ spec:
                     pattern: ^(\S+\s+){4}\S+$
                     type: string
                 type: object
+              bootstrapFrom:
+                description: |-
+                  BootstrapFrom configures recovery-based bootstrapping from an existing backup.
+                  When set, the cluster is initialized from the specified backup source instead of a fresh initdb.
+                  This field is immutable after creation.
+                properties:
+                  objectStorage:
+                    description: |-
+                      ObjectStorage restores from an object storage backup (e.g. S3) managed by the
+                      PostgresClusterClass. Bucket path and credentials are resolved from the class.
+                      Mutually exclusive with volumeSnapshot.
+                    properties:
+                      serverName:
+                        description: |-
+                          ServerName is the identifier of the source cluster in the object store.
+                          Must match the server name used when the backup was written.
+                        minLength: 1
+                        type: string
+                    required:
+                    - serverName
+                    type: object
+                  recoveryTarget:
+                    description: |-
+                      RecoveryTarget defines an optional point-in-time recovery (PITR) target.
+                      When omitted, recovery replays all available WAL (recovery to latest).
+                      For a volumeSnapshot source, setting recoveryTarget requires volumeSnapshot.walArchive
+                      so WAL segments can be replayed past the snapshot point.
+                    properties:
+                      exclusive:
+                        description: |-
+                          Exclusive stops recovery just before the target rather than just after (default: false).
+                          Ignored for type immediate.
+                        type: boolean
+                      type:
+                        description: Type selects which kind of recovery target Value
+                          carries.
+                        enum:
+                        - time
+                        - lsn
+                        - xid
+                        - name
+                        - immediate
+                        type: string
+                      value:
+                        description: |-
+                          Value is the target's value, interpreted according to Type:
+                          an RFC 3339 timestamp (time), a WAL LSN (lsn), a transaction ID (xid), or a restore-point name
+                          (name). It must be empty when Type is immediate.
+                        type: string
+                    required:
+                    - type
+                    type: object
+                    x-kubernetes-validations:
+                    - message: value is required for target types time, lsn, xid,
+                        and name, and must be empty for type immediate
+                      rule: 'self.type == ''immediate'' ? !has(self.value) || size(self.value)
+                        == 0 : has(self.value) && size(self.value) > 0'
+                  volumeSnapshot:
+                    description: |-
+                      VolumeSnapshot restores from Kubernetes VolumeSnapshot resources.
+                      Mutually exclusive with objectStorage.
+                    properties:
+                      storage:
+                        description: Storage is the name of the VolumeSnapshot containing
+                          the PGDATA directory.
+                        minLength: 1
+                        type: string
+                      walArchive:
+                        description: |-
+                          WalArchive identifies the object store WAL archive to replay WAL segments after the
+                          snapshot. Bucket path and credentials are resolved from the class backup config.
+                          Required when RecoveryTarget is set (PITR); optional for a plain snapshot restore.
+                        properties:
+                          serverName:
+                            description: |-
+                              ServerName is the identifier of the source cluster in the object store.
+                              Must match the server name used when the backup was written.
+                            minLength: 1
+                            type: string
+                        required:
+                        - serverName
+                        type: object
+                      walStorage:
+                        description: |-
+                          WalStorage is the name of the VolumeSnapshot containing the pg_wal directory.
+                          Required only when the source cluster had a separate WAL volume.
+                        minLength: 1
+                        type: string
+                    required:
+                    - storage
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: bootstrapFrom is immutable
+                  rule: self == oldSelf
+                - message: exactly one of volumeSnapshot or objectStorage must be
+                    set
+                  rule: has(self.volumeSnapshot) != has(self.objectStorage)
               class:
                 description: This field is IMMUTABLE after creation.
                 minLength: 1
@@ -173,6 +271,24 @@ spec:
                 items:
                   type: string
                 type: array
+              postgresMajorUpgradeConfig:
+                description: PostgresMajorUpgradeConfig sets up the upgrade flow according
+                  to backup, version and strategy requirements.
+                properties:
+                  allow:
+                    description: |-
+                      Allow permits the operator to execute a PostgreSQL major-version
+                      upgrade when spec.postgresVersion crosses a major-version boundary.
+                    type: boolean
+                  strategy:
+                    default: pgUpgrade
+                    description: |-
+                      Strategy selects the major-upgrade implementation.
+                      For now only pgUpgrade is supported.
+                    enum:
+                    - pgUpgrade
+                    type: string
+                type: object
               postgresVersion:
                 description: |-
                   PostgresVersion is the PostgreSQL version (major or major.minor).
@@ -281,6 +397,25 @@ spec:
               backupStatus:
                 description: BackupStatus contains the observed state of backup configuration.
                 properties:
+                  objectStore:
+                    description: ObjectStore contains status for barman object storage
+                      backups.
+                    properties:
+                      enabled:
+                        description: Enabled indicates whether object store backups
+                          are active.
+                        type: boolean
+                      lastScheduleTime:
+                        description: LastScheduleTime is when the last backup was
+                          scheduled.
+                        format: date-time
+                        type: string
+                      nextScheduleTime:
+                        description: NextScheduleTime is the next scheduled backup
+                          time.
+                        format: date-time
+                        type: string
+                    type: object
                   volumeSnapshot:
                     description: VolumeSnapshot contains status for volume snapshot
                       backups.
@@ -378,6 +513,13 @@ spec:
                       is reconciled by the operator.
                     type: boolean
                 type: object
+              currentPgVersion:
+                description: |-
+                  CurrentPgVersion is the PostgreSQL major version currently running against
+                  the data directory, as reported by CNPG (PGDataImageInfo.MajorVersion).
+                  Written on every reconcile; used as the source-version baseline for the
+                  major-version upgrade use case when no prior upgrade status entries exist.
+                type: string
               currentPrimary:
                 description: CurrentPrimary is the name of the pod currently hosting
                   the primary.
@@ -388,6 +530,12 @@ spec:
                   provisioner.
                 format: int32
                 type: integer
+              lastTransitionTime:
+                description: |-
+                  LastTransitionTime is the start time of the active time-to-Ready cycle.
+                  It is cleared when the PostgresCluster successfully reaches Ready.
+                format: date-time
+                type: string
               managedRolesStatus:
                 description: ManagedRolesStatus tracks the reconciliation status of
                   managed roles.
@@ -487,6 +635,145 @@ spec:
                   Phase represents the current phase of the PostgresCluster.
                   Values: "Pending", "Provisioning", "Failed", "Ready", "Deleting"
                 type: string
+              postgresMajorUpgradeStatus:
+                description: |-
+                  PostgresMajorUpgradeStatus contains the information
+                  about upgrade completion and any needed rollback/backup information
+                  shall the upgrade be reverted manually.
+                  It's a list to support a case of multi version upgrade.
+                items:
+                  properties:
+                    backupNames:
+                      description: |-
+                        BackupNames holds the names of the CNPG Backup objects created as
+                        rollback baselines for this upgrade hop. Use these to locate the
+                        backup and any provider-specific references needed for manual recovery.
+                      properties:
+                        postUpgrade:
+                          description: PostUpgrade is the backup taken after the upgraded
+                            cluster is verified.
+                          type: string
+                        preUpgrade:
+                          description: PreUpgrade is the backup taken before the pg_upgrade
+                            run.
+                          type: string
+                      type: object
+                    backupStatus:
+                      description: BackupStatus contains the observed state of backup
+                        configuration.
+                      properties:
+                        objectStore:
+                          description: ObjectStore contains status for barman object
+                            storage backups.
+                          properties:
+                            enabled:
+                              description: Enabled indicates whether object store
+                                backups are active.
+                              type: boolean
+                            lastScheduleTime:
+                              description: LastScheduleTime is when the last backup
+                                was scheduled.
+                              format: date-time
+                              type: string
+                            nextScheduleTime:
+                              description: NextScheduleTime is the next scheduled
+                                backup time.
+                              format: date-time
+                              type: string
+                          type: object
+                        volumeSnapshot:
+                          description: VolumeSnapshot contains status for volume snapshot
+                            backups.
+                          properties:
+                            enabled:
+                              description: Enabled indicates whether volume snapshot
+                                backups are active.
+                              type: boolean
+                            lastScheduleTime:
+                              description: LastScheduleTime is when the last backup
+                                was scheduled.
+                              format: date-time
+                              type: string
+                            nextScheduleTime:
+                              description: NextScheduleTime is the next scheduled
+                                backup time.
+                              format: date-time
+                              type: string
+                          type: object
+                      type: object
+                    completedAt:
+                      format: date-time
+                      type: string
+                    conditions:
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      type: array
+                    phase:
+                      type: string
+                    sourcePgVersion:
+                      type: string
+                    startedAt:
+                      format: date-time
+                      type: string
+                    strategy:
+                      type: string
+                    targetPgVersion:
+                      type: string
+                  type: object
+                type: array
               provisionerRef:
                 description: |-
                   ProvisionerRef contains reference to the provisioner resource managing this PostgresCluster.
@@ -583,6 +870,60 @@ spec:
                     - key
                     type: object
                     x-kubernetes-map-type: atomic
+                type: object
+              restore:
+                description: Restore contains the observed state of a recovery-bootstrapped
+                  cluster.
+                properties:
+                  credentialSweep:
+                    description: CredentialSweep tracks the post-recovery credential
+                      sweep.
+                    properties:
+                      completed:
+                        description: Completed is true once the credential sweep has
+                          run successfully.
+                        type: boolean
+                    type: object
+                  source:
+                    description: Source identifies the backup the cluster was restored
+                      from.
+                    properties:
+                      objectStorage:
+                        description: ObjectStorage is the server name of the object
+                          storage backup the cluster was restored from.
+                        type: string
+                      requestedRecoveryTarget:
+                        description: |-
+                          RequestedRecoveryTarget echoes the point-in-time recovery target requested in spec.bootstrapFrom,
+                          if any. It is derived from the desired spec, not observed from the provider, so it records what
+                          the restore was asked to recover to (not a confirmation of where recovery actually stopped).
+                          Nil for recovery to the latest available WAL.
+                        properties:
+                          exclusive:
+                            description: |-
+                              Exclusive reports whether recovery was requested to stop just before the target (true) rather
+                              than just after (false/omitted).
+                            type: boolean
+                          type:
+                            description: Type is the kind of recovery target that
+                              was requested.
+                            enum:
+                            - time
+                            - lsn
+                            - xid
+                            - name
+                            - immediate
+                            type: string
+                          value:
+                            description: Value is the target's value (empty for type
+                              immediate).
+                            type: string
+                        type: object
+                      volumeSnapshot:
+                        description: VolumeSnapshot is the name of the VolumeSnapshot
+                          the cluster was restored from.
+                        type: string
+                    type: object
                 type: object
             type: object
         type: object

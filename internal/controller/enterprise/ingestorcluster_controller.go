@@ -122,7 +122,34 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
-
+	fresh := &enterpriseApi.IngestorCluster{}
+	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr != nil {
+		if k8serrors.IsNotFound(fetchErr) {
+			return result, nil
+		}
+		logger.WarnContext(ctx, "failed to refetch CR for stalled condition update", "error", fetchErr)
+		return result, fetchErr
+	}
+	oldConditions := append([]metav1.Condition(nil), fresh.Status.Conditions...)
+	if msg, ok := splcommon.TerminalMessage(err); ok {
+		reason, _ := splcommon.TerminalReason(err)
+		fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, msg, fresh.GetGeneration())
+	} else {
+		fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
+	}
+	ep, epErr := enterprise.NewK8EventPublisherWithRecorder(r.Recorder, fresh)
+	if epErr != nil {
+		logger.WarnContext(ctx, "failed to create event publisher", "error", epErr)
+		return result, epErr
+	}
+	enterprise.EmitStalledTransitionEvents(ctx, ep, fresh.GetName(), oldConditions, fresh.Status.Conditions)
+	if updateErr := r.Status().Update(ctx, fresh); updateErr != nil {
+		logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
+		return result, updateErr
+	}
+	if _, ok := splcommon.TerminalMessage(err); ok {
+		return reconcile.Result{}, err
+	}
 	return result, err
 }
 
@@ -192,16 +219,15 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						continue
 					}
 
-					for _, vol := range queue.Spec.SQS.VolList {
-						if vol.SecretRef == secret.Name {
-							reqs = append(reqs, reconcile.Request{
-								NamespacedName: types.NamespacedName{
-									Name:      ic.Name,
-									Namespace: ic.Namespace,
-								},
-							})
-							break
-						}
+					if queue.Spec.SQS.SecretKeyRef != nil &&
+						(queue.Spec.SQS.SecretKeyRef.AwsAccessKey.Name == secret.Name ||
+							queue.Spec.SQS.SecretKeyRef.AwsSecretKey.Name == secret.Name) {
+						reqs = append(reqs, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      ic.Name,
+								Namespace: ic.Namespace,
+							},
+						})
 					}
 				}
 				return reqs
@@ -219,6 +245,33 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IngestorCluster{},
 			)).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				cm, ok := obj.(*corev1.ConfigMap)
+				if !ok {
+					return nil
+				}
+				var list enterpriseApi.IngestorClusterList
+				if err := r.Client.List(ctx, &list, client.InNamespace(cm.Namespace)); err != nil {
+					return nil
+				}
+				var reqs []reconcile.Request
+				for _, cr := range list.Items {
+					for _, vol := range cr.Spec.Volumes {
+						if common.VolumeReferencesConfigMap(vol, cm.Name) {
+							reqs = append(reqs, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Name:      cr.Name,
+									Namespace: cr.Namespace,
+								},
+							})
+							break
+						}
+					}
+				}
+				return reqs
+			}),
+		).
 		Watches(&enterpriseApi.Queue{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				queue, ok := obj.(*enterpriseApi.Queue)

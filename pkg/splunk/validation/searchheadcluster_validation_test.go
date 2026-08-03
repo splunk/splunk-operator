@@ -79,7 +79,7 @@ func TestValidateSearchHeadClusterCreate(t *testing.T) {
 							{Name: "appvol", Endpoint: "s3://apps"},
 						},
 						AppSources: []enterpriseApi.AppSourceSpec{
-							{Name: "apps", Location: "/apps"},
+							{Name: "apps", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "appvol"}},
 						},
 					},
 				},
@@ -92,6 +92,8 @@ func TestValidateSearchHeadClusterCreate(t *testing.T) {
 				Spec: enterpriseApi.SearchHeadClusterSpec{
 					Replicas: 3,
 					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+						Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 						AppSources: []enterpriseApi.AppSourceSpec{
 							{Name: "", Location: "/apps"},
 						},
@@ -107,6 +109,8 @@ func TestValidateSearchHeadClusterCreate(t *testing.T) {
 				Spec: enterpriseApi.SearchHeadClusterSpec{
 					Replicas: 3,
 					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+						Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 						AppSources: []enterpriseApi.AppSourceSpec{
 							{Name: "apps", Location: ""},
 						},
@@ -122,6 +126,8 @@ func TestValidateSearchHeadClusterCreate(t *testing.T) {
 				Spec: enterpriseApi.SearchHeadClusterSpec{
 					Replicas: -1,
 					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+						Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 						AppSources: []enterpriseApi.AppSourceSpec{
 							{Name: "", Location: ""},
 						},
@@ -129,6 +135,118 @@ func TestValidateSearchHeadClusterCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 3, // negative replicas + missing name + missing location
+		},
+		// ES premium app ssl_enablement tests
+		{
+			name: "ES app with ssl_enablement strict is valid",
+			obj: &enterpriseApi.SearchHeadCluster{
+				Spec: enterpriseApi.SearchHeadClusterSpec{
+					Replicas: 3,
+					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList: []enterpriseApi.VolumeSpec{
+							{Name: "vol1", Endpoint: "s3://bucket"},
+						},
+						AppSources: []enterpriseApi.AppSourceSpec{
+							{
+								Name:     "es",
+								Location: "/es",
+								AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+									VolName: "vol1",
+									Scope:   "premiumApps",
+									PremiumAppsProps: enterpriseApi.PremiumAppsProps{
+										Type:       "enterpriseSecurity",
+										EsDefaults: enterpriseApi.EsDefaults{SslEnablement: "strict"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "ES app with ssl_enablement ignore is valid",
+			obj: &enterpriseApi.SearchHeadCluster{
+				Spec: enterpriseApi.SearchHeadClusterSpec{
+					Replicas: 3,
+					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList: []enterpriseApi.VolumeSpec{
+							{Name: "vol1", Endpoint: "s3://bucket"},
+						},
+						AppSources: []enterpriseApi.AppSourceSpec{
+							{
+								Name:     "es",
+								Location: "/es",
+								AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+									VolName: "vol1",
+									Scope:   "premiumApps",
+									PremiumAppsProps: enterpriseApi.PremiumAppsProps{
+										Type:       "enterpriseSecurity",
+										EsDefaults: enterpriseApi.EsDefaults{SslEnablement: "ignore"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "ES app with ssl_enablement auto is invalid on SHC",
+			obj: &enterpriseApi.SearchHeadCluster{
+				Spec: enterpriseApi.SearchHeadClusterSpec{
+					Replicas: 3,
+					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList: []enterpriseApi.VolumeSpec{
+							{Name: "vol1", Endpoint: "s3://bucket"},
+						},
+						AppSources: []enterpriseApi.AppSourceSpec{
+							{
+								Name:     "es",
+								Location: "/es",
+								AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+									VolName: "vol1",
+									Scope:   "premiumApps",
+									PremiumAppsProps: enterpriseApi.PremiumAppsProps{
+										Type:       "enterpriseSecurity",
+										EsDefaults: enterpriseApi.EsDefaults{SslEnablement: "auto"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appRepo.appSources[0].premiumAppsProps.esDefaults.sslEnablement",
+		},
+		{
+			name: "ES app with auto ssl_enablement from defaults is invalid on SHC",
+			obj: &enterpriseApi.SearchHeadCluster{
+				Spec: enterpriseApi.SearchHeadClusterSpec{
+					Replicas: 3,
+					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList: []enterpriseApi.VolumeSpec{
+							{Name: "vol1", Endpoint: "s3://bucket"},
+						},
+						Defaults: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "vol1",
+							Scope:   "premiumApps",
+							PremiumAppsProps: enterpriseApi.PremiumAppsProps{
+								Type:       "enterpriseSecurity",
+								EsDefaults: enterpriseApi.EsDefaults{SslEnablement: "auto"},
+							},
+						},
+						AppSources: []enterpriseApi.AppSourceSpec{
+							{Name: "es", Location: "/es"},
+						},
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.appRepo.appSources[0].premiumAppsProps.esDefaults.sslEnablement",
 		},
 	}
 

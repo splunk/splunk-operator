@@ -19,13 +19,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -114,14 +114,46 @@ func CreateAnIndexStandalone(ctx context.Context, deployment *Deployment, indexN
 	}
 
 	// Validate the response of the CLI command
-	var expectedResp strings.Builder
-	fmt.Fprintf(&expectedResp, "Index \"%s\" added.", indexName)
-	if strings.Compare(addIndexResp, expectedResp.String()) == 0 {
-		logf.Log.Error(err, "Failed response to add index to splunk", "pod", podName, "addIndexResp", addIndexResp)
-		return errors.New("failed response to add index to splunk")
+	expectedResp := fmt.Sprintf("Index \"%s\" added.", indexName)
+	if !strings.Contains(addIndexResp, expectedResp) {
+		err := fmt.Errorf("unexpected response to add index %q on pod %s: %q", indexName, podName, addIndexResp)
+		logf.Log.Error(err, "Unexpected response to add index to splunk", "pod", podName, "addIndexResp", addIndexResp, "expectedResp", expectedResp)
+		return err
 	}
 
 	logf.Log.Info("Added index to Splunk", "podName", podName, "addIndexResp", addIndexResp)
+	return nil
+}
+
+var splunkIndexNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
+
+// CreateIndexOnClusterManager creates a clustered index through manager-apps and applies the cluster bundle.
+func CreateIndexOnClusterManager(ctx context.Context, deployment *Deployment, indexName string) error {
+	if !splunkIndexNamePattern.MatchString(indexName) {
+		return fmt.Errorf("invalid index name %q", indexName)
+	}
+
+	podName := GetCMPodName(deployment)
+	appName := "splunk-operator-test-" + indexName
+	stdin := fmt.Sprintf(`set -e
+manager_app_dir="/opt/splunk/etc/manager-apps/%[1]s/local"
+mkdir -p "${manager_app_dir}"
+cat > "${manager_app_dir}/indexes.conf" <<'EOF'
+[%[2]s]
+homePath = $SPLUNK_DB/%[2]s/db
+coldPath = $SPLUNK_DB/%[2]s/colddb
+thawedPath = $SPLUNK_DB/%[2]s/thaweddb
+repFactor = auto
+EOF
+/opt/splunk/bin/splunk apply cluster-bundle --answer-yes -auth admin:$(cat /mnt/splunk-secrets/password)
+`, appName, indexName)
+
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, []string{"/bin/bash"}, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to create clustered index", "pod", podName, "indexName", indexName, "stdout", stdout, "stderr", stderr)
+		return err
+	}
+	logf.Log.Info("Created clustered index and applied cluster bundle", "pod", podName, "indexName", indexName, "stdout", stdout, "stderr", stderr)
 	return nil
 }
 
@@ -153,10 +185,10 @@ func IngestFileViaOneshot(ctx context.Context, deployment *Deployment, logFile s
 	}
 
 	// Validate the expected CLI response
-	var expectedResp strings.Builder
-	fmt.Fprintf(&expectedResp, "Oneshot '%s' added", indexName)
-	if strings.Compare(addOneshotResp, expectedResp.String()) == 0 {
-		logf.Log.Error(err, "Failed response to add oneshot to splunk", "pod", podName, "addOneshotResp", addOneshotResp)
+	expectedResp := fmt.Sprintf("Oneshot '%s' added", logFile)
+	if !strings.Contains(addOneshotResp, expectedResp) {
+		err := fmt.Errorf("unexpected response to add oneshot %q to index %q on pod %s: %q", logFile, indexName, podName, addOneshotResp)
+		logf.Log.Error(err, "Unexpected response to add oneshot to splunk", "pod", podName, "addOneshotResp", addOneshotResp, "expectedResp", expectedResp)
 		return err
 	}
 	logf.Log.Info("File Ingested via add oneshot Successfully", "logFile", logFile, "addOneshotResp", addOneshotResp)

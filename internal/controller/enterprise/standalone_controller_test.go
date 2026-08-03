@@ -20,6 +20,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+
+	"fmt"
+
+	"github.com/pkg/errors"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 const timeout = time.Second * 10
@@ -132,6 +139,39 @@ var _ = Describe("Standalone Controller", Label("integration"), func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
+		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
+			namespace := "ns-splunk-st-stalled"
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.Standalone{})
+			c := builder.Build()
+			recorder := record.NewFakeRecorder(10)
+			reconciler := StandaloneReconciler{
+				Client:   c,
+				Scheme:   scheme.Scheme,
+				Recorder: recorder,
+			}
+			ssSpec := testutils.NewStandalone("test", namespace, "image")
+			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
+
+			ApplyStandalone = func(ctx context.Context, cl client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
+			}
+
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "test", Namespace: namespace},
+			}
+
+			// First reconcile: Stalled=False → Stalled=True — Stalled event expected
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+
+			// Second reconcile: Stalled=True → Stalled=True — Warning fires on every stalled reconcile
+			_, err = reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+		})
+
 	})
 })
 
@@ -167,13 +207,16 @@ func CreateStandalone(name string, namespace string, annotations map[string]stri
 
 	By("Expecting Standalone custom resource to be created successfully")
 	ss := &enterpriseApi.Standalone{}
-	Eventually(func() bool {
-		return k8sClient.Get(context.Background(), key, ss) == nil
-	}, timeout, interval).Should(BeTrue())
-	if status != "" {
-		ss.Status.Phase = status
-		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-	}
+	Eventually(func() error {
+		if err := k8sClient.Get(context.Background(), key, ss); err != nil {
+			return err
+		}
+		if status != "" {
+			ss.Status.Phase = status
+			return k8sClient.Status().Update(context.Background(), ss)
+		}
+		return nil
+	}, timeout, interval).Should(Succeed())
 
 	return ss
 }
@@ -190,13 +233,16 @@ func UpdateStandalone(instance *enterpriseApi.Standalone, status enterpriseApi.P
 
 	By("Expecting Standalone custom resource to be updated successfully")
 	ss := &enterpriseApi.Standalone{}
-	Eventually(func() bool {
-		return k8sClient.Get(context.Background(), key, ss) == nil
-	}, timeout, interval).Should(BeTrue())
-	if status != "" {
-		ss.Status.Phase = status
-		Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
-	}
+	Eventually(func() error {
+		if err := k8sClient.Get(context.Background(), key, ss); err != nil {
+			return err
+		}
+		if status != "" {
+			ss.Status.Phase = status
+			return k8sClient.Status().Update(context.Background(), ss)
+		}
+		return nil
+	}, timeout, interval).Should(Succeed())
 
 	return ss
 }

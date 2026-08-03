@@ -10,3 +10,9 @@
 {{- if and .Values.ingress.enabled (not .Values.service.enabled) }}
 {{- fail "service.enabled must be true when ingress.enabled is true because the Ingress backend targets the chart Service." }}
 {{- end }}
+{{- if and (not .Values.storage.emptyDir) (ne (int .Values.replicaCount) 1) }}
+{{- fail "replicaCount must be 1 when storage.emptyDir is false because durable mode uses shared ReadWriteOnce PersistentVolumeClaims." }}
+{{- end }}
+{{- if and (not .Values.storage.emptyDir) (ne .Values.updateStrategy.type "Recreate") }}
+{{- fail "updateStrategy.type must be Recreate when storage.emptyDir is false to prevent a surge Pod from contending for the shared ReadWriteOnce PersistentVolumeClaims." }}
+{{- end }}

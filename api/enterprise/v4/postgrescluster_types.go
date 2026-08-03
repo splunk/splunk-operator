@@ -23,11 +23,26 @@ import (
 )
 
 // BootstrapFrom defines the source from which a PostgresCluster is bootstrapped via recovery.
+// Exactly one of VolumeSnapshot or ObjectStorage must be set.
+// +kubebuilder:validation:XValidation:rule="has(self.volumeSnapshot) != has(self.objectStorage)",message="exactly one of volumeSnapshot or objectStorage must be set"
 type BootstrapFrom struct {
 	// VolumeSnapshot restores from Kubernetes VolumeSnapshot resources.
-	// Required whenever bootstrapFrom is set — it is the only supported recovery source.
-	// +kubebuilder:validation:Required
-	VolumeSnapshot *VolumeSnapshotSource `json:"volumeSnapshot"`
+	// Mutually exclusive with objectStorage.
+	// +optional
+	VolumeSnapshot *VolumeSnapshotSource `json:"volumeSnapshot,omitempty"`
+
+	// ObjectStorage restores from an object storage backup (e.g. S3) managed by the
+	// PostgresClusterClass. Bucket path and credentials are resolved from the class.
+	// Mutually exclusive with volumeSnapshot.
+	// +optional
+	ObjectStorage *ObjectStorageSource `json:"objectStorage,omitempty"`
+
+	// RecoveryTarget defines an optional point-in-time recovery (PITR) target.
+	// When omitted, recovery replays all available WAL (recovery to latest).
+	// For a volumeSnapshot source, setting recoveryTarget requires volumeSnapshot.walArchive
+	// so WAL segments can be replayed past the snapshot point.
+	// +optional
+	RecoveryTarget *RecoveryTarget `json:"recoveryTarget,omitempty"`
 }
 
 // VolumeSnapshotSource identifies the VolumeSnapshot resources to use as the base backup.
@@ -42,6 +57,65 @@ type VolumeSnapshotSource struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	WalStorage *string `json:"walStorage,omitempty"`
+
+	// WalArchive identifies the object store WAL archive to replay WAL segments after the
+	// snapshot. Bucket path and credentials are resolved from the class backup config.
+	// Required when RecoveryTarget is set (PITR); optional for a plain snapshot restore.
+	// +optional
+	WalArchive *ObjectStorageSource `json:"walArchive,omitempty"`
+}
+
+// ObjectStorageSource identifies a backup in an object store managed by the PostgresClusterClass.
+// Bucket path, credentials, and endpoint config are resolved from the class — not specified here.
+type ObjectStorageSource struct {
+	// ServerName is the identifier of the source cluster in the object store.
+	// Must match the server name used when the backup was written.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	ServerName string `json:"serverName"`
+}
+
+// RecoveryTargetType enumerates the kinds of point-in-time recovery target a user can request.
+// +kubebuilder:validation:Enum=time;lsn;xid;name;immediate
+type RecoveryTargetType string
+
+const (
+	// RecoveryTargetTime recovers up to a timestamp (RFC 3339), carried in RecoveryTarget.Value.
+	RecoveryTargetTime RecoveryTargetType = "time"
+	// RecoveryTargetLSN recovers up to a WAL log sequence number, carried in RecoveryTarget.Value.
+	RecoveryTargetLSN RecoveryTargetType = "lsn"
+	// RecoveryTargetXID recovers up to a transaction ID, carried in RecoveryTarget.Value.
+	RecoveryTargetXID RecoveryTargetType = "xid"
+	// RecoveryTargetName recovers to a named restore point (pg_create_restore_point), carried in
+	// RecoveryTarget.Value.
+	RecoveryTargetName RecoveryTargetType = "name"
+	// RecoveryTargetImmediate ends recovery as soon as a consistent state is reached. It takes no
+	// value — RecoveryTarget.Value must be empty for this type.
+	RecoveryTargetImmediate RecoveryTargetType = "immediate"
+)
+
+// RecoveryTarget defines the point-in-time recovery target as a discriminated (type, value) pair.
+// This mirrors PostgreSQL's own model — a single recovery_target_* is chosen — so the API cannot
+// express two conflicting targets at once, and core can dispatch on a single Type field.
+//   - type=time|lsn|xid|name require a non-empty value (the timestamp / LSN / XID / restore-point name).
+//   - type=immediate takes no value; value must be empty.
+//
+// +kubebuilder:validation:XValidation:rule="self.type == 'immediate' ? !has(self.value) || size(self.value) == 0 : has(self.value) && size(self.value) > 0",message="value is required for target types time, lsn, xid, and name, and must be empty for type immediate"
+type RecoveryTarget struct {
+	// Type selects which kind of recovery target Value carries.
+	// +kubebuilder:validation:Required
+	Type RecoveryTargetType `json:"type"`
+
+	// Value is the target's value, interpreted according to Type:
+	// an RFC 3339 timestamp (time), a WAL LSN (lsn), a transaction ID (xid), or a restore-point name
+	// (name). It must be empty when Type is immediate.
+	// +optional
+	Value string `json:"value,omitempty"`
+
+	// Exclusive stops recovery just before the target rather than just after (default: false).
+	// Ignored for type immediate.
+	// +optional
+	Exclusive *bool `json:"exclusive,omitempty"`
 }
 
 // PostgresClusterSpec defines the desired state of PostgresCluster.
@@ -127,6 +201,10 @@ type PostgresClusterSpec struct {
 	// if non empty, external secret management is mandatory.
 	// +optional
 	PasswordConfig *SuperuserPasswordConfig `json:"passwordConfig,omitempty"`
+
+	// PostgresMajorUpgradeConfig sets up the upgrade flow according to backup, version and strategy requirements.
+	// +optional
+	PostgresMajorUpgradeConfig *PostgresMajorUpgradeConfig `json:"postgresMajorUpgradeConfig,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="self.superuserExternalSecretRef.name.size() > 0",message="superuserExternalSecretRef.name must not be empty"
@@ -161,6 +239,20 @@ type PostgresClusterResources struct {
 	SuperUserSecretRef *corev1.SecretKeySelector `json:"superUserSecretRef,omitempty"`
 }
 
+type PostgresMajorUpgradeConfig struct {
+	// Allow permits the operator to execute a PostgreSQL major-version
+	// upgrade when spec.postgresVersion crosses a major-version boundary.
+	// +optional
+	Allow *bool `json:"allow,omitempty"`
+
+	// Strategy selects the major-upgrade implementation.
+	// For now only pgUpgrade is supported.
+	// +kubebuilder:validation:Enum=pgUpgrade
+	// +kubebuilder:default=pgUpgrade
+	// +optional
+	Strategy *string `json:"strategy,omitempty"`
+}
+
 // PostgresClusterStatus defines the observed state of PostgresCluster.
 type PostgresClusterStatus struct {
 	// Phase represents the current phase of the PostgresCluster.
@@ -171,6 +263,11 @@ type PostgresClusterStatus struct {
 	// Conditions represent the latest available observations of the PostgresCluster's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// LastTransitionTime is the start time of the active time-to-Ready cycle.
+	// It is cleared when the PostgresCluster successfully reaches Ready.
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
 
 	// ProvisionerRef contains reference to the provisioner resource managing this PostgresCluster.
 	// Right now, only CNPG is supported.
@@ -215,6 +312,20 @@ type PostgresClusterStatus struct {
 	// CurrentPrimary is the name of the pod currently hosting the primary.
 	// +optional
 	CurrentPrimary *string `json:"currentPrimary,omitempty"`
+
+	// PostgresMajorUpgradeStatus contains the information
+	// about upgrade completion and any needed rollback/backup information
+	// shall the upgrade be reverted manually.
+	// It's a list to support a case of multi version upgrade.
+	// +optional
+	PostgresMajorUpgradeStatus []PostgresMajorUpgradeStatus `json:"postgresMajorUpgradeStatus,omitempty"`
+
+	// CurrentPgVersion is the PostgreSQL major version currently running against
+	// the data directory, as reported by CNPG (PGDataImageInfo.MajorVersion).
+	// Written on every reconcile; used as the source-version baseline for the
+	// major-version upgrade use case when no prior upgrade status entries exist.
+	// +optional
+	CurrentPgVersion string `json:"currentPgVersion,omitempty"`
 }
 
 // ManagedRolesStatus tracks the state of managed PostgreSQL roles.
@@ -338,6 +449,33 @@ type RestoreSourceStatus struct {
 	// VolumeSnapshot is the name of the VolumeSnapshot the cluster was restored from.
 	// +optional
 	VolumeSnapshot *string `json:"volumeSnapshot,omitempty"`
+
+	// ObjectStorage is the server name of the object storage backup the cluster was restored from.
+	// +optional
+	ObjectStorage *string `json:"objectStorage,omitempty"`
+
+	// RequestedRecoveryTarget echoes the point-in-time recovery target requested in spec.bootstrapFrom,
+	// if any. It is derived from the desired spec, not observed from the provider, so it records what
+	// the restore was asked to recover to (not a confirmation of where recovery actually stopped).
+	// Nil for recovery to the latest available WAL.
+	// +optional
+	RequestedRecoveryTarget *RecoveryTargetStatus `json:"requestedRecoveryTarget,omitempty"`
+}
+
+// RecoveryTargetStatus is the structured echo of a requested recovery target, mirroring the
+// spec RecoveryTarget shape so status consumers do not have to parse a formatted string.
+type RecoveryTargetStatus struct {
+	// Type is the kind of recovery target that was requested.
+	Type RecoveryTargetType `json:"type"`
+
+	// Value is the target's value (empty for type immediate).
+	// +optional
+	Value string `json:"value,omitempty"`
+
+	// Exclusive reports whether recovery was requested to stop just before the target (true) rather
+	// than just after (false/omitted).
+	// +optional
+	Exclusive *bool `json:"exclusive,omitempty"`
 }
 
 // RestoreCredentialSweepStatus tracks whether the post-recovery credential sweep has run.
@@ -374,6 +512,33 @@ type PostgresClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PostgresCluster `json:"items"`
+}
+
+type PostgresMajorUpgradeStatus struct {
+	Phase           *string            `json:"phase,omitempty"`
+	Strategy        *string            `json:"strategy,omitempty"`
+	SourcePgVersion *string            `json:"sourcePgVersion,omitempty"`
+	TargetPgVersion *string            `json:"targetPgVersion,omitempty"`
+	StartedAt       *metav1.Time       `json:"startedAt,omitempty"`
+	CompletedAt     *metav1.Time       `json:"completedAt,omitempty"`
+	Conditions      []metav1.Condition `json:"conditions,omitempty"`
+	BackupStatus    *BackupStatus      `json:"backupStatus,omitempty"`
+	// BackupNames holds the names of the CNPG Backup objects created as
+	// rollback baselines for this upgrade hop. Use these to locate the
+	// backup and any provider-specific references needed for manual recovery.
+	// +optional
+	BackupNames *UpgradeBackupNames `json:"backupNames,omitempty"`
+}
+
+// UpgradeBackupNames records the CNPG Backup object names created at each
+// gate of a major-version upgrade hop.
+type UpgradeBackupNames struct {
+	// PreUpgrade is the backup taken before the pg_upgrade run.
+	// +optional
+	PreUpgrade *string `json:"preUpgrade,omitempty"`
+	// PostUpgrade is the backup taken after the upgraded cluster is verified.
+	// +optional
+	PostUpgrade *string `json:"postUpgrade,omitempty"`
 }
 
 func init() {

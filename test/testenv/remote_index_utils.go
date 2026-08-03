@@ -63,7 +63,7 @@ func GetIndexOnPod(ctx context.Context, deployment *Deployment, podName string, 
 
 // RollHotToWarm rolls hot buckets to warm for a given index and pod
 func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, indexName string) bool {
-	stdin := "/opt/splunk/bin/splunk _internal call /data/indexes/" + indexName + "/roll-hot-buckets admin:$(cat /mnt/splunk-secrets/password)"
+	stdin := "/opt/splunk/bin/splunk _internal call /data/indexes/" + indexName + "/roll-hot-buckets -auth admin:$(cat /mnt/splunk-secrets/password)"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
@@ -72,14 +72,6 @@ func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, 
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return true
-}
-
-// GenerateQueueVolumeSpec return SQSVolumeSpec struct with given values
-func GenerateQueueVolumeSpec(volumeName string, secretRef string) enterpriseApi.SQSVolumeSpec {
-	return enterpriseApi.SQSVolumeSpec{
-		Name:      volumeName,
-		SecretRef: secretRef,
-	}
 }
 
 // GenerateIndexVolumeSpec return VolumeSpec struct with given values

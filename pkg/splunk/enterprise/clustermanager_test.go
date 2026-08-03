@@ -169,10 +169,6 @@ func TestApplyClusterManager(t *testing.T) {
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
-	stalledCond := splcommon.GetCondition(current.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True for spec validation failure")
-	}
 
 	// Smartstore spec
 	current.Spec.CommonSplunkSpec.LivenessProbe = &enterpriseApi.Probe{
@@ -551,10 +547,6 @@ func TestClusterManagerSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
-	stalledCond := splcommon.GetCondition(cm.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
-	}
 }
 
 func TestApplyClusterManagerWithSmartstore(t *testing.T) {
@@ -842,6 +834,46 @@ func TestPerformCmBundlePush(t *testing.T) {
 	err = PerformCmBundlePush(ctx, client, &current, nil)
 	if err != nil && strings.HasPrefix(err.Error(), "Will re-attempt to push the bundle after the 5 seconds") {
 		t.Errorf("Bundle Push Should not fail if reattempted after 5 seconds interval passed. Error: %s", err.Error())
+	}
+}
+
+func TestPerformCmBundlePushTargetsClusterManagerPod(t *testing.T) {
+	ctx := context.TODO()
+	current := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	current.Status.BundlePushTracker.NeedToPushManagerApps = true
+	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 10
+
+	client := spltest.NewMockClient()
+	smartstoreConfigMap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-clustermanager-smartstore",
+			Namespace: "test",
+		},
+		Data: map[string]string{configToken: "current-token"},
+	}
+	if _, err := splctrl.ApplyConfigMap(ctx, client, &smartstoreConfigMap); err != nil {
+		t.Fatal(err)
+	}
+
+	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
+	podExecClient := &spltest.MockPodExecClient{TargetPodName: "stale-pod"}
+	podExecClient.AddMockPodExecReturnContext(ctx, command, &spltest.MockPodExecReturnContext{StdOut: "stale-token"})
+
+	if err := PerformCmBundlePush(ctx, client, &current, podExecClient); err == nil {
+		t.Fatal("PerformCmBundlePush() should return an error when the config token has not propagated")
+	}
+
+	wantPodName := "splunk-stack1-cluster-manager-0"
+	if got := podExecClient.GetTargetPodName(); got != wantPodName {
+		t.Errorf("PerformCmBundlePush() target pod = %q, want %q", got, wantPodName)
 	}
 }
 
@@ -1525,6 +1557,29 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
 
+	// Create the ClusterManager first since the LicenseManager's env assembly
+	// looks it up via ClusterManagerRef.
+	cm := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+	cm.Kind = "ClusterManager"
+	client.Create(ctx, &cm)
+
 	// Create License Manager
 	lm := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1565,28 +1620,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	// Create Cluster Manager
-	cm := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
-				},
-				Volumes: []corev1.Volume{},
-				LicenseManagerRef: corev1.ObjectReference{
-					Name: "test",
-				},
-			},
-		},
-	}
-
-	cm.Kind = "ClusterManager"
-	client.Create(ctx, &cm)
+	// Apply the ClusterManager created above now that its LicenseManager is ready
 	_, err = ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)

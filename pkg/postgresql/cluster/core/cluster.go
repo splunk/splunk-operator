@@ -20,13 +20,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"log/slog"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -41,7 +43,7 @@ import (
 )
 
 // PostgresClusterService is the application service entry point called by the primary adapter (reconciler).
-func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend) (ctrl.Result, error) {
+func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend, recoveryBackend RecoveryBackend) (ctrl.Result, error) {
 	c := rc.Client
 	logger := logging.FromContext(ctx).With("func", "PostgresClusterService")
 	logger.DebugContext(ctx, "reconciling PostgresCluster")
@@ -89,8 +91,15 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	}
 	updatePhaseStatus := func(phase reconcileClusterPhases) error {
 		oldPhase := currentPhase()
-		if err := setPhaseStatus(ctx, c, postgresCluster, phase); err != nil {
+		readinessDuration, completedReadinessCycle, err := setPhaseStatus(ctx, c, postgresCluster, phase)
+		if err != nil {
 			return err
+		}
+		if completedReadinessCycle && rc.Metrics != nil {
+			rc.Metrics.ObserveProvisioningDuration(
+				ports.ControllerCluster,
+				readinessDuration,
+			)
 		}
 		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), "", "")
 		return nil
@@ -134,6 +143,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	// Merge PostgresClusterSpec on top of PostgresClusterClass defaults.
 	mergedConfig := GetMergedConfig(clusterClass, postgresCluster)
 	configErrs := append(ValidateMergedConfig(mergedConfig, clusterClass.Name), ValidateCrossResource(clusterClass, postgresCluster)...)
+	configErrs = append(configErrs, ValidateRecoveryCapabilities(recoveryBackend, clusterClass, postgresCluster)...)
 	if len(configErrs) > 0 {
 		var errMsgs []error
 		for _, e := range configErrs {
@@ -174,12 +184,46 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if err := validateComponentOrder(components); err != nil {
 		return ctrl.Result{}, fmt.Errorf("invalid component wiring: %w", err)
 	}
-	result, err := runComponents(ctx, logger, components)
+
+	useCaseReconciler := newUseCaseReconciler(rc, req.NamespacedName, postgresCluster, mergedConfig)
+	if useCaseReconciler != nil {
+		// Prerequisites are checked inside Schedule: a use case whose prereqs
+		// are unmet is silently deferred — it does not block components and
+		// does not Act this pass.
+		if err := useCaseReconciler.Schedule(ctx); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	blocked := blockedComponents(useCaseReconciler)
+	if len(blocked) > 0 {
+		if err := startReadinessCycle(ctx, c, postgresCluster); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	result, err := runComponents(ctx, logger, components, blocked)
 	if err != nil {
 		return result, err
 	}
 	if result != (ctrl.Result{}) {
 		return result, nil
+	}
+
+	useCaseReport, useCaseErr := reconcileUseCases(ctx, useCaseReconciler)
+	if useCaseReport != nil || useCaseErr != nil {
+		if useCaseErr != nil {
+			logger.ErrorContext(ctx, "use case reconciliation failed",
+				"error", useCaseErr,
+				"name", useCaseReport.Name,
+				"reason", useCaseReport.Reason,
+				"phase", useCaseReport.Phase)
+		} else {
+			logger.InfoContext(ctx, "use case reconciled",
+				"name", useCaseReport.Name,
+				"reason", useCaseReport.Reason,
+				"phase", useCaseReport.Phase)
+		}
+		return resultFromUseCaseReport(useCaseReport), useCaseErr
 	}
 
 	logger.DebugContext(ctx, "reconciliation complete")
@@ -192,6 +236,41 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	return ctrl.Result{}, nil
 }
 
+func newUseCaseReconciler(rc *ReconcileContext, key types.NamespacedName, cluster *enterprisev4.PostgresCluster, mergedConfig *MergedConfig) *usecases.Reconciler {
+	if rc == nil || rc.UseCaseRegistryProvider == nil {
+		return nil
+	}
+	var spec *enterprisev4.PostgresClusterSpec
+	if cluster != nil {
+		spec = &cluster.Spec
+	}
+	return usecases.NewUseCaseReconciler(spec, rc.UseCaseRegistryProvider(key, cluster, mergedConfig))
+}
+
+func blockedComponents(reconciler *usecases.Reconciler) map[string]struct{} {
+	if reconciler == nil {
+		return nil
+	}
+	return reconciler.BlocksComponents()
+}
+
+func reconcileUseCases(ctx context.Context, reconciler *usecases.Reconciler) (*reconciliationTypes.Report, error) {
+	if reconciler == nil {
+		return nil, nil
+	}
+	return reconciler.Reconcile(ctx)
+}
+
+func resultFromUseCaseReport(report *reconciliationTypes.Report) ctrl.Result {
+	if report == nil || !report.Retry {
+		return ctrl.Result{}
+	}
+	if report.Sleep != nil && *report.Sleep > 0 {
+		return ctrl.Result{RequeueAfter: time.Duration(*report.Sleep) * time.Second}
+	}
+	return ctrl.Result{Requeue: true}
+}
+
 func writeComponentStatus(updateStatus healthStatusUpdater, before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
 	if updateStatus == nil {
 		return nil
@@ -199,10 +278,18 @@ func writeComponentStatus(updateStatus healthStatusUpdater, before *enterprisev4
 	return updateStatus(before, health)
 }
 
-func runComponents(ctx context.Context, logger *slog.Logger, components []component) (ctrl.Result, error) {
+func runComponents(ctx context.Context, logger *slog.Logger, components []component, blockedComponents ...map[string]struct{}) (ctrl.Result, error) {
+	var blocked map[string]struct{}
+	if len(blockedComponents) > 0 {
+		blocked = blockedComponents[0]
+	}
 	for _, c := range components {
-		var reconcileErr error
 		componentLogger := logger.With("component", c.Name())
+		if _, ok := blocked[c.Name()]; ok {
+			componentLogger.InfoContext(ctx, "component reconciliation blocked by active use case")
+			continue
+		}
+		var reconcileErr error
 		if reconcileErr = c.CheckContracts(); reconcileErr == nil {
 			reconcileErr = c.Reconcile(ctx)
 		}
@@ -352,6 +439,7 @@ func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, clu
 		Message:            message,
 		ObservedGeneration: cluster.Generation,
 	})
+	beginReadinessCycle(cluster, before, phase)
 
 	if equality.Semantic.DeepEqual(*before, cluster.Status) {
 		return nil
@@ -375,17 +463,64 @@ func setStatusFromHealth(ctx context.Context, c client.Client, metrics ports.Rec
 	return setStatus(ctx, c, metrics, cluster, before, health.Condition, conditionStatus, health.Reason, health.Message, health.Phase)
 }
 
-func setPhaseStatus(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, phase reconcileClusterPhases) error {
+// beginReadinessCycle persists the start of a single time-to-Ready cycle. Initial
+// provisioning starts at creation. Later cycles start when a persisted Ready
+// cluster becomes non-Ready, or when a new generation resumes a failed cycle.
+func beginReadinessCycle(cluster *enterprisev4.PostgresCluster, before *enterprisev4.PostgresClusterStatus, phase reconcileClusterPhases) {
+	if phase == "" || phase == readyClusterPhase || cluster.Status.LastTransitionTime != nil {
+		return
+	}
+
+	if before.Phase == nil && before.ObservedGeneration == nil {
+		lastTransitionTime := cluster.CreationTimestamp
+		cluster.Status.LastTransitionTime = &lastTransitionTime
+		return
+	}
+
+	wasReady := before.Phase != nil && *before.Phase == string(readyClusterPhase)
+	generationChanged := before.ObservedGeneration != nil && *before.ObservedGeneration != cluster.Generation
+	if wasReady || generationChanged {
+		lastTransitionTime := metav1.Now()
+		cluster.Status.LastTransitionTime = &lastTransitionTime
+	}
+}
+
+// startReadinessCycle records a readiness cycle when an active use case blocks
+// normal component reconciliation before a non-Ready status can be written.
+func startReadinessCycle(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster) error {
 	before := cluster.Status.DeepCopy()
-	p := string(phase)
-	cluster.Status.Phase = &p
+	beginReadinessCycle(cluster, before, provisioningClusterPhase)
 	if equality.Semantic.DeepEqual(*before, cluster.Status) {
 		return nil
 	}
 	if err := c.Status().Update(ctx, cluster); err != nil {
-		return fmt.Errorf("failed to update PostgresCluster status phase: %w", err)
+		return fmt.Errorf("failed to start PostgresCluster readiness cycle: %w", err)
 	}
 	return nil
+}
+
+// setPhaseStatus persists a final phase and returns the duration only when that
+// successful write completes an active time-to-Ready cycle.
+func setPhaseStatus(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, phase reconcileClusterPhases) (float64, bool, error) {
+	before := cluster.Status.DeepCopy()
+	p := string(phase)
+	cluster.Status.Phase = &p
+	completedReadinessCycle := phase == readyClusterPhase && cluster.Status.LastTransitionTime != nil
+	var lastTransitionTime time.Time
+	if completedReadinessCycle {
+		lastTransitionTime = cluster.Status.LastTransitionTime.Time
+		cluster.Status.LastTransitionTime = nil
+	}
+	if equality.Semantic.DeepEqual(*before, cluster.Status) {
+		return 0, false, nil
+	}
+	if err := c.Status().Update(ctx, cluster); err != nil {
+		return 0, false, fmt.Errorf("failed to update PostgresCluster status phase: %w", err)
+	}
+	if completedReadinessCycle {
+		return time.Since(lastTransitionTime).Seconds(), true, nil
+	}
+	return 0, false, nil
 }
 
 // deleteCNPGCluster deletes the CNPG Cluster if it exists.

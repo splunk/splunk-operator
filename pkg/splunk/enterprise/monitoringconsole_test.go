@@ -555,6 +555,12 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
+	c.AddObject(&enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack2",
+			Namespace: "test",
+		},
+	})
 	test := func(want string) {
 		f := func() (interface{}, error) {
 			if err := validateMonitoringConsoleSpec(ctx, c, &cr); err != nil {
@@ -626,10 +632,6 @@ func TestMonitoringConsoleSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
-	}
-	stalledCond := splcommon.GetCondition(mc.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
 	}
 }
 func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {

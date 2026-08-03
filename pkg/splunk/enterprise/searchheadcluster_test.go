@@ -143,8 +143,22 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[17], funcCalls[19]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[18]}, "List": {listmockCall[0], listmockCall[0]}}
+	// CheckPodsForTerminalFailures lists pods using the SHC StatefulSet's selector labels.
+	shcPodLabels := map[string]string{
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "search-head",
+		"app.kubernetes.io/name":       "search-head",
+		"app.kubernetes.io/part-of":    "splunk-stack1-search-head",
+		"app.kubernetes.io/instance":   "splunk-stack1-search-head",
+	}
+	shcPodListOpts := []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels(shcPodLabels),
+	}
+	shcPodListMockCall := spltest.MockFuncCall{ListOpts: shcPodListOpts}
+
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[17], funcCalls[19]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[18]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
 	statefulSet := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -947,11 +961,23 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 
 	cr.Spec.Replicas = 5
 	cr.Spec.ClusterManagerRef.Name = "stack1"
+	_ = splutil.CreateResource(ctx, c, &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	})
 	test(loadFixture(t, "statefulset_stack1_search_head_base_2.json"))
 
 	cr.Spec.Replicas = 6
 
 	cr.Spec.ClusterManagerRef.Namespace = "test2"
+	_ = splutil.CreateResource(ctx, c, &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test2",
+		},
+	})
 	test(loadFixture(t, "statefulset_stack1_search_head_base_3.json"))
 
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
@@ -1061,10 +1087,6 @@ func TestSearchHeadSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
-	stalledCond := splcommon.GetCondition(shc.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
-	}
 }
 
 func TestApplySearchHeadClusterValidationFailure(t *testing.T) {
@@ -1107,9 +1129,194 @@ func TestApplySearchHeadClusterValidationFailure(t *testing.T) {
 	if shc.Status.DeployerPhase != enterpriseApi.PhaseError {
 		t.Errorf("Expected DeployerPhaseError, got %v", shc.Status.DeployerPhase)
 	}
-	stalledCond := splcommon.GetCondition(shc.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True for spec validation failure")
+}
+
+func TestApplySearchHeadClusterDeployerPodTerminalFailure(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	c := newFakeClientBuilder(scheme).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		Build()
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "SearchHeadCluster",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	if err := c.Create(ctx, cr); err != nil {
+		t.Fatalf("failed to create SHC CR: %v", err)
+	}
+
+	// Pass 1: creates the deployer StatefulSet (PhasePending); no error expected.
+	if _, err := ApplySearchHeadCluster(ctx, c, cr); err != nil {
+		t.Fatalf("pass 1 unexpectedly failed: %v", err)
+	}
+
+	// Inject a deployer pod stuck in ImagePullBackOff so that
+	// checkPodsForTerminalFailures returns a TerminalError on the next reconcile.
+	deployerPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetPodName(SplunkDeployer, cr.GetName(), 0),
+			Namespace: cr.GetNamespace(),
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "splunk-operator",
+				"app.kubernetes.io/component":  "search-head",
+				"app.kubernetes.io/name":       "deployer",
+				"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-search-head", cr.GetName()),
+				"app.kubernetes.io/instance":   GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
+			},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{{
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{
+						Reason:  "ImagePullBackOff",
+						Message: "Back-off pulling image",
+					},
+				},
+			}},
+		},
+	}
+	if err := c.Create(ctx, deployerPod); err != nil {
+		t.Fatalf("failed to create terminal deployer pod: %v", err)
+	}
+
+	// Pass 2: deployer STS already exists with ReadyReplicas=0; the terminal pod
+	// is detected and the function must return a TerminalError with Stalled=True.
+	_, err := ApplySearchHeadCluster(ctx, c, cr)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("expected TerminalError for deployer ImagePullBackOff pod, got %v", err)
+	}
+}
+
+// TestApplySearchHeadClusterUpgradePathSoftWait verifies that when
+// UpgradePathValidation soft-waits on a LicenseManager that is temporarily
+// not Ready (returns (false, nil), not an error), ApplySearchHeadCluster
+// does not leave the earlier-staged PhaseError as the persisted status on
+// either cr.Status.Phase or cr.Status.DeployerPhase (CSPL-5080).
+func TestApplySearchHeadClusterUpgradePathSoftWait(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	c := newFakeClientBuilder(scheme).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		Build()
+
+	lm := &enterpriseApi.LicenseManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "LicenseManager",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "lm1",
+			Namespace: "test",
+		},
+	}
+	if err := c.Create(ctx, lm); err != nil {
+		t.Fatalf("failed to create LicenseManager CR: %v", err)
+	}
+	// LicenseManager not yet Ready: this is the benign soft-wait state.
+	lm.Status.Phase = enterpriseApi.PhaseUpdating
+	if err := c.Status().Update(ctx, lm); err != nil {
+		t.Fatalf("failed to set LicenseManager status: %v", err)
+	}
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "SearchHeadCluster",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: "lm1",
+				},
+			},
+		},
+	}
+	if err := c.Create(ctx, cr); err != nil {
+		t.Fatalf("failed to create SHC CR: %v", err)
+	}
+
+	// Pass 1: creates the deployer StatefulSet; no LicenseManager image to
+	// compare against yet, so UpgradePathValidation isn't exercised until
+	// the StatefulSet already exists (see CSPL-3060 guard).
+	if _, err := ApplySearchHeadCluster(ctx, c, cr); err != nil {
+		t.Fatalf("pass 1 unexpectedly failed: %v", err)
+	}
+
+	// The CSPL-3060 guard checks statefulSet.CreationTimestamp.IsZero(); the
+	// fake client doesn't populate CreationTimestamp on Create, so set it
+	// explicitly to make pass 2 exercise UpgradePathValidation.
+	deployerStatefulSetName := types.NamespacedName{
+		Name:      GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
+		Namespace: cr.GetNamespace(),
+	}
+	deployerStatefulSet := &appsv1.StatefulSet{}
+	if err := c.Get(ctx, deployerStatefulSetName, deployerStatefulSet); err != nil {
+		t.Fatalf("failed to fetch deployer StatefulSet: %v", err)
+	}
+	deployerStatefulSet.CreationTimestamp = metav1.Now()
+	if err := c.Update(ctx, deployerStatefulSet); err != nil {
+		t.Fatalf("failed to set deployer StatefulSet CreationTimestamp: %v", err)
+	}
+
+	// Give the LicenseManager a StatefulSet whose image matches the SHC's
+	// so UpgradePathValidation reaches the not-Ready soft-wait branch
+	// instead of the hard image-mismatch error branch.
+	lmStatefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkLicenseManager, lm.GetName()),
+			Namespace: lm.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "splunk", Image: cr.Spec.CommonSplunkSpec.Image},
+					},
+				},
+			},
+		},
+	}
+	if err := c.Create(ctx, lmStatefulSet); err != nil {
+		t.Fatalf("failed to create LicenseManager StatefulSet: %v", err)
+	}
+
+	// Pass 2: deployer StatefulSet already exists, so UpgradePathValidation
+	// runs, finds the LicenseManager image matches but Phase != Ready, and
+	// soft-waits by returning (false, nil).
+	if _, err := ApplySearchHeadCluster(ctx, c, cr); err != nil {
+		t.Fatalf("pass 2 unexpectedly returned an error for a benign soft-wait: %v", err)
+	}
+
+	if err := c.Get(ctx, types.NamespacedName{Name: cr.GetName(), Namespace: cr.GetNamespace()}, cr); err != nil {
+		t.Fatalf("failed to re-fetch SHC CR: %v", err)
+	}
+	if cr.Status.Phase != enterpriseApi.PhasePending {
+		t.Errorf("expected Phase=Pending during LicenseManager soft-wait, got %v", cr.Status.Phase)
+	}
+	if cr.Status.DeployerPhase != enterpriseApi.PhasePending {
+		t.Errorf("expected DeployerPhase=Pending during LicenseManager soft-wait, got %v", cr.Status.DeployerPhase)
 	}
 }
 

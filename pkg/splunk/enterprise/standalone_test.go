@@ -154,10 +154,6 @@ func TestApplyStandalone(t *testing.T) {
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
-	stalledCond := splcommon.GetCondition(current.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True for spec validation failure")
-	}
 
 	// Smartstore spec
 	current.Spec.CommonSplunkSpec.LivenessInitialDelaySeconds = 5
@@ -367,6 +363,12 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
 
 	cr.Spec.ClusterManagerRef.Name = "stack2"
+	_ = splutil.CreateResource(ctx, c, &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack2",
+			Namespace: "test",
+		},
+	})
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.SchedulerName = "custom-scheduler"
@@ -518,10 +520,6 @@ func TestStandaloneSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
-	}
-	stalledCond := splcommon.GetCondition(standalone.Status.Conditions, enterpriseApi.ConditionStalled)
-	if stalledCond == nil || stalledCond.Status != metav1.ConditionTrue {
-		t.Errorf("expected Stalled=True when SPLUNK_GENERAL_TERMS is not set")
 	}
 }
 

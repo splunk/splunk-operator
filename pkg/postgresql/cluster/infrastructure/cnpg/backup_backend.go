@@ -24,74 +24,32 @@ import (
 	"sort"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
-	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/backuptypes"
-	corev1 "k8s.io/api/core/v1"
+	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-// eventEmitter is the narrow event-emission interface the adapter requires.
-// It matches the unexported core.eventEmitter shape so that internal callers
-// (backup_model) can still pass a ReconcileContext directly; external callers
-// use NewBackupBackend with a plain EventRecorder.
-type eventEmitter interface {
-	emitNormal(obj client.Object, reason, message string)
-	emitWarning(obj client.Object, reason, message string)
-}
-
-// compile-time check that backupBackend satisfies core.BackupBackend.
-var _ core.BackupBackend = (*backupBackend)(nil)
 
 // backupBackend implements core.BackupBackend against CNPG Backup and
 // ScheduledBackup resources.
 type backupBackend struct {
 	client client.Client
 	scheme *runtime.Scheme
-	events eventEmitter
 }
 
 // NewBackupBackend returns a core.BackupBackend backed by CNPG resources.
-// It is the primary entrypoint for constructing the adapter — both internal
-// wiring (backup_model via cluster.go) and external consumers (e.g. the
-// major-upgrade use case) obtain the port through this constructor.
-func NewBackupBackend(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) core.BackupBackend {
-	return newBackupBackend(c, scheme, recorderEmitter{recorder: recorder})
+func NewBackupBackend(c client.Client, scheme *runtime.Scheme) *backupBackend {
+	return &backupBackend{client: c, scheme: scheme}
 }
 
-// newBackupBackend is the internal constructor used by wiring code inside
-// this package that already holds a package-private eventEmitter.
-func newBackupBackend(c client.Client, scheme *runtime.Scheme, events eventEmitter) core.BackupBackend {
-	return &backupBackend{client: c, scheme: scheme, events: events}
-}
-
-// recorderEmitter adapts a record.EventRecorder to the eventEmitter interface.
-type recorderEmitter struct {
-	recorder record.EventRecorder
-}
-
-func (e recorderEmitter) emitNormal(obj client.Object, reason, message string) {
-	if e.recorder != nil {
-		e.recorder.Event(obj, corev1.EventTypeNormal, reason, message)
-	}
-}
-
-func (e recorderEmitter) emitWarning(obj client.Object, reason, message string) {
-	if e.recorder != nil {
-		e.recorder.Event(obj, corev1.EventTypeWarning, reason, message)
-	}
-}
-
-func (a *backupBackend) EnsureScheduled(ctx context.Context, owner client.Object, spec backuptypes.ScheduleSpec) error {
+func (a *backupBackend) EnsureScheduled(ctx context.Context, owner client.Object, spec backuptypes.ScheduleSpec) (bool, error) {
 	cnpgMethod, err := toCNPGBackupMethod(spec.Method)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	var pluginCfg *cnpgv1.BackupPluginConfiguration
@@ -114,7 +72,7 @@ func (a *backupBackend) EnsureScheduled(ctx context.Context, owner client.Object
 		},
 	}
 	if err := ctrl.SetControllerReference(owner, desired, a.scheme); err != nil {
-		return fmt.Errorf("setting controller reference on ScheduledBackup: %w", err)
+		return false, fmt.Errorf("setting controller reference on ScheduledBackup: %w", err)
 	}
 
 	existing := &cnpgv1.ScheduledBackup{}
@@ -122,63 +80,61 @@ func (a *backupBackend) EnsureScheduled(ctx context.Context, owner client.Object
 	if apierrors.IsNotFound(err) {
 		createErr := a.client.Create(ctx, desired)
 		if createErr == nil {
-			a.events.emitNormal(owner, core.EventScheduledBackupCreated, "Scheduled backup created")
-			return nil
+			return true, nil
 		}
 		// Another reconcile raced us to create — fetch and fall through to the update path.
 		if !apierrors.IsAlreadyExists(createErr) {
-			return fmt.Errorf("creating ScheduledBackup: %w", createErr)
+			return false, fmt.Errorf("creating ScheduledBackup: %w", createErr)
 		}
 		if fetchErr := a.client.Get(ctx, types.NamespacedName{Name: spec.Name, Namespace: spec.Namespace}, existing); fetchErr != nil {
-			return fmt.Errorf("re-fetching ScheduledBackup after AlreadyExists: %w", fetchErr)
+			return false, fmt.Errorf("re-fetching ScheduledBackup after AlreadyExists: %w", fetchErr)
 		}
 	} else if err != nil {
-		return fmt.Errorf("getting ScheduledBackup: %w", err)
+		return false, fmt.Errorf("getting ScheduledBackup: %w", err)
 	}
 
 	// Guard against a foreign (not controlled by this owner) object sharing the name.
 	if controller := metav1.GetControllerOf(existing); controller != nil && controller.UID != owner.GetUID() {
-		return fmt.Errorf("ScheduledBackup %s/%s already exists and is not controlled by this owner", spec.Namespace, spec.Name)
+		return false, fmt.Errorf("ScheduledBackup %s/%s already exists and is not controlled by this owner", spec.Namespace, spec.Name)
 	}
 
 	ownersBefore := existing.DeepCopy().OwnerReferences
 	if err := ctrl.SetControllerReference(owner, existing, a.scheme); err != nil {
-		return fmt.Errorf("repairing controller reference on ScheduledBackup: %w", err)
+		return false, fmt.Errorf("repairing controller reference on ScheduledBackup: %w", err)
 	}
 	ownerChanged := !equality.Semantic.DeepEqual(ownersBefore, existing.OwnerReferences)
 	specChanged := !equality.Semantic.DeepEqual(existing.Spec, desired.Spec)
 
 	if !specChanged && !ownerChanged {
-		return nil
+		return false, nil
 	}
 
 	existing.Spec = desired.Spec
 	if err := a.client.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating ScheduledBackup: %w", err)
+		return false, fmt.Errorf("updating ScheduledBackup: %w", err)
 	}
-	return nil
+	return false, nil
 }
 
-func (a *backupBackend) DeleteScheduled(ctx context.Context, owner client.Object, name, namespace string) error {
+func (a *backupBackend) DeleteScheduled(ctx context.Context, owner client.Object, name, namespace string) (bool, error) {
 	sb := &cnpgv1.ScheduledBackup{}
 	err := a.client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, sb)
 	if apierrors.IsNotFound(err) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return fmt.Errorf("getting ScheduledBackup for deletion: %w", err)
+		return false, fmt.Errorf("getting ScheduledBackup for deletion: %w", err)
 	}
 	// Only delete a ScheduledBackup this owner controls. A user- or
 	// other-controller-owned object sharing the deterministic name must not be
 	// deleted (mirrors the ObjectStore delete guard).
 	if controller := metav1.GetControllerOf(sb); controller == nil || controller.UID != owner.GetUID() {
-		return nil
+		return false, nil
 	}
 	if err := a.client.Delete(ctx, sb); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("deleting ScheduledBackup: %w", err)
+		return false, fmt.Errorf("deleting ScheduledBackup: %w", err)
 	}
-	a.events.emitNormal(owner, core.EventScheduledBackupDeleted, "Scheduled backup deleted")
-	return nil
+	return true, nil
 }
 
 func (a *backupBackend) GetSchedule(ctx context.Context, name, namespace string) (backuptypes.ScheduleResult, error) {
@@ -197,10 +153,10 @@ func (a *backupBackend) GetSchedule(ctx context.Context, name, namespace string)
 	}, nil
 }
 
-func (a *backupBackend) BackupNow(ctx context.Context, owner client.Object, req backuptypes.BackupRequest) error {
+func (a *backupBackend) BackupNow(ctx context.Context, owner client.Object, req backuptypes.BackupRequest) (bool, error) {
 	cnpgMethod, err := toCNPGBackupMethod(req.Method)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// CNPG Backup spec is immutable, so the only safe idempotent operation is
@@ -212,12 +168,12 @@ func (a *backupBackend) BackupNow(ctx context.Context, owner client.Object, req 
 	err = a.client.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, existing)
 	if err == nil {
 		if controller := metav1.GetControllerOf(existing); controller == nil || controller.UID != owner.GetUID() {
-			return fmt.Errorf("Backup %s/%s already exists and is not controlled by this owner", req.Namespace, req.Name)
+			return false, fmt.Errorf("Backup %s/%s already exists and is not controlled by this owner", req.Namespace, req.Name)
 		}
-		return nil
+		return false, nil
 	}
 	if !apierrors.IsNotFound(err) {
-		return fmt.Errorf("getting Backup: %w", err)
+		return false, fmt.Errorf("getting Backup: %w", err)
 	}
 
 	var pluginCfg *cnpgv1.BackupPluginConfiguration
@@ -238,24 +194,23 @@ func (a *backupBackend) BackupNow(ctx context.Context, owner client.Object, req 
 		},
 	}
 	if err := ctrl.SetControllerReference(owner, desired, a.scheme); err != nil {
-		return fmt.Errorf("setting controller reference on Backup: %w", err)
+		return false, fmt.Errorf("setting controller reference on Backup: %w", err)
 	}
 	createErr := a.client.Create(ctx, desired)
 	if createErr == nil {
-		a.events.emitNormal(owner, core.EventOnDemandBackupCreated, "On-demand backup created")
-		return nil
+		return true, nil
 	}
 	// Another reconcile raced us — re-fetch and verify ownership.
 	if !apierrors.IsAlreadyExists(createErr) {
-		return fmt.Errorf("creating Backup: %w", createErr)
+		return false, fmt.Errorf("creating Backup: %w", createErr)
 	}
 	if fetchErr := a.client.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, existing); fetchErr != nil {
-		return fmt.Errorf("re-fetching Backup after AlreadyExists: %w", fetchErr)
+		return false, fmt.Errorf("re-fetching Backup after AlreadyExists: %w", fetchErr)
 	}
 	if controller := metav1.GetControllerOf(existing); controller == nil || controller.UID != owner.GetUID() {
-		return fmt.Errorf("Backup %s/%s already exists and is not controlled by this owner", req.Namespace, req.Name)
+		return false, fmt.Errorf("Backup %s/%s already exists and is not controlled by this owner", req.Namespace, req.Name)
 	}
-	return nil
+	return false, nil
 }
 
 func (a *backupBackend) GetBackup(ctx context.Context, owner client.Object, name, namespace string) (backuptypes.BackupResult, bool, error) {

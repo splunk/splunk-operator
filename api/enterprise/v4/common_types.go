@@ -107,6 +107,11 @@ type Spec struct {
 	// Pod's tolerations for Kubernetes node's taint
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
+	// DisableResourceDefaults prevents the operator from filling in default CPU and memory requests and limits.
+	// +kubebuilder:default=false
+	// +optional
+	DisableResourceDefaults bool `json:"disableResourceDefaults,omitempty"`
+
 	// resource requirements for the pod containers
 	Resources corev1.ResourceRequirements `json:"resources"`
 

@@ -82,28 +82,42 @@ func GetCMPodName(deployment *Deployment) string {
 	return fmt.Sprintf(ClusterManagerPod, deployment.GetName())
 }
 
-// CheckRFSF check if cluster has met replication factor and search factor
-func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
+// GetClusterManagerHealth queries the cluster manager's health REST endpoint
+// and returns the parsed content, so callers can inspect any of its fields
+// (RF/SF, site RF/SF, all-peers-up, all-data-searchable, multisite) without
+// each duplicating the curl-exec-and-unmarshal boilerplate.
+func GetClusterManagerHealth(ctx context.Context, deployment *Deployment) (*ClusterManagerHealthContent, error) {
 	podName := GetCMPodName(deployment)
 	stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/health?output_mode=json"
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
-		return false
+		return nil, err
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	restResponse := ClusterManagerHealthResponse{}
-	err = json.Unmarshal([]byte(stdout), &restResponse)
-	if err != nil {
+	if err := json.Unmarshal([]byte(stdout), &restResponse); err != nil {
 		logf.Log.Error(err, "Failed to parse health status")
+		return nil, err
+	}
+	if len(restResponse.Entries) == 0 {
+		return nil, fmt.Errorf("cluster manager health response contained no entries")
+	}
+	return &restResponse.Entries[0].Content, nil
+}
+
+// CheckRFSF check if cluster has met replication factor and search factor
+func CheckRFSF(ctx context.Context, deployment *Deployment) bool {
+	health, err := GetClusterManagerHealth(ctx, deployment)
+	if err != nil {
 		return false
 	}
-	sfMet := restResponse.Entries[0].Content.SearchFactorMet == "1"
+	sfMet := health.SearchFactorMet == "1"
 	if !sfMet {
 		logf.Log.Info("Search Factor not met")
 	}
-	rfMet := restResponse.Entries[0].Content.ReplicationFactorMet == "1"
+	rfMet := health.ReplicationFactorMet == "1"
 	if !rfMet {
 		logf.Log.Info("Replicaton Factor not met")
 	}
@@ -195,6 +209,20 @@ func CheckSearchHeadRemoved(ctx context.Context, deployment *Deployment) bool {
 	return searchHeadRemoved
 }
 
+// StartClusterPeerRollingRestart starts a rolling restart for all cluster peers.
+func StartClusterPeerRollingRestart(ctx context.Context, deployment *Deployment) bool {
+	podName := GetCMPodName(deployment)
+	stdin := "/opt/splunk/bin/splunk rolling-restart cluster-peers -auth admin:$(cat /mnt/splunk-secrets/password)"
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return false
+	}
+	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	return strings.Contains(stdout, "Rolling restart of all cluster peers has been initiated.")
+}
+
 // ClusterManagerInfoEndpointResponse is represtentation of /services/cluster/manager/info endpoint
 type ClusterManagerInfoEndpointResponse struct {
 	Entry []struct {
@@ -253,6 +281,31 @@ func CMBundlePushstatus(ctx context.Context, deployment *Deployment, previousBun
 			}
 		}
 		bundleStatus[entry.Content.Label] = entry.Content.Status
+	}
+
+	logf.Log.Info("Bundle status", "status", bundleStatus)
+	return bundleStatus
+}
+
+// PeerBundleStatus captures a peer's bundle push status and its active bundle ID.
+type PeerBundleStatus struct {
+	Status   string
+	BundleID string
+}
+
+// CMBundlePushstatusWithBundleID returns each peer's push status alongside its
+// active_bundle_id, so callers can verify peers are not just "Up" but also
+// serving the expected bundle (unlike CMBundlePushstatus, which only compares
+// hashes to filter out stale entries and drops the bundle ID from its result).
+func CMBundlePushstatusWithBundleID(ctx context.Context, deployment *Deployment, cm string) map[string]PeerBundleStatus {
+	restResponse := GetIndexersOrSearchHeadsOnCM(ctx, deployment, cm)
+
+	bundleStatus := make(map[string]PeerBundleStatus)
+	for _, entry := range restResponse.Entry {
+		bundleStatus[entry.Content.Label] = PeerBundleStatus{
+			Status:   entry.Content.Status,
+			BundleID: entry.Content.BundleID,
+		}
 	}
 
 	logf.Log.Info("Bundle status", "status", bundleStatus)

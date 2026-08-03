@@ -46,7 +46,9 @@ import (
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
@@ -83,6 +85,26 @@ func ContainsEvent(events []string, eventType string, event string) bool {
 	}
 	return false
 }
+
+type provisioningDurationObservation struct {
+	controller string
+	seconds    float64
+}
+
+type captureMetricsRecorder struct {
+	provisioningDurations []provisioningDurationObservation
+}
+
+func (r *captureMetricsRecorder) IncStatusTransition(string, string, string, string) {}
+func (r *captureMetricsRecorder) ObserveProvisioningDuration(controller string, seconds float64) {
+	r.provisioningDurations = append(r.provisioningDurations, provisioningDurationObservation{controller: controller, seconds: seconds})
+}
+func (r *captureMetricsRecorder) SetClusterPhases(map[string]float64)        {}
+func (r *captureMetricsRecorder) SetPoolerEnabledClusters(float64)           {}
+func (r *captureMetricsRecorder) SetDatabasePhases(map[string]float64)       {}
+func (r *captureMetricsRecorder) SetManagedUsers(string, map[string]float64) {}
+
+var _ ports.Recorder = (*captureMetricsRecorder)(nil)
 
 // seedCNPGClusterServerCASecret creates a minimal CNPG-style server CA Secret (ca.crt) so the access
 // ConfigMap can expose SERVER_CA_* keys once status.certificates.serverCASecret points at it.
@@ -156,9 +178,20 @@ func markCNPGClusterHealthy(cnpg *cnpgv1.Cluster, clusterName, caSecretName stri
 	const healthyReadyInstances = 2
 	cnpg.Status.Instances = healthyReadyInstances
 	cnpg.Status.ReadyInstances = healthyReadyInstances
+	cnpg.Status.CurrentPrimary = "example"
 	if caSecretName != "" {
 		cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 	}
+}
+
+func currentMajorUpgradePhase(ctx context.Context, key types.NamespacedName) string {
+	GinkgoHelper()
+	pc := &enterprisev4.PostgresCluster{}
+	Expect(k8sClient.Get(ctx, key, pc)).To(Succeed())
+	Expect(pc.Status.PostgresMajorUpgradeStatus).NotTo(BeEmpty())
+	current := pc.Status.PostgresMajorUpgradeStatus[len(pc.Status.PostgresMajorUpgradeStatus)-1]
+	Expect(current.Phase).NotTo(BeNil())
+	return *current.Phase
 }
 
 func seedClusterScopedDatabaseRoles(ctx context.Context, namespace, name, clusterName string, roleNames ...string) {
@@ -549,6 +582,163 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					received,
 					v1.EventTypeNormal, core.EventClusterReady,
 				)).To(BeTrue(), "events seen: %v", received)
+			})
+
+			It("drives the pg_upgrade major-version workflow and observes one readiness duration", func() {
+				targetVersion := "16"
+				initialImage := fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", postgresVersion)
+				targetImage := fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", targetVersion)
+
+				// Use the backup-enabled class so the upgrade gate creates a CNPG
+				// Backup that matches the target Cluster's VolumeSnapshot config.
+				pgCluster.Spec.Class = classNameBackup
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.ImageName).To(Equal(initialImage))
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+				cnpg.Status.Image = initialImage
+				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: initialImage, MajorVersion: 15}
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileAfterCNPGHealthyOrPatch()
+
+				pc := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				Expect(pc.Status.Phase).NotTo(BeNil())
+				Expect(*pc.Status.Phase).To(Equal("Ready"))
+
+				metrics := &captureMetricsRecorder{}
+				reconciler.Metrics = metrics
+				completedPhase := string(mvutypes.Completed)
+				strategy := mvutypes.MajorUpgradeFlowPgUpgrade
+				sourceVersion := "14"
+				pc.Status.PostgresMajorUpgradeStatus = []enterprisev4.PostgresMajorUpgradeStatus{{
+					Phase:           &completedPhase,
+					Strategy:        &strategy,
+					SourcePgVersion: &sourceVersion,
+					TargetPgVersion: ptr.To(postgresVersion),
+				}}
+				Expect(k8sClient.Status().Update(ctx, pc)).To(Succeed())
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				pc.Spec.PostgresVersion = ptr.To(targetVersion)
+				pc.Spec.PostgresMajorUpgradeConfig = &enterprisev4.PostgresMajorUpgradeConfig{
+					Allow:    ptr.To(true),
+					Strategy: &[]string{mvutypes.MajorUpgradeFlowPgUpgrade}[0],
+				}
+				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
+
+				// First reconcile: use case enters PreUpgradeBackup and the adapter creates the
+				// CNPG Backup CR. CNPG is not running in envtest so we patch it to completed.
+				_, err := reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.PreUpgradeBackup)))
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				Expect(pc.Status.LastTransitionTime).NotTo(BeNil())
+				lastTransitionTime := *pc.Status.LastTransitionTime
+
+				backupName := fmt.Sprintf("%s-pre-upgrade-%s-%s", clusterName, postgresVersion, targetVersion)
+				backup := &cnpgv1.Backup{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: backupName, Namespace: namespace}, backup)).To(Succeed())
+				Expect(backup.Spec.Method).To(Equal(cnpgv1.BackupMethodVolumeSnapshot))
+				Expect(cnpg.Spec.Backup).NotTo(BeNil())
+				Expect(cnpg.Spec.Backup.VolumeSnapshot).NotTo(BeNil())
+				Expect(backup.Status.Phase).NotTo(Equal(cnpgv1.BackupPhaseCompleted))
+
+				// A pending Backup must keep the workflow at its safety gate.
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.PreUpgradeBackup)))
+
+				backup.Status.Phase = cnpgv1.BackupPhaseCompleted
+				Expect(k8sClient.Status().Update(ctx, backup)).To(Succeed())
+
+				// Second reconcile: backup Done → gate passes → use case advances to Preflight.
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.ImageName).To(Equal(initialImage), "provisioner drift must be blocked before pg_upgrade starts")
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Preflight)))
+
+				// CNPG applies the target image while the data directory still uses the
+				// source image. A major-upgrade phase must keep the readiness cycle open.
+				cnpg = &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				Expect(cnpg.Spec.ImageName).To(Equal(targetImage))
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Upgrading)))
+
+				cnpg.Status.Phase = cnpgv1.PhaseMajorUpgrade
+				cnpg.Status.Image = targetImage
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Upgrading)))
+				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+				Expect(pc.Status.LastTransitionTime).NotTo(BeNil())
+				Expect(*pc.Status.LastTransitionTime).To(Equal(lastTransitionTime))
+				Expect(metrics.provisioningDurations).To(BeEmpty())
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+				cnpg.Status.Image = targetImage
+				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: targetImage, MajorVersion: 16}
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Verifying)))
+
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.PostUpgradeBackup)))
+
+				// The previous reconcile ran onVerifying and persisted PostUpgradeBackup.
+				// The postUpgradeBackup intercept (and BackupNow) only runs on the next
+				// reconcile — trigger it so the Backup CR is created before we patch it.
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.PostUpgradeBackup)))
+
+				postBackupName := fmt.Sprintf("%s-post-upgrade-%s-%s", clusterName, postgresVersion, targetVersion)
+				postBackup := &cnpgv1.Backup{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: postBackupName, Namespace: namespace}, postBackup)).To(Succeed())
+				postBackup.Status.Phase = cnpgv1.BackupPhaseCompleted
+				Expect(k8sClient.Status().Update(ctx, postBackup)).To(Succeed())
+
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Completed)))
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, req)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
+					g.Expect(pc.Status.Phase).NotTo(BeNil())
+					g.Expect(*pc.Status.Phase).To(Equal("Ready"))
+					g.Expect(pc.Status.LastTransitionTime).To(BeNil())
+				}).WithTimeout(45 * time.Second).WithPolling(50 * time.Millisecond).Should(Succeed())
+
+				Expect(metrics.provisioningDurations).To(HaveLen(1))
+				Expect(metrics.provisioningDurations[0].controller).To(Equal(ports.ControllerCluster))
+				Expect(metrics.provisioningDurations[0].seconds).To(BeNumerically(">", 0))
+
+				reconcileNTimes(2)
+				Expect(metrics.provisioningDurations).To(HaveLen(1))
+
+				received := make([]string, 0, 16)
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(received, v1.EventTypeNormal, mvutypes.EventMajorUpgradeScheduled)).To(
+					BeTrue(), "MajorUpgradeScheduled event must fire when workflow enters Preflight; events seen: %v", received)
+				Expect(ContainsEvent(received, v1.EventTypeNormal, mvutypes.EventMajorUpgradeStarted)).To(
+					BeTrue(), "MajorUpgradeStarted event must fire when image patch succeeds; events seen: %v", received)
+				Expect(ContainsEvent(received, v1.EventTypeNormal, mvutypes.EventMajorUpgradeCompleted)).To(
+					BeTrue(), "MajorUpgradeCompleted event must fire when post-upgrade backup completes; events seen: %v", received)
 			})
 
 			It("reconciles external superuser secret and creates managed resources w/ status refs", func() {
@@ -2018,6 +2208,153 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 			Expect(pc.Status.Phase).NotTo(BeNil())
 			Expect(*pc.Status.Phase).To(Equal("Ready"))
+		})
+	})
+
+	When("restoring a cluster from an object-store archive (PITR)", func() {
+		const originExternalCluster = "origin"
+		const barmanPluginName = "barman-cloud.cloudnative-pg.io"
+
+		var classNameRestore string
+
+		objectStoreKey := func() types.NamespacedName {
+			return types.NamespacedName{Name: clusterName + "-object-store", Namespace: namespace}
+		}
+
+		findExternalCluster := func(cnpg *cnpgv1.Cluster, name string) *cnpgv1.ExternalCluster {
+			for i := range cnpg.Spec.ExternalClusters {
+				if cnpg.Spec.ExternalClusters[i].Name == name {
+					return &cnpg.Spec.ExternalClusters[i]
+				}
+			}
+			return nil
+		}
+
+		BeforeEach(func() {
+			classNameRestore = classNamePrefix + "restore-" + fmt.Sprintf(
+				"%d-%d-%d",
+				GinkgoParallelProcess(),
+				GinkgoRandomSeed(),
+				CurrentSpecReport().LeafNodeLocation.LineNumber,
+			)
+
+			// Object store defined but backup writing left disabled: the restore only
+			// reads the archive, exercising the recovery-only ObjectStore path.
+			pgClassRestore := &enterprisev4.PostgresClusterClass{
+				ObjectMeta: metav1.ObjectMeta{Name: classNameRestore},
+				Spec: enterprisev4.PostgresClusterClassSpec{
+					Provisioner: provisioner,
+					Config: &enterprisev4.PostgresClusterClassConfig{
+						Instances:       ptr.To(clusterMemberCount),
+						Storage:         ptr.To(resource.MustParse(storageAmount)),
+						PostgresVersion: ptr.To(postgresVersion),
+					},
+					CNPG: &enterprisev4.CNPGConfig{
+						Backup: &enterprisev4.CNPGBackupConfig{
+							BarmanObjectStore: &enterprisev4.CNPGBarmanObjectStoreConfig{
+								DestinationPath: "s3://test-bucket/clusters/",
+								EndpointURL:     ptr.To("https://s3.us-east-1.amazonaws.com"),
+								S3Credentials: enterprisev4.CNPGBarmanS3Credentials{
+									AccessKeyId: v1.SecretKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
+										Key:                  "accessKeyId",
+									},
+									SecretAccessKey: v1.SecretKeySelector{
+										LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
+										Key:                  "secretAccessKey",
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pgClassRestore)).To(Succeed())
+
+			pgCluster.Spec.Class = classNameRestore
+		})
+
+		AfterEach(func() {
+			existing := &enterprisev4.PostgresClusterClass{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: classNameRestore}, existing)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, existing)).To(Succeed())
+			} else {
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}
+		})
+
+		// PITR-01
+		It("wires objectStorage + type=time target into the CNPG recovery spec, normalizing the timestamp", func() {
+			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
+				ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "pitr-src"},
+				RecoveryTarget: &enterprisev4.RecoveryTarget{
+					Type:  enterprisev4.RecoveryTargetTime,
+					Value: "2026-05-01T13:30:00Z",
+				},
+			}
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			// pass 1: finalizer; pass 2: CNPG cluster + managed ObjectStore created.
+			reconcileNTimes(2)
+
+			cnpg := &cnpgv1.Cluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+			Expect(cnpg.Spec.Bootstrap).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.InitDB).To(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery.Source).To(Equal(originExternalCluster))
+			Expect(cnpg.Spec.Bootstrap.Recovery.VolumeSnapshots).To(BeNil())
+
+			// PostgreSQL's recovery_target_time GUC rejects the RFC 3339 "Z" designator.
+			Expect(cnpg.Spec.Bootstrap.Recovery.RecoveryTarget).NotTo(BeNil())
+			targetTime := cnpg.Spec.Bootstrap.Recovery.RecoveryTarget.TargetTime
+			Expect(targetTime).To(Equal("2026-05-01 13:30:00+00:00"))
+			Expect(targetTime).NotTo(ContainSubstring("Z"))
+
+			origin := findExternalCluster(cnpg, originExternalCluster)
+			Expect(origin).NotTo(BeNil())
+			Expect(origin.PluginConfiguration).NotTo(BeNil())
+			Expect(origin.PluginConfiguration.Name).To(Equal(barmanPluginName))
+			Expect(origin.PluginConfiguration.Parameters).To(HaveKeyWithValue("barmanObjectName", clusterName+"-object-store"))
+			Expect(origin.PluginConfiguration.Parameters).To(HaveKeyWithValue("serverName", "pitr-src"))
+
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(core.ObjectStoreGVK)
+			Expect(k8sClient.Get(ctx, objectStoreKey(), obj)).To(Succeed())
+			owner := metav1.GetControllerOf(obj)
+			Expect(owner).NotTo(BeNil())
+			Expect(owner.Name).To(Equal(clusterName))
+		})
+
+		// PITR-02
+		It("sets recovery.source and externalClusters for a volumeSnapshot base with a WAL archive", func() {
+			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
+				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+					Storage:    "source-pg-backup-20260501120000",
+					WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "pitr-src"},
+				},
+				RecoveryTarget: &enterprisev4.RecoveryTarget{
+					Type:  enterprisev4.RecoveryTargetLSN,
+					Value: "0/16D68D0",
+				},
+			}
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			reconcileNTimes(2)
+
+			cnpg := &cnpgv1.Cluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+			Expect(cnpg.Spec.Bootstrap).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery.VolumeSnapshots).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery.VolumeSnapshots.Storage.Name).To(Equal("source-pg-backup-20260501120000"))
+			Expect(cnpg.Spec.Bootstrap.Recovery.Source).To(Equal(originExternalCluster))
+
+			Expect(cnpg.Spec.Bootstrap.Recovery.RecoveryTarget).NotTo(BeNil())
+			Expect(cnpg.Spec.Bootstrap.Recovery.RecoveryTarget.TargetLSN).To(Equal("0/16D68D0"))
+
+			origin := findExternalCluster(cnpg, originExternalCluster)
+			Expect(origin).NotTo(BeNil())
+			Expect(origin.PluginConfiguration.Parameters).To(HaveKeyWithValue("serverName", "pitr-src"))
 		})
 	})
 })

@@ -26,7 +26,7 @@ import (
 )
 
 var conflictErr = apierrors.NewConflict(schema.GroupResource{Group: "enterprise.splunk.com", Resource: "postgresclusters"}, "my-cluster", fmt.Errorf("rv mismatch"))
-var businessErr = fmt.Errorf("failed to fetch ClusterClass")
+var errBusiness = fmt.Errorf("failed to fetch ClusterClass")
 
 func TestIsPureConflict(t *testing.T) {
 	tests := []struct {
@@ -46,22 +46,22 @@ func TestIsPureConflict(t *testing.T) {
 		},
 		{
 			name:     "single non-conflict error",
-			err:      businessErr,
+			err:      errBusiness,
 			expected: false,
 		},
 		{
 			name:     "wrapped non-conflict error (fmt.Errorf %w)",
-			err:      fmt.Errorf("reconcile failed: %w", businessErr),
+			err:      fmt.Errorf("reconcile failed: %w", errBusiness),
 			expected: false,
 		},
 		{
 			name:     "joined: business + conflict — business wins",
-			err:      errors.Join(businessErr, conflictErr),
+			err:      errors.Join(errBusiness, conflictErr),
 			expected: false,
 		},
 		{
 			name:     "joined: conflict + business — business wins regardless of order",
-			err:      errors.Join(conflictErr, businessErr),
+			err:      errors.Join(conflictErr, errBusiness),
 			expected: false,
 		},
 		{

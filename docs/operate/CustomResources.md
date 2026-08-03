@@ -76,6 +76,7 @@ metadata:
     service.beta.kubernetes.io/azure-load-balancer-internal: "true"
   name: example
 spec:
+  disableResourceDefaults: false
   imagePullPolicy: Always
   livenessInitialDelaySeconds: 400
   readinessInitialDelaySeconds: 390
@@ -114,13 +115,14 @@ configuration parameters:
 | --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
 | image                 | string     | Container image to use for pod instances (overrides `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable |
 | imagePullPolicy       | string     | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                           |
+| disableResourceDefaults | boolean | Prevents the operator from filling in default CPU and memory requests and limits. Defaults to `false`. Set to `true` to preserve `resources` exactly as provided, including an empty value. |
 | livenessInitialDelaySeconds       | number     | Sets the initialDelaySeconds for Liveness probe (default: 300)                           |
 | readinessInitialDelaySeconds       | number     | Sets the initialDelaySeconds for Readiness probe (default: 10)                           |
 | extraEnv       | [EnvVar](https://v1-17.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#envvar-v1-core)     | Sets the extra environment variables to be passed to the Splunk instance containers. WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation                           |
 | schedulerName         | string     | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
 | podAnnotations        | map[string]string | Sets annotations on Splunk instance pods. These annotations can override operator-provided pod annotations, including the Istio sidecar traffic annotations. |
 | affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
-| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. The default settings should be considered for demo/test purposes.  Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#hardware-resources-requirements) for production values.|
+| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. Missing CPU and memory keys receive operator defaults unless `disableResourceDefaults` is `true`. The default settings should be considered for demo/test purposes. Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#hardware-resources-requirements) for production values.|
 | serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
 | topologySpreadConstraint       | [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) | Template used to create Kubernetes [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) |
 
@@ -321,6 +323,7 @@ SQS message queue inputs can be found in the table below.
 | region   | string | [Required] Region where the queue is located  |
 | endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
+| secretKeyRef | object | [Optional] Per-key selectors for AWS credentials. Contains `awsAccessKey` and `awsSecretKey`, each a `SecretKeySelector` with `name` (Secret name) and `key` (key within the Secret). When not set, IRSA / workload identity is assumed. |
 
 Change of any of the queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 
@@ -501,7 +504,19 @@ spec:
 ```
 
 ### A BestEffort QoS Class example:
-With no requests or limits values set for CPU and memory, the QoS class is set to BestEffort. The BestEffort QoS is not recommended for use with Splunk Operator.
+Set `disableResourceDefaults` to `true` and omit requests and limits to prevent the operator from adding resource defaults:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+spec:
+  disableResourceDefaults: true
+  resources: {}
+```
+
+With no requests or limits set for any container, Kubernetes assigns the pod the BestEffort QoS class. BestEffort QoS is not recommended for Splunk Enterprise production workloads. A namespace `LimitRange` may add resources during pod admission and result in a different QoS class.
 
 ### Pod Resources Management
 
@@ -520,6 +535,7 @@ All Splunk Enterprise Custom Resources include Kubernetes-standard [status condi
 | `Ready` | Indicates whether the resource is fully operational and all replicas are ready |
 | `Progressing` | Indicates whether the resource is being updated, scaled, or initialized |
 | `Paused` | Indicates whether reconciliation is paused via the pause annotation |
+| `Stalled` | Indicates a non-recoverable failure that requires user intervention before reconciliation can resume |
 
 ### Condition Fields
 
@@ -527,7 +543,7 @@ Each condition includes the following fields:
 
 | Field | Description |
 |-------|-------------|
-| `type` | The condition type (Ready, Progressing, or Paused) |
+| `type` | The condition type (Ready, Progressing, Paused, or Stalled) |
 | `status` | Either "True", "False", or "Unknown" |
 | `reason` | A machine-readable reason code for the condition's state |
 | `message` | A human-readable description of the condition |
@@ -558,6 +574,44 @@ status:
       message: Reconciliation is not paused
       lastTransitionTime: "2026-05-04T08:00:00Z"
       observedGeneration: 3
+    - type: Stalled
+      status: "False"
+      reason: NotStalled
+      message: ""
+      lastTransitionTime: "2026-05-04T08:00:00Z"
+      observedGeneration: 3
+```
+
+When a terminal failure is detected, `Stalled` flips to `True`:
+
+```yaml
+status:
+  phase: Error
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: ReconcileFailed
+      message: Pod stuck in terminal state — manual fix required
+      lastTransitionTime: "2026-05-04T11:00:00Z"
+      observedGeneration: 4
+    - type: Progressing
+      status: "False"
+      reason: ReconcileFailed
+      message: Pod stuck in terminal state — manual fix required
+      lastTransitionTime: "2026-05-04T11:00:00Z"
+      observedGeneration: 4
+    - type: Paused
+      status: "False"
+      reason: NotPaused
+      message: Reconciliation is not paused
+      lastTransitionTime: "2026-05-04T08:00:00Z"
+      observedGeneration: 4
+    - type: Stalled
+      status: "True"
+      reason: PodTerminalFailure
+      message: Pod stuck in terminal state — manual fix required
+      lastTransitionTime: "2026-05-04T11:00:00Z"
+      observedGeneration: 4
 ```
 
 ### Checking Conditions
@@ -579,6 +633,9 @@ kubectl describe standalone example
 - **`lastTransitionTime`** only updates when the condition's `status` field changes (e.g., from "False" to "True"), not on every reconcile
 - **`observedGeneration`** reflects which spec generation the controller has processed
 - When an error occurs, the `Ready` condition's `message` field contains the specific error description
+- **`Stalled=True`** signals a non-recoverable failure: the operator has stopped requeueing the CR and will not retry until the user resolves the root cause. `Stalled` is always `False` when `phase` is not `Error` — `Ready=True` and `Stalled=True` can never coexist
+- Use `Stalled=True` in monitoring or alerting rules to page on failures that need human intervention, as opposed to transient errors that self-heal
+- A **Warning** event with reason `Stalled` is emitted on **every** reconcile where `Stalled=True` (not only on the initial flip); a **Normal** event with reason `StalledResolved` is emitted once when the condition clears from `True` to `False`. Both are visible via `kubectl describe`
 
 ## Troubleshooting
 
@@ -605,6 +662,75 @@ bash# kubectl get stdaln -o yaml | grep -i message -A 5 -B 5
     resourceRevMap: {}
     selector: ""
 ```
+#### Terminal Failures
+
+Some failure states are non-recoverable without external intervention. When the operator detects one, it stops reconciling the CR immediately — the CR is **not requeued** — and sets `status.phase` to `Error` with `Stalled=True` in the status conditions. The CR remains in this state until the root cause is resolved and the operator detects the change.
+
+**What triggers a terminal failure**
+
+| Cause | `Stalled` condition message | Affected CRs |
+|-------|----------------------------|---------------|
+| A container is stuck in a non-recoverable waiting state: `ErrImagePull`, `ImagePullBackOff`, `InvalidImageName`, `ErrInvalidImage`, `CreateContainerConfigError`, `CreateContainerError`, or `RunContainerError` | `Pod stuck in terminal state — manual fix required` | All |
+| The TLS Secret referenced by `spec.certs[]` is missing a required key (`tls.crt` or `tls.key`) | `cert secret <namespace>/<name> is missing required key "<key>"` | All |
+| The CR spec fails validation during reconciliation (e.g. missing required field, invalid value) | `<CR type> spec validation failed` | All |
+| The Queue or ObjectStorage CR referenced by an IndexerCluster or IngestorCluster cannot be found | `Referenced Queue or ObjectStorage CR not found` | IndexerCluster, IngestorCluster |
+| `queueRef` or `objectStorageRef` is removed after having been applied | `queueRef and objectStorageRef cannot be removed once applied` | IndexerCluster, IngestorCluster |
+| `clusterManagerRef` is empty at the point where it is required at runtime | `empty Cluster Manager reference` | IndexerCluster |
+
+**Detecting a terminal failure**
+
+When a terminal failure occurs, `status.phase` is `Error` and the `Stalled` condition flips to `True`. A Kubernetes **Warning** event with reason `Stalled` is also emitted and is visible in `kubectl describe`. Check the conditions directly:
+
+```bash
+kubectl get standalone example -o jsonpath='{.status.conditions}' | jq .
+```
+
+Or filter for the `Stalled` condition specifically:
+
+```bash
+kubectl get standalone example -o jsonpath='{.status.conditions[?(@.type=="Stalled")]}' | jq .
+```
+
+The `Stalled` condition `message` field describes the failure. For pod-level failures, check the pod status for more detail:
+
+```bash
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+**Recovery**
+
+Once the root cause is resolved and the operator successfully reconciles the CR, the `Stalled` condition is cleared and a Kubernetes **Normal** event with reason `StalledResolved` is emitted.
+
+For a pod stuck in a terminal container state:
+1. Inspect the failing pod with `kubectl describe pod <pod-name> -n <namespace>` to read the `Waiting.Reason` and `Waiting.Message`.
+2. Fix the root cause (correct the image tag, provide the missing `imagePullSecret`, create the missing Secret or ConfigMap).
+3. Delete the stuck pods — the StatefulSet controller recreates them and the operator resumes reconciliation.
+
+```bash
+kubectl delete pod <stuck-pod-name> -n <namespace>
+```
+
+For a malformed TLS Secret:
+1. Update or recreate the Secret to include both `tls.crt` and `tls.key`.
+2. The operator detects the fix and resumes automatically on the next reconcile cycle.
+
+For a missing Queue or ObjectStorage CR (IndexerCluster, IngestorCluster):
+1. Create the missing CR in the same namespace as the IndexerCluster or IngestorCluster.
+2. The operator resumes automatically on the next reconcile cycle.
+
+For a spec validation failure:
+1. Check the `Stalled` condition `message` and operator logs to identify the invalid field.
+2. Correct the spec with `kubectl edit` or `kubectl patch`.
+3. The operator processes the spec change and resumes reconciliation automatically.
+
+For immutable refs cleared (`queueRef`/`objectStorageRef` removed after being applied):
+1. Restore the previous `queueRef` and `objectStorageRef` values in the CR spec.
+2. Apply the corrected spec — the operator resumes automatically.
+
+For an empty ClusterManager reference (IndexerCluster):
+1. Ensure `spec.clusterManagerRef.name` is set on the IndexerCluster.
+2. Apply the corrected spec — the operator resumes automatically.
+
 #### Pause Annotations
 The Splunk Operator controller reconciles every Splunk Enterprise CR. However, there might be circumstances wherein the influence of the Splunk Operator is not desired and needs to be paused. Every Splunk Enterprise CR has its own pause annotation associated with it, which when configured ensures that the Splunk Operator controller reconcile is paused for it. Below is a table listing the pause annotations:
 

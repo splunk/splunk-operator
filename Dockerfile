@@ -1,6 +1,6 @@
 # Setup defaults for build arguments
 ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
-ARG BASE_IMAGE_VERSION=8.10-1784076713
+ARG BASE_IMAGE_VERSION=8.10-1785302592
 ARG BUILDER_IMAGE=golang:1.26.5
 ARG GOTOOLCHAIN=auto
 ARG BUILDPLATFORM
@@ -27,7 +27,12 @@ COPY tools/ tools/
 COPY hack hack/
 
 # Build
-# TARGETOS and TARGETARCH are provided(inferred) by buildx via the --platforms flag
+# TARGETOS and TARGETARCH are provided by buildx via the --platform flag, but
+# they must be declared with ARG in this stage to be visible inside the RUN.
+# Without these declarations GOARCH expands to empty and Go falls back to the
+# builder's native arch, producing a binary that mismatches the image manifest.
+ARG TARGETOS
+ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 # Use BASE_IMAGE as the base image

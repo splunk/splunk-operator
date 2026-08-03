@@ -28,6 +28,7 @@ Each directory under `test/` is a separate Ginkgo test suite (Go package) with i
 | `test/smartstore/` | SmartStore configuration and functionality |
 | `test/secret/` | Secret management |
 | `test/ingest_search/` | Data ingest and search verification |
+| `test/indexing_clustering/` | Indexer cluster deployment, RF/SF, peer health, restart, and search-head-cluster scenarios |
 | `test/index_and_ingestion_separation/` | Index vs ingestion separation |
 | `test/delete_cr/` | CR deletion behavior |
 | `test/appframework_aws/` | App Framework with AWS S3 (`s1/`, `c3/`, `m4/` sub-suites) |
@@ -127,8 +128,10 @@ graph TD
 - Creates a unique namespace and sets up all required resources:
   - Cloud provider index secrets (EKS/Azure/GCP), created from environment variables
   - License ConfigMap (only when `--license-file` is provided; without it, Splunk instances use trial license)
+  - App download PVC wiring on the operator deployment; the helper retries update conflicts and skips duplicate `app-staging` volume and mount entries
 - **Prerequisites validation (fail-fast):** `SetupTestCaseEnv` calls `ValidateTestPrerequisites` immediately after creating the namespace and deployment. This checks that (a) the test namespace exists and (b) the operator pod is `Running` and `Ready` in the correct namespace (`splunk-operator` for cluster-wide, or the test namespace otherwise). If either check fails, the test fails fast with a clear error before any long-running operations begin
 - Torn down via `testenv.TeardownTestCaseEnv(testcaseEnvInst, deployment)` — which handles failure detection, skip-teardown on failure, deployment cleanup, and namespace deletion in one call
+- **Cloud credential validation (fail-fast):** when `CLUSTER_PROVIDER` is `eks`, `azure`, or `gcp`, `TestCaseEnv` rejects missing provider credentials before creating an incomplete Kubernetes Secret. The setup error names the missing variable, so the spec stops before cloud API operations begin
 
 **Deployment** (`test/testenv/deployment.go`)
 - Wraps the Splunk Custom Resources deployed in a test
@@ -292,7 +295,7 @@ Test selection is driven by Ginkgo `Label(...)` arguments on `It` blocks and fil
 - A **variant** label (where a CR has V3/V4 variants): `variant:manager` (ClusterManager / V4) or `variant:master` (ClusterMaster / V3).
 - A **feature** label — exactly one, matching the test's directory:
   `feature:appframework` (under `test/appframework_*`), `feature:smartstore`, `feature:monitoringconsole`,
-  `feature:secret`, `feature:crcrud`, `feature:deletecr`, `feature:licensemanager`, `feature:ingestsearch`, `feature:indingsep`, `feature:basic`.
+  `feature:secret`, `feature:crcrud`, `feature:deletecr`, `feature:licensemanager`, `feature:ingestsearch`, `feature:indingsep`, `feature:basic`, `feature:idxclustering`.
 - **Extra / scenario** labels when they carry meaning orthogonal to the above:
   `suite:mc1` / `suite:mc2` (CI parallelization groups),
   `feature:scaling` (added in addition to the test's primary `feature:*` label on scale-up/scale-down scenarios so the `managerscaling` CI job can target them).
@@ -496,7 +499,7 @@ Per-spec and suite-level timeouts are defined in `test/testenv/timeouts.go`. Use
 | `ShortSuiteTimeout` | 30 min | SmartStore, index/ingestion separation |
 | `MediumSuiteTimeout` | 120 min | Smoke, S1 app framework |
 | `MediumLongSuiteTimeout` | 150 min | MC, License Manager, secret |
-| `LongSuiteTimeout` | 225 min | CR CRUD, M4/C3 app framework |
+| `LongSuiteTimeout` | 225 min | CR CRUD, C3/M4 app framework |
 
 **Other timeouts:**
 
@@ -521,6 +524,36 @@ Install the version specified by `GO_VERSION` in `.env`.
 **2. Set up a Kubernetes cluster**
 
 You need a cluster with `kubectl` configured and a default StorageClass backed by a CSI driver for dynamic PVC provisioning (Splunk CRs create StatefulSets with PVCs).
+
+For a local single-node k3s workstation, point `kubectl` and the tests at the k3s kubeconfig:
+
+```bash
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+kubectl get nodes
+kubectl get storageclass
+```
+
+If you use a local registry, make sure k3s can pull from it. A common setup is `localhost:5000`:
+
+```bash
+docker ps --filter name=registry --format '{{.Names}}' | grep -q '^registry$' || \
+  docker run -d --restart=always -p 127.0.0.1:5000:5000 --name registry registry:2
+```
+
+If k3s cannot pull from `localhost:5000`, configure the k3s registry mirror and restart k3s:
+
+```bash
+sudo mkdir -p /etc/rancher/k3s
+sudo tee /etc/rancher/k3s/registries.yaml >/dev/null <<'EOF'
+mirrors:
+  "localhost:5000":
+    endpoint:
+      - "http://localhost:5000"
+EOF
+sudo systemctl restart k3s
+```
+
+Use k3s for direct local suite runs that do not require cloud storage credentials. Cloud-backed suites still need their documented `eks`, `azure`, or `gcp` provider setup because storage helpers select provider-specific S3, Azure Blob, or GCS behavior from the cloud test environment.
 
 **3. Install the Ginkgo CLI**
 
@@ -610,6 +643,7 @@ make int-test
 ```
 
 This runs `test/run-tests.sh`, which deploys the operator and invokes Ginkgo with the settings from `test/env.sh`.
+When `PRIVATE_REGISTRY` is set, `run-tests.sh` prepares the Enterprise image through `get-private-registry-enterprise.sh`, captures its single resolved image reference, and stops before deployment if the image pull, tag, or push fails. Diagnostic and Docker output remains in the job log instead of being included in the captured image reference.
 
 ### Run a Specific Suite Directly
 
@@ -630,6 +664,16 @@ ginkgo -v --label-filter="tier:e2e-pr && sva:s1" ./test/smoke -- \
 ```
 
 Suites under `test/appframework_*`, `test/smartstore/`, and `test/index_and_ingestion_separation/` require cloud storage setup (steps 9–10 above).
+
+For a local k3s run, explicitly use the k3s kubeconfig. Single-node k3s is resource constrained, so start with one suite and one Ginkgo process. Do not use this path for suites that require cloud storage setup, such as App Framework, SmartStore, or index/ingestion separation.
+
+```bash
+KUBECONFIG=/etc/rancher/k3s/k3s.yaml DEBUG=False \
+ginkgo -v --trace --timeout=240m ./test/indexing_clustering -- \
+  -operator-image=$OPERATOR_IMG \
+  -splunk-image=$SPLUNK_IMG \
+  -cluster-wide=true
+```
 
 ### Run a Specific Test by Name or Label
 
@@ -671,7 +715,7 @@ ginkgo -v -nodes=3 ./test/smoke -- \
 
 ### Using the Script Directly
 
-The `test/trigger-tests.sh` script wraps Ginkgo and selects tests via `TEST_LABELS` (a Ginkgo label-filter expression). The legacy `TEST_FOCUS` / `TEST_REGEX` / `TEST_TO_SKIP` / `SKIP_REGEX` variables are no longer honoured and will cause the script to exit.
+The `test/trigger-tests.sh` script wraps Ginkgo and selects tests via `TEST_LABELS` (a Ginkgo label-filter expression). The legacy `TEST_FOCUS` / `TEST_REGEX` / `TEST_TO_SKIP` / `SKIP_REGEX` variables are no longer honoured and will cause the script to exit. When `TEST_LABELS` includes `tier:e2e-pr` (the smoke tier), the script also passes `--fail-fast` so a suite stops at its first failure instead of running every remaining spec against already-broken cluster state. This is scoped to `tier:e2e-pr` only: smoke runs gate PR merges, so stopping fast gets a red/green signal back quickly. Nightly/full suites intentionally keep `keep-going` semantics so a single run surfaces every failing spec instead of just the first.
 
 ```bash
 export TEST_LABELS="tier:e2e-pr && sva:s1"
@@ -868,7 +912,9 @@ kubectl get all,pvc --all-namespaces -o json | \
 
 ### Cloud Provider Credentials
 
-Cloud provider variables below are used to create Kubernetes Secrets in each test namespace for SmartStore, App Framework, and index tests. In CI, these are populated from repository secrets. For local runs, export them in your shell or source them from a `.env` file. If you're only running smoke tests without cloud storage features, these can be left unset.
+Cloud provider variables below are used to create Kubernetes Secrets in each test namespace for SmartStore, App Framework, and index tests. In CI, these are populated from repository secrets. For local runs, export them in your shell or source them from a `.env` file.
+
+Credential validation runs whenever a `TestCaseEnv` is created with `CLUSTER_PROVIDER=eks`, `azure`, or `gcp`, regardless of which test suite is running. This means that even a smoke suite fails during setup when its selected cloud provider's required credentials are missing. Tests using `CLUSTER_PROVIDER=kind` (or another non-cloud provider) do not create these cloud Secrets and can leave the variables unset.
 
 > **Caution:** If you modify `test/env.sh` with local values or secrets, do **not** commit or push it. Changes to `env.sh` affect CI runs for all contributors and risk disclosing confidential data such as credentials and access keys. Consider using a local `.env` file (which is `.gitignore`d) or exporting variables in your shell session instead.
 
@@ -877,8 +923,10 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 | Variable | Description |
 |----------|-------------|
 | `ECR_REGISTRY` | ECR registry URL |
-| `TEST_S3_ACCESS_KEY_ID` | S3 access key for test buckets |
-| `TEST_S3_SECRET_ACCESS_KEY` | S3 secret key |
+| `TEST_S3_ACCESS_KEY_ID` | Required S3 access key for test buckets; `AWS_ACCESS_KEY_ID` is accepted as a fallback |
+| `TEST_S3_SECRET_ACCESS_KEY` | Required S3 secret key; `AWS_SECRET_ACCESS_KEY` is accepted as a fallback |
+| `AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID` | Required S3 access key for the index/ingestion separation Secret |
+| `AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY` | Required S3 secret key for the index/ingestion separation Secret |
 | `TEST_BUCKET` / `TEST_S3_BUCKET` | S3 bucket for test data |
 | `TEST_INDEXES_S3_BUCKET` | S3 bucket for index tests |
 | `S3_REGION` | AWS region (default: `us-west-2`) |
@@ -893,8 +941,8 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 
 | Variable | Description |
 |----------|-------------|
-| `STORAGE_ACCOUNT` | Azure Storage account name |
-| `STORAGE_ACCOUNT_KEY` | Azure Storage account key |
+| `STORAGE_ACCOUNT` | Required Azure Storage account name |
+| `STORAGE_ACCOUNT_KEY` | Required Azure Storage account key |
 | `TEST_CONTAINER` | Azure Blob container for test data |
 | `INDEXES_CONTAINER` | Azure Blob container for index tests |
 
@@ -902,7 +950,7 @@ Cloud provider variables below are used to create Kubernetes Secrets in each tes
 
 | Variable | Description |
 |----------|-------------|
-| `GCP_SERVICE_ACCOUNT_KEY` | Base64-encoded GCP service account JSON |
+| `GCP_SERVICE_ACCOUNT_KEY` | Required base64-encoded GCP service account JSON |
 | `GCP_CONTAINER_REGISTRY_LOGIN_SERVER` | GCP Artifact Registry URL |
 
 ---

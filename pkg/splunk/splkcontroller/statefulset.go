@@ -33,6 +33,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	// ReasonPodTerminalFailure is the machine-readable reason used when a pod is
+	// stuck in a non-recoverable terminal state that requires manual remediation.
+	ReasonPodTerminalFailure splcommon.EventReason = "PodTerminalFailure"
+)
+
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
 type DefaultStatefulSetPodManager struct{}
 
@@ -61,6 +67,65 @@ func (mgr *DefaultStatefulSetPodManager) FinishRecycle(ctx context.Context, n in
 }
 
 func (mgr *DefaultStatefulSetPodManager) FinishUpgrade(ctx context.Context, n int32) error {
+	return nil
+}
+
+// terminalPodWaitingReasons is the set of container Waiting.Reason values that
+// indicate a non-recoverable pod failure. A container stuck in one of these states
+// will never start without external intervention (correcting the image reference,
+// creating the missing Secret/ConfigMap, etc.).
+var terminalPodWaitingReasons = map[string]bool{
+	"ErrImagePull":               true, // image pull failed (bad credentials, unreachable registry)
+	"ImagePullBackOff":           true, // kubelet backing off after repeated pull failures
+	"InvalidImageName":           true, // image reference is syntactically malformed
+	"ErrInvalidImage":            true, // image reference resolves but is not a valid image
+	"CreateContainerConfigError": true, // env-var or volume references a missing ConfigMap/Secret key
+	"CreateContainerError":       true, // OCI runtime cannot create container (missing device, seccomp profile, etc.)
+	"RunContainerError":          true, // OCI runtime cannot run container (invalid entrypoint, missing binary)
+}
+
+// checkPodsForTerminalFailures lists pods belonging to statefulSet and returns a
+// descriptive error if any container or init-container is stuck in a terminal
+// waiting state. Returns nil if all pods appear healthy or if the List call
+// fails (treated as transient so it does not interrupt reconciliation).
+func checkPodsForTerminalFailures(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet) error {
+	if statefulSet.Spec.Selector == nil {
+		return nil
+	}
+	podList := &corev1.PodList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(statefulSet.GetNamespace()),
+		client.MatchingLabels(statefulSet.Spec.Selector.MatchLabels),
+	}
+	if err := c.List(ctx, podList, listOpts...); err != nil {
+		return nil // transient API error; don't interrupt reconciliation
+	}
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		for _, cs := range pod.Status.InitContainerStatuses {
+			if cs.State.Waiting != nil && terminalPodWaitingReasons[cs.State.Waiting.Reason] {
+				return fmt.Errorf("pod %s init-container %q in terminal state %s: %s",
+					pod.Name, cs.Name, cs.State.Waiting.Reason, cs.State.Waiting.Message)
+			}
+		}
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.State.Waiting != nil && terminalPodWaitingReasons[cs.State.Waiting.Reason] {
+				return fmt.Errorf("pod %s container %q in terminal state %s: %s",
+					pod.Name, cs.Name, cs.State.Waiting.Reason, cs.State.Waiting.Message)
+			}
+		}
+	}
+	return nil
+}
+
+// CheckPodsForTerminalFailures is the exported form of checkPodsForTerminalFailures.
+// It returns a splcommon.TerminalError (which satisfies errors.Is(err, reconcile.TerminalError(nil)))
+// if any pod belonging to statefulSet is stuck in a non-recoverable container waiting state,
+// or nil otherwise. Callers only need to propagate the returned error.
+func CheckPodsForTerminalFailures(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet) error {
+	if termErr := checkPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
+		return splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr)
+	}
 	return nil
 }
 
@@ -133,6 +198,13 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	readyReplicas := statefulSet.Status.ReadyReplicas
 	if readyReplicas < replicas {
 		scopedLog.InfoContext(ctx, "waiting for pods to become ready")
+		// Detect terminal container states (wrong image, inaccessible registry, missing
+		// ConfigMap/Secret key) that will never self-heal. Surface them as PhaseError
+		// immediately rather than waiting for the full reconcile timeout.
+		if termErr := checkPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
+			scopedLog.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
+			return enterpriseApi.PhaseError, splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr)
+		}
 		if readyReplicas > 0 {
 			return enterpriseApi.PhaseScalingUp, nil
 		}
@@ -214,6 +286,10 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			return enterpriseApi.PhaseError, err
 		}
 		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || !pod.Status.ContainerStatuses[0].Ready {
+			if termErr := checkPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
+				scopedLog.ErrorContext(ctx, "terminal pod failure detected during update; setting PhaseError", "error", termErr)
+				return enterpriseApi.PhaseError, splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr)
+			}
 			scopedLog.ErrorContext(ctx, "waiting for Pod to become ready", "podName", podName, "error", err)
 			return enterpriseApi.PhaseUpdating, err
 		}

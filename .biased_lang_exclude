@@ -69,11 +69,15 @@ test/clustermaster/cmaster_appframework_suite_test.go
 test/clustermaster/cmaster_appframework_test.go
 test/clustermaster/cmaster_appframework_test.go
 test/licensemaster/lmaster_m4_test.go
+tools/cleanup-gcp-test-resources.sh
 tools/k8s_collectors/k8s-splunk-collector.sh
 api/enterprise/v4/clustermanager_types.go
 api/enterprise/v4/indexercluster_types.go
 api/enterprise/v4/zz_generated.deepcopy.go
 api/enterprise/v4/common_types.go
+gitlab-ci/includes/release.yml
+gitlab-ci/includes/runtime.yml
+gitlab-ci/README.md
 #Below should be reviewed once CRDs have no bias lang
 tools/bias_lang_migration.sh
 go.mod

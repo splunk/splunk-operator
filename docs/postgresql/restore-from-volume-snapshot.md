@@ -4,11 +4,15 @@ parent: PostgreSQL
 nav_order: 6
 ---
 
-# Restoring a PostgresCluster from a Volume Snapshot
+# Restoring a PostgresCluster
 
-This guide covers restoring a PostgreSQL cluster from a volume snapshot backup. It is intended for **users** who need to recover a `PostgresCluster` from an existing `VolumeSnapshot`.
+This guide covers restoring a PostgreSQL cluster from a backup. It is intended for **users** who need to recover a `PostgresCluster`. Three restore modes are supported:
 
-Before following this guide, ensure your `PostgresClusterClass` has volume snapshot backups configured and at least one `VolumeSnapshot` is available in your namespace. See [Automated Backups via Volume Snapshots](backup-volume-snapshots.md) for backup setup.
+- **Volume snapshot** — recover to the exact moment a snapshot was taken ([§3](#3-performing-a-restore)).
+- **Point-in-time recovery (PITR)** — recover to an arbitrary timestamp, transaction ID, or LSN by replaying WAL from an object-store archive on top of a volume snapshot or object-store base backup ([§8](#8-point-in-time-recovery-pitr)).
+- **Object storage** — recover entirely from an object-store (barman-cloud) backup, no volume snapshot required ([§9](#9-restoring-from-object-storage)).
+
+Before following this guide, ensure your `PostgresClusterClass` has backups configured and a suitable backup is available. See [Automated Backups via Volume Snapshots](backup-volume-snapshots.md) and [Object Storage Backups](backup-object-storage.md) for backup setup. PITR and object-storage restore both require a `barmanObjectStore` configured on the class.
 
 ---
 
@@ -192,6 +196,123 @@ When you are ready to switch your application to the restored cluster:
 
 ## 7. Limitations
 
-- **Point-in-time recovery (PITR) is not supported in v1.** Restore always recovers to the exact moment the snapshot was taken. PITR (recovering to an arbitrary timestamp between backups) requires continuous WAL streaming to object storage (a WAL archive, distinct from the per-PVC WAL volume snapshot covered by `spec.bootstrapFrom.volumeSnapshot.walStorage`) and is planned for a future release.
-- **Restore from object storage is not supported in v1.** Only volume snapshot restore is available. Object storage restore is planned for a future release.
 - **Cross-class / cross-version restore is not supported.** The operator does not validate that the snapshot's PostgreSQL version matches the target class at admission time, and a mismatch results in a failed cluster with no clear error surfaced through the operator. Matching the PostgreSQL major version of the source is the user's responsibility — see [§5.2](#52-restoring-across-different-classes-not-supported).
+- **Target types `name`, `xid`, and `immediate` are only supported with a volume-snapshot base.** The operator rejects them on an [`objectStorage` source](#9-restoring-from-object-storage) because CloudNativePG can only auto-select the object-store base backup for types `time` or `lsn`. With a volume snapshot the base is the snapshot itself (unambiguous), so all target types are accepted. See [§8.3](#83-recovery-target-types).
+
+---
+
+## 8. Point-in-time recovery (PITR)
+
+PITR recovers the cluster to an arbitrary point **between** backups — a timestamp, transaction ID, or LSN — rather than to the exact backup point. This is done by replaying WAL (write-ahead log) segments from an object-store archive on top of a base backup.
+
+### 8.1 Prerequisites
+
+- The source cluster must have archived its WAL: when it was running, its class must have had `cnpg.backup.barmanObjectStore` configured with WAL archiving, so WAL segments are continuously shipped to object storage. See [Object Storage Backups](backup-object-storage.md).
+- **The class the restored cluster references** (`spec.class`) — not necessarily the source cluster's class — must define `cnpg.backup.barmanObjectStore` pointing at that same archive. This is where the operator resolves the bucket path and credentials to read WAL from. In the common case both clusters use the same class, but any class that points at the source's archive works. The operator rejects a PITR/object-storage restore whose referenced class has no `barmanObjectStore`.
+- You need the source cluster's **server name** in the object store — this is the folder under which its WAL is stored, matching the source cluster's name.
+
+### 8.2 PITR from a volume snapshot
+
+Combine a volume snapshot (the base backup) with a `walArchive` (the WAL source) and a `recoveryTarget`:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresCluster
+metadata:
+  name: mydb-restored
+  namespace: <namespace>
+spec:
+  class: <your-class>          # must define cnpg.backup.barmanObjectStore
+  bootstrapFrom:
+    volumeSnapshot:
+      storage: mydb-backup-20260501120000
+      walArchive:
+        serverName: mydb        # source cluster's server name in the object store
+    recoveryTarget:
+      type: time
+      value: "2026-05-01T13:30:00Z"
+```
+
+The snapshot restores the data directory up to the backup point; WAL segments from the archive are then replayed forward until the target time is reached. **`walArchive` is required whenever `recoveryTarget` is set on a volume-snapshot source** — the snapshot alone cannot reach a point past the moment it was taken. The operator rejects a PITR request that omits it.
+
+### 8.3 Recovery target types
+
+`recoveryTarget` is a discriminated pair: a `type` selects which kind of target to recover to, and `value` carries the target itself (interpreted according to `type`). This mirrors PostgreSQL's own model, where a single `recovery_target_*` is chosen, so the API cannot express two conflicting targets at once.
+
+| `type` | `value` meaning | Example `value` |
+|---|---|---|
+| `time` | An RFC 3339 timestamp (recommended) | `"2026-05-01T13:30:00Z"` |
+| `lsn` | A WAL log sequence number | `"0/16D68D0"` |
+| `xid` | A transaction ID | `"1234567"` |
+| `name` | A named restore point (`pg_create_restore_point`) | `"before-migration"` |
+| `immediate` | Stop as soon as a consistent state is reached — takes no `value` | *(omit `value`)* |
+
+`value` is required for every type except `immediate`, where it must be omitted. For example:
+
+```yaml
+    recoveryTarget:
+      type: lsn
+      value: "0/16D68D0"
+```
+
+`exclusive: true` stops recovery just *before* the target rather than just after (default is inclusive). It is ignored for type `immediate`. See [§7](#7-limitations) for the base-backup caveat affecting types `name`/`xid`/`immediate`.
+
+> **Types `xid`, `name`, and `immediate` require a volume-snapshot base.** With an [object-storage source](#9-restoring-from-object-storage), CloudNativePG can only auto-select the base backup for types `time` or `lsn`; for the other types it would fall back to the latest backup, which may sit past the target and start recovery from the wrong base. The operator therefore rejects types `xid`/`name`/`immediate` on an `objectStorage` source. Use type `time`/`lsn`, or restore from a `volumeSnapshot` base (which is unambiguous).
+
+### 8.4 Verifying a PITR restore
+
+`status.restore.source` echoes both the source and the recovery target that was requested:
+
+```bash
+kubectl get postgrescluster mydb-restored -n <namespace> -o jsonpath='{.status.restore}'
+```
+
+```json
+{
+  "source": {
+    "volumeSnapshot": "mydb-backup-20260501120000",
+    "requestedRecoveryTarget": {
+      "type": "time",
+      "value": "2026-05-01T13:30:00Z"
+    }
+  },
+  "credentialSweep": { "completed": true }
+}
+```
+
+`requestedRecoveryTarget` is derived from the desired spec — it records what the restore was *asked* to recover to (mirroring the `recoveryTarget` you set), not a provider-confirmed observation of where recovery actually stopped. It is omitted for a plain snapshot restore or a recovery to the latest available WAL.
+
+### 8.5 Large clusters: restore single-instance first
+
+For a snapshot-based restore of a large database with `instances > 1`, only the primary is bootstrapped from the fast snapshot clone — standbys are rebuilt with a full `pg_basebackup` copy over the network. To avoid multiple full copies:
+
+1. Restore with `instances: 1`.
+2. Wait for the primary to be `Ready`.
+3. Take a fresh snapshot of the recovered primary.
+4. Scale to the desired instance count — standbys are then provisioned from the new snapshot.
+
+---
+
+## 9. Restoring from object storage
+
+When a base backup exists in object storage (not just WAL), you can restore entirely from the object store with no volume snapshot. Use the top-level `objectStorage` source:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresCluster
+metadata:
+  name: mydb-restored
+  namespace: <namespace>
+spec:
+  class: <your-class>          # must define cnpg.backup.barmanObjectStore
+  bootstrapFrom:
+    objectStorage:
+      serverName: mydb          # source cluster's server name in the object store
+    recoveryTarget:             # optional — omit to recover to the latest WAL
+      type: time
+      value: "2026-05-01T13:30:00Z"
+```
+
+`volumeSnapshot` and `objectStorage` are mutually exclusive — set exactly one. Bucket path, credentials, and endpoint are resolved from the class's `barmanObjectStore` config; they are never specified in `bootstrapFrom`. This keeps restore authorization consistent with backup authorization: you can only restore from object stores your class already has access to.
+
+Credential handling ([§4](#4-credentials-after-restore)) and cross-class compatibility ([§5](#5-restore-compatibility)) apply identically to object-storage restores — the post-restore credential sweep runs for every recovery source.

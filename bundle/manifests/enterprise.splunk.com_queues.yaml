@@ -34,7 +34,9 @@ spec:
     name: v4
     schema:
       openAPIV3Schema:
-        description: Queue is the Schema for the queues API
+        description: 'Queue is the Schema for the queues API. NOTE: Queue is part
+          of the index and ingestion separation feature, which is currently in Preview
+          and not recommended for production use.'
         properties:
           apiVersion:
             description: |-
@@ -81,39 +83,75 @@ spec:
                     description: Name of the queue
                     minLength: 1
                     type: string
-                  volumes:
-                    description: List of remote storage volumes
-                    items:
-                      description: VolumeSpec defines remote volume config
-                      properties:
-                        endpoint:
-                          description: Remote volume URI
-                          type: string
-                        name:
-                          description: Remote volume name
-                          type: string
-                        path:
-                          description: Remote volume path
-                          type: string
-                        provider:
-                          description: 'App Package Remote Store provider. Supported
-                            values: aws, minio, azure, gcp.'
-                          type: string
-                        region:
-                          description: Region of the remote storage volume where apps
-                            reside. Used for aws, if provided. Not used for minio
-                            and azure.
-                          type: string
-                        secretRef:
-                          description: Secret object name
-                          type: string
-                        storageType:
-                          description: 'Remote Storage type. Supported values: s3,
-                            blob, gcs. s3 works with aws or minio providers, whereas
-                            blob works with azure provider, gcs works for gcp.'
-                          type: string
-                      type: object
-                    type: array
+                  secretKeyRef:
+                    description: |-
+                      SecretKeyRef holds per-credential selectors for AWS credentials.
+                      When not set, IRSA / workload identity is assumed.
+                      Secrets are looked up in the Queue's own namespace.
+                    properties:
+                      awsAccessKey:
+                        description: AwsAccessKey selects the AWS access key ID from
+                          a Kubernetes Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      awsSecretKey:
+                        description: AwsSecretKey selects the AWS secret access key
+                          from a Kubernetes Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    required:
+                    - awsAccessKey
+                    - awsSecretKey
+                    type: object
+                    x-kubernetes-validations:
+                    - message: awsAccessKey.name must not be empty
+                      rule: size(self.awsAccessKey.name) > 0
+                    - message: awsSecretKey.name must not be empty
+                      rule: size(self.awsSecretKey.name) > 0
+                    - message: awsAccessKey.key must not be empty
+                      rule: size(self.awsAccessKey.key) > 0
+                    - message: awsSecretKey.key must not be empty
+                      rule: size(self.awsSecretKey.key) > 0
                 required:
                 - dlq
                 - name
@@ -132,15 +170,84 @@ spec:
             - message: sqs.dlq is immutable once created
               rule: self.sqs.dlq == oldSelf.sqs.dlq
             - message: sqs.endpoint is immutable once created
-              rule: self.sqs.endpoint == oldSelf.sqs.endpoint
+              rule: (has(self.sqs.endpoint) == has(oldSelf.sqs.endpoint)) && (!has(self.sqs.endpoint)
+                || self.sqs.endpoint == oldSelf.sqs.endpoint)
             - message: sqs must be provided when provider is sqs or sqs_cp
               rule: (self.provider != 'sqs' && self.provider != 'sqs_cp') || has(self.sqs)
           status:
             description: QueueStatus defines the observed state of Queue
             properties:
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the resource's state.
+                  Conditions are: Ready, Progressing, Paused
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               message:
                 description: Auxiliary message describing CR status
                 type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the controller.
+                  It corresponds to the metadata.generation which is updated on spec changes.
+                format: int64
+                type: integer
               phase:
                 description: Phase of the queue
                 enum:

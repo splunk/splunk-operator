@@ -24,15 +24,18 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	cnpgpostgres "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -45,6 +48,23 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+)
+
+// Reserved CNPG names the operator synthesizes on the managed cnpgv1.Cluster spec. Both are
+// operator-owned: buildCNPGClusterSpec drops any live entry matching these names before appending
+// the desired one, so a user- or third-party-supplied plugin/externalCluster using either name is
+// treated as ours and will be overwritten on the next reconcile. Kept together here (rather than
+// buried next to their builders in this large file) so the reserved namespace is discoverable.
+const (
+	// barmanCloudPluginName is the CNPG plugin name for the barman-cloud object store backup plugin.
+	barmanCloudPluginName = "barman-cloud.cloudnative-pg.io"
+
+	// recoveryExternalClusterName is the fixed name of the externalClusters entry the operator
+	// synthesizes so CNPG can replay WAL from an object-store archive during recovery. It is
+	// referenced by BootstrapRecovery.Source and, for objectStorage/walArchive sources, points at the
+	// barman-cloud ObjectStore the operator manages from the class backup config. RESERVED: this name
+	// is owned by the operator; any live externalCluster named "origin" is replaced on reconcile.
+	recoveryExternalClusterName = "origin"
 )
 
 type clusterModel struct {
@@ -61,7 +81,8 @@ type clusterModel struct {
 	// cnpgPatch classifies this reconcile's CNPG spec change. Observe uses
 	// requiresPhaseGate() to decide whether to hold ClusterReady=Provisioning
 	// while CNPG.Status.Phase still reflects the pre-patch value.
-	cnpgPatch cnpgPatchKind
+	cnpgPatch     cnpgPatchKind
+	blockedHealth *componentHealth
 
 	metricsEnabled bool
 }
@@ -91,6 +112,7 @@ func (p *clusterModel) CheckContracts() error {
 func (p *clusterModel) Reconcile(ctx context.Context) error {
 	p.cnpgCreated = false
 	p.cnpgPatch = cnpgPatchNone
+	p.blockedHealth = nil
 
 	poolerEnabled := p.mergedConfig != nil && p.mergedConfig.Spec != nil &&
 		isPoolerEnabled(p.mergedConfig.Spec.ConnectionPooler)
@@ -145,6 +167,11 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		}
 		p.events.emitNormal(p.cluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster for PostgresCluster %s", p.cluster.Name))
 		p.cnpgPatch = cnpgPatchMetadata
+	}
+
+	if health, blocked := p.majorVersionDriftBlock(p.cnpgCluster); blocked {
+		p.blockedHealth = &health
+		return nil
 	}
 
 	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec)
@@ -218,8 +245,16 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 	p.cluster.Status.Instances = ptr.To(int32(p.cnpgCluster.Status.Instances))
 	p.cluster.Status.ReadyInstances = ptr.To(int32(p.cnpgCluster.Status.ReadyInstances))
 	p.cluster.Status.CurrentPrimary = ptr.To(p.cnpgCluster.Status.CurrentPrimary)
+	if info := p.cnpgCluster.Status.PGDataImageInfo; info != nil && info.MajorVersion > 0 {
+		p.cluster.Status.CurrentPgVersion = fmt.Sprintf("%d", info.MajorVersion)
+	}
 
-	if p.cnpgPatch.requiresPhaseGate() && (p.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy || p.cnpgCluster.Status.Phase == "") {
+	if p.blockedHealth != nil {
+		return *p.blockedHealth, nil
+	}
+
+	if (p.cnpgPatch.requiresPhaseGate() || imageUpdateInProgress(p.cnpgCluster)) &&
+		(p.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy || p.cnpgCluster.Status.Phase == "") {
 		return newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, p.cnpgCluster.Status.Phase)), nil
 	}
 
@@ -288,6 +323,59 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, phase))
 	}
 	return health, convergeErr
+}
+
+func (p *clusterModel) majorVersionDriftBlock(existingCNPG *cnpgv1.Cluster) (componentHealth, bool) {
+	if p.cluster == nil || p.mergedConfig == nil || p.mergedConfig.Spec == nil || p.mergedConfig.Spec.PostgresVersion == nil {
+		return componentHealth{}, false
+	}
+
+	currentVersion := postgresVersionFromImageName(existingCNPG.Spec.ImageName)
+	if currentVersion == "" {
+		return componentHealth{}, false
+	}
+
+	currentMajor, _ := parseVersion(currentVersion)
+	requestedMajor, _ := parseVersion(*p.mergedConfig.Spec.PostgresVersion)
+	if currentMajor <= 0 || requestedMajor <= 0 || currentMajor == requestedMajor {
+		return componentHealth{}, false
+	}
+	if requestedMajor < currentMajor {
+		return newPendingHealth(
+			clusterReady,
+			reasonMajorDowngradeUnsupported,
+			fmt.Sprintf(string(msgFmtMajorDowngradeUnsupported), currentVersion, *p.mergedConfig.Spec.PostgresVersion),
+		), true
+	}
+
+	if isMajorUpgradeAllowed(p.cluster.Spec.PostgresMajorUpgradeConfig) {
+		// allow=true authorizes the major-upgrade *workflow*; it does not
+		// license the provisioner to bump the CNPG image itself. Hold here so
+		// the major-upgrade use case (backup -> preflight -> patch -> verify ->
+		// finalize) owns the transition. We must NOT patch the image directly:
+		// that would skip the orchestrated backup/preflight and could jump
+		// multiple majors at once, since this guard performs no multi-major-jump
+		// check.
+		//
+		// Holding (not patching) is also what lets the use case eventually take
+		// over: it reads the running major straight from the live CNPG cluster
+		// (PGDataImageInfo.MajorVersion), so once CNPG reports a version its
+		// Prerequisites pass and it activates and blocks this component outright.
+		// (Observe still latches status.currentPgVersion from the same CNPG field
+		// here, but that projection is now observability only — the use case does
+		// not depend on it.)
+		return newPendingHealth(
+			clusterReady,
+			reasonMajorUpgradePending,
+			fmt.Sprintf(string(msgFmtMajorUpgradePending), currentVersion, *p.mergedConfig.Spec.PostgresVersion),
+		), true
+	}
+
+	return newPendingHealth(
+		clusterReady,
+		reasonMajorUpgradeConfigRequired,
+		fmt.Sprintf(string(msgFmtMajorUpgradeConfigRequired), currentVersion, *p.mergedConfig.Spec.PostgresVersion),
+	), true
 }
 
 // scaleInProgress reports whether desired and observed/ready instance counts
@@ -453,15 +541,104 @@ func ValidateCrossResource(class *enterprisev4.PostgresClusterClass, cluster *en
 		})
 	}
 
-	// The CRD marks volumeSnapshot required under bootstrapFrom, but validate it here too so an
-	// intended restore can never silently fall through to a fresh initdb if the field is absent.
-	if cluster.Spec.BootstrapFrom != nil && cluster.Spec.BootstrapFrom.VolumeSnapshot == nil {
+	errs = append(errs, validateBootstrapFrom(class, cluster)...)
+
+	return errs
+}
+
+// validateBootstrapFrom enforces the cross-struct and cross-resource rules for recovery bootstrap
+// that CEL on a single type cannot express: exactly one source, the walArchive-required-for-PITR
+// coupling, and the requirement that a WAL/object-store source has a class object store to resolve
+// bucket path and credentials from.
+func validateBootstrapFrom(class *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) []ConfigValidationError {
+	b := cluster.Spec.BootstrapFrom
+	if b == nil {
+		return nil
+	}
+
+	var errs []ConfigValidationError
+
+	// Exactly one source. The CRD enforces this via CEL too; validate here so an intended restore
+	// can never silently fall through to a fresh initdb, and to give a clear webhook message.
+	hasSnapshot := b.VolumeSnapshot != nil
+	hasObjectStorage := b.ObjectStorage != nil
+	if hasSnapshot == hasObjectStorage {
 		errs = append(errs, ConfigValidationError{
-			Field:   "spec.bootstrapFrom.volumeSnapshot",
-			Message: "bootstrapFrom requires volumeSnapshot — it is the only supported recovery source",
+			Field:   "spec.bootstrapFrom",
+			Message: "exactly one of volumeSnapshot or objectStorage must be set",
+		})
+		// The remaining rules assume a well-formed single source; bail to avoid misleading errors.
+		return errs
+	}
+
+	// PITR from a volume snapshot needs a WAL archive to replay past the snapshot point.
+	if hasSnapshot && b.RecoveryTarget != nil && b.VolumeSnapshot.WalArchive == nil {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.bootstrapFrom.volumeSnapshot.walArchive",
+			Message: "walArchive is required when recoveryTarget is set on a volumeSnapshot source (WAL segments must be replayed past the snapshot point)",
 		})
 	}
 
+	// Validate the target value formats here so CNPG does not reject a malformed timestamp/LSN/XID
+	// after the immutable parent CR already exists (which would force a delete-and-recreate). The CRD
+	// CEL enforces exactly-one-target and rejects empty strings; this mirrors CNPG's format checks.
+	// Value formats are PostgreSQL-level (provisioner-independent), so they stay in core; the
+	// provisioner-specific capability rules — which source supports which target kind, and whether a
+	// class object store is required — are delegated to the RecoveryBackend port (see
+	// ValidateRecoveryCapabilities) so they do not accrete as CNPG-specific domain logic here.
+	if b.RecoveryTarget != nil {
+		errs = append(errs, validateRecoveryTargetFormat(b.RecoveryTarget)...)
+	}
+
+	return errs
+}
+
+// lsnRegexp matches a PostgreSQL LSN: two hex segments separated by a slash, e.g. "0/16D68D0".
+var lsnRegexp = regexp.MustCompile(`^[0-9A-Fa-f]+/[0-9A-Fa-f]+$`)
+
+// restorePointNameRegexp matches a valid PostgreSQL restore point name. pg_create_restore_point
+// truncates names to 63 bytes; disallow control characters so the value is a usable identifier.
+var restorePointNameRegexp = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,63}$`)
+
+// validateRecoveryTargetFormat mirrors the value-format checks CNPG applies to recovery targets so
+// a malformed timestamp, LSN, XID, or restore-point name is rejected at admission — before the
+// immutable parent CR is created and CNPG would fail the restore with no actionable in-place fix.
+// The CRD CEL already guarantees exactly one target is set and rejects empty strings.
+func validateRecoveryTargetFormat(rt *enterprisev4.RecoveryTarget) []ConfigValidationError {
+	var errs []ConfigValidationError
+	switch rt.Type {
+	case enterprisev4.RecoveryTargetTime:
+		// CNPG parses the recovery target time with time.Parse; accept RFC 3339 (the format the docs
+		// and examples use). Reject anything else so users get a clear error at creation time.
+		if _, err := time.Parse(time.RFC3339, rt.Value); err != nil {
+			errs = append(errs, ConfigValidationError{
+				Field:   "spec.bootstrapFrom.recoveryTarget.value",
+				Message: fmt.Sprintf("value for target type time must be an RFC 3339 timestamp (e.g. 2026-05-01T13:30:00Z), got %q", rt.Value),
+			})
+		}
+	case enterprisev4.RecoveryTargetLSN:
+		if !lsnRegexp.MatchString(rt.Value) {
+			errs = append(errs, ConfigValidationError{
+				Field:   "spec.bootstrapFrom.recoveryTarget.value",
+				Message: fmt.Sprintf("value for target type lsn must be a WAL log sequence number of the form X/Y in hex (e.g. 0/16D68D0), got %q", rt.Value),
+			})
+		}
+	case enterprisev4.RecoveryTargetXID:
+		// A transaction ID is an unsigned integer. Reject non-numeric or out-of-range values.
+		if _, err := strconv.ParseUint(rt.Value, 10, 64); err != nil {
+			errs = append(errs, ConfigValidationError{
+				Field:   "spec.bootstrapFrom.recoveryTarget.value",
+				Message: fmt.Sprintf("value for target type xid must be a numeric transaction ID, got %q", rt.Value),
+			})
+		}
+	case enterprisev4.RecoveryTargetName:
+		if !restorePointNameRegexp.MatchString(rt.Value) {
+			errs = append(errs, ConfigValidationError{
+				Field:   "spec.bootstrapFrom.recoveryTarget.value",
+				Message: fmt.Sprintf("value for target type name must be a restore-point name of 1-63 printable characters, got %q", rt.Value),
+			})
+		}
+	}
 	return errs
 }
 
@@ -475,6 +652,23 @@ func parseVersion(version string) (major, minor int) {
 	}
 	major, _ = strconv.Atoi(version)
 	return major, -1
+}
+
+func isMajorUpgradeAllowed(config *enterprisev4.PostgresMajorUpgradeConfig) bool {
+	return config != nil && config.Allow != nil && *config.Allow
+}
+
+func postgresVersionFromImageName(imageName string) string {
+	if imageName == "" {
+		return ""
+	}
+	imageName = strings.SplitN(imageName, "@", 2)[0]
+	lastSlash := strings.LastIndex(imageName, "/")
+	lastColon := strings.LastIndex(imageName, ":")
+	if lastColon <= lastSlash {
+		return ""
+	}
+	return imageName[lastColon+1:]
 }
 
 // ValidateMergedConfig checks the merged configuration for required fields and cross-field constraints.
@@ -531,7 +725,7 @@ func validatePostgreSQLConfigNoCNPGFixedKeys(params map[string]string) error {
 // Operator-controlled invariants (e.g. SuperuserSecret, EnableSuperuserAccess) are exempt — they
 // are always the same value and are never exposed in the PostgresCluster CRD.
 func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, clusterName, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
-	live.ImageName = fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", *specCfg.Spec.PostgresVersion)
+	live.ImageName = clusterCnpg.PostgresImageName(*specCfg.Spec.PostgresVersion)
 	live.Instances = int(*specCfg.Spec.Instances)
 	live.PostgresConfiguration = cnpgv1.PostgresConfiguration{
 		Parameters: maps.Clone(specCfg.Spec.PostgreSQLConfig),
@@ -567,11 +761,22 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, cluste
 		}
 	}
 	live.Plugins = append(filtered, buildCNPGPlugins(specCfg, clusterName)...)
+
+	// Preserve externalClusters owned by other controllers/users: drop only our managed recovery
+	// entry from the live spec, then append the desired one (only present for object-store recovery).
+	// This entry, recovery.source, and recovery.recoveryTarget are captured by normalizeRecovery so
+	// they participate in drift detection: they are rebuilt deterministically from the immutable
+	// bootstrapFrom every reconcile, so tracking them heals an out-of-band edit before bootstrap
+	// completes without risking false-positive drift (CNPG ignores the stanza once bootstrapped).
+	filteredExt := make([]cnpgv1.ExternalCluster, 0, len(live.ExternalClusters))
+	for _, e := range live.ExternalClusters {
+		if e.Name != recoveryExternalClusterName {
+			filteredExt = append(filteredExt, e)
+		}
+	}
+	live.ExternalClusters = append(filteredExt, buildRecoveryExternalClusters(specCfg, clusterName)...)
 	return live
 }
-
-// barmanCloudPluginName is the CNPG plugin name for the barman-cloud object store backup plugin.
-const barmanCloudPluginName = "barman-cloud.cloudnative-pg.io"
 
 func buildCNPGPlugins(cfg *MergedConfig, clusterName string) []cnpgv1.PluginConfiguration {
 	if activeBarmanObjectStoreCfg(cfg) == nil {
@@ -622,12 +827,13 @@ func buildVolumeSnapshotConfiguration(vs *enterprisev4.CNPGVolumeSnapshotConfig)
 }
 
 // buildBootstrapConfiguration selects initdb for a fresh cluster, or recovery from the
-// referenced VolumeSnapshot pair when spec.bootstrapFrom is set.
+// configured source (VolumeSnapshot and/or object-store WAL archive) when spec.bootstrapFrom is set.
 func buildBootstrapConfiguration(cfg *MergedConfig, secretName string) *cnpgv1.BootstrapConfiguration {
-	// No bootstrapFrom means a fresh cluster (initdb). The bootstrapFrom-set-but-snapshot-nil
-	// case is rejected upstream by ValidateCrossResource, so the nil-snapshot branch here is only
-	// defensive — it must not hand CNPG an empty BootstrapRecovery it would reject.
-	if cfg.Spec.BootstrapFrom == nil || cfg.Spec.BootstrapFrom.VolumeSnapshot == nil {
+	// No bootstrapFrom means a fresh cluster (initdb). The bootstrapFrom-set-but-no-source case is
+	// rejected upstream by ValidateCrossResource, so the nil-source branch here is only defensive —
+	// it must not hand CNPG an empty BootstrapRecovery it would reject.
+	b := cfg.Spec.BootstrapFrom
+	if b == nil || (b.VolumeSnapshot == nil && b.ObjectStorage == nil) {
 		return &cnpgv1.BootstrapConfiguration{
 			InitDB: &cnpgv1.BootstrapInitDB{
 				Database: defaultDatabaseName,
@@ -637,12 +843,22 @@ func buildBootstrapConfiguration(cfg *MergedConfig, secretName string) *cnpgv1.B
 		}
 	}
 	return &cnpgv1.BootstrapConfiguration{
-		Recovery: buildBootstrapRecovery(cfg.Spec.BootstrapFrom),
+		Recovery: buildBootstrapRecovery(b),
 	}
 }
 
+// buildBootstrapRecovery translates the provider-agnostic BootstrapFrom into a CNPG
+// BootstrapRecovery. Four shapes are supported:
+//   - volumeSnapshot only                       → recovery.volumeSnapshots
+//   - volumeSnapshot + walArchive               → recovery.volumeSnapshots + recovery.source (WAL replay)
+//   - objectStorage                             → recovery.source (base backup + WAL from object store)
+//   - any of the above + recoveryTarget (PITR)  → recovery.recoveryTarget
+//
+// When recovery reads WAL from an object store, recovery.source names an externalClusters entry
+// built by buildRecoveryExternalClusters; the two must stay in sync via recoveryExternalClusterName.
 func buildBootstrapRecovery(b *enterprisev4.BootstrapFrom) *cnpgv1.BootstrapRecovery {
 	recovery := &cnpgv1.BootstrapRecovery{}
+
 	if b.VolumeSnapshot != nil {
 		recovery.VolumeSnapshots = &cnpgv1.DataSource{
 			Storage: corev1.TypedLocalObjectReference{
@@ -659,7 +875,126 @@ func buildBootstrapRecovery(b *enterprisev4.BootstrapFrom) *cnpgv1.BootstrapReco
 			}
 		}
 	}
+
+	// recovery.source points CNPG at the object-store archive (via externalClusters) for WAL replay.
+	// Set it whenever a WAL archive is referenced — either alongside a snapshot (snapshot+PITR) or as
+	// the sole objectStorage source.
+	if recoveryReadsObjectStore(b) {
+		recovery.Source = recoveryExternalClusterName
+	}
+
+	recovery.RecoveryTarget = buildRecoveryTarget(b.RecoveryTarget)
 	return recovery
+}
+
+// buildRecoveryTarget maps the provider-agnostic RecoveryTarget onto the CNPG type.
+// Returns nil when no target is set (recovery to the latest available WAL).
+func buildRecoveryTarget(rt *enterprisev4.RecoveryTarget) *cnpgv1.RecoveryTarget {
+	if rt == nil {
+		return nil
+	}
+	target := &cnpgv1.RecoveryTarget{}
+	switch rt.Type {
+	case enterprisev4.RecoveryTargetTime:
+		target.TargetTime = normalizeRecoveryTargetTime(rt.Value)
+	case enterprisev4.RecoveryTargetLSN:
+		target.TargetLSN = rt.Value
+	case enterprisev4.RecoveryTargetXID:
+		target.TargetXID = rt.Value
+	case enterprisev4.RecoveryTargetName:
+		target.TargetName = rt.Value
+	case enterprisev4.RecoveryTargetImmediate:
+		immediate := true
+		target.TargetImmediate = &immediate
+	}
+	// Exclusive is meaningless for an immediate target; the API documents it as ignored there.
+	if rt.Exclusive != nil && rt.Type != enterprisev4.RecoveryTargetImmediate {
+		target.Exclusive = rt.Exclusive
+	}
+	return target
+}
+
+// pgTargetTimeLayout renders a timestamp with a numeric UTC offset (e.g. 2026-05-01 13:30:00+00:00).
+// PostgreSQL's recovery_target_time GUC parser rejects the RFC 3339 "Z" zone designator, so a UTC
+// value admitted as "...Z" would otherwise fail the restore with "invalid value for parameter
+// recovery_target_time". Emitting a numeric offset keeps the same instant in a form PG accepts.
+const pgTargetTimeLayout = "2006-01-02 15:04:05.999999999-07:00"
+
+// normalizeRecoveryTargetTime re-renders an admitted RFC 3339 recovery target time into a
+// PostgreSQL-safe layout with a numeric offset. Admission (validateRecoveryTargetFormat) has already
+// accepted the value via time.Parse(time.RFC3339, ...); if for any reason it does not parse here we
+// pass it through unchanged rather than dropping the target.
+func normalizeRecoveryTargetTime(value string) string {
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return value
+	}
+	return t.Format(pgTargetTimeLayout)
+}
+
+// recoveryReadsObjectStore reports whether recovery needs to read WAL (and, for objectStorage, the
+// base backup) from a barman-cloud object store. True for a volumeSnapshot source with a walArchive,
+// or for an objectStorage source.
+func recoveryReadsObjectStore(b *enterprisev4.BootstrapFrom) bool {
+	if b == nil {
+		return false
+	}
+	if b.ObjectStorage != nil {
+		return true
+	}
+	return b.VolumeSnapshot != nil && b.VolumeSnapshot.WalArchive != nil
+}
+
+// recoveryObjectStoreServerName returns the source cluster's server name in the object store, i.e.
+// the folder under which its backup/WAL are stored. Empty when recovery does not read an object store.
+func recoveryObjectStoreServerName(b *enterprisev4.BootstrapFrom) string {
+	if b == nil {
+		return ""
+	}
+	if b.ObjectStorage != nil {
+		return b.ObjectStorage.ServerName
+	}
+	if b.VolumeSnapshot != nil && b.VolumeSnapshot.WalArchive != nil {
+		return b.VolumeSnapshot.WalArchive.ServerName
+	}
+	return ""
+}
+
+// managedObjectStoreCfg returns the class barman-cloud object store config when the operator must
+// manage an ObjectStore CR for this cluster — either to write backups (backup enabled) or to read
+// WAL/base backups during recovery (a walArchive or objectStorage restore source). Returns nil when
+// neither applies. This is the single gate objectStoreModel uses to create/delete the ObjectStore.
+func managedObjectStoreCfg(cfg *MergedConfig) *enterprisev4.CNPGBarmanObjectStoreConfig {
+	if c := activeBarmanObjectStoreCfg(cfg); c != nil {
+		return c
+	}
+	if cfg != nil && cfg.Spec != nil && recoveryReadsObjectStore(cfg.Spec.BootstrapFrom) {
+		return barmanObjectStoreCfg(cfg)
+	}
+	return nil
+}
+
+// buildRecoveryExternalClusters synthesizes the externalClusters entry CNPG needs to reach the
+// object-store WAL archive during recovery. It returns nil unless bootstrapFrom references an object
+// store; the entry points at the operator-managed barman-cloud ObjectStore (objectStoreName) and the
+// source cluster's serverName. Returns nil when no object store is referenced.
+func buildRecoveryExternalClusters(cfg *MergedConfig, clusterName string) []cnpgv1.ExternalCluster {
+	b := cfg.Spec.BootstrapFrom
+	if !recoveryReadsObjectStore(b) {
+		return nil
+	}
+	return []cnpgv1.ExternalCluster{
+		{
+			Name: recoveryExternalClusterName,
+			PluginConfiguration: &cnpgv1.PluginConfiguration{
+				Name: barmanCloudPluginName,
+				Parameters: map[string]string{
+					"barmanObjectName": objectStoreName(clusterName),
+					"serverName":       recoveryObjectStoreServerName(b),
+				},
+			},
+		},
+	}
 }
 
 func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) (*cnpgv1.Cluster, error) {
@@ -694,6 +1029,7 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec
 			normalized.Owner = spec.Bootstrap.InitDB.Owner
 		} else if spec.Bootstrap.Recovery != nil {
 			normalized.BootstrapType = bootstrapRecovery
+			normalized.Recovery = normalizeRecovery(spec.Bootstrap.Recovery, spec.ExternalClusters)
 		}
 	}
 	if spec.Certificates != nil && len(spec.Certificates.ServerAltDNSNames) > 0 {
@@ -729,6 +1065,42 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec
 	return normalized
 }
 
+// normalizeRecovery captures the operator-owned recovery wiring so it participates in drift
+// detection while bootstrap is in progress. It records recovery.source, the synthesized "origin"
+// externalCluster (matched by recoveryExternalClusterName), and the recovery target. CNPG consumes
+// this stanza at bootstrap; re-asserting it after the cluster has bootstrapped is a no-op, so the
+// only effect of tracking it is that out-of-band edits before bootstrap completes are healed rather
+// than silently accepted.
+func normalizeRecovery(rec *cnpgv1.BootstrapRecovery, externalClusters []cnpgv1.ExternalCluster) *normalizedRecoverySpec {
+	nr := &normalizedRecoverySpec{Source: rec.Source}
+	for i := range externalClusters {
+		e := externalClusters[i]
+		if e.Name != recoveryExternalClusterName {
+			continue
+		}
+		nrec := &normalizedRecoveryExternalCluster{Name: e.Name}
+		if e.PluginConfiguration != nil {
+			nrec.PluginName = e.PluginConfiguration.Name
+			if len(e.PluginConfiguration.Parameters) > 0 {
+				nrec.Parameters = maps.Clone(e.PluginConfiguration.Parameters)
+			}
+		}
+		nr.ExternalCluster = nrec
+		break
+	}
+	if rt := rec.RecoveryTarget; rt != nil {
+		nr.Target = &normalizedRecoveryTarget{
+			TargetTime:      rt.TargetTime,
+			TargetLSN:       rt.TargetLSN,
+			TargetXID:       rt.TargetXID,
+			TargetName:      rt.TargetName,
+			TargetImmediate: rt.TargetImmediate,
+			Exclusive:       rt.Exclusive,
+		}
+	}
+	return nr
+}
+
 // stripImageRefForDrift trims whitespace and strips an OCI digest suffix (@sha256:… / @…)
 // so drift detection matches tag-only desired images against apiserver materialized refs.
 func stripImageRefForDrift(name string) string {
@@ -753,6 +1125,24 @@ const (
 // requiresPhaseGate reports whether Observe should hold ClusterReady=Provisioning
 // while CNPG.Status.Phase still reflects the pre-patch value.
 func (k cnpgPatchKind) requiresPhaseGate() bool { return k == cnpgPatchBody }
+
+// imageUpdateInProgress reports whether CNPG has applied the requested image
+// to both the running pods and the data directory.
+func imageUpdateInProgress(cluster *cnpgv1.Cluster) bool {
+	specImage := stripImageRefForDrift(cluster.Spec.ImageName)
+	if specImage == "" {
+		return false
+	}
+	statusImage := stripImageRefForDrift(cluster.Status.Image)
+	if statusImage != "" && specImage != statusImage {
+		return true
+	}
+	if cluster.Status.PGDataImageInfo == nil {
+		return false
+	}
+	dataImage := stripImageRefForDrift(cluster.Status.PGDataImageInfo.Image)
+	return dataImage != "" && specImage != dataImage
+}
 
 // isClusterDrift reports whether two normalized specs differ in any field CNPG
 // must observably reconcile against. InheritedAnnotations is excluded (metadata-only).

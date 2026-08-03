@@ -411,8 +411,8 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				Defaults: ansibleConfig,
 			},
 			Replicas:         int32(replicas),
-			QueueRef:         queue,
-			ObjectStorageRef: os,
+			QueueRef:         &queue,
+			ObjectStorageRef: &os,
 		},
 	}
 
@@ -1302,4 +1302,28 @@ func ValidateContent(confFileContent string, listOfStringsForValidation []string
 		}
 	}
 	return nil
+}
+
+// GetPodsStartTime returns a map of pod name to start time for all pods in the namespace.
+func GetPodsStartTime(ns string) map[string]time.Time {
+	result := make(map[string]time.Time)
+	out, err := exec.Command("kubectl", "get", "pods", "-n", ns,
+		"-o", "jsonpath={range .items[*]}{.metadata.name}={.status.startTime}{\"\\n\"}{end}").Output()
+	if err != nil {
+		return result
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 || parts[1] == "" {
+			continue
+		}
+		t, parseErr := time.Parse(time.RFC3339, parts[1])
+		if parseErr == nil {
+			result[parts[0]] = t
+		}
+	}
+	return result
 }

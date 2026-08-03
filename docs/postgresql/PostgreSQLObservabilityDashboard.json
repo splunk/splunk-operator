@@ -650,7 +650,7 @@
       },
       "id": 100,
       "options": {
-        "content": "## Controller-Runtime (built-in, zero code)\nReconcile count, duration, errors \u2014 provided automatically by the framework.",
+        "content": "## Controller-Runtime (built-in, zero code)\nReconcile count, duration, errors \u2014 provided automatically by the framework. Reconcile duration measures one active invocation and excludes time between requeues while dependencies converge.",
         "mode": "markdown"
       },
       "title": "",
@@ -684,7 +684,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(controller_runtime_reconcile_total{controller=~\"postgresCluster|postgresdatabase\"}[1m])",
+          "expr": "rate(controller_runtime_reconcile_total{controller=~\"postgrescluster|postgresdatabase\"}[1m])",
           "legendFormat": "{{controller}} / {{result}}",
           "range": true,
           "refId": "A"
@@ -721,7 +721,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (controller, le) (rate(controller_runtime_reconcile_time_seconds_bucket{controller=~\"postgresCluster|postgresdatabase\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (controller, le) (rate(controller_runtime_reconcile_time_seconds_bucket{controller=~\"postgrescluster|postgresdatabase\"}[5m])))",
           "legendFormat": "p99 {{controller}}",
           "range": true,
           "refId": "A"
@@ -732,7 +732,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (controller, le) (rate(controller_runtime_reconcile_time_seconds_bucket{controller=~\"postgresCluster|postgresdatabase\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (controller, le) (rate(controller_runtime_reconcile_time_seconds_bucket{controller=~\"postgrescluster|postgresdatabase\"}[5m])))",
           "legendFormat": "p50 {{controller}}",
           "range": true,
           "refId": "B"
@@ -774,7 +774,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(controller_runtime_reconcile_errors_total{controller=~\"postgresCluster|postgresdatabase\"}[1m])",
+          "expr": "rate(controller_runtime_reconcile_errors_total{controller=~\"postgrescluster|postgresdatabase\"}[1m])",
           "legendFormat": "{{controller}}",
           "range": true,
           "refId": "A"
@@ -792,7 +792,7 @@
       },
       "id": 200,
       "options": {
-        "content": "## Domain Metrics (custom, `splunk_operator_postgres_*`)\nFleet state gauges (collected every reconcile) and status transitions (emitted on condition changes).\n\nRuntime PostgreSQL and PgBouncer panels above assume annotation-based pod scraping and filter by `pod`, not dedicated metrics Services.\n\nIf you validate through OpenTelemetry Collector, keep the Grafana datasource as Prometheus and have Prometheus scrape only the OTel Collector exporter for these metrics to avoid duplicate series.",
+        "content": "## Domain Metrics (custom, `splunk_operator_postgres_*`)\nFleet state gauges (collected every reconcile), status transitions (emitted on condition changes), and readiness-cycle latency.\n\nProvisioning latency records end-to-end creation-to-Ready and later readiness-affecting operations such as scaling, upgrade, switchover, recovery, restart, and configuration rollout. It includes time waiting for CNPG, Kubernetes, and other dependencies between reconciles. Compare it with the Controller-Runtime reconcile duration panels to distinguish end-to-end delay from active controller work.\n\nRuntime PostgreSQL and PgBouncer panels above assume annotation-based pod scraping and filter by `pod`, not dedicated metrics Services.\n\nIf you validate through OpenTelemetry Collector, keep the Grafana datasource as Prometheus and have Prometheus scrape only the OTel Collector exporter for these metrics to avoid duplicate series.",
         "mode": "markdown"
       },
       "title": "",
@@ -960,6 +960,39 @@
         }
       ],
       "title": "Failures by Reason (per second)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 18,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le, controller) (rate(splunk_operator_postgres_provisioning_duration_seconds_bucket[15m])))",
+          "legendFormat": "{{controller}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "PostgreSQL time-to-Ready latency (P99)",
       "type": "timeseries"
     }
   ],

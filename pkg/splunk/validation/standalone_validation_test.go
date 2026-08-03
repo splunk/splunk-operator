@@ -100,7 +100,7 @@ func TestValidateStandaloneCreate(t *testing.T) {
 							{Name: "appvol", Endpoint: "s3://apps"},
 						},
 						AppSources: []enterpriseApi.AppSourceSpec{
-							{Name: "apps", Location: "/apps"},
+							{Name: "apps", Location: "/apps", AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{VolName: "appvol"}},
 						},
 					},
 				},
@@ -113,6 +113,8 @@ func TestValidateStandaloneCreate(t *testing.T) {
 				Spec: enterpriseApi.StandaloneSpec{
 					Replicas: 1,
 					AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+						VolList:  []enterpriseApi.VolumeSpec{{Name: "vol", Endpoint: "s3://bucket"}},
+						Defaults: enterpriseApi.AppSourceDefaultSpec{VolName: "vol"},
 						AppSources: []enterpriseApi.AppSourceSpec{
 							{Name: "", Location: "/apps"},
 						},

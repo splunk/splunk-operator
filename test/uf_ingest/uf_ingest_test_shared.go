@@ -106,6 +106,8 @@ func RunUFToStandaloneIngestTest(ctx context.Context, deployment *testenv.Deploy
 		"install", ufRelease,
 		ufChartPath,
 		"--namespace", ns,
+		"--wait",
+		"--timeout", "15m",
 		"--set", fmt.Sprintf("splunkConfig.forwardServer=%s:9997", standaloneService),
 		"--set", "splunkConfig.password=IntegTest1!",
 		"--set", "splunkConfig.splunkGeneralTerms=" + sgt,
@@ -125,7 +127,7 @@ func RunUFToStandaloneIngestTest(ctx context.Context, deployment *testenv.Deploy
 
 	// Wait for the UF Deployment to roll out (chart renders kind: Deployment, not DaemonSet)
 	rolloutCmd := exec.CommandContext(ctx, "kubectl", "rollout", "status",
-		"deployment/"+ufDeploymentName, "--namespace", ns, "--timeout=5m")
+		"deployment/"+ufDeploymentName, "--namespace", ns, "--timeout=15m")
 	rolloutOut, rolloutErr := rolloutCmd.CombinedOutput()
 	Expect(rolloutErr).To(Succeed(), "UF Deployment did not become ready: %s", string(rolloutOut))
 

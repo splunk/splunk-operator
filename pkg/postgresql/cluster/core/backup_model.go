@@ -21,8 +21,8 @@ import (
 	"fmt"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
-	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/backuptypes"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,11 +35,14 @@ import (
 // use while the value objects it exchanges live in the leaf backuptypes package.
 type BackupBackend interface {
 	// EnsureScheduled creates or updates the scheduled backup to match spec,
-	// owned by owner. It is idempotent.
-	EnsureScheduled(ctx context.Context, owner client.Object, spec backuptypes.ScheduleSpec) error
+	// owned by owner. It is idempotent. Returns true when the object was newly
+	// created so the caller can emit the appropriate event.
+	EnsureScheduled(ctx context.Context, owner client.Object, spec backuptypes.ScheduleSpec) (created bool, err error)
 	// DeleteScheduled removes the scheduled backup if it exists and is controlled
 	// by owner. It is a no-op when the object is absent or owned by someone else.
-	DeleteScheduled(ctx context.Context, owner client.Object, name, namespace string) error
+	// Returns true when the object was actually deleted so the caller can emit
+	// the appropriate event.
+	DeleteScheduled(ctx context.Context, owner client.Object, name, namespace string) (deleted bool, err error)
 	// GetSchedule returns the observed state of the scheduled backup.
 	// No owner filter is applied — the same name can only exist once per
 	// namespace, and callers need to observe the object regardless of who owns it
@@ -48,8 +51,9 @@ type BackupBackend interface {
 
 	// BackupNow creates a one-shot backup owned by owner if it does not already
 	// exist. It is idempotent on req.Name: a backup with the same name is never
-	// recreated or mutated (CNPG Backup spec is immutable).
-	BackupNow(ctx context.Context, owner client.Object, req backuptypes.BackupRequest) error
+	// recreated or mutated (CNPG Backup spec is immutable). Returns true when the
+	// object was newly created so the caller can emit the appropriate event.
+	BackupNow(ctx context.Context, owner client.Object, req backuptypes.BackupRequest) (created bool, err error)
 	// GetBackup returns the observed state of a single backup that is controlled
 	// by owner, or (zero, false) when no Backup object with that name exists or
 	// the object is not controlled by owner.
@@ -195,6 +199,20 @@ func activeBarmanObjectStoreCfg(cfg *MergedConfig) *enterprisev4.CNPGBarmanObjec
 	return barmanObjectStoreCfg(cfg)
 }
 
+// Returns the provider that any on-demand usecase can use in order to create a CNPG Backup
+func EffectiveBackupProvider(cfg *MergedConfig) (backuptypes.BackupMethod, string, bool) {
+	if !backupIsEnabled(cfg) || cfg.CNPG == nil || cfg.CNPG.Backup == nil {
+		return 0, "", false
+	}
+	if cfg.CNPG.Backup.BarmanObjectStore != nil {
+		return backuptypes.BackupMethodPlugin, barmanCloudPluginName, true
+	}
+	if cfg.CNPG.Backup.VolumeSnapshot != nil {
+		return backuptypes.BackupMethodVolumeSnapshot, "", true
+	}
+	return 0, "", false
+}
+
 func (b *backupModel) Reconcile(ctx context.Context) error {
 	if !b.backupEnabled() {
 		if err := b.deleteScheduledBackups(ctx, b.allScheduledBackupNames()); err != nil {
@@ -213,8 +231,12 @@ func (b *backupModel) Reconcile(ctx context.Context) error {
 	desired := make(map[string]struct{})
 	for _, p := range b.activeBackupProviders() {
 		desired[p.sbName] = struct{}{}
-		if err := b.backend.EnsureScheduled(ctx, b.cluster, b.scheduleSpec(p)); err != nil {
+		created, err := b.backend.EnsureScheduled(ctx, b.cluster, b.scheduleSpec(p))
+		if err != nil {
 			return newReconcileFailure(reasonScheduledBackupFailed, err)
+		}
+		if created {
+			b.events.emitNormal(b.cluster, EventScheduledBackupCreated, "Scheduled backup created")
 		}
 	}
 	var stale []string
@@ -301,8 +323,12 @@ func (b *backupModel) computeHealth(ctx context.Context, reconcileErr error) (co
 // PostgresCluster controls.
 func (b *backupModel) deleteScheduledBackups(ctx context.Context, names []string) error {
 	for _, name := range names {
-		if err := b.backend.DeleteScheduled(ctx, b.cluster, name, b.cluster.Namespace); err != nil {
+		deleted, err := b.backend.DeleteScheduled(ctx, b.cluster, name, b.cluster.Namespace)
+		if err != nil {
 			return err
+		}
+		if deleted {
+			b.events.emitNormal(b.cluster, EventScheduledBackupDeleted, "Scheduled backup deleted")
 		}
 	}
 	return nil

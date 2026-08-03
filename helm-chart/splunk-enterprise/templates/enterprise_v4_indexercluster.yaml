@@ -21,6 +21,7 @@ items:
 {{ toYaml . | indent 6 }}
   {{- end }}
   spec:
+    disableResourceDefaults: {{ $.Values.indexerCluster.disableResourceDefaults }}
   {{- if $.Values.indexerCluster.serviceAccount }}
     serviceAccount: {{ $.Values.indexerCluster.serviceAccount }}
   {{- end }}

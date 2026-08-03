@@ -14,6 +14,8 @@
 
 package certs
 
+import splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+
 const (
 	// CertMountRoot is the base directory under which all cert secrets are mounted.
 	CertMountRoot = "/mnt/tls"
@@ -30,6 +32,10 @@ const (
 	// RoleMountFmt is the fixed mount path for Ansible-processed (role-tagged) certs.
 	// Ansible reads from /mnt/tls/splunk-<role>-tls-cert/ regardless of the secret name.
 	RoleMountFmt = CertMountRoot + "/splunk-%s-tls-cert"
+
+	// EventReasonCertSecretMalformed is the machine-readable TerminalError reason used
+	// when a cert secret exists but is missing a required key (tls.crt or tls.key).
+	EventReasonCertSecretMalformed splcommon.EventReason = "CertSecretMalformed"
 
 	// CertRevAnnotFmt is the pod annotation key format for cert rotation detection.
 	// Uses the enterprise.splunk.com prefix, consistent with other SOK annotations
