@@ -36,8 +36,11 @@ No readiness, lifecycle-hold, shutdown, or restart timing behavior changes.
   composite coverage is 78.3 percent.
 - [x] (2026-08-03 01:43Z) Committed and pushed exact source `184061106` on
   isolated branch `codex/shc-99-exact-splunkd-process-match`.
-- [ ] Reproduce the focused test and complete Make gates on Linux AMD64 before
-  final integration.
+- [x] (2026-08-03 16:46Z) Integrated the isolated correction as `9bb94c929`
+  into exact cumulative source `aa3792287`, then passed
+  `make shc98-monitor-check`, all 43 native-Linux Make suites and 192
+  enterprise/controller specs, composite coverage 78.3 percent, and
+  `make build` on Linux AMD64.
 - [ ] Exercise level-one liveness in the immutable EKS runtime during a normal
   lifecycle stage and prove the Pod becomes unhealthy if splunkd is absent
   without an explicit lifecycle hold.
@@ -79,11 +82,12 @@ No readiness, lifecycle-hold, shutdown, or restart timing behavior changes.
 
 ## Outcomes & Retrospective
 
-The source correction is complete and passes the macOS source gates. The
-known false-positive command is rejected, the real Splunk daemon command is
-accepted, and the test no longer inspects unrelated host processes. Linux and
-immutable EKS evidence remain open, so SHC-99 is source-qualified locally but
-not yet integrated or EKS-qualified.
+The source correction is complete and passes both the macOS and native-Linux
+source gates. The known false-positive command is rejected, the real Splunk
+daemon command is accepted, and the test no longer inspects unrelated host
+processes. The correction is integrated into cumulative source `aa3792287`.
+Immutable-image EKS evidence remains open, so SHC-99 is integrated and
+source-qualified but not yet EKS-qualified.
 
 ## Context and Orientation
 
@@ -144,6 +148,8 @@ before integration.
 
 - Branch: `codex/shc-99-exact-splunkd-process-match`.
 - Exact source: `184061106`.
+- Final-integration functional commit: `9bb94c929`.
+- Final-integration cumulative source: `aa3792287`.
 - Focused repeats: 20 passes.
 - Full controller JUnit: 194 nodes, zero failures.
 - Composite coverage: 78.3 percent.
