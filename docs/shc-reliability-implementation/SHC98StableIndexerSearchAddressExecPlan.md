@@ -238,10 +238,90 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   `next-target-before-search-head-peer-3-converged`. The complete rollback
   therefore proves recoverability without PVC deletion but rejects controller
   lifecycle completion as a Search Head peer-convergence gate.
-- [ ] Build and deploy the exact SHC-100 safety source on native Linux, restore
-  the accepted runtime and Operator images through the controlled lifecycle,
-  and separately qualify explicit stable addressing during initial cluster
-  formation, customer takeover, and one later same-address Pod replacement.
+- [x] (2026-08-03 13:41Z) Passed the exact SHC-100 production-source gate on
+  native Linux AMD64 from clean source `2e4bfa333`: all 43 Make suites, all 192
+  enterprise/controller specs, 78.3 percent composite coverage, formatting,
+  vet, generation, compilation, and `make build`. The resulting manager binary
+  SHA-256 is `17ce1db6daab08bf19c694f1d241cca14abd50e58362fb70724e82b78a1ce208`.
+  Repository `make docker-buildx` published the immutable Operator OCI index
+  `sha256:da21db17e031dfd03ad0de1020a12eda46ca8b98bd4d8f4cba4c12134b6d59b1`;
+  EKS ran that exact digest, retained the four existing indexer Pod UIDs and
+  revision, preserved the explicit `absent` value, and emitted no scoped
+  Operator error.
+- [x] (2026-08-03 14:31Z) Restored the retained four-tier fixture to accepted
+  runtime OCI index
+  `sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd`.
+  All four resources were paused before their desired images changed, and no
+  StatefulSet or Pod changed while paused. License Manager, Cluster Manager,
+  Search Head Cluster, and IndexerCluster then converged in dependency order.
+  The SHC retained at least two serving endpoints, dynamically transferred
+  captaincy for both captain targets, replaced all three members plus the
+  Deployer, returned three registered `Up` members, and recorded zero
+  container restarts. The indexer change combined the accepted image and
+  removal of `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=absent` in one StatefulSet
+  revision. It completed `3 -> 2 -> 1 -> 0`, retained at least three endpoints,
+  preserved all PVC claims, replaced all four Pod UIDs, rendered no address
+  environment entry, and recorded zero container restarts.
+- [x] (2026-08-03 14:34Z) Found and corrected a Linux `jq` compatibility defect
+  in the evidence-only per-ordinal guard. `label` is a `jq` keyword and could
+  not be used as the guard's argument name; exact source `10730a6a2` uses
+  `peer_label`. Bash syntax, ShellCheck, both executable address/GUID filters,
+  and `git diff --check` pass. The affected retained-restoration monitor was
+  stopped and is not counted as automated per-ordinal evidence. Offline
+  evaluation of the preserved rollback sample with the corrected predicate
+  independently confirms the factual violation: at the ordinal-3-to-2
+  transition, every Search Head held two identities for ordinal 3 and both
+  were `Down`.
+- [x] (2026-08-03 15:02Z) Completed retained-cluster restoration evidence.
+  The 3,600-event workload ended exactly complete with zero HEC or search
+  request failures. It nevertheless recorded 215 materially incomplete
+  successful samples, 35 count regressions, and peak pending 550 while the
+  Search Heads still retained old peers. Their inventories fell from eight to
+  four entries only at `14:57:05Z`, about 26 minutes 13 seconds after indexer
+  lifecycle `Ready`; ten later exact samples and the final snapshot agreed on
+  the four current `Up` Pod-IP peers with RF/SF met. This is accepted-image
+  recovery evidence, not evidence that retained-address migration is safe.
+- [x] (2026-08-03 15:26Z) Formed a separate four-tier cluster from empty PVCs
+  with explicit `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=auto` only on the
+  IndexerCluster. License Manager, Cluster Manager, and four indexers became
+  Ready first. Every indexer rendered its expected per-ordinal StatefulSet
+  FQDN, and Cluster Manager published exactly those four `Up`, searchable
+  peers. The three-member SHC was then unpaused at `15:14:16Z`, completed its
+  supported first-formation rolling restart, moved captaincy dynamically, and
+  reached `initialFormationStage=Complete` and Ready at `15:26:21Z`. It had
+  three registered `Up` members, three endpoints, and zero container restarts.
+- [x] (2026-08-03 16:02Z) Completed one later same-runtime, same-address full
+  IndexerCluster Pod replacement. One annotation change selected a single new
+  desired revision and the Operator completed `3 -> 2 -> 1 -> 0` between
+  `15:28:39Z` and `15:49:36Z`. All four Pod UIDs and IPs changed while all
+  eight PVC identities and the four advertised FQDNs remained unchanged.
+  Across 157 evidence samples, every Search Head always held exactly four
+  unique addresses and four unique GUIDs; no stale fifth peer appeared.
+  Planned draining produced at most one `Down` peer on a Search Head, at least
+  three indexer endpoints remained Ready, and aggregate container restarts
+  stayed zero. The corrected per-ordinal guard passed `[3,2,1,0]` and 60 exact
+  post-roll samples with all four peers `Up` and RF/SF met.
+- [x] (2026-08-03 16:06Z) Re-ran the exact Ansible source gate at `9dff0999c`
+  on Linux: lint and playbook syntax, 62 environment tests, seven task tests,
+  eight executable address/ownership behavior tests, and two startup tests
+  passed. The behavior tests prove preservation of an unowned customer value
+  and relinquishment of stale ownership after a customer change. A live
+  retained-address takeover is deliberately not claimed because that unsafe
+  mutation would repeat the already rejected identity-migration case.
+- [x] (2026-08-03 16:37Z) Completed and analyzed the fresh cluster's
+  3,600-event workload. All 3,600 HEC submissions and distributed-search
+  requests succeeded, and the final result was the exact contiguous event set
+  with count, maximum, and distinct all 3,600 and minimum one. During the
+  planned roll, 180 samples were more than one event behind, all 21 count
+  regressions occurred, 18 drops exceeded ten, the maximum count drop was 280,
+  and maximum pending was 282 at sequence 1,056 (`15:48:14Z`). After lifecycle
+  completion there were no count regressions: one sample in the monitor window
+  and one later steady-state sample were two events behind. The final snapshot
+  retained four unique `Up` peers on every Search Head, four `Up` searchable
+  Cluster Manager peers, all RF/SF factors, and zero container restarts.
+- [ ] Integrate the separately qualified SHC-99 exact process matcher, build
+  and exercise the exact integrated Operator image, restore the accepted
+  Operator image, and record final health before closing the bounded result.
 
 ## Surprises & Discoveries
 
@@ -252,6 +332,37 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   authentication attempts to old Pod IPs.
   Consequence: SHC-98 observes `/services/search/distributed/peers` separately
   on every Search Head and treats agreement as a distinct gate.
+- Observation: the first `pod-ip` per-ordinal guard used `label` as a `jq`
+  argument name, which Linux `jq` parses as a keyword when the function runs.
+  Snapshot mode did not execute that function, so syntax and snapshot checks
+  could not expose the defect.
+  Evidence: the retained-restoration monitor printed `unexpected label` at
+  target transitions. Re-running the exact saved rollback sample with the
+  corrected `peer_label` expression returned `converged:false` for all three
+  Search Heads and showed two `Down` identities for the prior peer.
+  Consequence: source `10730a6a2` corrects the executable guard; the affected
+  restoration run is not claimed as automated per-ordinal evidence, and the
+  corrected full-roll path was rerun and passed in the separate fresh-cluster
+  campaign recorded above.
+- Observation: setting the stable FQDN before initial peer formation avoids
+  the retained-cluster alias migration seen in the rejected forward test.
+  Evidence: the fresh cluster began with exactly four FQDN peers on every
+  Search Head. During a later full Pod replacement, all 157 samples retained
+  exactly four unique addresses and GUIDs even though every Pod UID and IP
+  changed; the corrected per-ordinal guard and 60 final samples passed.
+  Consequence: stable per-ordinal identity is a viable bounded new-cluster
+  mechanism, but it does not supply a migration path for an existing cluster
+  whose retained GUIDs are already registered under Pod-IP addresses.
+- Observation: eliminating peer-address churn did not make distributed-search
+  results immediately complete while one indexer was intentionally absent.
+  Evidence: the fresh stable-address workload had zero HEC or search-request
+  failures and no stale peer, yet all 21 count regressions and maximum pending
+  282 occurred during the `3 -> 2 -> 1 -> 0` replacement. No count regression
+  occurred after lifecycle completion, and the final 3,600-event set was exact.
+  Consequence: stable identity materially narrows address convergence but does
+  not close OPS-011. Splunk must either guarantee complete aggregates under
+  the supported redundancy policy or expose a partial-result signal clients
+  can use to retry or fail safely.
 - Observation: the current live peer inventory contains Pod IPs because the
   registered search address is absent.
   Evidence: all three Search Heads reported the same four `IP:8089` entries;
@@ -537,9 +648,17 @@ new-cluster experiment from any future retained-cluster migration design.
 Final forward and rollback evidence capture is complete. Controlled rollback
 restored Pod-IP registration without deleting PVCs, but reproduced the same
 silent partial-result behavior and delayed Search Head convergence. Exact
-SHC-100 Linux image qualification, accepted-image restoration, and the
-separate initial-formation experiment remain in progress; no production
-recommendation for stable search addressing is claimed.
+SHC-100 Linux image qualification and accepted-runtime restoration passed.
+The separate initial-formation experiment also passed: a fresh cluster began
+with four stable FQDN peers and later completed a full four-Pod replacement
+without ever creating a stale or duplicate Search Head peer identity. This
+supports an explicit, bounded new-cluster opt-in and rejects an automatic or
+in-place retained-cluster migration. The 3,600-event workload converged exactly
+without request failure, but all 21 successful-search count regressions and
+maximum pending 282 occurred during planned replacement. Accepted-Operator
+restoration and the final SHC-99 integration record remain in progress; no
+general production default, complete-result guarantee, or retained-cluster
+migration recommendation is claimed.
 
 ## Context and Orientation
 
@@ -785,6 +904,31 @@ reproducible.
 - SHC-100 rollback evidence mode: `bbeaa5644`.
 - SHC-100 evidence-preserving violation handling: `91c39b89b`.
 - SHC-100 stale lifecycle-target isolation: `c952d242a`.
+- SHC-100 Linux `jq` guard correction: `10730a6a2`.
+- SHC-100 exact production-source manager binary SHA-256:
+  `17ce1db6daab08bf19c694f1d241cca14abd50e58362fb70724e82b78a1ce208`.
+- SHC-100 Operator OCI index:
+  `sha256:da21db17e031dfd03ad0de1020a12eda46ca8b98bd4d8f4cba4c12134b6d59b1`.
+- Accepted-restoration final peer snapshot SHA-256:
+  `478d672e9c4e08ce3225897143e695718f41b217bbef94500d9b79550480f724`.
+- Accepted-restoration workload log SHA-256:
+  `27d27c74de192c929a57eed095c19f552651c61ce3a10018c8072ecbc51a9b08`.
+- Fresh-formation manifest SHA-256:
+  `f52dddd9ed2df7a896a82e2f96ce898340a3beb3c3a4f8ace8ef1744ece9f3b5`.
+- Fresh-formation baseline peer/lifecycle evidence SHA-256:
+  `5d7e32c03759303acd20414661b801a14516af2589858442b03a147eca557ad3`.
+- Fresh-formation baseline effective-config evidence SHA-256:
+  `914b1de59a75700ae92f2122529b5afe934d3c3e5f5f433481b06d5d94369ed0`.
+- Stable replacement peer/lifecycle evidence SHA-256:
+  `9fcec8960e9af061a8d54227d0fb445858478dfdc0d4bf840efe18ab5a97864b`.
+- Stable replacement Kubernetes Event evidence SHA-256:
+  `4efc0ee365d773507af3c3d4654c1762cd6757ff5c3bcce94e86fd8c7c0b952d`.
+- Stable replacement effective-config evidence SHA-256:
+  `8a87497b9d0a8f6f5fa46e793e862409997b31c7d0194625241a650384b88134`.
+- Stable replacement workload log SHA-256:
+  `3f12a7f19dcf328d2c4d5757370a96647b639d5b0efd2e50947b57be5801e2c0`.
+- Post-workload final peer/lifecycle snapshot SHA-256:
+  `def3ac8cd474373d3df838a3b2e30b290a305d46f4d88b9af889afab3246adfd`.
 - Rollback peer/lifecycle evidence SHA-256:
   `dd2b22308d95ee953fdbe2efb906f95986d6b48d638032792d76022651b5b2ed`.
 - Rollback Kubernetes Event evidence SHA-256:
@@ -848,3 +992,11 @@ per-Search-Head stale-peer cleanup timing, final workload measurements, and
 content checksums. The revision separates eventual recoverability from safe
 ordinal progression because successful transport and lifecycle completion did
 not prevent materially incomplete distributed-search results.
+
+Revision note (2026-08-03 16:06Z): Added the exact SHC-100 Linux gate,
+dependency-ordered accepted-runtime restoration, corrected evidence predicate,
+fresh explicit-address formation, and full same-address replacement results.
+The revision now distinguishes the rejected retained-address migration from
+the successful fresh-cluster stable-identity path, records the complete
+workload's transient-result boundary, and leaves final integration plus
+accepted-Operator restoration explicit rather than assumed.
