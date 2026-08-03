@@ -1,3 +1,10 @@
+---
+title: "ADR-0005: PostgresClusterClass abstraction"
+parent: Architecture Decision Records
+grand_parent: PostgreSQL
+nav_order: 5
+---
+
 # ADR-0005: PostgresClusterClass abstraction
 
 - **Status:** Accepted

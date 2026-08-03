@@ -1,3 +1,10 @@
+---
+title: Architecture Decision Records
+parent: PostgreSQL
+nav_order: 3
+has_children: true
+---
+
 # Architecture Decision Records
 
 This directory holds the Architecture Decision Records (ADRs) for the Splunk

@@ -1,3 +1,11 @@
+---
+title: "ADR-0000: Template"
+parent: Architecture Decision Records
+grand_parent: PostgreSQL
+nav_order: 0
+nav_exclude: true
+---
+
 # ADR-NNNN: <short title of the decision>
 
 - **Status:** Proposed | Accepted | Superseded by [ADR-XXXX](xxxx-....md) | Deprecated

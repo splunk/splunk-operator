@@ -1,3 +1,10 @@
+---
+title: "ADR-0004: PgBouncer connection-pooler integration model"
+parent: Architecture Decision Records
+grand_parent: PostgreSQL
+nav_order: 4
+---
+
 # ADR-0004: PgBouncer connection-pooler integration model
 
 - **Status:** Accepted

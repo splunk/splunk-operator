@@ -1,3 +1,10 @@
+---
+title: "ADR-0002: Actuate/Converge reconcile pattern (component pipeline)"
+parent: Architecture Decision Records
+grand_parent: PostgreSQL
+nav_order: 2
+---
+
 # ADR-0002: Actuate/Converge reconcile pattern (component pipeline)
 
 - **Status:** Accepted

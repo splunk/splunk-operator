@@ -1,3 +1,10 @@
+---
+title: "ADR-0001: CRD structure and API group choice"
+parent: Architecture Decision Records
+grand_parent: PostgreSQL
+nav_order: 1
+---
+
 # ADR-0001: CRD structure and API group choice
 
 - **Status:** Accepted

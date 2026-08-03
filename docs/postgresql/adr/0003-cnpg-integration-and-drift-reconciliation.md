@@ -1,3 +1,10 @@
+---
+title: "ADR-0003: CNPG integration approach and drift reconciliation"
+parent: Architecture Decision Records
+grand_parent: PostgreSQL
+nav_order: 3
+---
+
 # ADR-0003: CNPG integration approach and drift reconciliation
 
 - **Status:** Accepted
