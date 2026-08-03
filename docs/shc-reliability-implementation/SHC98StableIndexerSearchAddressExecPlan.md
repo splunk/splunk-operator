@@ -71,11 +71,15 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
 - [x] (2026-08-03 01:50Z) Passed the complete local Splunk Ansible
   `make shc-check` under the repository's pinned Ansible 5.10 environment on
   Python 3.9: focused legacy lint, full playbook syntax, 60 clustering
-  environment tests, three stable-address task tests, and two startup tests.
+  environment tests, five stable-address task tests, and two startup tests.
 - [x] (2026-08-03 01:51Z) Ran Docker-Splunk `make ansible`; it cloned and
-  detached at exact null-safe source
-  `de208e179774e02ac054f50c468c7a4a8d57d644`, matching the Makefile pin and
-  recorded version.
+  detached at the exact pinned source, matching the Makefile and recorded
+  version.
+- [x] (2026-08-03 01:56Z) Added and source-qualified an explicit `absent`
+  rollback value. It removes only
+  `server.conf/[clustering]/register_search_address`, verifies the effective
+  option is gone before start, and preserves undefined/null/empty as an
+  unmanaged no-op. Docker-Splunk now pins the reversible source.
 - [x] (2026-08-03 01:27Z) Operator focused generation tests, `make build`, Go
   formatting, vet, and compilation pass. The complete macOS Make test reached
   42 passing suites and one unrelated `pkg/splunk/enterprise` failure.
@@ -182,6 +186,12 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   indexer StatefulSet revision.
   Rationale: two revisions would introduce a second destructive roll and make
   the availability comparison ambiguous.
+  Date/Author: 2026-08-03, Codex with Vivek Reddy.
+- Decision: reserve `SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=absent` for
+  controlled rollback.
+  Rationale: the setting is persisted on the indexer PVC. Reverting images
+  alone would leave it active, while treating null or empty as removal would
+  unexpectedly mutate existing non-opted-in Ansible deployments.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: keep explicit partial-result semantics as a Splunk Enterprise
   requirement even if stable addresses improve the workload.
@@ -359,20 +369,26 @@ the repository's verified pause contract and do not begin replacement. If a
 roll is interrupted, preserve the durable lifecycle record and resume with
 the same desired revision; do not edit status or delete another Pod.
 
-If the EKS candidate is rejected, roll back by restoring the prior immutable
-runtime and Operator desired images through the same dependency-ordered
-lifecycle path. Do not remove PVCs or reset Splunk membership. Preserve the
-rejected image digests and evidence so the result is reproducible.
+If the EKS candidate is rejected, do not revert the runtime first. Override
+the indexer environment with
+`SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=absent`, run one controlled lifecycle
+pass with the candidate runtime, and verify `btool` plus every Search Head peer
+inventory no longer contains the registered FQDN. Then restore the prior
+immutable runtime and Operator desired images through the same
+dependency-ordered lifecycle path. Do not remove PVCs or reset Splunk
+membership. Preserve the rejected image digests and evidence so the result is
+reproducible.
 
 ## Artifacts and Notes
 
 - Operator branch: `codex/shc-98-stable-indexer-search-address`.
 - Initial Operator source: `5faeeb0e7a5c97750d6006d7d43da168996aab8e`.
 - Splunk Ansible branch: `codex/shc-98-stable-indexer-search-address`.
-- Null-safe Ansible source: `de208e179774e02ac054f50c468c7a4a8d57d644`.
+- Reversible Ansible source:
+  `8a3ac3b4f832427e81f074ec2b40bdb1937d3465`.
 - Docker-Splunk branch: `codex/shc-98-stable-indexer-search-address`.
-- Null-safe dependency-pin source:
-  `f611b74bdf7c55af64fe53adcdc6efa990ce7002`.
+- Reversible dependency-pin source:
+  `cfd4fdee2a90f3cb70787dc915cddc299aaa7825`.
 - EKS context:
   `arn:aws:eks:us-west-2:667741767953:cluster/vivek-spl-301372`.
 - Qualification namespace: `shc-final-qualification`.
@@ -388,7 +404,7 @@ content in this document or evidence bundles.
 
 Splunk Ansible exposes the optional environment input:
 
-    SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=<host-or-IP|auto>
+    SPLUNK_IDXC_REGISTER_SEARCH_ADDRESS=<host-or-IP|auto|absent>
 
 It maps to:
 
@@ -396,8 +412,10 @@ It maps to:
     server.conf/[clustering]/register_search_address
 
 `auto` resolves to `SPLUNK_HOSTNAME` when non-empty, otherwise
-`socket.getfqdn()`. The Operator supplies `auto` for clustered indexers and
-retains the existing `CommonSplunkSpec.ExtraEnv` override contract.
+`socket.getfqdn()`. `absent` removes the option before start for controlled
+rollback. Undefined, null, and empty inputs remain unmanaged. The Operator
+supplies `auto` for clustered indexers and retains the existing
+`CommonSplunkSpec.ExtraEnv` override contract.
 
 The candidate depends on StatefulSet hostname/subdomain identity, the
 indexer's existing headless Service, Kubernetes cluster DNS, Cluster Manager
