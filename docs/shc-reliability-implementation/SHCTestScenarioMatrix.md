@@ -55,6 +55,7 @@ Unless a scenario explicitly tests loss of majority, assert:
 | HLT-011 | P2 | No service mesh installed | Local member readiness succeeds without a sidecar, mesh control plane, ingress, or external network dependency |
 | HLT-012 | P2 | TLS terminates at ingress | External TLS mode does not select the local management scheme; readiness follows the actual Splunkd `enableSplunkdSSL` configuration |
 | HLT-013 | P2 | Mesh mTLS, passthrough, or re-encryption | Local readiness bypasses proxy routing while supported inter-Pod management traffic retains its qualified TLS policy |
+| HLT-014 | P1 | Persistent Service connection during backend replacement | Selected backend identity and connection generation are recorded; endpoint withdrawal prevents new selection; an interrupted flow reconnects within policy without hiding the first transport failure or losing the logical request |
 
 ### HLT-009 SHC-97 evidence
 

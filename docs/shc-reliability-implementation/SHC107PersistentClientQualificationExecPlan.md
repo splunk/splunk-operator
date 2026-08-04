@@ -24,6 +24,9 @@ failures, and final result completeness. This is qualification code only. It
 does not change the Operator, Docker-Splunk, Splunk Ansible, or Splunk
 Enterprise.
 
+The stable scenario identifier for this requirement is `HLT-014` in
+`SHCTestScenarioMatrix.md`.
+
 ## Progress
 
 - [x] (2026-08-04 00:42Z) Created isolated qualification branch
@@ -32,12 +35,19 @@ Enterprise.
 - [x] (2026-08-04 00:42Z) Implemented deterministic source `9e9cbc819`: a
   standard-library Python client, digest-pinned Kubernetes Job, Make validation
   and deployment targets, seven focused unit tests, and fixture documentation.
-- [x] (2026-08-04 00:42Z) Passed the focused tests 100 consecutive times,
+- [x] (2026-08-04 01:06Z) Completed exact harness source `f3ec88026`. The
+  follow-up commits expose HTTP version and `Connection` headers, request
+  explicit keep-alive, and use a neutral qualification `User-Agent` so the
+  current Splunk HTTP server permits standards-compliant HTTP/1.1 reuse.
+- [x] (2026-08-04 01:08Z) Passed the focused tests 100 consecutive times,
   Kubernetes client-side manifest validation, `make fmt vet`, and
   `git diff --check`.
-- [ ] Run a short stable-cluster EKS smoke after the active SHC-94/SHC-106
-  evidence monitor completes. Establish whether HEC and search responses
-  retain HTTP/1.1 connections or explicitly close them.
+- [x] (2026-08-04 01:06Z) Passed the stable EKS smoke on the accepted Operator:
+  12 HEC submissions used one connection, 25 Search Head identity/search
+  requests used one connection, both paths returned HTTP/1.1
+  `Connection: Keep-Alive`, no request failed, and all 12 unique events became
+  searchable. The two earlier diagnostic runs correctly recorded Splunk's
+  server-requested close behavior before the neutral user agent was added.
 - [ ] Run the client before an Operator-owned Search Head `2 -> 1 -> 0`
   replacement and prove the connection pinned to each replaced member either
   stays valid until supported shutdown or reconnects with no logical request
@@ -73,6 +83,20 @@ Enterprise.
   Consequence: the harness records server closes and maximum requests per
   connection rather than falsely claiming persistence. A server-close result
   is a product behavior finding, not a Kubernetes failure.
+- Observation: current Splunkd intentionally declines HTTP/1.1 reuse when the
+  `User-Agent` is absent, identifies Python's default HTTP client, or starts
+  with the official `splunk-sdk-python/` identifier.
+  Evidence: the first stable run and an explicit-keep-alive run both received
+  HTTP/1.1 `Connection: Close` for every HEC and Search Head response. The
+  local Splunk source implementation in `RestHttpTcpConnection::trustHttp11`
+  explicitly returns false for those client identities. The same EKS paths
+  returned `Connection: Keep-Alive` and reused one connection after exact
+  harness source `f3ec88026` sent `User-Agent: SOK-SHC-Qualification/1.0`.
+  Consequence: the stable test proves Splunk and the in-cluster Service path
+  support persistent HTTP/1.1 connections for a capable client. It also
+  identifies a separate client-compatibility limitation: an official Python
+  SDK client does not exercise persistence unless Splunk's compatibility
+  policy or that client identity changes. No Splunkd change is made here.
 
 ## Decision Log
 
@@ -97,10 +121,15 @@ Enterprise.
 
 ## Outcomes & Retrospective
 
-The deterministic test harness is source-qualified and pushed. No live
-persistent-client result is claimed yet. Its first EKS smoke is intentionally
-waiting for the current 240-sample accepted-image conflict record to finish so
-the records do not overlap.
+The deterministic test harness and its stable-cluster behavior are qualified.
+On EKS, exact source `f3ec88026` carried all 12 HEC submissions on one TLS
+connection and all 25 Search Head management/search requests on one TLS
+connection. There were zero first-attempt failures, reconnects, server closes,
+logical failures, or count regressions, and the final result was exactly 12
+unique events. This is bounded proof of stable persistent connection reuse;
+it is not yet proof of reconnect behavior during backend replacement. Search
+Head and indexer replacement, Operator restart, network variants, and soak
+remain open.
 
 ## Context and Orientation
 
@@ -122,11 +151,11 @@ client closes them. A robust result must therefore separate:
 
 ## Plan of Work
 
-First deploy exact harness source `9e9cbc819` for a short stable smoke. Confirm
-that credentials are absent from logs, `server/info` identifies a real Search
-Head, identity and search use the same connection generation, and at least one
-service carries more than one request per connection. If Splunk closes a path
-after every response, record that fact and do not label that path persistent.
+The stable smoke used exact harness source `f3ec88026`. It confirmed that
+credentials are absent from logs, `server/info` identifies a real Search Head,
+identity and search use the same connection generation, and both Services
+carry multiple requests per connection. The two diagnostic forced-close runs
+are retained as negative evidence and are not labeled persistent.
 
 For Search Head qualification, start a longer unique run before the controlled
 reverse-ordinal rollout. Record Job logs, EndpointSlices, Search Head Pod UIDs,
@@ -189,15 +218,33 @@ objects without affecting Splunk Pods or persistent volumes.
 
 - Qualification source branch:
   `codex/shc-107-persistent-client-qualification`.
-- Exact harness source: `9e9cbc819`.
-- Production Operator source under test: `a6cda92a3` after native image
-  construction; the initial stable smoke may use the accepted Operator and
-  must say so explicitly.
+- Exact harness source: `f3ec88026bd316e56ff9cfcba46d5a547676cc14`.
+- Production Operator source under test for disruptive correction campaigns:
+  `a6cda92a3` after native image construction. The completed stable smoke used
+  the accepted Operator image explicitly recorded below; it did not claim to
+  exercise SHC-106.
 - Fixture: `test/fixtures/shc-reliability/shc107_persistent_client.py`.
 - Job: `test/fixtures/shc-reliability/shc107-incluster-workload-job.yaml`.
 - Source gates: seven tests, 100 repeated runs, `make fmt vet`, client-side
-  Kubernetes validation, and `git diff --check`.
-- Live stable, rollout, network-variant, and soak evidence: pending.
+  Kubernetes validation, and `git diff --check`. The final `fmt`/`vet` log has
+  SHA-256 `3aa0e397494cfef2991968ee6320c9c3f380f4c3ea18e36dab967e9e2121e34b`.
+- Stable EKS inputs: context `shc85-vivek-spl-301372`, namespace
+  `shc-final-qualification`, accepted Operator image index
+  `sha256:a9f2125097fa823d5182e8729683e5099116a889fdae8e892f0bd3110a8cdf3d`,
+  Splunk runtime image index
+  `sha256:49b12103f8444319dcf823eb829d2dfc020410e44d46273461c1b15e52c724fd`,
+  and client image index
+  `sha256:d6e11fe00dcadb6a3b168b23081950f85265daf0c923a314034160a495a6db4b`.
+- Stable persistent result:
+  `shc107-user-agent-persistent-smoke-accepted-operator-20260804T0106Z.log`,
+  SHA-256
+  `43f0c1da3d7797a6ae3ebf08a085bfeae16cb1c2e26cf90caf9c35253bca0447`.
+- Diagnostic forced-close results:
+  `shc107-stable-smoke-accepted-operator-20260804T0058Z.log`, SHA-256
+  `a29c2adc5d6226c5df2c918b03ae86e393175547c3fc76abaaad8e41de1be43f`,
+  and `shc107-keepalive-smoke-accepted-operator-20260804T0102Z.log`, SHA-256
+  `c06ac53715a7fb606f17e68ddc2ba47747c62eabf596f6bfc23a60a3df94b70d`.
+- Live rollout, network-variant, and soak evidence: pending.
 
 ## Interfaces and Dependencies
 

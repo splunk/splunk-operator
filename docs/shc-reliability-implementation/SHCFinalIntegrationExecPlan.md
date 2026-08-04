@@ -146,8 +146,10 @@ it is not converted into a qualified claim by documentation alone.
   separate Operator/runtime corrections from Splunk Enterprise changes that
   are only identified for later ownership.
 - [ ] Complete SHC-107 persistent-client qualification at test-only source
-  `9e9cbc819`. The deterministic harness is source-qualified; stable EKS
-  smoke, Search Head and indexer replacement, Operator restart, network
+  `f3ec88026`. The deterministic harness and stable EKS reuse are qualified:
+  one HEC connection carried 12 writes, one Search Head connection carried 25
+  identity/search requests, and every request and final event completed
+  exactly. Search Head and indexer replacement, Operator restart, network
   variants, and soak remain open.
 - [ ] Complete SHC-82 restart-required App Framework qualification for Search
   Heads and indexers, including searchable indexer restart behavior.
