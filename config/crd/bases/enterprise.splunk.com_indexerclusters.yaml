@@ -5933,6 +5933,22 @@ spec:
               licenseUrl:
                 description: Full path or URL for a Splunk Enterprise license file
                 type: string
+              lifecyclePolicy:
+                description: |-
+                  LifecyclePolicy configures the Kubernetes traffic-withdrawal barrier
+                  used before an Operator-owned indexer decommission.
+                properties:
+                  endpointWithdrawalDelaySeconds:
+                    description: |-
+                      EndpointWithdrawalDelaySeconds is the minimum quiescence period after
+                      the target is no longer routable through the Indexer Service's
+                      EndpointSlices and before Splunk decommission begins. It gives
+                      kube-proxy and other EndpointSlice consumers time to apply the withdrawal.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                type: object
               livenessInitialDelaySeconds:
                 description: |-
                   LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
@@ -9122,6 +9138,34 @@ spec:
                     type: string
                   desiredRevision:
                     type: string
+                  endpointWithdrawalDeadline:
+                    description: |-
+                      Durable end of the propagation delay calculated from the effective
+                      lifecycle policy when this withdrawal sequence was observed.
+                    format: date-time
+                    type: string
+                  endpointWithdrawalInvalidatedSequence:
+                    description: |-
+                      Latest endpoint-withdrawal sequence invalidated because the target became
+                      routable again before the propagation delay elapsed.
+                    format: int64
+                    type: integer
+                  endpointWithdrawalObservedAt:
+                    description: |-
+                      When Kubernetes first showed both the target Pod as not Ready and no
+                      routable target entry in the Indexer Service's EndpointSlices.
+                    format: date-time
+                    type: string
+                  endpointWithdrawalPodUID:
+                    description: Exact target UID covered by the endpoint-withdrawal
+                      observation.
+                    type: string
+                  endpointWithdrawalSequence:
+                    description: |-
+                      Monotonic observation sequence used to prevent a stale status writer
+                      from restoring an earlier withdrawal observation.
+                    format: int64
+                    type: integer
                   finishedAt:
                     format: date-time
                     type: string

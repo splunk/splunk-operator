@@ -2662,6 +2662,33 @@ func validateIndexerClusterPodUpdateStatusMerge(
 				reconciled.DecommissionRequestedAt == nil) ||
 			(latest.ObservedDecommissioning &&
 				!reconciled.ObservedDecommissioning) ||
+			(latest.EndpointWithdrawalObservedAt != nil &&
+				reconciled.EndpointWithdrawalObservedAt == nil) ||
+			(latest.EndpointWithdrawalDeadline != nil &&
+				reconciled.EndpointWithdrawalDeadline == nil) ||
+			(reconciled.EndpointWithdrawalSequence ==
+				latest.EndpointWithdrawalSequence &&
+				latest.EndpointWithdrawalObservedAt != nil &&
+				(reconciled.EndpointWithdrawalObservedAt == nil ||
+					!reconciled.EndpointWithdrawalObservedAt.Equal(
+						latest.EndpointWithdrawalObservedAt,
+					))) ||
+			(reconciled.EndpointWithdrawalSequence ==
+				latest.EndpointWithdrawalSequence &&
+				latest.EndpointWithdrawalDeadline != nil &&
+				(reconciled.EndpointWithdrawalDeadline == nil ||
+					!reconciled.EndpointWithdrawalDeadline.Equal(
+						latest.EndpointWithdrawalDeadline,
+					))) ||
+			(latest.EndpointWithdrawalPodUID != "" &&
+				reconciled.EndpointWithdrawalSequence ==
+					latest.EndpointWithdrawalSequence &&
+				reconciled.EndpointWithdrawalPodUID !=
+					latest.EndpointWithdrawalPodUID) ||
+			(reconciled.EndpointWithdrawalSequence <
+				latest.EndpointWithdrawalSequence) ||
+			(reconciled.EndpointWithdrawalInvalidatedSequence <
+				latest.EndpointWithdrawalInvalidatedSequence) ||
 			(latest.ReplacementPodUID != "" &&
 				reconciled.ReplacementPodUID == "") ||
 			(latest.ServingRecoveryObservedAt != nil &&

@@ -121,6 +121,14 @@ var IndexerLifecycleStageDurationSeconds = prometheus.NewHistogramVec(
 	[]string{LabelStage},
 )
 
+var IndexerEndpointWithdrawalCounters = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "splunk_operator_indexer_endpoint_withdrawal_total",
+		Help: "The number of durable Indexer endpoint-withdrawal observations and invalidations",
+	},
+	[]string{LabelAction},
+)
+
 func GetPrometheusLabels(request reconcile.Request, kind string) prometheus.Labels {
 	return prometheus.Labels{
 		LabelNamespace: request.Namespace,
@@ -156,5 +164,6 @@ func init() {
 		SHCAuthorizedRevisionRecoveryCounter,
 		IndexerLifecycleTransitionCounters,
 		IndexerLifecycleStageDurationSeconds,
+		IndexerEndpointWithdrawalCounters,
 	)
 }

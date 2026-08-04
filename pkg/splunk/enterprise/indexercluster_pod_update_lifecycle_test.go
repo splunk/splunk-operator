@@ -627,7 +627,7 @@ func TestIndexerRestartingTargetPersistsReplacementAuthorization(t *testing.T) {
 	}
 }
 
-func TestIndexerRecoversDecommissionAcceptedBeforeStatusPersisted(
+func TestIndexerControlledStateRequiresWithdrawalBeforeRecovery(
 	t *testing.T,
 ) {
 	enableIndexerLifecycleForTest(t)
@@ -656,10 +656,10 @@ func TestIndexerRecoversDecommissionAcceptedBeforeStatusPersisted(
 	}
 	operation := mgr.cr.Status.PodUpdate
 	if operation.Stage !=
-		enterpriseApi.IndexerClusterPodUpdateStageDecommissioning ||
-		operation.DecommissionRequestedAt == nil ||
-		!operation.ObservedDecommissioning ||
-		operation.Reason != "IndexerDecommissionRecovered" {
+		enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness ||
+		operation.DecommissionRequestedAt != nil ||
+		operation.ObservedDecommissioning ||
+		operation.Reason != "IndexerReadinessWithdrawalRecovered" {
 		t.Fatalf("unexpected recovered operation: %#v", operation)
 	}
 }

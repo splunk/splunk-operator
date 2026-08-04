@@ -3125,6 +3125,75 @@ func TestIndexerClusterPodUpdateStatusMergePreservesSearchPeerConvergence(
 	}
 }
 
+func TestIndexerClusterPodUpdateStatusMergePreservesEndpointWithdrawal(
+	t *testing.T,
+) {
+	observedAt := metav1.NewTime(
+		time.Date(2026, 8, 4, 13, 40, 32, 0, time.UTC),
+	)
+	latest := &enterpriseApi.IndexerClusterPodUpdateStatus{
+		OperationID:                           "operation",
+		Stage:                                 enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness,
+		LastTransitionTime:                    &observedAt,
+		EndpointWithdrawalObservedAt:          &observedAt,
+		EndpointWithdrawalDeadline:            &observedAt,
+		EndpointWithdrawalPodUID:              "target-uid",
+		EndpointWithdrawalSequence:            2,
+		EndpointWithdrawalInvalidatedSequence: 1,
+	}
+
+	for _, mutate := range []func(*enterpriseApi.IndexerClusterPodUpdateStatus){
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			status.EndpointWithdrawalObservedAt = nil
+		},
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			status.EndpointWithdrawalDeadline = nil
+		},
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			older := metav1.NewTime(observedAt.Add(-time.Second))
+			status.EndpointWithdrawalDeadline = &older
+		},
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			newer := metav1.NewTime(observedAt.Add(time.Second))
+			status.EndpointWithdrawalObservedAt = &newer
+		},
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			newer := metav1.NewTime(observedAt.Add(time.Second))
+			status.EndpointWithdrawalDeadline = &newer
+		},
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			status.EndpointWithdrawalPodUID = "different-target-uid"
+		},
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			status.EndpointWithdrawalSequence--
+		},
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			status.EndpointWithdrawalInvalidatedSequence--
+		},
+	} {
+		reconciled := latest.DeepCopy()
+		mutate(reconciled)
+		err := validateIndexerClusterPodUpdateStatusMerge(
+			latest,
+			reconciled,
+			"example",
+		)
+		if !k8serrors.IsConflict(err) {
+			t.Fatalf("regression error = %v, want conflict", err)
+		}
+	}
+
+	reconciled := latest.DeepCopy()
+	reconciled.Stage = enterpriseApi.IndexerClusterPodUpdateStageDecommissioning
+	if err := validateIndexerClusterPodUpdateStatusMerge(
+		latest,
+		reconciled,
+		"example",
+	); err != nil {
+		t.Fatalf("forward endpoint-withdrawal stage was rejected: %v", err)
+	}
+}
+
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))

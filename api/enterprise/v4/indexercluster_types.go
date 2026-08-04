@@ -39,6 +39,11 @@ const (
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
+	// LifecyclePolicy configures the Kubernetes traffic-withdrawal barrier
+	// used before an Operator-owned indexer decommission.
+	// +optional
+	LifecyclePolicy *IndexerClusterLifecyclePolicy `json:"lifecyclePolicy,omitempty"`
+
 	// +optional
 	// Queue reference. NOTE: part of the index and ingestion separation feature, which is currently in Preview and not recommended for production use.
 	QueueRef *corev1.ObjectReference `json:"queueRef,omitempty"`
@@ -49,6 +54,19 @@ type IndexerClusterSpec struct {
 
 	// Number of indexer cluster peers
 	Replicas int32 `json:"replicas"`
+}
+
+// IndexerClusterLifecyclePolicy configures lifecycle timing for an
+// Operator-owned indexer Pod update.
+type IndexerClusterLifecyclePolicy struct {
+	// EndpointWithdrawalDelaySeconds is the minimum quiescence period after
+	// the target is no longer routable through the Indexer Service's
+	// EndpointSlices and before Splunk decommission begins. It gives
+	// kube-proxy and other EndpointSlice consumers time to apply the withdrawal.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=86400
+	EndpointWithdrawalDelaySeconds *int64 `json:"endpointWithdrawalDelaySeconds,omitempty"`
 }
 
 // IndexerClusterMemberStatus is used to track the status of each indexer cluster peer.
@@ -120,6 +138,25 @@ type IndexerClusterPodUpdateStatus struct {
 	// requested. This prevents an unchanged, eventually consistent Up response
 	// from being mistaken for a completed decommission cycle.
 	ObservedDecommissioning bool `json:"observedDecommissioning,omitempty"`
+
+	// When Kubernetes first showed both the target Pod as not Ready and no
+	// routable target entry in the Indexer Service's EndpointSlices.
+	EndpointWithdrawalObservedAt *metav1.Time `json:"endpointWithdrawalObservedAt,omitempty"`
+
+	// Durable end of the propagation delay calculated from the effective
+	// lifecycle policy when this withdrawal sequence was observed.
+	EndpointWithdrawalDeadline *metav1.Time `json:"endpointWithdrawalDeadline,omitempty"`
+
+	// Exact target UID covered by the endpoint-withdrawal observation.
+	EndpointWithdrawalPodUID string `json:"endpointWithdrawalPodUID,omitempty"`
+
+	// Monotonic observation sequence used to prevent a stale status writer
+	// from restoring an earlier withdrawal observation.
+	EndpointWithdrawalSequence int64 `json:"endpointWithdrawalSequence,omitempty"`
+
+	// Latest endpoint-withdrawal sequence invalidated because the target became
+	// routable again before the propagation delay elapsed.
+	EndpointWithdrawalInvalidatedSequence int64 `json:"endpointWithdrawalInvalidatedSequence,omitempty"`
 
 	// Most recent stage transition time.
 	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`

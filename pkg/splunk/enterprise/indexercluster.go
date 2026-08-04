@@ -740,6 +740,17 @@ var VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, clie
 	return mgr.verifyRFPeers(ctx, client)
 }
 
+var requestIndexerPeerDecommission = func(
+	ctx context.Context,
+	mgr *indexerClusterPodManager,
+	ordinal int32,
+	enforceCounts bool,
+) error {
+	c := mgr.getClient(ctx, ordinal)
+	defer c.CloseIdleConnections()
+	return c.DecommissionIndexerClusterPeer(enforceCounts)
+}
+
 // indexerClusterPodManager is used to manage the pods within an indexer cluster
 type indexerClusterPodManager struct {
 	c               splcommon.ControllerClient
@@ -1663,6 +1674,27 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 	if operation != nil &&
 		operation.DecommissionRequestedAt == nil &&
 		indexerPeerStatusIsControlledDecommission(peerStatus) {
+		if operation.Stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageTargetSelected {
+			mgr.transitionIndexerPodUpdate(
+				ctx,
+				enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness,
+				"IndexerReadinessWithdrawalRecovered",
+				"Recovered a controlled peer state; requiring the endpoint-withdrawal barrier before ownership",
+			)
+			return false, nil
+		}
+		if operation.Stage ==
+			enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness {
+			withdrawalDelayElapsed, err :=
+				mgr.ensureIndexerEndpointWithdrawalBarrier(ctx)
+			if err != nil {
+				return false, err
+			}
+			if !withdrawalDelayElapsed {
+				return false, nil
+			}
+		}
 		now := metav1.Now()
 		operation.DecommissionRequestedAt = &now
 		operation.ObservedDecommissioning = true
@@ -1726,33 +1758,15 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 				)
 				return false, nil
 			case enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness:
-				var targetPod corev1.Pod
-				err := mgr.c.Get(
-					ctx,
-					types.NamespacedName{
-						Namespace: mgr.cr.GetNamespace(),
-						Name:      operation.TargetPod,
-					},
-					&targetPod,
-				)
+				withdrawalDelayElapsed, err :=
+					mgr.ensureIndexerEndpointWithdrawalBarrier(ctx)
 				if err != nil {
 					return false, err
 				}
-				if isKubernetesPodReady(&targetPod) {
-					podExecClient := splutil.GetPodExecClient(
-						mgr.c,
-						mgr.cr,
-						operation.TargetPod,
-					)
-					if err := setIndexerReadinessWithdrawalOnSplunkPod(
-						ctx,
-						podExecClient,
-					); err != nil {
-						return false, err
-					}
+				if !withdrawalDelayElapsed {
 					mgr.log.InfoContext(
 						ctx,
-						"waiting for Indexer Pod readiness withdrawal before decommission",
+						"waiting for Indexer Service endpoint withdrawal before decommission",
 						"operationID",
 						operation.OperationID,
 						"peerName",
@@ -1786,9 +1800,7 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 		}
 
 		mgr.log.InfoContext(ctx, "decommissioning IndexerCluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
-		c := mgr.getClient(ctx, n)
-		defer c.CloseIdleConnections()
-		err := c.DecommissionIndexerClusterPeer(enforceCounts)
+		err := requestIndexerPeerDecommission(ctx, mgr, n, enforceCounts)
 		if err != nil {
 			return false, err
 		}
@@ -2469,6 +2481,16 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 	}
 	if (queueRefName == "") != (osRefName == "") {
 		return fmt.Errorf("queueRef and objectStorageRef must both be set or both be empty")
+	}
+	if cr.Spec.LifecyclePolicy != nil &&
+		cr.Spec.LifecyclePolicy.EndpointWithdrawalDelaySeconds != nil {
+		delaySeconds :=
+			*cr.Spec.LifecyclePolicy.EndpointWithdrawalDelaySeconds
+		if delaySeconds < 1 || delaySeconds > 86400 {
+			return fmt.Errorf(
+				"lifecyclePolicy.endpointWithdrawalDelaySeconds must be between 1 and 86400",
+			)
+		}
 	}
 
 	// Cannot leave clusterManagerRef field empty or else we cannot connect to CM
