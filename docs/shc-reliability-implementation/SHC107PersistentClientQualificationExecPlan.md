@@ -92,15 +92,26 @@ The stable scenario identifier for this requirement is `HLT-014` in
   namespace had no mesh injection label, every Splunk and workload Pod had one
   container, and no Pod had sidecar status. The result does not claim a
   transparent-mesh or ingress path.
-- [ ] Run the same client before an Operator-owned indexer `3 -> 2 -> 1 -> 0`
-  replacement and record HEC connection recovery plus distributed-search
-  completeness.
+- [x] (2026-08-04 03:46Z) Completed an Operator-owned indexer
+  `3 -> 2 -> 1 -> 0` replacement with exact source `3e9f47751`. One explicit
+  HEC HTTP 503/code 23 response closed the selected connection and recovered
+  once through the Service; all 2,400 submissions were accepted and became
+  searchable. The persistent search connection returned HTTP 200 throughout
+  but recorded three count regressions, maximum count drop 847 and maximum
+  pending 849, so immediate distributed-search completeness failed.
+- [x] (2026-08-04 03:46Z) Preserved the full-roll ordering failure. The
+  controller selected ordinal 2 before every Search Head had converged from
+  ordinal 3, and the monitor ended
+  `FAIL-next-target-before-search-head-peer-3-converged`. The lifecycle
+  completed at `03:17:48Z`; every Search Head first showed exactly the four
+  current `Up` peers at `03:44:11Z`, 1,583 seconds later.
 - [ ] Repeat with supported service-mesh routing and TLS termination at
   ingress. Add HTTP HEC coverage separately; the completed bounded fixture
   uses HTTPS on the in-cluster Splunk ports.
 - [ ] Run a longer candidate-image soak after the bounded accepted-image
-  campaigns. The completed 1,800- and 1,200-sample runs establish trustworthy
-  connection evidence but do not replace a release stability gate.
+  campaigns. The completed 1,800-, 1,200-, and 2,400-sample runs establish
+  trustworthy connection evidence but do not replace a release stability
+  gate.
 
 ## Surprises & Discoveries
 
@@ -230,6 +241,51 @@ The stable scenario identifier for this requirement is `HLT-014` in
   Consequence: this accepted-image observation is not evidence that SHC-106 is
   fixed. Native candidate-image qualification must prove serialized ownership
   and exact StatefulSet convergence.
+- Observation: response-aware HEC recovery remained effective across a full
+  four-indexer replacement, but HTTP success did not make search results
+  complete.
+  Evidence: one explicit HTTP 503/code 23 response caused one bounded
+  reconnect, after which 2,400 submissions completed exactly with zero HEC
+  failure. The unchanged Search Head connection returned HTTP 200 for every
+  search yet regressed at sequences 907, 1060, and 1107. The largest two
+  drops were 847 events and maximum pending was 849; exact results recovered
+  before the run ended.
+  Consequence: the explicit HEC mitigation qualifies eventual delivery for
+  this accepted-image campaign. It does not satisfy the independent
+  immediate distributed-search completeness requirement.
+- Observation: Indexer lifecycle `Completed`, Kubernetes readiness, and
+  Cluster Manager serving recovery still precede cluster-wide Search Head
+  peer convergence.
+  Evidence: all four Pod UIDs and IPs changed in reverse ordinal order while
+  their `etc` and `var` claims were preserved, at least three Pods and three
+  endpoints remained Ready, and restarts stayed zero. Nevertheless, the
+  controller selected ordinal 2 before ordinal 3 had converged on every
+  Search Head. At final lifecycle completion all three Search Heads still
+  listed eight peers: four current `Up` entries and four stale `Down` entries.
+  Lifecycle finished at `03:17:48Z`; exact four-peer convergence first
+  appeared on every Search Head at `03:44:11Z`, 1,583 seconds later.
+  Consequence: a successful per-Pod readiness gate is necessary but not a safe
+  ordinal-advancement gate. The Operator must observe every Search Head's
+  distributed-peer view, or Splunk must supply an equivalent authoritative
+  convergence signal, before selecting the next indexer.
+- Observation: Cluster Manager factor checks protected the replication
+  boundary but did not cover the distributed-search boundary.
+  Evidence: the Cluster Manager endpoint remained available in all 241
+  monitor samples. RF/SF/site factors reported zero in 11 samples during the
+  four replacement windows, and the controller did not select the next
+  ordinal until those factors recovered. The separate Search Head peer guard
+  still failed.
+  Consequence: keep the existing Cluster Manager safety checks and add the
+  missing cluster-wide Search Head convergence gate; neither can replace the
+  other.
+- Observation: the qualification Job's Kubernetes `Complete` condition means
+  exact final delivery, not uninterrupted search completeness.
+  Evidence: the harness intentionally exits successfully when all numbered
+  events are eventually complete and there are no logical HEC/search request
+  failures; it reports count regressions independently. This run therefore
+  succeeded as a Job while recording three regressions.
+  Consequence: automation and release decisions must evaluate the regression
+  counters and convergence monitor, not only Job success.
 
 ## Decision Log
 
@@ -269,9 +325,9 @@ The stable scenario identifier for this requirement is `HLT-014` in
 ## Outcomes & Retrospective
 
 The deterministic harness, stable reuse, unplanned active-captain replacement,
-one selected-indexer replacement, two Operator-owned Search Head rolls,
-controller replacement, and the no-mesh topology are qualified for their
-bounded claims.
+one selected-indexer replacement, a full four-indexer replacement, two
+Operator-owned Search Head rolls, controller replacement, and the no-mesh
+topology are qualified for their bounded claims.
 The Search Head campaign recovered one visible transport boundary and
 completed 600 events exactly. The indexer campaign first proved that
 transport-only retry loses explicit 503-rejected HEC requests on an established
@@ -285,8 +341,11 @@ negative control proved that readiness does not move a persistent connection:
 it delivered 1,800 events exactly but recorded 218 detention failures. Exact
 source `3e9f47751` then recovered four explicit HTTP 405 responses across two
 complete planned rolls, including an Operator restart, and completed 1,200
-events with zero logical failure. A complete Operator-owned indexer roll,
-service-mesh and ingress variants, HTTP HEC, candidate-image qualification,
+events with zero logical failure. The same source completed a full accepted-
+image indexer roll with one recovered HEC 503 and exact 2,400-event delivery,
+but three HTTP-successful search-count regressions and premature ordinal
+advancement reject immediate-completeness and safe-convergence claims.
+Service-mesh and ingress variants, HTTP HEC, candidate-image qualification,
 and release-duration soak remain open.
 
 ## Context and Orientation
@@ -476,8 +535,28 @@ objects without affecting Splunk Pods or persistent volumes.
   Generation 18 was observed and Ready with all members `Up`, three serving
   endpoints, a ready captain, equal Search Head current/update revisions, and
   zero Search Head or Operator restarts.
-- Operator-owned indexer roll, transparent-mesh, ingress TLS termination, HTTP
-  HEC, candidate-image, and release-duration soak evidence: pending.
+- Operator-owned full indexer-roll result:
+  `shc107-full-indexer-roll-workload-20260804T0257Z.log`, SHA-256
+  `0a5a0193e402084533cc91c163602823f9d80b71010a3ce0158ef883090c6150`.
+  It completed 2,400 submissions exactly with zero HEC, search, or identity
+  failure; one explicit HEC response failure recovered through a second
+  connection. It recorded three count regressions, maximum drop 847 and
+  maximum pending 849. The 241-sample monitor has SHA-256
+  `0aa60e7d2a93104702bddb1a1dddeff83dce880c74fc7146560dea77f6cdbdd3`
+  and ended `FAIL-next-target-before-search-head-peer-3-converged`. Lifecycle
+  completed at `03:17:48Z`; all three Search Heads first converged to exactly
+  four current `Up` peers at `03:44:11Z`. The final direct result from each
+  Search Head was `count/min/max/distinct=2400/1/2400/2400`; that record has
+  SHA-256
+  `9a0851182a142d3ff2af3b614dabf6af82cf4ec476d0c0f994a2f234e90fc2af`.
+  Final IndexerCluster, Pod, EndpointSlice, StatefulSet, and Operator-log
+  records have SHA-256 `97e156a08b1d3b1209af367e3a802215aa3e0c278fb15a2f8f2d39452136d30f`,
+  `551ab1f6a7157346831ae8a0472ab339832943945c96be26c43235b5522e3df6`,
+  `65d68a0f63a98e9731a569809bf1cfd6f311e6852c7f0de2b671c217ff5d7777`,
+  `d02d97980c50267c82e98b7a37314e4951922032fbadeea2bb3a4a74245f309b`,
+  and `4b859bf94fb4484ead0d7f34e9acbc8fd1a887c34d5b98bc81b9527ed4268adb`.
+- Transparent-mesh, ingress TLS termination, HTTP HEC, candidate-image, and
+  release-duration soak evidence: pending.
 
 ## Interfaces and Dependencies
 

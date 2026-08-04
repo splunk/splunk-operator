@@ -123,10 +123,25 @@ three `Up` members, a ready captain, equal Search Head revisions, and zero
 container restarts were restored.
 
 The topology had no mesh injection or sidecars, so the bounded no-mesh path and
-Operator restart are qualified. A complete Operator-owned indexer roll,
-transparent mesh, ingress TLS termination, HTTP HEC, candidate-image
-qualification, release-duration soak, and both Splunkd connection-close
-requirements remain open.
+Operator restart are qualified.
+
+The same exact source then spanned a complete accepted-image indexer
+`3 -> 2 -> 1 -> 0` roll. One explicit HEC HTTP 503/code 23 response forced a
+second connection and recovered once; all 2,400 submissions became searchable
+with zero logical request failure. The persistent Search Head connection
+returned HTTP 200 throughout, but three counts regressed. Maximum count drop
+was 847 and maximum pending was 849. Kubernetes preserved all eight indexer
+PVC claims, at least three indexer Pods and endpoints remained Ready, and all
+container restart counts stayed zero.
+
+HLT-014 therefore passes bounded response-aware HEC delivery for the full
+accepted-image roll, but OPS-011 remains failed for immediate search
+completeness. The convergence monitor also rejected lifecycle ordering:
+ordinal 2 was selected before ordinal 3 had converged on every Search Head,
+and exact four-current-peer convergence followed lifecycle completion by
+1,583 seconds. Transparent mesh, ingress TLS termination, HTTP HEC,
+candidate-image qualification, release-duration soak, and both Splunkd
+connection-close requirements remain open.
 
 ## Drain and captain scenarios
 

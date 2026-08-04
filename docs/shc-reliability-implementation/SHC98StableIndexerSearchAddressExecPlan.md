@@ -503,6 +503,20 @@ a Splunk Enterprise requirement until that behavior exists and is qualified.
   Consequence: the evidence monitor now checks per-GUID identity convergence
   before accepting a later target. This is a qualification guard, not a claim
   that controller gating alone repairs Splunk's in-place identity migration.
+- Observation: a later independent accepted-image Pod-IP campaign reproduced
+  the advancement gap without changing peer-address configuration.
+  Evidence: the complete `3 -> 2 -> 1 -> 0` replacement preserved every PVC,
+  at least three indexer Pods and endpoints, and zero restarts. The monitor
+  nevertheless rejected ordinal-2 selection before ordinal-3 convergence.
+  At final lifecycle `Completed`, every Search Head still held four current
+  `Up` peers and four stale `Down` peers; exact four-peer convergence followed
+  1,583 seconds later. Its persistent-client workload delivered all 2,400
+  events exactly but recorded three HTTP-successful count regressions with
+  maximum drop 847 and maximum pending 849.
+  Consequence: the retained-address migration failure and the ordinary Pod-IP
+  convergence delay are separate facts. Stable identity can remove Pod-IP
+  churn for a newly formed opt-in cluster, but current lifecycle advancement
+  remains unsafe unless every Search Head's peer view is an explicit gate.
 - Observation: stale distributed-peer removal converges independently on each
   Search Head even when every member ultimately agrees.
   Evidence: during rollback, Search Heads 1 and 2 removed the ordinal-1 FQDN

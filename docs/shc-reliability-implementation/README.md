@@ -41,8 +41,13 @@ with zero logical or count-regression failure, and survived deletion of the
 active Operator during durable ordinal-2 work. It finished with three `Up`
 members, three serving endpoints, a ready captain, and zero restarts. This is
 a bounded client-mitigation and lifecycle result, not a Splunkd fix or final
-candidate-image certification. Indexer full-roll, mesh/ingress, HTTP HEC,
-candidate-image, partial-result, and release-soak gates remain open.
+candidate-image certification. A subsequent full indexer `3 -> 2 -> 1 -> 0`
+roll delivered 2,400 events exactly and recovered one explicit HEC 503, but
+three HTTP-successful searches regressed by up to 847 events. The controller
+also selected ordinal 2 before ordinal 3 had converged on every Search Head;
+exact four-peer convergence followed lifecycle completion by 1,583 seconds.
+Mesh/ingress, HTTP HEC, candidate-image, immediate-completeness, and
+release-soak gates remain open.
 
 SHC-97 qualified the bounded Docker-Splunk single-start contract using exact
 Splunk-Ansible source `ae8ecf4a` and Docker-Splunk source `118cae68`. The

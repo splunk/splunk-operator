@@ -155,9 +155,14 @@ it is not converted into a qualified claim by documentation alone.
   events with zero logical failure, including after deleting the active
   Operator in durable ordinal-2 state. The final SHC had three `Up` members,
   three serving endpoints, equal Search Head revisions, a ready captain, and
-  zero restarts. A complete Operator-owned indexer roll, transparent mesh,
-  ingress TLS termination, HTTP HEC, candidate-image qualification, release
-  soak, and immediate distributed-search completeness remain open.
+  zero restarts. A complete accepted-image indexer `3 -> 2 -> 1 -> 0` roll
+  then recovered one explicit HEC 503 and delivered 2,400 events exactly, but
+  recorded three HTTP-successful count regressions with maximum drop 847 and
+  selected ordinal 2 before ordinal 3 peer convergence on every Search Head.
+  Exact peer convergence followed lifecycle completion by 1,583 seconds.
+  Transparent mesh, ingress TLS termination, HTTP HEC, candidate-image
+  qualification, release soak, immediate distributed-search completeness,
+  and the missing ordinal-advancement gate remain open.
 - [ ] Complete SHC-82 restart-required App Framework qualification for Search
   Heads and indexers, including searchable indexer restart behavior.
 - [ ] Run the clean final EKS qualification matrix and stability gate from
