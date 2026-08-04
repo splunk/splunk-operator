@@ -573,8 +573,9 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Linux gate also passed all 43 suites and 192/192 specs. The immutable
   Operator OCI index is
   `sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`;
-  qualification harness `ee2cf5559` passes Bash/ShellCheck and a read-only
-  retained-cluster preflight. Destructive EKS gates remain open in
+  qualification harness `49b6c5057` passes Bash/ShellCheck and a read-only
+  retained-cluster preflight, and requires a live API-independent workload
+  before mutation. Destructive EKS gates remain open in
   `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
