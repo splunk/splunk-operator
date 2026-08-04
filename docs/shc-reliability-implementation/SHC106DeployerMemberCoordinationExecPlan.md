@@ -60,6 +60,13 @@ unchanged.
 - [x] (2026-08-04 00:07Z) Passed `make build`, generation, formatting, vet,
   Helm lint, all 150 Helm unit tests, `git diff --check`, and new-change lint
   with zero issues.
+- [x] (2026-08-04 02:49Z) Independently reproduced the accepted-image overlap
+  twice more while qualifying persistent clients. For generation 18, the
+  Deployer received `Killing` at `02:38:37Z`; ordinal 2 was selected for the
+  same common-template revision at that instant and received `Killing` at
+  `02:39:05Z`. The active Operator was then deleted while the member operation
+  was durable and the accepted controller completed the Search Head roll, but
+  this remains negative evidence because it does not contain SHC-106.
 - [ ] Build an immutable Linux/AMD64 Operator image from exact source
   `a6cda92a3` and deploy it by digest to the qualification cluster.
 - [ ] Repeat the real App Framework plus competing-template campaign and prove
@@ -122,6 +129,24 @@ unchanged.
   Consequence: the Deployer owner now publishes a durable
   `SHC RollingUpdate DeployerUpdateActive` status reason. A controller restart
   or support capture can therefore identify why member mutation is blocked.
+- Observation: accepted-image overlap is deterministic for an ordinary common
+  Pod-template annotation, not limited to App Framework timing.
+  Evidence: two later persistent-client campaigns caused both StatefulSets to
+  render the same annotation change. In generation 18 the Deployer stopped at
+  `02:38:37Z` while the member controller simultaneously selected ordinal 2;
+  that Search Head stopped 28 seconds later, before the Deployer was Ready.
+  Consequence: the original reproduction is not a one-off app-poll artifact.
+  Candidate acceptance must exercise both ownership directions using the exact
+  SHC-106 image.
+- Observation: StatefulSet status can lag a replacement Pod that already has
+  the update revision and Ready condition.
+  Evidence: after the accepted-image campaign the Deployer Pod was Ready with
+  label `splunk-shcfinal-shc-deployer-558659bcc7`, while StatefulSet status
+  still reported update revision `558659bcc7` and prior current revision
+  `976b8548b`. Search Head current/update revisions had already converged.
+  Consequence: candidate coordination must use the published update revision
+  and observed Pod revision/readiness as designed, while final certification
+  separately waits for exact StatefulSet status convergence.
 
 ## Decision Log
 
@@ -250,6 +275,12 @@ another normal rollout is required.
   `build/_test/shc-final/shc94-real-app-conflict-20260803T2348Z.log`.
 - Triggering monitor SHA-256:
   `238ff88035e37fc58d270a907e5c04f7e87142ec62b3896de6d22e6422b8c621`.
+- Independent accepted-image reproduction monitor:
+  `build/_test/shc107/shc107-response-aware-sh-roll-monitor-20260804T0227Z.log`,
+  SHA-256
+  `df5c1ff1d680e1fab99de4be5291d6e8830bbe7afe13dcbc0372d8ea3555568e`.
+  The correlated Event export has SHA-256
+  `844292fd4ecf1b68ca28bc39699acd035b03a82b4e8f6cf730ceb1bf7ee1cea3`.
 - Accepted-Operator log SHA-256:
   `ed0c727359e0368c0e30652cbf1d9991a0db0a8bca1b57795ea1b87a4db1635c`.
 - Final Kubernetes evidence SHA-256 values: Events
