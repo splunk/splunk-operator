@@ -35,8 +35,12 @@ remain separate requirements.
   EndpointSlice, and detention control path after the SHC-116 live finding.
 - [x] Confirmed source currently observes withdrawal and immediately calls the
   detention action without a durable propagation deadline.
-- [ ] Implement the bounded API, durable state, validation, status merge,
-  observability, and tests on an isolated production branch from SHC-116.
+- [x] (2026-08-04 UTC) Implemented the bounded API, durable state, validation,
+  status merge, observability, and tests on isolated source
+  `cd79208b8b18ad90aa916cc1e1418911d42bd924`, stacked on exact SHC-116.
+- [x] (2026-08-04 UTC) Passed generation, manifests, focused lifecycle and API
+  tests, the complete 43-suite native test gate (192/192 specs, 78.8 percent
+  composite coverage), `make build`, and `git diff --check` on the exact source.
 - [ ] Build an immutable Linux image and qualify a complete Search Head roll on
   EKS, including controller replacement during the propagation interval.
 
@@ -55,6 +59,16 @@ remain separate requirements.
   EndpointSlice state.
   Consequence: acceptance must distinguish reduced new routing from complete
   connection draining and must not overstate the Operator's control.
+- Observation: the existing 180-second effective detention timeout can be
+  configured independently from the new propagation delay.
+  Consequence: API and controller validation require the effective endpoint
+  withdrawal delay to remain strictly below the effective detention timeout;
+  otherwise an operation would be guaranteed to time out before detention.
+- Observation: lifecycle status can be written by reconciliations that began
+  from different resource versions.
+  Consequence: status merge preserves monotonic observation and invalidation
+  state for the same operation, rejects corrupt active proof, and permits a new
+  operation only when its start time is not older than the persisted operation.
 
 ## Decision Log
 
@@ -74,11 +88,26 @@ remain separate requirements.
   independent review avoids conflating indexer evidence, Search Head behavior,
   and qualification-only duration changes.
   Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: enforce the delay on both Pod-update and permanent scale-down
+  intents before either path can request detention.
+  Rationale: Service routing does not distinguish why the exact member is being
+  removed, so both lifecycle paths need the same Kubernetes propagation
+  contract.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
-The gap is registered from direct source inspection. No implementation or live
-availability claim is made by this planning record.
+The production source is implemented and source-qualified at
+`cd79208b8b18ad90aa916cc1e1418911d42bd924`. It adds a customer-configurable,
+default-30-second continuous withdrawal interval; persists the exact Pod UID,
+observation, immutable deadline, sequence, and invalidation sequence; protects
+that proof during status merge; and exposes bounded Events, reasons, and the
+`splunk_operator_search_head_endpoint_withdrawal_total` metric. Both Pod-update
+and scale-down detention paths fail closed until the interval completes.
+
+This is not yet a live availability claim. Immutable Linux image construction
+and EKS qualification, including controller replacement during the interval,
+remain open.
 
 ## Plan of Work
 
@@ -122,15 +151,20 @@ not discard the lifecycle operation before restoring serving eligibility.
 
 ## Artifacts and Notes
 
-- Production parent planned: exact SHC-116 source
+- Production parent: exact SHC-116 source
   `96c83dcadc25e6034ba2a41898c84ed1b255b570`.
-- Planned source branch:
+- Source branch:
   `codex/shc-118-search-head-endpoint-withdrawal`.
+- Exact source:
+  `cd79208b8b18ad90aa916cc1e1418911d42bd924`.
 - Existing immediate-action source:
   `pkg/splunk/enterprise/searchheadcluster_lifecycle.go`.
 - Existing withdrawal observation source:
   `pkg/splunk/enterprise/searchhead_serving_readiness.go`.
-- Implementation and EKS evidence: pending.
+- Source evidence: generation, manifests, focused API/lifecycle tests, all 43
+  native suites with 192/192 specs and 78.8 percent composite coverage,
+  `make build`, and `git diff --check` passed on the exact source.
+- Immutable image and EKS evidence: pending.
 
 ## Interfaces and Dependencies
 
