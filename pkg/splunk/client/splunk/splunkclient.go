@@ -39,6 +39,10 @@ type SplunkHTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+type idleConnectionCloser interface {
+	CloseIdleConnections()
+}
+
 const (
 	defaultSplunkRequestTimeout            = 5 * time.Second
 	searchHeadClusterUpgradeRequestTimeout = 60 * time.Second
@@ -81,6 +85,20 @@ func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 			Timeout:   searchHeadClusterUpgradeRequestTimeout,
 			Transport: transport,
 		},
+	}
+}
+
+// CloseIdleConnections releases idle HTTP connections owned by this client.
+// Callers that create a short-lived SplunkClient should invoke it after their
+// final request so its private transport does not retain an idle socket.
+func (c *SplunkClient) CloseIdleConnections() {
+	for _, httpClient := range []SplunkHTTPClient{
+		c.Client,
+		c.SearchHeadClusterUpgradeClient,
+	} {
+		if closer, ok := httpClient.(idleConnectionCloser); ok {
+			closer.CloseIdleConnections()
+		}
 	}
 }
 

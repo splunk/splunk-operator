@@ -45,11 +45,16 @@ func (body *closeTrackingBody) Close() error {
 }
 
 type fixedResponseClient struct {
-	response *http.Response
+	response              *http.Response
+	idleConnectionsClosed bool
 }
 
 func (client *fixedResponseClient) Do(*http.Request) (*http.Response, error) {
 	return client.response, nil
+}
+
+func (client *fixedResponseClient) CloseIdleConnections() {
+	client.idleConnectionsClosed = true
 }
 
 // Error tester for client
@@ -180,6 +185,27 @@ func TestSplunkClientDoClosesResponseBody(t *testing.T) {
 				t.Fatal("Do() did not close the response body")
 			}
 		})
+	}
+}
+
+func TestSplunkClientClosesOwnedIdleConnections(t *testing.T) {
+	defaultClient := &fixedResponseClient{}
+	upgradeClient := &fixedResponseClient{}
+	c := splunk.NewSplunkClient(
+		"https://localhost:8089",
+		"admin",
+		"p@ssw0rd",
+	)
+	c.Client = defaultClient
+	c.SearchHeadClusterUpgradeClient = upgradeClient
+
+	c.CloseIdleConnections()
+
+	if !defaultClient.idleConnectionsClosed {
+		t.Fatal("default client idle connections were not closed")
+	}
+	if !upgradeClient.idleConnectionsClosed {
+		t.Fatal("upgrade client idle connections were not closed")
 	}
 }
 

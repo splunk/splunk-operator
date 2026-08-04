@@ -123,6 +123,7 @@ func (mgr *indexerClusterPodManager) indexerSearchPeerConvergenceObserved(
 				string(mgr.secrets.Data["password"]),
 			)
 			searchPeers, err := searchHeadClient.GetSearchDistributedPeers()
+			searchHeadClient.CloseIdleConnections()
 			if err != nil {
 				return true, false, fmt.Sprintf(
 					"waiting for distributed peers from Search Head %s: %v",
