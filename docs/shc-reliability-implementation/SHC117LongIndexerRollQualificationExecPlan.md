@@ -38,9 +38,11 @@ runtime image, Docker-Splunk behavior, or Splunk Enterprise behavior.
   EKS `3 -> 2 -> 1 -> 0` roll and 60 consecutive final-state observations.
   It retained 647 full snapshots from `15:58:41Z` through `18:20:20Z` and
   exited zero without timing out.
-- [ ] Allow the independent 10,800-sample workload Job to finish, verify its
-  final exact-delivery and regression counters, collect the runner's final
-  resource snapshots, and seal hashes for the complete evidence directory.
+- [x] (2026-08-04 19:26Z) The independent 10,800-sample workload Job finished
+  with Kubernetes `Complete`, zero HEC failures, zero search-request failures,
+  exact final count/minimum/maximum/distinct values of
+  `10800/1/10800/10800`, and `complete=true`. The runner collected final
+  resources, exited zero, and all 25 artifact hashes verify.
 
 ## Surprises & Discoveries
 
@@ -66,6 +68,14 @@ runtime image, Docker-Splunk behavior, or Splunk Enterprise behavior.
   Consequence: the final SHC-117 verdict must report those counters even when
   Kubernetes marks the Job Complete; it must not equate eventual completeness
   with uninterrupted distributed-search completeness.
+- Observation: the completed Job recorded 19 count regressions, all while the
+  planned roll was active. The last occurred at `17:40:34Z`; maximum pending
+  was 1,335 at sequence 5,358 and `17:41:15Z`. The lifecycle monitor remained
+  active through `18:20:20Z`, and the Job had no later count regression before
+  completion at `19:26:16Z`.
+  Consequence: the extended window was long enough to distinguish roll-bound
+  regressions from post-roll stability and to retain eventual exact-delivery
+  evidence without hiding the intermediate-result gap.
 
 ## Decision Log
 
@@ -94,9 +104,11 @@ runtime image, Docker-Splunk behavior, or Splunk Enterprise behavior.
 
 The extended monitor no longer ends before the observed full-roll duration. It
 completed all four ordinal transitions and 60 consecutive final-state
-observations with exit code zero. The overall live outcome remains open only
-for the still-running 10,800-sample Job, its exact final counters, and the
-runner's final artifact collection.
+observations with exit code zero. The 10,800-sample Job and outer runner also
+completed with zero request failures, exact eventual uniqueness, and verified
+final artifacts. SHC-117 therefore closes the duration/evidence-window gap. It
+does not convert the 19 HTTP-successful count regressions into a success claim;
+that separate Splunk distributed-search result contract remains open.
 
 ## Plan of Work
 
@@ -137,7 +149,11 @@ does not mutate controller source or the Splunk runtime image.
 - Workload samples: 10,800 at one-second intervals.
 - Monitor timeout: 10,800 seconds.
 - Job active deadline: 14,400 seconds.
-- Live long-workload verdict: pending.
+- Live long-workload verdict: passed for duration coverage, request success,
+  and eventual exact delivery. Submitted 10,800; HEC failures 0; search-request
+  failures 0; final count/min/max/distinct `10800/1/10800/10800`; Kubernetes
+  Job `Complete`; monitor and outer-runner exit codes 0. Intermediate evidence:
+  19 count regressions and maximum pending 1,335 during the planned roll.
 - Lifecycle monitor: passed with 647 snapshots from
   `2026-08-04T15:58:41Z` through `2026-08-04T18:20:20Z`, target order
   `[3,2,1,0]`, and 60 consecutive final-state observations from
@@ -150,8 +166,13 @@ does not mutate controller source or the Splunk runtime image.
   `492e557ab3ae3dc5aa77a2423abcdb871a35fd93a7f60e605cdc37d606d2e971`,
   and stdout
   `16eebe9c61746e9841cac64f4c127c5336bde8efb59bc7341df6f53aeb27a676`.
-- The workload and final evidence-directory hashes remain pending and are not
-  inferred from monitor success.
+- Workload log SHA-256:
+  `ef779a56ad85c6813bf377aafa3ed5388064a15bcf31c93031504992cbc7c71e`.
+  Workload Job SHA-256:
+  `7fe374d35f7bc2519a0d1f0d215446a688c67da5e55b9f52753849b433572e77`.
+  Artifact-manifest SHA-256:
+  `7e46344af722395aa21225adbd48e47242a3c086a66f2dd9be46a29bc956faae`;
+  all 25 listed hashes verify from the repository root.
 
 ## Interfaces and Dependencies
 
@@ -166,3 +187,8 @@ boundary.
 Updated on 2026-08-04 after the extended lifecycle monitor exited zero. This
 revision records the completed ordinal and stability evidence while preserving
 the long-workload Job and final artifact hashes as explicit open work.
+
+Updated on 2026-08-04 after the extended Job and outer runner completed. This
+revision closes the test-duration gap with exact final counters and verified
+artifacts while preserving intermediate search-count regressions as a separate
+availability finding.
