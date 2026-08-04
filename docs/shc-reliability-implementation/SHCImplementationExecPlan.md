@@ -569,8 +569,11 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `make build` pass. Chart lint, all 150 Helm tests, full v4 API and metrics
   package race checks, and 20 changed-path enterprise race repetitions also
   pass. A broad enterprise race run reproduced pre-existing App Framework and
-  Cluster Manager test-seam races outside the changed paths. Immutable Linux
-  image and EKS gates remain open in
+  Cluster Manager test-seam races outside the changed paths. The matching-CLI
+  Linux gate also passed all 43 suites and 192/192 specs. The immutable
+  Operator OCI index is
+  `sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`;
+  EKS gates remain open in
   `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers

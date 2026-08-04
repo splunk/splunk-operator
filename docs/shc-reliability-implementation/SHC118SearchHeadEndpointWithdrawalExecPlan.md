@@ -49,8 +49,14 @@ remain separate requirements.
 - [x] (2026-08-04 UTC) Passed chart lint, all 150 Helm tests, full race checks
   for the v4 API and metrics packages, and 20 race-enabled repetitions of the
   changed policy, withdrawal, no-early-detention, and status-merge paths.
-- [ ] Build an immutable Linux image and qualify a complete Search Head roll on
-  EKS, including controller replacement during the propagation interval.
+- [x] (2026-08-04 UTC) Repeated the complete native Linux gate with the
+  repository-matched Ginkgo 2.32.0 CLI: 43 suites, 192/192 specs, and 78.8
+  percent composite coverage. `make build` passed with no generated diff.
+- [x] (2026-08-04 UTC) Built and pushed the exact Linux AMD64 Operator candidate
+  through the Makefile. Immutable OCI index digest is
+  `sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`.
+- [ ] Qualify a complete Search Head roll on EKS, including controller
+  replacement during the propagation interval.
 
 ## Surprises & Discoveries
 
@@ -127,9 +133,9 @@ that proof during status merge; and exposes bounded Events, reasons, and the
 `splunk_operator_search_head_endpoint_withdrawal_total` metric. Both Pod-update
 and scale-down detention paths fail closed until the interval completes.
 
-This is not yet a live availability claim. Immutable Linux image construction
-and EKS qualification, including controller replacement during the interval,
-remain open.
+This is not yet a live availability claim. The exact Linux image is available;
+EKS qualification, including controller replacement during the interval,
+remains open.
 
 ## Plan of Work
 
@@ -194,7 +200,9 @@ not discard the lifecycle operation before restoring serving eligibility.
   `f412235c58fe8b8ac7b47441b854e092036f8500932dee2d53d6280d535c7b87`;
   failures are confined to the pre-existing App Framework/Cluster Manager test
   paths listed above rather than SHC-118 files.
-- Immutable image and EKS evidence: pending.
+- Immutable Operator OCI index:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator@sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`.
+- EKS evidence: pending.
 
 ## Interfaces and Dependencies
 
