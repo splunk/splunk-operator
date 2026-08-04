@@ -5,11 +5,10 @@ This directory turns the product and architecture requirements in
 implementation program for Splunk Operator, Docker-Splunk/Splunk Ansible, and
 Splunk Enterprise integration.
 
-The planning baseline is the GitLab `sok/develop` branch at commit
-`39316c19fb990f1af84966d5269a8f4116550dbb`, observed on 2026-07-24. The commit
-is an evidence anchor, not a permanent product claim. Every implementation
-milestone must refresh the baseline before design approval and again before
-merge.
+The planning baseline is the current product design verified from source and
+supported interfaces. Every implementation milestone must refresh that
+baseline before design approval and again before merge; a previously observed
+source revision is evidence, not a permanent product claim.
 
 These documents do not declare the earlier requirements implemented. They
 separate:
@@ -18,6 +17,17 @@ separate:
 2. useful work on unmerged branches that may be reused after review;
 3. design decisions that still require agreement; and
 4. implementation and qualification work that remains.
+
+## Primary production engineering design
+
+`SearchHeadClusterProductionEngineeringRequirementsAndArchitecture.md` is the
+prospective production engineering requirements and architecture document. It
+consolidates the problem statement, ownership model, API and runtime
+contracts, ordered implementation increments, component design, all stable
+qualification scenarios, end-to-end test procedures, acceptance gates,
+rollout and rollback, risks, and the longer-term Kubernetes-native Splunk
+direction. Prototype results are used only as design evidence; the document
+does not claim that the production capability is already implemented.
 
 ## Active bounded investigation
 
@@ -75,65 +85,68 @@ evidence and limits are in
 
 ## Review order
 
-1. `CurrentDevelopBaseline.md` establishes what exists now.
-2. `SHC112IndexerSearchPeerConvergenceGateExecPlan.md` records the durable
+1. `SearchHeadClusterProductionEngineeringRequirementsAndArchitecture.md`
+   defines the prospective end-to-end production design and qualification
+   contract.
+2. `CurrentDevelopBaseline.md` establishes what exists now.
+3. `SHC112IndexerSearchPeerConvergenceGateExecPlan.md` records the durable
    Operator-owned indexer advancement gate and its separate Splunk Enterprise
    boundary.
-3. `SHC113SplunkRESTResponseClosureExecPlan.md` records the shared REST-client
+4. `SHC113SplunkRESTResponseClosureExecPlan.md` records the shared REST-client
    response ownership correction and its immutable resource-soak gate.
-4. `SHC114BoundedSearchPeerObservationExecPlan.md` records the bounded,
+5. `SHC114BoundedSearchPeerObservationExecPlan.md` records the bounded,
    cancellation-aware peer-observation batch and its live controller gate.
-5. `SHC115ShortLivedRESTTransportOwnershipExecPlan.md` records the
+6. `SHC115ShortLivedRESTTransportOwnershipExecPlan.md` records the
    repository-wide short-lived Splunk REST transport ownership rule and live
    resource-soak gate.
-6. `SHC116IndexerEndpointWithdrawalExecPlan.md` records the durable
+7. `SHC116IndexerEndpointWithdrawalExecPlan.md` records the durable
    EndpointSlice-withdrawal propagation barrier before indexer decommission.
-7. `SHC117LongIndexerRollQualificationExecPlan.md` records the extended,
+8. `SHC117LongIndexerRollQualificationExecPlan.md` records the extended,
    finite evidence window required to observe every indexer ordinal.
-8. `SHC118SearchHeadEndpointWithdrawalExecPlan.md` records the corresponding
+9. `SHC118SearchHeadEndpointWithdrawalExecPlan.md` records the corresponding
    propagation barrier required before Search Head detention.
-9. `SHC111ProtocolQualificationExecPlan.md` records explicit HTTP/HTTPS
+10. `SHC111ProtocolQualificationExecPlan.md` records explicit HTTP/HTTPS
    persistent-client variants and their distinct network-topology gates.
-10. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
+11. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
    long-lived Kubernetes Service client evidence and remaining live gates.
-11. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
+12. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
    Deployer/member overlap, exact source correction, completed regression
    gates, and remaining immutable Linux/EKS acceptance boundary.
-12. `SHC105AppFrameworkRequeueBoundaryExecPlan.md` records the live
+13. `SHC105AppFrameworkRequeueBoundaryExecPlan.md` records the live
    timing defect, exact source correction, completed regression gates, and the
    remaining immutable Linux/EKS acceptance boundary.
-13. `SHCFinalBranchManifest.md` records exact accepted branch tips, merge
+14. `SHCFinalBranchManifest.md` records exact accepted branch tips, merge
    ancestry, superseded branch dispositions, and cumulative repository gates.
-14. `SHCFinalIntegrationExecPlan.md` records the assembly of the final Operator
+15. `SHCFinalIntegrationExecPlan.md` records the assembly of the final Operator
    and runtime feature branches and the exact remaining qualification gates.
-15. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
+16. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
    acceptance evidence.
-16. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
+17. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
    immutable commits and stable scenario identifiers.
-17. `SHC98StableIndexerSearchAddressExecPlan.md` records the active bounded
+18. `SHC98StableIndexerSearchAddressExecPlan.md` records the active bounded
    distributed-peer convergence experiment.
-18. `SHC97DockerSplunkStartupQualification.md` records the latest completed
+19. `SHC97DockerSplunkStartupQualification.md` records the latest completed
    runtime startup and full-topology qualification.
-19. `SHC93OperatorReadinessQualification.md` and
+20. `SHC93OperatorReadinessQualification.md` and
    `SHC93OperatorReadinessExecPlan.md` record the latest manager-readiness
    contract, exact evidence, rejected candidates, and remaining boundaries.
-20. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
+21. `OperatorLifecycleTechnicalDesign.md` defines the CRD, controller state
    machine, StatefulSet strategy, and durable status contract.
-21. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
+22. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
    cluster-wide image-upgrade workflow and its composition with per-member
    lifecycle orchestration.
-22. `RuntimeLifecycleContract.md` defines the contract between the Operator,
+23. `RuntimeLifecycleContract.md` defines the contract between the Operator,
    Pod lifecycle, probe scripts, Docker-Splunk/Splunk Ansible, and splunkd.
-23. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
+24. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
    Splunk-managed indexer restart boundary and the remote serving-recovery
    contract that cannot be completed by an Operator readiness probe.
-24. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
+25. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
    integration rules, and conflict prevention.
-25. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
+26. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
    and common pass invariants.
-26. `QualificationObservabilityRolloutPlan.md` is the executable test,
+27. `QualificationObservabilityRolloutPlan.md` is the executable test,
    evidence, migration, release, and rollback plan.
-27. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
+28. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
    contract for Docker-Splunk image construction on a supported Linux host.
 
 The Operator design is a Wave 0 spike contract and the runtime design now

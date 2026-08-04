@@ -49,7 +49,7 @@ The immediate requirement is a compatibility architecture for the current implem
 - Kubernetes performs Pod replacement through a gated StatefulSet `RollingUpdate`.
 - The Operator decides when one replacement is safe and never authorizes more than one planned SHC disruption at a time.
 - A bounded, idempotent `preStop` hook is introduced as part of the same lifecycle change; it is not part of the current Operator design.
-- Every Search Head Pod, including the current captain, uses Splunk's local SHC readiness endpoint to decide whether it should receive new traffic.
+- Every Search Head Pod, including the current captain, uses the existing container-state and local-management readiness check together with an Operator-owned SHC serving gate to decide whether it should receive new traffic; the design does not invent an unsupported member-readiness endpoint.
 - Manual detention, active-search draining, captain transfer, graceful Splunk shutdown, persistent identity, and verified SHC rejoin remain part of the lifecycle.
 - The lifecycle is observable and recoverable after an Operator restart.
 
@@ -61,7 +61,7 @@ The requirements in this document are based on the current behavior observed in 
 
 They are not claims that Splunk must retain these behaviors permanently. In particular:
 
-- The current SHC readiness endpoint has intentionally narrow behavior.
+- The current local container readiness check has intentionally narrow behavior.
 - Ordinary Splunk shutdown does not perform the complete searchable drain workflow.
 - Cluster formation and rejoin still depend on imperative commands and container startup automation.
 - Current SOK uses `OnDelete` and has no Splunk workload `preStop` hook.
@@ -157,7 +157,8 @@ for client traffic
 The local management root alone is insufficient. During current-runtime
 compatibility, the Operator gate must withhold initial formation, require the
 local member to be registered and `Up`, and withdraw a planned target when
-detention begins. It must not invent or call an unsupported Splunk endpoint.
+the operation selects it, before detention begins. It must not invent or call
+an unsupported Splunk endpoint.
 
 The captain uses the same local probe and member gate because:
 
@@ -263,7 +264,7 @@ A planned change to an SHC can cause avoidable search interruption or prolonged 
 - Moving all detention, drain, or captain-transfer work into preStop would start that work only after termination has begun and would place it inside the termination grace-period deadline.
 - A long or non-idempotent preStop hook could consume the grace period before `splunk stop` completes.
 - Kubernetes normally completes `preStop` before sending TERM, so the two shutdown paths are not inherently concurrent. They can still invoke duplicate sequential shutdown work, and lifecycle hooks can be delivered more than once, so one idempotent shutdown coordinator remains necessary.
-- Kubernetes endpoint removal and downstream routing propagation are not instantaneous. Planned detention and readiness failure should begin before deletion authorization. Any additional preStop delay must be configurable and justified by measured behavior of the supported Service, ingress, service-mesh, and load-balancer paths rather than assumed to be universally necessary.
+- Kubernetes endpoint removal and downstream routing propagation are not instantaneous. The Operator should withdraw the target's serving gate, observe Pod and EndpointSlice withdrawal for a configurable propagation interval, and only then request detention. This preparation completes before replacement authorization and is qualified against the supported Service, ingress, service-mesh, and load-balancer paths.
 - If RollingUpdate is enabled before the Operator partition gate is active, Kubernetes could replace members without the existing Splunk-aware preparation.
 - If restart and scale-down intent are not kept separate, a temporary replacement could incorrectly remove a persistent member from SHC consensus.
 - If bootstrap and rejoin remain implicit, a replacement Pod could repeat cluster-forming actions instead of recovering the existing member identity.
@@ -403,18 +404,22 @@ Before authorizing a planned replacement, the Operator must verify:
 
 The native searchable rolling-restart preflight provides the baseline: dynamic and stable captain, service readiness, acceptable KV state, no conflicting rolling upgrade, and no out-of-sync member.
 
-### 3. Stop new work on the target
+### 3. Withdraw Kubernetes traffic and stop new work on the target
 
-The target enters manual detention.
+The Operator first sets the selected target's serving gate to false. It waits
+until the Pod is not Ready, no client-Service EndpointSlice lists the Pod as a
+ready or unknown endpoint, and that withdrawal remains true for the configured
+propagation interval. Observation failure blocks the operation.
 
-As soon as detention is active:
+Only after that barrier completes does the target enter manual detention. As
+soon as detention is active:
 
 - Splunk rejects new ad-hoc searches on that member;
 - the captain does not assign new scheduled searches to that member;
 - existing searches continue;
 - the member continues participating in most SHC operations; and
-- the Operator sets the target's readiness gate false and verifies its removal
-  from normal Kubernetes Service traffic.
+- the Operator keeps the target's serving gate false throughout detention,
+  drain, shutdown, and rejoin.
 
 ### 4. Drain existing work
 
@@ -464,17 +469,20 @@ The new preStop hook is a last-mile safeguard, not the primary rollout coordinat
 The hook must:
 
 - be idempotent;
-- write a machine-readable stopping state before starting shutdown work;
-- confirm or request local manual detention;
-- ensure local readiness is unavailable;
-- perform only bounded drain or final validation work allowed by policy;
-- invoke one graceful Splunk shutdown path;
-- emit stage and elapsed-time information; and
-- leave enough of the grace-period budget for Splunk to stop.
+- delegate to one shared runtime shutdown helper;
+- write a machine-readable stopping state before local shutdown work;
+- invoke exactly one bounded graceful Splunk shutdown across preStop and TERM;
+- emit local owner, result, and elapsed-time information; and
+- perform no detention, search drain, captain transfer, membership, or other
+  distributed-cluster orchestration.
 
 Kubernetes normally waits for preStop to finish before it sends TERM, so preStop and the existing Docker-Splunk TERM trap do not inherently call `splunk stop` concurrently. They can nevertheless cause duplicate sequential stop attempts, preStop can be delivered more than once, and a locally launched background operation could overlap TERM. Both paths must therefore share one idempotent state marker, lock, or shutdown coordinator and converge on one graceful Splunk stop operation.
 
-The normal planned sequence should make readiness false through detention before Kubernetes is authorized to delete the Pod. This gives EndpointSlice consumers time to observe removal before termination. A short additional preStop propagation delay may be supported as a configurable safeguard, but its value must be derived from qualification of the actual Kubernetes networking path and must remain within the shared termination budget.
+The normal planned sequence makes the Operator-owned serving condition false
+and proves EndpointSlice withdrawal before detention, drain, and Kubernetes
+replacement authorization. Propagation waiting belongs to the durable
+controller lifecycle, not preStop, and therefore does not consume the local
+shutdown portion of the Pod termination budget.
 
 ### 8. Rejoin using persistent identity
 
@@ -549,8 +557,8 @@ AND any planned detention has withdrawn the member
 
 This applies identically to captains and non-captains.
 
-For the current runtime, the Operator explicitly withdraws readiness during
-its own planned detention. A future Splunk local traffic-readiness contract
+For the current runtime, the Operator explicitly withdraws readiness before
+and throughout its own planned detention. A future Splunk local traffic-readiness contract
 should also cover automatic detention. Captain instability must not
 automatically make every member unready.
 
@@ -576,7 +584,7 @@ Startup must allow Splunk enough time to:
 - load persistent configuration;
 - start splunkd;
 - recover local services; and
-- expose the local readiness endpoint.
+- expose the local management service used by the container readiness check.
 
 Startup completion does not prove full SHC recovery. The Operator's rejoin gate provides that stronger guarantee.
 
@@ -663,7 +671,7 @@ availability while the runtime APIs are inconclusive.
 
 | **Goal** | **Scenario** | **Acceptance criteria** |
 |---|---|---|
-| Route traffic correctly | Any member, including the captain, enters detention | Its local readiness endpoint fails and Kubernetes removes it from normal Service traffic; other ready members remain available |
+| Route traffic correctly | Any member, including the captain, enters detention | The Operator-owned SHC serving condition becomes false and Kubernetes removes the Pod from normal Service traffic; other ready members remain available |
 | Restart a non-captain | Image or Pod configuration changes | Target drains according to policy, Kubernetes replaces one Pod, persistent identity is retained, member rejoins `Up`, and no second member starts replacement early |
 | Restart the captain | The next rollout target is the actual captain | Supported transfer completes, the new captain becomes service-ready, and only then is the old captain replaced |
 | Preserve ad-hoc availability | Captain election is in progress | Healthy non-detained members remain traffic-ready; cluster condition reports scheduled-search risk separately |
@@ -1189,7 +1197,7 @@ Required material includes:
 | Where should bounded lifecycle snapshots be stored? | Current and most recent summaries can remain in CR status; larger evidence requires a bounded diagnostic object or logging platform |
 | What storage policy applies after permanent scale-down? | Preserve current compatibility until an explicit retention policy is approved |
 | Which stalled-rejoin conditions have a Splunk-supported automatic recovery? | Detection and blocking are required now; do not remove and re-add membership automatically until each recovery class has an approved product procedure |
-| Which supported network paths need an additional preStop propagation delay? | Determine through qualification; detention before deletion remains the primary traffic-removal mechanism |
+| What endpoint-withdrawal propagation interval applies to each supported network path? | Determine through qualification; the durable Operator barrier observes Pod and EndpointSlice withdrawal before detention, while persistent connections remain a separate Splunk/client contract |
 | What PDB budget applies to each supported SHC size? | Protect Eviction API disruptions without presenting PDB as the StatefulSet rollout sequencer |
 | Which future Splunk release introduces native lifecycle contracts? | TBD with Splunk Enterprise roadmap |
 | What is the migration boundary from Docker-Splunk/Ansible to a distroless image? | Requires a supported image, configuration, identity, lifecycle, and diagnostics contract before removal |

@@ -1962,7 +1962,7 @@ The design must specify:
 Define the contract rather than placing distributed-cluster orchestration in a
 hook:
 
-- Search Head readiness calls the supported local member-readiness endpoint;
+- Search Head container readiness uses the existing container-state and local-management check, while an Operator-owned serving gate represents SHC membership and lifecycle eligibility; no supported local member-readiness endpoint is assumed;
 - liveness checks only local irrecoverable process health;
 - startup allows local splunkd initialization but does not claim full rejoin;
 - `preStop` makes local traffic withdrawal and shutdown intent observable and
