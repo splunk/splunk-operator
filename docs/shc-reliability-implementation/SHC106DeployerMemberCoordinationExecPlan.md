@@ -38,6 +38,11 @@ unchanged.
   system: the SHC returned to `Ready` with three members, partition three,
   equal current/update Search Head revision, a Ready replacement Deployer, and
   no container restarts.
+- [x] (2026-08-04 00:55Z) Closed and hashed the complete accepted-image
+  reproduction record. All 240 HEC submissions and searches succeeded, all
+  240 unique events became searchable, minimum serving capacity remained two
+  Search Heads and four indexers, and the ten sampled Deployer-unavailable
+  intervals all overlapped the still-unavailable Search Head.
 - [x] (2026-08-04 00:06Z) Implemented the bounded controller correction at
   production correction `ab342d7a5` and controller-boundary test source
   `67d2897c1` on branch
@@ -93,6 +98,14 @@ unchanged.
   Consequence: SHC-106 composes with the existing revision queue. It addresses
   the Deployer/member overlap rather than redesigning Search Head revision
   supersession.
+- Observation: the competing disruptions did not cause a request outage in
+  this one run, but they consumed independent recovery paths concurrently.
+  Evidence: the 240-sample monitor recorded zero HEC or search failures and
+  exact final completeness. It recorded 46 samples with a Search Head
+  disruption, ten with a Deployer disruption, and ten with both; the overlap
+  ran from sample 15 at `23:51:52Z` through sample 24 at `23:54:31Z`.
+  Consequence: the requirement is preventative reliability control, not a
+  claim that every overlap immediately causes customer-visible data loss.
 - Observation: a generic StatefulSet manager can report Ready while the
   StatefulSet controller has not yet published `observedGeneration` or
   `updateRevision`.
@@ -136,11 +149,16 @@ unchanged.
 
 ## Outcomes & Retrospective
 
-SHC-106 is source-qualified and pushed, but is not complete. The current live
-Operator reproduced the Deployer/member overlap while HEC and search remained
-available and the SHC eventually recovered. Native Linux image construction
-and candidate EKS qualification remain blocked while the dedicated
-vWorkstation Coder endpoint returns EOF during SSH setup.
+SHC-106 is source-qualified and pushed, but is not complete. The accepted
+Operator conclusively reproduced the Deployer/member overlap while HEC and
+search remained available: 240 numbered events completed exactly, no count
+regression occurred, maximum pending was one, at least two Search Head and all
+four indexer endpoints remained serving, and no container restarted. The SHC
+finished Ready with three registered members, captain Search Head 1, partition
+three, and equal current/update Search Head revision. Native Linux image
+construction and candidate EKS qualification remain blocked while the
+dedicated vWorkstation Coder endpoint fails below authentication during TLS/API
+connection setup.
 
 ## Context and Orientation
 
@@ -230,6 +248,25 @@ another normal rollout is required.
 - Documentation branch: `codex/shc-106-qualification-docs`.
 - Triggering monitor:
   `build/_test/shc-final/shc94-real-app-conflict-20260803T2348Z.log`.
+- Triggering monitor SHA-256:
+  `238ff88035e37fc58d270a907e5c04f7e87142ec62b3896de6d22e6422b8c621`.
+- Accepted-Operator log SHA-256:
+  `ed0c727359e0368c0e30652cbf1d9991a0db0a8bca1b57795ea1b87a4db1635c`.
+- Final Kubernetes evidence SHA-256 values: Events
+  `191f8f13f903a54ad15d9240e4ac3d40a41eefd34c1dc42a710877a40a390ab9`,
+  SearchHeadCluster
+  `0a23bd89294d02aad498daffe222eaa284bef3868e37e1c5403dc17c42e6f780`,
+  StatefulSets
+  `12ea94714b15a94c3d8f3fb1a1e0d891a9b3c3e6139ad419066358a9eeb9cc78`,
+  routing
+  `797163d8af2991fbb3a87ac8f2c74637defd4fdd4639d4d7f4f8994abec19119`,
+  and Operator snapshot
+  `76424634a731f764c3e36d8251821f6d93d2909dd7e40390691438164e9b461b`.
+- The final Event export is a retained API snapshot, not a complete
+  event-history counter: Kubernetes Event TTL left six `Unhealthy` objects
+  representing 45 expected startup/readiness probe attempts. Exact disruption
+  timing comes from the independent monitor plus the observed `Killing`
+  Events, not from treating the final Event object count as the entire run.
 - Final source test log:
   `build/_test/shc-final/shc106-make-test-persisted-status.log`.
 - Source gates: 43 suites, 192/192 specs, zero failures, 78.6 percent
