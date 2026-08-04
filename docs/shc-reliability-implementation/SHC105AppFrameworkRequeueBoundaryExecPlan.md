@@ -46,6 +46,11 @@ Head rollout sequencing.
   repository Make target for `linux/amd64`; the resulting binary is an x86-64
   ELF executable. Native Linux container-image construction and execution are
   still required.
+- [x] (2026-08-04 00:55Z) Closed the independent 240-sample accepted-image
+  conflict campaign. Its Operator log contained exactly one ERROR entry: the
+  same `invalid requeue time` signature with `timeValue=0`, at `00:01:06Z`.
+  The rollout and all 240 workload requests still completed, confirming the
+  bounded observability defect without expanding it into an outage claim.
 - [ ] Build an immutable Linux/AMD64 Operator image from exact source
   `0e638dac4`, deploy it to the EKS qualification cluster, and observe at least
   two App Framework poll boundaries during an active lifecycle without an
@@ -108,7 +113,8 @@ Head rollout sequencing.
 SHC-105 is source-qualified but not yet complete. Exact source `0e638dac4`
 passes the full local regression gate, including 1,000 focused boundary
 repetitions. Native Linux image construction and live EKS qualification remain
-blocked while the dedicated vWorkstation control endpoint returns TLS EOF.
+blocked while the dedicated vWorkstation endpoint fails below authentication
+during TLS/API connection setup.
 
 ## Context and Orientation
 
@@ -173,6 +179,12 @@ remain the recovery authority; do not edit either status to force progress.
 - Triggering accepted Operator source: `14d8853908292422b679da46c89c1a15c14c2bf4`.
 - Triggering accepted Operator OCI index:
   `sha256:a9f2125097fa823d5182e8729683e5099116a889fdae8e892f0bd3110a8cdf3d`.
+- Complete accepted-image Operator log:
+  `shc94-real-app-conflict-operator-20260803T2348Z.log`, SHA-256
+  `ed0c727359e0368c0e30652cbf1d9991a0db0a8bca1b57795ea1b87a4db1635c`.
+- Complete companion workload log:
+  `shc94-real-app-conflict-20260803T2348Z.log`, SHA-256
+  `238ff88035e37fc58d270a907e5c04f7e87142ec62b3896de6d22e6422b8c621`.
 - Full Make test result: 43 suites passed, zero failures, 78.3 percent
   composite coverage.
 - Additional gates: `make fmt vet`, `make build`, Helm lint, 150 Helm unit
