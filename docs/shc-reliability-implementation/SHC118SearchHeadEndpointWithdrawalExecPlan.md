@@ -75,9 +75,11 @@ remain separate requirements.
   every ordinal's `etc` and `var` claims, replaced all three Pod UIDs, and
   finished 12 stable samples with zero container restarts. Harness exit code is
   zero.
-- [ ] Allow the independent 3,600-sample Job from the controller-restart
-  campaign to reach Kubernetes `Complete`, verify final uniqueness/counters,
-  and seal hashes for the evidence directory.
+- [x] (2026-08-04 20:42Z) The controller-restart campaign's independent Job
+  reached Kubernetes `Complete`: 3,600 submissions, zero HEC failures, zero
+  search-request failures, zero count regressions, maximum pending 2, and exact
+  final count/min/max/distinct `3600/1/3600/3600`. Runner, workload wait, and
+  finalizer exit codes are zero; all 37 listed artifact hashes verify.
 - [ ] Run the separate omitted-field, Operator-default-30-second campaign with
   a fresh 3,600-sample Job and no controller replacement.
 
@@ -176,12 +178,11 @@ that proof during status merge; and exposes bounded Events, reasons, and the
 `splunk_operator_search_head_endpoint_withdrawal_total` metric. Both Pod-update
 and scale-down detention paths fail closed until the interval completes.
 
-The explicit-120-second EKS lifecycle gate now passes, including manager
-replacement inside an active interval and the active-captain ordinal. The
-bounded workload had zero HEC/search request failures through lifecycle
-completion, but its terminal exact-delivery verdict remains open. The separate
-omitted-field 30-second campaign also remains open, so this is not yet the final
-SHC-118 availability claim.
+The explicit-120-second EKS campaign now passes end to end, including manager
+replacement inside an active interval, the active-captain ordinal, 3,600
+successful HEC/search requests, zero count regressions, exact eventual
+uniqueness, and verified artifacts. The separate omitted-field 30-second
+campaign remains open, so this is not yet the final SHC-118 availability claim.
 
 ## Plan of Work
 
@@ -263,7 +264,19 @@ not discard the lifecycle operation before restoring serving eligibility.
   `c1e02e73-1ba7-4580-8f0f-9b63b2bda55f`, after
   `75c1be97-1066-4dc9-aaf4-605d1b8511af`. The active-captain target transferred
   captaincy from ordinal 0 to ordinal 1 before replacement authorization.
-- Controller-restart workload final counters and evidence hashes: pending.
+- Controller-restart workload: 3,600 submissions, HEC failures 0,
+  search-request failures 0, count regressions 0, maximum pending 2, final
+  count/min/max/distinct `3600/1/3600/3600`, and `complete=true`.
+- Controller-restart SHA-256 values: samples
+  `3d606e22fc716ffb4c47db57c2a8388f7e0c6d2fc3c974315bfa52048d50a89d`,
+  workload
+  `1a54f859fdf048cd259cb6f9cf101e35fba29047b9c2485e3dd18a34b7922115`,
+  final Pods
+  `6d9b1f7e581c50828f9e8596a80ef30d532caddcf589f73b1d9e01165158c4ea`,
+  and artifact manifest
+  `fd7de67bdadc243609d191bbd5ce9041a0b69bbfbf96d8d545c6daab5e9697e7`.
+  All 37 manifest entries verify from the repository root. Structured final
+  Operator logs contain no `ERROR` or `FATAL` level record.
 - Omitted-field Operator-default campaign: pending.
 
 ## Interfaces and Dependencies
@@ -288,3 +301,8 @@ deadline ordering, dynamic captain transfer, stable claims, bounded endpoint
 availability, and zero request failures through roll completion. The Job's
 terminal exact counters/hashes and the omitted-field default campaign remain
 open and are not inferred from this lifecycle pass.
+
+Revision note (2026-08-04 20:42Z): Closed the explicit-policy workload and
+artifact gates with 3,600 successful request pairs, zero count regressions,
+exact final uniqueness, zero exit codes, and 37 verified hashes. The separate
+omitted-field Operator-default campaign remains open.
