@@ -1290,6 +1290,61 @@ func (mgr *indexerClusterPodManager) FinishRecycle(ctx context.Context, n int32)
 				return false, nil
 			}
 
+			convergenceRequired, searchPeersConverged, convergenceMessage, err :=
+				checkIndexerSearchPeerConvergence(ctx, mgr, &replacement)
+			if err != nil {
+				return false, err
+			}
+			if convergenceRequired {
+				if operation.Stage != enterpriseApi.
+					IndexerClusterPodUpdateStageAwaitingSearchPeerConvergence {
+					mgr.transitionIndexerPodUpdate(
+						ctx,
+						enterpriseApi.IndexerClusterPodUpdateStageAwaitingSearchPeerConvergence,
+						"IndexerSearchPeerConvergencePending",
+						convergenceMessage,
+					)
+					return false, nil
+				}
+				if !searchPeersConverged {
+					if operation.SearchPeerConvergencePodUID ==
+						string(replacement.GetUID()) &&
+						operation.SearchPeerConvergenceSequence >
+							operation.SearchPeerConvergenceInvalidatedSequence {
+						operation.SearchPeerConvergenceInvalidatedSequence =
+							operation.SearchPeerConvergenceSequence
+					}
+					if operation.Reason != "IndexerSearchPeerConvergencePending" ||
+						operation.Message != convergenceMessage {
+						now := metav1.Now()
+						operation.LastTransitionTime = &now
+						operation.Reason = "IndexerSearchPeerConvergencePending"
+						operation.Message = convergenceMessage
+					}
+					return false, nil
+				}
+				if operation.SearchPeerConvergenceObservedAt == nil ||
+					operation.SearchPeerConvergencePodUID != string(replacement.GetUID()) ||
+					operation.SearchPeerConvergenceSequence <=
+						operation.SearchPeerConvergenceInvalidatedSequence {
+					now := metav1.Now()
+					operation.SearchPeerConvergenceObservedAt = &now
+					operation.SearchPeerConvergencePodUID = string(replacement.GetUID())
+					operation.SearchPeerConvergenceSequence++
+					operation.LastTransitionTime = &now
+					operation.Reason = "IndexerSearchPeerConvergenceObserved"
+					operation.Message = convergenceMessage
+					if eventPublisher := GetEventPublisher(ctx, mgr.cr); eventPublisher != nil {
+						eventPublisher.Normal(
+							ctx,
+							"IndexerSearchPeerConvergenceObserved",
+							convergenceMessage,
+						)
+					}
+					return false, nil
+				}
+			}
+
 			operation.ReplacementPodUID = string(replacement.GetUID())
 			mgr.transitionIndexerPodUpdate(
 				ctx,
@@ -1830,7 +1885,9 @@ func indexerPodUpdateCanOwnUnavailability(
 	return operation.Stage ==
 		enterpriseApi.IndexerClusterPodUpdateStageDecommissioning ||
 		operation.Stage ==
-			enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement
+			enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement ||
+		operation.Stage == enterpriseApi.
+			IndexerClusterPodUpdateStageAwaitingSearchPeerConvergence
 }
 
 func indexerPodUpdateIsActive(
@@ -2034,8 +2091,10 @@ func (mgr *indexerClusterPodManager) indexerPodUpdatePeerIsControlled(
 		return operation.Stage ==
 			enterpriseApi.IndexerClusterPodUpdateStageWithdrawingReadiness ||
 			(operation.ObservedDecommissioning &&
-				operation.Stage ==
-					enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement)
+				(operation.Stage ==
+					enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement ||
+					operation.Stage == enterpriseApi.
+						IndexerClusterPodUpdateStageAwaitingSearchPeerConvergence))
 	default:
 		return false
 	}

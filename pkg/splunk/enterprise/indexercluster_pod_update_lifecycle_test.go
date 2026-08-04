@@ -35,11 +35,13 @@ import (
 
 func enableIndexerLifecycleForTest(t *testing.T) {
 	t.Helper()
+	oldSearchPeerCheck := checkIndexerSearchPeerConvergence
 	oldPodLifecycle :=
 		config.DefaultMutableFeatureGate.Enabled(config.SplunkPodLifecycle)
 	oldIndexerLifecycle :=
 		config.DefaultMutableFeatureGate.Enabled(config.IndexerClusterLifecycle)
 	t.Cleanup(func() {
+		checkIndexerSearchPeerConvergence = oldSearchPeerCheck
 		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
 			map[string]bool{
 				string(config.SplunkPodLifecycle):      oldPodLifecycle,
@@ -47,6 +49,13 @@ func enableIndexerLifecycleForTest(t *testing.T) {
 			},
 		))
 	})
+	checkIndexerSearchPeerConvergence = func(
+		_ context.Context,
+		_ *indexerClusterPodManager,
+		_ *corev1.Pod,
+	) (bool, bool, string, error) {
+		return false, true, "No dependent SearchHeadCluster", nil
+	}
 	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(
 		map[string]bool{
 			string(config.SplunkPodLifecycle):      true,
@@ -892,6 +901,83 @@ func TestIndexerReplacementRevalidatesPersistedServingRecovery(t *testing.T) {
 		enterpriseApi.IndexerClusterPodUpdateStageCompleted,
 		mgr.cr.Status.PodUpdate.Stage,
 	)
+}
+
+func TestIndexerReplacementWaitsForDurableSearchPeerConvergence(t *testing.T) {
+	enableIndexerLifecycleForTest(t)
+	allowIndexerServingRecoveryForTest(t)
+	mgr, _, pods := indexerLifecycleFixture(t)
+	target := pods[2]
+	now := metav1.Now()
+	mgr.cr.Status.PodUpdate =
+		&enterpriseApi.IndexerClusterPodUpdateStatus{
+			OperationID:               "operation",
+			Stage:                     enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement,
+			TargetPod:                 target.Name,
+			TargetPodUID:              string(target.UID),
+			TargetOrdinal:             2,
+			SourceRevision:            "old",
+			DesiredRevision:           "new",
+			StartedAt:                 &now,
+			DecommissionRequestedAt:   &now,
+			ObservedDecommissioning:   true,
+			LastTransitionTime:        &now,
+			ServingRecoveryObservedAt: &now,
+		}
+	replacement := target.DeepCopy()
+	replacement.UID = types.UID("replacement-uid")
+	replacement.Labels["controller-revision-hash"] = "new"
+	require.NoError(t, mgr.c.Update(context.Background(), replacement))
+	mgr.cr.Status.PodUpdate.ServingRecoveryPodUID = string(replacement.UID)
+
+	converged := false
+	checkIndexerSearchPeerConvergence = func(
+		_ context.Context,
+		_ *indexerClusterPodManager,
+		_ *corev1.Pod,
+	) (bool, bool, string, error) {
+		return true, converged, "test convergence observation", nil
+	}
+
+	complete, err := mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.Equal(t, enterpriseApi.IndexerClusterPodUpdateStageAwaitingSearchPeerConvergence, mgr.cr.Status.PodUpdate.Stage)
+
+	complete, err = mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.Zero(t, mgr.cr.Status.PodUpdate.SearchPeerConvergenceSequence)
+
+	converged = true
+	complete, err = mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.NotNil(t, mgr.cr.Status.PodUpdate.SearchPeerConvergenceObservedAt)
+	require.Equal(t, string(replacement.UID), mgr.cr.Status.PodUpdate.SearchPeerConvergencePodUID)
+	require.Equal(t, int64(1), mgr.cr.Status.PodUpdate.SearchPeerConvergenceSequence)
+
+	converged = false
+	complete, err = mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.Equal(t, int64(1), mgr.cr.Status.PodUpdate.SearchPeerConvergenceInvalidatedSequence)
+	require.NotNil(t, mgr.cr.Status.PodUpdate.SearchPeerConvergenceObservedAt)
+
+	converged = true
+	complete, err = mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.Equal(t, int64(2), mgr.cr.Status.PodUpdate.SearchPeerConvergenceSequence)
+
+	complete, err = mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.False(t, complete)
+	require.Equal(t, enterpriseApi.IndexerClusterPodUpdateStageCompleted, mgr.cr.Status.PodUpdate.Stage)
+
+	complete, err = mgr.FinishRecycle(context.Background(), 2)
+	require.NoError(t, err)
+	require.True(t, complete)
 }
 
 func TestIndexerReplacementAdoptsLatestStatefulSetRevision(t *testing.T) {

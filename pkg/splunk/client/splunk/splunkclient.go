@@ -652,6 +652,9 @@ type ClusterManagerPeerInfo struct {
 	// Can be either of the form IP:port or hostname:port.
 	HostPortPair string `json:"host_port_pair"`
 
+	// Address supplied to Search Heads for distributed-search traffic.
+	RegisterSearchAddress string `json:"register_search_address"`
+
 	// Flag indicating if this peer belongs to the current committed generation and is searchable.
 	Searchable bool `json:"is_searchable"`
 

@@ -77,12 +77,13 @@ type IndexerClusterMemberStatus struct {
 type IndexerClusterPodUpdateStage string
 
 const (
-	IndexerClusterPodUpdateStageTargetSelected       IndexerClusterPodUpdateStage = "TargetSelected"
-	IndexerClusterPodUpdateStageWithdrawingReadiness IndexerClusterPodUpdateStage = "WithdrawingReadiness"
-	IndexerClusterPodUpdateStageDecommissioning      IndexerClusterPodUpdateStage = "Decommissioning"
-	IndexerClusterPodUpdateStageReadyForReplacement  IndexerClusterPodUpdateStage = "ReadyForReplacement"
-	IndexerClusterPodUpdateStageCompleted            IndexerClusterPodUpdateStage = "Completed"
-	IndexerClusterPodUpdateStageCancelled            IndexerClusterPodUpdateStage = "Cancelled"
+	IndexerClusterPodUpdateStageTargetSelected                IndexerClusterPodUpdateStage = "TargetSelected"
+	IndexerClusterPodUpdateStageWithdrawingReadiness          IndexerClusterPodUpdateStage = "WithdrawingReadiness"
+	IndexerClusterPodUpdateStageDecommissioning               IndexerClusterPodUpdateStage = "Decommissioning"
+	IndexerClusterPodUpdateStageReadyForReplacement           IndexerClusterPodUpdateStage = "ReadyForReplacement"
+	IndexerClusterPodUpdateStageAwaitingSearchPeerConvergence IndexerClusterPodUpdateStage = "AwaitingSearchPeerConvergence"
+	IndexerClusterPodUpdateStageCompleted                     IndexerClusterPodUpdateStage = "Completed"
+	IndexerClusterPodUpdateStageCancelled                     IndexerClusterPodUpdateStage = "Cancelled"
 )
 
 // IndexerClusterPodUpdateStatus records exact ownership of one indexer Pod
@@ -145,6 +146,24 @@ type IndexerClusterPodUpdateStatus struct {
 	// Monotonic observation sequence used to prevent a stale status writer
 	// from restoring proof for an earlier replacement UID.
 	ServingRecoverySequence int64 `json:"servingRecoverySequence,omitempty"`
+
+	// When every Search Head managed in this namespace for the referenced
+	// Cluster Manager first reported exactly one current, enabled, Up entry for
+	// the replacement peer GUID and address.
+	SearchPeerConvergenceObservedAt *metav1.Time `json:"searchPeerConvergenceObservedAt,omitempty"`
+
+	// Exact replacement UID covered by the Search Head convergence observation.
+	SearchPeerConvergencePodUID string `json:"searchPeerConvergencePodUID,omitempty"`
+
+	// Monotonic observation sequence used to prevent a stale status writer
+	// from restoring proof for an earlier replacement UID.
+	SearchPeerConvergenceSequence int64 `json:"searchPeerConvergenceSequence,omitempty"`
+
+	// Latest Search Head convergence observation sequence invalidated by a
+	// subsequent failed observation. Keeping invalidation monotonic preserves
+	// the audit trail without allowing a stale status writer to resurrect an
+	// earlier successful observation.
+	SearchPeerConvergenceInvalidatedSequence int64 `json:"searchPeerConvergenceInvalidatedSequence,omitempty"`
 }
 
 // IndexerClusterStatus defines the observed state of a Splunk Enterprise indexer cluster

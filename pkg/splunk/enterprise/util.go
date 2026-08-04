@@ -2670,6 +2670,14 @@ func validateIndexerClusterPodUpdateStatusMerge(
 				reconciled.ServingRecoveryPodUID == "") ||
 			(reconciled.ServingRecoverySequence <
 				latest.ServingRecoverySequence) ||
+			(latest.SearchPeerConvergenceObservedAt != nil &&
+				reconciled.SearchPeerConvergenceObservedAt == nil) ||
+			(latest.SearchPeerConvergencePodUID != "" &&
+				reconciled.SearchPeerConvergencePodUID == "") ||
+			(reconciled.SearchPeerConvergenceSequence <
+				latest.SearchPeerConvergenceSequence) ||
+			(reconciled.SearchPeerConvergenceInvalidatedSequence <
+				latest.SearchPeerConvergenceInvalidatedSequence) ||
 			(latest.FinishedAt != nil &&
 				reconciled.FinishedAt == nil) ||
 			indexerClusterPodUpdateTransitionIsOlder(
@@ -2717,10 +2725,12 @@ func indexerClusterPodUpdateStageRank(
 		return 3
 	case enterpriseApi.IndexerClusterPodUpdateStageReadyForReplacement:
 		return 4
+	case enterpriseApi.IndexerClusterPodUpdateStageAwaitingSearchPeerConvergence:
+		return 5
 	case enterpriseApi.IndexerClusterPodUpdateStageCompleted:
-		return 5
+		return 6
 	case enterpriseApi.IndexerClusterPodUpdateStageCancelled:
-		return 5
+		return 6
 	default:
 		return 0
 	}

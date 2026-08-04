@@ -3082,6 +3082,49 @@ func TestIndexerClusterPodUpdateStatusMergePreservesServingRecovery(
 	}
 }
 
+func TestIndexerClusterPodUpdateStatusMergePreservesSearchPeerConvergence(
+	t *testing.T,
+) {
+	observedAt := metav1.NewTime(
+		time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC),
+	)
+	latest := &enterpriseApi.IndexerClusterPodUpdateStatus{
+		OperationID:                              "operation",
+		Stage:                                    enterpriseApi.IndexerClusterPodUpdateStageAwaitingSearchPeerConvergence,
+		LastTransitionTime:                       &observedAt,
+		SearchPeerConvergenceObservedAt:          &observedAt,
+		SearchPeerConvergencePodUID:              "replacement-uid",
+		SearchPeerConvergenceSequence:            2,
+		SearchPeerConvergenceInvalidatedSequence: 1,
+		DecommissionRequestedAt:                  &observedAt,
+		ObservedDecommissioning:                  true,
+	}
+
+	for _, mutate := range []func(*enterpriseApi.IndexerClusterPodUpdateStatus){
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			status.SearchPeerConvergenceObservedAt = nil
+		},
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) { status.SearchPeerConvergencePodUID = "" },
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) { status.SearchPeerConvergenceSequence-- },
+		func(status *enterpriseApi.IndexerClusterPodUpdateStatus) {
+			status.SearchPeerConvergenceInvalidatedSequence--
+		},
+	} {
+		reconciled := latest.DeepCopy()
+		mutate(reconciled)
+		err := validateIndexerClusterPodUpdateStatusMerge(latest, reconciled, "example")
+		if !k8serrors.IsConflict(err) {
+			t.Fatalf("regression error = %v, want conflict", err)
+		}
+	}
+
+	reconciled := latest.DeepCopy()
+	reconciled.Stage = enterpriseApi.IndexerClusterPodUpdateStageCompleted
+	if err := validateIndexerClusterPodUpdateStatusMerge(latest, reconciled, "example"); err != nil {
+		t.Fatalf("forward convergence stage was rejected: %v", err)
+	}
+}
+
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
