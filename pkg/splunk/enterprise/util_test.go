@@ -3203,6 +3203,7 @@ func TestSearchHeadClusterLifecycleStatusMergePreservesEndpointWithdrawal(
 	deadline := metav1.NewTime(observedAt.Add(30 * time.Second))
 	latest := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
 		OperationID:                           "operation",
+		Stage:                                 enterpriseApi.SearchHeadClusterLifecycleStageDetainingTarget,
 		LastTransitionTime:                    &observedAt,
 		EndpointWithdrawalObservedAt:          &observedAt,
 		EndpointWithdrawalDeadline:            &deadline,
@@ -3259,6 +3260,15 @@ func TestSearchHeadClusterLifecycleStatusMergePreservesEndpointWithdrawal(
 	nextOperation := latest.DeepCopy()
 	nextOperation.OperationID = "next-operation"
 	nextOperation.StartedAt = &deadline
+	if err := validateSearchHeadClusterLifecycleStatusMerge(
+		latest,
+		nextOperation,
+		"example",
+	); !k8serrors.IsConflict(err) {
+		t.Fatalf("active lifecycle operation replacement error = %v, want conflict", err)
+	}
+
+	latest.Stage = enterpriseApi.SearchHeadClusterLifecycleStageCompleted
 	if err := validateSearchHeadClusterLifecycleStatusMerge(
 		latest,
 		nextOperation,

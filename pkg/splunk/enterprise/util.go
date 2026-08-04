@@ -2677,7 +2677,9 @@ func validateSearchHeadClusterLifecycleStatusMerge(
 		return conflict("")
 	}
 	if reconciled.OperationID != latest.OperationID {
-		if latest.LastTransitionTime != nil &&
+		if latest.Stage ==
+			enterpriseApi.SearchHeadClusterLifecycleStageCompleted &&
+			latest.LastTransitionTime != nil &&
 			reconciled.StartedAt != nil &&
 			!reconciled.StartedAt.Time.Before(latest.LastTransitionTime.Time) {
 			return nil
