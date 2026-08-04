@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -32,6 +33,24 @@ import (
 )
 
 var invalidUrlByteArray = []byte{0x7F}
+
+type closeTrackingBody struct {
+	io.Reader
+	closed bool
+}
+
+func (body *closeTrackingBody) Close() error {
+	body.closed = true
+	return nil
+}
+
+type fixedResponseClient struct {
+	response *http.Response
+}
+
+func (client *fixedResponseClient) Do(*http.Request) (*http.Response, error) {
+	return client.response, nil
+}
 
 // Error tester for client
 func splunkClientErrorTester(t *testing.T, test func(splunk.SplunkClient) error) {
@@ -85,6 +104,83 @@ func TestSplunkClientDo(t *testing.T) {
 		Method: "abcd",
 	}
 	c.Do(&hreq, []int{200}, nil)
+}
+
+func TestSplunkClientDoClosesResponseBody(t *testing.T) {
+	tests := []struct {
+		name           string
+		status         int
+		body           string
+		responseTarget interface{}
+		wantError      bool
+	}{
+		{
+			name:           "successful JSON response",
+			status:         http.StatusOK,
+			body:           `{"value":"ok"}`,
+			responseTarget: &map[string]string{},
+		},
+		{
+			name:      "successful response without target",
+			status:    http.StatusOK,
+			body:      "accepted",
+			wantError: false,
+		},
+		{
+			name:      "unexpected status",
+			status:    http.StatusServiceUnavailable,
+			body:      "unavailable",
+			wantError: true,
+		},
+		{
+			name:           "empty response",
+			status:         http.StatusOK,
+			responseTarget: &map[string]string{},
+			wantError:      true,
+		},
+		{
+			name:           "invalid JSON response",
+			status:         http.StatusOK,
+			body:           "not-json",
+			responseTarget: &map[string]string{},
+			wantError:      true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := &closeTrackingBody{Reader: strings.NewReader(test.body)}
+			client := &fixedResponseClient{response: &http.Response{
+				StatusCode: test.status,
+				Body:       body,
+			}}
+			c := splunk.NewSplunkClient(
+				"https://localhost:8089",
+				"admin",
+				"p@ssw0rd",
+			)
+			c.Client = client
+			request, err := http.NewRequest(
+				http.MethodGet,
+				"https://localhost:8089/services/test",
+				nil,
+			)
+			if err != nil {
+				t.Fatalf("http.NewRequest() error = %v", err)
+			}
+
+			err = c.Do(request, []int{http.StatusOK}, test.responseTarget)
+			if test.wantError && err == nil {
+				t.Fatal("Do() error = nil, want an error")
+			}
+			if !test.wantError && err != nil {
+				t.Fatalf("Do() error = %v", err)
+			}
+			if !body.closed {
+				t.Fatal("Do() did not close the response body")
+			}
+		})
+	}
 }
 
 func TestNewSplunkClientRequestTimeouts(t *testing.T) {

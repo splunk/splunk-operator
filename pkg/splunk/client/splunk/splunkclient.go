@@ -98,6 +98,7 @@ func (c *SplunkClient) doWithClient(client SplunkHTTPClient, request *http.Reque
 	if err != nil {
 		return err
 	}
+	defer response.Body.Close()
 
 	//default set flag to false and the check response code
 	expectedStatusFlag := false
