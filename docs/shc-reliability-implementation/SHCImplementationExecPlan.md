@@ -551,6 +551,13 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   open in `SHC116IndexerEndpointWithdrawalExecPlan.md`. The repeated native
   Linux full gate passed 43 suites, 192/192 specs, and 78.7 percent composite
   coverage.
+- [ ] (2026-08-04 UTC) Complete SHC-117 extended full-roll evidence. The
+  measured exact-peer cleanup interval can make four ordinary indexer
+  replacements plus stabilization exceed the old one-hour workload and
+  two-hour monitor defaults. Test-only source `cd522e119` extends the workload
+  and monitor to three hours and the Job deadline to four hours. Repository
+  shell/manifest gates pass; the complete EKS run remains open in
+  `SHC117LongIndexerRollQualificationExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP
