@@ -565,7 +565,11 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   monotonically; API and controller validation prevent a delay that would
   exhaust the effective detention timeout. Generation, manifests, focused
   tests, all 43 native suites (192/192 specs, 78.8 percent coverage), and
-  `make build` pass. Immutable Linux image and EKS gates remain open in
+  `make build` pass. Chart lint, all 150 Helm tests, full v4 API and metrics
+  package race checks, and 20 changed-path enterprise race repetitions also
+  pass. A broad enterprise race run reproduced pre-existing App Framework and
+  Cluster Manager test-seam races outside the changed paths. Immutable Linux
+  image and EKS gates remain open in
   `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers

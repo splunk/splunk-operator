@@ -41,6 +41,9 @@ remain separate requirements.
 - [x] (2026-08-04 UTC) Passed generation, manifests, focused lifecycle and API
   tests, the complete 43-suite native test gate (192/192 specs, 78.8 percent
   composite coverage), `make build`, and `git diff --check` on the exact source.
+- [x] (2026-08-04 UTC) Passed chart lint, all 150 Helm tests, full race checks
+  for the v4 API and metrics packages, and 20 race-enabled repetitions of the
+  changed policy, withdrawal, no-early-detention, and status-merge paths.
 - [ ] Build an immutable Linux image and qualify a complete Search Head roll on
   EKS, including controller replacement during the propagation interval.
 
@@ -69,6 +72,13 @@ remain separate requirements.
   Consequence: status merge preserves monotonic observation and invalidation
   state for the same operation, rejects corrupt active proof, and permits a new
   operation only when its start time is not older than the persisted operation.
+- Observation: a broad race run over the entire enterprise package reproduces
+  existing races in App Framework scheduler tests and a Cluster Manager test
+  seam, including `TestPhaseManagersMsgChannels`, `TestPodCopyWorkerHandler`,
+  `TestInstallWorkerHandler`, and `TestApplyClusterManager`.
+  Consequence: that broad repository result remains a separate open quality
+  issue. None of those paths is changed by SHC-118; the complete normal gate
+  and the race-enabled changed-path gates pass.
 
 ## Decision Log
 
@@ -163,7 +173,13 @@ not discard the lifecycle operation before restoring serving eligibility.
   `pkg/splunk/enterprise/searchhead_serving_readiness.go`.
 - Source evidence: generation, manifests, focused API/lifecycle tests, all 43
   native suites with 192/192 specs and 78.8 percent composite coverage,
-  `make build`, and `git diff --check` passed on the exact source.
+  `make build`, chart lint, all 150 Helm tests, full v4 API and metrics package
+  race checks, 20 changed-path enterprise race repetitions, and
+  `git diff --check` passed on the exact source.
+- Broad enterprise race log SHA-256:
+  `f412235c58fe8b8ac7b47441b854e092036f8500932dee2d53d6280d535c7b87`;
+  failures are confined to the pre-existing App Framework/Cluster Manager test
+  paths listed above rather than SHC-118 files.
 - Immutable image and EKS evidence: pending.
 
 ## Interfaces and Dependencies
