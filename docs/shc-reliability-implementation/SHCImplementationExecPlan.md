@@ -537,7 +537,7 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   suite passed. Immutable Linux, controller-restart, and EKS
   file-descriptor/socket soak gates remain open in
   `SHC115ShortLivedRESTTransportOwnershipExecPlan.md`.
-- [ ] (2026-08-04 UTC) Complete SHC-116 indexer endpoint-withdrawal
+- [x] (2026-08-04 UTC) Complete SHC-116 indexer endpoint-withdrawal
   qualification. The accepted-image diagnostic correlated its only HEC
   failure with the exact decommission request while the target still appeared
   routable through the indexer Service EndpointSlice. Exact source
@@ -546,17 +546,25 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   invalidates the observation if routing returns, and prevents normal and
   recovery decommission before the continuous delay expires. Generation,
   build/vet, focused race checks, chart lint, all 150 Helm tests, and the exact
-  Linux image gate passed. The full reverse-ordinal EKS workload, active
-  controller replacement during the delay, and zero-failure comparison remain
-  open in `SHC116IndexerEndpointWithdrawalExecPlan.md`. The repeated native
-  Linux full gate passed 43 suites, 192/192 specs, and 78.7 percent composite
-  coverage.
-- [ ] (2026-08-04 UTC) Complete SHC-117 extended full-roll evidence. The
+  Linux image gate passed. The full EKS run then completed target order
+  `3,2,1,0`, active controller replacement during a persisted delay, 647
+  lifecycle snapshots, 60 consecutive final-state observations, all four Pod
+  UID replacements, stable PVC claims, zero container restarts, 10,800
+  successful HEC/search requests, and exact eventual uniqueness. All 25
+  artifact hashes verify. Nineteen HTTP-successful count regressions, all
+  during the planned roll, keep the separate Splunk partial-result requirement
+  open. The repeated native Linux full gate passed 43 suites, 192/192 specs,
+  and 78.7 percent composite coverage. Exact evidence is in
+  `SHC116IndexerEndpointWithdrawalExecPlan.md`.
+- [x] (2026-08-04 UTC) Complete SHC-117 extended full-roll evidence. The
   measured exact-peer cleanup interval can make four ordinary indexer
   replacements plus stabilization exceed the old one-hour workload and
   two-hour monitor defaults. Test-only source `cd522e119` extends the workload
   and monitor to three hours and the Job deadline to four hours. Repository
-  shell/manifest gates pass; the complete EKS run remains open in
+  shell/manifest gates pass. The complete EKS run retained the workload through
+  all four replacements and stabilization, exited zero, ended with exact
+  `10800/1/10800/10800` count/min/max/distinct, and sealed verified evidence.
+  The 19 intermediate regressions are reported independently in
   `SHC117LongIndexerRollQualificationExecPlan.md`.
 - [x] (2026-08-04 UTC) Implement SHC-118, the Search Head endpoint-withdrawal
   propagation barrier. Exact source `8152fc042` persists a restart-safe,
@@ -3001,3 +3009,9 @@ default-policy campaign omits the policy field and verifies the persisted
 30-second observation-to-deadline interval. An explicitly configured value of
 30 no longer serves as omitted-policy evidence. Source and CRD inspection
 confirmed this is an Operator-resolved default, not Kubernetes API defaulting.
+
+Revision note (2026-08-04 UTC): Closed SHC-116 and SHC-117 after the complete
+10,800-sample Job and outer evidence runner exited zero. The update records
+exact eventual delivery and verified hashes while preserving 19 intermediate
+distributed-search count regressions as a separate Splunk result-semantics
+requirement.
