@@ -5,7 +5,7 @@ metadata:
   labels:
     qualification.splunk.com/scenario: shc98-stable-indexer-address
 spec:
-  activeDeadlineSeconds: 7200
+  activeDeadlineSeconds: 14400
   backoffLimit: 0
   template:
     metadata:
@@ -33,7 +33,7 @@ spec:
                   name: splunk-shc-final-qualification-secret
                   key: password
             - name: SHC85_WORKLOAD_SAMPLES
-              value: "3600"
+              value: "10800"
             - name: SHC85_WORKLOAD_INTERVAL_SECONDS
               value: "1"
             - name: SHC85_HEC_SERVICE

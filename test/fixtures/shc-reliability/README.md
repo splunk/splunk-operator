@@ -518,6 +518,12 @@ SHC-98 Job is pinned to the previously accepted runtime OCI index, uses the
 Pod hostname as a unique workload run ID, and does not mount a Kubernetes
 service-account token.
 
+The complete-roll monitor and API-independent workload allow three hours by
+default. The Job has a four-hour active deadline so Kubernetes does not end a
+healthy 10,800-sample run during startup or final result convergence. This
+window covers the observed per-ordinal stale-peer removal delay across all four
+indexers instead of ending after only the first one or two replacements.
+
 A retained `status.podUpdate` can describe the prior completed revision before
 a new StatefulSet revision is selected. The monitor counts an ordinal only
 after a roll is observed and `podUpdate.desiredRevision` exactly matches the
