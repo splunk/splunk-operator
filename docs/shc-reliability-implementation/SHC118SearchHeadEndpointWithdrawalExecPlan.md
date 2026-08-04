@@ -55,6 +55,11 @@ remain separate requirements.
 - [x] (2026-08-04 UTC) Built and pushed the exact Linux AMD64 Operator candidate
   through the Makefile. Immutable OCI index digest is
   `sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`.
+- [x] (2026-08-04 UTC) Added qualification harness `ee2cf5559`. Bash syntax and
+  ShellCheck pass. Its read-only rehearsal against the retained cluster proved
+  exact Operator-image matching, a Ready three-member zero-restart baseline,
+  closed partition, serving readiness gates, and three routable client
+  endpoints without mutating the cluster.
 - [ ] Qualify a complete Search Head roll on EKS, including controller
   replacement during the propagation interval.
 
@@ -202,6 +207,9 @@ not discard the lifecycle operation before restoring serving eligibility.
   paths listed above rather than SHC-118 files.
 - Immutable Operator OCI index:
   `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator@sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`.
+- Qualification branch:
+  `codex/shc-118-search-head-endpoint-withdrawal-qualification` at
+  `ee2cf5559`.
 - EKS evidence: pending.
 
 ## Interfaces and Dependencies
