@@ -20,6 +20,7 @@ from typing import Callable
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 USER_AGENT = "SOK-SHC-Qualification/1.0"
 RETRYABLE_HEC_HTTP_STATUSES = frozenset({503})
+RETRYABLE_SEARCH_HTTP_STATUSES = frozenset({405})
 
 
 @dataclass
@@ -38,6 +39,13 @@ class ConnectionStats:
 @dataclass(frozen=True)
 class HECResult:
     accepted: bool
+    status: int
+    code: str
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    result: tuple[int, int, int, int] | None
     status: int
     code: str
 
@@ -261,7 +269,7 @@ def search_sequences(
     client: PersistentHTTPSClient,
     password: str,
     run_id: str,
-) -> tuple[int, int, int, int] | None:
+) -> SearchResult:
     form = urllib.parse.urlencode(
         {
             "search": (
@@ -283,10 +291,14 @@ def search_sequences(
             "Content-Length": str(len(form)),
             "User-Agent": USER_AGENT,
         },
+        retry_statuses=RETRYABLE_SEARCH_HTTP_STATUSES,
     )
     if status != 200:
-        return None
-    return parse_search_result(response)
+        return SearchResult(None, status, "HTTPError")
+    result = parse_search_result(response)
+    if result is None:
+        return SearchResult(None, status, "InvalidResult")
+    return SearchResult(result, status, "0")
 
 
 def stats_text(name: str, stats: ConnectionStats) -> str:
@@ -365,9 +377,10 @@ def main() -> int:
                 search_member = "Unavailable"
 
             try:
-                result = search_sequences(search_client, password, run_id)
+                search_result = search_sequences(search_client, password, run_id)
             except (OSError, http.client.HTTPException):
-                result = None
+                search_result = SearchResult(None, 0, "TransportError")
+            result = search_result.result
             result_connection = search_client.stats.opened
             if result is None:
                 search_failures += 1
@@ -387,7 +400,8 @@ def main() -> int:
                 f"seq={sequence} "
                 f"hec={'ok' if hec_result.accepted else 'fail'} "
                 f"hecStatus={hec_result.status} hecCode={hec_result.code} "
-                f"search={search_state} count={count} min={minimum} "
+                f"search={search_state} searchStatus={search_result.status} "
+                f"searchCode={search_result.code} count={count} min={minimum} "
                 f"max={maximum} distinct={distinct} pending={pending} "
                 f"searchMember={search_member} "
                 f"searchMemberConnection={identity_connection} "
@@ -401,9 +415,10 @@ def main() -> int:
         complete = False
         for _ in range(settle_attempts):
             try:
-                result = search_sequences(search_client, password, run_id)
+                search_result = search_sequences(search_client, password, run_id)
             except (OSError, http.client.HTTPException):
-                result = None
+                search_result = SearchResult(None, 0, "TransportError")
+            result = search_result.result
             if result is not None:
                 last_result = result
                 if result == (samples, 1, samples, samples):

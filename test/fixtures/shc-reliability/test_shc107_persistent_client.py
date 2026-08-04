@@ -156,6 +156,62 @@ class SearchResultTest(unittest.TestCase):
         payload = b'{"result":{"count":"not-a-number"}}\n'
         self.assertIsNone(MODULE.parse_search_result(payload))
 
+    def test_records_successful_search_result(self):
+        payload = (
+            b'{"result":{"count":"4","min":"1",'
+            b'"max":"4","distinct":"4"}}\n'
+        )
+        factory = FakeFactory([[FakeResponse(payload=payload)]])
+        client = MODULE.PersistentHTTPSClient(
+            "service", 8089, 5, connection_factory=factory
+        )
+
+        result = MODULE.search_sequences(client, "password", "run")
+
+        self.assertEqual(MODULE.SearchResult((4, 1, 4, 4), 200, "0"), result)
+
+    def test_reconnects_and_retries_search_detention_405(self):
+        payload = (
+            b'{"result":{"count":"4","min":"1",'
+            b'"max":"4","distinct":"4"}}\n'
+        )
+        factory = FakeFactory(
+            [
+                [FakeResponse(status=405, payload=b"detained")],
+                [FakeResponse(payload=payload)],
+            ]
+        )
+        client = MODULE.PersistentHTTPSClient(
+            "service", 8089, 5, connection_factory=factory
+        )
+
+        result = MODULE.search_sequences(client, "password", "run")
+
+        self.assertEqual(MODULE.SearchResult((4, 1, 4, 4), 200, "0"), result)
+        self.assertEqual(2, client.stats.opened)
+        self.assertEqual(1, client.stats.first_response_failures)
+        self.assertEqual(1, client.stats.recovered_requests)
+        self.assertEqual(1, client.stats.response_recovered_requests)
+
+    def test_preserves_second_search_detention_405_as_failure(self):
+        factory = FakeFactory(
+            [
+                [FakeResponse(status=405, payload=b"detained")],
+                [FakeResponse(status=405, payload=b"detained")],
+            ]
+        )
+        client = MODULE.PersistentHTTPSClient(
+            "service", 8089, 5, connection_factory=factory
+        )
+
+        result = MODULE.search_sequences(client, "password", "run")
+
+        self.assertEqual(MODULE.SearchResult(None, 405, "HTTPError"), result)
+        self.assertEqual(2, client.stats.opened)
+        self.assertEqual(1, client.stats.first_response_failures)
+        self.assertEqual(0, client.stats.recovered_requests)
+        self.assertEqual(0, client.stats.response_recovered_requests)
+
 
 class HECResultTest(unittest.TestCase):
     def test_records_accepted_hec_response(self):

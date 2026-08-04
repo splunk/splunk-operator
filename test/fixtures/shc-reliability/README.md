@@ -539,6 +539,14 @@ once. It records the first response failure and response-based recovery
 separately. A second 503 remains a logical failure; this does not turn
 unbounded retries or ambiguous transport failures into hidden success.
 
+Current Search Head detention similarly rejects creation of a new search job
+with HTTP 405 while an established connection remains reusable. For this
+explicit not-created result on the known search-creation endpoint only, the
+client closes the stale connection and retries once through the Service. The
+first response remains visible and a second 405 remains a logical failure.
+This bounded compatibility behavior does not make arbitrary HTTP 405 responses
+successful and is not the server-side connection-close requirement.
+
 A passing workload has zero logical HEC and search failures and exact final
 sequence completeness. Connection counters remain evidence rather than an
 unconditional success threshold: an HTTP server is allowed to advertise
