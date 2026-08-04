@@ -7,6 +7,7 @@ namespace="${SHC118_NAMESPACE:-shc-final-qualification}"
 cr_name="${SHC118_CR_NAME:-shcfinal-shc}"
 operator_namespace="${SHC118_OPERATOR_NAMESPACE:-splunk-operator}"
 operator_deployment="${SHC118_OPERATOR_DEPLOYMENT:-splunk-operator-controller-manager}"
+workload_job="${SHC118_WORKLOAD_JOB:-shc98-incluster-workload}"
 expected_operator_image="${SHC118_EXPECTED_OPERATOR_IMAGE:?SHC118_EXPECTED_OPERATOR_IMAGE is required}"
 withdrawal_seconds="${SHC118_WITHDRAWAL_SECONDS:-120}"
 restart_operator="${SHC118_RESTART_OPERATOR:-true}"
@@ -101,6 +102,10 @@ collect_evidence() {
     >"${evidence_dir}/endpointslices.json" 2>&1
   shc_kube get events --sort-by=.metadata.creationTimestamp -o json \
     >"${evidence_dir}/events.json" 2>&1
+  shc_kube get job "${workload_job}" -o json \
+    >"${evidence_dir}/workload-job.json" 2>&1
+  shc_kube logs job/"${workload_job}" \
+    >"${evidence_dir}/workload.log" 2>&1
   operator_kube get deployment "${operator_deployment}" -o json \
     >"${evidence_dir}/operator-deployment.json" 2>&1
   operator_kube get pods -o json >"${evidence_dir}/operator-pods.json" 2>&1
@@ -268,6 +273,18 @@ fi
 if [[ "${operator_image}" != "${expected_operator_image}" ]]; then
   fail "Operator image does not match the exact expected digest"
 fi
+workload_job_json="$(shc_kube get job "${workload_job}" -o json)"
+if [[ "$(jq -r '.status.active // 0' <<<"${workload_job_json}")" -ne 1 ]]; then
+  fail "API-independent HEC/search workload Job is not active"
+fi
+workload_ready_pods="$(shc_kube get pods -l "job-name=${workload_job}" -o json | jq \
+  '[.items[] |
+    select(.metadata.deletionTimestamp == null) |
+    select(any(.status.conditions[]?; .type == "Ready" and .status == "True"))] |
+    length')"
+if [[ "${workload_ready_pods}" -ne 1 ]]; then
+  fail "API-independent HEC/search workload Pod is not Ready"
+fi
 
 baseline_cr_json="$(shc_kube get searchheadcluster.enterprise.splunk.com "${cr_name}" -o json)"
 desired_replicas="$(jq -r '.spec.replicas // 0' <<<"${baseline_cr_json}")"
@@ -346,6 +363,7 @@ printf '%s\n' "${initial_sts_json}" >"${evidence_dir}/baseline-statefulset.json"
 printf '%s\n' "${initial_pods_json}" >"${evidence_dir}/baseline-pods.json"
 printf '%s\n' "${initial_endpoint_pods}" >"${evidence_dir}/baseline-endpoints.json"
 printf '%s\n' "${baseline_event_json}" >"${evidence_dir}/baseline-events.json"
+printf '%s\n' "${workload_job_json}" >"${evidence_dir}/baseline-workload-job.json"
 
 if [[ "${preflight_only}" == true ]]; then
   collect_evidence
@@ -509,6 +527,17 @@ fi
 if ((invalidated_event_delta != 0)); then
   fail "endpoint-withdrawal proof was invalidated during the healthy-path roll"
 fi
+workload_log="$(shc_kube logs job/"${workload_job}")"
+workload_sample_count="$(awk '/^[0-9][0-9][0-9][0-9]-/{count++} END{print count+0}' \
+  <<<"${workload_log}")"
+workload_hec_failures="$(awk '/hec=fail/{count++} END{print count+0}' \
+  <<<"${workload_log}")"
+workload_search_failures="$(awk '/search=fail/{count++} END{print count+0}' \
+  <<<"${workload_log}")"
+if ((workload_sample_count == 0 || workload_hec_failures != 0 ||
+  workload_search_failures != 0)); then
+  fail "API-independent workload recorded no samples or a request failure"
+fi
 
 collect_evidence
 cat >"${summary_file}" <<EOF
@@ -524,6 +553,9 @@ minimumRoutableEndpoints=${minimum_endpoints}
 maximumUnreadyPods=${maximum_unready}
 observedEventDelta=${observed_event_delta}
 invalidatedEventDelta=${invalidated_event_delta}
+workloadSamplesAtRollCompletion=${workload_sample_count}
+workloadHecFailures=${workload_hec_failures}
+workloadSearchFailures=${workload_search_failures}
 stableSamples=${stable_samples_required}
 EOF
 printf 'PASS: order=%s minEndpoints=%s maxUnready=%s operatorRestarted=%s evidence=%s\n' \

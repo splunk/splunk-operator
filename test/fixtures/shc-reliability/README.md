@@ -54,7 +54,11 @@ two Search Heads remain routable, more than one member is unready, a container
 restarts in place, detention precedes the persisted deadline, or the target is
 still routable while propagation is pending. It retains CR, StatefulSet, Pod,
 EndpointSlice, Event, and Operator-log evidence without reading or printing
-Splunk credentials.
+Splunk credentials. The harness refuses to trigger unless the API-independent
+HEC/search Job is active with one Ready client Pod, and it fails if that Job
+records a HEC or search request failure before rollout completion. The outer
+qualification runner must still wait for the Job's exact final-completeness
+gate after the Kubernetes lifecycle monitor succeeds.
 
 Run `make shc118-monitor-check` before live use. Start the separate in-cluster
 HEC/search workload first, then invoke the monitor with the exact accepted
