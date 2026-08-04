@@ -40,11 +40,11 @@ a Splunk-managed searchable rolling restart.
 - [x] (2026-08-04 04:57Z) Added the Splunk REST client observation and durable
   Indexer lifecycle gate on isolated source branch
   `codex/shc-112-indexer-search-peer-gate`. Cumulative source is
-  `be95112bd`.
+  `79f751075`.
 - [x] Added exact, duplicate, wrong-address, `Down`, disabled, missing,
   unrelated-cluster, current/deprecated manager-reference, transient
   observation, durable two-observation, invalidation, and status-merge tests.
-- [x] (2026-08-04 05:13Z) Exact cumulative source `be95112bd` passed
+- [x] (2026-08-04 05:32Z) Exact cumulative source `79f751075` passed
   generation, `make fmt vet build`, the full 43-suite Make gate, all 192
   enterprise/controller specs, 78.6 percent composite coverage, a 100-run
   focused observation check, 20 race-enabled focused repetitions, all 150
@@ -55,10 +55,15 @@ a Splunk-managed searchable rolling restart.
   Cluster Manager observation, and a Kubernetes SearchHeadCluster discovery
   failure. Splunk observation failures remain classified waits; Kubernetes
   discovery failure remains a controller error.
+- [x] Reconstructed a fresh controller manager from persisted CR status
+  between convergence observation and revalidation. This restart boundary
+  passed 100 focused repetitions, 20 race-enabled repetitions, and the full
+  Make gate without relying on prior process memory.
 - [ ] Build an immutable Linux Operator image and exercise a complete
   `3 -> 2 -> 1 -> 0` EKS replacement while a persistent client and independent
   monitor are running.
-- [ ] Prove restart recovery while `AwaitingSearchPeerConvergence` is durable.
+- [ ] Prove live Operator-Pod replacement while
+  `AwaitingSearchPeerConvergence` is durable on the immutable EKS candidate.
 - [ ] Repeat the multiple-SHC, no-matching-SHC, unreachable-Search-Head, and
   temporarily unavailable Cluster Manager variants on the immutable EKS
   candidate.
@@ -181,7 +186,8 @@ inspected before any rollback changes lifecycle ownership.
 - Source branch: `codex/shc-112-indexer-search-peer-gate`.
 - REST client source: `63c2a5459`.
 - Lifecycle gate source: `d7a6e6125`.
-- Cumulative source and negative qualification: `be95112bd`.
+- Cumulative source, negative qualification, and reconstructed-manager test:
+  `79f751075`.
 - Accepted-image workload SHA-256:
   `0a5a0193e402084533cc91c163602823f9d80b71010a3ce0158ef883090c6150`.
 - Accepted-image monitor SHA-256:

@@ -483,7 +483,7 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   maximum pending 329 at sequence 1239, again with zero request failures and
   exact eventual results.
 - [ ] (2026-08-04 UTC) Complete SHC-112 immutable qualification for the
-  Operator-owned advancement boundary. Isolated source `be95112bd` adds a
+  Operator-owned advancement boundary. Isolated source `79f751075` adds a
   durable `AwaitingSearchPeerConvergence` stage and requires every managed
   Search Head referencing the same Cluster Manager to report exactly one
   current, enabled, `Up` replacement GUID/address before the next Indexer
@@ -493,7 +493,9 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Make suites and 192 enterprise/controller specs. Source qualification also
   covers transient Cluster Manager and Search Head observations, Kubernetes
   discovery failure, no matching SearchHeadCluster, and multiple matching
-  clusters. Linux image, controller-restart, and live EKS gates remain open in
+  clusters. A reconstructed-manager test proves source-level restart recovery
+  from persisted status. Linux image, live Operator-Pod replacement, and EKS
+  gates remain open in
   `SHC112IndexerSearchPeerConvergenceGateExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
