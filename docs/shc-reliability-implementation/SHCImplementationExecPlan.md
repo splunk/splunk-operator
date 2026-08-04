@@ -737,6 +737,14 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `SHC RollingUpdate DeployerUpdateActive` reason through the API status path.
   All local source gates passed; immutable Linux image, both ownership
   directions, and controller-restart EKS qualification remain open.
+- [x] (2026-08-04 00:42Z) Registered SHC-107 at test-only source
+  `9e9cbc819`. The API-independent Python workload retains HEC and Search Head
+  HTTPS connections, identifies the selected Search Head on the same
+  connection, and records transport failure, bounded reconnect, server close,
+  logical request, and completeness signals separately. Seven tests passed
+  100 repetitions with `make fmt vet` and Kubernetes manifest validation.
+  Stable smoke and all disruptive EKS campaigns remain open; no persistent-
+  client availability claim is made yet.
 - [ ] Resolve the blocking API and lifecycle policy decisions.
 - [ ] Complete and approve the Operator lifecycle technical design.
 - [ ] Complete and approve the runtime lifecycle contract.

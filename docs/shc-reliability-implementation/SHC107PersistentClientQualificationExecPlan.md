@@ -1,0 +1,208 @@
+# Qualify persistent clients across SHC and indexer Pod replacement
+
+This ExecPlan is a living document. The sections `Progress`, `Surprises &
+Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to
+date as work proceeds.
+
+This document is maintained in accordance with the ExecPlan requirements in
+the `execution-plan` skill.
+
+## Purpose / Big Picture
+
+The existing availability monitors start a new `curl` process for every HEC
+submission and every distributed search. That proves repeated application
+requests can resolve the current Kubernetes Service endpoints, but it does not
+exercise a client whose TCP/TLS connection remains pinned to one backend Pod.
+Kubernetes removes a terminating Pod from new Service endpoint selection; it
+does not move an already-established TCP connection to another Pod.
+
+SHC-107 adds an API-independent in-cluster client that reuses one HTTPS
+connection to the indexer HEC Service and one to the Search Head Service. It
+records the exact Search Head identity serving the connection, transport
+interruptions, bounded reconnects, server-requested closes, logical request
+failures, and final result completeness. This is qualification code only. It
+does not change the Operator, Docker-Splunk, Splunk Ansible, or Splunk
+Enterprise.
+
+## Progress
+
+- [x] (2026-08-04 00:42Z) Created isolated qualification branch
+  `codex/shc-107-persistent-client-qualification` from exact cumulative
+  Operator source `a6cda92a3`.
+- [x] (2026-08-04 00:42Z) Implemented deterministic source `9e9cbc819`: a
+  standard-library Python client, digest-pinned Kubernetes Job, Make validation
+  and deployment targets, seven focused unit tests, and fixture documentation.
+- [x] (2026-08-04 00:42Z) Passed the focused tests 100 consecutive times,
+  Kubernetes client-side manifest validation, `make fmt vet`, and
+  `git diff --check`.
+- [ ] Run a short stable-cluster EKS smoke after the active SHC-94/SHC-106
+  evidence monitor completes. Establish whether HEC and search responses
+  retain HTTP/1.1 connections or explicitly close them.
+- [ ] Run the client before an Operator-owned Search Head `2 -> 1 -> 0`
+  replacement and prove the connection pinned to each replaced member either
+  stays valid until supported shutdown or reconnects with no logical request
+  loss.
+- [ ] Run the same client before an Operator-owned indexer `3 -> 2 -> 1 -> 0`
+  replacement and record HEC connection recovery plus distributed-search
+  completeness.
+- [ ] Repeat with Operator restart, no service mesh, supported service-mesh
+  routing, and TLS termination at ingress. Add HTTP HEC coverage separately;
+  the first bounded fixture uses HTTPS on the in-cluster Splunk ports.
+- [ ] Run repeated and soak campaigns only after the bounded smoke and one
+  controlled roll establish trustworthy connection evidence.
+
+## Surprises & Discoveries
+
+- Observation: the existing in-cluster and host-side monitors create a new
+  client process for every request.
+  Evidence: `shc85_incluster_workload.sh` and
+  `shc82_appframework_monitor.sh` invoke `curl` independently inside each
+  iteration.
+  Consequence: their zero-request-failure records remain valid for short-lived
+  requests but cannot be cited as persistent-connection qualification.
+- Observation: a Service connection needs backend identity evidence, not only
+  a Service DNS name.
+  Evidence: kube-proxy or the cloud dataplane selects one EndpointSlice backend
+  when the TCP flow is created, while the client-visible destination remains
+  the Service address.
+  Consequence: each SHC-107 sample calls authenticated `server/info` on the
+  same connection and records the member name plus the identity and search
+  connection generations.
+- Observation: application servers may legitimately return
+  `Connection: close`.
+  Consequence: the harness records server closes and maximum requests per
+  connection rather than falsely claiming persistence. A server-close result
+  is a product behavior finding, not a Kubernetes failure.
+
+## Decision Log
+
+- Decision: allow one reconnect inside a logical request and record the first
+  failed attempt separately.
+  Rationale: a production client must recover a connection whose backend exits,
+  while evidence must not hide that the original transport was interrupted.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: do not trigger a rollout from the workload Job.
+  Rationale: lifecycle orchestration, Kubernetes state evidence, and client
+  traffic are separate concerns. The campaign owns the rollout and correlates
+  its timestamps with the workload log.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: use the standard library in a digest-pinned existing client image.
+  Rationale: the qualification must not depend on downloading packages at Job
+  startup or rebuilding the Splunk runtime image.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: keep SHC-107 separate from the SHC-106 production image source.
+  Rationale: a test harness must not change the immutable production candidate
+  being qualified.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
+
+## Outcomes & Retrospective
+
+The deterministic test harness is source-qualified and pushed. No live
+persistent-client result is claimed yet. Its first EKS smoke is intentionally
+waiting for the current 240-sample accepted-image conflict record to finish so
+the records do not overlap.
+
+## Context and Orientation
+
+The final qualification topology has a three-member SearchHeadCluster, a
+four-peer IndexerCluster, and stable Kubernetes Services for Search Head
+management/search traffic and indexer HEC. Search Heads advertise only members
+whose Operator-owned serving condition is true. Indexers use the serving-aware
+readiness profile in the lifecycle-enabled fixture.
+
+EndpointSlice withdrawal affects new connection selection. Existing TCP flows
+remain associated with their original backend until the peer, network path, or
+client closes them. A robust result must therefore separate:
+
+1. backend readiness and EndpointSlice membership;
+2. the identity and generation of the already-open client connection;
+3. the first transport attempt and any bounded reconnect;
+4. the logical HEC or search result; and
+5. eventual indexed-result completeness.
+
+## Plan of Work
+
+First deploy exact harness source `9e9cbc819` for a short stable smoke. Confirm
+that credentials are absent from logs, `server/info` identifies a real Search
+Head, identity and search use the same connection generation, and at least one
+service carries more than one request per connection. If Splunk closes a path
+after every response, record that fact and do not label that path persistent.
+
+For Search Head qualification, start a longer unique run before the controlled
+reverse-ordinal rollout. Record Job logs, EndpointSlices, Search Head Pod UIDs,
+serving conditions, StatefulSet revisions/partition, lifecycle operation,
+captain, and Kubernetes Events. Correlate the member named by the connection
+with its withdrawal and replacement. Repeat for an active captain and a
+non-captain if the first deterministic order does not cover both.
+
+For indexer qualification, retain the same Search Head connection while the
+indexer HEC connection is exposed to every reverse-ordinal replacement. Record
+Indexer Pod identity, endpoints, lifecycle state, RF/SF/searchable health, HEC
+transport recovery, every successful search count, regressions, maximum
+pending sequences, and exact final convergence. Do not treat eventual
+completeness as proof of immediate distributed-search completeness.
+
+Repeat each bounded campaign with one Operator restart. Then qualify network
+variants separately: no mesh, a supported transparent mesh, external TLS
+termination with the configured ingress hostname/port, and HTTP versus HTTPS
+HEC. Do not assume mesh availability or that TLS reaches the Splunk Pod when an
+ingress terminates it.
+
+## Validation and Acceptance
+
+Acceptance requires:
+
+- exact harness commit, client-image digest, cluster context, namespace, and
+  production Operator/runtime digests are recorded;
+- the stable smoke proves which paths actually reuse a connection;
+- every Search Head identity sample is tied to the connection generation used
+  by its distributed search;
+- transport interruption, reconnect, server close, and logical failure counts
+  are separately reported;
+- a replaced selected backend never remains falsely advertised as serving;
+- the client either completes the logical request on the original connection
+  or reconnects within the bounded single retry;
+- HEC and distributed-search logical request failures remain zero for the
+  accepted planned-roll campaign;
+- at least two Search Head and three indexer endpoints remain serving during
+  the corresponding planned replacements;
+- container restart counts remain zero unless the scenario explicitly targets
+  container restart behavior;
+- final numbered events are complete and unique; and
+- Warning Events and Operator/runtime ERROR/FATAL logs are explained and
+  contain no new lifecycle or credential-exposure defect.
+
+HTTP server close behavior, search-count regression, or a failed first attempt
+must remain visible even when the final exit code is successful. Any such
+finding narrows the claim and may create a separate product requirement.
+
+## Idempotence and Recovery
+
+`make shc107-persistent-client` validates the fixture, updates its ConfigMap,
+deletes only the prior SHC-107 Job, and recreates it in the selected namespace.
+It does not mutate a Splunk Custom Resource or StatefulSet. A unique Job
+hostname becomes the default indexed run ID. A failed Job can be inspected and
+then safely recreated; deleting the Job and ConfigMap removes all SHC-107
+objects without affecting Splunk Pods or persistent volumes.
+
+## Artifacts and Notes
+
+- Qualification source branch:
+  `codex/shc-107-persistent-client-qualification`.
+- Exact harness source: `9e9cbc819`.
+- Production Operator source under test: `a6cda92a3` after native image
+  construction; the initial stable smoke may use the accepted Operator and
+  must say so explicitly.
+- Fixture: `test/fixtures/shc-reliability/shc107_persistent_client.py`.
+- Job: `test/fixtures/shc-reliability/shc107-incluster-workload-job.yaml`.
+- Source gates: seven tests, 100 repeated runs, `make fmt vet`, client-side
+  Kubernetes validation, and `git diff --check`.
+- Live stable, rollout, network-variant, and soak evidence: pending.
+
+## Interfaces and Dependencies
+
+SHC-107 consumes the indexer HEC endpoint, Search Head management/search
+endpoint, the existing qualification credential Secret, and the client image's
+Python 3 standard library. It observes but does not own StatefulSets,
+EndpointSlices, lifecycle status, captaincy, App Framework state, or Kubernetes
+Events. It changes no public API and adds no production runtime dependency.

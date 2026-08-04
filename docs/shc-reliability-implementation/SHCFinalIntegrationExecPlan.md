@@ -145,6 +145,10 @@ it is not converted into a qualified claim by documentation alone.
 - [ ] Complete SHC-85 distributed-search convergence analysis and explicitly
   separate Operator/runtime corrections from Splunk Enterprise changes that
   are only identified for later ownership.
+- [ ] Complete SHC-107 persistent-client qualification at test-only source
+  `9e9cbc819`. The deterministic harness is source-qualified; stable EKS
+  smoke, Search Head and indexer replacement, Operator restart, network
+  variants, and soak remain open.
 - [ ] Complete SHC-82 restart-required App Framework qualification for Search
   Heads and indexers, including searchable indexer restart behavior.
 - [ ] Run the clean final EKS qualification matrix and stability gate from
