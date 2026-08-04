@@ -27,25 +27,27 @@ const (
 	// 600-second bounded local shutdown deadline plus a 60-second kubelet
 	// margin. It applies only to startup- and liveness-probe failures; planned
 	// Pod replacement retains DefaultTerminationGracePeriodSeconds.
-	DefaultProbeTerminationGracePeriodSeconds int64 = 660
-	DefaultDetentionTimeoutSeconds            int64 = 180
-	DefaultSearchDrainTimeoutSeconds          int64 = 180
-	DefaultCaptainTransferTimeoutSeconds      int64 = 180
-	DefaultPodStartupTimeoutSeconds           int64 = 1800
-	DefaultMemberRejoinTimeoutSeconds         int64 = 1800
+	DefaultProbeTerminationGracePeriodSeconds       int64 = 660
+	DefaultSearchHeadEndpointWithdrawalDelaySeconds int64 = 30
+	DefaultDetentionTimeoutSeconds                  int64 = 180
+	DefaultSearchDrainTimeoutSeconds                int64 = 180
+	DefaultCaptainTransferTimeoutSeconds            int64 = 180
+	DefaultPodStartupTimeoutSeconds                 int64 = 1800
+	DefaultMemberRejoinTimeoutSeconds               int64 = 1800
 )
 
 // ResolvedSearchHeadClusterLifecyclePolicy contains the effective values used
 // by lifecycle orchestration. It is deliberately separate from the stored API
 // so omitted fields remain omitted.
 type ResolvedSearchHeadClusterLifecyclePolicy struct {
-	TerminationGracePeriodSeconds int64
-	PodUpdateStrategy             enterpriseApi.SearchHeadClusterPodUpdateStrategy
-	DetentionTimeoutSeconds       int64
-	SearchDrainTimeoutSeconds     int64
-	CaptainTransferTimeoutSeconds int64
-	PodStartupTimeoutSeconds      int64
-	MemberRejoinTimeoutSeconds    int64
+	TerminationGracePeriodSeconds  int64
+	PodUpdateStrategy              enterpriseApi.SearchHeadClusterPodUpdateStrategy
+	EndpointWithdrawalDelaySeconds int64
+	DetentionTimeoutSeconds        int64
+	SearchDrainTimeoutSeconds      int64
+	CaptainTransferTimeoutSeconds  int64
+	PodStartupTimeoutSeconds       int64
+	MemberRejoinTimeoutSeconds     int64
 }
 
 // ResolveTerminationGracePeriodSeconds returns nil while SplunkPodLifecycle is
@@ -76,12 +78,13 @@ func ResolveSearchHeadClusterLifecyclePolicy(spec *enterpriseApi.SearchHeadClust
 	}
 
 	resolved := &ResolvedSearchHeadClusterLifecyclePolicy{
-		PodUpdateStrategy:             enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete,
-		DetentionTimeoutSeconds:       DefaultDetentionTimeoutSeconds,
-		SearchDrainTimeoutSeconds:     DefaultSearchDrainTimeoutSeconds,
-		CaptainTransferTimeoutSeconds: DefaultCaptainTransferTimeoutSeconds,
-		PodStartupTimeoutSeconds:      DefaultPodStartupTimeoutSeconds,
-		MemberRejoinTimeoutSeconds:    DefaultMemberRejoinTimeoutSeconds,
+		PodUpdateStrategy:              enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete,
+		EndpointWithdrawalDelaySeconds: DefaultSearchHeadEndpointWithdrawalDelaySeconds,
+		DetentionTimeoutSeconds:        DefaultDetentionTimeoutSeconds,
+		SearchDrainTimeoutSeconds:      DefaultSearchDrainTimeoutSeconds,
+		CaptainTransferTimeoutSeconds:  DefaultCaptainTransferTimeoutSeconds,
+		PodStartupTimeoutSeconds:       DefaultPodStartupTimeoutSeconds,
+		MemberRejoinTimeoutSeconds:     DefaultMemberRejoinTimeoutSeconds,
 	}
 	resolved.TerminationGracePeriodSeconds = *ResolveTerminationGracePeriodSeconds(&spec.CommonSplunkSpec)
 	if spec.LifecyclePolicy == nil {
@@ -91,6 +94,9 @@ func ResolveSearchHeadClusterLifecyclePolicy(spec *enterpriseApi.SearchHeadClust
 	policy := spec.LifecyclePolicy
 	if policy.PodUpdateStrategy != "" {
 		resolved.PodUpdateStrategy = policy.PodUpdateStrategy
+	}
+	if policy.EndpointWithdrawalDelaySeconds != nil {
+		resolved.EndpointWithdrawalDelaySeconds = *policy.EndpointWithdrawalDelaySeconds
 	}
 	if policy.DetentionTimeoutSeconds != nil {
 		resolved.DetentionTimeoutSeconds = *policy.DetentionTimeoutSeconds
@@ -108,6 +114,34 @@ func ResolveSearchHeadClusterLifecyclePolicy(spec *enterpriseApi.SearchHeadClust
 		resolved.MemberRejoinTimeoutSeconds = *policy.MemberRejoinTimeoutSeconds
 	}
 	return resolved, nil
+}
+
+func validateSearchHeadClusterLifecyclePolicy(
+	spec *enterpriseApi.SearchHeadClusterSpec,
+) error {
+	if spec == nil || spec.LifecyclePolicy == nil {
+		return nil
+	}
+	policy := spec.LifecyclePolicy
+	delaySeconds := DefaultSearchHeadEndpointWithdrawalDelaySeconds
+	if policy.EndpointWithdrawalDelaySeconds != nil {
+		delaySeconds = *policy.EndpointWithdrawalDelaySeconds
+	}
+	if delaySeconds < 1 || delaySeconds > 86400 {
+		return fmt.Errorf(
+			"lifecyclePolicy.endpointWithdrawalDelaySeconds must be between 1 and 86400",
+		)
+	}
+	detentionTimeoutSeconds := DefaultDetentionTimeoutSeconds
+	if policy.DetentionTimeoutSeconds != nil {
+		detentionTimeoutSeconds = *policy.DetentionTimeoutSeconds
+	}
+	if delaySeconds >= detentionTimeoutSeconds {
+		return fmt.Errorf(
+			"lifecyclePolicy.endpointWithdrawalDelaySeconds must be less than detentionTimeoutSeconds after defaults are applied",
+		)
+	}
+	return nil
 }
 
 // validateSearchHeadClusterImageUpdateIntent validates the exact-pair

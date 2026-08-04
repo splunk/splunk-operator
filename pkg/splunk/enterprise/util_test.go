@@ -3194,6 +3194,91 @@ func TestIndexerClusterPodUpdateStatusMergePreservesEndpointWithdrawal(
 	}
 }
 
+func TestSearchHeadClusterLifecycleStatusMergePreservesEndpointWithdrawal(
+	t *testing.T,
+) {
+	observedAt := metav1.NewTime(
+		time.Date(2026, 8, 4, 13, 40, 32, 0, time.UTC),
+	)
+	deadline := metav1.NewTime(observedAt.Add(30 * time.Second))
+	latest := &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+		OperationID:                           "operation",
+		LastTransitionTime:                    &observedAt,
+		EndpointWithdrawalObservedAt:          &observedAt,
+		EndpointWithdrawalDeadline:            &deadline,
+		EndpointWithdrawalPodUID:              "target-uid",
+		EndpointWithdrawalSequence:            2,
+		EndpointWithdrawalInvalidatedSequence: 1,
+	}
+
+	for _, mutate := range []func(*enterpriseApi.SearchHeadClusterLifecycleOperationStatus){
+		func(status *enterpriseApi.SearchHeadClusterLifecycleOperationStatus) {
+			status.EndpointWithdrawalObservedAt = nil
+		},
+		func(status *enterpriseApi.SearchHeadClusterLifecycleOperationStatus) {
+			status.EndpointWithdrawalDeadline = nil
+		},
+		func(status *enterpriseApi.SearchHeadClusterLifecycleOperationStatus) {
+			changed := metav1.NewTime(observedAt.Add(time.Second))
+			status.EndpointWithdrawalObservedAt = &changed
+		},
+		func(status *enterpriseApi.SearchHeadClusterLifecycleOperationStatus) {
+			changed := metav1.NewTime(deadline.Add(time.Second))
+			status.EndpointWithdrawalDeadline = &changed
+		},
+		func(status *enterpriseApi.SearchHeadClusterLifecycleOperationStatus) {
+			status.EndpointWithdrawalPodUID = "different-target-uid"
+		},
+		func(status *enterpriseApi.SearchHeadClusterLifecycleOperationStatus) {
+			status.EndpointWithdrawalSequence--
+		},
+		func(status *enterpriseApi.SearchHeadClusterLifecycleOperationStatus) {
+			status.EndpointWithdrawalInvalidatedSequence--
+		},
+	} {
+		reconciled := latest.DeepCopy()
+		mutate(reconciled)
+		err := validateSearchHeadClusterLifecycleStatusMerge(
+			latest,
+			reconciled,
+			"example",
+		)
+		if !k8serrors.IsConflict(err) {
+			t.Fatalf("regression error = %v, want conflict", err)
+		}
+	}
+
+	if err := validateSearchHeadClusterLifecycleStatusMerge(
+		latest,
+		latest.DeepCopy(),
+		"example",
+	); err != nil {
+		t.Fatalf("unchanged endpoint-withdrawal proof was rejected: %v", err)
+	}
+
+	nextOperation := latest.DeepCopy()
+	nextOperation.OperationID = "next-operation"
+	nextOperation.StartedAt = &deadline
+	if err := validateSearchHeadClusterLifecycleStatusMerge(
+		latest,
+		nextOperation,
+		"example",
+	); err != nil {
+		t.Fatalf("new lifecycle operation was rejected: %v", err)
+	}
+
+	staleOperation := nextOperation.DeepCopy()
+	staleStartedAt := metav1.NewTime(observedAt.Add(-time.Second))
+	staleOperation.StartedAt = &staleStartedAt
+	if err := validateSearchHeadClusterLifecycleStatusMerge(
+		latest,
+		staleOperation,
+		"example",
+	); !k8serrors.IsConflict(err) {
+		t.Fatalf("stale lifecycle operation error = %v, want conflict", err)
+	}
+}
+
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))

@@ -450,7 +450,11 @@ func (mgr *searchHeadClusterPodManager) prepareLifecycleReplacement(
 		return false, nil
 	case shcworkflow.ActionRequestDetention:
 		if searchHeadServingReadinessGateConfigured(mgr.statefulSet) {
-			withdrawn, err := mgr.searchHeadServingWithdrawalObserved(ctx, n)
+			withdrawn, err := mgr.ensureSearchHeadEndpointWithdrawalBarrier(
+				ctx,
+				n,
+				time.Duration(policy.EndpointWithdrawalDelaySeconds)*time.Second,
+			)
 			if err != nil {
 				return false, err
 			}

@@ -75,6 +75,7 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 		}
 		if got.TerminationGracePeriodSeconds != 1200 ||
 			got.PodUpdateStrategy != enterpriseApi.SearchHeadClusterPodUpdateStrategyOnDelete ||
+			got.EndpointWithdrawalDelaySeconds != 30 ||
 			got.DetentionTimeoutSeconds != 180 ||
 			got.SearchDrainTimeoutSeconds != 180 ||
 			got.CaptainTransferTimeoutSeconds != 180 ||
@@ -91,12 +92,13 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 				TerminationGracePeriodSeconds: lifecycleInt64Pointer(100),
 			},
 			LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
-				PodUpdateStrategy:             enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
-				DetentionTimeoutSeconds:       lifecycleInt64Pointer(105),
-				SearchDrainTimeoutSeconds:     lifecycleInt64Pointer(101),
-				CaptainTransferTimeoutSeconds: lifecycleInt64Pointer(102),
-				PodStartupTimeoutSeconds:      lifecycleInt64Pointer(103),
-				MemberRejoinTimeoutSeconds:    lifecycleInt64Pointer(104),
+				PodUpdateStrategy:              enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate,
+				EndpointWithdrawalDelaySeconds: lifecycleInt64Pointer(100),
+				DetentionTimeoutSeconds:        lifecycleInt64Pointer(105),
+				SearchDrainTimeoutSeconds:      lifecycleInt64Pointer(101),
+				CaptainTransferTimeoutSeconds:  lifecycleInt64Pointer(102),
+				PodStartupTimeoutSeconds:       lifecycleInt64Pointer(103),
+				MemberRejoinTimeoutSeconds:     lifecycleInt64Pointer(104),
 			},
 		}
 		got, err := ResolveSearchHeadClusterLifecyclePolicy(spec)
@@ -105,6 +107,7 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 		}
 		if got.TerminationGracePeriodSeconds != 100 ||
 			got.PodUpdateStrategy != enterpriseApi.SearchHeadClusterPodUpdateStrategyRollingUpdate ||
+			got.EndpointWithdrawalDelaySeconds != 100 ||
 			got.DetentionTimeoutSeconds != 105 ||
 			got.SearchDrainTimeoutSeconds != 101 ||
 			got.CaptainTransferTimeoutSeconds != 102 ||
@@ -113,6 +116,55 @@ func TestResolveSearchHeadClusterLifecyclePolicy(t *testing.T) {
 			t.Fatalf("unexpected explicit policy: %#v", got)
 		}
 	})
+}
+
+func TestValidateSearchHeadClusterLifecyclePolicy(t *testing.T) {
+	for _, testCase := range []struct {
+		name      string
+		value     int64
+		detention *int64
+		wantErr   bool
+	}{
+		{name: "minimum", value: 1},
+		{name: "below default detention timeout", value: 179},
+		{name: "equal to default detention timeout", value: 180, wantErr: true},
+		{
+			name:      "custom coherent timing",
+			value:     60,
+			detention: lifecycleInt64Pointer(61),
+		},
+		{
+			name:      "custom incoherent timing",
+			value:     60,
+			detention: lifecycleInt64Pointer(60),
+			wantErr:   true,
+		},
+		{name: "maximum is incompatible with maximum detention timeout", value: 86400, wantErr: true},
+		{name: "zero", value: 0, wantErr: true},
+		{name: "above maximum", value: 86401, wantErr: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			spec := &enterpriseApi.SearchHeadClusterSpec{
+				LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+					EndpointWithdrawalDelaySeconds: lifecycleInt64Pointer(testCase.value),
+					DetentionTimeoutSeconds:        testCase.detention,
+				},
+			}
+			err := validateSearchHeadClusterLifecyclePolicy(spec)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("validation error = %v, wantErr=%v", err, testCase.wantErr)
+			}
+		})
+	}
+
+	defaultConflict := &enterpriseApi.SearchHeadClusterSpec{
+		LifecyclePolicy: &enterpriseApi.SearchHeadClusterLifecyclePolicy{
+			DetentionTimeoutSeconds: lifecycleInt64Pointer(30),
+		},
+	}
+	if err := validateSearchHeadClusterLifecyclePolicy(defaultConflict); err == nil {
+		t.Fatal("expected default endpoint-withdrawal delay to be validated against explicit detention timeout")
+	}
 }
 
 func TestValidateSearchHeadClusterImageUpdateIntent(t *testing.T) {

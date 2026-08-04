@@ -2430,6 +2430,13 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		); err != nil {
 			return nil, err
 		}
+		if err = validateSearchHeadClusterLifecycleStatusMerge(
+			latestCR.Status.LifecycleOperation,
+			cr.Status.LifecycleOperation,
+			cr.GetName(),
+		); err != nil {
+			return nil, err
+		}
 		if (crError != nil) && ((*crError) != nil) {
 			if terminalMessage, terminal :=
 				splcommon.TerminalMessage(*crError); terminal {
@@ -2642,6 +2649,84 @@ func validateSearchHeadClusterImageUpgradeStatusMerge(
 			reconciledOperationID,
 		),
 	)
+}
+
+func validateSearchHeadClusterLifecycleStatusMerge(
+	latest *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	reconciled *enterpriseApi.SearchHeadClusterLifecycleOperationStatus,
+	name string,
+) error {
+	if latest == nil || latest.EndpointWithdrawalSequence == 0 {
+		return nil
+	}
+	conflict := func(reconciledOperationID string) error {
+		return k8serrors.NewConflict(
+			schema.GroupResource{
+				Group:    enterpriseApi.GroupVersion.Group,
+				Resource: "searchheadclusters",
+			},
+			name,
+			fmt.Errorf(
+				"refusing stale endpoint-withdrawal status for lifecycle operation %q from operation %q",
+				latest.OperationID,
+				reconciledOperationID,
+			),
+		)
+	}
+	if reconciled == nil {
+		return conflict("")
+	}
+	if reconciled.OperationID != latest.OperationID {
+		if latest.LastTransitionTime != nil &&
+			reconciled.StartedAt != nil &&
+			!reconciled.StartedAt.Time.Before(latest.LastTransitionTime.Time) {
+			return nil
+		}
+		return conflict(reconciled.OperationID)
+	}
+	if reconciled.EndpointWithdrawalSequence <
+		latest.EndpointWithdrawalSequence ||
+		reconciled.EndpointWithdrawalSequence >
+			latest.EndpointWithdrawalSequence+1 ||
+		reconciled.EndpointWithdrawalInvalidatedSequence <
+			latest.EndpointWithdrawalInvalidatedSequence ||
+		reconciled.EndpointWithdrawalInvalidatedSequence >
+			reconciled.EndpointWithdrawalSequence ||
+		(reconciled.EndpointWithdrawalSequence >
+			latest.EndpointWithdrawalSequence &&
+			latest.EndpointWithdrawalSequence >
+				latest.EndpointWithdrawalInvalidatedSequence &&
+			reconciled.EndpointWithdrawalInvalidatedSequence <
+				latest.EndpointWithdrawalSequence) {
+		return conflict(reconciled.OperationID)
+	}
+	if reconciled.EndpointWithdrawalSequence !=
+		latest.EndpointWithdrawalSequence {
+		if reconciled.EndpointWithdrawalObservedAt == nil ||
+			reconciled.EndpointWithdrawalDeadline == nil ||
+			!reconciled.EndpointWithdrawalDeadline.After(
+				reconciled.EndpointWithdrawalObservedAt.Time,
+			) ||
+			reconciled.EndpointWithdrawalPodUID == "" {
+			return conflict(reconciled.OperationID)
+		}
+		return nil
+	}
+	if reconciled.EndpointWithdrawalObservedAt == nil ||
+		latest.EndpointWithdrawalObservedAt == nil ||
+		!reconciled.EndpointWithdrawalObservedAt.Equal(
+			latest.EndpointWithdrawalObservedAt,
+		) ||
+		reconciled.EndpointWithdrawalDeadline == nil ||
+		latest.EndpointWithdrawalDeadline == nil ||
+		!reconciled.EndpointWithdrawalDeadline.Equal(
+			latest.EndpointWithdrawalDeadline,
+		) ||
+		reconciled.EndpointWithdrawalPodUID !=
+			latest.EndpointWithdrawalPodUID {
+		return conflict(reconciled.OperationID)
+	}
+	return nil
 }
 
 func validateIndexerClusterPodUpdateStatusMerge(

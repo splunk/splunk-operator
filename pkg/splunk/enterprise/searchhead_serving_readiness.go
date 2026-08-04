@@ -533,6 +533,16 @@ func (mgr *searchHeadClusterPodManager) searchHeadServingWithdrawalObserved(
 	}, pod); err != nil {
 		return false, fmt.Errorf("get Search Head Pod %s before detention: %w", podName, err)
 	}
+	return mgr.searchHeadPodServingWithdrawalObserved(ctx, pod)
+}
+
+func (mgr *searchHeadClusterPodManager) searchHeadPodServingWithdrawalObserved(
+	ctx context.Context,
+	pod *corev1.Pod,
+) (bool, error) {
+	if pod == nil {
+		return false, nil
+	}
 	if podConditionStatus(pod, searchHeadServingCondition) != corev1.ConditionFalse ||
 		podConditionStatus(pod, corev1.PodReady) != corev1.ConditionFalse {
 		return false, nil

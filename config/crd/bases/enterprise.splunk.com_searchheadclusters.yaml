@@ -6910,6 +6910,16 @@ spec:
                     maximum: 86400
                     minimum: 1
                     type: integer
+                  endpointWithdrawalDelaySeconds:
+                    description: |-
+                      EndpointWithdrawalDelaySeconds is the minimum continuous propagation
+                      interval after Kubernetes reports that the exact target Pod is not Ready
+                      and no longer routable through the Search Head client Service
+                      EndpointSlices. Detention is not requested until this interval elapses.
+                    format: int64
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
                   imageUpdateIntent:
                     description: |-
                       ImageUpdateIntent explicitly classifies one exact source-to-target image
@@ -6968,6 +6978,12 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+                x-kubernetes-validations:
+                - message: endpointWithdrawalDelaySeconds must be less than detentionTimeoutSeconds
+                    after defaults are applied
+                  rule: '(has(self.endpointWithdrawalDelaySeconds) ? self.endpointWithdrawalDelaySeconds
+                    : 30) < (has(self.detentionTimeoutSeconds) ? self.detentionTimeoutSeconds
+                    : 180)'
               livenessInitialDelaySeconds:
                 description: |-
                   LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
@@ -10478,6 +10494,29 @@ spec:
                   detentionRequestedAt:
                     format: date-time
                     type: string
+                  endpointWithdrawalDeadline:
+                    format: date-time
+                    type: string
+                  endpointWithdrawalInvalidatedSequence:
+                    format: int64
+                    type: integer
+                  endpointWithdrawalObservedAt:
+                    description: |-
+                      EndpointWithdrawalObservedAt and EndpointWithdrawalDeadline preserve the
+                      exact start and completion boundary of the current propagation proof.
+                    format: date-time
+                    type: string
+                  endpointWithdrawalPodUID:
+                    description: EndpointWithdrawalPodUID binds the proof to the original
+                      lifecycle target.
+                    type: string
+                  endpointWithdrawalSequence:
+                    description: |-
+                      EndpointWithdrawalSequence advances for every new proof. The invalidated
+                      sequence is monotonic, preventing a stale status update from reviving a
+                      proof after the target becomes routable again.
+                    format: int64
+                    type: integer
                   intent:
                     description: |-
                       SearchHeadClusterLifecycleIntent identifies why a durable lifecycle

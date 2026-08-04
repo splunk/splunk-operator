@@ -126,6 +126,11 @@ func TestIndexerLifecycleMetricsUseOnlyBoundedLabels(t *testing.T) {
 			collector:     IndexerEndpointWithdrawalCounters,
 			variableLabel: "variableLabels: {action}",
 		},
+		{
+			name:          "Search Head endpoint withdrawal",
+			collector:     SearchHeadEndpointWithdrawalCounters,
+			variableLabel: "variableLabels: {action}",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			descriptions := make(chan *prometheus.Desc, 1)

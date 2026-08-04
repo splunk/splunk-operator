@@ -112,6 +112,7 @@ type SearchHeadClusterLifecycleApproval struct {
 
 // SearchHeadClusterLifecyclePolicy configures lifecycle timing and rollout
 // ownership for a Search Head Cluster.
+// +kubebuilder:validation:XValidation:rule="(has(self.endpointWithdrawalDelaySeconds) ? self.endpointWithdrawalDelaySeconds : 30) < (has(self.detentionTimeoutSeconds) ? self.detentionTimeoutSeconds : 180)",message="endpointWithdrawalDelaySeconds must be less than detentionTimeoutSeconds after defaults are applied"
 type SearchHeadClusterLifecyclePolicy struct {
 	// PodUpdateStrategy selects the Pod replacement owner. Empty resolves to
 	// OnDelete.
@@ -123,6 +124,15 @@ type SearchHeadClusterLifecyclePolicy struct {
 	// SameVersionRestart is valid only with podUpdateStrategy=RollingUpdate.
 	// +optional
 	ImageUpdateIntent *SearchHeadClusterImageUpdateIntentSpec `json:"imageUpdateIntent,omitempty"`
+
+	// EndpointWithdrawalDelaySeconds is the minimum continuous propagation
+	// interval after Kubernetes reports that the exact target Pod is not Ready
+	// and no longer routable through the Search Head client Service
+	// EndpointSlices. Detention is not requested until this interval elapses.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=86400
+	EndpointWithdrawalDelaySeconds *int64 `json:"endpointWithdrawalDelaySeconds,omitempty"`
 
 	// DetentionTimeoutSeconds bounds the wait for traffic withdrawal and
 	// authoritative confirmation that the target entered manual detention.
@@ -294,6 +304,9 @@ const (
 	SearchHeadClusterLifecycleReasonClusterNotSafe                  SearchHeadClusterLifecycleReason = "ClusterNotSafe"
 	SearchHeadClusterLifecycleReasonObservationStale                SearchHeadClusterLifecycleReason = "ObservationStale"
 	SearchHeadClusterLifecycleReasonConflictingCaptainObservation   SearchHeadClusterLifecycleReason = "ConflictingCaptainObservation"
+	SearchHeadClusterLifecycleReasonEndpointWithdrawalObserved      SearchHeadClusterLifecycleReason = "EndpointWithdrawalObserved"
+	SearchHeadClusterLifecycleReasonEndpointWithdrawalPending       SearchHeadClusterLifecycleReason = "EndpointWithdrawalPropagationPending"
+	SearchHeadClusterLifecycleReasonEndpointWithdrawalInvalidated   SearchHeadClusterLifecycleReason = "EndpointWithdrawalInvalidated"
 	SearchHeadClusterLifecycleReasonDetentionRequested              SearchHeadClusterLifecycleReason = "DetentionRequested"
 	SearchHeadClusterLifecycleReasonDetentionTimedOut               SearchHeadClusterLifecycleReason = "DetentionTimedOut"
 	SearchHeadClusterLifecycleReasonKVStoreNotReady                 SearchHeadClusterLifecycleReason = "KVStoreNotReady"
@@ -422,11 +435,22 @@ type SearchHeadClusterLifecycleOperationStatus struct {
 	CaptainTransferTarget      string                           `json:"captainTransferTarget,omitempty"`
 	CaptainTransferRequestedAt *metav1.Time                     `json:"captainTransferRequestedAt,omitempty"`
 	TargetPodUID               string                           `json:"targetPodUID,omitempty"`
-	TargetMemberID             string                           `json:"targetMemberID,omitempty"`
-	ReplacementPodUID          string                           `json:"replacementPodUID,omitempty"`
-	ReplacementMemberID        string                           `json:"replacementMemberID,omitempty"`
-	ReplacementAuthorizedAt    *metav1.Time                     `json:"replacementAuthorizedAt,omitempty"`
-	ReplacementPodObservedAt   *metav1.Time                     `json:"replacementPodObservedAt,omitempty"`
+	// EndpointWithdrawalObservedAt and EndpointWithdrawalDeadline preserve the
+	// exact start and completion boundary of the current propagation proof.
+	EndpointWithdrawalObservedAt *metav1.Time `json:"endpointWithdrawalObservedAt,omitempty"`
+	EndpointWithdrawalDeadline   *metav1.Time `json:"endpointWithdrawalDeadline,omitempty"`
+	// EndpointWithdrawalPodUID binds the proof to the original lifecycle target.
+	EndpointWithdrawalPodUID string `json:"endpointWithdrawalPodUID,omitempty"`
+	// EndpointWithdrawalSequence advances for every new proof. The invalidated
+	// sequence is monotonic, preventing a stale status update from reviving a
+	// proof after the target becomes routable again.
+	EndpointWithdrawalSequence            int64        `json:"endpointWithdrawalSequence,omitempty"`
+	EndpointWithdrawalInvalidatedSequence int64        `json:"endpointWithdrawalInvalidatedSequence,omitempty"`
+	TargetMemberID                        string       `json:"targetMemberID,omitempty"`
+	ReplacementPodUID                     string       `json:"replacementPodUID,omitempty"`
+	ReplacementMemberID                   string       `json:"replacementMemberID,omitempty"`
+	ReplacementAuthorizedAt               *metav1.Time `json:"replacementAuthorizedAt,omitempty"`
+	ReplacementPodObservedAt              *metav1.Time `json:"replacementPodObservedAt,omitempty"`
 	// RecoveryRevision is the last known-good StatefulSet revision used to
 	// recover a single unavailable target after its authorized desired revision
 	// was withdrawn or superseded. DesiredRevision remains the failed

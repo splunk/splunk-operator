@@ -2804,6 +2804,14 @@ func (in *SearchHeadClusterLifecycleOperationStatus) DeepCopyInto(out *SearchHea
 		in, out := &in.CaptainTransferRequestedAt, &out.CaptainTransferRequestedAt
 		*out = (*in).DeepCopy()
 	}
+	if in.EndpointWithdrawalObservedAt != nil {
+		in, out := &in.EndpointWithdrawalObservedAt, &out.EndpointWithdrawalObservedAt
+		*out = (*in).DeepCopy()
+	}
+	if in.EndpointWithdrawalDeadline != nil {
+		in, out := &in.EndpointWithdrawalDeadline, &out.EndpointWithdrawalDeadline
+		*out = (*in).DeepCopy()
+	}
 	if in.ReplacementAuthorizedAt != nil {
 		in, out := &in.ReplacementAuthorizedAt, &out.ReplacementAuthorizedAt
 		*out = (*in).DeepCopy()
@@ -2867,6 +2875,11 @@ func (in *SearchHeadClusterLifecyclePolicy) DeepCopyInto(out *SearchHeadClusterL
 	if in.ImageUpdateIntent != nil {
 		in, out := &in.ImageUpdateIntent, &out.ImageUpdateIntent
 		*out = new(SearchHeadClusterImageUpdateIntentSpec)
+		**out = **in
+	}
+	if in.EndpointWithdrawalDelaySeconds != nil {
+		in, out := &in.EndpointWithdrawalDelaySeconds, &out.EndpointWithdrawalDelaySeconds
+		*out = new(int64)
 		**out = **in
 	}
 	if in.DetentionTimeoutSeconds != nil {

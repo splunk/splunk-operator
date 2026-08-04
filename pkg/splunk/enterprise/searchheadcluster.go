@@ -1492,6 +1492,9 @@ func validateSearchHeadClusterSpec(ctx context.Context, c splcommon.ControllerCl
 	if err := validateSearchHeadClusterImageUpdateIntent(&cr.Spec); err != nil {
 		return err
 	}
+	if err := validateSearchHeadClusterLifecyclePolicy(&cr.Spec); err != nil {
+		return err
+	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
 		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false, cr.GetObjectKind().GroupVersionKind().Kind)

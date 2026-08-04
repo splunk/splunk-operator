@@ -129,6 +129,14 @@ var IndexerEndpointWithdrawalCounters = prometheus.NewCounterVec(
 	[]string{LabelAction},
 )
 
+var SearchHeadEndpointWithdrawalCounters = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "splunk_operator_search_head_endpoint_withdrawal_total",
+		Help: "The number of durable Search Head endpoint-withdrawal observations and invalidations",
+	},
+	[]string{LabelAction},
+)
+
 func GetPrometheusLabels(request reconcile.Request, kind string) prometheus.Labels {
 	return prometheus.Labels{
 		LabelNamespace: request.Namespace,
@@ -165,5 +173,6 @@ func init() {
 		IndexerLifecycleTransitionCounters,
 		IndexerLifecycleStageDurationSeconds,
 		IndexerEndpointWithdrawalCounters,
+		SearchHeadEndpointWithdrawalCounters,
 	)
 }
