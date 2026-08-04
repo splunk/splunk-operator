@@ -69,18 +69,38 @@ The stable scenario identifier for this requirement is `HLT-014` in
   submissions were accepted and all 600 unique events became searchable.
   Two HTTP-successful aggregate searches still regressed while the indexer was
   recovering, so immediate distributed-search completeness remains open.
-- [ ] Run the client before an Operator-owned Search Head `2 -> 1 -> 0`
-  replacement and prove the connection pinned to each replaced member either
-  stays valid until supported shutdown or reconnects with no logical request
-  loss.
+- [x] (2026-08-04 02:43Z) Completed the transport-only negative control across
+  repeated Operator-owned Search Head `2 -> 1 -> 0` replacement. Ingestion was
+  exact and complete at 1,800 events, but established connections remained
+  pinned to detained members and 218 searches failed: 86 on ordinal 0, 111 on
+  ordinal 1, and 21 on ordinal 2. Six later transport failures reconnected;
+  they did not repair the earlier application-level detention responses.
+- [x] (2026-08-04 02:49Z) Qualified response-aware Search Head recovery at
+  exact source `3e9f47751` across two complete Operator-owned reverse-ordinal
+  rolls. Four explicit HTTP 405 detention responses each caused the client to
+  close the stale connection and retry once through the Service. All 1,200
+  HEC submissions and distributed searches completed with zero logical,
+  identity, or count-regression failure and exact final uniqueness.
+- [x] (2026-08-04 02:49Z) Deleted the active Operator Pod during generation 18
+  while ordinal 2 was in durable `WaitingForTermination`. The replacement
+  controller retained operation ID
+  `PodUpdate:splunk-shcfinal-shc-search-head-2:splunk-shcfinal-shc-search-head-7b8d4746b7:18`,
+  completed `2 -> 1 -> 0`, and returned generation 18 to three Ready/Up
+  members, three serving endpoints, a ready captain, and zero container
+  restarts.
+- [x] (2026-08-04 02:49Z) Qualified the bounded no-service-mesh path. The
+  namespace had no mesh injection label, every Splunk and workload Pod had one
+  container, and no Pod had sidecar status. The result does not claim a
+  transparent-mesh or ingress path.
 - [ ] Run the same client before an Operator-owned indexer `3 -> 2 -> 1 -> 0`
   replacement and record HEC connection recovery plus distributed-search
   completeness.
-- [ ] Repeat with Operator restart, no service mesh, supported service-mesh
-  routing, and TLS termination at ingress. Add HTTP HEC coverage separately;
-  the first bounded fixture uses HTTPS on the in-cluster Splunk ports.
-- [ ] Run repeated and soak campaigns only after the bounded smoke and one
-  controlled roll establish trustworthy connection evidence.
+- [ ] Repeat with supported service-mesh routing and TLS termination at
+  ingress. Add HTTP HEC coverage separately; the completed bounded fixture
+  uses HTTPS on the in-cluster Splunk ports.
+- [ ] Run a longer candidate-image soak after the bounded accepted-image
+  campaigns. The completed 1,800- and 1,200-sample runs establish trustworthy
+  connection evidence but do not replace a release stability gate.
 
 ## Surprises & Discoveries
 
@@ -173,6 +193,43 @@ The stable scenario identifier for this requirement is `HLT-014` in
   completeness remains open. Splunk must either preserve the supported
   completeness contract or expose machine-detectable partial-result status so
   clients and qualification can distinguish an incomplete success.
+- Observation: Search Head detention rejects work without closing the
+  established HTTP connection.
+  Evidence: during the transport-only planned-roll control, all three selected
+  members continued returning application-level failure while their
+  connections remained open. The run recorded 218 logical search failures but
+  only six later transport failures. Local Splunk source returns HTTP 405 from
+  `HandleJobsDataProvider` when the member is in detention and does not mark
+  the transaction as the final request on that connection.
+  Consequence: readiness and EndpointSlice withdrawal protect only new flows.
+  Current clients need a bounded response-aware reconnect for this explicit
+  rejection; Splunk Enterprise should close the connection after sending the
+  complete detention response. This is a documented Splunkd requirement, not
+  an Operator or Docker-Splunk production change in SHC-107.
+- Observation: the bounded response-aware rule preserved logical work across
+  planned Search Head replacement and controller loss.
+  Evidence: exact test source `3e9f47751` treats only HTTP 405 as the Search
+  Head detention response, preserves the first-response counter, closes the
+  stale connection, and retries once. Across two complete reverse-ordinal
+  rolls it recorded four first-response failures, four recovered requests,
+  five total Search Head connections, zero first transport failures, zero
+  logical search failures, and exact 1,200-event completion. The second roll
+  continued through deletion of the active Operator Pod without changing its
+  durable operation ID.
+  Consequence: the explicit-response mitigation is effective for this bounded
+  client and topology. It is not proof that every search client retries HTTP
+  405, and it does not remove the product-side connection-lifetime gap.
+- Observation: the accepted Operator again disrupted the Deployer and a
+  Search Head concurrently when one common Pod-template annotation changed.
+  Evidence: the Deployer received `Killing` at `02:38:37Z` while ordinal 2 was
+  selected for the same generation and received `Killing` at `02:39:05Z`.
+  The Search Head workload remained available through response-aware routing,
+  but the overlap repeats the SHC-106 negative control. At final capture the
+  Deployer Pod carried the update revision and was Ready while StatefulSet
+  status still reported the prior `currentRevision`.
+  Consequence: this accepted-image observation is not evidence that SHC-106 is
+  fixed. Native candidate-image qualification must prove serialized ownership
+  and exact StatefulSet convergence.
 
 ## Decision Log
 
@@ -201,11 +258,20 @@ The stable scenario identifier for this requirement is `HLT-014` in
   connection. Transport loss after submission is ambiguous and is not covered
   by this rule.
   Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: retry only the explicit Search Head detention HTTP 405 once and
+  keep the first response visible.
+  Rationale: current Splunk source rejects the search before dispatch and tells
+  the caller to use another Search Head. Closing before the retry forces a new
+  Service endpoint selection without treating unrelated 4xx responses as
+  retryable.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
 The deterministic harness, stable reuse, unplanned active-captain replacement,
-and one selected-indexer replacement are qualified for their bounded claims.
+one selected-indexer replacement, two Operator-owned Search Head rolls,
+controller replacement, and the no-mesh topology are qualified for their
+bounded claims.
 The Search Head campaign recovered one visible transport boundary and
 completed 600 events exactly. The indexer campaign first proved that
 transport-only retry loses explicit 503-rejected HEC requests on an established
@@ -213,9 +279,15 @@ connection. Exact source `d57db8d7a` then closed that stale connection and
 retried the explicit rejection once through the Service: one response failure
 was recovered, all 600 submissions were accepted, and the final result was
 complete and unique. This is a client mitigation result, not a Splunkd fix.
-Two silently incomplete successful searches during recovery keep the immediate
-distributed-search completeness requirement open. Operator-owned Search Head
-and indexer rollouts, Operator restart, network variants, and soak remain open.
+Two silently incomplete successful searches during indexer recovery keep the
+immediate distributed-search completeness requirement open. The Search Head
+negative control proved that readiness does not move a persistent connection:
+it delivered 1,800 events exactly but recorded 218 detention failures. Exact
+source `3e9f47751` then recovered four explicit HTTP 405 responses across two
+complete planned rolls, including an Operator restart, and completed 1,200
+events with zero logical failure. A complete Operator-owned indexer roll,
+service-mesh and ingress variants, HTTP HEC, candidate-image qualification,
+and release-duration soak remain open.
 
 ## Context and Orientation
 
@@ -306,7 +378,7 @@ objects without affecting Splunk Pods or persistent volumes.
 - Qualification source branch:
   `codex/shc-107-persistent-client-qualification`.
 - Exact current harness source:
-  `d57db8d7a9ded74ec08862be06565f6d4675fa79`. Stable reuse and the
+  `3e9f47751e439f7a1de49633616ef995f950f111`. Stable reuse and the
   active-captain campaign used `f3ec88026bd316e56ff9cfcba46d5a547676cc14`.
 - Production Operator source under test for disruptive correction campaigns:
   `a6cda92a3` after native image construction. The completed stable smoke used
@@ -314,8 +386,8 @@ objects without affecting Splunk Pods or persistent volumes.
   exercise SHC-106.
 - Fixture: `test/fixtures/shc-reliability/shc107_persistent_client.py`.
 - Job: `test/fixtures/shc-reliability/shc107-incluster-workload-job.yaml`.
-- Source gates: seven tests, 100 repeated runs, `make fmt vet`, client-side
-  Kubernetes validation, and `git diff --check`. The final `fmt`/`vet` log has
+- Source gates: 15 tests, 100 repeated runs, `make fmt vet`, client-side
+  Kubernetes validation, and `git diff --check`. The earlier `fmt`/`vet` log has
   SHA-256 `3aa0e397494cfef2991968ee6320c9c3f380f4c3ea18e36dab967e9e2121e34b`.
 - Stable EKS inputs: context `shc85-vivek-spl-301372`, namespace
   `shc-final-qualification`, accepted Operator image index
@@ -370,8 +442,42 @@ objects without affecting Splunk Pods or persistent volumes.
   expected readiness/startup probe failures while the target was shutting
   down or starting; they identify the intended serving-withdrawal interval
   and did not affect another Pod.
-- Operator-owned rollout, indexer, network-variant, controller-restart, and
-  soak evidence: pending.
+- Transport-only Operator-owned Search Head negative control:
+  `shc107-operator-owned-sh-roll-negative-workload-20260804T0210Z.log`,
+  SHA-256
+  `f99a12d7cefa2638126f0bb868149c0b0df5e14d449a3dc81c4929ad21ea7111`.
+  It submitted 1,800 events with zero HEC failure and exact final completeness,
+  while 218 searches failed on detained members. Its 311-sample Pod,
+  EndpointSlice, lifecycle, captain, and StatefulSet monitor has SHA-256
+  `e40e3d339efa1c9f03f40ddf0848e1494d036eb8b87e837ea2d52d4fdde5e198`.
+- Response-aware Operator-owned Search Head result:
+  `shc107-response-aware-sh-roll-workload-20260804T0226Z.log`, SHA-256
+  `ef141b12057a97e50d7eaddee59302b9ef6125a45a0fde542bccf6b68d9fe179`.
+  It completed 1,200 events exactly with four explicit response failures,
+  four recovered requests, five Search Head connections, and zero logical,
+  identity, HEC, or count-regression failure. The final 184-sample rollout
+  monitor has SHA-256
+  `df5c1ff1d680e1fab99de4be5291d6e8830bbe7afe13dcbc0372d8ea3555568e`.
+- Controller-restart record:
+  `shc107-response-aware-controller-restart-delete-20260804T0238Z.log`.
+  The active Operator UID changed from
+  `cf64dd23-c574-42ea-8e52-be62df078131` to
+  `d6569aa6-0e13-463f-af27-53ee6a1ddff6` while the ordinal-2 durable operation
+  remained in progress. The replacement Operator log has SHA-256
+  `126939467ff7f29f0a6bf39f009d49523160570e88cc0caaeb620384584c9873`.
+- Final response-aware state records: SearchHeadCluster SHA-256
+  `7ba25bf43601301e8d3e433aea88437a117f8081b8be9d9521edc307be4fae8d`,
+  Search Head StatefulSet SHA-256
+  `6c5f65ccc73fa61366f395d322d94714d10e533f44d9a11cd21038bce45f5657`,
+  Pod snapshot SHA-256
+  `20c835fac99448a2367a56a6491abbc014afcdc67dab5caf290650fce5f1f7b9d`,
+  and EndpointSlice snapshot SHA-256
+  `a4536026d58d08c91847d07357eba2dc1546104c0451a967a0ab9425e4d012fe`.
+  Generation 18 was observed and Ready with all members `Up`, three serving
+  endpoints, a ready captain, equal Search Head current/update revisions, and
+  zero Search Head or Operator restarts.
+- Operator-owned indexer roll, transparent-mesh, ingress TLS termination, HTTP
+  HEC, candidate-image, and release-duration soak evidence: pending.
 
 ## Interfaces and Dependencies
 

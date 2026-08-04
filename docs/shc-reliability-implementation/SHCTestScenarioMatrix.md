@@ -107,8 +107,26 @@ were complete and unique.
 That campaign also returned two HTTP-successful but lower aggregate search
 counts during indexer recovery. HEC delivery recovery passes for this bounded
 replacement; uninterrupted immediate distributed-search completeness does
-not. Operator-owned rollout, controller restart, network variants, the Splunkd
-shutdown connection-close requirement, and soak remain open.
+not.
+
+The Operator-owned Search Head negative control then submitted 1,800 events
+exactly while established connections remained pinned to detained members.
+It recorded 218 application-level search failures across all three ordinals;
+only six later transport failures caused reconnection. Exact response-aware
+source `3e9f47751` closes and retries once only for the explicit Splunk
+detention HTTP 405. Across two complete `2 -> 1 -> 0` rolls it recovered four
+such responses, completed 1,200 HEC submissions and searches exactly, and
+reported zero logical, identity, transport-first-attempt, or count-regression
+failure. The second roll completed after the active Operator Pod was deleted
+in durable ordinal-2 `WaitingForTermination` state. Three serving endpoints,
+three `Up` members, a ready captain, equal Search Head revisions, and zero
+container restarts were restored.
+
+The topology had no mesh injection or sidecars, so the bounded no-mesh path and
+Operator restart are qualified. A complete Operator-owned indexer roll,
+transparent mesh, ingress TLS termination, HTTP HEC, candidate-image
+qualification, release-duration soak, and both Splunkd connection-close
+requirements remain open.
 
 ## Drain and captain scenarios
 

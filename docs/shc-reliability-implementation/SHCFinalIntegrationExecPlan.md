@@ -145,15 +145,19 @@ it is not converted into a qualified claim by documentation alone.
 - [ ] Complete SHC-85 distributed-search convergence analysis and explicitly
   separate Operator/runtime corrections from Splunk Enterprise changes that
   are only identified for later ownership.
-- [ ] Complete SHC-107 persistent-client qualification at test-only source
-  `f3ec88026`. The deterministic harness and stable EKS reuse are qualified:
-  one HEC connection carried 12 writes, one Search Head connection carried 25
-  identity/search requests, and every request and final event completed
-  exactly. An unplanned replacement of the selected active captain then
-  produced one visible failed transport attempt, one recovered request, a new
-  Search Head connection/captain, and exact 600-event completion. Operator-
-  owned Search Head roll, indexer replacement, Operator restart, network
-  variants, and soak remain open.
+- [ ] Complete SHC-107 persistent-client qualification. Exact test-only source
+  `3e9f47751` now qualifies stable reuse, unplanned active-captain replacement,
+  selected-indexer response recovery, two complete Operator-owned Search Head
+  rolls, active-controller replacement, and the no-mesh path. The Search Head
+  negative control delivered 1,800 events exactly but recorded 218 searches
+  rejected on connections pinned to detained members. Response-aware recovery
+  then closed and retried four explicit HTTP 405 responses and completed 1,200
+  events with zero logical failure, including after deleting the active
+  Operator in durable ordinal-2 state. The final SHC had three `Up` members,
+  three serving endpoints, equal Search Head revisions, a ready captain, and
+  zero restarts. A complete Operator-owned indexer roll, transparent mesh,
+  ingress TLS termination, HTTP HEC, candidate-image qualification, release
+  soak, and immediate distributed-search completeness remain open.
 - [ ] Complete SHC-82 restart-required App Framework qualification for Search
   Heads and indexers, including searchable indexer restart behavior.
 - [ ] Run the clean final EKS qualification matrix and stability gate from

@@ -32,6 +32,18 @@ criteria, and current evidence are in
 
 ## Latest bounded qualification
 
+SHC-107 exact test source `3e9f47751` completed two Operator-owned Search Head
+`2 -> 1 -> 0` rolls on the no-service-mesh EKS topology. The transport-only
+control delivered 1,800 events exactly but recorded 218 searches rejected on
+connections pinned to detained members. The response-aware run closed and
+retried four explicit HTTP 405 detention responses, completed 1,200 events
+with zero logical or count-regression failure, and survived deletion of the
+active Operator during durable ordinal-2 work. It finished with three `Up`
+members, three serving endpoints, a ready captain, and zero restarts. This is
+a bounded client-mitigation and lifecycle result, not a Splunkd fix or final
+candidate-image certification. Indexer full-roll, mesh/ingress, HTTP HEC,
+candidate-image, partial-result, and release-soak gates remain open.
+
 SHC-97 qualified the bounded Docker-Splunk single-start contract using exact
 Splunk-Ansible source `ae8ecf4a` and Docker-Splunk source `118cae68`. The
 Linux-built runtime OCI index
