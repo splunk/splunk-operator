@@ -76,44 +76,46 @@ evidence and limits are in
 ## Review order
 
 1. `CurrentDevelopBaseline.md` establishes what exists now.
-2. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
+2. `SHC111ProtocolQualificationExecPlan.md` records explicit HTTP/HTTPS
+   persistent-client variants and their distinct network-topology gates.
+3. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
    long-lived Kubernetes Service client evidence and remaining live gates.
-3. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
+4. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
    Deployer/member overlap, exact source correction, completed regression
    gates, and remaining immutable Linux/EKS acceptance boundary.
-4. `SHC105AppFrameworkRequeueBoundaryExecPlan.md` records the live
+5. `SHC105AppFrameworkRequeueBoundaryExecPlan.md` records the live
    timing defect, exact source correction, completed regression gates, and the
    remaining immutable Linux/EKS acceptance boundary.
-5. `SHCFinalIntegrationExecPlan.md` records the assembly of the final Operator
+6. `SHCFinalIntegrationExecPlan.md` records the assembly of the final Operator
    and runtime feature branches and the exact remaining qualification gates.
-6. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
+7. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
    acceptance evidence.
-7. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
+8. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
    immutable commits and stable scenario identifiers.
-8. `SHC98StableIndexerSearchAddressExecPlan.md` records the active bounded
+9. `SHC98StableIndexerSearchAddressExecPlan.md` records the active bounded
    distributed-peer convergence experiment.
-9. `SHC97DockerSplunkStartupQualification.md` records the latest completed
+10. `SHC97DockerSplunkStartupQualification.md` records the latest completed
    runtime startup and full-topology qualification.
-10. `SHC93OperatorReadinessQualification.md` and
+11. `SHC93OperatorReadinessQualification.md` and
    `SHC93OperatorReadinessExecPlan.md` record the latest manager-readiness
    contract, exact evidence, rejected candidates, and remaining boundaries.
-11. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
+12. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
    machine, StatefulSet strategy, and durable status contract.
-12. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
+13. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
    cluster-wide image-upgrade workflow and its composition with per-member
    lifecycle orchestration.
-13. `RuntimeLifecycleContract.md` defines the contract between the Operator,
+14. `RuntimeLifecycleContract.md` defines the contract between the Operator,
    Pod lifecycle, probe scripts, Docker-Splunk/Splunk Ansible, and splunkd.
-14. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
+15. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
    Splunk-managed indexer restart boundary and the remote serving-recovery
    contract that cannot be completed by an Operator readiness probe.
-15. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
+16. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
    integration rules, and conflict prevention.
-16. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
+17. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
    and common pass invariants.
-17. `QualificationObservabilityRolloutPlan.md` is the executable test,
+18. `QualificationObservabilityRolloutPlan.md` is the executable test,
    evidence, migration, release, and rollback plan.
-18. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
+19. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
    contract for Docker-Splunk image construction on a supported Linux host.
 
 The Operator design is a Wave 0 spike contract and the runtime design now
