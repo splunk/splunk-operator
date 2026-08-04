@@ -169,7 +169,12 @@ class HECResultTest(unittest.TestCase):
         self.assertEqual(MODULE.HECResult(True, 200, "0"), result)
 
     def test_records_http_rejection_without_response_body(self):
-        factory = FakeFactory([[FakeResponse(status=503, payload=b"")]])
+        factory = FakeFactory(
+            [
+                [FakeResponse(status=503, payload=b"")],
+                [FakeResponse(status=503, payload=b"")],
+            ]
+        )
         client = MODULE.PersistentHTTPSClient(
             "service", 8088, 5, connection_factory=factory
         )
@@ -187,6 +192,44 @@ class HECResultTest(unittest.TestCase):
         result = MODULE.submit_event(client, "token", "run", 1)
 
         self.assertEqual(MODULE.HECResult(False, 200, "9"), result)
+
+    def test_reconnects_and_retries_explicit_hec_503(self):
+        factory = FakeFactory(
+            [
+                [FakeResponse(status=503, payload=b"")],
+                [FakeResponse(payload=b'{"text":"Success","code":0}')],
+            ]
+        )
+        client = MODULE.PersistentHTTPSClient(
+            "service", 8088, 5, connection_factory=factory
+        )
+
+        result = MODULE.submit_event(client, "token", "run", 1)
+
+        self.assertEqual(MODULE.HECResult(True, 200, "0"), result)
+        self.assertEqual(2, client.stats.opened)
+        self.assertEqual(1, client.stats.first_response_failures)
+        self.assertEqual(1, client.stats.recovered_requests)
+        self.assertEqual(1, client.stats.response_recovered_requests)
+
+    def test_preserves_second_hec_503_as_logical_failure(self):
+        factory = FakeFactory(
+            [
+                [FakeResponse(status=503, payload=b"")],
+                [FakeResponse(status=503, payload=b"")],
+            ]
+        )
+        client = MODULE.PersistentHTTPSClient(
+            "service", 8088, 5, connection_factory=factory
+        )
+
+        result = MODULE.submit_event(client, "token", "run", 1)
+
+        self.assertEqual(MODULE.HECResult(False, 503, "HTTPError"), result)
+        self.assertEqual(2, client.stats.opened)
+        self.assertEqual(1, client.stats.first_response_failures)
+        self.assertEqual(0, client.stats.recovered_requests)
+        self.assertEqual(0, client.stats.response_recovered_requests)
 
 
 class SearchHeadIdentityTest(unittest.TestCase):

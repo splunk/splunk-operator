@@ -531,6 +531,14 @@ DNS name. The default remains the normal Kubernetes Service. The workload log
 records the HTTP status and numeric HEC response code without printing the
 token or response text.
 
+The current Splunk shutdown path was observed returning HTTP 503 with
+`Connection: Keep-Alive` on an established HEC connection after its Pod had
+left Service endpoints. For that explicit not-accepted response only, the
+qualification client closes the stale connection and retries the same event
+once. It records the first response failure and response-based recovery
+separately. A second 503 remains a logical failure; this does not turn
+unbounded retries or ambiguous transport failures into hidden success.
+
 A passing workload has zero logical HEC and search failures and exact final
 sequence completeness. Connection counters remain evidence rather than an
 unconditional success threshold: an HTTP server is allowed to advertise

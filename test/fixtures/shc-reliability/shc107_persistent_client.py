@@ -19,13 +19,16 @@ from typing import Callable
 
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 USER_AGENT = "SOK-SHC-Qualification/1.0"
+RETRYABLE_HEC_HTTP_STATUSES = frozenset({503})
 
 
 @dataclass
 class ConnectionStats:
     opened: int = 0
     first_attempt_failures: int = 0
+    first_response_failures: int = 0
     recovered_requests: int = 0
+    response_recovered_requests: int = 0
     server_closes: int = 0
     max_requests_per_connection: int = 0
     response_versions: set[str] = field(default_factory=set)
@@ -85,8 +88,10 @@ class PersistentHTTPSClient:
         path: str,
         body: bytes,
         headers: dict[str, str],
+        retry_statuses: frozenset[int] = frozenset(),
     ) -> tuple[int, bytes]:
         last_error: Exception | None = None
+        recovery_kind: str | None = None
         for attempt in range(2):
             try:
                 if self.connection is None or self.connection.sock is None:
@@ -113,13 +118,22 @@ class PersistentHTTPSClient:
                 if response.will_close or self.connection.sock is None:
                     self.stats.server_closes += 1
                     self._close()
-                if attempt == 1:
+                retry_response = response.status in retry_statuses
+                if retry_response and attempt == 0:
+                    self.stats.first_response_failures += 1
+                    recovery_kind = "response"
+                    self._close()
+                    continue
+                if attempt == 1 and not retry_response:
                     self.stats.recovered_requests += 1
+                    if recovery_kind == "response":
+                        self.stats.response_recovered_requests += 1
                 return response.status, payload
             except (OSError, http.client.HTTPException) as error:
                 last_error = error
                 if attempt == 0:
                     self.stats.first_attempt_failures += 1
+                    recovery_kind = "transport"
                 self._close()
         assert last_error is not None
         raise last_error
@@ -193,6 +207,7 @@ def submit_event(
             "Content-Length": str(len(payload)),
             "User-Agent": USER_AGENT,
         },
+        retry_statuses=RETRYABLE_HEC_HTTP_STATUSES,
     )
     if status != 200:
         return HECResult(False, status, "HTTPError")
@@ -282,7 +297,9 @@ def stats_text(name: str, stats: ConnectionStats) -> str:
     return (
         f"{name}Connections={stats.opened} "
         f"{name}FirstAttemptFailures={stats.first_attempt_failures} "
+        f"{name}FirstResponseFailures={stats.first_response_failures} "
         f"{name}RecoveredRequests={stats.recovered_requests} "
+        f"{name}ResponseRecoveredRequests={stats.response_recovered_requests} "
         f"{name}ServerCloses={stats.server_closes} "
         f"{name}MaxRequestsPerConnection={stats.max_requests_per_connection} "
         f"{name}ResponseVersions={versions} "
