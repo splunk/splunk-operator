@@ -297,7 +297,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		if searchHeadClusterLifecycleEnabled() &&
 			cr.Status.LastStableReplicas != nil &&
 			phase != enterpriseApi.PhaseReady {
-			message := "Waiting for the Deployer Pod update to complete before changing Search Head Pods"
+			message := shcRollingUpdateStatusPrefix +
+				"DeployerUpdateActive: waiting for the Deployer Pod update to complete before changing Search Head Pods"
 			cr.Status.Message = message
 			setPhaseAndConditions(phase, message)
 			return result, nil

@@ -77,10 +77,18 @@ func TestApplySearchHeadClusterDefersDeployerTemplateDuringMemberLifecycle(
 	if _, found := stored.Spec.Template.Annotations[shcDeployerCoordinationAnnotation]; found {
 		t.Fatal("active Search Head lifecycle applied queued Deployer template")
 	}
-	if cr.Status.DeployerPhase != enterpriseApi.PhaseReady {
+	storedCR := &enterpriseApi.SearchHeadCluster{}
+	if err := controllerClient.Get(
+		ctx,
+		client.ObjectKeyFromObject(cr),
+		storedCR,
+	); err != nil {
+		t.Fatalf("get persisted SearchHeadCluster status: %v", err)
+	}
+	if storedCR.Status.DeployerPhase != enterpriseApi.PhaseReady {
 		t.Fatalf(
 			"Deployer phase = %q, want %q while update is deferred",
-			cr.Status.DeployerPhase,
+			storedCR.Status.DeployerPhase,
 			enterpriseApi.PhaseReady,
 		)
 	}
@@ -151,10 +159,25 @@ func TestApplySearchHeadClusterWaitsForActiveDeployerBeforeSearchHeadMutation(
 			err,
 		)
 	}
-	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
+	storedCR := &enterpriseApi.SearchHeadCluster{}
+	if err := controllerClient.Get(
+		ctx,
+		client.ObjectKeyFromObject(cr),
+		storedCR,
+	); err != nil {
+		t.Fatalf("get persisted SearchHeadCluster status: %v", err)
+	}
+	if storedCR.Status.DeployerPhase == enterpriseApi.PhaseReady {
 		t.Fatalf(
 			"Deployer phase = %q while Pod revision has not converged",
-			cr.Status.DeployerPhase,
+			storedCR.Status.DeployerPhase,
+		)
+	}
+	if storedCR.Status.Message !=
+		"SHC RollingUpdate DeployerUpdateActive: waiting for the Deployer Pod update to complete before changing Search Head Pods" {
+		t.Fatalf(
+			"persisted coordination message = %q",
+			storedCR.Status.Message,
 		)
 	}
 }
