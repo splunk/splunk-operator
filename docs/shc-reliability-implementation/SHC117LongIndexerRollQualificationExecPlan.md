@@ -11,10 +11,11 @@ the `execution-plan` skill.
 
 The SHC-112 exact search-peer gate can legitimately wait about 26 minutes for
 each replacement indexer's stale prior Pod-IP entry to disappear from every
-Search Head. A four-indexer reverse-ordinal roll plus the required five-minute
-stable window can therefore exceed the old two-hour monitor timeout. The old
-workload stopped after one hour, so it could end after only the first one or two
-replacements and could not support a full-roll availability verdict.
+Search Head. A four-indexer reverse-ordinal roll plus 60 consecutive complete
+final-state observations can therefore exceed the old two-hour monitor
+timeout. The old workload stopped after one hour, so it could end after only
+the first one or two replacements and could not support a full-roll
+availability verdict.
 
 SHC-117 is a test-only correction. It keeps the monitor and API-independent HEC
 and distributed-search workload active for three hours and gives the Job a
@@ -33,7 +34,13 @@ runtime image, Docker-Splunk behavior, or Splunk Enterprise behavior.
 - [x] The Makefile monitor syntax/ShellCheck target and workload manifest
   dry-run passed on macOS. Linux bash syntax and manifest dry-run passed; the
   vWorkstation does not currently provide the separate ShellCheck executable.
-- [ ] Run the complete SHC-116 EKS roll and retain all evidence artifacts.
+- [x] (2026-08-04 18:20Z) The extended monitor completed the entire SHC-116
+  EKS `3 -> 2 -> 1 -> 0` roll and 60 consecutive final-state observations.
+  It retained 647 full snapshots from `15:58:41Z` through `18:20:20Z` and
+  exited zero without timing out.
+- [ ] Allow the independent 10,800-sample workload Job to finish, verify its
+  final exact-delivery and regression counters, collect the runner's final
+  resource snapshots, and seal hashes for the complete evidence directory.
 
 ## Surprises & Discoveries
 
@@ -41,10 +48,24 @@ runtime image, Docker-Splunk behavior, or Splunk Enterprise behavior.
   full lifecycle, even though each individual replacement was healthy.
   Consequence: a clean one-hour workload could not prove all ordinal
   transitions.
-- Observation: the previous two-hour monitor included a five-minute stable
-  requirement within its deadline.
+- Observation: the previous two-hour monitor included 60 stable observations
+  with a five-second minimum sleep within its deadline.
   Consequence: four ordinary stale-peer convergence intervals could exhaust
   the timeout before the final acceptance window.
+- Observation: the stability setting counts full observations rather than
+  promising a fixed wall-clock interval. Each observation performs Kubernetes
+  and Splunk REST collection before the configured five-second sleep.
+  Evidence: 60 accepted final-state observations ran from `18:07:18Z` through
+  `18:20:20Z`, about 13 minutes in the retained cluster.
+  Consequence: acceptance and timeout sizing must use measured full-sample
+  duration; the phrase "five-minute stable window" describes only the minimum
+  sleep budget and is not precise enough for evidence.
+- Observation: a successful workload Job proves request success and exact
+  eventual delivery, but its `countRegressions` and `maxPending` fields remain
+  independent evidence.
+  Consequence: the final SHC-117 verdict must report those counters even when
+  Kubernetes marks the Job Complete; it must not equate eventual completeness
+  with uninterrupted distributed-search completeness.
 
 ## Decision Log
 
@@ -58,12 +79,24 @@ runtime image, Docker-Splunk behavior, or Splunk Enterprise behavior.
   production commit while evidence-harness changes remain independently
   reviewable.
   Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: define the final stability gate as 60 consecutive complete
+  observations and retain their first and last timestamps.
+  Rationale: collection cost is real and variable, so sample count plus actual
+  timestamps is reproducible evidence while a nominal wall-clock label is not.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: keep lifecycle-monitor success, request success, final exact
+  delivery, and intermediate search-count regression as separate verdicts.
+  Rationale: each answers a different availability question and a passing Job
+  alone cannot prove that every HTTP-successful search was complete.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
-The harness no longer ends before the observed full-roll duration. Its live
-outcome remains open until the SHC-116 candidate completes every ordinal and
-the final stable window.
+The extended monitor no longer ends before the observed full-roll duration. It
+completed all four ordinal transitions and 60 consecutive final-state
+observations with exit code zero. The overall live outcome remains open only
+for the still-running 10,800-sample Job, its exact final counters, and the
+runner's final artifact collection.
 
 ## Plan of Work
 
@@ -104,7 +137,21 @@ does not mutate controller source or the Splunk runtime image.
 - Workload samples: 10,800 at one-second intervals.
 - Monitor timeout: 10,800 seconds.
 - Job active deadline: 14,400 seconds.
-- Live evidence: pending.
+- Live long-workload verdict: pending.
+- Lifecycle monitor: passed with 647 snapshots from
+  `2026-08-04T15:58:41Z` through `2026-08-04T18:20:20Z`, target order
+  `[3,2,1,0]`, and 60 consecutive final-state observations from
+  `18:07:18Z` through `18:20:20Z`.
+- Monitor SHA-256 values: TSV
+  `7bb72cc61397ba923fda5645e63146820f76f10b36541ca0eb14c6ba2d186a66`,
+  Events
+  `43c0ca28a2f3f4df819824e6a441df273490dcb71535c16b7c71c52a8c9e04af`,
+  final configuration
+  `492e557ab3ae3dc5aa77a2423abcdb871a35fd93a7f60e605cdc37d606d2e971`,
+  and stdout
+  `16eebe9c61746e9841cac64f4c127c5336bde8efb59bc7341df6f53aeb27a676`.
+- The workload and final evidence-directory hashes remain pending and are not
+  inferred from monitor success.
 
 ## Interfaces and Dependencies
 
@@ -113,3 +160,9 @@ It is used to qualify SHC-116 and the cumulative SHC-112 through SHC-115
 behavior. Its Job continues to use the accepted runtime digest and the same
 HEC/search script, Secret references, Services, and no-service-account-token
 boundary.
+
+## Revision Note
+
+Updated on 2026-08-04 after the extended lifecycle monitor exited zero. This
+revision records the completed ordinal and stability evidence while preserving
+the long-workload Job and final artifact hashes as explicit open work.
