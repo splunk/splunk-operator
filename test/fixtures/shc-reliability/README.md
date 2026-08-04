@@ -499,8 +499,11 @@ failures, transparently recovered requests, server-requested connection
 closes, total opened connections, and the maximum requests carried by one
 connection. Each sample reads `server/info` and records the Search Head member
 identity plus the connection generations used by identity and search, so the
-evidence can prove which persistent backend served a request. Credentials come
-from the existing qualification Secret and are never printed.
+evidence can prove which persistent backend served a request. The client sends
+an explicit keep-alive request and records the observed HTTP version and
+response `Connection` header; a server close is therefore diagnosable rather
+than inferred only from a missing socket. Credentials come from the existing
+qualification Secret and are never printed.
 
 Validate the Python behavior and Kubernetes manifest before creating the Job:
 

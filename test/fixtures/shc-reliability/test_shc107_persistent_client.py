@@ -18,13 +18,27 @@ class FakeSocket:
 
 
 class FakeResponse:
-    def __init__(self, status=200, payload=b"{}", will_close=False):
+    def __init__(
+        self,
+        status=200,
+        payload=b"{}",
+        will_close=False,
+        version=11,
+        connection_header=None,
+    ):
         self.status = status
         self.payload = payload
         self.will_close = will_close
+        self.version = version
+        self.connection_header = connection_header
 
     def read(self):
         return self.payload
+
+    def getheader(self, name):
+        if name.lower() == "connection":
+            return self.connection_header
+        return None
 
 
 class FakeConnection:
@@ -76,6 +90,8 @@ class PersistentHTTPSClientTest(unittest.TestCase):
         self.assertEqual(1, client.stats.opened)
         self.assertEqual(2, client.stats.max_requests_per_connection)
         self.assertEqual(0, client.stats.first_attempt_failures)
+        self.assertEqual({"HTTP/1.1"}, client.stats.response_versions)
+        self.assertEqual({"Absent"}, client.stats.response_connection_headers)
 
     def test_reconnects_and_retries_one_interrupted_request(self):
         factory = FakeFactory(
@@ -99,7 +115,14 @@ class PersistentHTTPSClientTest(unittest.TestCase):
     def test_records_server_close_as_new_connection_boundary(self):
         factory = FakeFactory(
             [
-                [FakeResponse(payload=b"one", will_close=True)],
+                [
+                    FakeResponse(
+                        payload=b"one",
+                        will_close=True,
+                        version=10,
+                        connection_header="close",
+                    )
+                ],
                 [FakeResponse(payload=b"two")],
             ]
         )
@@ -111,6 +134,11 @@ class PersistentHTTPSClientTest(unittest.TestCase):
         client.request("POST", "/two", b"", {})
         self.assertEqual(2, client.stats.opened)
         self.assertEqual(1, client.stats.server_closes)
+        self.assertEqual({"HTTP/1.0", "HTTP/1.1"}, client.stats.response_versions)
+        self.assertEqual(
+            {"Absent", "close"},
+            client.stats.response_connection_headers,
+        )
 
 
 class SearchResultTest(unittest.TestCase):

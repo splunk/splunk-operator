@@ -13,7 +13,7 @@ import ssl
 import sys
 import time
 import urllib.parse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 
@@ -27,6 +27,8 @@ class ConnectionStats:
     recovered_requests: int = 0
     server_closes: int = 0
     max_requests_per_connection: int = 0
+    response_versions: set[str] = field(default_factory=set)
+    response_connection_headers: set[str] = field(default_factory=set)
 
 
 class PersistentHTTPSClient:
@@ -84,6 +86,16 @@ class PersistentHTTPSClient:
                 assert self.connection is not None
                 self.connection.request(method, path, body=body, headers=headers)
                 response = self.connection.getresponse()
+                self.stats.response_versions.add(
+                    {10: "HTTP/1.0", 11: "HTTP/1.1"}.get(
+                        response.version,
+                        f"HTTP/{response.version}",
+                    )
+                )
+                connection_header = response.getheader("Connection")
+                self.stats.response_connection_headers.add(
+                    (connection_header or "Absent").strip().replace(" ", "_")
+                )
                 payload = response.read()
                 self.requests_on_connection += 1
                 self.stats.max_requests_per_connection = max(
@@ -168,6 +180,7 @@ def submit_event(
         payload,
         {
             "Authorization": f"Splunk {token}",
+            "Connection": "keep-alive",
             "Content-Type": "application/json",
             "Content-Length": str(len(payload)),
         },
@@ -195,6 +208,7 @@ def identify_search_head(
         b"",
         {
             "Authorization": basic_authorization(password),
+            "Connection": "keep-alive",
             "Content-Length": "0",
         },
     )
@@ -236,6 +250,7 @@ def search_sequences(
         form,
         {
             "Authorization": basic_authorization(password),
+            "Connection": "keep-alive",
             "Content-Type": "application/x-www-form-urlencoded",
             "Content-Length": str(len(form)),
         },
@@ -246,12 +261,18 @@ def search_sequences(
 
 
 def stats_text(name: str, stats: ConnectionStats) -> str:
+    versions = ",".join(sorted(stats.response_versions)) or "None"
+    connection_headers = (
+        ",".join(sorted(stats.response_connection_headers)) or "None"
+    )
     return (
         f"{name}Connections={stats.opened} "
         f"{name}FirstAttemptFailures={stats.first_attempt_failures} "
         f"{name}RecoveredRequests={stats.recovered_requests} "
         f"{name}ServerCloses={stats.server_closes} "
-        f"{name}MaxRequestsPerConnection={stats.max_requests_per_connection}"
+        f"{name}MaxRequestsPerConnection={stats.max_requests_per_connection} "
+        f"{name}ResponseVersions={versions} "
+        f"{name}ResponseConnectionHeaders={connection_headers}"
     )
 
 
