@@ -546,11 +546,13 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   invalidates the observation if routing returns, and prevents normal and
   recovery decommission before the continuous delay expires. Generation,
   build/vet, focused race checks, chart lint, all 150 Helm tests, and the exact
-  Linux image gate passed. The full reverse-ordinal EKS workload, active
-  controller replacement during the delay, and zero-failure comparison remain
-  open in `SHC116IndexerEndpointWithdrawalExecPlan.md`. The repeated native
-  Linux full gate passed 43 suites, 192/192 specs, and 78.7 percent composite
-  coverage.
+  Linux image gate passed. The active-controller replacement sub-gate also
+  passed live EKS qualification: exact target UID, operation ID, observation,
+  deadline, and sequence survived manager replacement, and decommission was
+  requested nine seconds after the persisted deadline. The fresh full
+  reverse-ordinal workload and zero-failure comparison remain open in
+  `SHC116IndexerEndpointWithdrawalExecPlan.md`. The repeated native Linux full
+  gate passed 43 suites, 192/192 specs, and 78.7 percent composite coverage.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP

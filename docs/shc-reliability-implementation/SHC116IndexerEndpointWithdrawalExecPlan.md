@@ -50,8 +50,13 @@ changes neither Docker-Splunk nor Splunk Enterprise.
   `sha256:5259c53cbf6723c3636eb8fe6a3e59e417f1bdf8c1375634496db9c064af2508`.
 - [x] Repeated the full native-Linux Make gate at exact source: 43 suites,
   192/192 specs, zero failures, and 78.7 percent composite coverage.
-- [ ] Complete immutable EKS qualification, including controller replacement
-  during the delay.
+- [x] (2026-08-04 UTC) Replaced the active Operator during ordinal zero's
+  persisted propagation interval. The replacement manager recovered the exact
+  operation, target UID, observation, deadline, and sequence, and requested
+  decommission only after that deadline.
+- [ ] Complete the fresh immutable EKS full-roll workload and final stable
+  window. The controller-replacement sub-gate is complete; the full
+  availability verdict remains open.
 
 ## Surprises & Discoveries
 
@@ -98,9 +103,12 @@ changes neither Docker-Splunk nor Splunk Enterprise.
 ## Outcomes & Retrospective
 
 The exact source and immutable Linux image are frozen. Source checks establish
-restart-safe and fail-closed state-machine behavior, but the live availability
-claim remains open until the same workload that reproduced the failure
-completes a full `3 -> 2 -> 1 -> 0` roll with the candidate controller.
+restart-safe and fail-closed state-machine behavior. Live EKS evidence now also
+establishes restart recovery for one active propagation interval: the manager
+changed while the durable proof was active and no early decommission occurred.
+The overall availability claim remains open until a fresh workload completes a
+full `3 -> 2 -> 1 -> 0` roll and final stable window with the candidate
+controller.
 
 ## Plan of Work
 
@@ -173,7 +181,17 @@ status fields while a target is withdrawn.
   `sha256:5259c53cbf6723c3636eb8fe6a3e59e417f1bdf8c1375634496db9c064af2508`.
 - Baseline diagnostic: one HEC failure at `2026-08-04T13:40:27Z`, the
   decommission-request timestamp; no search request failure in that sample.
-- EKS candidate evidence: pending.
+- EKS controller-replacement sub-gate: ordinal-zero operation
+  `28f17551-4fa7-4567-b5b7-817f27851258:splunk-shcfinal-idxc-indexer-7795598cd8:1785857163531756307`
+  observed exact target UID `28f17551-4fa7-4567-b5b7-817f27851258` withdrawn at
+  `2026-08-04T15:26:14Z`, with immutable deadline
+  `2026-08-04T15:26:44Z` and sequence 1.
+- The old manager was removed during that interval. Replacement manager UID
+  `feb9a040-2053-4fcf-86d5-9dc450e68469` became Ready at
+  `2026-08-04T15:26:33Z` and retained the same durable fields. The decommission
+  request was recorded at `2026-08-04T15:26:53Z`, nine seconds after the
+  deadline. No duplicate or early request was observed.
+- EKS full-roll availability evidence: in progress.
 
 ## Interfaces and Dependencies
 
