@@ -492,6 +492,79 @@ corrupt or delete the Lease, partition contenders from one another, or prove
 behavior under an API quorum loss. Those conflict and split-brain scenarios
 remain separate qualification work.
 
+## SHC-107 persistent Kubernetes Service client
+
+`shc107_persistent_client.py` keeps one HTTP or HTTPS connection to the indexer
+HEC Service and one to the Search Head Service instead of starting a new `curl`
+process for every request. Each logical request may reconnect once after a
+transport interruption. The evidence separates first-attempt connection
+failures, transparently recovered requests, server-requested connection
+closes, total opened connections, and the maximum requests carried by one
+connection. Each sample reads `server/info` and records the Search Head member
+identity plus the connection generations used by identity and search, so the
+evidence can prove which persistent backend served a request. The client sends
+an explicit keep-alive request and records the observed HTTP version and
+response `Connection` header; a server close is therefore diagnosable rather
+than inferred only from a missing socket. The client also sends a neutral
+qualification `User-Agent`. Splunkd intentionally declines HTTP/1.1 connection
+reuse for missing and historically incompatible user agents, including the
+default Python HTTP client and the official Python SDK identifier. Credentials
+come from the existing qualification Secret and are never printed.
+
+Validate the Python behavior and Kubernetes manifest before creating the Job:
+
+```bash
+make shc107-persistent-client-check
+```
+
+Start the workload in the final qualification namespace before a controlled
+Search Head or indexer replacement:
+
+```bash
+make shc107-persistent-client \
+  SHC107_NAMESPACE=shc-final-qualification \
+  SHC107_SAMPLES=1800
+kubectl -n shc-final-qualification logs -f \
+  job/shc107-persistent-client
+```
+
+For a diagnostic that must select one known backend, set
+`SHC107_HEC_SERVICE` or `SHC107_SEARCH_SERVICE` to that Pod's headless-Service
+DNS name. The default remains the normal Kubernetes Service. The workload log
+records the HTTP status and numeric HEC response code without printing the
+token or response text.
+
+The default scheme is HTTPS on ports 8088 and 8089. Protocol qualification can
+set `SHC107_HEC_SCHEME`, `SHC107_HEC_PORT`, `SHC107_SEARCH_SCHEME`, and
+`SHC107_SEARCH_PORT` explicitly. Only `http` and `https` are accepted. These
+settings describe the real endpoint presented to the client; they do not
+change Splunk, terminate TLS, or assume that an ingress or service mesh exists.
+
+The current Splunk shutdown path was observed returning HTTP 503 with
+`Connection: Keep-Alive` on an established HEC connection after its Pod had
+left Service endpoints. For that explicit not-accepted response only, the
+qualification client closes the stale connection and retries the same event
+once. It records the first response failure and response-based recovery
+separately. A second 503 remains a logical failure; this does not turn
+unbounded retries or ambiguous transport failures into hidden success.
+
+Current Search Head detention similarly rejects creation of a new search job
+with HTTP 405 while an established connection remains reusable. For this
+explicit not-created result on the known search-creation endpoint only, the
+client closes the stale connection and retries once through the Service. The
+first response remains visible and a second 405 remains a logical failure.
+This bounded compatibility behavior does not make arbitrary HTTP 405 responses
+successful and is not the server-side connection-close requirement.
+
+A passing workload has zero logical HEC and search failures and exact final
+sequence completeness. Connection counters remain evidence rather than an
+unconditional success threshold: an HTTP server is allowed to advertise
+`Connection: close`. A rollout claim must state whether a connection was
+actually reused, whether the selected backend disappeared, and whether the
+client recovered the logical request after reconnecting. This workload does
+not create or trigger a Pod rollout; the lifecycle campaign owns that action
+and its Kubernetes evidence separately.
+
 ## SHC-98 stable indexer search-address evidence
 
 `shc98_stable_address_monitor.sh` is a read-only monitor for the SHC-98

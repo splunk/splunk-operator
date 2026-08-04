@@ -173,8 +173,21 @@ SHC98_MONITOR ?= test/fixtures/shc-reliability/shc98_stable_address_monitor.sh
 SHC98_NAMESPACE ?= shc-final-qualification
 SHC98_KUBECTL ?= kubectl
 SHC98_WORKLOAD_MANIFEST ?= test/fixtures/shc-reliability/shc98-incluster-workload-job.yaml
+SHC107_NAMESPACE ?= shc-final-qualification
+SHC107_KUBECTL ?= kubectl
+SHC107_WORKLOAD ?= test/fixtures/shc-reliability/shc107_persistent_client.py
+SHC107_WORKLOAD_MANIFEST ?= test/fixtures/shc-reliability/shc107-incluster-workload-job.yaml
+SHC107_SAMPLES ?= 1800
+SHC107_INTERVAL_SECONDS ?= 1
+SHC107_SETTLE_ATTEMPTS ?= 60
+SHC107_HEC_SERVICE ?= splunk-shcfinal-idxc-indexer-service
+SHC107_HEC_SCHEME ?= https
+SHC107_HEC_PORT ?= 8088
+SHC107_SEARCH_SERVICE ?= splunk-shcfinal-shc-search-head-service
+SHC107_SEARCH_SCHEME ?= https
+SHC107_SEARCH_PORT ?= 8089
 
-.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc82-monitor-check shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload shc98-monitor-check shc98-workload-check shc98-incluster-workload
+.PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc82-monitor-check shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload shc98-monitor-check shc98-workload-check shc98-incluster-workload shc107-persistent-client-check shc107-persistent-client
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
 	$(SHC_RELIABILITY_PYTHON) "$(SHC82_APP_PACKAGER)" \
 		--source-dir "$(SHC82_APP_SOURCE_DIR)" \
@@ -274,6 +287,32 @@ shc98-incluster-workload: shc98-workload-check ## Recreate the API-independent S
 		shc98-incluster-workload --ignore-not-found --wait=true
 	$(SHC98_KUBECTL) -n "$(SHC98_NAMESPACE)" apply \
 		-f "$(SHC98_WORKLOAD_MANIFEST)"
+
+shc107-persistent-client-check: ## Validate the SHC-107 persistent-client workload and manifest.
+	$(SHC_RELIABILITY_PYTHON) -m unittest discover \
+		-s test/fixtures/shc-reliability \
+		-p 'test_shc107_persistent_client.py' -v
+	$(SHC107_KUBECTL) apply --dry-run=client --validate=false \
+		-f "$(SHC107_WORKLOAD_MANIFEST)" >/dev/null
+
+shc107-persistent-client: shc107-persistent-client-check ## Recreate the persistent HEC/search client Job.
+	$(SHC107_KUBECTL) -n "$(SHC107_NAMESPACE)" create configmap \
+		shc107-persistent-client \
+		--from-file=shc107_persistent_client.py="$(SHC107_WORKLOAD)" \
+		--from-literal=SHC107_SAMPLES="$(SHC107_SAMPLES)" \
+		--from-literal=SHC107_INTERVAL_SECONDS="$(SHC107_INTERVAL_SECONDS)" \
+		--from-literal=SHC107_SETTLE_ATTEMPTS="$(SHC107_SETTLE_ATTEMPTS)" \
+		--from-literal=SHC107_HEC_SERVICE="$(SHC107_HEC_SERVICE)" \
+		--from-literal=SHC107_HEC_SCHEME="$(SHC107_HEC_SCHEME)" \
+		--from-literal=SHC107_HEC_PORT="$(SHC107_HEC_PORT)" \
+		--from-literal=SHC107_SEARCH_SERVICE="$(SHC107_SEARCH_SERVICE)" \
+		--from-literal=SHC107_SEARCH_SCHEME="$(SHC107_SEARCH_SCHEME)" \
+		--from-literal=SHC107_SEARCH_PORT="$(SHC107_SEARCH_PORT)" \
+		--dry-run=client -o yaml | $(SHC107_KUBECTL) apply -f -
+	$(SHC107_KUBECTL) -n "$(SHC107_NAMESPACE)" delete job \
+		shc107-persistent-client --ignore-not-found --wait=true
+	$(SHC107_KUBECTL) -n "$(SHC107_NAMESPACE)" apply \
+		-f "$(SHC107_WORKLOAD_MANIFEST)"
 
 
 ##@ Documentation
