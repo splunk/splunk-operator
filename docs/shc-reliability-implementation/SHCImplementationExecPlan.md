@@ -497,6 +497,15 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   from persisted status. Linux image, live Operator-Pod replacement, and EKS
   gates remain open in
   `SHC112IndexerSearchPeerConvergenceGateExecPlan.md`.
+- [ ] (2026-08-04 UTC) Complete SHC-113 immutable resource qualification for
+  shared Splunk REST response ownership. Exact stacked source `961fe9b06`
+  closes every successful response body and covers JSON success, no-target
+  success, unexpected status, empty body, and malformed body. It passed 100
+  focused repetitions, 20 race-enabled repetitions, all 43 Make suites,
+  192/192 enterprise/controller specs, 78.6 percent composite coverage,
+  chart lint, and all 150 Helm tests. An immutable Linux image and bounded EKS
+  file-descriptor/connection soak remain open in
+  `SHC113SplunkRESTResponseClosureExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP
