@@ -595,7 +595,10 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Its Job then completed 3,600 submissions with zero HEC/search failures, zero
   count regressions, maximum pending 2, exact final uniqueness, zero runner/
   wait/finalizer exit codes, and all 37 hashes verified. The omitted-field
-  default campaign remains open in
+  default lifecycle harness also passed target order `2,1,0`, exact 30-second
+  persisted intervals, dynamic captain transfer, stable claims, minimum two
+  endpoints, maximum one unready Pod, zero invalidations/restarts/request
+  failures, and 12 stable samples. Its 3,600-sample Job and hashes remain open in
   `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
@@ -3033,3 +3036,8 @@ Revision note (2026-08-04 20:42Z): Closed the SHC-118 explicit-policy workload
 and artifact gates with exact 3,600-event delivery, zero request failures or
 count regressions, and verified hashes. The omitted-field default campaign
 remains open.
+
+Revision note (2026-08-04 21:03Z): Recorded the passing omitted-field
+Operator-default lifecycle harness and left only its independent workload and
+artifact gates open. Kubernetes Event-series counts remain operational signals;
+exact operation cardinality comes from status and samples.

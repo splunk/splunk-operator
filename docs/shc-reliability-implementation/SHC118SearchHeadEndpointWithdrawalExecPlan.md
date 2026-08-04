@@ -80,8 +80,15 @@ remain separate requirements.
   search-request failures, zero count regressions, maximum pending 2, and exact
   final count/min/max/distinct `3600/1/3600/3600`. Runner, workload wait, and
   finalizer exit codes are zero; all 37 listed artifact hashes verify.
-- [ ] Run the separate omitted-field, Operator-default-30-second campaign with
-  a fresh 3,600-sample Job and no controller replacement.
+- [x] (2026-08-04 21:03Z) Completed the omitted-field,
+  Operator-default-30-second EKS lifecycle harness with no controller
+  replacement. It rolled `2 -> 1 -> 0`; each exact operation persisted a
+  30-second observation-to-deadline interval before detention; minimum
+  endpoints were 2, maximum unready Pods 1, all three UIDs changed while claims
+  remained stable, invalidation delta was 0, restarts/request failures were 0,
+  and 12 stability samples passed. Harness exit code is zero.
+- [ ] Allow the default campaign's independent 3,600-sample Job to reach
+  Kubernetes `Complete`, verify final uniqueness/counters, and seal hashes.
 
 ## Surprises & Discoveries
 
@@ -129,6 +136,15 @@ remain separate requirements.
   Consequence: an audit that searches for the word `error` alone produces false
   positives. Qualification must inspect structured log level and lifecycle
   action; these three expected startup waits are not controller errors.
+- Observation: the default campaign's Kubernetes Event count delta was 4 even
+  though its sample stream contains exactly three new operation IDs and three
+  withdrawal observations. During the run, expired prior Event objects were
+  recreated from the long-lived Event broadcaster's correlation series with a
+  retained count and first timestamp.
+  Consequence: Event series are at-least-once operational signals, not an exact
+  lifecycle-operation ledger. Status operation IDs and retained samples prove
+  exact cardinality; the Event gate requires at least one observation per
+  replacement and zero invalidations rather than equality to replica count.
 
 ## Decision Log
 
@@ -178,11 +194,13 @@ that proof during status merge; and exposes bounded Events, reasons, and the
 `splunk_operator_search_head_endpoint_withdrawal_total` metric. Both Pod-update
 and scale-down detention paths fail closed until the interval completes.
 
-The explicit-120-second EKS campaign now passes end to end, including manager
+The explicit-120-second EKS campaign passes end to end, including manager
 replacement inside an active interval, the active-captain ordinal, 3,600
 successful HEC/search requests, zero count regressions, exact eventual
-uniqueness, and verified artifacts. The separate omitted-field 30-second
-campaign remains open, so this is not yet the final SHC-118 availability claim.
+uniqueness, and verified artifacts. The omitted-field 30-second lifecycle
+harness also passes, but its independent Job has not yet reached its terminal
+exact-delivery verdict. This is therefore not yet the final SHC-118 availability
+claim.
 
 ## Plan of Work
 
@@ -277,7 +295,25 @@ not discard the lifecycle operation before restoring serving eligibility.
   `fd7de67bdadc243609d191bbd5ce9041a0b69bbfbf96d8d545c6daab5e9697e7`.
   All 37 manifest entries verify from the repository root. Structured final
   Operator logs contain no `ERROR` or `FATAL` level record.
-- Omitted-field Operator-default campaign: pending.
+- Omitted-field Operator-default lifecycle: passed; terminal workload and
+  artifact gates pending.
+- Omitted-field lifecycle harness: pass, exit code 0, policy source
+  `operator-default`, target order `[2,1,0]`, minimum endpoints 2, maximum
+  unready Pods 1, Operator not restarted, Event count delta 4, invalidation
+  delta 0, stable samples 12, and zero HEC/search request failures through roll
+  completion.
+- Omitted-field exact propagation boundaries: ordinal 2
+  `20:49:10Z/20:49:40Z/20:49:41Z`; ordinal 1
+  `20:53:08Z/20:53:38Z/20:53:39Z`; ordinal 0
+  `20:57:21Z/20:57:51Z/20:57:53Z` for observation/deadline/detention.
+- Omitted-field replacement UIDs: ordinal 2
+  `b6a6fe59-f048-46b8-adde-e2d9700d5ab0 -> 6cb304d3-16c0-4c3b-a4d1-6e1165b5d6b5`,
+  ordinal 1
+  `3b1146ec-f40a-4ac6-ad66-61933226b3e3 -> f1d8a7af-e6e1-4f88-a8e8-3e1c2e935027`,
+  and ordinal 0
+  `ca1839a6-c1ca-439e-b9be-0061cda85252 -> 268d4dcf-d812-4896-9994-1b91d17cc61d`;
+  every `etc` and `var` claim was preserved.
+- Omitted-field workload final counters and evidence hashes: pending.
 
 ## Interfaces and Dependencies
 
@@ -306,3 +342,10 @@ Revision note (2026-08-04 20:42Z): Closed the explicit-policy workload and
 artifact gates with 3,600 successful request pairs, zero count regressions,
 exact final uniqueness, zero exit codes, and 37 verified hashes. The separate
 omitted-field Operator-default campaign remains open.
+
+Revision note (2026-08-04 21:03Z): Recorded the passing omitted-field
+Operator-default lifecycle harness with exact 30-second intervals, sequential
+replacement, dynamic captain transfer, stable claims, bounded endpoints, and
+zero request failures through roll completion. Its Job and final hashes remain
+open. The revision also distinguishes correlated Kubernetes Event counts from
+the exact three-operation status/sample ledger.
