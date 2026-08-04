@@ -44,6 +44,47 @@ without logging credentials.
 The monitor exits successfully only when every submitted sequence is present
 exactly once at the final completeness gate.
 
+`shc118_endpoint_withdrawal_monitor.sh` is the destructive, explicit
+qualification harness for the Search Head endpoint-withdrawal barrier. It
+requires an exact digest-pinned Operator image, an established three-member
+SHC using the opt-in `RollingUpdate` lifecycle, and an explicit kube context.
+It changes only the selected SearchHeadCluster: the configured propagation
+interval and one Pod-template annotation trigger a complete reverse-ordinal
+roll. During the first persisted propagation interval it replaces the single
+Operator Pod and requires the operation ID, target UID, observation, immutable
+deadline, and sequence to survive exactly. Every sample fails if fewer than
+two Search Heads remain routable, more than one member is unready, a container
+restarts in place, detention precedes the persisted deadline, or the target is
+still routable while propagation is pending. It retains CR, StatefulSet, Pod,
+EndpointSlice, Event, and Operator-log evidence without reading or printing
+Splunk credentials. The harness refuses to trigger unless the API-independent
+HEC/search Job is active with one Ready client Pod, and it fails if that Job
+records a HEC or search request failure before rollout completion. The outer
+qualification runner must still wait for the Job's exact final-completeness
+gate after the Kubernetes lifecycle monitor succeeds.
+
+Run `make shc118-monitor-check` before live use. Start the separate in-cluster
+HEC/search workload first, then invoke the monitor with the exact accepted
+context and Operator digest:
+
+```text
+SHC118_KUBE_CONTEXT=<context> \
+SHC118_EXPECTED_OPERATOR_IMAGE=<repository>@sha256:<digest> \
+SHC118_WITHDRAWAL_SECONDS=120 \
+test/fixtures/shc-reliability/shc118_endpoint_withdrawal_monitor.sh
+```
+
+The 120-second test interval leaves enough time to replace the controller
+during the persisted barrier. A separate steady-controller run must set
+`SHC118_RESTART_OPERATOR=false`, `SHC118_USE_POLICY_DEFAULT=true`, and
+`SHC118_WITHDRAWAL_SECONDS=30` to remove the policy field and exercise the
+Operator-resolved product default rather than an explicit value of 30. The
+harness verifies that the persisted deadline is exactly the expected interval
+after the observation.
+Set `SHC118_PREFLIGHT_ONLY=true` to validate the selected context, exact
+Operator image, three-member Ready baseline, closed StatefulSet partition,
+serving readiness gates, and EndpointSlices without mutating the cluster.
+
 Run it from the repository root:
 
 ```bash
