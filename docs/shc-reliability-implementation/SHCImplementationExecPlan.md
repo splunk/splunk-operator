@@ -558,6 +558,13 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   and monitor to three hours and the Job deadline to four hours. Repository
   shell/manifest gates pass; the complete EKS run remains open in
   `SHC117LongIndexerRollQualificationExecPlan.md`.
+- [ ] (2026-08-04 UTC) Implement SHC-118, the Search Head endpoint-withdrawal
+  propagation barrier. Direct source inspection confirms the current path
+  waits for target readiness and EndpointSlice withdrawal but can request
+  detention immediately after that observation. Add the same durable,
+  restart-safe continuous delay proven necessary by SHC-116 without claiming
+  control over established client connections. Source, Linux image, and EKS
+  gates remain open in `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP
