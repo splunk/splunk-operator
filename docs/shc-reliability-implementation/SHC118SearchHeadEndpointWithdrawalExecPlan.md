@@ -38,6 +38,11 @@ remain separate requirements.
 - [x] (2026-08-04 UTC) Implemented the bounded API, durable state, validation,
   status merge, observability, and tests on isolated source
   `cd79208b8b18ad90aa916cc1e1418911d42bd924`, stacked on exact SHC-116.
+- [x] (2026-08-04 UTC) An external architecture review found that status merge
+  could accept a different operation ID based only on a newer timestamp while
+  the persisted operation was still active. Exact source
+  `8152fc042e1da814cc37238b7a9eb4cf22b76222` now rejects that replacement
+  until the persisted lifecycle operation reaches `Completed`.
 - [x] (2026-08-04 UTC) Passed generation, manifests, focused lifecycle and API
   tests, the complete 43-suite native test gate (192/192 specs, 78.8 percent
   composite coverage), `make build`, and `git diff --check` on the exact source.
@@ -71,7 +76,8 @@ remain separate requirements.
   from different resource versions.
   Consequence: status merge preserves monotonic observation and invalidation
   state for the same operation, rejects corrupt active proof, and permits a new
-  operation only when its start time is not older than the persisted operation.
+  operation ID only after the persisted operation is `Completed` and the new
+  start time is not older than the persisted transition.
 - Observation: a broad race run over the entire enterprise package reproduces
   existing races in App Framework scheduler tests and a Cluster Manager test
   seam, including `TestPhaseManagersMsgChannels`, `TestPodCopyWorkerHandler`,
@@ -104,11 +110,17 @@ remain separate requirements.
   removed, so both lifecycle paths need the same Kubernetes propagation
   contract.
   Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: fail closed when status merge encounters a different operation ID
+  while the persisted lifecycle operation is active.
+  Rationale: a newer timestamp alone cannot prove that the prior target and its
+  endpoint-withdrawal ownership were safely completed; controller recovery and
+  cancellation continue under the persisted operation identity.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
 The production source is implemented and source-qualified at
-`cd79208b8b18ad90aa916cc1e1418911d42bd924`. It adds a customer-configurable,
+`8152fc042e1da814cc37238b7a9eb4cf22b76222`. It adds a customer-configurable,
 default-30-second continuous withdrawal interval; persists the exact Pod UID,
 observation, immutable deadline, sequence, and invalidation sequence; protects
 that proof during status merge; and exposes bounded Events, reasons, and the
@@ -166,6 +178,8 @@ not discard the lifecycle operation before restoring serving eligibility.
 - Source branch:
   `codex/shc-118-search-head-endpoint-withdrawal`.
 - Exact source:
+  `8152fc042e1da814cc37238b7a9eb4cf22b76222`.
+- Initial feature source:
   `cd79208b8b18ad90aa916cc1e1418911d42bd924`.
 - Existing immediate-action source:
   `pkg/splunk/enterprise/searchheadcluster_lifecycle.go`.

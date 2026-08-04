@@ -559,10 +559,11 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   shell/manifest gates pass; the complete EKS run remains open in
   `SHC117LongIndexerRollQualificationExecPlan.md`.
 - [x] (2026-08-04 UTC) Implement SHC-118, the Search Head endpoint-withdrawal
-  propagation barrier. Exact source `cd79208b8` persists a restart-safe,
+  propagation barrier. Exact source `8152fc042` persists a restart-safe,
   immutable continuous-withdrawal deadline for the exact Pod UID and gates both
   Pod-update and scale-down detention. Returned routability invalidates proof
-  monotonically; API and controller validation prevent a delay that would
+  monotonically; a different operation ID cannot replace an active persisted
+  operation; and API and controller validation prevent a delay that would
   exhaust the effective detention timeout. Generation, manifests, focused
   tests, all 43 native suites (192/192 specs, 78.8 percent coverage), and
   `make build` pass. Chart lint, all 150 Helm tests, full v4 API and metrics
