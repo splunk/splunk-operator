@@ -2265,12 +2265,14 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcom
 
 var GetClusterManagerInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
 	c := mgr.getClusterManagerClient(ctx)
-	return c.GetClusterManagerInfo()
+	defer c.CloseIdleConnections()
+	return c.GetClusterManagerInfoWithContext(ctx)
 }
 
 var GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
 	c := mgr.getClusterManagerClient(ctx)
-	return c.GetClusterManagerPeers()
+	defer c.CloseIdleConnections()
+	return c.GetClusterManagerPeersWithContext(ctx)
 }
 
 // updateStatus for indexerClusterPodManager uses the REST API to update the status for an IndexerCluster custom resource

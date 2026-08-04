@@ -49,6 +49,15 @@ type fixedResponseClient struct {
 	idleConnectionsClosed bool
 }
 
+type contextCapturingClient struct {
+	request *http.Request
+}
+
+func (client *contextCapturingClient) Do(request *http.Request) (*http.Response, error) {
+	client.request = request
+	return nil, request.Context().Err()
+}
+
 func (client *fixedResponseClient) Do(*http.Request) (*http.Response, error) {
 	return client.response, nil
 }
@@ -746,6 +755,69 @@ func TestGetSearchDistributedPeers(t *testing.T) {
 	// Negative testing
 	splunkClientErrorTester(t, test)
 }
+
+func TestGetSearchDistributedPeersPropagatesContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	httpClient := &contextCapturingClient{}
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c.Client = httpClient
+
+	_, err := c.GetSearchDistributedPeersWithContext(ctx)
+
+	if err != context.Canceled {
+		t.Fatalf("GetSearchDistributedPeersWithContext() error = %v, want %v", err, context.Canceled)
+	}
+	if httpClient.request == nil {
+		t.Fatal("HTTP client did not receive a request")
+	}
+	if httpClient.request.Context().Err() != context.Canceled {
+		t.Fatalf("request context error = %v, want %v", httpClient.request.Context().Err(), context.Canceled)
+	}
+}
+
+func TestClusterManagerObservationsPropagateContext(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		call func(*splunk.SplunkClient, context.Context) error
+	}{
+		{
+			name: "manager info",
+			call: func(client *splunk.SplunkClient, ctx context.Context) error {
+				_, err := client.GetClusterManagerInfoWithContext(ctx)
+				return err
+			},
+		},
+		{
+			name: "manager peers",
+			call: func(client *splunk.SplunkClient, ctx context.Context) error {
+				_, err := client.GetClusterManagerPeersWithContext(ctx)
+				return err
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			httpClient := &contextCapturingClient{}
+			client := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+			client.Client = httpClient
+
+			err := test.call(client, ctx)
+
+			if err != context.Canceled {
+				t.Fatalf("observation error = %v, want %v", err, context.Canceled)
+			}
+			if httpClient.request == nil {
+				t.Fatal("HTTP client did not receive a request")
+			}
+			if httpClient.request.Context().Err() != context.Canceled {
+				t.Fatalf("request context error = %v, want %v", httpClient.request.Context().Err(), context.Canceled)
+			}
+		})
+	}
+}
+
 func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/server/info/server-info?count=0&output_mode=json", nil)
 	test := func(c splunk.SplunkClient) error {

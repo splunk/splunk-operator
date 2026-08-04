@@ -145,8 +145,14 @@ func (c *SplunkClient) doWithClient(client SplunkHTTPClient, request *http.Reque
 
 // Get sends a REST API request and unmarshals response into obj, if not nil.
 func (c *SplunkClient) Get(path string, obj interface{}) error {
+	return c.GetWithContext(context.Background(), path, obj)
+}
+
+// GetWithContext sends a REST API request bound to ctx and unmarshals the
+// response into obj, if not nil.
+func (c *SplunkClient) GetWithContext(ctx context.Context, path string, obj interface{}) error {
 	endpoint := fmt.Sprintf("%s%s?count=0&output_mode=json", c.ManagementURI, path)
-	request, err := http.NewRequest("GET", endpoint, nil)
+	request, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
 		return err
 	}
@@ -578,13 +584,19 @@ type ClusterManagerInfo struct {
 // You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Finfo
 func (c *SplunkClient) GetClusterManagerInfo() (*ClusterManagerInfo, error) {
+	return c.GetClusterManagerInfoWithContext(context.Background())
+}
+
+// GetClusterManagerInfoWithContext queries Cluster Manager state and cancels
+// the request when ctx is done.
+func (c *SplunkClient) GetClusterManagerInfoWithContext(ctx context.Context) (*ClusterManagerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
 			Content ClusterManagerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
 	path := "/services/cluster/manager/info"
-	err := c.Get(path, &apiResponse)
+	err := c.GetWithContext(ctx, path, &apiResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -750,6 +762,12 @@ type ClusterManagerPeerInfo struct {
 // You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Fpeers
 func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterManagerPeerInfo, error) {
+	return c.GetClusterManagerPeersWithContext(context.Background())
+}
+
+// GetClusterManagerPeersWithContext queries Cluster Manager peer state and
+// cancels the request when ctx is done.
+func (c *SplunkClient) GetClusterManagerPeersWithContext(ctx context.Context) (map[string]ClusterManagerPeerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
 			Name    string                 `json:"name"`
@@ -757,7 +775,7 @@ func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterManagerPeerIn
 		} `json:"entry"`
 	}{}
 	path := "/services/cluster/manager/peers"
-	err := c.Get(path, &apiResponse)
+	err := c.GetWithContext(ctx, path, &apiResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -844,6 +862,12 @@ type SearchDistributedPeerInfo struct {
 // from one Search Head. Callers must compare every entry because a retained
 // stale address can have the same peer GUID as its replacement.
 func (c *SplunkClient) GetSearchDistributedPeers() ([]SearchDistributedPeerInfo, error) {
+	return c.GetSearchDistributedPeersWithContext(context.Background())
+}
+
+// GetSearchDistributedPeersWithContext returns the complete distributed-peer
+// inventory from one Search Head and cancels the request when ctx is done.
+func (c *SplunkClient) GetSearchDistributedPeersWithContext(ctx context.Context) ([]SearchDistributedPeerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
 			Name    string                    `json:"name"`
@@ -851,7 +875,7 @@ func (c *SplunkClient) GetSearchDistributedPeers() ([]SearchDistributedPeerInfo,
 		} `json:"entry"`
 	}{}
 	path := "/services/search/distributed/peers"
-	if err := c.Get(path, &apiResponse); err != nil {
+	if err := c.GetWithContext(ctx, path, &apiResponse); err != nil {
 		return nil, err
 	}
 

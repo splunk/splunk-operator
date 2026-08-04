@@ -17,6 +17,9 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"sort"
+	"sync"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
@@ -24,6 +27,21 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const (
+	maxConcurrentSearchPeerObservations = 4
+	searchPeerObservationBatchTimeout   = 15 * time.Second
+)
+
+type searchPeerObservationTarget struct {
+	podName string
+	client  *splclient.SplunkClient
+}
+
+type searchPeerObservationResult struct {
+	peers []splclient.SearchDistributedPeerInfo
+	err   error
+}
 
 var checkIndexerSearchPeerConvergence = func(
 	ctx context.Context,
@@ -98,6 +116,7 @@ func (mgr *indexerClusterPodManager) indexerSearchPeerConvergenceObserved(
 		), nil
 	}
 
+	targets := make([]searchPeerObservationTarget, 0)
 	for _, searchHeadCluster := range matchedClusters {
 		for ordinal := int32(0); ordinal < searchHeadCluster.Spec.Replicas; ordinal++ {
 			podName := GetSplunkStatefulsetPodName(
@@ -117,32 +136,42 @@ func (mgr *indexerClusterPodManager) indexerSearchPeerConvergenceObserved(
 					),
 				),
 			)
-			searchHeadClient := mgr.newSplunkClient(
-				fmt.Sprintf("https://%s:8089", host),
-				"admin",
-				string(mgr.secrets.Data["password"]),
-			)
-			searchPeers, err := searchHeadClient.GetSearchDistributedPeers()
-			searchHeadClient.CloseIdleConnections()
-			if err != nil {
-				return true, false, fmt.Sprintf(
-					"waiting for distributed peers from Search Head %s: %v",
-					podName,
-					err,
-				), nil
-			}
-			if !searchDistributedPeerConverged(
-				searchPeers,
+			targets = append(targets, searchPeerObservationTarget{
+				podName: podName,
+				client: mgr.newSplunkClient(
+					fmt.Sprintf("https://%s:8089", host),
+					"admin",
+					string(mgr.secrets.Data["password"]),
+				),
+			})
+		}
+	}
+	sort.Slice(targets, func(left, right int) bool {
+		return targets[left].podName < targets[right].podName
+	})
+
+	results := observeSearchHeadPeers(ctx, targets)
+	for targetIndex := range targets {
+		target := targets[targetIndex]
+		result := results[targetIndex]
+		if result.err != nil {
+			return true, false, fmt.Sprintf(
+				"waiting for distributed peers from Search Head %s: %v",
+				target.podName,
+				result.err,
+			), nil
+		}
+		if !searchDistributedPeerConverged(
+			result.peers,
+			peer.ID,
+			expectedAddress,
+		) {
+			return true, false, fmt.Sprintf(
+				"Search Head %s has not converged peer GUID %s to %s",
+				target.podName,
 				peer.ID,
 				expectedAddress,
-			) {
-				return true, false, fmt.Sprintf(
-					"Search Head %s has not converged peer GUID %s to %s",
-					podName,
-					peer.ID,
-					expectedAddress,
-				), nil
-			}
+			), nil
 		}
 	}
 	return true, true, fmt.Sprintf(
@@ -151,6 +180,44 @@ func (mgr *indexerClusterPodManager) indexerSearchPeerConvergenceObserved(
 		peer.ID,
 		expectedAddress,
 	), nil
+}
+
+func observeSearchHeadPeers(
+	ctx context.Context,
+	targets []searchPeerObservationTarget,
+) []searchPeerObservationResult {
+	results := make([]searchPeerObservationResult, len(targets))
+	if len(targets) == 0 {
+		return results
+	}
+
+	observationCtx, cancel := context.WithTimeout(
+		ctx,
+		searchPeerObservationBatchTimeout,
+	)
+	defer cancel()
+
+	workerCount := min(len(targets), maxConcurrentSearchPeerObservations)
+	jobs := make(chan int)
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for targetIndex := range jobs {
+				target := targets[targetIndex]
+				results[targetIndex].peers, results[targetIndex].err =
+					target.client.GetSearchDistributedPeersWithContext(observationCtx)
+				target.client.CloseIdleConnections()
+			}
+		}()
+	}
+	for targetIndex := range targets {
+		jobs <- targetIndex
+	}
+	close(jobs)
+	workers.Wait()
+	return results
 }
 
 func searchHeadClusterManagerName(

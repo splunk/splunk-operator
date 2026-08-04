@@ -18,8 +18,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
@@ -30,6 +34,39 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+type boundedObservationHTTPClient struct {
+	started chan<- struct{}
+	release <-chan struct{}
+	active  *atomic.Int32
+	maximum *atomic.Int32
+	calls   *atomic.Int32
+}
+
+func (client *boundedObservationHTTPClient) Do(request *http.Request) (*http.Response, error) {
+	client.calls.Add(1)
+	active := client.active.Add(1)
+	defer client.active.Add(-1)
+	for {
+		maximum := client.maximum.Load()
+		if active <= maximum || client.maximum.CompareAndSwap(maximum, active) {
+			break
+		}
+	}
+	client.started <- struct{}{}
+	select {
+	case <-client.release:
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(
+				`{"entry":[{"name":"10.0.1.4:8089","content":{"guid":"peer-guid","status":"Up","disabled":false}}]}`,
+			)),
+		}, nil
+	case <-request.Context().Done():
+		return nil, request.Context().Err()
+	}
+}
 
 func TestSearchDistributedPeerConverged(t *testing.T) {
 	current := splclient.SearchDistributedPeerInfo{
@@ -69,6 +106,108 @@ func TestSearchHeadClusterManagerName(t *testing.T) {
 			ClusterMasterRef: corev1.ObjectReference{Name: "deprecated"},
 		}},
 	}))
+}
+
+func TestObserveSearchHeadPeersBoundsConcurrency(t *testing.T) {
+	const targetCount = maxConcurrentSearchPeerObservations + 2
+	started := make(chan struct{}, targetCount)
+	release := make(chan struct{})
+	var active atomic.Int32
+	var maximum atomic.Int32
+	var calls atomic.Int32
+	targets := make([]searchPeerObservationTarget, 0, targetCount)
+	for targetIndex := range targetCount {
+		httpClient := &boundedObservationHTTPClient{
+			started: started,
+			release: release,
+			active:  &active,
+			maximum: &maximum,
+			calls:   &calls,
+		}
+		client := splclient.NewSplunkClient(
+			fmt.Sprintf("https://search-%d:8089", targetIndex),
+			"admin",
+			"secret",
+		)
+		client.Client = httpClient
+		targets = append(targets, searchPeerObservationTarget{
+			podName: fmt.Sprintf("search-%d", targetIndex),
+			client:  client,
+		})
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resultChannel := make(chan []searchPeerObservationResult, 1)
+	go func() {
+		resultChannel <- observeSearchHeadPeers(ctx, targets)
+	}()
+	for range maxConcurrentSearchPeerObservations {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for bounded observation worker")
+		}
+	}
+	select {
+	case <-started:
+		t.Fatal("more than the bounded number of observations started")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+
+	select {
+	case results := <-resultChannel:
+		require.Len(t, results, targetCount)
+		for _, result := range results {
+			require.NoError(t, result.err)
+			require.Len(t, result.peers, 1)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for bounded observations to finish")
+	}
+	require.Equal(t, int32(targetCount), calls.Load())
+	require.Equal(t, int32(maxConcurrentSearchPeerObservations), maximum.Load())
+}
+
+func TestObserveSearchHeadPeersHonorsParentCancellation(t *testing.T) {
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var active atomic.Int32
+	var maximum atomic.Int32
+	var calls atomic.Int32
+	httpClient := &boundedObservationHTTPClient{
+		started: started,
+		release: release,
+		active:  &active,
+		maximum: &maximum,
+		calls:   &calls,
+	}
+	client := splclient.NewSplunkClient("https://search-0:8089", "admin", "secret")
+	client.Client = httpClient
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resultChannel := make(chan []searchPeerObservationResult, 1)
+	go func() {
+		resultChannel <- observeSearchHeadPeers(ctx, []searchPeerObservationTarget{{
+			podName: "search-0",
+			client:  client,
+		}})
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for observation request")
+	}
+	cancel()
+
+	select {
+	case results := <-resultChannel:
+		require.Len(t, results, 1)
+		require.ErrorIs(t, results[0].err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("observation did not stop after parent cancellation")
+	}
 }
 
 func TestIndexerSearchPeerConvergenceObserved(t *testing.T) {
