@@ -39,17 +39,19 @@ unchanged.
   equal current/update Search Head revision, a Ready replacement Deployer, and
   no container restarts.
 - [x] (2026-08-04 00:06Z) Implemented the bounded controller correction at
-  exact Operator source `ab342d7a5` on branch
+  production correction `ab342d7a5` and controller-boundary test source
+  `67d2897c1` on branch
   `codex/shc-106-deployer-coordination`.
-- [x] (2026-08-04 00:06Z) Passed 100 focused normal repetitions, 100 focused
-  race repetitions, the complete enterprise package, and the complete Make
-  test gate: 43 suites, 192/192 controller specs, zero failures, and 78.3
-  percent composite coverage.
+- [x] (2026-08-04 00:18Z) Passed 100 normal and 100 race repetitions of both
+  the coordination decisions and real `ApplySearchHeadCluster` ownership
+  boundaries, the complete enterprise package, and the complete Make test
+  gate: 43 suites, 192/192 controller specs, zero failures, and 78.6 percent
+  composite coverage.
 - [x] (2026-08-04 00:07Z) Passed `make build`, generation, formatting, vet,
   Helm lint, all 150 Helm unit tests, `git diff --check`, and new-change lint
   with zero issues.
 - [ ] Build an immutable Linux/AMD64 Operator image from exact source
-  `ab342d7a5` and deploy it by digest to the qualification cluster.
+  `67d2897c1` and deploy it by digest to the qualification cluster.
 - [ ] Repeat the real App Framework plus competing-template campaign and prove
   that the Deployer UID remains unchanged until the Search Head lifecycle is
   complete.
@@ -115,7 +117,7 @@ unchanged.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: do not claim live correction from the unmodified Operator run.
   Rationale: that run proves the defect and validates the existing Search Head
-  queue behavior. Only an immutable image built from `ab342d7a5` can qualify
+  queue behavior. Only an immutable image built from `67d2897c1` can qualify
   the correction.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 
@@ -150,7 +152,7 @@ not contain SHC-106.
 
 ## Plan of Work
 
-Build exact source `ab342d7a5` on the Linux vWorkstation and publish the
+Build exact source `67d2897c1` on the Linux vWorkstation and publish the
 Operator image by immutable digest. Retain the existing runtime image, PVCs,
 topology, and app repository so that the controller change is the only
 variable.
@@ -209,15 +211,16 @@ another normal rollout is required.
 ## Artifacts and Notes
 
 - Production branch: `codex/shc-106-deployer-coordination`.
-- Exact source: `ab342d7a5`.
+- Production correction: `ab342d7a5`.
+- Exact cumulative source: `67d2897c1`.
 - Documentation branch: `codex/shc-106-qualification-docs`.
 - Triggering monitor:
   `build/_test/shc-final/shc94-real-app-conflict-20260803T2348Z.log`.
 - Final source test log:
   `build/_test/shc-final/shc106-make-test-final.log`.
-- Source gates: 43 suites, 192/192 specs, zero failures, 78.3 percent
-  composite coverage, 100 focused normal repetitions, 100 focused race
-  repetitions, 150 Helm tests, and zero new lint issues.
+- Source gates: 43 suites, 192/192 specs, zero failures, 78.6 percent
+  composite coverage, 100 normal and 100 race repetitions of both helper and
+  real controller-boundary tests, 150 Helm tests, and zero new lint issues.
 - Live candidate image and correction qualification: pending native Linux
   builder availability.
 

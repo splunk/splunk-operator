@@ -163,15 +163,17 @@ it is not converted into a qualified claim by documentation alone.
   `make build`, all 43 Make test suites, Helm lint, and all 150 chart tests
   passed. Immutable Linux image and live multi-boundary EKS qualification
   remain open.
-- [x] (2026-08-04 00:07Z) Registered and source-qualified SHC-106 at exact
-  Operator source `ab342d7a5`. A real EKS app rollout plus competing common
+- [x] (2026-08-04 00:18Z) Registered and source-qualified SHC-106 at production
+  correction `ab342d7a5` and cumulative source `67d2897c1`. A real EKS app
+  rollout plus competing common
   template update reproduced overlapping Deployer and Search Head disruption.
   The bounded correction introduces one established-SHC disruption owner,
   retains an already-active Deployer until Kubernetes-observed convergence,
   and prevents Search Head mutation while that owner remains active. One
-  hundred focused normal and race repetitions, all 43 Make suites, 192/192
-  specs, 78.3 percent coverage, build/vet, 150 Helm tests, and new-change lint
-  passed. Immutable Linux image and live correction qualification remain open.
+  hundred normal and race repetitions of helper and real controller-boundary
+  tests, all 43 Make suites, 192/192 specs, 78.6 percent coverage, build/vet,
+  150 Helm tests, and new-change lint passed. Immutable Linux image and live
+  correction qualification remain open.
 
 ## Surprises & Discoveries
 

@@ -726,8 +726,9 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   source `0e638dac4`. Exact-boundary and overdue App Framework timer values now
   return the existing bounded five-second retry. The full local regression
   gate passed; immutable Linux image and live EKS qualification remain open.
-- [x] (2026-08-04 00:07Z) Registered and source-qualified SHC-106 at Operator
-  source `ab342d7a5`. EKS reproduced an overlapping Deployer and Search Head
+- [x] (2026-08-04 00:18Z) Registered and source-qualified SHC-106 at production
+  correction `ab342d7a5` and cumulative source `67d2897c1`. EKS reproduced an
+  overlapping Deployer and Search Head
   planned disruption from one common template change during a real app-driven
   member roll. The controller correction serializes durable App Framework,
   active member lifecycle, and Deployer replacement ownership for an
