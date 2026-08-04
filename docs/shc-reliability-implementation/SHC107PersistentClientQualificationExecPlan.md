@@ -355,6 +355,8 @@ objects without affecting Splunk Pods or persistent volumes.
 - Response-aware selected-indexer result:
   `shc107-hec503-retry-workload-20260804T0148Z.log`, SHA-256
   `35edcfab76356bdcc2c6adc64fa5a9d30429084b4c55a817d89000cbb2165c77`.
+  The selected-backend/delete record has SHA-256
+  `aa9b9b0c439b9d020ca5aee7c5c5501bfff35083885d7cc84b230349f6aa66af`.
   The filtered Kubernetes Event window has SHA-256
   `a260b79155225f636c68bb6842eedf5e66a859cbd46ab4315e3e7888ea9cfe76`;
   the Operator log window has SHA-256
@@ -364,7 +366,10 @@ objects without affecting Splunk Pods or persistent volumes.
   `a2ade4fe-bf36-4f46-8fb7-10507b0b70d0`, became Ready at
   `01:52:43Z`, and retained zero container restarts. The final IndexerCluster
   was Ready with four peers and four serving endpoints; the Operator window
-  contained zero ERROR/FATAL entries.
+  contained zero ERROR/FATAL entries. The four Warning Events were the
+  expected readiness/startup probe failures while the target was shutting
+  down or starting; they identify the intended serving-withdrawal interval
+  and did not affect another Pod.
 - Operator-owned rollout, indexer, network-variant, controller-restart, and
   soak evidence: pending.
 
