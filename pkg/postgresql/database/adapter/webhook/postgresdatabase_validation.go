@@ -18,6 +18,7 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,17 +41,108 @@ func ValidatePostgresDatabaseCreate(ctx context.Context, obj *enterpriseApi.Post
 
 		return allErrs
 	}
+	liveReader := reader
+	if obj.GetDeletionTimestamp() != nil {
+		liveReader = nil
+	}
+	allErrs = append(allErrs, validateDatabaseCustomMetrics(ctx, obj, liveReader)...)
 
-	if reader != nil {
-		allErrs = append(allErrs, validateExternalDatabaseSecrets(ctx, obj, reader)...)
+	if liveReader != nil {
+		allErrs = append(allErrs, validateExternalDatabaseSecrets(ctx, obj, liveReader)...)
 	}
 
 	return allErrs
 }
 
+// Admission checks reference existence; keys and mutable content remain runtime concerns.
+func validateDatabaseCustomMetrics(ctx context.Context, obj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+	for i := range obj.Spec.Databases {
+		mon := obj.Spec.Databases[i].Monitoring
+		if mon == nil {
+			continue
+		}
+		basePath := field.NewPath("spec", "databases").Index(i).Child("monitoring", "customQueriesConfigMap")
+		for j := range mon.CustomQueriesConfigMap {
+			ref := mon.CustomQueriesConfigMap[j]
+			refPath := basePath.Index(j)
+			if ref.Optional != nil {
+				allErrs = append(allErrs, field.Invalid(
+					refPath.Child("optional"),
+					*ref.Optional,
+					fmt.Sprintf("optional is not supported for ConfigMap %q; omit the field because custom-metrics sources are required", ref.Name)))
+			}
+			name := ref.Name
+			if name == "" {
+				continue
+			}
+			if reader == nil {
+				continue
+			}
+			cm := &corev1.ConfigMap{}
+			namePath := refPath.Child("name")
+			switch err := reader.Get(ctx, client.ObjectKey{Name: name, Namespace: obj.Namespace}, cm); {
+			case apierrors.IsNotFound(err):
+				allErrs = append(allErrs, field.Invalid(namePath, name, "referenced custom-metrics ConfigMap does not exist"))
+			case err != nil:
+				allErrs = append(allErrs, field.InternalError(namePath, err))
+			}
+		}
+	}
+	return allErrs
+}
+
 // ValidatePostgresDatabaseUpdate validates a PostgresDatabase on UPDATE.
 func ValidatePostgresDatabaseUpdate(ctx context.Context, obj, oldObj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
-	return ValidatePostgresDatabaseCreate(ctx, obj, reader)
+	var allErrs field.ErrorList
+
+	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			"the PostgresController feature is not enabled; set --feature-gates=PostgresController=true to activate"))
+		return allErrs
+	}
+	liveReader := reader
+	if obj.GetDeletionTimestamp() != nil {
+		liveReader = nil
+	}
+	metricsReader := liveReader
+	if databaseMonitoringSelectorsUnchanged(obj, oldObj) {
+		metricsReader = nil
+	}
+	allErrs = append(allErrs, validateDatabaseCustomMetrics(ctx, obj, metricsReader)...)
+	if liveReader != nil {
+		allErrs = append(allErrs, validateExternalDatabaseSecrets(ctx, obj, liveReader)...)
+	}
+	return allErrs
+}
+
+func databaseMonitoringSelectorsUnchanged(obj, oldObj *enterpriseApi.PostgresDatabase) bool {
+	if oldObj == nil || len(obj.Spec.Databases) != len(oldObj.Spec.Databases) {
+		return false
+	}
+	for i := range obj.Spec.Databases {
+		newMon := obj.Spec.Databases[i].Monitoring
+		oldMon := oldObj.Spec.Databases[i].Monitoring
+		newRefs := configMapSelectorsFrom(newMon)
+		oldRefs := configMapSelectorsFrom(oldMon)
+		if len(newRefs) != len(oldRefs) {
+			return false
+		}
+		for j := range newRefs {
+			if newRefs[j].Name != oldRefs[j].Name || newRefs[j].Key != oldRefs[j].Key {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func configMapSelectorsFrom(mon *enterpriseApi.DatabaseMonitoring) []corev1.ConfigMapKeySelector {
+	if mon == nil {
+		return nil
+	}
+	return mon.CustomQueriesConfigMap
 }
 
 func validateExternalDatabaseSecrets(ctx context.Context, obj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {

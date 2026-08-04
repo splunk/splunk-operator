@@ -54,6 +54,14 @@ const (
 	EventObjectStoreDeleted               = "ObjectStoreDeleted"
 	EventUnmanagedRolesSweepDone          = "UnmanagedRolesSweepDone"
 	EventUnmanagedRolesSweepFailed        = "UnmanagedRolesSweepFailed"
+	EventCustomMetricsQueryApplied        = "CustomMetricsQueryApplied"
+	EventCustomMetricsQueryRepaired       = "CustomMetricsQueryRepaired"
+	EventCustomMetricsInvalidQuery        = "CustomMetricsInvalidQuery"
+	EventCustomMetricsCollision           = "CustomMetricsCollision"
+	EventCustomMetricsConfigMapNotFound   = "CustomMetricsConfigMapNotFound"
+	EventCustomMetricsConfigTooLarge      = "CustomMetricsConfigTooLarge"
+	EventCustomMetricsOwnershipConflict   = "CustomMetricsOwnershipConflict"
+	EventCustomMetricsReconcileFailed     = "CustomMetricsReconcileFailed"
 )
 
 const (

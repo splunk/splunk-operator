@@ -25,6 +25,7 @@ import (
 	"github.com/sethvargo/go-password/password"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -145,6 +146,14 @@ func PostgresDatabaseService(
 		}
 		logger.InfoContext(ctx, "finalizer added successfully")
 		return ctrl.Result{}, nil
+	}
+
+	_, err := persistCustomMetricsPublication(ctx, c, postgresDB)
+	if err != nil {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCustomMetricsStatus, "publishing custom metrics participation"); ok {
+			return result, conflictErr
+		}
+		return ctrl.Result{}, fmt.Errorf("publishing custom metrics participation: %w", err)
 	}
 
 	currentReconcileFailure := hasCurrentReconcileFailure(postgresDB)
@@ -413,7 +422,7 @@ func PostgresDatabaseService(
 	}
 	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabasesReady, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable,
-		fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
+		fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases ready status"); ok {
 			return result, conflictErr
 		}
@@ -503,6 +512,33 @@ func PostgresDatabaseService(
 		postgresDB.Status.LastTransitionTime = nil
 	}
 
+	metricsOutcome, err := reconcileCustomMetricsGate(ctx, rc, postgresDB, cluster)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling custom-metrics acknowledgement: %w", err)
+	}
+	switch metricsOutcome.State {
+	case dbmetrics.GateFailed:
+		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, customMetricsReady, EventCustomMetricsFailed, metricsOutcome.Message)
+		if err := persistCustomMetricsStatus(ctx, rc, postgresDB, metricsOutcome, metav1.ConditionFalse, failedDBPhase); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCustomMetricsStatus, "persisting custom metrics failure"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: retryDelay}, nil
+	case dbmetrics.GatePending:
+		if err := persistCustomMetricsStatus(ctx, rc, postgresDB, metricsOutcome, metav1.ConditionUnknown, provisioningDBPhase); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCustomMetricsStatus, "persisting custom metrics pending status"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: retryDelay}, nil
+	default:
+		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, customMetricsReady, EventCustomMetricsReady, metricsOutcome.Message)
+		applyCustomMetricsStatus(rc, postgresDB, metricsOutcome, metav1.ConditionTrue, readyDBPhase)
+	}
+
 	if !wasReady {
 		rc.emitNormal(postgresDB, EventPostgresDatabaseReady, fmt.Sprintf("PostgresDatabase %s is ready", postgresDB.Name))
 	}
@@ -586,9 +622,6 @@ func getDesiredRoles(postgresDB *enterprisev4.PostgresDatabase) []string {
 }
 
 func existingDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) map[string]struct{} {
-	if postgresDB.Status.Phase == nil || *postgresDB.Status.Phase != string(readyDBPhase) {
-		return map[string]struct{}{}
-	}
 	existing := make(map[string]struct{}, len(postgresDB.Status.Databases))
 	for _, database := range postgresDB.Status.Databases {
 		existing[database.Name] = struct{}{}

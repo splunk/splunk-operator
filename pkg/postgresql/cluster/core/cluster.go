@@ -26,10 +26,12 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	mon "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	monitoring "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,7 +45,10 @@ import (
 )
 
 // PostgresClusterService is the application service entry point called by the primary adapter (reconciler).
-func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend, recoveryBackend RecoveryBackend) (ctrl.Result, error) {
+// Injected factory keeps provisioner adapters out of core.
+type CustomMetricsFactory func(provisioner string, target monitoring.Target) (*mon.Model, error)
+
+func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend, customMetricsFactory CustomMetricsFactory, recoveryBackend RecoveryBackend) (ctrl.Result, error) {
 	c := rc.Client
 	logger := logging.FromContext(ctx).With("func", "PostgresClusterService")
 	logger.DebugContext(ctx, "reconciling PostgresCluster")
@@ -140,6 +145,19 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, errors.Join(fmt.Errorf("failed to fetch PostgresClusterClass %s: %w", postgresCluster.Spec.Class, err), statusErr)
 	}
 
+	customMetricsModel, err := customMetricsFactory(clusterClass.Spec.Provisioner, monitoring.Target{
+		Namespace:    postgresCluster.Namespace,
+		FeatureName:  postgresCluster.Name,
+		FeatureUID:   string(postgresCluster.UID),
+		ProviderName: postgresCluster.Name,
+	})
+	if err != nil {
+		rc.emitWarning(postgresCluster, EventConfigMergeFailed, fmt.Sprintf("unsupported provisioner for PostgresCluster %s — check operator logs", postgresCluster.Name))
+		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonInvalidConfiguration,
+			fmt.Sprintf("Failed to build custom metrics model: %v", err), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(fmt.Errorf("failed to build custom metrics model: %w", err), statusErr)
+	}
+
 	// Merge PostgresClusterSpec on top of PostgresClusterClass defaults.
 	mergedConfig := GetMergedConfig(clusterClass, postgresCluster)
 	configErrs := append(ValidateMergedConfig(mergedConfig, clusterClass.Name), ValidateCrossResource(clusterClass, postgresCluster)...)
@@ -176,6 +194,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		newSecretModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, postgresSecretName, contracts),
 		newObjectStoreModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, mergedConfig),
 		newClusterModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, contracts),
+		newCustomMetricsModel(customMetricsModel, rc, updateComponentHealthStatus, postgresCluster, contracts),
 		newManagedRolesModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, contracts, newRoleSweeper),
 		newPoolerModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, contracts),
 		newBackupModel(backupBackend, rc, updateComponentHealthStatus, postgresCluster, mergedConfig, contracts),
@@ -325,10 +344,12 @@ func runComponents(ctx context.Context, logger *slog.Logger, components []compon
 type componentHealth struct {
 	State     pgcConstants.State
 	Condition conditionTypes
-	Reason    conditionReasons
-	Message   string
-	Phase     reconcileClusterPhases
-	Result    ctrl.Result
+	// Allows degraded optional features without failing cluster readiness.
+	ConditionStatus *metav1.ConditionStatus
+	Reason          conditionReasons
+	Message         string
+	Phase           reconcileClusterPhases
+	Result          ctrl.Result
 }
 
 // newReadyHealth marks a component as fully reconciled — its desired state matches
@@ -344,6 +365,17 @@ func newReadyHealth(cond conditionTypes, reason conditionReasons, msg string) co
 // on its own — operator intervention or a spec change is required.
 func newFailedHealth(cond conditionTypes, reason conditionReasons, msg string) componentHealth {
 	return componentHealth{Condition: cond, State: pgcConstants.Failed, Reason: reason, Message: msg, Phase: failedClusterPhase}
+}
+
+func newDegradedHealth(cond conditionTypes, reason conditionReasons, msg string) componentHealth {
+	status := metav1.ConditionFalse
+	return componentHealth{
+		Condition:       cond,
+		ConditionStatus: &status,
+		State:           pgcConstants.Ready,
+		Reason:          reason,
+		Message:         msg,
+	}
 }
 
 // newPendingHealth marks a component that is blocked waiting for an upstream object
@@ -459,6 +491,9 @@ func setStatusFromHealth(ctx context.Context, c client.Client, metrics ports.Rec
 	conditionStatus := metav1.ConditionFalse
 	if health.State == pgcConstants.Ready {
 		conditionStatus = metav1.ConditionTrue
+	}
+	if health.ConditionStatus != nil {
+		conditionStatus = *health.ConditionStatus
 	}
 	return setStatus(ctx, c, metrics, cluster, before, health.Condition, conditionStatus, health.Reason, health.Message, health.Phase)
 }

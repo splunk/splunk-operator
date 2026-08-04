@@ -22,7 +22,9 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
+	dbmetricsadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/custom_metrics"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
+	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/predicates"
@@ -91,7 +93,15 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	rc := &dbcore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics}
+	rc := &dbcore.ReconcileContext{
+		Client:   r.Client,
+		Scheme:   r.Scheme,
+		Recorder: r.Recorder,
+		Metrics:  r.Metrics,
+		NewCustomMetricsAcknowledgementRepo: func(cluster *enterprisev4.PostgresCluster) dbmetrics.AcknowledgementRepository {
+			return dbmetricsadapter.NewAcknowledgementRepository(cluster.Status.CustomMetricsStatus)
+		},
+	}
 	result, err := dbcore.PostgresDatabaseService(ctx, rc, postgresDB, dbadapter.NewDBRepository)
 	r.FleetCollector.CollectDatabaseMetrics(ctx, r.Client, r.Metrics)
 	if sharedreconcile.IsPureConflict(err) {
@@ -184,12 +194,8 @@ func roUnavailable(readyInstances *int32) bool {
 	return readyInstances == nil || *readyInstances < 2
 }
 
-// postgresClusterForDatabasePredicator wakes PostgresDatabase reconciles when
-// the parent cluster's pooler advertisement changes or when ReadyInstances
-// crosses the <2 threshold (the inputs to resolveClusterEndpoints). The
-// ReadyInstances comparison is threshold-based rather than equality so ticks
-// within the same RO-availability state (e.g. 2→3) don't cause reconcile
-// storms.
+// Watches cluster status consumed by database gates; replica changes matter only
+// when they cross the read-only availability threshold.
 func postgresClusterForDatabasePredicator() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(event.CreateEvent) bool { return true },
@@ -203,6 +209,9 @@ func postgresClusterForDatabasePredicator() predicate.Predicate {
 				return true
 			}
 			if !equality.Semantic.DeepEqual(oldCluster.Status.ManagedRolesStatus, newCluster.Status.ManagedRolesStatus) {
+				return true
+			}
+			if !equality.Semantic.DeepEqual(oldCluster.Status.CustomMetricsStatus, newCluster.Status.CustomMetricsStatus) {
 				return true
 			}
 			return roUnavailable(oldCluster.Status.ReadyInstances) != roUnavailable(newCluster.Status.ReadyInstances)

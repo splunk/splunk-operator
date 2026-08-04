@@ -103,6 +103,8 @@ func (h *MajorUpgradeUseCase) BlocksComponents() []string {
 		pgcConstants.ComponentPooler,
 		pgcConstants.ComponentBackup,
 		pgcConstants.ComponentConfigMap,
+		// Shares the blocked provisioner contract and mutates the same CNPG Cluster.
+		pgcConstants.ComponentCustomMetrics,
 	}
 }
 

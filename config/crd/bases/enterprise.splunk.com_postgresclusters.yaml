@@ -228,6 +228,40 @@ spec:
                       ConnectionPoolerMetrics overrides whether connection pooler metrics scraping is enabled.
                       When unset, the class-level setting applies.
                     type: boolean
+                  customQueriesConfigMap:
+                    description: Ordered cluster-scoped sources; selector optional
+                      fields are unsupported.
+                    items:
+                      description: Selects a key from a ConfigMap.
+                      properties:
+                        key:
+                          description: The key to select.
+                          type: string
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                        optional:
+                          description: Specify whether the ConfigMap or its key must
+                            be defined
+                          type: boolean
+                      required:
+                      - key
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    maxItems: 100
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: name must not be empty
+                      rule: self.all(x, has(x.name) && x.name.size() > 0)
+                    - message: key must not be empty
+                      rule: self.all(x, x.key.size() > 0)
                   postgresqlMetrics:
                     description: |-
                       PostgreSQLMetrics overrides whether PostgreSQL metrics scraping is enabled.
@@ -522,6 +556,54 @@ spec:
                 description: CurrentPrimary is the name of the pod currently hosting
                   the primary.
                 type: string
+              customMetricsStatus:
+                description: Per-database decisions consumed by database readiness
+                  gates.
+                properties:
+                  databaseContributions:
+                    items:
+                      properties:
+                        appliedRevision:
+                          type: string
+                        databaseName:
+                          minLength: 1
+                          type: string
+                        desiredRevision:
+                          minLength: 1
+                          type: string
+                        message:
+                          type: string
+                        postgresDatabaseName:
+                          minLength: 1
+                          type: string
+                        postgresDatabaseUID:
+                          minLength: 1
+                          type: string
+                        reason:
+                          minLength: 1
+                          type: string
+                        status:
+                          enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                          type: string
+                      required:
+                      - databaseName
+                      - desiredRevision
+                      - message
+                      - postgresDatabaseName
+                      - postgresDatabaseUID
+                      - reason
+                      - status
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - postgresDatabaseName
+                    - postgresDatabaseUID
+                    - databaseName
+                    x-kubernetes-list-type: map
+                type: object
               instances:
                 description: |-
                   Instances is the declared instance count reported by the underlying

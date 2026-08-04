@@ -32,6 +32,8 @@ const (
 	EventDatabaseReconciliationStarted = "DatabaseReconciliationStarted"
 	EventDatabasesReady                = "DatabasesReady"
 	EventPrivilegesReady               = "PrivilegesReady"
+	EventCustomMetricsReady            = "CustomMetricsReady"
+	EventCustomMetricsFailed           = "CustomMetricsFailed"
 	EventCleanupComplete               = "CleanupComplete"
 	EventClusterNotFound               = "ClusterNotFound"
 	EventClusterNotReady               = "ClusterNotReady"

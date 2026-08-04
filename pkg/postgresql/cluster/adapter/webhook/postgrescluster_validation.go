@@ -70,15 +70,80 @@ func validatePostgresCluster(ctx context.Context, obj, oldObj *enterpriseApi.Pos
 				re.Message))
 		}
 	}
+	liveReader := reader
+	if obj.GetDeletionTimestamp() != nil {
+		liveReader = nil
+	}
+	metricsReader := liveReader
+	if oldObj != nil && clusterMonitoringSelectorsUnchanged(obj, oldObj) {
+		metricsReader = nil
+	}
+	allErrs = append(allErrs, validateCustomMetrics(ctx, obj, metricsReader)...)
 
-	if reader != nil {
-		allErrs = append(allErrs, validateAgainstClass(ctx, obj, oldObj, reader, specUnchanged)...)
-		if e := validateExternalSuperuserSecret(ctx, obj, reader); e != nil {
+	if liveReader != nil {
+		allErrs = append(allErrs, validateAgainstClass(ctx, obj, oldObj, liveReader, specUnchanged)...)
+		if e := validateExternalSuperuserSecret(ctx, obj, liveReader); e != nil {
 			allErrs = append(allErrs, e)
 		}
 	}
 
 	return allErrs
+}
+
+func validateCustomMetrics(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
+	if obj.Spec.Monitoring == nil {
+		return nil
+	}
+	basePath := field.NewPath("spec", "monitoring", "customQueriesConfigMap")
+	var allErrs field.ErrorList
+
+	for i := range obj.Spec.Monitoring.CustomQueriesConfigMap {
+		refPath := basePath.Index(i)
+		if obj.Spec.Monitoring.CustomQueriesConfigMap[i].Optional != nil {
+			allErrs = append(allErrs, field.Invalid(
+				refPath.Child("optional"),
+				*obj.Spec.Monitoring.CustomQueriesConfigMap[i].Optional,
+				fmt.Sprintf("optional is not supported for ConfigMap %q; omit the field because custom-metrics sources are required",
+					obj.Spec.Monitoring.CustomQueriesConfigMap[i].Name)))
+		}
+		name := obj.Spec.Monitoring.CustomQueriesConfigMap[i].Name
+		if name == "" || reader == nil {
+			continue
+		}
+		cm := &corev1.ConfigMap{}
+		namePath := refPath.Child("name")
+		switch err := reader.Get(ctx, client.ObjectKey{Name: name, Namespace: obj.Namespace}, cm); {
+		case apierrors.IsNotFound(err):
+			allErrs = append(allErrs, field.Invalid(namePath, name, "referenced custom-metrics ConfigMap does not exist"))
+		case err != nil:
+			allErrs = append(allErrs, field.InternalError(namePath, err))
+		}
+	}
+	return allErrs
+}
+
+func clusterMonitoringSelectorsUnchanged(obj, oldObj *enterpriseApi.PostgresCluster) bool {
+	oldRefs := func() []corev1.ConfigMapKeySelector {
+		if oldObj == nil || oldObj.Spec.Monitoring == nil {
+			return nil
+		}
+		return oldObj.Spec.Monitoring.CustomQueriesConfigMap
+	}()
+	newRefs := func() []corev1.ConfigMapKeySelector {
+		if obj.Spec.Monitoring == nil {
+			return nil
+		}
+		return obj.Spec.Monitoring.CustomQueriesConfigMap
+	}()
+	if len(oldRefs) != len(newRefs) {
+		return false
+	}
+	for i := range oldRefs {
+		if oldRefs[i].Name != newRefs[i].Name || oldRefs[i].Key != newRefs[i].Key {
+			return false
+		}
+	}
+	return true
 }
 
 func validateExternalSuperuserSecret(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader) *field.Error {

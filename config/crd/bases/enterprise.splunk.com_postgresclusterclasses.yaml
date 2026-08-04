@@ -277,8 +277,7 @@ spec:
                 default: {}
                 description: |-
                   PostgresClusterConfig contains cluster-level configuration.
-                  These settings apply to PostgresCluster infrastructure.
-                  Can be overridden in PostgresCluster CR.
+                  Field documentation states whether a setting is overridable.
                 properties:
                   backup:
                     description: |-
@@ -334,10 +333,7 @@ spec:
                     type: integer
                   monitoring:
                     default: {}
-                    description: |-
-                      Monitoring contains configuration for metrics exposure.
-                      When enabled, creates metrics resources for clusters using this class.
-                      Can be overridden in PostgresCluster CR.
+                    description: Monitoring contains overridable metric defaults.
                     properties:
                       connectionPoolerMetrics:
                         properties:

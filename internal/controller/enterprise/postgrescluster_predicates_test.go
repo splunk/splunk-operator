@@ -11,6 +11,8 @@ You may obtain a copy of the License at
 package controller
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -18,9 +20,13 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
@@ -62,7 +68,7 @@ func dbWithStatusRoles(name, cluster string, roleNames ...string) *enterprisev4.
 		roles = append(roles, enterprisev4.DatabaseRoleInfo{Name: r, Exists: true})
 	}
 	return &enterprisev4.PostgresDatabase{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns", Generation: 1},
 		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: cluster}},
 		Status:     enterprisev4.PostgresDatabaseStatus{Databases: []enterprisev4.DatabaseInfo{{Name: "app", Roles: roles}}},
 	}
@@ -94,12 +100,35 @@ func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"},
 		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}},
 	}}))
+	published := dbWithStatusRoles("db", "pg")
+	published.Status.CustomMetricsPublication = &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		ObservedGeneration: 1,
+	}
+	assert.True(t, pred.Create(event.CreateEvent{Object: published}))
 
 	assert.True(t, pred.Delete(event.DeleteEvent{Object: dbWithStatusRoles("db", "pg")}))
 
 	old := dbWithStatusRoles("db", "pg", "app_admin")
 	updated := dbWithStatusRoles("db", "pg", "app_admin", "app_rw")
 	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+
+	oldSpec := dbWithStatusRoles("db", "pg", "app_admin")
+	oldSpec.Generation = 1
+	specUpdated := dbWithStatusRoles("db", "pg", "app_admin")
+	specUpdated.Generation = 2
+	assert.False(t, pred.Update(event.UpdateEvent{ObjectOld: oldSpec, ObjectNew: specUpdated}),
+		"raw database spec changes must be interpreted by the database controller first")
+
+	statusUpdated := dbWithStatusRoles("db", "pg", "app_admin")
+	statusUpdated.Status.CustomMetricsPublication = &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		ObservedGeneration: 1,
+		Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+			DatabaseName: "app",
+			Revision:     "revision",
+			Exists:       true,
+		}},
+	}
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: statusUpdated}))
 
 	deleting := dbWithStatusRoles("db", "pg", "app_admin")
 	now := metav1.Now()
@@ -109,6 +138,325 @@ func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
 	assert.False(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: dbWithStatusRoles("db", "pg", "app_admin")}))
 	assert.False(t, pred.Update(event.UpdateEvent{ObjectOld: &corev1.Secret{}, ObjectNew: &corev1.Secret{}}))
 }
+
+func TestExtractDatabaseCustomQueryConfigMapNamesUsesCommittedStatus(t *testing.T) {
+	db := dbWithStatusRoles("db", "pg")
+	db.Spec.Databases = []enterprisev4.DatabaseDefinition{{
+		Name: "app",
+		Monitoring: &enterprisev4.DatabaseMonitoring{
+			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selectorForTest("spec-only")},
+		},
+	}}
+	assert.Nil(t, extractDatabaseCustomQueryConfigMapNames(db))
+
+	db.Status.CustomMetricsPublication = &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		ObservedGeneration: db.Generation,
+		Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+			DatabaseName: "app",
+			Revision:     "revision",
+			Exists:       true,
+			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{
+				selectorForTest("published"),
+				selectorForTest("published"),
+			},
+		}},
+	}
+	assert.Equal(t, []string{"published"}, extractDatabaseCustomQueryConfigMapNames(db))
+
+	db.Status.CustomMetricsPublication.Contributions[0].Exists = false
+	assert.Nil(t, extractDatabaseCustomQueryConfigMapNames(db))
+
+	db.Status.CustomMetricsPublication.Contributions[0].Exists = true
+	db.Status.CustomMetricsPublication.ObservedGeneration = db.Generation - 1
+	assert.Nil(t, extractDatabaseCustomQueryConfigMapNames(db))
+}
+
+func selectorForTest(name string) corev1.ConfigMapKeySelector {
+	return corev1.ConfigMapKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: name},
+		Key:                  "queries.yaml",
+	}
+}
+
+func TestGeneratedMetricsConfigMapMapsToPostgresCluster(t *testing.T) {
+	controller := true
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name:      "pg-metrics",
+		Namespace: "ns",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: cnpgv1.SchemeGroupVersion.String(),
+			Kind:       "Cluster",
+			Name:       "pg",
+			Controller: &controller,
+		}},
+	}}
+
+	reqs := (&PostgresClusterReconciler{}).enqueueClustersForCustomMetricsConfigMap(t.Context(), cm)
+	if assert.Len(t, reqs, 1) {
+		assert.Equal(t, "ns", reqs[0].Namespace)
+		assert.Equal(t, "pg", reqs[0].Name)
+	}
+
+	pred := customMetricsConfigMapPredicate()
+	updated := cm.DeepCopy()
+	updated.Data = map[string]string{generatedCMKeyForTest: "changed"}
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: cm, ObjectNew: updated}))
+
+	ownerRemoved := cm.DeepCopy()
+	ownerRemoved.OwnerReferences = nil
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: cm, ObjectNew: ownerRemoved}))
+	assert.False(t, pred.Update(event.UpdateEvent{ObjectOld: cm, ObjectNew: cm.DeepCopy()}))
+
+	assert.True(t, pred.Delete(event.DeleteEvent{Object: cm}))
+
+	hashDrift := cm.DeepCopy()
+	hashDrift.Annotations = map[string]string{
+		"enterprise.splunk.com/monitoring-config-hash": "drifted",
+	}
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: cm, ObjectNew: hashDrift}))
+}
+
+func TestForeignGeneratedMetricsConfigMapMapsToIntendedPostgresCluster(t *testing.T) {
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name:      "pg-metrics",
+		Namespace: "ns",
+	}}
+
+	reqs := (&PostgresClusterReconciler{}).enqueueClustersForCustomMetricsConfigMap(t.Context(), cm)
+
+	require.Len(t, reqs, 1)
+	assert.Equal(t, "ns", reqs[0].Namespace)
+	assert.Equal(t, "pg", reqs[0].Name)
+	assert.True(t, customMetricsConfigMapPredicate().Delete(event.DeleteEvent{Object: cm}))
+}
+
+func TestGeneratedMetricsConfigMapOwnedByAnotherPostgresClusterMapsToIntendedCluster(t *testing.T) {
+	controller := true
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name:      "intended-metrics",
+		Namespace: "ns",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresCluster",
+			Name:       "other",
+			Controller: &controller,
+		}},
+	}}
+
+	pred := customMetricsConfigMapPredicate()
+	assert.True(t, pred.Create(event.CreateEvent{Object: cm}))
+	assert.True(t, pred.Delete(event.DeleteEvent{Object: cm}))
+	reqs := (&PostgresClusterReconciler{}).enqueueClustersForCustomMetricsConfigMap(t.Context(), cm)
+	require.Len(t, reqs, 1)
+	assert.Equal(t, "intended", reqs[0].Name)
+}
+
+func TestCustomMetricsConfigMapCreatePredicateSeparatesSourcesFromOwnedResources(t *testing.T) {
+	controller := true
+	pred := customMetricsConfigMapPredicate()
+	source := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: "ns"}}
+	owned := source.DeepCopy()
+	owned.Name = "owned"
+	owned.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: enterprisev4.GroupVersion.String(),
+		Kind:       "PostgresCluster",
+		Name:       "pg",
+		Controller: &controller,
+	}}
+
+	assert.True(t, pred.Create(event.CreateEvent{Object: source}))
+	assert.False(t, pred.Create(event.CreateEvent{Object: owned}))
+}
+
+func TestCustomMetricsConfigMapMapperFansOutBeyondControllerOwner(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	consumer := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "ns"},
+		Spec: enterprisev4.PostgresClusterSpec{Monitoring: &enterprisev4.PostgresClusterMonitoring{
+			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selectorForTest("shared-source")},
+		}},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(consumer).
+		WithIndex(&enterprisev4.PostgresCluster{}, indexClusterCustomQueryConfigMaps, extractClusterCustomQueryConfigMapNames).
+		Build()
+	controller := true
+	source := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name:      "shared-source",
+		Namespace: "ns",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: enterprisev4.GroupVersion.String(),
+			Kind:       "PostgresCluster",
+			Name:       "producer",
+			Controller: &controller,
+		}},
+	}}
+
+	reqs := (&PostgresClusterReconciler{Client: c}).enqueueClustersForCustomMetricsConfigMap(t.Context(), source)
+
+	require.Len(t, reqs, 2)
+	assert.ElementsMatch(t, []string{"producer", "consumer"}, []string{reqs[0].Name, reqs[1].Name})
+}
+
+func TestCustomMetricsConfigMapMapperFansOutCNPGOwnedDatabaseSource(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	database := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "databases", Namespace: "ns", Generation: 2},
+		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "consumer"}},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+				ObservedGeneration: 2,
+				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+					DatabaseName: "orders",
+					Revision:     "revision",
+					Exists:       true,
+					CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{
+						selectorForTest("provider-source"),
+					},
+				}},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(database).
+		WithIndex(&enterprisev4.PostgresDatabase{}, indexDatabaseCustomQueryConfigMaps, extractDatabaseCustomQueryConfigMapNames).
+		Build()
+	controller := true
+	source := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name:      "provider-source",
+		Namespace: "ns",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: cnpgv1.SchemeGroupVersion.String(),
+			Kind:       "Cluster",
+			Name:       "provider-owner",
+			Controller: &controller,
+		}},
+	}}
+
+	reqs := (&PostgresClusterReconciler{Client: c}).enqueueClustersForCustomMetricsConfigMap(t.Context(), source)
+
+	require.Len(t, reqs, 2)
+	assert.ElementsMatch(t, []string{"provider-owner", "consumer"}, []string{reqs[0].Name, reqs[1].Name})
+}
+
+func TestCNPGOwnedConfigMapUsesOwnerNameWithoutGeneratedNameConvention(t *testing.T) {
+	controller := true
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name:      "arbitrary-provider-config",
+		Namespace: "ns",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: cnpgv1.SchemeGroupVersion.String(),
+			Kind:       "Cluster",
+			Name:       "pg",
+			Controller: &controller,
+		}},
+	}}
+
+	reqs := (&PostgresClusterReconciler{}).enqueueClustersForCustomMetricsConfigMap(t.Context(), cm)
+
+	require.Len(t, reqs, 1)
+	assert.Equal(t, "pg", reqs[0].Name)
+}
+
+func TestOwnedConfigMapPredicateObservesSafetyDrift(t *testing.T) {
+	pred := configMapPredicator()
+	base := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name:        "pg-metrics-lkg",
+		Annotations: map[string]string{"enterprise.splunk.com/monitoring-config-hash": "revision"},
+	}}
+
+	metadataDrift := base.DeepCopy()
+	metadataDrift.Annotations["enterprise.splunk.com/monitoring-config-hash"] = "drifted"
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: metadataDrift}))
+
+	binaryDrift := base.DeepCopy()
+	binaryDrift.BinaryData = map[string][]byte{"queries.yaml": []byte("drifted")}
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: binaryDrift}))
+}
+
+type failIndexedListClient struct {
+	client.Client
+}
+
+func (c *failIndexedListClient) List(
+	ctx context.Context,
+	list client.ObjectList,
+	opts ...client.ListOption,
+) error {
+	options := &client.ListOptions{}
+	options.ApplyOptions(opts)
+	if options.FieldSelector != nil && !options.FieldSelector.Empty() {
+		return errors.New("injected indexed list failure")
+	}
+	return c.Client.List(ctx, list, opts...)
+}
+
+func TestCustomMetricsConfigMapMapperFallsBackWhenIndexedListsFail(t *testing.T) {
+	scheme := runtime.NewScheme()
+	assert.NoError(t, enterprisev4.AddToScheme(scheme))
+	cluster := &enterprisev4.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-source", Namespace: "ns"},
+		Spec: enterprisev4.PostgresClusterSpec{
+			Monitoring: &enterprisev4.PostgresClusterMonitoring{
+				CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selectorForTest("source")},
+			},
+		},
+	}
+	database := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "databases", Namespace: "ns", Generation: 3},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "database-source"},
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+				ObservedGeneration: 3,
+				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+					DatabaseName:           "orders",
+					Revision:               "revision",
+					Exists:                 true,
+					CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selectorForTest("source")},
+				}},
+			},
+		},
+	}
+	duplicateTarget := database.DeepCopy()
+	duplicateTarget.Name = "databases-same-target"
+	duplicateTarget.Spec.ClusterRef.Name = cluster.Name
+	unrelatedCluster := cluster.DeepCopy()
+	unrelatedCluster.Name = "unrelated-cluster"
+	unrelatedCluster.Spec.Monitoring.CustomQueriesConfigMap = []corev1.ConfigMapKeySelector{
+		selectorForTest("other-source"),
+	}
+	unrelatedDatabase := database.DeepCopy()
+	unrelatedDatabase.Name = "unrelated-database"
+	unrelatedDatabase.Spec.ClusterRef.Name = "unrelated-database-source"
+	unrelatedDatabase.Status.CustomMetricsPublication.Contributions[0].CustomQueriesConfigMap =
+		[]corev1.ConfigMapKeySelector{selectorForTest("other-source")}
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		cluster,
+		database,
+		duplicateTarget,
+		unrelatedCluster,
+		unrelatedDatabase,
+	).Build()
+	r := &PostgresClusterReconciler{Client: &failIndexedListClient{Client: base}}
+
+	reqs := r.enqueueClustersForCustomMetricsConfigMap(t.Context(), &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: "ns"},
+	})
+
+	require.Len(t, reqs, 2)
+	assert.ElementsMatch(t, []string{"cluster-source", "database-source"}, []string{
+		reqs[0].Name,
+		reqs[1].Name,
+	})
+}
+
+const generatedCMKeyForTest = "queries.yaml"
 
 func TestCNPGClusterPredicator(t *testing.T) {
 	t.Parallel()
@@ -136,6 +484,13 @@ func TestCNPGClusterPredicator(t *testing.T) {
 		{name: "current primary change", mutate: func(c *cnpgv1.Cluster) { c.Status.CurrentPrimary = "pg1-2" }, want: true},
 		{name: "resizing pvc added", mutate: func(c *cnpgv1.Cluster) { c.Status.ResizingPVC = []string{"pg1-1"} }, want: true},
 		{name: "resizing pvc count reduced", mutate: func(c *cnpgv1.Cluster) { c.Status.ResizingPVC = []string{"pg1-1", "pg1-2"} }, want: true},
+		{
+			name: "metrics ConfigMap resource version change",
+			mutate: func(c *cnpgv1.Cluster) {
+				c.Status.ConfigMapResourceVersion.Metrics = map[string]string{"pg1-metrics": "2"}
+			},
+			want: true,
+		},
 	}
 
 	for _, tc := range cases {

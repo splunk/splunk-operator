@@ -18,6 +18,7 @@ package core
 import (
 	"errors"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,10 +29,11 @@ import (
 
 // ReconcileContext bundles infrastructure dependencies injected by the controller.
 type ReconcileContext struct {
-	Client   client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Metrics  ports.Recorder
+	Client                              client.Client
+	Scheme                              *runtime.Scheme
+	Recorder                            record.EventRecorder
+	Metrics                             ports.Recorder
+	NewCustomMetricsAcknowledgementRepo func(*enterprisev4.PostgresCluster) dbmetrics.AcknowledgementRepository
 }
 
 type reconcileDBPhases string
@@ -77,12 +79,13 @@ const (
 	deletingDBPhase     reconcileDBPhases = "Deleting"
 
 	// condition types
-	clusterReady    conditionTypes = "ClusterReady"
-	rolesReady      conditionTypes = "RolesReady"
-	databasesReady  conditionTypes = "DatabasesReady"
-	secretsReady    conditionTypes = "SecretsReady"
-	configMapsReady conditionTypes = "ConfigMapsReady"
-	privilegesReady conditionTypes = "PrivilegesReady"
+	clusterReady       conditionTypes = "ClusterReady"
+	rolesReady         conditionTypes = "RolesReady"
+	databasesReady     conditionTypes = "DatabasesReady"
+	secretsReady       conditionTypes = "SecretsReady"
+	configMapsReady    conditionTypes = "ConfigMapsReady"
+	privilegesReady    conditionTypes = "PrivilegesReady"
+	customMetricsReady conditionTypes = "CustomMetricsReady"
 
 	// condition reasons
 	reasonClusterNotFound            conditionReasons = "ClusterNotFound"
@@ -112,6 +115,10 @@ const (
 	reasonPrivilegesGranted          conditionReasons = "PrivilegesGranted"
 	reasonPrivilegesGrantFailed      conditionReasons = "PrivilegesGrantFailed"
 	reasonPrivilegesTerminalFailure  conditionReasons = "PrivilegesTerminalFailure"
+	reasonCustomMetricsReady         conditionReasons = "CustomMetricsReady"
+	reasonCustomMetricsDisabled      conditionReasons = "CustomMetricsDisabled"
+	reasonCustomMetricsPending       conditionReasons = "CustomMetricsPending"
+	reasonCustomMetricsFailed        conditionReasons = "CustomMetricsFailed"
 	cnpgReasonRecovery               conditionReasons = "CNPGClusterRecovery"
 	cnpgReasonFailingOver            conditionReasons = "CNPGFailingOver"
 
@@ -132,6 +139,7 @@ const (
 	conflictCNPGDatabasesReconcile reconcileConflictCategory = "cnpg_databases_reconcile"
 	conflictDatabasesStatus        reconcileConflictCategory = "databases_status"
 	conflictPrivilegesStatus       reconcileConflictCategory = "privileges_status"
+	conflictCustomMetricsStatus    reconcileConflictCategory = "custom_metrics_status"
 	conflictFinalStatus            reconcileConflictCategory = "final_status"
 )
 

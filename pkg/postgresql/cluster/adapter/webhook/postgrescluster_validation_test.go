@@ -375,6 +375,150 @@ func TestValidatePostgresClusterExternalSecret(t *testing.T) {
 	}
 }
 
+func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
+	const ns = "default"
+
+	validClass := &enterpriseApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "dev"},
+		Spec: enterpriseApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &enterpriseApi.PostgresClusterClassConfig{
+				Instances:        ptr.To(int32(3)),
+				Storage:          ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion:  ptr.To("17"),
+				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{Enabled: ptr.To(false)},
+			},
+		},
+	}
+
+	clusterWith := func(refs ...corev1.ConfigMapKeySelector) *enterpriseApi.PostgresCluster {
+		return &enterpriseApi.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
+			Spec: enterpriseApi.PostgresClusterSpec{
+				Class:      "dev",
+				Monitoring: &enterpriseApi.PostgresClusterMonitoring{CustomQueriesConfigMap: refs},
+			},
+		}
+	}
+
+	sourceCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "metrics-src", Namespace: ns},
+		Data:       map[string]string{"queries.yaml": ""},
+	}
+
+	t.Run("nil monitoring - skipped", func(t *testing.T) {
+		reader := newFakeReader(validClass).Build()
+		obj := &enterpriseApi.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
+			Spec:       enterpriseApi.PostgresClusterSpec{Class: "dev"},
+		}
+		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, reader)
+		assert.Empty(t, errs)
+	})
+
+	t.Run("existing source ConfigMap - admitted", func(t *testing.T) {
+		reader := newFakeReader(validClass, sourceCM).Build()
+		obj := clusterWith(corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"})
+		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, reader)
+		assert.Empty(t, errs)
+	})
+
+	t.Run("missing source ConfigMap - rejected", func(t *testing.T) {
+		reader := newFakeReader(validClass).Build()
+		obj := clusterWith(corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "absent"}, Key: "queries.yaml"})
+		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, reader)
+		require.Len(t, errs, 1)
+		assert.Equal(t, "spec.monitoring.customQueriesConfigMap[0].name", errs[0].Field)
+		assert.Contains(t, errs[0].Detail, "does not exist")
+	})
+
+	t.Run("deleting object skips missing live references", func(t *testing.T) {
+		reader := newFakeReader().Build()
+		oldObj := clusterWith(corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "removed"}, Key: "queries.yaml"})
+		obj := oldObj.DeepCopy()
+		now := metav1.Now()
+		obj.DeletionTimestamp = &now
+
+		errs := webhook.ValidatePostgresClusterUpdate(context.Background(), obj, oldObj, reader)
+
+		assert.Empty(t, errs)
+	})
+
+	t.Run("every explicit optional field is rejected", func(t *testing.T) {
+		reader := newFakeReader(validClass, sourceCM).Build()
+		obj := clusterWith(
+			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: ptr.To(true)},
+			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"},
+			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: ptr.To(false)},
+		)
+		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, reader)
+
+		require.Len(t, errs, 2)
+		assert.Equal(t, "spec.monitoring.customQueriesConfigMap[0].optional", errs[0].Field)
+		assert.Equal(t, "spec.monitoring.customQueriesConfigMap[2].optional", errs[1].Field)
+		assert.Contains(t, errs[0].Detail, "omit the field")
+		assert.Contains(t, errs[1].Detail, "omit the field")
+		assert.Contains(t, errs[0].Detail, `ConfigMap "metrics-src"`)
+	})
+
+	t.Run("optional policy does not depend on API reader", func(t *testing.T) {
+		obj := clusterWith(corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"},
+			Key:                  "queries.yaml",
+			Optional:             ptr.To(true),
+		})
+
+		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, nil)
+
+		require.Len(t, errs, 1)
+		assert.Equal(t, "spec.monitoring.customQueriesConfigMap[0].optional", errs[0].Field)
+	})
+
+	t.Run("unchanged missing source does not block an unrelated update", func(t *testing.T) {
+		oldObj := clusterWith(corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "removed"},
+			Key:                  "queries.yaml",
+		})
+		obj := oldObj.DeepCopy()
+		obj.Labels = map[string]string{"unrelated": "change"}
+
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, newFakeReader(validClass).Build())
+
+		assert.Empty(t, errs)
+	})
+
+	t.Run("changed selector list validates every resulting reference", func(t *testing.T) {
+		oldObj := clusterWith(corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"},
+			Key:                  "queries.yaml",
+		})
+		obj := clusterWith(
+			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"},
+			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "absent"}, Key: "queries.yaml"},
+		)
+
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, newFakeReader(validClass, sourceCM).Build())
+
+		require.Len(t, errs, 1)
+		assert.Equal(t, "spec.monitoring.customQueriesConfigMap[1].name", errs[0].Field)
+	})
+
+	t.Run("explicit optional remains rejected when selectors are otherwise unchanged", func(t *testing.T) {
+		ref := corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "removed"},
+			Key:                  "queries.yaml",
+			Optional:             ptr.To(false),
+		}
+		oldObj := clusterWith(ref)
+		obj := oldObj.DeepCopy()
+
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, newFakeReader(validClass).Build())
+
+		require.Len(t, errs, 1)
+		assert.Equal(t, "spec.monitoring.customQueriesConfigMap[0].optional", errs[0].Field)
+	})
+}
+
 func TestValidatePostgresClusterStorageUpdate(t *testing.T) {
 	class := &enterpriseApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "prod"},

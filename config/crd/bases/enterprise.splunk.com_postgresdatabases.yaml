@@ -83,6 +83,43 @@ spec:
                       items:
                         type: string
                       type: array
+                    monitoring:
+                      properties:
+                        customQueriesConfigMap:
+                          description: Ordered database-scoped sources; selector optional
+                            fields are unsupported.
+                          items:
+                            description: Selects a key from a ConfigMap.
+                            properties:
+                              key:
+                                description: The key to select.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the ConfigMap or its
+                                  key must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          maxItems: 100
+                          type: array
+                          x-kubernetes-list-type: atomic
+                          x-kubernetes-validations:
+                          - message: name must not be empty
+                            rule: self.all(x, has(x.name) && x.name.size() > 0)
+                          - message: key must not be empty
+                            rule: self.all(x, x.key.size() > 0)
+                      type: object
                     name:
                       description: Name of the PostgreSQL database to create.
                       maxLength: 30
@@ -220,6 +257,78 @@ spec:
                   - type
                   type: object
                 type: array
+              customMetricsPublication:
+                description: |-
+                  CustomMetricsPublication is committed intent consumed by the
+                  PostgresCluster controller. Nil or a stale observed generation means the
+                  current participation has not been published yet.
+                properties:
+                  contributions:
+                    description: |-
+                      Contributions contains one explicit participation decision per declared
+                      database.
+                    items:
+                      description: |-
+                        DatabaseCustomMetricsContribution is committed database-owned intent.
+                        Exists=false explicitly declares that the database does not participate.
+                      properties:
+                        customQueriesConfigMap:
+                          items:
+                            description: Selects a key from a ConfigMap.
+                            properties:
+                              key:
+                                description: The key to select.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the ConfigMap or its
+                                  key must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          maxItems: 100
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        databaseName:
+                          minLength: 1
+                          type: string
+                        exists:
+                          description: False removes previously committed intent.
+                          type: boolean
+                        revision:
+                          description: Digest used for cluster acknowledgement.
+                          minLength: 1
+                          type: string
+                      required:
+                      - databaseName
+                      - exists
+                      - revision
+                      type: object
+                    maxItems: 10
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  observedGeneration:
+                    description: |-
+                      ObservedGeneration identifies the PostgresDatabase spec generation used
+                      to calculate Contributions.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                required:
+                - contributions
+                - observedGeneration
+                type: object
               databases:
                 items:
                   properties:

@@ -33,9 +33,11 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -59,6 +61,21 @@ import (
 type stubDBRepo struct {
 	execErr error
 	calls   []string
+}
+
+type stubAcknowledgementRepository struct {
+	ack        mtypes.DatabaseAcknowledgement
+	found      bool
+	err        error
+	identities []mtypes.ContributorIdentity
+}
+
+func (r *stubAcknowledgementRepository) Find(
+	_ context.Context,
+	identity mtypes.ContributorIdentity,
+) (mtypes.DatabaseAcknowledgement, bool, error) {
+	r.identities = append(r.identities, identity)
+	return r.ack, r.found, r.err
 }
 
 type provisioningDurationObservation struct {
@@ -563,6 +580,25 @@ func TestSecretMissingPolicyForDB(t *testing.T) {
 	}
 }
 
+func TestExistingDatabaseStatusDoesNotDependOnCurrentPhase(t *testing.T) {
+	for _, phase := range []string{
+		string(provisioningDBPhase),
+		string(failedDBPhase),
+		string(readyDBPhase),
+	} {
+		t.Run(phase, func(t *testing.T) {
+			postgresDB := &enterprisev4.PostgresDatabase{
+				Status: enterprisev4.PostgresDatabaseStatus{
+					Phase:     &phase,
+					Databases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
+				},
+			}
+
+			assert.Contains(t, existingDatabaseStatus(postgresDB), "payments")
+		})
+	}
+}
+
 func TestGetDesiredRoles(t *testing.T) {
 	postgresDB := &enterprisev4.PostgresDatabase{
 		Spec: enterprisev4.PostgresDatabaseSpec{
@@ -833,6 +869,325 @@ func TestSetStatus(t *testing.T) {
 	assert.Equal(t, *postgresDB.Status.Phase, *got.Status.Phase)
 	require.Len(t, got.Status.Conditions, 1)
 	assert.Equal(t, postgresDB.Status.Conditions[0], got.Status.Conditions[0])
+}
+
+func TestPersistCustomMetricsPublication(t *testing.T) {
+	scheme := testScheme(t)
+	existing := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "database-owner",
+			Namespace:  "dbs",
+			UID:        types.UID("database-owner-uid"),
+			Generation: 7,
+		},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			Databases: []enterprisev4.DatabaseDefinition{
+				{
+					Name: "orders",
+					Monitoring: &enterprisev4.DatabaseMonitoring{
+						CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "orders-metrics"},
+							Key:                  "queries.yaml",
+						}},
+					},
+				},
+				{Name: "analytics"},
+			},
+		},
+	}
+	c := testClient(t, scheme, existing)
+	postgresDB := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existing), postgresDB))
+
+	changed, err := persistCustomMetricsPublication(t.Context(), c, postgresDB)
+
+	require.NoError(t, err)
+	assert.True(t, changed)
+	got := &enterprisev4.PostgresDatabase{}
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existing), got))
+	require.NotNil(t, got.Status.CustomMetricsPublication)
+	assert.Equal(t, int64(7), got.Status.CustomMetricsPublication.ObservedGeneration)
+	require.Len(t, got.Status.CustomMetricsPublication.Contributions, 2)
+	assert.Equal(t, "orders", got.Status.CustomMetricsPublication.Contributions[0].DatabaseName)
+	assert.True(t, got.Status.CustomMetricsPublication.Contributions[0].Exists)
+	assert.Equal(t, "orders-metrics", got.Status.CustomMetricsPublication.Contributions[0].CustomQueriesConfigMap[0].Name)
+	assert.Equal(t, "analytics", got.Status.CustomMetricsPublication.Contributions[1].DatabaseName)
+	assert.False(t, got.Status.CustomMetricsPublication.Contributions[1].Exists)
+	assert.Nil(t, got.Status.ObservedGeneration,
+		"publishing one component must not claim that unrelated database reconciliation observed the generation")
+
+	changed, err = persistCustomMetricsPublication(t.Context(), c, got)
+	require.NoError(t, err)
+	assert.False(t, changed)
+
+	got.Spec.Databases[0].Monitoring = nil
+	changed, err = persistCustomMetricsPublication(t.Context(), c, got)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	condition := meta.FindStatusCondition(got.Status.Conditions, string(customMetricsReady))
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionUnknown, condition.Status)
+	assert.Equal(t, string(reasonCustomMetricsPending), condition.Reason,
+		"replacing an active publication with a tombstone must durably keep the acknowledgement gate pending")
+}
+
+func TestReconcileCustomMetricsGateMapsAPIState(t *testing.T) {
+	const (
+		namespace = "dbs"
+		ownerName = "database-owner"
+		ownerUID  = types.UID("database-owner-uid")
+	)
+	selector := corev1.ConfigMapKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: "orders-metrics"},
+		Key:                  "queries.yaml",
+	}
+	querySelector := mtypes.QuerySelector{
+		ConfigMapName: selector.Name,
+		ConfigMapKey:  selector.Key,
+	}
+	ordersRevision := mtypes.ContributionRevision("orders", true, []mtypes.QuerySelector{querySelector})
+	disabledRevision := mtypes.ContributionRevision("analytics", false, nil)
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ownerName,
+			Namespace: namespace,
+			UID:       ownerUID,
+		},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			Databases: []enterprisev4.DatabaseDefinition{
+				{
+					Name: "orders",
+					Monitoring: &enterprisev4.DatabaseMonitoring{
+						CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selector},
+					},
+				},
+				{Name: "analytics"},
+			},
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+				ObservedGeneration: 1,
+				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{
+					{
+						DatabaseName:           "orders",
+						Revision:               ordersRevision,
+						Exists:                 true,
+						CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selector},
+					},
+					{
+						DatabaseName: "analytics",
+						Revision:     disabledRevision,
+						Exists:       false,
+					},
+				},
+			},
+		},
+	}
+	repository := &stubAcknowledgementRepository{
+		found: true,
+		ack: mtypes.DatabaseAcknowledgement{
+			DesiredRevision: ordersRevision,
+			AppliedRevision: ordersRevision,
+			Status:          mtypes.AcknowledgementTrue,
+		},
+	}
+	rc := &ReconcileContext{
+		NewCustomMetricsAcknowledgementRepo: func(*enterprisev4.PostgresCluster) dbmetrics.AcknowledgementRepository {
+			return repository
+		},
+	}
+
+	outcome, err := reconcileCustomMetricsGate(
+		t.Context(),
+		rc,
+		postgresDB,
+		&enterprisev4.PostgresCluster{},
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, dbmetrics.GateReady, outcome.State)
+	ordersContribution := mtypes.DatabaseContribution{
+		Identity: mtypes.ContributorIdentity{
+			PostgresDatabaseName: ownerName,
+			PostgresDatabaseUID:  string(ownerUID),
+			DatabaseName:         "orders",
+			Namespace:            namespace,
+		},
+		Revision:  ordersRevision,
+		Exists:    true,
+		Selectors: []mtypes.QuerySelector{querySelector},
+	}
+	require.Len(t, repository.identities, 1)
+	assert.Equal(t, ordersContribution.Identity, repository.identities[0])
+}
+
+func TestPersistCustomMetricsStatus(t *testing.T) {
+	tests := []struct {
+		name            string
+		outcome         dbmetrics.Outcome
+		conditionStatus metav1.ConditionStatus
+		phase           reconcileDBPhases
+		wantReason      string
+	}{
+		{
+			name: "ready",
+			outcome: dbmetrics.Outcome{
+				State:   dbmetrics.GateReady,
+				Reason:  "CustomMetricsReady",
+				Message: "Database custom metrics are applied",
+			},
+			conditionStatus: metav1.ConditionTrue,
+			phase:           readyDBPhase,
+			wantReason:      "CustomMetricsReady",
+		},
+		{
+			name: "pending",
+			outcome: dbmetrics.Outcome{
+				State:   dbmetrics.GatePending,
+				Reason:  "CustomMetricsPending",
+				Message: "Waiting for PostgresCluster acknowledgement",
+			},
+			conditionStatus: metav1.ConditionUnknown,
+			phase:           provisioningDBPhase,
+			wantReason:      "CustomMetricsPending",
+		},
+		{
+			name: "failed",
+			outcome: dbmetrics.Outcome{
+				State:   dbmetrics.GateFailed,
+				Reason:  "InvalidQueryDefinition",
+				Message: `Custom metrics for database "orders" failed`,
+			},
+			conditionStatus: metav1.ConditionFalse,
+			phase:           failedDBPhase,
+			wantReason:      "InvalidQueryDefinition",
+		},
+		{
+			name: "disabled tombstone",
+			outcome: dbmetrics.Outcome{
+				State:   dbmetrics.GateReady,
+				Reason:  "CustomMetricsDisabled",
+				Message: "Database custom metrics are disabled",
+			},
+			conditionStatus: metav1.ConditionTrue,
+			phase:           readyDBPhase,
+			wantReason:      "CustomMetricsDisabled",
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			scheme := testScheme(t)
+			existing := &enterprisev4.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "database-owner",
+					Namespace:  "dbs",
+					Generation: 3,
+				},
+				Spec: enterprisev4.PostgresDatabaseSpec{
+					Databases: []enterprisev4.DatabaseDefinition{{Name: "orders"}},
+				},
+				Status: enterprisev4.PostgresDatabaseStatus{
+					CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+						ObservedGeneration: 3,
+						Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+							DatabaseName: "orders",
+							Revision:     "published-revision",
+							Exists:       true,
+						}},
+					},
+				},
+			}
+			c := testClient(t, scheme, existing)
+			postgresDB := &enterprisev4.PostgresDatabase{}
+			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existing), postgresDB))
+			rc := &ReconcileContext{
+				Client:  c,
+				Metrics: &pgprometheus.NoopRecorder{},
+			}
+
+			err := persistCustomMetricsStatus(
+				t.Context(),
+				rc,
+				postgresDB,
+				tst.outcome,
+				tst.conditionStatus,
+				tst.phase,
+			)
+
+			require.NoError(t, err)
+			got := &enterprisev4.PostgresDatabase{}
+			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existing), got))
+			require.NotNil(t, got.Status.Phase)
+			assert.Equal(t, string(tst.phase), *got.Status.Phase)
+			require.Len(t, got.Status.Databases, 1)
+			require.NotNil(t, got.Status.CustomMetricsPublication)
+			assert.Equal(t, "published-revision", got.Status.CustomMetricsPublication.Contributions[0].Revision,
+				"the acknowledgement gate must not rewrite the early publication")
+			condition := meta.FindStatusCondition(got.Status.Conditions, string(customMetricsReady))
+			require.NotNil(t, condition)
+			assert.Equal(t, tst.conditionStatus, condition.Status)
+			assert.Equal(t, tst.wantReason, condition.Reason)
+			assert.Equal(t, tst.outcome.Message, condition.Message)
+			assert.Equal(t, got.Generation, condition.ObservedGeneration)
+		})
+	}
+}
+
+func TestReconcileCustomMetricsGatePropagatesAcknowledgementRepositoryError(t *testing.T) {
+	transient := apierrors.NewServiceUnavailable("cluster status temporarily unavailable")
+	selector := corev1.ConfigMapKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: "orders-metrics"},
+		Key:                  "queries.yaml",
+	}
+	revision := mtypes.ContributionRevision("orders", true, []mtypes.QuerySelector{{
+		ConfigMapName: selector.Name,
+		ConfigMapKey:  selector.Key,
+	}})
+	postgresDB := &enterprisev4.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "database-owner",
+			Namespace: "dbs",
+			UID:       types.UID("database-owner-uid"),
+		},
+		Spec: enterprisev4.PostgresDatabaseSpec{
+			Databases: []enterprisev4.DatabaseDefinition{{
+				Name: "orders",
+				Monitoring: &enterprisev4.DatabaseMonitoring{
+					CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selector},
+				},
+			}},
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+				ObservedGeneration: 1,
+				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+					DatabaseName:           "orders",
+					Revision:               revision,
+					Exists:                 true,
+					CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selector},
+				}},
+			},
+		},
+	}
+	repository := &stubAcknowledgementRepository{err: transient}
+	rc := &ReconcileContext{
+		NewCustomMetricsAcknowledgementRepo: func(*enterprisev4.PostgresCluster) dbmetrics.AcknowledgementRepository {
+			return repository
+		},
+	}
+
+	_, err := reconcileCustomMetricsGate(
+		t.Context(),
+		rc,
+		postgresDB,
+		&enterprisev4.PostgresCluster{},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, transient)
+	assert.False(t, errors.Is(err, reconcile.TerminalError(nil)),
+		"acknowledgement read failures must remain retryable")
 }
 
 func TestPersistStatusStartsReadinessCycleOnce(t *testing.T) {
@@ -1654,18 +2009,25 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		assert.Equal(t, postgresDB.UID, after.OwnerReferences[0].UID)
 	})
 
-	t.Run("does not recreate missing secrets for previously provisioned databases", func(t *testing.T) {
-		postgresDB.Status.Phase = strPtr(string(readyDBPhase))
-		postgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
-		c := testClient(t, scheme)
+	for _, phase := range []reconcileDBPhases{provisioningDBPhase, failedDBPhase, readyDBPhase} {
+		t.Run("does not recreate missing secrets for previously provisioned databases in phase "+string(phase), func(t *testing.T) {
+			existing := postgresDB.DeepCopy()
+			existing.Status.Phase = strPtr(string(phase))
+			existing.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+			c := testClient(t, scheme)
 
-		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
+			err := reconcileRoleSecrets(context.Background(), c, scheme, existing, existingDatabaseStatus(existing))
 
-		require.Error(t, err)
-		var driftErr secretReconcileError
-		require.ErrorAs(t, err, &driftErr)
-		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
-	})
+			require.Error(t, err)
+			var driftErr secretReconcileError
+			require.ErrorAs(t, err, &driftErr)
+			assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+			assert.Error(t, c.Get(t.Context(), types.NamespacedName{
+				Name:      "primary-payments-admin",
+				Namespace: existing.Namespace,
+			}, &corev1.Secret{}))
+		})
+	}
 
 	t.Run("returns error when names are empty", func(t *testing.T) {
 
@@ -2532,6 +2894,9 @@ func TestPopulateDatabaseStatus(t *testing.T) {
 				{Name: "payments"},
 				{Name: "analytics"},
 			},
+		},
+		Status: enterprisev4.PostgresDatabaseStatus{
+			Databases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
 		},
 	}
 	want := []enterprisev4.DatabaseInfo{
