@@ -62,6 +62,7 @@ const (
 	condRolesReady      = "RolesReady"
 	condDatabasesReady  = "DatabasesReady"
 	condPrivilegesReady = "PrivilegesReady"
+	condCustomMetrics   = "CustomMetricsReady"
 )
 
 // condition reasons
@@ -81,9 +82,10 @@ const (
 
 // phases
 const (
-	phasePending = "Pending"
-	phaseReady   = "Ready"
-	phaseFailed  = "Failed"
+	phasePending      = "Pending"
+	phaseProvisioning = "Provisioning"
+	phaseReady        = "Ready"
+	phaseFailed       = "Failed"
 )
 
 // annotations
@@ -326,6 +328,34 @@ func expectFinalizerAdded(ctx context.Context, requestName types.NamespacedName)
 }
 
 func seedExistingDatabaseStatus(ctx context.Context, current *enterprisev4.PostgresDatabase, dbName string) {
+	for _, database := range current.Spec.Databases {
+		if database.Name != dbName || database.PasswordConfig != nil {
+			continue
+		}
+		for secretName, username := range map[string]string{
+			adminSecretNameForTest(current.Name, dbName): adminRoleNameForTest(dbName),
+			rwSecretNameForTest(current.Name, dbName):    rwRoleNameForTest(dbName),
+		} {
+			secret := &corev1.Secret{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: current.Namespace}, secret)
+			if apierrors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            secretName,
+						Namespace:       current.Namespace,
+						OwnerReferences: ownedByPostgresDatabase(current),
+					},
+					Data: map[string][]byte{
+						"username": []byte(username),
+						"password": []byte("test-password"),
+					},
+				})).To(Succeed())
+				continue
+			}
+			Expect(err).NotTo(HaveOccurred())
+		}
+		break
+	}
 	current.Status.Databases = []enterprisev4.DatabaseInfo{{Name: dbName}}
 	Expect(k8sClient.Status().Update(ctx, current)).To(Succeed())
 }
@@ -614,6 +644,156 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectStatusCondition(current, condDatabasesReady, metav1.ConditionTrue, reasonDatabasesAvailable)
 				expectStatusCondition(current, condPrivilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted)
 			})
+
+			It("gates readiness on the current custom-metrics acknowledgement", func() {
+				const (
+					sourceName = "database-handshake-metrics"
+					sourceKey  = "queries.yaml"
+				)
+				scenario := newReadyClusterScenario(namespace, "metrics-handshake", "metrics-cluster", "metrics-cnpg", dbAppdb)
+				Expect(k8sClient.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: sourceName, Namespace: namespace},
+					Data: map[string]string{sourceKey: `database_handshake_metric:
+  type: gauge
+  help: "Database handshake metric"
+  query: "SELECT 1 AS value"
+  value: value
+`},
+				})).To(Succeed())
+				createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{
+					Name: scenario.dbName,
+					Monitoring: &enterprisev4.DatabaseMonitoring{
+						CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
+							LocalObjectReference: corev1.LocalObjectReference{Name: sourceName},
+							Key:                  sourceKey,
+						}},
+					},
+				}})
+				postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
+				markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
+				cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
+				markCNPGClusterReady(ctx, cnpgCluster,
+					[]string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)},
+					"metrics-rw", "metrics-ro")
+
+				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+				current := expectFinalizerAdded(ctx, scenario.requestName)
+
+				By("publishing the contribution before provisioning")
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				Expect(current.Status.CustomMetricsPublication).NotTo(BeNil())
+				Expect(current.Status.CustomMetricsPublication.ObservedGeneration).To(Equal(current.Generation))
+				Expect(current.Status.CustomMetricsPublication.Contributions).To(HaveLen(1))
+				Expect(current.Status.CustomMetricsPublication.Contributions[0].Exists).To(BeTrue())
+				revision := current.Status.CustomMetricsPublication.Contributions[0].Revision
+				Expect(revision).NotTo(BeEmpty())
+
+				Eventually(func(g Gomega) {
+					result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(result.RequeueAfter).To(Equal(15 * time.Second))
+					g.Expect(publishedRoleNames(fetchPostgresDatabase(ctx, scenario.requestName))).To(
+						ConsistOf(adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)),
+					)
+				}, "5s", "100ms").Should(Succeed())
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				simulateClusterRoleOwnership(ctx, scenario.clusterName, scenario.namespace, current,
+					adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName))
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				Expect(current.Status.Databases).To(HaveLen(1))
+				Expect(current.Status.CustomMetricsPublication.Contributions[0].Revision).To(Equal(revision))
+				current.Status.Databases[0].Ready = true
+				Expect(k8sClient.Status().Update(ctx, current)).To(Succeed())
+				markCNPGDatabaseApplied(ctx, cnpgDatabase)
+
+				By("waiting for acknowledgement before final readiness")
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusPhase(current, phaseProvisioning)
+				expectStatusCondition(current, condCustomMetrics, metav1.ConditionUnknown, "CustomMetricsPending")
+
+				setAcknowledgement := func(desiredRevision, appliedRevision string, status metav1.ConditionStatus, reason string) {
+					GinkgoHelper()
+					cluster := &enterprisev4.PostgresCluster{}
+					Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.clusterName, Namespace: namespace}, cluster)).To(Succeed())
+					cluster.Status.CustomMetricsStatus = &enterprisev4.CustomMetricsStatus{
+						DatabaseContributions: []enterprisev4.DatabaseCustomMetricsStatus{{
+							PostgresDatabaseName: current.Name,
+							PostgresDatabaseUID:  string(current.UID),
+							DatabaseName:         scenario.dbName,
+							DesiredRevision:      desiredRevision,
+							AppliedRevision:      appliedRevision,
+							Status:               status,
+							Reason:               reason,
+							Message:              reason,
+						}},
+					}
+					Expect(k8sClient.Status().Update(ctx, cluster)).To(Succeed())
+				}
+
+				By("rejecting a stale acknowledgement")
+				setAcknowledgement("stale-revision", "stale-revision", metav1.ConditionTrue, "CustomMetricsReady")
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusPhase(current, phaseProvisioning)
+				expectStatusCondition(current, condCustomMetrics, metav1.ConditionUnknown, "CustomMetricsPending")
+
+				By("remaining provisioning while the provider is configuring the current revision")
+				setAcknowledgement(revision, "", metav1.ConditionUnknown, "CustomMetricsConfiguring")
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusPhase(current, phaseProvisioning)
+				expectStatusCondition(current, condCustomMetrics, metav1.ConditionUnknown, "CustomMetricsConfiguring")
+
+				By("exposing a matching negative acknowledgement even when the prior safe revision is still applied")
+				setAcknowledgement(revision, revision, metav1.ConditionFalse, "InvalidQueryDefinition")
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusPhase(current, phaseFailed)
+				expectStatusCondition(current, condCustomMetrics, metav1.ConditionFalse, "InvalidQueryDefinition")
+
+				By("becoming ready only after the exact revision is applied")
+				setAcknowledgement(revision, revision, metav1.ConditionTrue, "CustomMetricsReady")
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusPhase(current, phaseReady)
+				expectStatusCondition(current, condCustomMetrics, metav1.ConditionTrue, "CustomMetricsReady")
+
+				By("publishing and waiting for an explicit disablement tombstone")
+				Expect(k8sClient.Get(ctx, scenario.requestName, current)).To(Succeed())
+				current.Spec.Databases[0].Monitoring = nil
+				Expect(k8sClient.Update(ctx, current)).To(Succeed())
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				Expect(current.Status.CustomMetricsPublication).NotTo(BeNil())
+				Expect(current.Status.CustomMetricsPublication.Contributions).To(HaveLen(1))
+				Expect(current.Status.CustomMetricsPublication.Contributions[0].Exists).To(BeFalse())
+				disabledRevision := current.Status.CustomMetricsPublication.Contributions[0].Revision
+				Expect(disabledRevision).NotTo(Equal(revision))
+
+				expectStatusPhase(current, phaseProvisioning)
+				expectStatusCondition(current, condCustomMetrics, metav1.ConditionUnknown, "CustomMetricsPending")
+
+				setAcknowledgement(disabledRevision, disabledRevision, metav1.ConditionTrue, "CustomMetricsDisabled")
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusPhase(current, phaseReady)
+				expectStatusCondition(current, condCustomMetrics, metav1.ConditionTrue, "CustomMetricsDisabled")
+			})
 		})
 
 		Context("and external superuser secret is reconciled", func() {
@@ -736,6 +916,12 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 				current = fetchPostgresDatabase(ctx, scenario.requestName)
 				expectStatusCondition(current, condSecretsReady, metav1.ConditionFalse, reasonExternalSecretMissing)
+				Expect(current.Status.CustomMetricsPublication).NotTo(BeNil())
+				Expect(current.Status.CustomMetricsPublication.ObservedGeneration).To(Equal(current.Generation))
+				Expect(current.Status.CustomMetricsPublication.Contributions).To(HaveLen(1))
+				Expect(current.Status.CustomMetricsPublication.Contributions[0].DatabaseName).To(Equal(scenario.dbName))
+				Expect(current.Status.CustomMetricsPublication.Contributions[0].Exists).To(BeFalse(),
+					"non-participation must be published before the unrelated Secret gate fails")
 
 				received := make([]string, 0, 16)
 				collectEvents(&received, recorder)
@@ -1377,6 +1563,26 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			}
 			newCluster := oldCluster.DeepCopy()
 			newCluster.Status.ConnectionPoolerStatus.ReadWriteEnabled = false
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
+		})
+
+		It("passes PostgresCluster custom-metrics acknowledgement updates", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &enterprisev4.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+			}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.CustomMetricsStatus = &enterprisev4.CustomMetricsStatus{
+				DatabaseContributions: []enterprisev4.DatabaseCustomMetricsStatus{{
+					PostgresDatabaseName: "app",
+					PostgresDatabaseUID:  "uid",
+					DatabaseName:         "orders",
+					DesiredRevision:      "revision",
+					AppliedRevision:      "revision",
+					Status:               metav1.ConditionTrue,
+					Reason:               "CustomMetricsReady",
+				}},
+			}
 			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
 		})
 

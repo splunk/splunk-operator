@@ -39,8 +39,7 @@ type PostgresClusterClassSpec struct {
 	Provisioner string `json:"provisioner"`
 
 	// PostgresClusterConfig contains cluster-level configuration.
-	// These settings apply to PostgresCluster infrastructure.
-	// Can be overridden in PostgresCluster CR.
+	// Field documentation states whether a setting is overridable.
 	// +kubebuilder:default={}
 	// +optional
 	Config *PostgresClusterClassConfig `json:"config,omitempty"`
@@ -53,8 +52,7 @@ type PostgresClusterClassSpec struct {
 }
 
 // +kubebuilder:validation:XValidation:rule="!has(self.monitoring) || !has(self.monitoring.connectionPoolerMetrics) || !has(self.monitoring.connectionPoolerMetrics.enabled) || !self.monitoring.connectionPoolerMetrics.enabled || (has(self.connectionPooler) && has(self.connectionPooler.enabled) && self.connectionPooler.enabled)",message="connectionPooler.enabled must be true when monitoring.connectionPoolerMetrics.enabled is true"
-// PostgresClusterClassConfig contains provider-agnostic cluster configuration.
-// These fields define PostgresCluster infrastructure and can be overridden in PostgresCluster CR.
+// PostgresClusterClassConfig contains provider-agnostic defaults and policies.
 type PostgresClusterClassConfig struct {
 	// Instances is the number of database instances (1 primary + N replicas).
 	// Single instance (1) is suitable for development.
@@ -102,9 +100,7 @@ type PostgresClusterClassConfig struct {
 	// +optional
 	ConnectionPooler *ConnectionPoolerEnableConfig `json:"connectionPooler,omitempty"`
 
-	// Monitoring contains configuration for metrics exposure.
-	// When enabled, creates metrics resources for clusters using this class.
-	// Can be overridden in PostgresCluster CR.
+	// Monitoring contains overridable metric defaults.
 	// +kubebuilder:default={}
 	// +optional
 	Monitoring *PostgresMonitoringClassConfig `json:"monitoring,omitempty"`

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -88,12 +89,15 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=backups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=backups/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := slog.Default().With("controller", "PostgresCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics, UseCaseRegistryProvider: r.useCaseRegistry}
-	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper, cnpgadapter.NewBackupBackend(r.Client, r.Scheme), cnpgadapter.NewRecoveryBackend())
+	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper,
+		cnpgadapter.NewBackupBackend(r.Client, r.Scheme),
+		newCustomMetricsFactory(r.Client, r.Scheme), cnpgadapter.NewRecoveryBackend())
 	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
 	if sharedreconcile.IsPureConflict(err) {
 		return ctrl.Result{Requeue: true}, nil
@@ -158,6 +162,24 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&enterprisev4.PostgresCluster{},
+		indexClusterCustomQueryConfigMaps,
+		extractClusterCustomQueryConfigMapNames,
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&enterprisev4.PostgresDatabase{},
+		indexDatabaseCustomQueryConfigMaps,
+		extractDatabaseCustomQueryConfigMapNames,
+	); err != nil {
+		return err
+	}
+
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
 		For(&enterprisev4.PostgresCluster{}, builder.WithPredicates(postgresClusterPredicator())).
@@ -171,7 +193,10 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(postgresDatabaseForClusterPredicator())).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.enqueueClustersForExternalSecret),
-			builder.WithPredicates(predicates.ExternalSecret()))
+			builder.WithPredicates(predicates.ExternalSecret())).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueClustersForCustomMetricsConfigMap),
+			builder.WithPredicates(customMetricsConfigMapPredicate()))
 
 	// The barman-cloud ObjectStore CRD is optional. Only register an owner watch when
 	// the CRD is installed — Owns() on an unregistered GVK would fail informer startup.
@@ -241,7 +266,7 @@ func postgresDatabaseForClusterPredicator() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			db, ok := e.Object.(*enterprisev4.PostgresDatabase)
-			return ok && len(db.Status.Databases) > 0
+			return ok && (len(db.Status.Databases) > 0 || db.Status.CustomMetricsPublication != nil)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			oldDB, oldOK := e.ObjectOld.(*enterprisev4.PostgresDatabase)
@@ -255,7 +280,11 @@ func postgresDatabaseForClusterPredicator() predicate.Predicate {
 			if !equality.Semantic.DeepEqual(oldDB.GetDeletionTimestamp(), newDB.GetDeletionTimestamp()) {
 				return true
 			}
-			return !equality.Semantic.DeepEqual(oldDB.Status.Databases, newDB.Status.Databases)
+			return !equality.Semantic.DeepEqual(oldDB.Status.Databases, newDB.Status.Databases) ||
+				!equality.Semantic.DeepEqual(
+					oldDB.Status.CustomMetricsPublication,
+					newDB.Status.CustomMetricsPublication,
+				)
 		},
 		DeleteFunc:  func(event.DeleteEvent) bool { return true },
 		GenericFunc: func(event.GenericEvent) bool { return false },
@@ -316,7 +345,11 @@ func cnpgClusterPredicator() predicate.Predicate {
 					oldObj.Status.Instances != newObj.Status.Instances ||
 					oldObj.Status.ReadyInstances != newObj.Status.ReadyInstances ||
 					oldObj.Status.CurrentPrimary != newObj.Status.CurrentPrimary ||
-					len(oldObj.Status.ResizingPVC) != len(newObj.Status.ResizingPVC)
+					len(oldObj.Status.ResizingPVC) != len(newObj.Status.ResizingPVC) ||
+					!equality.Semantic.DeepEqual(
+						oldObj.Status.ConfigMapResourceVersion.Metrics,
+						newObj.Status.ConfigMapResourceVersion.Metrics,
+					)
 			},
 		},
 	)
@@ -386,14 +419,20 @@ func secretPredicator() predicate.Predicate {
 	}
 }
 
-// ConfigMap has no Generation, so ResourceVersionChangedPredicate would fire on label/annotation
-// mutations (e.g. admission webhooks, kubectl annotate) that don't affect data content.
+// ConfigMap has no Generation. Owned data and controller-owner drift are
+// relevant; safety metadata also carries the recoverable revision contract.
 func configMapPredicator() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			oldCM := e.ObjectOld.(*corev1.ConfigMap)
 			newCM := e.ObjectNew.(*corev1.ConfigMap)
-			return !equality.Semantic.DeepEqual(oldCM.Data, newCM.Data)
+			if !equality.Semantic.DeepEqual(oldCM.Data, newCM.Data) ||
+				!equality.Semantic.DeepEqual(oldCM.BinaryData, newCM.BinaryData) ||
+				!equality.Semantic.DeepEqual(metav1.GetControllerOf(oldCM), metav1.GetControllerOf(newCM)) {
+				return true
+			}
+			return strings.HasSuffix(newCM.Name, "-metrics-lkg") &&
+				!equality.Semantic.DeepEqual(oldCM.Annotations, newCM.Annotations)
 		},
 	}
 }

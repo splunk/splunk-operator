@@ -210,13 +210,14 @@ const (
 	failedClusterPhase       reconcileClusterPhases = "Failed"
 
 	// condition types
-	clusterReady      conditionTypes = "ClusterReady"
-	poolerReady       conditionTypes = "PoolerReady"
-	backupReady       conditionTypes = "BackupReady"
-	objectStoreReady  conditionTypes = "ObjectStoreReady"
-	managedRolesReady conditionTypes = "ManagedRolesReady"
-	secretsReady      conditionTypes = "SecretsReady"
-	configMapsReady   conditionTypes = "ConfigMapsReady"
+	clusterReady       conditionTypes = "ClusterReady"
+	poolerReady        conditionTypes = "PoolerReady"
+	backupReady        conditionTypes = "BackupReady"
+	objectStoreReady   conditionTypes = "ObjectStoreReady"
+	managedRolesReady  conditionTypes = "ManagedRolesReady"
+	secretsReady       conditionTypes = "SecretsReady"
+	configMapsReady    conditionTypes = "ConfigMapsReady"
+	customMetricsReady conditionTypes = "CustomMetricsReady"
 
 	// condition reasons — cross-component
 	reasonUpstreamNotReady conditionReasons = "UpstreamNotReady"
@@ -276,6 +277,19 @@ const (
 	reasonObjectStoreConfigured      conditionReasons = "ObjectStoreConfigured"
 	reasonObjectStoreReconcileFailed conditionReasons = "ObjectStoreReconcileFailed"
 
+	reasonCustomMetricsReady               conditionReasons = "CustomMetricsReady"
+	reasonCustomMetricsDisabled            conditionReasons = "CustomMetricsDisabled"
+	reasonCustomMetricsConfigMapNotFound   conditionReasons = "CustomMetricsConfigMapNotFound"
+	reasonCustomMetricsInvalidQuery        conditionReasons = "InvalidQueryDefinition"
+	reasonCustomMetricsMetricNameCollision conditionReasons = "MetricNameCollision"
+	reasonCustomMetricsConfigTooLarge      conditionReasons = "CustomMetricsConfigTooLarge"
+	reasonCustomMetricsTranslationFailed   conditionReasons = "CustomMetricsTranslationFailed"
+	reasonCustomMetricsApplyFailed         conditionReasons = "CustomMetricsApplyFailed"
+	reasonCustomMetricsApplyRetrying       conditionReasons = "CustomMetricsApplyRetrying"
+	reasonCustomMetricsConfiguring         conditionReasons = "CustomMetricsConfiguring"
+	reasonCustomMetricsPending             conditionReasons = "CustomMetricsPending"
+	reasonCustomMetricsOwnershipConflict   conditionReasons = "GeneratedResourceOwnershipConflict"
+
 	// condition reasons — CNPG cluster phase mapping
 	reasonCNPGClusterHealthy     conditionReasons = "CNPGClusterHealthy"
 	reasonCNPGProvisioning       conditionReasons = "CNPGClusterProvisioning"
@@ -322,6 +336,15 @@ const (
 	msgBackupVolumeSnapshotMissing statusMessage = "Backup enabled but cnpg.backup.volumeSnapshot is not configured in the class"
 	msgScheduledBackupReady        statusMessage = "Scheduled backup is configured and active"
 	msgFmtScheduledBackupFailed    statusMessage = "Failed to reconcile scheduled backup: %v"
+
+	msgCustomMetricsReady                statusMessage = "Custom metrics are configured and applied"
+	msgCustomMetricsDisabled             statusMessage = "No custom metrics configured"
+	msgFmtCustomMetricsConfigMapMiss     statusMessage = "Custom metrics source not found: %s"
+	msgFmtCustomMetricsInvalidQuery      statusMessage = "Invalid custom query definition: %v"
+	msgFmtCustomMetricsCollision         statusMessage = "Custom metric name collision(s): %s"
+	msgFmtCustomMetricsConfigTooLarge    statusMessage = "Custom metrics configuration is too large: %s. Reduce the number or size of referenced query definitions; the previous complete configuration remains active"
+	msgFmtCustomMetricsApplyFailed       statusMessage = "Failed to apply custom metrics: %v"
+	msgFmtCustomMetricsOwnershipConflict statusMessage = "Custom metrics cannot use the generated resource name: %s. Remove or rename the foreign resource to recover"
 
 	// status messages — aggregate and component readiness checks
 	msgPoolerDisabled                 statusMessage = "Connection pooler disabled"

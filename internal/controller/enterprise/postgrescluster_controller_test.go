@@ -49,6 +49,7 @@ import (
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
@@ -283,6 +284,22 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		cnpg.Status.ReadyInstances = int(instances)
 		cnpg.Status.WriteService = cnpg.Name + "-rw"
 		cnpg.Status.ReadService = cnpg.Name + "-ro"
+	}
+
+	acknowledgeCNPGMetricsConfigMap := func(enabled bool) {
+		GinkgoHelper()
+		cnpg := &cnpgv1.Cluster{}
+		Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+		cnpg.Status.ConfigMapResourceVersion.Metrics = map[string]string{}
+		if enabled {
+			generated := &v1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      clusterName + "-metrics",
+				Namespace: namespace,
+			}, generated)).To(Succeed())
+			cnpg.Status.ConfigMapResourceVersion.Metrics[generated.Name] = generated.ResourceVersion
+		}
+		Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 	}
 
 	BeforeEach(func() {
@@ -2034,6 +2051,565 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		})
 
 		Context("when a configmap spec changes", func() {
+			It("does not let unrelated unpublished database status block requested custom metrics indefinitely", func() {
+				const (
+					queryKey  = "queries.yaml"
+					queryName = "cluster_metric_with_unrelated_database_failure"
+				)
+				sourceName := clusterName + "-cluster-metrics-source"
+				databaseResourceName := "unrelated-" + strings.TrimPrefix(clusterName, clusterNamePrefix)
+				generatedKey := types.NamespacedName{Name: clusterName + "-metrics", Namespace: namespace}
+
+				source := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: sourceName, Namespace: namespace},
+					Data: map[string]string{queryKey: fmt.Sprintf(`%s:
+  type: gauge
+  help: "Cluster metric independent of database provisioning"
+  query: "SELECT 1 AS value"
+  value: value
+`, queryName)},
+				}
+				Expect(k8sClient.Create(ctx, source)).To(Succeed())
+				DeferCleanup(func() {
+					err := k8sClient.Delete(context.Background(), source)
+					Expect(err == nil || apierrors.IsNotFound(err)).To(BeTrue())
+				})
+
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
+				DeferCleanup(func() {
+					err := k8sClient.Delete(context.Background(), &v1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Name: caSecretName, Namespace: namespace},
+					})
+					Expect(err == nil || apierrors.IsNotFound(err)).To(BeTrue())
+				})
+				markCNPGHealthy(cnpg, clusterMemberCount)
+				cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileAfterCNPGHealthyOrPatch()
+
+				unrelatedDatabase := &enterprisev4.PostgresDatabase{
+					ObjectMeta: metav1.ObjectMeta{Name: databaseResourceName, Namespace: namespace},
+					Spec: enterprisev4.PostgresDatabaseSpec{
+						ClusterRef: v1.LocalObjectReference{Name: clusterName},
+						Databases: []enterprisev4.DatabaseDefinition{{
+							Name: "unrelated",
+							PasswordConfig: &enterprisev4.PasswordConfig{
+								ExternalAdminSecretRef: v1.LocalObjectReference{Name: databaseResourceName + "-missing-admin"},
+								ExternalRWSecretRef:    v1.LocalObjectReference{Name: databaseResourceName + "-missing-rw"},
+							},
+						}},
+					},
+				}
+				Expect(k8sClient.Create(ctx, unrelatedDatabase)).To(Succeed())
+				unrelatedDatabaseKey := types.NamespacedName{Name: databaseResourceName, Namespace: namespace}
+				DeferCleanup(func() {
+					current := &enterprisev4.PostgresDatabase{}
+					if err := k8sClient.Get(context.Background(), unrelatedDatabaseKey, current); err != nil {
+						Expect(apierrors.IsNotFound(err)).To(BeTrue())
+						return
+					}
+					controllerutil.RemoveFinalizer(current, postgresDatabaseFinalizer)
+					Expect(k8sClient.Update(context.Background(), current)).To(Succeed())
+					err := k8sClient.Delete(context.Background(), current)
+					Expect(err == nil || apierrors.IsNotFound(err)).To(BeTrue())
+				})
+
+				By("driving the database into an unrelated provisioning failure")
+				Eventually(func(g Gomega) {
+					_, _ = reconcilePostgresDatabase(ctx, unrelatedDatabaseKey)
+					current := &enterprisev4.PostgresDatabase{}
+					g.Expect(k8sClient.Get(ctx, unrelatedDatabaseKey, current)).To(Succeed())
+					condition := meta.FindStatusCondition(current.Status.Conditions, "SecretsReady")
+					g.Expect(condition).NotTo(BeNil())
+					g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(condition.Reason).To(Equal("ExternalSecretMissing"))
+				}, "5s", "100ms").Should(Succeed())
+
+				currentCluster := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, currentCluster)).To(Succeed())
+				currentCluster.Spec.Monitoring = &enterprisev4.PostgresClusterMonitoring{
+					CustomQueriesConfigMap: []v1.ConfigMapKeySelector{{
+						LocalObjectReference: v1.LocalObjectReference{Name: sourceName},
+						Key:                  queryKey,
+					}},
+				}
+				Expect(k8sClient.Update(ctx, currentCluster)).To(Succeed())
+				reconcileAfterCNPGHealthyOrPatch()
+				acknowledgeCNPGMetricsConfigMap(true)
+				reconcileNTimes(1)
+
+				currentCluster = &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, currentCluster)).To(Succeed())
+				condition := meta.FindStatusCondition(currentCluster.Status.Conditions, "CustomMetricsReady")
+				Expect(condition).NotTo(BeNil())
+				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+				Expect(condition.Reason).To(Equal("CustomMetricsReady"))
+
+				generated := &v1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, generatedKey, generated)).To(Succeed())
+				Expect(generated.Data[queryKey]).To(ContainSubstring(queryName))
+			})
+
+			It("consumes only committed database contributions and publishes acknowledgements", func() {
+				const (
+					queryKey  = "queries.yaml"
+					queryName = "controller_database_handshake"
+					database  = "appdb"
+				)
+				sourceName := clusterName + "-database-metrics-source"
+				databaseResourceName := clusterName + "-databases"
+				generatedKey := types.NamespacedName{Name: clusterName + "-metrics", Namespace: namespace}
+				source := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: sourceName, Namespace: namespace},
+					Data: map[string]string{queryKey: fmt.Sprintf(`%s:
+  type: gauge
+  help: "Controller database handshake metric"
+  query: "SELECT 1 AS value"
+  value: value
+`, queryName)},
+				}
+				Expect(k8sClient.Create(ctx, source)).To(Succeed())
+				postgresDatabase := &enterprisev4.PostgresDatabase{
+					ObjectMeta: metav1.ObjectMeta{Name: databaseResourceName, Namespace: namespace},
+					Spec: enterprisev4.PostgresDatabaseSpec{
+						ClusterRef: v1.LocalObjectReference{Name: clusterName},
+						Databases: []enterprisev4.DatabaseDefinition{{
+							Name: database,
+							Monitoring: &enterprisev4.DatabaseMonitoring{
+								CustomQueriesConfigMap: []v1.ConfigMapKeySelector{{
+									LocalObjectReference: v1.LocalObjectReference{Name: sourceName},
+									Key:                  queryKey,
+								}},
+							},
+						}},
+					},
+				}
+				Expect(k8sClient.Create(ctx, postgresDatabase)).To(Succeed())
+
+				By("ignoring raw database spec before its controller publishes status")
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, clusterMemberCount)
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileAfterCNPGHealthyOrPatch()
+
+				currentCluster := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, currentCluster)).To(Succeed())
+				condition := meta.FindStatusCondition(currentCluster.Status.Conditions, "CustomMetricsReady")
+				Expect(condition).NotTo(BeNil())
+				Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(condition.Reason).To(Equal("CustomMetricsPending"))
+				Expect(currentCluster.Status.CustomMetricsStatus).To(BeNil())
+				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, generatedKey, &v1.ConfigMap{}))).To(BeTrue())
+
+				By("aggregating the committed status contribution")
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: databaseResourceName, Namespace: namespace}, postgresDatabase)).To(Succeed())
+				revision := mtypes.ContributionRevision(database, true, []mtypes.QuerySelector{{
+					ConfigMapName: sourceName,
+					ConfigMapKey:  queryKey,
+				}})
+				postgresDatabase.Status.CustomMetricsPublication = &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+					ObservedGeneration: postgresDatabase.Generation,
+					Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+						DatabaseName: database,
+						Revision:     revision,
+						Exists:       true,
+						CustomQueriesConfigMap: []v1.ConfigMapKeySelector{{
+							LocalObjectReference: v1.LocalObjectReference{Name: sourceName},
+							Key:                  queryKey,
+						}},
+					}},
+				}
+				Expect(k8sClient.Status().Update(ctx, postgresDatabase)).To(Succeed())
+				reconcileNTimes(1)
+
+				generated := &v1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, generatedKey, generated)).To(Succeed())
+				acknowledgeCNPGMetricsConfigMap(true)
+				reconcileNTimes(1)
+				Expect(k8sClient.Get(ctx, generatedKey, generated)).To(Succeed())
+				Expect(generated.Data[queryKey]).To(ContainSubstring(database + ":" + queryName))
+				Expect(k8sClient.Get(ctx, pgClusterKey, currentCluster)).To(Succeed())
+				Expect(currentCluster.Status.CustomMetricsStatus).NotTo(BeNil())
+				Expect(currentCluster.Status.CustomMetricsStatus.DatabaseContributions).To(HaveLen(1))
+				ack := currentCluster.Status.CustomMetricsStatus.DatabaseContributions[0]
+				Expect(ack.PostgresDatabaseName).To(Equal(databaseResourceName))
+				Expect(ack.PostgresDatabaseUID).To(Equal(string(postgresDatabase.UID)))
+				Expect(ack.DatabaseName).To(Equal(database))
+				Expect(ack.DesiredRevision).To(Equal(revision))
+				Expect(ack.AppliedRevision).To(Equal(revision))
+				Expect(ack.Status).To(Equal(metav1.ConditionTrue))
+
+				By("retaining the applied revision while negatively acknowledging invalid source data")
+				baseline := generated.DeepCopy()
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: sourceName, Namespace: namespace}, source)).To(Succeed())
+				source.Data[queryKey] = fmt.Sprintf(`%s:
+  type: histogram
+  help: "Invalid database handshake metric"
+  query: "SELECT 1 AS value"
+  value: value
+`, queryName)
+				Expect(k8sClient.Update(ctx, source)).To(Succeed())
+				reconcileNTimes(1)
+				Expect(k8sClient.Get(ctx, generatedKey, generated)).To(Succeed())
+				Expect(generated.UID).To(Equal(baseline.UID))
+				Expect(generated.Data).To(Equal(baseline.Data))
+				Expect(k8sClient.Get(ctx, pgClusterKey, currentCluster)).To(Succeed())
+				ack = currentCluster.Status.CustomMetricsStatus.DatabaseContributions[0]
+				Expect(ack.DesiredRevision).To(Equal(revision))
+				Expect(ack.AppliedRevision).To(Equal(revision))
+				Expect(ack.Status).To(Equal(metav1.ConditionFalse))
+				Expect(ack.Reason).To(Equal("InvalidQueryDefinition"))
+
+				By("applying an explicit disabled contribution")
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: databaseResourceName, Namespace: namespace}, postgresDatabase)).To(Succeed())
+				disabledRevision := mtypes.ContributionRevision(database, false, nil)
+				postgresDatabase.Status.CustomMetricsPublication.Contributions[0] = enterprisev4.DatabaseCustomMetricsContribution{
+					DatabaseName: database,
+					Revision:     disabledRevision,
+					Exists:       false,
+				}
+				Expect(k8sClient.Status().Update(ctx, postgresDatabase)).To(Succeed())
+				reconcileNTimes(1)
+				acknowledgeCNPGMetricsConfigMap(false)
+				reconcileNTimes(1)
+				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, generatedKey, &v1.ConfigMap{}))).To(BeTrue())
+				Expect(k8sClient.Get(ctx, pgClusterKey, currentCluster)).To(Succeed())
+				ack = currentCluster.Status.CustomMetricsStatus.DatabaseContributions[0]
+				Expect(ack.DesiredRevision).To(Equal(disabledRevision))
+				Expect(ack.AppliedRevision).To(Equal(disabledRevision))
+				Expect(ack.Status).To(Equal(metav1.ConditionTrue))
+				Expect(ack.Reason).To(Equal("CustomMetricsDisabled"))
+			})
+
+			It("reconciles custom metrics through invalid sources and ownership collisions", func() {
+				const (
+					generatedHashAnnotation = "enterprise.splunk.com/monitoring-config-hash"
+					queryKey                = "queries.yaml"
+					queryName               = "controller_database_count"
+					uniqueLosingQuery       = "controller_losing_package_marker"
+				)
+
+				sourceName := clusterName + "-custom-metrics-source"
+				collisionSourceName := clusterName + "-custom-metrics-collision"
+				generatedName := clusterName + "-metrics"
+				generatedKey := types.NamespacedName{Name: generatedName, Namespace: namespace}
+				safetyKey := types.NamespacedName{Name: generatedName + "-lkg", Namespace: namespace}
+				validQuery := fmt.Sprintf(`%s:
+  type: gauge
+  help: "Controller integration metric"
+  query: "SELECT count(*) AS db_count FROM pg_database"
+  value: db_count
+`, queryName)
+
+				defer func() {
+					for _, name := range []string{sourceName, collisionSourceName} {
+						_ = k8sClient.Delete(ctx, &v1.ConfigMap{
+							ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+						})
+					}
+				}()
+
+				var foreignUID types.UID
+				defer func() {
+					if foreignUID == "" {
+						return
+					}
+					cm := &v1.ConfigMap{}
+					if err := k8sClient.Get(ctx, generatedKey, cm); err == nil && cm.UID == foreignUID {
+						_ = k8sClient.Delete(ctx, cm)
+					}
+				}()
+
+				monitoringCondition := func(status metav1.ConditionStatus, reason string, messageParts ...string) *metav1.Condition {
+					GinkgoHelper()
+					current := &enterprisev4.PostgresCluster{}
+					Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+					condition := meta.FindStatusCondition(current.Status.Conditions, "CustomMetricsReady")
+					Expect(condition).NotTo(BeNil())
+					Expect(condition.Status).To(Equal(status))
+					Expect(condition.Reason).To(Equal(reason))
+					Expect(condition.ObservedGeneration).To(Equal(current.Generation))
+					for _, part := range messageParts {
+						Expect(condition.Message).To(ContainSubstring(part))
+					}
+					return condition
+				}
+
+				getGenerated := func() *v1.ConfigMap {
+					GinkgoHelper()
+					cm := &v1.ConfigMap{}
+					Expect(k8sClient.Get(ctx, generatedKey, cm)).To(Succeed())
+					return cm
+				}
+
+				hasGeneratedSelector := func() bool {
+					GinkgoHelper()
+					cnpg := &cnpgv1.Cluster{}
+					Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+					if cnpg.Spec.Monitoring == nil {
+						return false
+					}
+					for _, selector := range cnpg.Spec.Monitoring.CustomQueriesConfigMap {
+						if selector.Name == generatedName && selector.Key == queryKey {
+							return true
+						}
+					}
+					return false
+				}
+
+				assertLastKnownGood := func(baseline *v1.ConfigMap) {
+					GinkgoHelper()
+					current := getGenerated()
+					Expect(current.UID).To(Equal(baseline.UID))
+					Expect(current.Data).To(Equal(baseline.Data))
+					Expect(current.BinaryData).To(Equal(baseline.BinaryData))
+					Expect(current.Annotations).To(Equal(baseline.Annotations))
+					Expect(current.OwnerReferences).To(Equal(baseline.OwnerReferences))
+					Expect(hasGeneratedSelector()).To(BeTrue())
+				}
+
+				By("creating a valid source and reconciling the happy path")
+				source := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: sourceName, Namespace: namespace},
+					Data:       map[string]string{queryKey: validQuery},
+				}
+				Expect(k8sClient.Create(ctx, source)).To(Succeed())
+				pgCluster.Spec.Monitoring = &enterprisev4.PostgresClusterMonitoring{
+					CustomQueriesConfigMap: []v1.ConfigMapKeySelector{{
+						LocalObjectReference: v1.LocalObjectReference{Name: sourceName},
+						Key:                  queryKey,
+					}},
+				}
+				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+				reconcileNTimes(2)
+
+				cnpg := &cnpgv1.Cluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+				markCNPGHealthy(cnpg, clusterMemberCount)
+				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
+				reconcileAfterCNPGHealthyOrPatch()
+				acknowledgeCNPGMetricsConfigMap(true)
+				reconcileNTimes(1)
+
+				monitoringCondition(metav1.ConditionTrue, "CustomMetricsReady")
+				baseline := getGenerated().DeepCopy()
+				Expect(baseline.Data[queryKey]).To(ContainSubstring(queryName))
+				Expect(baseline.Data[queryKey]).To(ContainSubstring("usage: GAUGE"))
+				Expect(baseline.Annotations[generatedHashAnnotation]).NotTo(BeEmpty())
+				Expect(hasGeneratedSelector()).To(BeTrue())
+				controllerOwner := metav1.GetControllerOf(baseline)
+				Expect(controllerOwner).NotTo(BeNil())
+				Expect(controllerOwner.APIVersion).To(Equal(cnpgv1.SchemeGroupVersion.String()))
+				Expect(controllerOwner.Kind).To(Equal("Cluster"))
+				Expect(controllerOwner.Name).To(Equal(clusterName))
+				Expect(controllerOwner.UID).To(Equal(cnpg.UID))
+				safety := &v1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, safetyKey, safety)).To(Succeed())
+				safetyOwner := metav1.GetControllerOf(safety)
+				Expect(safetyOwner).NotTo(BeNil())
+				Expect(safetyOwner.APIVersion).To(Equal(enterprisev4.GroupVersion.String()))
+				Expect(safetyOwner.Kind).To(Equal("PostgresCluster"))
+				Expect(safetyOwner.Name).To(Equal(clusterName))
+				Expect(safetyOwner.UID).To(Equal(pgCluster.UID))
+
+				received := make([]string, 0, 16)
+				CollectEvents(&received, fakeRecorder)
+
+				By("deleting the source before removing its reference")
+				Expect(k8sClient.Delete(ctx, source)).To(Succeed())
+				_, err := reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				monitoringCondition(metav1.ConditionFalse, "CustomMetricsConfigMapNotFound", sourceName, queryKey)
+				assertLastKnownGood(baseline)
+				received = received[:0]
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(received, v1.EventTypeWarning, core.EventCustomMetricsConfigMapNotFound)).To(
+					BeTrue(), "events seen: %v", received)
+
+				By("restoring the confirmed payload after the generated ConfigMap is deleted while the source remains invalid")
+				Expect(k8sClient.Delete(ctx, getGenerated())).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				acknowledgeCNPGMetricsConfigMap(true)
+				reconcileNTimes(1)
+				monitoringCondition(metav1.ConditionFalse, "CustomMetricsConfigMapNotFound", sourceName, queryKey)
+				restoredAfterDeletion := getGenerated().DeepCopy()
+				Expect(restoredAfterDeletion.UID).NotTo(Equal(baseline.UID))
+				Expect(restoredAfterDeletion.Data).To(Equal(baseline.Data))
+				Expect(restoredAfterDeletion.Annotations).To(Equal(baseline.Annotations))
+				Expect(hasGeneratedSelector()).To(BeTrue())
+				baseline = restoredAfterDeletion
+				received = received[:0]
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(received, v1.EventTypeNormal, core.EventCustomMetricsQueryRepaired)).To(
+					BeTrue(), "events seen: %v", received)
+
+				By("recreating the source with invalid but readable query YAML")
+				source = &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: sourceName, Namespace: namespace},
+					Data: map[string]string{queryKey: fmt.Sprintf(`%s:
+  type: histogram
+  help: "Unsupported metric type"
+  query: "SELECT 1 AS value"
+  value: value
+`, queryName)},
+				}
+				Expect(k8sClient.Create(ctx, source)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				monitoringCondition(metav1.ConditionFalse, "InvalidQueryDefinition", sourceName, "histogram")
+				assertLastKnownGood(baseline)
+				received = received[:0]
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(received, v1.EventTypeWarning, core.EventCustomMetricsInvalidQuery)).To(
+					BeTrue(), "events seen: %v", received)
+
+				By("repairing generated ConfigMap data drift while the source remains invalid")
+				drifted := getGenerated()
+				drifted.Data[queryKey] = "drifted"
+				Expect(k8sClient.Update(ctx, drifted)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				acknowledgeCNPGMetricsConfigMap(true)
+				reconcileNTimes(1)
+				monitoringCondition(metav1.ConditionFalse, "InvalidQueryDefinition", sourceName, "histogram")
+				assertLastKnownGood(baseline)
+				received = received[:0]
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(received, v1.EventTypeNormal, core.EventCustomMetricsQueryRepaired)).To(
+					BeTrue(), "events seen: %v", received)
+
+				By("restoring the valid source")
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: sourceName, Namespace: namespace}, source)).To(Succeed())
+				source.Data[queryKey] = validQuery
+				Expect(k8sClient.Update(ctx, source)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				monitoringCondition(metav1.ConditionTrue, "CustomMetricsReady")
+				assertLastKnownGood(baseline)
+
+				By("adding a later source package with a duplicate and a unique sibling")
+				collisionSource := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: collisionSourceName, Namespace: namespace},
+					Data: map[string]string{queryKey: fmt.Sprintf(`%s:
+  type: gauge
+  help: "Duplicate metric"
+  query: "SELECT 2 AS db_count"
+  value: db_count
+%s:
+  type: gauge
+  help: "Must be dropped with its package"
+  query: "SELECT 1 AS marker"
+  value: marker
+`, queryName, uniqueLosingQuery)},
+				}
+				Expect(k8sClient.Create(ctx, collisionSource)).To(Succeed())
+				current := &enterprisev4.PostgresCluster{}
+				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+				current.Spec.Monitoring.CustomQueriesConfigMap = append(
+					current.Spec.Monitoring.CustomQueriesConfigMap,
+					v1.ConfigMapKeySelector{
+						LocalObjectReference: v1.LocalObjectReference{Name: collisionSourceName},
+						Key:                  queryKey,
+					},
+				)
+				Expect(k8sClient.Update(ctx, current)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				monitoringCondition(
+					metav1.ConditionFalse,
+					"MetricNameCollision",
+					queryName,
+					sourceName,
+					collisionSourceName,
+				)
+				assertLastKnownGood(baseline)
+				Expect(getGenerated().Data[queryKey]).NotTo(ContainSubstring(uniqueLosingQuery))
+				received = received[:0]
+				CollectEvents(&received, fakeRecorder)
+				Expect(ContainsEvent(received, v1.EventTypeWarning, core.EventCustomMetricsCollision)).To(
+					BeTrue(), "events seen: %v", received)
+
+				By("removing the colliding package and recovering")
+				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+				current.Spec.Monitoring.CustomQueriesConfigMap = current.Spec.Monitoring.CustomQueriesConfigMap[:1]
+				Expect(k8sClient.Update(ctx, current)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				monitoringCondition(metav1.ConditionTrue, "CustomMetricsReady")
+				assertLastKnownGood(baseline)
+
+				By("disabling custom metrics before introducing a foreign generated ConfigMap")
+				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+				current.Spec.Monitoring.CustomQueriesConfigMap = nil
+				Expect(k8sClient.Update(ctx, current)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				acknowledgeCNPGMetricsConfigMap(false)
+				reconcileNTimes(1)
+				monitoringCondition(metav1.ConditionTrue, "CustomMetricsDisabled")
+				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, generatedKey, &v1.ConfigMap{}))).To(BeTrue())
+				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, safetyKey, &v1.ConfigMap{}))).To(BeTrue())
+				Expect(hasGeneratedSelector()).To(BeFalse())
+
+				foreign := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        generatedName,
+						Namespace:   namespace,
+						Annotations: map[string]string{"integration-test": "do-not-adopt"},
+					},
+					Data: map[string]string{queryKey: "foreign-sentinel"},
+				}
+				Expect(k8sClient.Create(ctx, foreign)).To(Succeed())
+				foreignUID = foreign.UID
+				foreignBaseline := foreign.DeepCopy()
+
+				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+				current.Spec.Monitoring.CustomQueriesConfigMap = []v1.ConfigMapKeySelector{{
+					LocalObjectReference: v1.LocalObjectReference{Name: sourceName},
+					Key:                  queryKey,
+				}}
+				Expect(k8sClient.Update(ctx, current)).To(Succeed())
+				_, err = reconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+				monitoringCondition(
+					metav1.ConditionFalse,
+					"GeneratedResourceOwnershipConflict",
+					generatedName,
+					"is not controlled by CNPG Cluster",
+				)
+				Expect(hasGeneratedSelector()).To(BeFalse())
+
+				foreignCurrent := &v1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, generatedKey, foreignCurrent)).To(Succeed())
+				Expect(foreignCurrent.UID).To(Equal(foreignBaseline.UID))
+				Expect(foreignCurrent.Data).To(Equal(foreignBaseline.Data))
+				Expect(foreignCurrent.BinaryData).To(Equal(foreignBaseline.BinaryData))
+				Expect(foreignCurrent.Annotations).To(Equal(foreignBaseline.Annotations))
+				Expect(foreignCurrent.OwnerReferences).To(Equal(foreignBaseline.OwnerReferences))
+
+				By("deleting the foreign ConfigMap and reconciling recovery")
+				Expect(k8sClient.Delete(ctx, foreignCurrent)).To(Succeed())
+				foreignUID = ""
+				reconcileAfterCNPGHealthyOrPatch()
+				acknowledgeCNPGMetricsConfigMap(true)
+				reconcileNTimes(1)
+				monitoringCondition(metav1.ConditionTrue, "CustomMetricsReady")
+				recovered := getGenerated()
+				Expect(recovered.Data[queryKey]).To(ContainSubstring(queryName))
+				Expect(recovered.UID).NotTo(Equal(foreignBaseline.UID))
+				Expect(metav1.IsControlledBy(recovered, cnpg)).To(BeTrue())
+				Expect(hasGeneratedSelector()).To(BeTrue())
+			})
+
 			It("emits ConfigMapReconciled event on configmap update", func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)

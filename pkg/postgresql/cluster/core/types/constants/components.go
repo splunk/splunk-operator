@@ -16,11 +16,12 @@ limitations under the License.
 package pgcConstants
 
 const (
-	ComponentManagedRoles = "managedRoles"
-	ComponentProvisioner  = "provisioner"
-	ComponentPooler       = "pooler"
-	ComponentBackup       = "backup"
-	ComponentObjectStore  = "objectStore"
-	ComponentConfigMap    = "configMap"
-	ComponentSecret       = "secret"
+	ComponentManagedRoles  = "managedRoles"
+	ComponentProvisioner   = "provisioner"
+	ComponentPooler        = "pooler"
+	ComponentBackup        = "backup"
+	ComponentObjectStore   = "objectStore"
+	ComponentConfigMap     = "configMap"
+	ComponentSecret        = "secret"
+	ComponentCustomMetrics = "custom_metrics"
 )

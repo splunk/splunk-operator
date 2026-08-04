@@ -40,6 +40,16 @@ type PostgresDatabaseSpec struct {
 	Databases []DatabaseDefinition `json:"databases"`
 }
 
+type DatabaseMonitoring struct {
+	// Ordered database-scoped sources; selector optional fields are unsupported.
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:XValidation:rule="self.all(x, has(x.name) && x.name.size() > 0)",message="name must not be empty"
+	// +kubebuilder:validation:XValidation:rule="self.all(x, x.key.size() > 0)",message="key must not be empty"
+	// +optional
+	CustomQueriesConfigMap []corev1.ConfigMapKeySelector `json:"customQueriesConfigMap,omitempty"`
+}
+
 // +kubebuilder:validation:XValidation:rule="(has(self.passwordConfig) == has(oldSelf.passwordConfig))",message="passwordConfig cannot be altered after creation"
 // +kubebuilder:validation:XValidation:rule="!has(self.passwordConfig) || self.passwordConfig == oldSelf.passwordConfig",message="passwordConfig is immutable once set"
 type DatabaseDefinition struct {
@@ -61,6 +71,9 @@ type DatabaseDefinition struct {
 	// if non empty, external secret management is mandatory.
 	// +optional
 	PasswordConfig *PasswordConfig `json:"passwordConfig,omitempty"`
+
+	// +optional
+	Monitoring *DatabaseMonitoring `json:"monitoring,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="self.externalAdminSecretRef.name.size() > 0",message="externalAdminSecretRef.name must not be empty"
@@ -81,6 +94,46 @@ type DatabaseInfo struct {
 	RWUserSecretRef    *corev1.SecretKeySelector    `json:"rwUserSecretRef,omitempty"`
 	ConfigMapRef       *corev1.LocalObjectReference `json:"configMapRef,omitempty"`
 	Roles              []DatabaseRoleInfo           `json:"roles,omitempty"`
+}
+
+// DatabaseCustomMetricsContribution is committed database-owned intent.
+// Exists=false explicitly declares that the database does not participate.
+type DatabaseCustomMetricsContribution struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	DatabaseName string `json:"databaseName"`
+
+	// Digest used for cluster acknowledgement.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Revision string `json:"revision"`
+
+	// False removes previously committed intent.
+	// +kubebuilder:validation:Required
+	Exists bool `json:"exists"`
+
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=100
+	// +optional
+	CustomQueriesConfigMap []corev1.ConfigMapKeySelector `json:"customQueriesConfigMap,omitempty"`
+}
+
+// PostgresDatabaseCustomMetricsPublication is the current database-owned
+// participation published for the PostgresCluster controller to consume.
+type PostgresDatabaseCustomMetricsPublication struct {
+	// ObservedGeneration identifies the PostgresDatabase spec generation used
+	// to calculate Contributions.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	ObservedGeneration int64 `json:"observedGeneration"`
+
+	// Contributions contains one explicit participation decision per declared
+	// database.
+	// +kubebuilder:validation:Required
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=10
+	Contributions []DatabaseCustomMetricsContribution `json:"contributions"`
 }
 
 // DatabaseRoleInfo is the committed credential-ready role surface published by
@@ -112,6 +165,11 @@ type PostgresDatabaseStatus struct {
 
 	// +optional
 	Databases []DatabaseInfo `json:"databases,omitempty"`
+	// CustomMetricsPublication is committed intent consumed by the
+	// PostgresCluster controller. Nil or a stale observed generation means the
+	// current participation has not been published yet.
+	// +optional
+	CustomMetricsPublication *PostgresDatabaseCustomMetricsPublication `json:"customMetricsPublication,omitempty"`
 	// ObservedGeneration represents the .metadata.generation that the status was set based upon.
 	// +optional
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`

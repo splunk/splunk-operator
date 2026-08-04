@@ -225,6 +225,14 @@ type PostgresClusterMonitoring struct {
 	// When unset, the class-level setting applies.
 	// +optional
 	ConnectionPoolerMetrics *bool `json:"connectionPoolerMetrics,omitempty"`
+
+	// Ordered cluster-scoped sources; selector optional fields are unsupported.
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:XValidation:rule="self.all(x, has(x.name) && x.name.size() > 0)",message="name must not be empty"
+	// +kubebuilder:validation:XValidation:rule="self.all(x, x.key.size() > 0)",message="key must not be empty"
+	// +optional
+	CustomQueriesConfigMap []corev1.ConfigMapKeySelector `json:"customQueriesConfigMap,omitempty"`
 }
 
 // PostgresClusterResources defines references to Kubernetes resources related to the PostgresCluster, such as ConfigMaps and Secrets.
@@ -283,6 +291,10 @@ type PostgresClusterStatus struct {
 	// +optional
 	ManagedRolesStatus *ManagedRolesStatus `json:"managedRolesStatus,omitempty"`
 
+	// Per-database decisions consumed by database readiness gates.
+	// +optional
+	CustomMetricsStatus *CustomMetricsStatus `json:"customMetricsStatus,omitempty"`
+
 	// Resources contains references to related Kubernetes resources like ConfigMaps and Secrets.
 	// +optional
 	Resources *PostgresClusterResources `json:"resources,omitempty"`
@@ -326,6 +338,41 @@ type PostgresClusterStatus struct {
 	// major-version upgrade use case when no prior upgrade status entries exist.
 	// +optional
 	CurrentPgVersion string `json:"currentPgVersion,omitempty"`
+}
+
+// CustomMetricsStatus crosses the cluster-to-database acknowledgement boundary.
+type CustomMetricsStatus struct {
+	// +listType=map
+	// +listMapKey=postgresDatabaseName
+	// +listMapKey=postgresDatabaseUID
+	// +listMapKey=databaseName
+	// +optional
+	DatabaseContributions []DatabaseCustomMetricsStatus `json:"databaseContributions,omitempty"`
+}
+
+type DatabaseCustomMetricsStatus struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	PostgresDatabaseName string `json:"postgresDatabaseName"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	PostgresDatabaseUID string `json:"postgresDatabaseUID"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	DatabaseName string `json:"databaseName"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	DesiredRevision string `json:"desiredRevision"`
+	// +optional
+	AppliedRevision string `json:"appliedRevision,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=True;False;Unknown
+	Status metav1.ConditionStatus `json:"status"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Reason string `json:"reason"`
+	// +kubebuilder:validation:Required
+	Message string `json:"message"`
 }
 
 // ManagedRolesStatus tracks the state of managed PostgreSQL roles.

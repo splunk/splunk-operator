@@ -23,6 +23,7 @@ import (
 	"time"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
@@ -198,8 +199,26 @@ func TestMajorUpgradeUseCaseBlocksComponentsBeforeSourceIsLatched(t *testing.T) 
 	if !scheduled {
 		t.Fatalf("Schedule() = false, want true")
 	}
-	if len(useCase.BlocksComponents()) == 0 {
+	blocked := useCase.BlocksComponents()
+	if len(blocked) == 0 {
 		t.Fatalf("BlocksComponents() returned no blocks for active major upgrade without source")
+	}
+
+	blockedSet := make(map[string]struct{}, len(blocked))
+	for _, c := range blocked {
+		blockedSet[c] = struct{}{}
+	}
+	for _, want := range []string{
+		pgcConstants.ComponentProvisioner,
+		pgcConstants.ComponentManagedRoles,
+		pgcConstants.ComponentPooler,
+		pgcConstants.ComponentBackup,
+		pgcConstants.ComponentConfigMap,
+		pgcConstants.ComponentCustomMetrics,
+	} {
+		if _, ok := blockedSet[want]; !ok {
+			t.Errorf("BlocksComponents() missing %q; got %v", want, blocked)
+		}
 	}
 }
 
