@@ -149,7 +149,10 @@ it is not converted into a qualified claim by documentation alone.
   `f3ec88026`. The deterministic harness and stable EKS reuse are qualified:
   one HEC connection carried 12 writes, one Search Head connection carried 25
   identity/search requests, and every request and final event completed
-  exactly. Search Head and indexer replacement, Operator restart, network
+  exactly. An unplanned replacement of the selected active captain then
+  produced one visible failed transport attempt, one recovered request, a new
+  Search Head connection/captain, and exact 600-event completion. Operator-
+  owned Search Head roll, indexer replacement, Operator restart, network
   variants, and soak remain open.
 - [ ] Complete SHC-82 restart-required App Framework qualification for Search
   Heads and indexers, including searchable indexer restart behavior.

@@ -76,6 +76,24 @@ topology, not every slow-start timing or storage/provider combination. Detailed
 evidence is in
 [SHC97DockerSplunkStartupQualification.md](SHC97DockerSplunkStartupQualification.md).
 
+### HLT-014 SHC-107 evidence
+
+Exact test-only source `f3ec88026` first proved stable HTTP/1.1 reuse on the
+EKS qualification topology: one HEC TLS connection carried 12 writes and one
+Search Head TLS connection carried 25 identity/search requests with zero
+failure and exact final completeness. The selected backend identity and both
+connection generations were observable.
+
+The bounded unplanned replacement then selected Search Head 1, which was also
+the active captain. Kubernetes withdrew that terminating endpoint. One search
+attempt on the established connection failed, the same logical request
+reconnected successfully, and the next identity sample selected Search Head 2
+on generation two. Search Head 2 became captain, the replacement member rejoined,
+at least two endpoints remained serving, and all 600 numbered events completed
+with zero logical failure or count regression. This qualifies HLT-014 for one
+unplanned active-captain replacement on the accepted image. Operator-owned
+rollout, indexer backend replacement, and network variants remain open.
+
 ## Drain and captain scenarios
 
 | ID | Priority | Scenario | Required proof |

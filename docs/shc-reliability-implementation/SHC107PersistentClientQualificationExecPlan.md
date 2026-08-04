@@ -48,6 +48,12 @@ The stable scenario identifier for this requirement is `HLT-014` in
   `Connection: Keep-Alive`, no request failed, and all 12 unique events became
   searchable. The two earlier diagnostic runs correctly recorded Splunk's
   server-requested close behavior before the neutral user agent was added.
+- [x] (2026-08-04 01:25Z) Passed an unplanned active-captain Pod replacement
+  on the accepted Operator. Search Head 1 was the selected persistent backend
+  and current captain. Endpoint withdrawal interrupted one transport attempt;
+  the same logical search recovered once, connection generation advanced from
+  one to two, Search Head 2 became the selected member and captain, and all
+  600 HEC/search requests and unique events completed exactly.
 - [ ] Run the client before an Operator-owned Search Head `2 -> 1 -> 0`
   replacement and prove the connection pinned to each replaced member either
   stays valid until supported shutdown or reconnects with no logical request
@@ -97,6 +103,28 @@ The stable scenario identifier for this requirement is `HLT-014` in
   identifies a separate client-compatibility limitation: an official Python
   SDK client does not exercise persistence unless Splunk's compatibility
   policy or that client identity changes. No Splunkd change is made here.
+- Observation: deleting the selected active-captain Pod produced one visible,
+  recoverable transport boundary rather than silent Service migration.
+  Evidence: deletion was requested at `01:15:07Z`; the endpoint became
+  not-serving by the `01:15:08Z` monitor sample. Sequence 41 at `01:15:13Z`
+  recorded one failed first attempt and one recovered request. Sequence 42
+  identified Search Head 2 on connection generation two. The old Pod UID was
+  replaced by `01:15:57Z`, the new Pod was serving by `01:17:32Z`, and the SHC
+  was Ready with three endpoints and Search Head 2 as captain by `01:17:36Z`.
+  Consequence: Kubernetes correctly stops new selection of the terminating
+  endpoint, but a capable client must reconnect an existing flow. The bounded
+  single retry was sufficient in this run; this is not a universal retry-time
+  guarantee.
+- Observation: the accepted Operator reported expected observations as errors
+  while the known captain backend was absent.
+  Evidence: from `01:15:15Z` through `01:16:48Z`, the Operator emitted 23
+  `captain election failed` and 16 `unable to retrieve SearchHeadCluster
+  member info` ERROR entries. They were 503 proxy failures or connection
+  refusal to the terminating member. Availability and recovery still passed.
+  Consequence: this is a supportability/severity gap, not a failed SHC-107
+  availability result. A separate work item must distinguish an expected
+  transient during observed Pod termination/election from a persistent or
+  quorum-threatening controller error.
 
 ## Decision Log
 
@@ -121,15 +149,17 @@ The stable scenario identifier for this requirement is `HLT-014` in
 
 ## Outcomes & Retrospective
 
-The deterministic test harness and its stable-cluster behavior are qualified.
-On EKS, exact source `f3ec88026` carried all 12 HEC submissions on one TLS
-connection and all 25 Search Head management/search requests on one TLS
-connection. There were zero first-attempt failures, reconnects, server closes,
-logical failures, or count regressions, and the final result was exactly 12
-unique events. This is bounded proof of stable persistent connection reuse;
-it is not yet proof of reconnect behavior during backend replacement. Search
-Head and indexer replacement, Operator restart, network variants, and soak
-remain open.
+The deterministic test harness, stable reuse, and unplanned active-captain
+replacement behavior are qualified. The stable smoke reused one HEC and one
+Search Head TLS connection with exact results. During replacement, all 600 HEC
+writes stayed on one connection, the selected Search Head connection recorded
+one failed first attempt and one recovered request, and the replacement
+connection served the rest of the run. There were zero logical failures,
+server closes, count regressions, or missing/duplicate final events. At least
+two Search Head endpoints remained serving, the old captain was replaced by a
+new Pod UID, and the SHC returned to three registered members with zero
+container restarts. Operator-owned Search Head rollout, indexer replacement,
+Operator restart, network variants, and soak remain open.
 
 ## Context and Orientation
 
@@ -239,12 +269,21 @@ objects without affecting Splunk Pods or persistent volumes.
   `shc107-user-agent-persistent-smoke-accepted-operator-20260804T0106Z.log`,
   SHA-256
   `43f0c1da3d7797a6ae3ebf08a085bfeae16cb1c2e26cf90caf9c35253bca0447`.
+- Unplanned active-captain replacement result:
+  `shc107-unplanned-sh-replacement-accepted-operator-20260804T0114Z.log`,
+  SHA-256
+  `f67ac71a012e6913e149a0ab846e913bd36a7ad5108dcb321ca27c42389f0d07`.
+  The 50-sample Pod/Endpoint/SHC monitor has SHA-256
+  `c5a1ed90846123a4f2954db17cdbae00de0ece1593601d3591d5280260b8b8fa`;
+  the Operator log has SHA-256
+  `e8ff1addb6338f96ecf918e90ecd47049795254dd7bca02a7a8125dbe803caca`.
 - Diagnostic forced-close results:
   `shc107-stable-smoke-accepted-operator-20260804T0058Z.log`, SHA-256
   `a29c2adc5d6226c5df2c918b03ae86e393175547c3fc76abaaad8e41de1be43f`,
   and `shc107-keepalive-smoke-accepted-operator-20260804T0102Z.log`, SHA-256
   `c06ac53715a7fb606f17e68ddc2ba47747c62eabf596f6bfc23a60a3df94b70d`.
-- Live rollout, network-variant, and soak evidence: pending.
+- Operator-owned rollout, indexer, network-variant, controller-restart, and
+  soak evidence: pending.
 
 ## Interfaces and Dependencies
 

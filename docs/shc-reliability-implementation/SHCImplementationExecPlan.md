@@ -748,7 +748,11 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   `Keep-Alive`, zero failures, and exact final completeness. Current Splunkd
   intentionally forces close for absent/default Python and official Python SDK
   user-agent identities; the neutral capable-client identity is therefore part
-  of the bounded test contract. Disruptive EKS campaigns remain open.
+  of the bounded test contract. Unplanned deletion of the selected active
+  captain then caused one visible first-attempt failure, one recovered logical
+  request, connection/captain movement to another member, and exact 600-event
+  completion. Operator-owned and remaining disruptive EKS campaigns remain
+  open.
 - [ ] Resolve the blocking API and lifecycle policy decisions.
 - [ ] Complete and approve the Operator lifecycle technical design.
 - [ ] Complete and approve the runtime lifecycle contract.
