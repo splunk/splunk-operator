@@ -181,7 +181,11 @@ SHC107_SAMPLES ?= 1800
 SHC107_INTERVAL_SECONDS ?= 1
 SHC107_SETTLE_ATTEMPTS ?= 60
 SHC107_HEC_SERVICE ?= splunk-shcfinal-idxc-indexer-service
+SHC107_HEC_SCHEME ?= https
+SHC107_HEC_PORT ?= 8088
 SHC107_SEARCH_SERVICE ?= splunk-shcfinal-shc-search-head-service
+SHC107_SEARCH_SCHEME ?= https
+SHC107_SEARCH_PORT ?= 8089
 
 .PHONY: shc82-app-package shc82-indexer-app-package shc82-app-package-test shc82-monitor-check shc-final-manifest shc-final-manifest-test shc82-license-secret shc83-license-secret shc84-license-secret shc85-license-secret shc85-incluster-workload shc98-monitor-check shc98-workload-check shc98-incluster-workload shc107-persistent-client-check shc107-persistent-client
 shc82-app-package: ## Package the deterministic SHC-82 restart-required test app.
@@ -299,7 +303,11 @@ shc107-persistent-client: shc107-persistent-client-check ## Recreate the persist
 		--from-literal=SHC107_INTERVAL_SECONDS="$(SHC107_INTERVAL_SECONDS)" \
 		--from-literal=SHC107_SETTLE_ATTEMPTS="$(SHC107_SETTLE_ATTEMPTS)" \
 		--from-literal=SHC107_HEC_SERVICE="$(SHC107_HEC_SERVICE)" \
+		--from-literal=SHC107_HEC_SCHEME="$(SHC107_HEC_SCHEME)" \
+		--from-literal=SHC107_HEC_PORT="$(SHC107_HEC_PORT)" \
 		--from-literal=SHC107_SEARCH_SERVICE="$(SHC107_SEARCH_SERVICE)" \
+		--from-literal=SHC107_SEARCH_SCHEME="$(SHC107_SEARCH_SCHEME)" \
+		--from-literal=SHC107_SEARCH_PORT="$(SHC107_SEARCH_PORT)" \
 		--dry-run=client -o yaml | $(SHC107_KUBECTL) apply -f -
 	$(SHC107_KUBECTL) -n "$(SHC107_NAMESPACE)" delete job \
 		shc107-persistent-client --ignore-not-found --wait=true

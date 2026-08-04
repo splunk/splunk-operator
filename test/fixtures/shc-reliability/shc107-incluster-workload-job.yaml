@@ -51,11 +51,31 @@ spec:
                 configMapKeyRef:
                   name: shc107-persistent-client
                   key: SHC107_HEC_SERVICE
+            - name: SHC107_HEC_SCHEME
+              valueFrom:
+                configMapKeyRef:
+                  name: shc107-persistent-client
+                  key: SHC107_HEC_SCHEME
+            - name: SHC107_HEC_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: shc107-persistent-client
+                  key: SHC107_HEC_PORT
             - name: SHC107_SEARCH_SERVICE
               valueFrom:
                 configMapKeyRef:
                   name: shc107-persistent-client
                   key: SHC107_SEARCH_SERVICE
+            - name: SHC107_SEARCH_SCHEME
+              valueFrom:
+                configMapKeyRef:
+                  name: shc107-persistent-client
+                  key: SHC107_SEARCH_SCHEME
+            - name: SHC107_SEARCH_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: shc107-persistent-client
+                  key: SHC107_SEARCH_PORT
           resources:
             requests:
               cpu: 100m

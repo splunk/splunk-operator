@@ -1,8 +1,10 @@
 import http.client
 import importlib.util
+import os
 import pathlib
 import sys
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = pathlib.Path(__file__).with_name("shc107_persistent_client.py")
@@ -70,9 +72,11 @@ class FakeFactory:
     def __init__(self, connection_outcomes):
         self.connection_outcomes = list(connection_outcomes)
         self.connections = []
+        self.contexts = []
 
-    def __call__(self, _host, _port, timeout, context):
-        del timeout, context
+    def __call__(self, _host, _port, timeout, context=None):
+        del timeout
+        self.contexts.append(context)
         connection = FakeConnection(self.connection_outcomes.pop(0))
         self.connections.append(connection)
         return connection
@@ -94,6 +98,17 @@ class PersistentHTTPSClientTest(unittest.TestCase):
         self.assertEqual(0, client.stats.first_attempt_failures)
         self.assertEqual({"HTTP/1.1"}, client.stats.response_versions)
         self.assertEqual({"Absent"}, client.stats.response_connection_headers)
+
+    def test_plain_http_omits_tls_context(self):
+        factory = FakeFactory([[FakeResponse(payload=b"plain-http")]])
+        client = MODULE.PersistentHTTPSClient(
+            "service", 8088, 5, use_tls=False, connection_factory=factory
+        )
+
+        self.assertEqual(
+            (200, b"plain-http"), client.request("POST", "/event", b"", {})
+        )
+        self.assertEqual([None], factory.contexts)
 
     def test_reconnects_and_retries_one_interrupted_request(self):
         factory = FakeFactory(
@@ -211,6 +226,37 @@ class SearchResultTest(unittest.TestCase):
         self.assertEqual(1, client.stats.first_response_failures)
         self.assertEqual(0, client.stats.recovered_requests)
         self.assertEqual(0, client.stats.response_recovered_requests)
+
+
+class EndpointConfigurationTest(unittest.TestCase):
+    def test_defaults_to_https_and_default_port(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                ("service", 8088, True, "https"),
+                MODULE.endpoint_configuration("SHC107_HEC", "service", 8088),
+            )
+
+    def test_accepts_plain_http_and_custom_port(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "SHC107_HEC_SERVICE": "http-service",
+                "SHC107_HEC_PORT": "18088",
+                "SHC107_HEC_SCHEME": "HTTP",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                ("http-service", 18088, False, "http"),
+                MODULE.endpoint_configuration("SHC107_HEC", "service", 8088),
+            )
+
+    def test_rejects_unsupported_scheme(self):
+        with mock.patch.dict(
+            os.environ, {"SHC107_HEC_SCHEME": "tcp"}, clear=True
+        ):
+            with self.assertRaisesRegex(ValueError, "must be http or https"):
+                MODULE.endpoint_configuration("SHC107_HEC", "service", 8088)
 
 
 class HECResultTest(unittest.TestCase):

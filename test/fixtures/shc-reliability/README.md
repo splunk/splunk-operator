@@ -491,8 +491,8 @@ remain separate qualification work.
 
 ## SHC-107 persistent Kubernetes Service client
 
-`shc107_persistent_client.py` keeps one HTTPS connection to the indexer HEC
-Service and one to the Search Head Service instead of starting a new `curl`
+`shc107_persistent_client.py` keeps one HTTP or HTTPS connection to the indexer
+HEC Service and one to the Search Head Service instead of starting a new `curl`
 process for every request. Each logical request may reconnect once after a
 transport interruption. The evidence separates first-attempt connection
 failures, transparently recovered requests, server-requested connection
@@ -530,6 +530,12 @@ For a diagnostic that must select one known backend, set
 DNS name. The default remains the normal Kubernetes Service. The workload log
 records the HTTP status and numeric HEC response code without printing the
 token or response text.
+
+The default scheme is HTTPS on ports 8088 and 8089. Protocol qualification can
+set `SHC107_HEC_SCHEME`, `SHC107_HEC_PORT`, `SHC107_SEARCH_SCHEME`, and
+`SHC107_SEARCH_PORT` explicitly. Only `http` and `https` are accepted. These
+settings describe the real endpoint presented to the client; they do not
+change Splunk, terminate TLS, or assume that an ingress or service mesh exists.
 
 The current Splunk shutdown path was observed returning HTTP 503 with
 `Connection: Keep-Alive` on an established HEC connection after its Pod had

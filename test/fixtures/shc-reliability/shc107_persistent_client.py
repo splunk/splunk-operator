@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Exercise HEC and distributed search through reusable HTTPS connections."""
+"""Exercise HEC and distributed search through reusable HTTP connections."""
 
 from __future__ import annotations
 
@@ -51,15 +51,15 @@ class SearchResult:
 
 
 class PersistentHTTPSClient:
-    """Reuse one HTTPS connection and retry one interrupted logical request."""
+    """Reuse one HTTP(S) connection and retry one interrupted logical request."""
 
     def __init__(
         self,
         host: str,
         port: int,
         timeout: int,
-        connection_factory: Callable[..., http.client.HTTPSConnection]
-        | None = None,
+        use_tls: bool = True,
+        connection_factory: Callable[..., http.client.HTTPConnection] | None = None,
     ) -> None:
         context = ssl.create_default_context()
         context.check_hostname = False
@@ -67,18 +67,21 @@ class PersistentHTTPSClient:
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.use_tls = use_tls
         self.context = context
-        self.connection_factory = connection_factory or http.client.HTTPSConnection
-        self.connection: http.client.HTTPSConnection | None = None
+        self.connection_factory = connection_factory or (
+            http.client.HTTPSConnection if use_tls else http.client.HTTPConnection
+        )
+        self.connection: http.client.HTTPConnection | None = None
         self.requests_on_connection = 0
         self.stats = ConnectionStats()
 
     def _connect(self) -> None:
+        connection_arguments: dict[str, object] = {"timeout": self.timeout}
+        if self.use_tls:
+            connection_arguments["context"] = self.context
         self.connection = self.connection_factory(
-            self.host,
-            self.port,
-            timeout=self.timeout,
-            context=self.context,
+            self.host, self.port, **connection_arguments
         )
         self.connection.connect()
         self.requests_on_connection = 0
@@ -166,6 +169,22 @@ def required_environment(name: str) -> str:
     if not value:
         raise ValueError(f"required credential environment variable is empty: {name}")
     return value
+
+
+def endpoint_configuration(
+    prefix: str,
+    default_host: str,
+    default_port: int,
+    default_scheme: str = "https",
+) -> tuple[str, int, bool, str]:
+    host = os.environ.get(f"{prefix}_SERVICE", default_host)
+    if not host:
+        raise ValueError(f"{prefix}_SERVICE must not be empty")
+    port = positive_integer(f"{prefix}_PORT", default_port)
+    scheme = os.environ.get(f"{prefix}_SCHEME", default_scheme).lower()
+    if scheme not in {"http", "https"}:
+        raise ValueError(f"{prefix}_SCHEME must be http or https")
+    return host, port, scheme == "https", scheme
 
 
 def parse_search_result(payload: bytes) -> tuple[int, int, int, int] | None:
@@ -326,6 +345,12 @@ def main() -> int:
         samples = positive_integer("SHC107_SAMPLES", 1800)
         interval = positive_integer("SHC107_INTERVAL_SECONDS", 1)
         settle_attempts = positive_integer("SHC107_SETTLE_ATTEMPTS", 60)
+        hec_host, hec_port, hec_tls, hec_scheme = endpoint_configuration(
+            "SHC107_HEC", "splunk-shcfinal-idxc-indexer-service", 8088
+        )
+        search_host, search_port, search_tls, search_scheme = endpoint_configuration(
+            "SHC107_SEARCH", "splunk-shcfinal-shc-search-head-service", 8089
+        )
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
@@ -336,14 +361,16 @@ def main() -> int:
         return 2
 
     hec_client = PersistentHTTPSClient(
-        os.environ.get("SHC107_HEC_SERVICE", "splunk-shcfinal-idxc-indexer-service"),
-        8088,
+        hec_host,
+        hec_port,
         15,
+        use_tls=hec_tls,
     )
     search_client = PersistentHTTPSClient(
-        os.environ.get("SHC107_SEARCH_SERVICE", "splunk-shcfinal-shc-search-head-service"),
-        8089,
+        search_host,
+        search_port,
         25,
+        use_tls=search_tls,
     )
 
     hec_failures = 0
@@ -354,7 +381,9 @@ def main() -> int:
     last_result = (0, 0, 0, 0)
     print(
         f"run={run_id} start={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} "
-        f"samples={samples} intervalSeconds={interval}",
+        f"samples={samples} intervalSeconds={interval} "
+        f"hecScheme={hec_scheme} hecPort={hec_port} "
+        f"searchScheme={search_scheme} searchPort={search_port}",
         flush=True,
     )
 
