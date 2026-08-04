@@ -38,6 +38,11 @@ unchanged.
   system: the SHC returned to `Ready` with three members, partition three,
   equal current/update Search Head revision, a Ready replacement Deployer, and
   no container restarts.
+- [x] (2026-08-04 00:55Z) Closed and hashed the complete accepted-image
+  reproduction record. All 240 HEC submissions and searches succeeded, all
+  240 unique events became searchable, minimum serving capacity remained two
+  Search Heads and four indexers, and the ten sampled Deployer-unavailable
+  intervals all overlapped the still-unavailable Search Head.
 - [x] (2026-08-04 00:06Z) Implemented the bounded controller correction at
   production correction `ab342d7a5` and controller-boundary test source
   `67d2897c1` on branch
@@ -55,6 +60,13 @@ unchanged.
 - [x] (2026-08-04 00:07Z) Passed `make build`, generation, formatting, vet,
   Helm lint, all 150 Helm unit tests, `git diff --check`, and new-change lint
   with zero issues.
+- [x] (2026-08-04 02:49Z) Independently reproduced the accepted-image overlap
+  twice more while qualifying persistent clients. For generation 18, the
+  Deployer received `Killing` at `02:38:37Z`; ordinal 2 was selected for the
+  same common-template revision at that instant and received `Killing` at
+  `02:39:05Z`. The active Operator was then deleted while the member operation
+  was durable and the accepted controller completed the Search Head roll, but
+  this remains negative evidence because it does not contain SHC-106.
 - [ ] Build an immutable Linux/AMD64 Operator image from exact source
   `a6cda92a3` and deploy it by digest to the qualification cluster.
 - [ ] Repeat the real App Framework plus competing-template campaign and prove
@@ -93,6 +105,14 @@ unchanged.
   Consequence: SHC-106 composes with the existing revision queue. It addresses
   the Deployer/member overlap rather than redesigning Search Head revision
   supersession.
+- Observation: the competing disruptions did not cause a request outage in
+  this one run, but they consumed independent recovery paths concurrently.
+  Evidence: the 240-sample monitor recorded zero HEC or search failures and
+  exact final completeness. It recorded 46 samples with a Search Head
+  disruption, ten with a Deployer disruption, and ten with both; the overlap
+  ran from sample 15 at `23:51:52Z` through sample 24 at `23:54:31Z`.
+  Consequence: the requirement is preventative reliability control, not a
+  claim that every overlap immediately causes customer-visible data loss.
 - Observation: a generic StatefulSet manager can report Ready while the
   StatefulSet controller has not yet published `observedGeneration` or
   `updateRevision`.
@@ -109,6 +129,24 @@ unchanged.
   Consequence: the Deployer owner now publishes a durable
   `SHC RollingUpdate DeployerUpdateActive` status reason. A controller restart
   or support capture can therefore identify why member mutation is blocked.
+- Observation: accepted-image overlap is deterministic for an ordinary common
+  Pod-template annotation, not limited to App Framework timing.
+  Evidence: two later persistent-client campaigns caused both StatefulSets to
+  render the same annotation change. In generation 18 the Deployer stopped at
+  `02:38:37Z` while the member controller simultaneously selected ordinal 2;
+  that Search Head stopped 28 seconds later, before the Deployer was Ready.
+  Consequence: the original reproduction is not a one-off app-poll artifact.
+  Candidate acceptance must exercise both ownership directions using the exact
+  SHC-106 image.
+- Observation: StatefulSet status can lag a replacement Pod that already has
+  the update revision and Ready condition.
+  Evidence: after the accepted-image campaign the Deployer Pod was Ready with
+  label `splunk-shcfinal-shc-deployer-558659bcc7`, while StatefulSet status
+  still reported update revision `558659bcc7` and prior current revision
+  `976b8548b`. Search Head current/update revisions had already converged.
+  Consequence: candidate coordination must use the published update revision
+  and observed Pod revision/readiness as designed, while final certification
+  separately waits for exact StatefulSet status convergence.
 
 ## Decision Log
 
@@ -136,11 +174,16 @@ unchanged.
 
 ## Outcomes & Retrospective
 
-SHC-106 is source-qualified and pushed, but is not complete. The current live
-Operator reproduced the Deployer/member overlap while HEC and search remained
-available and the SHC eventually recovered. Native Linux image construction
-and candidate EKS qualification remain blocked while the dedicated
-vWorkstation Coder endpoint returns EOF during SSH setup.
+SHC-106 is source-qualified and pushed, but is not complete. The accepted
+Operator conclusively reproduced the Deployer/member overlap while HEC and
+search remained available: 240 numbered events completed exactly, no count
+regression occurred, maximum pending was one, at least two Search Head and all
+four indexer endpoints remained serving, and no container restarted. The SHC
+finished Ready with three registered members, captain Search Head 1, partition
+three, and equal current/update Search Head revision. Native Linux image
+construction and candidate EKS qualification remain blocked while the
+dedicated vWorkstation Coder endpoint fails below authentication during TLS/API
+connection setup.
 
 ## Context and Orientation
 
@@ -230,6 +273,31 @@ another normal rollout is required.
 - Documentation branch: `codex/shc-106-qualification-docs`.
 - Triggering monitor:
   `build/_test/shc-final/shc94-real-app-conflict-20260803T2348Z.log`.
+- Triggering monitor SHA-256:
+  `238ff88035e37fc58d270a907e5c04f7e87142ec62b3896de6d22e6422b8c621`.
+- Independent accepted-image reproduction monitor:
+  `build/_test/shc107/shc107-response-aware-sh-roll-monitor-20260804T0227Z.log`,
+  SHA-256
+  `df5c1ff1d680e1fab99de4be5291d6e8830bbe7afe13dcbc0372d8ea3555568e`.
+  The correlated Event export has SHA-256
+  `844292fd4ecf1b68ca28bc39699acd035b03a82b4e8f6cf730ceb1bf7ee1cea3`.
+- Accepted-Operator log SHA-256:
+  `ed0c727359e0368c0e30652cbf1d9991a0db0a8bca1b57795ea1b87a4db1635c`.
+- Final Kubernetes evidence SHA-256 values: Events
+  `191f8f13f903a54ad15d9240e4ac3d40a41eefd34c1dc42a710877a40a390ab9`,
+  SearchHeadCluster
+  `0a23bd89294d02aad498daffe222eaa284bef3868e37e1c5403dc17c42e6f780`,
+  StatefulSets
+  `12ea94714b15a94c3d8f3fb1a1e0d891a9b3c3e6139ad419066358a9eeb9cc78`,
+  routing
+  `797163d8af2991fbb3a87ac8f2c74637defd4fdd4639d4d7f4f8994abec19119`,
+  and Operator snapshot
+  `76424634a731f764c3e36d8251821f6d93d2909dd7e40390691438164e9b461b`.
+- The final Event export is a retained API snapshot, not a complete
+  event-history counter: Kubernetes Event TTL left six `Unhealthy` objects
+  representing 45 expected startup/readiness probe attempts. Exact disruption
+  timing comes from the independent monitor plus the observed `Killing`
+  Events, not from treating the final Event object count as the entire run.
 - Final source test log:
   `build/_test/shc-final/shc106-make-test-persisted-status.log`.
 - Source gates: 43 suites, 192/192 specs, zero failures, 78.6 percent
