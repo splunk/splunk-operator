@@ -537,6 +537,20 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   suite passed. Immutable Linux, controller-restart, and EKS
   file-descriptor/socket soak gates remain open in
   `SHC115ShortLivedRESTTransportOwnershipExecPlan.md`.
+- [ ] (2026-08-04 UTC) Complete SHC-116 indexer endpoint-withdrawal
+  qualification. The accepted-image diagnostic correlated its only HEC
+  failure with the exact decommission request while the target still appeared
+  routable through the indexer Service EndpointSlice. Exact source
+  `96c83dcad` requires the target UID to be not Ready and absent from routable
+  EndpointSlice entries, persists an immutable effective propagation deadline,
+  invalidates the observation if routing returns, and prevents normal and
+  recovery decommission before the continuous delay expires. Generation,
+  build/vet, focused race checks, chart lint, all 150 Helm tests, and the exact
+  Linux image gate passed. The full reverse-ordinal EKS workload, active
+  controller replacement during the delay, and zero-failure comparison remain
+  open in `SHC116IndexerEndpointWithdrawalExecPlan.md`. The repeated native
+  Linux full gate passed 43 suites, 192/192 specs, and 78.7 percent composite
+  coverage.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP
