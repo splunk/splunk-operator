@@ -24,6 +24,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -88,12 +89,15 @@ func TestIndexerSearchPeerConvergenceObserved(t *testing.T) {
 		}},
 	}
 	duplicateStalePeer := false
+	distributedPeersStatus := http.StatusOK
+	distributedPeersCalls := 0
 	mgr := &indexerClusterPodManager{
 		c:       fakeClient,
 		log:     logging.FromContext(context.Background()),
 		cr:      cr,
 		secrets: &corev1.Secret{Data: map[string][]byte{"password": []byte("secret")}},
 		newSplunkClient: func(managementURI, _, _ string) *splclient.SplunkClient {
+			distributedPeersCalls++
 			body := `{"entry":[{"name":"10.0.1.4:8089","content":{"guid":"peer-guid","status":"Up","disabled":false}}]}`
 			if duplicateStalePeer {
 				body = `{"entry":[{"name":"10.0.1.4:8089","content":{"guid":"peer-guid","status":"Up","disabled":false}},{"name":"10.0.0.4:8089","content":{"guid":"peer-guid","status":"Down","disabled":false}}]}`
@@ -101,7 +105,7 @@ func TestIndexerSearchPeerConvergenceObserved(t *testing.T) {
 			mockHTTPClient := &spltest.MockHTTPClient{}
 			request, err := http.NewRequest("GET", fmt.Sprintf("%s/services/search/distributed/peers?count=0&output_mode=json", managementURI), nil)
 			require.NoError(t, err)
-			mockHTTPClient.AddHandler(request, http.StatusOK, body, nil)
+			mockHTTPClient.AddHandler(request, distributedPeersStatus, body, nil)
 			client := splclient.NewSplunkClient(managementURI, "admin", "secret")
 			client.Client = mockHTTPClient
 			return client
@@ -144,6 +148,51 @@ func TestIndexerSearchPeerConvergenceObserved(t *testing.T) {
 	require.True(t, required)
 	require.False(t, converged)
 	require.Contains(t, message, "waiting for Cluster Manager peers")
+
+	clusterManagerError = nil
+	distributedPeersStatus = http.StatusServiceUnavailable
+	required, converged, message, err = mgr.indexerSearchPeerConvergenceObserved(context.Background(), replacement)
+	require.NoError(t, err)
+	require.True(t, required)
+	require.False(t, converged)
+	require.Contains(t, message, "waiting for distributed peers")
+
+	distributedPeersStatus = http.StatusOK
+	fakeClient.ListObj = &enterpriseApi.SearchHeadClusterList{Items: []enterpriseApi.SearchHeadCluster{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "search", Namespace: "test"},
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					ClusterManagerRef: corev1.ObjectReference{Name: "manager"},
+				},
+				Replicas: 2,
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "second-search", Namespace: "test"},
+			Spec: enterpriseApi.SearchHeadClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					ClusterManagerRef: corev1.ObjectReference{Name: "manager"},
+				},
+				Replicas: 1,
+			},
+		},
+	}}
+	callsBeforeMultipleClusters := distributedPeersCalls
+	required, converged, message, err = mgr.indexerSearchPeerConvergenceObserved(context.Background(), replacement)
+	require.NoError(t, err)
+	require.True(t, required)
+	require.True(t, converged)
+	require.Contains(t, message, "Every Search Head in 2 cluster(s)")
+	require.Equal(t, 3, distributedPeersCalls-callsBeforeMultipleClusters)
+
+	fakeClient.InduceErrorKind[splcommon.MockClientInduceErrorList] = errors.New("temporary Kubernetes list failure")
+	required, converged, message, err = mgr.indexerSearchPeerConvergenceObserved(context.Background(), replacement)
+	require.ErrorContains(t, err, "list SearchHeadClusters")
+	require.True(t, required)
+	require.False(t, converged)
+	require.Empty(t, message)
+	fakeClient.InduceErrorKind[splcommon.MockClientInduceErrorList] = nil
 
 	fakeClient.ListObj = &enterpriseApi.SearchHeadClusterList{Items: []enterpriseApi.SearchHeadCluster{{
 		ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "test"},
