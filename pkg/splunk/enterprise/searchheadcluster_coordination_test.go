@@ -21,6 +21,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/test"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -143,6 +144,322 @@ func TestSHCAppFrameworkKubernetesRestartOwnership(t *testing.T) {
 				t.Fatalf("Kubernetes restart ownership=%t, want %t", got, test.want)
 			}
 		})
+	}
+}
+
+func TestSHCDeployerUpdateDeferred(t *testing.T) {
+	replicas := int32(3)
+	tests := []struct {
+		name        string
+		podGate     bool
+		shcGate     bool
+		established bool
+		appContext  enterpriseApi.AppDeploymentContext
+		operation   *enterpriseApi.SearchHeadClusterLifecycleOperationStatus
+		want        bool
+		wantReason  string
+	}{
+		{name: "feature gates disabled"},
+		{
+			name:    "initial formation keeps legacy ordering",
+			podGate: true,
+			shcGate: true,
+			appContext: *appDeploymentContextWithStatus(
+				enterpriseApi.DeployStatusInProgress,
+			),
+		},
+		{
+			name:        "transient repository poll is not durable work",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			appContext: enterpriseApi.AppDeploymentContext{
+				IsDeploymentInProgress: true,
+			},
+		},
+		{
+			name:        "durable App Framework work owns disruption",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			appContext: *appDeploymentContextWithStatus(
+				enterpriseApi.DeployStatusInProgress,
+			),
+			want:       true,
+			wantReason: "AppFrameworkOperationActive",
+		},
+		{
+			name:        "active Search Head rollout owns disruption",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			operation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				Intent: enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+				Stage: enterpriseApi.
+					SearchHeadClusterLifecycleStageWaitingForContainer,
+			},
+			want:       true,
+			wantReason: "SearchHeadLifecycleActive",
+		},
+		{
+			name:        "completed Search Head rollout releases disruption",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			operation: &enterpriseApi.SearchHeadClusterLifecycleOperationStatus{
+				Intent: enterpriseApi.SearchHeadClusterLifecycleIntentPodUpdate,
+				Stage:  enterpriseApi.SearchHeadClusterLifecycleStageCompleted,
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			setLifecyclePolicyTestGates(t, testCase.podGate, testCase.shcGate)
+			cr := &enterpriseApi.SearchHeadCluster{
+				Status: enterpriseApi.SearchHeadClusterStatus{
+					AppContext:         testCase.appContext,
+					LifecycleOperation: testCase.operation,
+				},
+			}
+			if testCase.established {
+				cr.Status.LastStableReplicas = &replicas
+			}
+			got, reason := shcDeployerUpdateDeferred(cr)
+			if got != testCase.want || reason != testCase.wantReason {
+				t.Fatalf(
+					"shcDeployerUpdateDeferred() = %t/%q, want %t/%q",
+					got,
+					reason,
+					testCase.want,
+					testCase.wantReason,
+				)
+			}
+		})
+	}
+}
+
+func TestSHCDeployerReconcilePhase(t *testing.T) {
+	tests := []struct {
+		name           string
+		managerPhase   enterpriseApi.Phase
+		observedActive bool
+		want           enterpriseApi.Phase
+	}{
+		{
+			name:         "stable ready observation remains ready",
+			managerPhase: enterpriseApi.PhaseReady,
+			want:         enterpriseApi.PhaseReady,
+		},
+		{
+			name:           "active observation cannot become ready in same reconcile",
+			managerPhase:   enterpriseApi.PhaseReady,
+			observedActive: true,
+			want:           enterpriseApi.PhaseUpdating,
+		},
+		{
+			name:           "active observation preserves manager pending phase",
+			managerPhase:   enterpriseApi.PhasePending,
+			observedActive: true,
+			want:           enterpriseApi.PhasePending,
+		},
+		{
+			name:           "active observation preserves manager error phase",
+			managerPhase:   enterpriseApi.PhaseError,
+			observedActive: true,
+			want:           enterpriseApi.PhaseError,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := shcDeployerReconcilePhase(
+				testCase.managerPhase,
+				testCase.observedActive,
+			); got != testCase.want {
+				t.Fatalf(
+					"shcDeployerReconcilePhase() = %q, want %q",
+					got,
+					testCase.want,
+				)
+			}
+		})
+	}
+}
+
+func TestEstablishedSHCDeployerUpdateActive(t *testing.T) {
+	replicas := int32(3)
+	readyCondition := []corev1.PodCondition{
+		{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+	}
+	tests := []struct {
+		name        string
+		podGate     bool
+		shcGate     bool
+		established bool
+		statefulSet *appsv1.StatefulSet
+		pod         *corev1.Pod
+		deleting    bool
+		want        bool
+	}{
+		{name: "feature gates disabled"},
+		{
+			name:    "initial formation ignores missing Deployer",
+			podGate: true,
+			shcGate: true,
+		},
+		{
+			name:        "established Deployer StatefulSet missing",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			want:        true,
+		},
+		{
+			name:        "StatefulSet generation not observed",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			statefulSet: deployerCoordinationTestStatefulSet(2, 1, "revision-a"),
+			pod: deployerCoordinationTestPod(
+				"revision-a",
+				readyCondition,
+			),
+			want: true,
+		},
+		{
+			name:        "StatefulSet update revision not published",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			statefulSet: deployerCoordinationTestStatefulSet(2, 2, ""),
+			pod: deployerCoordinationTestPod(
+				"revision-a",
+				readyCondition,
+			),
+			want: true,
+		},
+		{
+			name:        "Pod revision has not converged",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			statefulSet: deployerCoordinationTestStatefulSet(2, 2, "revision-b"),
+			pod: deployerCoordinationTestPod(
+				"revision-a",
+				readyCondition,
+			),
+			want: true,
+		},
+		{
+			name:        "Pod deletion has started",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			statefulSet: deployerCoordinationTestStatefulSet(2, 2, "revision-b"),
+			pod: deployerCoordinationTestPod(
+				"revision-b",
+				readyCondition,
+			),
+			deleting: true,
+			want:     true,
+		},
+		{
+			name:        "Pod revision converged but Pod is not ready",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			statefulSet: deployerCoordinationTestStatefulSet(2, 2, "revision-b"),
+			pod: deployerCoordinationTestPod(
+				"revision-b",
+				nil,
+			),
+			want: true,
+		},
+		{
+			name:        "Pod revision and readiness converged",
+			podGate:     true,
+			shcGate:     true,
+			established: true,
+			statefulSet: deployerCoordinationTestStatefulSet(2, 2, "revision-b"),
+			pod: deployerCoordinationTestPod(
+				"revision-b",
+				readyCondition,
+			),
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			setLifecyclePolicyTestGates(t, testCase.podGate, testCase.shcGate)
+			client := test.NewMockClient()
+			if testCase.statefulSet != nil {
+				client.AddObject(testCase.statefulSet.DeepCopy())
+			}
+			if testCase.pod != nil {
+				if testCase.deleting {
+					now := metav1.Now()
+					testCase.pod.DeletionTimestamp = &now
+					testCase.pod.Finalizers = []string{"test.splunk.com/hold"}
+				}
+				client.AddObject(testCase.pod.DeepCopy())
+			}
+			cr := &enterpriseApi.SearchHeadCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "stack1", Namespace: "test"},
+			}
+			if testCase.established {
+				cr.Status.LastStableReplicas = &replicas
+			}
+			got, err := establishedSHCDeployerUpdateActive(
+				context.Background(),
+				client,
+				cr,
+			)
+			if err != nil {
+				t.Fatalf("observe Deployer update: %v", err)
+			}
+			if got != testCase.want {
+				t.Fatalf(
+					"establishedSHCDeployerUpdateActive() = %t, want %t",
+					got,
+					testCase.want,
+				)
+			}
+		})
+	}
+}
+
+func deployerCoordinationTestStatefulSet(
+	generation int64,
+	observedGeneration int64,
+	updateRevision string,
+) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "splunk-stack1-deployer",
+			Namespace:  "test",
+			Generation: generation,
+		},
+		Status: appsv1.StatefulSetStatus{
+			ObservedGeneration: observedGeneration,
+			UpdateRevision:     updateRevision,
+		},
+	}
+}
+
+func deployerCoordinationTestPod(
+	revision string,
+	conditions []corev1.PodCondition,
+) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-deployer-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": revision,
+			},
+		},
+		Status: corev1.PodStatus{Conditions: conditions},
 	}
 }
 

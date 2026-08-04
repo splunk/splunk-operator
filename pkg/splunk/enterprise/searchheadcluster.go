@@ -261,12 +261,48 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}
-	phase, err := deployerManager.Update(ctx, client, statefulSet, 1)
+	var phase enterpriseApi.Phase
+	deployerUpdateActive, err := establishedSHCDeployerUpdateActive(
+		ctx,
+		client,
+		cr,
+	)
 	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Deployer pods")
+		setPhaseAndConditions(
+			enterpriseApi.PhaseError,
+			"Failed to observe Deployer update state",
+		)
 		return result, err
 	}
-	cr.Status.DeployerPhase = phase
+	deferDeployerUpdate, deferReason := shcDeployerUpdateDeferred(cr)
+	if deferDeployerUpdate && !deployerUpdateActive {
+		// The current Deployer is already ready on its observed revision. Do not
+		// start a second planned disruption while durable App Framework work or
+		// an SHC member rollout owns the disruption slot.
+		cr.Status.DeployerPhase = enterpriseApi.PhaseReady
+		logger.InfoContext(
+			ctx,
+			"deferring Deployer Pod update while another SHC operation is active",
+			"reason",
+			deferReason,
+		)
+	} else {
+		phase, err = deployerManager.Update(ctx, client, statefulSet, 1)
+		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Deployer pods")
+			return result, err
+		}
+		phase = shcDeployerReconcilePhase(phase, deployerUpdateActive)
+		cr.Status.DeployerPhase = phase
+		if searchHeadClusterLifecycleEnabled() &&
+			cr.Status.LastStableReplicas != nil &&
+			phase != enterpriseApi.PhaseReady {
+			message := "Waiting for the Deployer Pod update to complete before changing Search Head Pods"
+			cr.Status.Message = message
+			setPhaseAndConditions(phase, message)
+			return result, nil
+		}
+	}
 
 	// create or update statefulset for the search heads
 	var authorizedRevisionWithdrawalRequested bool
@@ -1384,6 +1420,66 @@ func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, err
+}
+
+// establishedSHCDeployerUpdateActive reports whether an established
+// lifecycle-enabled SHC already has a Deployer replacement or recovery in
+// progress. Once that disruption starts it remains the owner until the Pod is
+// ready on the StatefulSet update revision; it must not yield to App Framework
+// work or a Search Head lifecycle that appears later.
+func establishedSHCDeployerUpdateActive(
+	ctx context.Context,
+	c splcommon.ControllerClient,
+	cr *enterpriseApi.SearchHeadCluster,
+) (bool, error) {
+	if cr == nil ||
+		!searchHeadClusterLifecycleEnabled() ||
+		cr.Status.LastStableReplicas == nil {
+		return false, nil
+	}
+
+	name := GetSplunkStatefulsetName(SplunkDeployer, cr.GetName())
+	key := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
+	var statefulSet appsv1.StatefulSet
+	if err := c.Get(ctx, key, &statefulSet); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("get Deployer StatefulSet update state: %w", err)
+	}
+	if statefulSet.Generation > statefulSet.Status.ObservedGeneration {
+		return true, nil
+	}
+	if statefulSet.Status.UpdateRevision == "" {
+		// A ready Pod is not sufficient evidence of convergence when the
+		// StatefulSet controller has not published the desired revision yet.
+		return true, nil
+	}
+
+	var pod corev1.Pod
+	podKey := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      fmt.Sprintf("%s-0", name),
+	}
+	if err := c.Get(ctx, podKey, &pod); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("get Deployer Pod update state: %w", err)
+	}
+	if pod.GetDeletionTimestamp() != nil ||
+		pod.GetLabels()["controller-revision-hash"] !=
+			statefulSet.Status.UpdateRevision {
+		return true, nil
+	}
+	for i := range pod.Status.Conditions {
+		condition := pod.Status.Conditions[i]
+		if condition.Type == corev1.PodReady &&
+			condition.Status == corev1.ConditionTrue {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // validateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.

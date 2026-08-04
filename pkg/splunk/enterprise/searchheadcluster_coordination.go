@@ -79,6 +79,43 @@ func shcAppFrameworkWorkActive(
 	return false
 }
 
+// shcDeployerUpdateDeferred keeps a new Deployer Pod-template replacement
+// from starting while another established-SHC owner is using the disruption
+// slot. Initial formation and compatibility-mode clusters retain their legacy
+// ordering. An already-started Deployer replacement is detected separately
+// and must resume instead of yielding to a later owner.
+func shcDeployerUpdateDeferred(
+	cr *enterpriseApi.SearchHeadCluster,
+) (bool, string) {
+	if cr == nil ||
+		!searchHeadClusterLifecycleEnabled() ||
+		cr.Status.LastStableReplicas == nil {
+		return false, ""
+	}
+	if shcAppFrameworkWorkActive(&cr.Status.AppContext) {
+		return true, "AppFrameworkOperationActive"
+	}
+	if shcPodRolloutActive(cr.Status.LifecycleOperation) {
+		return true, "SearchHeadLifecycleActive"
+	}
+	return false, ""
+}
+
+// shcDeployerReconcilePhase preserves a fail-closed wait when the Kubernetes
+// observation at the start of reconciliation proved that the Deployer had not
+// converged. The generic manager can report Ready while a new StatefulSet
+// generation or update revision has not reached its status yet; one later
+// observation must prove convergence before Search Head Pods may change.
+func shcDeployerReconcilePhase(
+	managerPhase enterpriseApi.Phase,
+	observedActive bool,
+) enterpriseApi.Phase {
+	if observedActive && managerPhase == enterpriseApi.PhaseReady {
+		return enterpriseApi.PhaseUpdating
+	}
+	return managerPhase
+}
+
 // shcAppFrameworkKubernetesRestartEnabled identifies the fully qualified
 // runtime contract for converting an App Framework restart requirement into a
 // StatefulSet revision. Compatibility-mode OnDelete clusters, disabled feature
