@@ -46,12 +46,14 @@ class FakeConnection:
         self.outcomes = outcomes
         self.sock = None
         self.response = None
+        self.request_headers = []
 
     def connect(self):
         self.sock = FakeSocket()
 
     def request(self, _method, _path, body=None, headers=None):
-        del body, headers
+        del body
+        self.request_headers.append(headers)
         outcome = self.outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
@@ -171,6 +173,10 @@ class SearchHeadIdentityTest(unittest.TestCase):
             MODULE.identify_search_head(client, "password"),
         )
         self.assertEqual(1, client.stats.opened)
+        self.assertEqual(
+            MODULE.USER_AGENT,
+            factory.connections[0].request_headers[0]["User-Agent"],
+        )
 
     def test_rejects_missing_server_name(self):
         factory = FakeFactory([[FakeResponse(payload=b'{"entry":[]}')]])

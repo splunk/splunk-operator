@@ -18,6 +18,7 @@ from typing import Callable
 
 
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
+USER_AGENT = "SOK-SHC-Qualification/1.0"
 
 
 @dataclass
@@ -183,6 +184,7 @@ def submit_event(
             "Connection": "keep-alive",
             "Content-Type": "application/json",
             "Content-Length": str(len(payload)),
+            "User-Agent": USER_AGENT,
         },
     )
     if status != 200:
@@ -210,6 +212,7 @@ def identify_search_head(
             "Authorization": basic_authorization(password),
             "Connection": "keep-alive",
             "Content-Length": "0",
+            "User-Agent": USER_AGENT,
         },
     )
     if status != 200:
@@ -253,6 +256,7 @@ def search_sequences(
             "Connection": "keep-alive",
             "Content-Type": "application/x-www-form-urlencoded",
             "Content-Length": str(len(form)),
+            "User-Agent": USER_AGENT,
         },
     )
     if status != 200:

@@ -502,8 +502,11 @@ identity plus the connection generations used by identity and search, so the
 evidence can prove which persistent backend served a request. The client sends
 an explicit keep-alive request and records the observed HTTP version and
 response `Connection` header; a server close is therefore diagnosable rather
-than inferred only from a missing socket. Credentials come from the existing
-qualification Secret and are never printed.
+than inferred only from a missing socket. The client also sends a neutral
+qualification `User-Agent`. Splunkd intentionally declines HTTP/1.1 connection
+reuse for missing and historically incompatible user agents, including the
+default Python HTTP client and the official Python SDK identifier. Credentials
+come from the existing qualification Secret and are never printed.
 
 Validate the Python behavior and Kubernetes manifest before creating the Job:
 
