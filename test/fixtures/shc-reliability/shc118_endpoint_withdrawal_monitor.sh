@@ -82,7 +82,7 @@ if [[ "${use_policy_default}" == true && "${withdrawal_seconds}" -ne 30 ]]; then
 fi
 withdrawal_policy_source=explicit
 if [[ "${use_policy_default}" == true ]]; then
-  withdrawal_policy_source=default
+  withdrawal_policy_source=operator-default
 fi
 if ! [[ "${timeout_seconds}" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
   printf 'FAIL: SHC118_TIMEOUT_SECONDS must be positive\n' >&2
