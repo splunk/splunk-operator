@@ -587,8 +587,13 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   verifies the persisted 30-second observation-to-deadline interval rather
   than mistaking an explicit value of 30 for omitted-policy evidence. The
   missing field is resolved by the Operator, not defaulted by Kubernetes.
-  Destructive EKS gates remain open in
-  `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
+  The explicit-120-second EKS lifecycle harness passed target order `2,1,0`,
+  controller replacement inside ordinal 2's persisted interval, dynamic
+  captain transfer for ordinal 0, minimum two endpoints, maximum one unready
+  Pod, all three UID replacements with stable claims, three observation Events,
+  zero invalidations/restarts/request failures, and 12 stable final samples.
+  The 3,600-sample Job's terminal verdict and omitted-field default campaign
+  remain open in `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP
@@ -3015,3 +3020,8 @@ Revision note (2026-08-04 UTC): Closed SHC-116 and SHC-117 after the complete
 exact eventual delivery and verified hashes while preserving 19 intermediate
 distributed-search count regressions as a separate Splunk result-semantics
 requirement.
+
+Revision note (2026-08-04 19:56Z): Recorded the passing SHC-118
+explicit-policy lifecycle campaign, while leaving the independent workload's
+terminal exact-delivery gate and the omitted-field Operator-default campaign
+open.

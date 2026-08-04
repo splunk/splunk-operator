@@ -67,8 +67,19 @@ remain separate requirements.
   exactly 30 seconds after the endpoint-withdrawal observation; this prevents
   an explicitly set value of 30 from being mistaken for omitted-policy
   evidence.
-- [ ] Qualify a complete Search Head roll on EKS, including controller
-  replacement during the propagation interval.
+- [x] (2026-08-04 19:56Z) Completed the explicit-120-second EKS lifecycle
+  harness. It rolled `2 -> 1 -> 0`, retained at least two routable endpoints,
+  allowed at most one unready member, replaced the Operator during ordinal 2's
+  active interval, preserved the exact operation/UID/observation/deadline/
+  sequence, recorded three observation Events and zero invalidations, retained
+  every ordinal's `etc` and `var` claims, replaced all three Pod UIDs, and
+  finished 12 stable samples with zero container restarts. Harness exit code is
+  zero.
+- [ ] Allow the independent 3,600-sample Job from the controller-restart
+  campaign to reach Kubernetes `Complete`, verify final uniqueness/counters,
+  and seal hashes for the evidence directory.
+- [ ] Run the separate omitted-field, Operator-default-30-second campaign with
+  a fresh 3,600-sample Job and no controller replacement.
 
 ## Surprises & Discoveries
 
@@ -108,6 +119,14 @@ remain separate requirements.
   `ResolveSearchHeadClusterLifecyclePolicy` resolves the missing field to 30.
   Consequence: the omitted-field campaign qualifies the Operator-resolved
   product default. It must not be described as Kubernetes API defaulting.
+- Observation: each replacement briefly returned HTTP 503 from
+  `/services/shcluster/member/info` while the new Splunk process was not yet
+  able to communicate with the captain. The Operator recorded those facts at
+  `INFO` level with a structured `error` field and held the lifecycle in
+  `WaitingForContainer`.
+  Consequence: an audit that searches for the word `error` alone produces false
+  positives. Qualification must inspect structured log level and lifecycle
+  action; these three expected startup waits are not controller errors.
 
 ## Decision Log
 
@@ -157,9 +176,12 @@ that proof during status merge; and exposes bounded Events, reasons, and the
 `splunk_operator_search_head_endpoint_withdrawal_total` metric. Both Pod-update
 and scale-down detention paths fail closed until the interval completes.
 
-This is not yet a live availability claim. The exact Linux image is available;
-EKS qualification, including controller replacement during the interval,
-remains open.
+The explicit-120-second EKS lifecycle gate now passes, including manager
+replacement inside an active interval and the active-captain ordinal. The
+bounded workload had zero HEC/search request failures through lifecycle
+completion, but its terminal exact-delivery verdict remains open. The separate
+omitted-field 30-second campaign also remains open, so this is not yet the final
+SHC-118 availability claim.
 
 ## Plan of Work
 
@@ -229,7 +251,20 @@ not discard the lifecycle operation before restoring serving eligibility.
 - Qualification branch:
   `codex/shc-118-search-head-endpoint-withdrawal-qualification` at
   `7363f71a90a026b3137c333020422968f6453c8c`.
-- EKS evidence: pending.
+- Explicit-120-second EKS lifecycle harness: pass, exit code 0, target order
+  `[2,1,0]`, minimum endpoints 2, maximum unready Pods 1, Operator restarted,
+  observation Event delta 3, invalidation delta 0, stable samples 12, and zero
+  HEC/search request failures through roll completion.
+- Exact propagation boundaries: ordinal 2 observation/deadline/detention
+  `19:37:34Z/19:39:34Z/19:39:36Z`; ordinal 1
+  `19:42:50Z/19:44:50Z/19:44:50Z`; ordinal 0
+  `19:48:29Z/19:50:29Z/19:50:35Z`.
+- Controller-replacement UIDs: before
+  `c1e02e73-1ba7-4580-8f0f-9b63b2bda55f`, after
+  `75c1be97-1066-4dc9-aaf4-605d1b8511af`. The active-captain target transferred
+  captaincy from ordinal 0 to ordinal 1 before replacement authorization.
+- Controller-restart workload final counters and evidence hashes: pending.
+- Omitted-field Operator-default campaign: pending.
 
 ## Interfaces and Dependencies
 
@@ -246,3 +281,10 @@ whether the policy came from the Operator resolver or an explicit value, and
 proves the persisted observation-to-deadline interval. Source and generated
 CRD inspection also corrected the evidence boundary: this is an
 Operator-resolved product default, not Kubernetes API defaulting.
+
+Revision note (2026-08-04 19:56Z): Recorded the passing explicit-120-second
+EKS lifecycle harness, including controller replacement, exact per-ordinal
+deadline ordering, dynamic captain transfer, stable claims, bounded endpoint
+availability, and zero request failures through roll completion. The Job's
+terminal exact counters/hashes and the omitted-field default campaign remain
+open and are not inferred from this lifecycle pass.
