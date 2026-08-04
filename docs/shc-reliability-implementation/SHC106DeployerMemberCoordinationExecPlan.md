@@ -47,11 +47,16 @@ unchanged.
   boundaries, the complete enterprise package, and the complete Make test
   gate: 43 suites, 192/192 controller specs, zero failures, and 78.6 percent
   composite coverage.
+- [x] (2026-08-04 00:27Z) Verified the coordination boundary through the
+  persisted CR status path. The durable
+  `SHC RollingUpdate DeployerUpdateActive` reason now survives the normal
+  status refresh, and exact cumulative source `a6cda92a3` passed the complete
+  Make test gate again.
 - [x] (2026-08-04 00:07Z) Passed `make build`, generation, formatting, vet,
   Helm lint, all 150 Helm unit tests, `git diff --check`, and new-change lint
   with zero issues.
 - [ ] Build an immutable Linux/AMD64 Operator image from exact source
-  `67d2897c1` and deploy it by digest to the qualification cluster.
+  `a6cda92a3` and deploy it by digest to the qualification cluster.
 - [ ] Repeat the real App Framework plus competing-template campaign and prove
   that the Deployer UID remains unchanged until the Search Head lifecycle is
   complete.
@@ -96,6 +101,14 @@ unchanged.
   Consequence: the SHC coordinator requires one later observation that proves
   the Deployer Pod is Ready on the published update revision before releasing
   Search Head work.
+- Observation: an ordinary non-error status message is cleared by the SHC
+  status refresh path unless it carries the existing rolling-update prefix.
+  Evidence: a controller-boundary test that fetched the CR back through the
+  API found an empty coordination reason even though the in-memory reconcile
+  object had set it.
+  Consequence: the Deployer owner now publishes a durable
+  `SHC RollingUpdate DeployerUpdateActive` status reason. A controller restart
+  or support capture can therefore identify why member mutation is blocked.
 
 ## Decision Log
 
@@ -117,7 +130,7 @@ unchanged.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 - Decision: do not claim live correction from the unmodified Operator run.
   Rationale: that run proves the defect and validates the existing Search Head
-  queue behavior. Only an immutable image built from `67d2897c1` can qualify
+  queue behavior. Only an immutable image built from `a6cda92a3` can qualify
   the correction.
   Date/Author: 2026-08-03, Codex with Vivek Reddy.
 
@@ -152,7 +165,7 @@ not contain SHC-106.
 
 ## Plan of Work
 
-Build exact source `67d2897c1` on the Linux vWorkstation and publish the
+Build exact source `a6cda92a3` on the Linux vWorkstation and publish the
 Operator image by immutable digest. Retain the existing runtime image, PVCs,
 topology, and app repository so that the controller change is the only
 variable.
@@ -212,12 +225,13 @@ another normal rollout is required.
 
 - Production branch: `codex/shc-106-deployer-coordination`.
 - Production correction: `ab342d7a5`.
-- Exact cumulative source: `67d2897c1`.
+- Persisted-status correction: `a6cda92a3`.
+- Exact cumulative source: `a6cda92a3`.
 - Documentation branch: `codex/shc-106-qualification-docs`.
 - Triggering monitor:
   `build/_test/shc-final/shc94-real-app-conflict-20260803T2348Z.log`.
 - Final source test log:
-  `build/_test/shc-final/shc106-make-test-final.log`.
+  `build/_test/shc-final/shc106-make-test-persisted-status.log`.
 - Source gates: 43 suites, 192/192 specs, zero failures, 78.6 percent
   composite coverage, 100 normal and 100 race repetitions of both helper and
   real controller-boundary tests, 150 Helm tests, and zero new lint issues.

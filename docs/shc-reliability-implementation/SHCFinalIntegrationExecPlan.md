@@ -164,7 +164,7 @@ it is not converted into a qualified claim by documentation alone.
   passed. Immutable Linux image and live multi-boundary EKS qualification
   remain open.
 - [x] (2026-08-04 00:18Z) Registered and source-qualified SHC-106 at production
-  correction `ab342d7a5` and cumulative source `67d2897c1`. A real EKS app
+  correction `ab342d7a5` and cumulative source `a6cda92a3`. A real EKS app
   rollout plus competing common
   template update reproduced overlapping Deployer and Search Head disruption.
   The bounded correction introduces one established-SHC disruption owner,
@@ -173,7 +173,9 @@ it is not converted into a qualified claim by documentation alone.
   hundred normal and race repetitions of helper and real controller-boundary
   tests, all 43 Make suites, 192/192 specs, 78.6 percent coverage, build/vet,
   150 Helm tests, and new-change lint passed. Immutable Linux image and live
-  correction qualification remain open.
+  correction qualification remain open. The cumulative source also persists
+  the bounded `SHC RollingUpdate DeployerUpdateActive` reason across the
+  controller status refresh and verifies it through the API-backed boundary.
 
 ## Surprises & Discoveries
 
