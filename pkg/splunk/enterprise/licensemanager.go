@@ -392,11 +392,13 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 		// Get license information from Splunk API
 		licenses, err := splunkClient.GetLicenseInfo()
 		if err != nil {
+			splunkClient.CloseIdleConnections()
 			logger.ErrorContext(ctx, "failed to get license information from Splunk API", "error", err, "podName", podName)
 			eventPublisher.Warning(ctx, EventReasonLicenseHealthCheckFailed,
 				fmt.Sprintf("Unable to query license health from Pod '%s'; reconciliation will retry", podName))
 			continue
 		}
+		splunkClient.CloseIdleConnections()
 
 		// Check for expired licenses
 		for licenseName, licenseInfo := range licenses {

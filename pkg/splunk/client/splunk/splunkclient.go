@@ -46,6 +46,7 @@ type idleConnectionCloser interface {
 const (
 	defaultSplunkRequestTimeout            = 5 * time.Second
 	searchHeadClusterUpgradeRequestTimeout = 60 * time.Second
+	defaultSplunkIdleConnectionTimeout     = 90 * time.Second
 )
 
 // SplunkClient is a simple object used to send HTTP REST API requests
@@ -72,6 +73,7 @@ type SplunkClient struct {
 func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
+		IdleConnTimeout: defaultSplunkIdleConnectionTimeout,
 	}
 	return &SplunkClient{
 		ManagementURI: managementURI,

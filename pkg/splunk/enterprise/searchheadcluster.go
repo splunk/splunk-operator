@@ -716,6 +716,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			// Get client for Pod and restart splunk instance on pod
 			shClient := mgr.getClient(ctx, observation.ordinal)
 			err = shClient.RestartSplunk()
+			shClient.CloseIdleConnections()
 			if err != nil {
 				return err
 			}

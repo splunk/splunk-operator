@@ -120,6 +120,28 @@ func TestSplunkClientDo(t *testing.T) {
 	c.Do(&hreq, []int{200}, nil)
 }
 
+func TestNewSplunkClientBoundsIdleConnectionLifetime(t *testing.T) {
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	defaultClient, ok := c.Client.(*http.Client)
+	if !ok {
+		t.Fatalf("default client type = %T, want *http.Client", c.Client)
+	}
+	upgradeClient, ok := c.SearchHeadClusterUpgradeClient.(*http.Client)
+	if !ok {
+		t.Fatalf("upgrade client type = %T, want *http.Client", c.SearchHeadClusterUpgradeClient)
+	}
+	transport, ok := defaultClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("default transport type = %T, want *http.Transport", defaultClient.Transport)
+	}
+	if transport.IdleConnTimeout <= 0 {
+		t.Fatalf("idle connection timeout = %s, want a positive bound", transport.IdleConnTimeout)
+	}
+	if upgradeClient.Transport != defaultClient.Transport {
+		t.Fatal("default and SHC control clients must share one owned transport")
+	}
+}
+
 func TestSplunkClientDoClosesResponseBody(t *testing.T) {
 	tests := []struct {
 		name           string

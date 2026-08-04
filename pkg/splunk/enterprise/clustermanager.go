@@ -546,6 +546,7 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 
 	// Get a Splunk client to execute the REST call
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+	defer splunkClient.CloseIdleConnections()
 
 	return splunkClient.BundlePush(true)
 }
@@ -577,6 +578,7 @@ var GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.Clus
 
 	mgr := clusterManagerPodManager{log: logger, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	cm := mgr.getClusterManagerClient(cr)
+	defer cm.CloseIdleConnections()
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to get cluster info from ClusterManager pod, using basic environment variables", "error", err)

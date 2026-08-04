@@ -151,6 +151,7 @@ func dependencyImageMismatchWait(
 // helps in mock function
 var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
 	cm := mgr.getClusterManagerClient(ctx)
+	defer cm.CloseIdleConnections()
 	return cm.GetClusterInfo(false)
 }
 

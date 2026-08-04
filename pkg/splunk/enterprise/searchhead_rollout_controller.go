@@ -42,7 +42,9 @@ var initiateSearchHeadClusterUpgrade = func(
 	mgr *searchHeadClusterPodManager,
 	ordinal int32,
 ) error {
-	return mgr.getClient(ctx, ordinal).InitiateUpgrade()
+	c := mgr.getClient(ctx, ordinal)
+	defer c.CloseIdleConnections()
+	return c.InitiateUpgrade()
 }
 
 var finalizeSearchHeadClusterUpgrade = func(
@@ -50,7 +52,9 @@ var finalizeSearchHeadClusterUpgrade = func(
 	mgr *searchHeadClusterPodManager,
 	ordinal int32,
 ) error {
-	return mgr.getClient(ctx, ordinal).FinalizeUpgrade()
+	c := mgr.getClient(ctx, ordinal)
+	defer c.CloseIdleConnections()
+	return c.FinalizeUpgrade()
 }
 
 var validateSearchHeadClusterImageUpgradePath = func(

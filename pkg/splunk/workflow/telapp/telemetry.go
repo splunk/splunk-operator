@@ -457,6 +457,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		return false
 	}
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", serviceFQDN), "admin", string(adminPwd))
+	defer splunkClient.CloseIdleConnections()
 
 	var licenseInfo map[string]splclient.LicenseInfo
 	licenseInfo, err = splunkClient.GetLicenseInfo()

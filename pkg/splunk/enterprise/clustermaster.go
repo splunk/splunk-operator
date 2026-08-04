@@ -410,6 +410,7 @@ func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr 
 
 	// Get a Splunk client to execute the REST call
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+	defer splunkClient.CloseIdleConnections()
 
 	return splunkClient.BundlePush(true)
 }
@@ -438,6 +439,7 @@ var VerifyCMasterisMultisite = func(ctx context.Context, cr *enterpriseApiV3.Clu
 	logger := logging.FromContext(ctx).With("func", "VerifyCMasterisMultisite", "name", cr.GetName(), "namespace", cr.GetNamespace())
 	mgr := clusterMasterPodManager{log: logger, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	cm := mgr.getClusterMasterClient(cr)
+	defer cm.CloseIdleConnections()
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
 		return nil, err

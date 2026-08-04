@@ -815,8 +815,9 @@ var removeSearchHeadClusterMember = func(
 	mgr *searchHeadClusterPodManager,
 	n int32,
 ) error {
-	return mgr.getClient(ctx, n).
-		RemoveSearchHeadClusterMember()
+	c := mgr.getClient(ctx, n)
+	defer c.CloseIdleConnections()
+	return c.RemoveSearchHeadClusterMember()
 }
 
 func (mgr *searchHeadClusterPodManager) requestScaleDownMembershipRemoval(
@@ -869,6 +870,7 @@ func (mgr *searchHeadClusterPodManager) prepareRecycleLegacy(ctx context.Context
 		// Detain search head
 		logger.InfoContext(ctx, "detaining SearchHeadCluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
+		defer c.CloseIdleConnections()
 
 		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
 
@@ -958,6 +960,7 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 		// release from detention
 		logger.InfoContext(ctx, "releasing SearchHeadCluster member from detention", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
+		defer c.CloseIdleConnections()
 		return false, c.SetSearchHeadDetention(false)
 
 	case "": // member info is transiently unavailable (e.g. pod mid-restart); wait for it to come back
@@ -974,6 +977,7 @@ func (mgr *searchHeadClusterPodManager) FinishUpgrade(ctx context.Context, n int
 	if mgr.cr.Status.UpgradePhase == enterpriseApi.UpgradePhaseUpgrading {
 		logger := logging.FromContext(ctx).With("func", "FinishUpgrade")
 		c := mgr.getClient(ctx, n)
+		defer c.CloseIdleConnections()
 
 		// stop gathering metrics
 		currentTime := time.Now().Unix()
@@ -1013,12 +1017,14 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 // GetSearchHeadClusterMemberInfo used in mocking this function
 var GetSearchHeadClusterMemberInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadClusterMemberInfo, error) {
 	c := mgr.getClient(ctx, n)
+	defer c.CloseIdleConnections()
 	return c.GetSearchHeadClusterMemberInfo()
 }
 
 // GetSearchHeadCaptainInfo used in mocking this function
 var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
 	c := mgr.getClient(ctx, n)
+	defer c.CloseIdleConnections()
 	return c.GetSearchHeadCaptainInfo()
 }
 
@@ -1031,7 +1037,9 @@ var GetSearchHeadCaptainMembersForStatus = func(
 	mgr *searchHeadClusterPodManager,
 	n int32,
 ) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
-	return mgr.getClient(ctx, n).GetSearchHeadCaptainMembers()
+	c := mgr.getClient(ctx, n)
+	defer c.CloseIdleConnections()
+	return c.GetSearchHeadCaptainMembers()
 }
 
 // InitiateSearchHeadInitialFormationRollingRestart is replaceable in tests.
@@ -1041,8 +1049,9 @@ var InitiateSearchHeadInitialFormationRollingRestart = func(
 	ctx context.Context,
 	mgr *searchHeadClusterPodManager,
 ) error {
-	return mgr.getClient(ctx, 0).
-		InitiateSearchHeadRollingRestart(true)
+	c := mgr.getClient(ctx, 0)
+	defer c.CloseIdleConnections()
+	return c.InitiateSearchHeadRollingRestart(true)
 }
 
 func (mgr *searchHeadClusterPodManager) reconcileInitialFormationRestart(

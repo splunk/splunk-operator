@@ -45,7 +45,9 @@ var getSearchHeadCaptainMembers = func(
 	mgr *searchHeadClusterPodManager,
 	n int32,
 ) (map[string]splclient.SearchHeadCaptainMemberInfo, error) {
-	return mgr.getClient(ctx, n).GetSearchHeadCaptainMembers()
+	c := mgr.getClient(ctx, n)
+	defer c.CloseIdleConnections()
+	return c.GetSearchHeadCaptainMembers()
 }
 
 var getSearchHeadKVStoreStatus = func(
@@ -53,7 +55,9 @@ var getSearchHeadKVStoreStatus = func(
 	mgr *searchHeadClusterPodManager,
 	n int32,
 ) (string, error) {
-	status, err := mgr.getClient(ctx, n).GetKVStoreStatus()
+	c := mgr.getClient(ctx, n)
+	defer c.CloseIdleConnections()
+	status, err := c.GetKVStoreStatus()
 	if err != nil {
 		return "", err
 	}
@@ -229,7 +233,9 @@ var transferSearchHeadCaptain = func(
 	n int32,
 	managementURI string,
 ) error {
-	return mgr.getClient(ctx, n).TransferSearchHeadCaptain(managementURI)
+	c := mgr.getClient(ctx, n)
+	defer c.CloseIdleConnections()
+	return c.TransferSearchHeadCaptain(managementURI)
 }
 
 var setSearchHeadDetention = func(
@@ -238,7 +244,9 @@ var setSearchHeadDetention = func(
 	n int32,
 	detain bool,
 ) error {
-	return mgr.getClient(ctx, n).SetSearchHeadDetention(detain)
+	c := mgr.getClient(ctx, n)
+	defer c.CloseIdleConnections()
+	return c.SetSearchHeadDetention(detain)
 }
 
 var releaseSearchHeadDetention = func(

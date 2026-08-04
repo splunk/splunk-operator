@@ -329,6 +329,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			if err == nil {
 				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
 				err := c.AutomateMCApplyChanges()
+				c.CloseIdleConnections()
 				if err != nil {
 					eventPublisher.Warning(ctx, "AutomateMCApplyChangesFailed", "Get Monitoring Console client failed. Check operator logs for details.")
 					setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console configuration")
@@ -683,6 +684,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			if err == nil {
 				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
 				err := c.AutomateMCApplyChanges()
+				c.CloseIdleConnections()
 				if err != nil {
 					eventPublisher.Warning(ctx, "AutomateMCApplyChangesFailed", "Automate MC Apply Changes failed. Check operator logs for details.")
 					return result, fmt.Errorf("automate MC apply changes: %w", err)
@@ -898,6 +900,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			// Change idxc secret key
 			err = idxcClient.SetIdxcSecret(nsIdxcSecret)
 			if err != nil {
+				idxcClient.CloseIdleConnections()
 				// Emit event for password sync failure
 				if eventPublisher != nil {
 					eventPublisher.Warning(ctx, "PasswordSyncFailed",
@@ -912,6 +915,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 
 			// Restart splunk instance on pod
 			err = idxcClient.RestartSplunk()
+			idxcClient.CloseIdleConnections()
 			if err != nil {
 				// Emit event for password sync failure
 				if eventPublisher != nil {
@@ -1122,6 +1126,7 @@ func (mgr *indexerClusterPodManager) PrepareScaleDown(ctx context.Context, n int
 
 	// next, remove the peer
 	c := mgr.getClusterManagerClient(ctx)
+	defer c.CloseIdleConnections()
 	peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
 	remainingPeers := int32(len(mgr.cr.Status.Peers)) - 1
 	mgr.log.InfoContext(ctx, "deregistering peer from ClusterManager", "peerName", peerName, "remainingPeers", remainingPeers)
@@ -1782,6 +1787,7 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 
 		mgr.log.InfoContext(ctx, "decommissioning IndexerCluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
 		c := mgr.getClient(ctx, n)
+		defer c.CloseIdleConnections()
 		err := c.DecommissionIndexerClusterPeer(enforceCounts)
 		if err != nil {
 			return false, err
@@ -2238,6 +2244,7 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcom
 		mgr.c = c
 	}
 	cm := mgr.getClusterManagerClient(ctx)
+	defer cm.CloseIdleConnections()
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
 		return fmt.Errorf("could not get cluster info from cluster manager")
