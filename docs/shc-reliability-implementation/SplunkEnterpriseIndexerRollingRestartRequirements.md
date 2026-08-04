@@ -106,6 +106,24 @@ The leader takeover itself resumed correctly and did not duplicate the
 interrupted decommission request. It also did not eliminate the later
 distributed-peer convergence gap after indexer address and identity changes.
 
+A seventh independent accepted-image record used one persistent HEC
+connection and one persistent Search Head connection across the complete
+Operator-owned `3 -> 2 -> 1 -> 0` replacement. One explicit HEC HTTP 503/code
+23 rejection caused one bounded reconnect; all 2,400 submissions were accepted
+and the final result on every Search Head was exactly
+`count/min/max/distinct=2400/1/2400/2400`. Every search request returned HTTP
+200, but counts regressed three times. Maximum count drop was 847 and maximum
+pending was 849. The Operator selected ordinal 2 before ordinal 3 had
+converged on every Search Head. At final lifecycle `Completed`, each Search
+Head still listed four current `Up` peers and four stale `Down` peers; exact
+four-peer convergence occurred 1,583 seconds later. The workload and monitor
+logs have SHA-256
+`0a5a0193e402084533cc91c163602823f9d80b71010a3ce0158ef883090c6150`
+and
+`0aa60e7d2a93104702bddb1a1dddeff83dce880c74fc7146560dea77f6cdbdd3`.
+This record independently rejects using HEC delivery, Pod readiness, or
+lifecycle completion as a proxy for distributed-search convergence.
+
 This is not evidence that RF or SF was configured incorrectly, and it is not
 yet a complete root-cause finding. It proves that HTTP request success, Cluster
 Manager `Up/searchable`, Kubernetes endpoint recovery, and remote HEC health

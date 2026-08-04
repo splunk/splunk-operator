@@ -55,6 +55,7 @@ Unless a scenario explicitly tests loss of majority, assert:
 | HLT-011 | P2 | No service mesh installed | Local member readiness succeeds without a sidecar, mesh control plane, ingress, or external network dependency |
 | HLT-012 | P2 | TLS terminates at ingress | External TLS mode does not select the local management scheme; readiness follows the actual Splunkd `enableSplunkdSSL` configuration |
 | HLT-013 | P2 | Mesh mTLS, passthrough, or re-encryption | Local readiness bypasses proxy routing while supported inter-Pod management traffic retains its qualified TLS policy |
+| HLT-014 | P1 | Persistent Service connection during backend replacement | Selected backend identity and connection generation are recorded; endpoint withdrawal prevents new selection; an interrupted flow reconnects within policy without hiding the first transport failure or losing the logical request |
 
 ### HLT-009 SHC-97 evidence
 
@@ -74,6 +75,73 @@ This closes bounded HLT-009 no-regression coverage for the exact image and EKS
 topology, not every slow-start timing or storage/provider combination. Detailed
 evidence is in
 [SHC97DockerSplunkStartupQualification.md](SHC97DockerSplunkStartupQualification.md).
+
+### HLT-014 SHC-107 evidence
+
+Exact test-only source `f3ec88026` first proved stable HTTP/1.1 reuse on the
+EKS qualification topology: one HEC TLS connection carried 12 writes and one
+Search Head TLS connection carried 25 identity/search requests with zero
+failure and exact final completeness. The selected backend identity and both
+connection generations were observable.
+
+The bounded unplanned replacement then selected Search Head 1, which was also
+the active captain. Kubernetes withdrew that terminating endpoint. One search
+attempt on the established connection failed, the same logical request
+reconnected successfully, and the next identity sample selected Search Head 2
+on generation two. Search Head 2 became captain, the replacement member rejoined,
+at least two endpoints remained serving, and all 600 numbered events completed
+with zero logical failure or count regression. This qualifies HLT-014 for one
+unplanned active-captain replacement on the accepted image.
+
+Indexer testing then established a different boundary. With transport-only
+recovery, an established Service connection remained pinned to a withdrawn
+indexer and Splunk returned HTTP 503 with `Connection: Keep-Alive`; 28 HEC
+submissions were not accepted. A direct diagnostic identified Splunk HEC code
+23, `Server is shutting down`. Exact test source `d57db8d7a` therefore closes
+and retries once only for that explicit rejection while retaining response
+failure counters. In a fresh Service-backed campaign, replacing the selected
+indexer caused one explicit response failure, one reconnect, and one recovered
+logical request. All 600 submissions were accepted and the final 600 events
+were complete and unique.
+
+That campaign also returned two HTTP-successful but lower aggregate search
+counts during indexer recovery. HEC delivery recovery passes for this bounded
+replacement; uninterrupted immediate distributed-search completeness does
+not.
+
+The Operator-owned Search Head negative control then submitted 1,800 events
+exactly while established connections remained pinned to detained members.
+It recorded 218 application-level search failures across all three ordinals;
+only six later transport failures caused reconnection. Exact response-aware
+source `3e9f47751` closes and retries once only for the explicit Splunk
+detention HTTP 405. Across two complete `2 -> 1 -> 0` rolls it recovered four
+such responses, completed 1,200 HEC submissions and searches exactly, and
+reported zero logical, identity, transport-first-attempt, or count-regression
+failure. The second roll completed after the active Operator Pod was deleted
+in durable ordinal-2 `WaitingForTermination` state. Three serving endpoints,
+three `Up` members, a ready captain, equal Search Head revisions, and zero
+container restarts were restored.
+
+The topology had no mesh injection or sidecars, so the bounded no-mesh path and
+Operator restart are qualified.
+
+The same exact source then spanned a complete accepted-image indexer
+`3 -> 2 -> 1 -> 0` roll. One explicit HEC HTTP 503/code 23 response forced a
+second connection and recovered once; all 2,400 submissions became searchable
+with zero logical request failure. The persistent Search Head connection
+returned HTTP 200 throughout, but three counts regressed. Maximum count drop
+was 847 and maximum pending was 849. Kubernetes preserved all eight indexer
+PVC claims, at least three indexer Pods and endpoints remained Ready, and all
+container restart counts stayed zero.
+
+HLT-014 therefore passes bounded response-aware HEC delivery for the full
+accepted-image roll, but OPS-011 remains failed for immediate search
+completeness. The convergence monitor also rejected lifecycle ordering:
+ordinal 2 was selected before ordinal 3 had converged on every Search Head,
+and exact four-current-peer convergence followed lifecycle completion by
+1,583 seconds. Transparent mesh, ingress TLS termination, HTTP HEC,
+candidate-image qualification, release-duration soak, and both Splunkd
+connection-close requirements remain open.
 
 ## Drain and captain scenarios
 

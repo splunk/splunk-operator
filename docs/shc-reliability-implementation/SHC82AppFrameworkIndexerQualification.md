@@ -966,6 +966,26 @@ lossless delivery must use bounded retry and an acknowledgment/idempotency
 contract appropriate to their input path. The Operator cannot recover an
 event that a client abandons after receiving a connection failure.
 
+SHC-107 persistent-client evidence makes this boundary concrete. Kubernetes
+withdrew the selected terminating indexer from its EndpointSlice, but an
+already-established TLS connection remained associated with that Pod. Splunk
+then returned HEC code 23 / HTTP 503, `Server is shutting down`, while keeping
+the HTTP/1.1 connection alive. A transport-only client did not choose a new
+Service backend and lost 28 explicitly rejected submissions. A bounded client
+that closed and retried exactly that explicit rejection once selected a
+serving endpoint and accepted all 600 submissions. That is a compatibility
+mitigation, not a server-side delivery guarantee. Splunkd should close the HEC
+connection when it starts rejecting work for detention/shutdown. A transport
+failure without an HTTP response remains ambiguous and still requires HEC
+acknowledgment or producer idempotency before safe replay.
+
+The same accepted 600-event campaign returned two HTTP-successful aggregate
+searches whose counts were lower than the immediately preceding result, then
+converged to 600 unique events. Continuous HTTP success and eventual exactness
+therefore do not satisfy immediate search completeness. The supported product
+contract must either prevent a successful silently incomplete result or expose
+machine-detectable partial-result state.
+
 Qualification must separately report:
 
 - request acceptance;
@@ -985,8 +1005,10 @@ environment-qualified:
 - HEC disabled without permanently failing readiness;
 - no service mesh, supported mesh modes, and ingress TLS termination;
 - separate Service behavior for HEC and other indexer ports;
-- persistent HEC connections and deliberately stale EndpointSlice/client
-  caches;
+- Operator-owned full-roll behavior for persistent HEC connections and
+  deliberately stale EndpointSlice/client caches; one selected-backend
+  unplanned replacement and the explicit-503 client mitigation are boundedly
+  qualified by SHC-107;
 - insufficient RF/SF/peer redundancy, which must fail closed;
 - one peer already unhealthy before the app update;
 - Operator restart or absence durations and topologies beyond the qualified

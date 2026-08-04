@@ -145,6 +145,24 @@ it is not converted into a qualified claim by documentation alone.
 - [ ] Complete SHC-85 distributed-search convergence analysis and explicitly
   separate Operator/runtime corrections from Splunk Enterprise changes that
   are only identified for later ownership.
+- [ ] Complete SHC-107 persistent-client qualification. Exact test-only source
+  `3e9f47751` now qualifies stable reuse, unplanned active-captain replacement,
+  selected-indexer response recovery, two complete Operator-owned Search Head
+  rolls, active-controller replacement, and the no-mesh path. The Search Head
+  negative control delivered 1,800 events exactly but recorded 218 searches
+  rejected on connections pinned to detained members. Response-aware recovery
+  then closed and retried four explicit HTTP 405 responses and completed 1,200
+  events with zero logical failure, including after deleting the active
+  Operator in durable ordinal-2 state. The final SHC had three `Up` members,
+  three serving endpoints, equal Search Head revisions, a ready captain, and
+  zero restarts. A complete accepted-image indexer `3 -> 2 -> 1 -> 0` roll
+  then recovered one explicit HEC 503 and delivered 2,400 events exactly, but
+  recorded three HTTP-successful count regressions with maximum drop 847 and
+  selected ordinal 2 before ordinal 3 peer convergence on every Search Head.
+  Exact peer convergence followed lifecycle completion by 1,583 seconds.
+  Transparent mesh, ingress TLS termination, HTTP HEC, candidate-image
+  qualification, release soak, immediate distributed-search completeness,
+  and the missing ordinal-advancement gate remain open.
 - [ ] Complete SHC-82 restart-required App Framework qualification for Search
   Heads and indexers, including searchable indexer restart behavior.
 - [ ] Run the clean final EKS qualification matrix and stability gate from
@@ -156,6 +174,26 @@ it is not converted into a qualified claim by documentation alone.
   idempotent aggregate setup, the unchanged 15/4/1 bounded contracts, five
   bootstrap regressions, 91 broader test collections, Compose validation, and
   exact cleanup without user site-package mutation.
+- [x] (2026-08-03 23:14Z) Registered and source-qualified SHC-105 at exact
+  Operator source `0e638dac4`. The exact App Framework poll boundary now uses
+  the existing five-second overdue retry instead of emitting a false zero-
+  duration requeue error. One thousand focused repetitions, `make fmt vet`,
+  `make build`, all 43 Make test suites, Helm lint, and all 150 chart tests
+  passed. Immutable Linux image and live multi-boundary EKS qualification
+  remain open.
+- [x] (2026-08-04 00:18Z) Registered and source-qualified SHC-106 at production
+  correction `ab342d7a5` and cumulative source `a6cda92a3`. A real EKS app
+  rollout plus competing common
+  template update reproduced overlapping Deployer and Search Head disruption.
+  The bounded correction introduces one established-SHC disruption owner,
+  retains an already-active Deployer until Kubernetes-observed convergence,
+  and prevents Search Head mutation while that owner remains active. One
+  hundred normal and race repetitions of helper and real controller-boundary
+  tests, all 43 Make suites, 192/192 specs, 78.6 percent coverage, build/vet,
+  150 Helm tests, and new-change lint passed. Immutable Linux image and live
+  correction qualification remain open. The cumulative source also persists
+  the bounded `SHC RollingUpdate DeployerUpdateActive` reason across the
+  controller status refresh and verifies it through the API-backed boundary.
 
 ## Surprises & Discoveries
 

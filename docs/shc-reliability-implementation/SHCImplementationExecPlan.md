@@ -482,6 +482,129 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   later controller-leader-failover campaign recorded 13 regressions and
   maximum pending 329 at sequence 1239, again with zero request failures and
   exact eventual results.
+- [ ] (2026-08-04 UTC) Complete SHC-112 immutable qualification for the
+  Operator-owned advancement boundary. Isolated source `79f751075` adds a
+  durable `AwaitingSearchPeerConvergence` stage and requires every managed
+  Search Head referencing the same Cluster Manager to report exactly one
+  current, enabled, `Up` replacement GUID/address before the next Indexer
+  ordinal is selected. This addresses the observed premature advancement but
+  does not close complete-or-explicitly-partial search semantics or the
+  Splunk-managed searchable-restart sequence. The exact source passed all 43
+  Make suites and 192 enterprise/controller specs. Source qualification also
+  covers transient Cluster Manager and Search Head observations, Kubernetes
+  discovery failure, no matching SearchHeadCluster, and multiple matching
+  clusters. A reconstructed-manager test proves source-level restart recovery
+  from persisted status. Linux image, live Operator-Pod replacement, and EKS
+  gates remain open in
+  `SHC112IndexerSearchPeerConvergenceGateExecPlan.md`.
+- [ ] (2026-08-04 UTC) Complete SHC-113 immutable resource qualification for
+  shared Splunk REST response and transport ownership. Initial source
+  `961fe9b06` closes every successful response body and covers JSON success,
+  no-target success, unexpected status, empty body, and malformed body. Exact
+  stacked source `c700a077e` additionally releases both idle HTTP clients
+  owned by every short-lived SHC-112 Search Head observation, including an
+  observation-error path, without disabling keep-alive globally. It passed
+  100 focused response-ownership repetitions, 20 race-enabled focused
+  repetitions, all 43 Make suites, 192/192 enterprise/controller specs, 78.6
+  percent composite coverage, chart lint, and all 150 Helm tests. One
+  unrelated MonitoringConsole status conflict in an initial full run passed
+  10/10 isolated retries before the clean 192/192 rerun. An immutable Linux
+  image and bounded EKS file-descriptor/connection soak remain open in
+  `SHC113SplunkRESTResponseClosureExecPlan.md`.
+- [ ] (2026-08-04 UTC) Complete SHC-114 bounded peer-observation
+  qualification. Source branch `codex/shc-114-bounded-peer-observation`
+  carries the reconcile context through Cluster Manager and Search Head REST
+  reads, caps Search Head fan-out at four, applies one 15-second batch budget,
+  evaluates results in deterministic Pod-name order, and closes the private
+  transports. Focused behavior passed 100 normal and 20 race-enabled
+  repetitions. Exact source `5440b8c2e` passed generation with no schema
+  drift, `make fmt vet build`, all 43 Make suites, 192/192 specs, 78.7 percent
+  composite coverage, chart lint, all 150 Helm tests, and `git diff --check`.
+  The immutable Linux image, EKS duration/cancellation campaign, controller
+  replacement, and file-descriptor/socket soak remain open in
+  `SHC114BoundedSearchPeerObservationExecPlan.md`.
+- [ ] (2026-08-04 UTC) Complete SHC-115 short-lived Splunk REST transport
+  ownership qualification. The repository-wide follow-up to SHC-113 and
+  SHC-114 found older lifecycle, status, license, bundle, Monitoring Console,
+  secret-sync, and telemetry callers that also construct private transports.
+  The isolated candidate explicitly releases every identified production
+  client on success and failure, preserves keep-alive within one client, and
+  gives future omissions a 90-second idle fallback. Exact source `cd3498393`
+  passed `make build`, all 43 Make suites, 192/192 specs, 78.7 percent
+  composite coverage, chart lint, all 150 Helm tests, changed-path race gates,
+  and `git diff --check`. A broad race run exposed an unrelated existing App
+  Framework worker-scheduler race outside the changed files; the normal full
+  suite passed. Immutable Linux, controller-restart, and EKS
+  file-descriptor/socket soak gates remain open in
+  `SHC115ShortLivedRESTTransportOwnershipExecPlan.md`.
+- [x] (2026-08-04 UTC) Complete SHC-116 indexer endpoint-withdrawal
+  qualification. The accepted-image diagnostic correlated its only HEC
+  failure with the exact decommission request while the target still appeared
+  routable through the indexer Service EndpointSlice. Exact source
+  `96c83dcad` requires the target UID to be not Ready and absent from routable
+  EndpointSlice entries, persists an immutable effective propagation deadline,
+  invalidates the observation if routing returns, and prevents normal and
+  recovery decommission before the continuous delay expires. Generation,
+  build/vet, focused race checks, chart lint, all 150 Helm tests, and the exact
+  Linux image gate passed. The full EKS run then completed target order
+  `3,2,1,0`, active controller replacement during a persisted delay, 647
+  lifecycle snapshots, 60 consecutive final-state observations, all four Pod
+  UID replacements, stable PVC claims, zero container restarts, 10,800
+  successful HEC/search requests, and exact eventual uniqueness. All 25
+  artifact hashes verify. Nineteen HTTP-successful count regressions, all
+  during the planned roll, keep the separate Splunk partial-result requirement
+  open. The repeated native Linux full gate passed 43 suites, 192/192 specs,
+  and 78.7 percent composite coverage. Exact evidence is in
+  `SHC116IndexerEndpointWithdrawalExecPlan.md`.
+- [x] (2026-08-04 UTC) Complete SHC-117 extended full-roll evidence. The
+  measured exact-peer cleanup interval can make four ordinary indexer
+  replacements plus stabilization exceed the old one-hour workload and
+  two-hour monitor defaults. Test-only source `cd522e119` extends the workload
+  and monitor to three hours and the Job deadline to four hours. Repository
+  shell/manifest gates pass. The complete EKS run retained the workload through
+  all four replacements and stabilization, exited zero, ended with exact
+  `10800/1/10800/10800` count/min/max/distinct, and sealed verified evidence.
+  The 19 intermediate regressions are reported independently in
+  `SHC117LongIndexerRollQualificationExecPlan.md`.
+- [x] (2026-08-04 UTC) Implement SHC-118, the Search Head endpoint-withdrawal
+  propagation barrier. Exact source `8152fc042` persists a restart-safe,
+  immutable continuous-withdrawal deadline for the exact Pod UID and gates both
+  Pod-update and scale-down detention. Returned routability invalidates proof
+  monotonically; a different operation ID cannot replace an active persisted
+  operation; and API and controller validation prevent a delay that would
+  exhaust the effective detention timeout. Generation, manifests, focused
+  tests, all 43 native suites (192/192 specs, 78.8 percent coverage), and
+  `make build` pass. Chart lint, all 150 Helm tests, full v4 API and metrics
+  package race checks, and 20 changed-path enterprise race repetitions also
+  pass. A broad enterprise race run reproduced pre-existing App Framework and
+  Cluster Manager test-seam races outside the changed paths. The matching-CLI
+  Linux gate also passed all 43 suites and 192/192 specs. The immutable
+  Operator OCI index is
+  `sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`;
+  qualification harness `7363f71a9` passes Bash/ShellCheck and a read-only
+  retained-cluster preflight, and requires a live API-independent workload
+  before mutation. Its separate default-policy mode removes the field and
+  verifies the persisted 30-second observation-to-deadline interval rather
+  than mistaking an explicit value of 30 for omitted-policy evidence. The
+  missing field is resolved by the Operator, not defaulted by Kubernetes.
+  The explicit-120-second EKS lifecycle harness passed target order `2,1,0`,
+  controller replacement inside ordinal 2's persisted interval, dynamic
+  captain transfer for ordinal 0, minimum two endpoints, maximum one unready
+  Pod, all three UID replacements with stable claims, three observation Events,
+  zero invalidations/restarts/request failures, and 12 stable final samples.
+  Its Job then completed 3,600 submissions with zero HEC/search failures, zero
+  count regressions, maximum pending 2, exact final uniqueness, zero runner/
+  wait/finalizer exit codes, and all 37 hashes verified. The omitted-field
+  default lifecycle harness also passed target order `2,1,0`, exact 30-second
+  persisted intervals, dynamic captain transfer, stable claims, minimum two
+  endpoints, maximum one unready Pod, zero invalidations/restarts/request
+  failures, and 12 stable samples. Its Job completed 3,600 submissions with
+  zero HEC/search failures, one transient count regression, maximum pending 3,
+  exact final uniqueness, zero runner/wait/finalizer exit codes, and all 30
+  hashes verified. SHC-118 is complete for its bounded endpoint-withdrawal,
+  request-availability, and eventual-delivery scope. The single successful-
+  search regression keeps the separate Splunk intermediate-result semantics
+  requirement open in `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP
@@ -716,11 +839,43 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   cleared on 2026-07-28 by publishing immutable source commits and pinned
   Linux images used by the EKS campaign.
 - [ ] Approve the capability/dependency map and assign technical owners.
-- [ ] Complete SHC-104 Docker-Splunk test-bootstrap reproducibility. Canonical
-  source `6ee266c1` passes the 15 shutdown, four exact-Ansible-ref, and one
-  base-image-security tests, but `make test_setup` fails later while building
-  legacy PyYAML 5.4.1 under the current Python 3.10/pip 26.2 environment. Keep
-  this separate from product runtime qualification.
+- [x] (2026-08-03 22:31Z) Completed SHC-104 Docker-Splunk test-bootstrap
+  reproducibility at canonical source `0604eeb`. A repository-local locked
+  environment passed clean and repeated Linux/AMD64 aggregate setup, the
+  unchanged 15 shutdown, four exact-Ansible-ref, and one base-image-security
+  tests, five bootstrap regressions, 91 broader test collections, Compose
+  validation, and exact cleanup. Production runtime source is unchanged.
+- [x] (2026-08-03 23:14Z) Registered and source-qualified SHC-105 at Operator
+  source `0e638dac4`. Exact-boundary and overdue App Framework timer values now
+  return the existing bounded five-second retry. The full local regression
+  gate passed; immutable Linux image and live EKS qualification remain open.
+- [x] (2026-08-04 00:18Z) Registered and source-qualified SHC-106 at production
+  correction `ab342d7a5` and cumulative source `a6cda92a3`. EKS reproduced an
+  overlapping Deployer and Search Head
+  planned disruption from one common template change during a real app-driven
+  member roll. The controller correction serializes durable App Framework,
+  active member lifecycle, and Deployer replacement ownership for an
+  established SHC while preserving the existing queued Search Head revision
+  barrier. The cumulative source also persists the
+  `SHC RollingUpdate DeployerUpdateActive` reason through the API status path.
+  All local source gates passed; immutable Linux image, both ownership
+  directions, and controller-restart EKS qualification remain open.
+- [x] (2026-08-04 01:06Z) Registered and stable-smoke-qualified SHC-107 at
+  test-only source `f3ec88026`. The API-independent Python workload retains HEC and Search Head
+  HTTPS connections, identifies the selected Search Head on the same
+  connection, and records transport failure, bounded reconnect, server close,
+  logical request, and completeness signals separately. Seven tests passed
+  100 repetitions with `make fmt vet` and Kubernetes manifest validation. On
+  stable EKS Services, one HEC connection carried 12 writes and one Search
+  Head connection carried 25 identity/search requests with HTTP/1.1
+  `Keep-Alive`, zero failures, and exact final completeness. Current Splunkd
+  intentionally forces close for absent/default Python and official Python SDK
+  user-agent identities; the neutral capable-client identity is therefore part
+  of the bounded test contract. Unplanned deletion of the selected active
+  captain then caused one visible first-attempt failure, one recovered logical
+  request, connection/captain movement to another member, and exact 600-event
+  completion. Operator-owned and remaining disruptive EKS campaigns remain
+  open.
 - [ ] Resolve the blocking API and lifecycle policy decisions.
 - [ ] Complete and approve the Operator lifecycle technical design.
 - [ ] Complete and approve the runtime lifecycle contract.
@@ -2864,3 +3019,36 @@ Revision note (2026-08-03 20:35Z): Closed SHC-102/103 with fail-closed probe
 ConfigMap ownership, cache-independent create semantics, deterministic and
 native-Linux regression gates, immutable live EKS creation, complete
 disposable cleanup, and exact accepted restoration.
+
+Revision note (2026-08-04 UTC): Corrected SHC-118 acceptance so its separate
+default-policy campaign omits the policy field and verifies the persisted
+30-second observation-to-deadline interval. An explicitly configured value of
+30 no longer serves as omitted-policy evidence. Source and CRD inspection
+confirmed this is an Operator-resolved default, not Kubernetes API defaulting.
+
+Revision note (2026-08-04 UTC): Closed SHC-116 and SHC-117 after the complete
+10,800-sample Job and outer evidence runner exited zero. The update records
+exact eventual delivery and verified hashes while preserving 19 intermediate
+distributed-search count regressions as a separate Splunk result-semantics
+requirement.
+
+Revision note (2026-08-04 19:56Z): Recorded the passing SHC-118
+explicit-policy lifecycle campaign, while leaving the independent workload's
+terminal exact-delivery gate and the omitted-field Operator-default campaign
+open.
+
+Revision note (2026-08-04 20:42Z): Closed the SHC-118 explicit-policy workload
+and artifact gates with exact 3,600-event delivery, zero request failures or
+count regressions, and verified hashes. The omitted-field default campaign
+remains open.
+
+Revision note (2026-08-04 21:03Z): Recorded the passing omitted-field
+Operator-default lifecycle harness and left only its independent workload and
+artifact gates open. Kubernetes Event-series counts remain operational signals;
+exact operation cardinality comes from status and samples.
+
+Revision note (2026-08-04 21:54Z): Closed SHC-118's omitted-field workload and
+artifact gates with exact 3,600-event final delivery, zero request failures,
+zero process exit codes, and 30 verified hashes. Preserved one transient
+HTTP-successful count regression as evidence for the separate Splunk
+intermediate-result semantics requirement.
