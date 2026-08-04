@@ -970,6 +970,14 @@ func TestIndexerReplacementWaitsForDurableSearchPeerConvergence(t *testing.T) {
 	require.False(t, complete)
 	require.Equal(t, int64(2), mgr.cr.Status.PodUpdate.SearchPeerConvergenceSequence)
 
+	// Reconstruct the manager from the persisted custom-resource status to
+	// model a controller process replacement between observation and
+	// revalidation. No in-memory proof from the prior manager may be required.
+	mgr = &indexerClusterPodManager{
+		c:   mgr.c,
+		log: mgr.log,
+		cr:  mgr.cr.DeepCopy(),
+	}
 	complete, err = mgr.FinishRecycle(context.Background(), 2)
 	require.NoError(t, err)
 	require.False(t, complete)
