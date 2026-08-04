@@ -34,8 +34,11 @@ captain-reported member/restart states exposed by the SearchHeadCluster.
 For App Framework coordination tests, every sample also includes the
 StatefulSet partition and revisions, the durable bundle/observation/restart
 revision triple, and each package's deploy, phase, repository, and object-hash
-state. This makes a real durable app hold distinguishable from transient
-repository polling without relying on controller process memory.
+state. The same line records the Deployer Pod UID, revision, readiness and
+restart count plus its StatefulSet strategy and revisions. This makes a real
+durable app hold distinguishable from transient repository polling and exposes
+an unsafe concurrent Deployer recycle instead of treating only Search Head
+Pods as the disruption boundary.
 Failed searches retain a bounded, whitespace-normalized response detail
 without logging credentials.
 The monitor exits successfully only when every submitted sequence is present

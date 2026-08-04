@@ -18,6 +18,7 @@ secret_name="splunk-${namespace}-secret"
 hec_service="splunk-${indexercluster_name}-indexer-service"
 shc_service="splunk-${searchheadcluster_name}-search-head-service"
 shc_instance="splunk-${searchheadcluster_name}-search-head"
+deployer_instance="splunk-${searchheadcluster_name}-deployer"
 idxc_instance="splunk-${indexercluster_name}-indexer"
 
 for value in "${samples}" "${interval_seconds}" "${settle_attempts}"; do
@@ -281,12 +282,20 @@ for sequence in $(seq 1 "${samples}"); do
     resource_state statefulset.apps "${shc_instance}" \
       '{.spec.updateStrategy.rollingUpdate.partition}/{.status.currentRevision}/{.status.updateRevision}/{.status.updatedReplicas}'
   )"
+  deployer_pod="$(
+    resource_state pod "${deployer_instance}-0" \
+      '{.metadata.uid}/{.metadata.labels.controller-revision-hash}/{.status.containerStatuses[0].ready}/{.status.containerStatuses[0].restartCount}'
+  )"
+  deployer_revision="$(
+    resource_state statefulset.apps "${deployer_instance}" \
+      '{.spec.updateStrategy.type}/{.status.currentRevision}/{.status.updateRevision}/{.status.readyReplicas}/{.status.updatedReplicas}'
+  )"
   cm_app="$(
     resource_state clustermanager.enterprise.splunk.com "${stack_name}" \
       '{.status.appContext.isDeploymentInProgress}/{.status.appContext.bundlePushStatus.bundlePushStage}'
   )"
 
-  log_line "${timestamp} seq=${sequence} hec=${hec_state} search=${search_state}/${search_detail} count=${count} min=${minimum:-unknown} max=${maximum} distinct=${distinct} shContainersReady=${sh_containers_ready} shPodsReady=${sh_pods_ready} shServingReady=${sh_serving_ready} shEndpoints=${sh_endpoints} shEndpointPods=${sh_endpoint_pods} shServingConditions=${sh_serving_conditions} shMembers=${sh_member_states} idxEndpoints=${idx_endpoints} restarts=${restarts} shc=${shc} shRevision=${sh_revision} idxc=${idxc} shcApp=${shc_app} shcAppRevisions=${shc_app_revisions} shcAppPackages=${shc_app_packages} cmApp=${cm_app}"
+  log_line "${timestamp} seq=${sequence} hec=${hec_state} search=${search_state}/${search_detail} count=${count} min=${minimum:-unknown} max=${maximum} distinct=${distinct} shContainersReady=${sh_containers_ready} shPodsReady=${sh_pods_ready} shServingReady=${sh_serving_ready} shEndpoints=${sh_endpoints} shEndpointPods=${sh_endpoint_pods} shServingConditions=${sh_serving_conditions} shMembers=${sh_member_states} idxEndpoints=${idx_endpoints} restarts=${restarts} shc=${shc} shRevision=${sh_revision} deployerPod=${deployer_pod} deployerRevision=${deployer_revision} idxc=${idxc} shcApp=${shc_app} shcAppRevisions=${shc_app_revisions} shcAppPackages=${shc_app_packages} cmApp=${cm_app}"
   sleep "${interval_seconds}"
 done
 
