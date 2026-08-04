@@ -47,7 +47,9 @@ a Splunk-managed searchable rolling restart.
 - [x] (2026-08-04 05:13Z) Exact cumulative source `be95112bd` passed
   generation, `make fmt vet build`, the full 43-suite Make gate, all 192
   enterprise/controller specs, 78.6 percent composite coverage, a 100-run
-  focused observation check, and `git diff --check`.
+  focused observation check, 20 race-enabled focused repetitions, all 150
+  Operator and Universal Forwarder Helm tests, chart lint, and
+  `git diff --check`.
 - [x] Source-qualified multiple matching SearchHeadClusters, no matching
   SearchHeadCluster, one unreachable Search Head, a temporarily unavailable
   Cluster Manager observation, and a Kubernetes SearchHeadCluster discovery
