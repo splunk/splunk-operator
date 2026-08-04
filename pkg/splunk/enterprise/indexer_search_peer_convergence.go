@@ -75,10 +75,10 @@ func (mgr *indexerClusterPodManager) indexerSearchPeerConvergenceObserved(
 
 	clusterPeers, err := GetClusterManagerPeersCall(ctx, mgr)
 	if err != nil {
-		return true, false, "", fmt.Errorf(
-			"read Cluster Manager peers for Search Head convergence: %w",
+		return true, false, fmt.Sprintf(
+			"waiting for Cluster Manager peers before Search Head convergence: %v",
 			err,
-		)
+		), nil
 	}
 	peer, ok := clusterPeers[replacement.GetName()]
 	if !ok || peer.ID == "" {

@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -109,7 +110,11 @@ func TestIndexerSearchPeerConvergenceObserved(t *testing.T) {
 
 	oldGetClusterManagerPeersCall := GetClusterManagerPeersCall
 	t.Cleanup(func() { GetClusterManagerPeersCall = oldGetClusterManagerPeersCall })
+	var clusterManagerError error
 	GetClusterManagerPeersCall = func(context.Context, *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+		if clusterManagerError != nil {
+			return nil, clusterManagerError
+		}
 		return map[string]splclient.ClusterManagerPeerInfo{
 			"splunk-indexers-indexer-2": {
 				ID:                    "peer-guid",
@@ -131,6 +136,14 @@ func TestIndexerSearchPeerConvergenceObserved(t *testing.T) {
 	require.True(t, required)
 	require.False(t, converged)
 	require.Contains(t, message, "has not converged")
+
+	duplicateStalePeer = false
+	clusterManagerError = errors.New("temporary observation failure")
+	required, converged, message, err = mgr.indexerSearchPeerConvergenceObserved(context.Background(), replacement)
+	require.NoError(t, err)
+	require.True(t, required)
+	require.False(t, converged)
+	require.Contains(t, message, "waiting for Cluster Manager peers")
 
 	fakeClient.ListObj = &enterpriseApi.SearchHeadClusterList{Items: []enterpriseApi.SearchHeadCluster{{
 		ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "test"},
