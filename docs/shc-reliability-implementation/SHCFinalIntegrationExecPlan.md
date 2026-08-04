@@ -194,6 +194,29 @@ it is not converted into a qualified claim by documentation alone.
   correction qualification remain open. The cumulative source also persists
   the bounded `SHC RollingUpdate DeployerUpdateActive` reason across the
   controller status refresh and verifies it through the API-backed boundary.
+- [x] (2026-08-04 22:25Z) Fast-forwarded the final Operator branch through
+  accepted SHC-118 production source `8152fc042`, then merged the independent
+  SHC-106, SHC-107/111, SHC-117, and SHC-118 qualification histories. The
+  cumulative SHC-105 through SHC-118 documentation line and the final
+  SHC-105, SHC-106, SHC-108 through SHC-111, SHC-116, and SHC-117 evidence
+  tips are now exact ancestors of the final branch.
+- [x] (2026-08-04 22:32Z) Passed the complete cumulative Operator repository
+  gate at assembled tip `9aaab1ec2`: `make fmt manifests generate`,
+  `make vet build`, all 43 `make test` suites with 78.8 percent composite
+  coverage, `make helm-check` with 60 Operator and 90 Universal Forwarder
+  tests, the bounded SHC-82/98/107/118 checks, and `git diff --check`.
+- [x] (2026-08-04 22:35Z) Audited every local and fetched `codex/shc-*` tip.
+  Every accepted tip is now an ancestor of the final branch. The seven
+  remaining non-ancestor Operator tips and two older Docker-Splunk lines are
+  patch-equivalent or superseded and are explicitly recorded in
+  `SHCFinalBranchManifest.md` instead of being merged back into accepted
+  source.
+- [x] (2026-08-04 22:41Z) Confirmed Docker-Splunk final source `0604eeb`
+  already contains the accepted runtime branches and passed 15 shutdown,
+  four source-pin, one key-verification, and five bootstrap tests plus owned
+  shell checks. Fast-forwarded the local Splunk Ansible final feature ref to
+  the exact Docker-pinned source `9dff0999`; `make shc-check` passed 79
+  focused tests, Ansible lint, and full playbook syntax.
 
 ## Surprises & Discoveries
 
@@ -310,6 +333,18 @@ it is not converted into a qualified claim by documentation alone.
   Consequence: SHC-104 owns an isolated locked test environment; the failure
   is not attributed to runtime or shutdown behavior.
 
+- Observation: exact branch-tip ancestry can incorrectly imply missing work
+  when older experimental branches were independently replayed or replaced.
+  Evidence: seven Operator refs remained outside final ancestry after all
+  accepted SHC-105 through SHC-118 tips were merged. Patch comparison marked
+  SHC-58, SHC-59, SHC-60, SHC-82 evidence, SHC-85 withdrawal evidence, and the
+  SHC-99 production correction as already represented; the remaining SHC-85
+  lifecycle-hold implementation is superseded by qualified cumulative commit
+  `5dbe7dac8`.
+  Consequence: branch closure is recorded by exact ancestry, patch
+  equivalence, or an explicit supersession decision. Obsolete history is not
+  merged solely to remove a non-ancestor ref from an audit.
+
 ## Decision Log
 
 - Decision: use `feature/shc-kubernetes-reliability` as the single final
@@ -372,6 +407,13 @@ it is not converted into a qualified claim by documentation alone.
   Rationale: preserving an ambiguous legacy/custom object is recoverable;
   overwriting supported customer scripts is not. A successful API write is
   authoritative, while a concurrent winner is re-read and preserved.
+
+- Decision: preserve accepted branch ancestry and document superseded tips
+  rather than merging every historical branch name.
+  Rationale: merging old transfer branches or pre-qualification documents can
+  reintroduce rejected implementations and stale claims. The final manifest
+  provides a reviewable disposition for every non-ancestor tip while keeping
+  the cumulative source identical to the qualified implementation.
 
 ## Implementation and qualification sequence
 
@@ -439,6 +481,12 @@ Operator restoration all passed. The observed successful-search partial-
 result behavior during indexer replacement remains an explicit SHC-85/OPS-011
 and Splunk Enterprise boundary.
 
+The final review branch now also contains the accepted production,
+qualification, and documentation histories through SHC-118. Its assembled
+source passed the complete macOS Makefile gate. This closes branch assembly;
+it does not close the compatibility and Splunk Enterprise boundaries that the
+individual qualification records continue to identify.
+
 Revision note (2026-08-02 UTC): created this integration ExecPlan after the
 branch/patch audit and during the first complete post-merge source gate; then
 updated it with merge commits and the passing macOS and Linux results. The plan
@@ -458,3 +506,8 @@ unchanged retained objects, and accepted restoration.
 Revision note (2026-08-03 20:45Z): Registered SHC-104 after canonical
 Docker-Splunk bounded tests passed but its aggregate legacy Python dependency
 bootstrap failed reproducibly on the current Linux builder.
+
+Revision note (2026-08-04 22:35Z): Consolidated accepted Operator histories
+through SHC-118, completed the cumulative repository gate, and added the final
+branch manifest with explicit patch-equivalent and superseded-tip
+dispositions.
