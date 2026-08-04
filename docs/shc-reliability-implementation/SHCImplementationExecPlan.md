@@ -793,10 +793,12 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   observed `Decommissioning`. Remaining gates include other API-partition and
   leader-failover stages and topologies, split-brain/Lease corruption,
   repeated failover, conflicting desired-state changes,
-  insufficient RF/SF health, HEC-disabled Splunk-to-Splunk traffic, HTTP and
-  HTTPS HEC variants, ingress TLS termination, service-mesh and no-mesh
-  deployments, persistent-client connection behavior, and repeated/soak
-  campaigns. Per-Search-Head distributed-peer address/authentication
+  insufficient RF/SF health, HEC-disabled Splunk-to-Splunk traffic, ingress
+  TLS termination/passthrough, supported service-mesh deployments, and
+  repeated/soak campaigns. SHC-107 and SHC-111 qualify bounded persistent
+  client and direct-Service HTTP/HTTPS behavior on the no-mesh topology; they
+  do not generalize that evidence to an absent ingress or mesh.
+  Per-Search-Head distributed-peer address/authentication
   convergence and explicit partial-result behavior are also open after the
   API-independent client observed transient incomplete successful search
   results during peer IP churn. Splunk-managed bundle-push restarts remain a

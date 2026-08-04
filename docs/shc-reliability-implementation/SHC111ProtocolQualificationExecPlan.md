@@ -37,15 +37,50 @@ Splunk Ansible, or Splunk Enterprise production behavior.
   `3 -> 2 -> 1 -> 0`, retained at least three Ready peers, and recorded zero
   container restarts. This mixed-protocol transition is setup evidence, not a
   client-availability verdict.
-- [ ] Wait for every Search Head to converge to the four current peer
-  identities after the setup transition.
-- [ ] Run a stable persistent HTTP HEC smoke and prove the recorded scheme,
-  connection reuse, and exact final event set.
-- [ ] Trigger a same-protocol HTTP indexer `3 -> 2 -> 1 -> 0` replacement and
-  record response-aware HEC recovery, distributed-search completeness,
-  ordinal ordering, PVCs, endpoints, restarts, Events, and logs.
-- [ ] Restore HTTPS through the same dependency-safe process after HTTP
-  qualification unless the next retained campaign explicitly requires HTTP.
+- [x] (2026-08-04 04:50Z) Waited for every Search Head to converge to the
+  four current peer identities after the setup transition. The accepted
+  Operator selected the next ordinal before prior peer convergence; the
+  monitor retained that violation and then observed exact convergence.
+- [x] (2026-08-04 04:53Z) Completed a stable persistent HTTP HEC smoke. One
+  HTTP connection carried all 100 accepted submissions, the HTTPS Search Head
+  connection remained stable, no request failed or required recovery, and the
+  final numbered event set was exactly `100/1/100/100`.
+- [x] (2026-08-04 05:44Z) Completed a same-protocol HTTP indexer
+  `3 -> 2 -> 1 -> 0` replacement. Ready Pods and endpoints never fell below
+  three; all four Pod UIDs and IPs changed; every PVC claim remained stable;
+  and container restarts remained zero.
+- [x] The persistent client delivered exactly 2,400 unique numbered events
+  with zero HEC, search-request, or Search Head identity failures. One HEC
+  HTTP 503 response was retried on a second connection and recovered exactly.
+  Three HTTP-successful searches regressed; the largest count drop was 933
+  and peak pending was 935 before final exact convergence.
+- [x] The independent monitor rejected ordinal 2 selection at
+  `04:59:59Z` because ordinal 3 had not converged on every Search Head.
+  Kubernetes lifecycle completed at `05:15:54Z`; every Search Head first
+  reported exactly four current `Up` peers at `05:42:11Z`, 1,577 seconds
+  later; and the monitor retained stable exact samples through `05:44:31Z`.
+- [x] (2026-08-04 07:30Z) Restored all four retained indexers to HTTPS through
+  the same dependency-safe `3 -> 2 -> 1 -> 0` process. Ready Pods and
+  endpoints never fell below three, every Pod UID and IP changed, every PVC
+  claim remained stable, all replacement containers retained zero restarts,
+  and all four Ansible recaps reported `unreachable=0 failed=0`.
+- [x] Verified effective `inputs.conf/[http]/enableSSL = 1` on every indexer.
+  HTTPS HEC health returned 200 through the Service and each individual
+  headless endpoint; plain HTTP was rejected with a connection reset.
+- [x] The restoration monitor retained the expected sequencing rejection at
+  `05:53:28Z`: ordinal 2 was selected before ordinal 3 had converged on every
+  Search Head. Lifecycle completed at `06:09:19Z`; every Search Head first
+  reported exactly the four current enabled `Up` peers at `06:43:05Z`, 2,026
+  seconds later. Thirteen consecutive exact observations extended through
+  `07:30:44Z` before the monitor returned the retained sequencing failure.
+- [x] Final Cluster Manager RF, SF, site RF, and site SF were met; the SHC was
+  Ready with three registered `Up` members and a ready captain on ordinal 1;
+  the accepted Operator had zero restarts and zero scoped ERROR/FATAL matches.
+- [x] Retained event snapshots contained the expected lifecycle Events and
+  kubelet `Unhealthy` probe warnings while each replacement initialized; no
+  other Warning reason appeared. The final standalone Events snapshot was
+  empty after the long observation window, so the TSV snapshots are the
+  authoritative event history.
 - [ ] Qualify ingress TLS termination/passthrough and a supported transparent
   service mesh on a cluster that actually supplies those components.
 
@@ -71,6 +106,28 @@ Splunk Ansible, or Splunk Enterprise production behavior.
   Consequence: readiness follows the effective HEC protocol in this bounded
   runtime. The full-roll test must still prove persistent client behavior and
   remote Search Head convergence independently.
+- Observation: stable HTTP HEC reused one connection for all 100 requests and
+  returned every numbered event exactly once.
+  Consequence: HTTP itself is not a workaround for the Search Head
+  distributed-peer convergence window. Protocol behavior and orchestration
+  ordering require separate verdicts.
+- Observation: the same-protocol HTTP roll reproduced the HTTPS campaign's
+  response recovery, successful-search regressions, premature ordinal
+  advancement, and approximately 26-minute post-lifecycle peer cleanup.
+  Consequence: TLS on HEC is not the cause of the reliability gap. The
+  accepted Operator's advancement boundary and Splunk's distributed-peer
+  lifecycle remain the relevant layers.
+- Observation: the HTTP-to-HTTPS restoration reproduced the same sequencing
+  failure and required 2,026 seconds after Kubernetes lifecycle completion to
+  remove the stale Search Head peer aliases.
+  Consequence: restoring TLS changes the HEC transport but does not close the
+  distributed-search convergence gap. The SHC-112 all-Search-Head gate remains
+  required for candidate qualification.
+- Observation: the monitor host paused between some post-convergence samples,
+  so the final 13-sample result spans 47 minutes rather than representing a
+  uniform five-second trace.
+  Consequence: record this as 13 consecutive exact observations plus final
+  direct health checks, not as uninterrupted five-second sampling.
 
 ## Decision Log
 
@@ -89,28 +146,33 @@ Splunk Ansible, or Splunk Enterprise production behavior.
   Rationale: mixed backend protocols make a single Service endpoint
   intrinsically ambiguous during that transition.
   Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: accept the full HTTP run for eventual delivery and request
+  availability, but reject it for immediate distributed-search completeness
+  and safe lifecycle ordering.
+  Rationale: every request succeeded and the final set was exact, while three
+  successful searches returned materially incomplete results and the next
+  ordinal started before prior peer convergence.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
-The source and the four-peer HTTP setup transition are complete. Stable HTTP
-reuse, a same-protocol disruptive roll, final Search Head peer convergence,
-and HTTPS restoration remain in progress. Ingress and mesh qualification are
-blocked by absent cluster capabilities, not treated as passed or failed.
+The source, four-peer HTTP setup transition, exact post-transition peer
+convergence, stable HTTP reuse, same-protocol disruptive roll, final exact
+event and peer convergence, and dependency-safe HTTPS restoration are
+complete. The retained topology is back on HTTPS and is healthy. The accepted
+Operator again advanced before all Search Heads converged, so the restoration
+passes availability and eventual-convergence checks but intentionally rejects
+safe lifecycle ordering. Ingress and mesh qualification are blocked by absent
+cluster capabilities, not treated as passed or failed.
 
 ## Plan of Work
 
-After all Search Heads list exactly the four current `Up` indexer peers, run a
-short stable smoke with `SHC107_HEC_SCHEME=http` and retain the start/end
-records. Confirm more than one HEC request uses the same connection, no TLS
-context is used, every request is accepted, and the final numbered set is
-complete and unique.
-
-Then start a longer response-aware workload before changing only an inert Pod
-template annotation on the IndexerCluster. This creates a same-protocol Pod
-replacement: both old and new backends remain HTTP. Run the existing
-reverse-ordinal monitor in Pod-IP mode and keep the HEC and distributed-search
-verdicts separate. Job `Complete` is not sufficient if count-regression or
-peer-convergence guards fail.
+The direct-Service HTTP/HTTPS work is complete. On a separately provisioned
+topology, qualify ingress TLS termination and passthrough as distinct cases,
+then qualify a supported transparent service mesh with and without injected
+sidecars on the client and Splunk tiers. Preserve explicit client-visible
+scheme/port settings and keep transport availability, Kubernetes readiness,
+and distributed-search completeness as separate verdicts.
 
 ## Validation and Acceptance
 
@@ -135,6 +197,17 @@ Live HTTP acceptance requires:
   previous peer; and
 - Events and Operator/runtime ERROR/FATAL logs are retained and explained.
 
+HTTPS restoration acceptance additionally requires:
+
+- all four replacement indexers have effective `enableSSL = 1` and return
+  HTTPS HEC health 200 individually;
+- plain HTTP fails rather than being silently accepted;
+- replacement order, minimum availability, UID/IP changes, PVC preservation,
+  Ansible results, and restart counts remain independently verified;
+- Cluster Manager and SHC health are final and exact; and
+- any lifecycle-ordering rejection remains visible even when eventual peer
+  convergence succeeds.
+
 ## Idempotence and Recovery
 
 The Make target recreates only the SHC-107 qualification ConfigMap and Job.
@@ -154,7 +227,34 @@ persistent volume.
 - HTTP setup target revision:
   `splunk-shcfinal-idxc-indexer-57c5967877`.
 - HTTP setup lifecycle completion: `2026-08-04T04:21:35Z`.
-- Persistent HTTP and same-protocol full-roll hashes: pending.
+- HTTP setup-transition monitor SHA-256:
+  `d2e19bf23572177c5707d0a2b2bfce3da596414e83a49b18bdc7ac7be38eeda9`.
+- Stable HTTP workload log SHA-256:
+  `9d04527bc6e511bdd2cc4054629626df5252d72ba9bf806e4d23bc06d6a91e77`.
+- Same-protocol HTTP target revision:
+  `splunk-shcfinal-idxc-indexer-7dc6b885b`.
+- Same-protocol HTTP workload log SHA-256:
+  `5803ed0d8d12d047e687d7157271ad352819bbd51f6732a611e7f81d776a4d19`.
+- Same-protocol HTTP monitor SHA-256:
+  `6805ef8491391667d9f3928d6b1543b11ebaf4a308e819dd89e6519324852f1f`.
+- Same-protocol HTTP final Events SHA-256:
+  `b42d4795d03b0a6b52c10ae2336c998fd65b4f2ab59fae3b755daf05f2d58e22`.
+- Same-protocol HTTP effective configuration SHA-256:
+  `15f6befec56c7a4576f28264443c66a7d332f4d80c2b9818a5fbb20c82965231`.
+- HTTPS restoration generation: 11.
+- HTTPS restoration target revision:
+  `splunk-shcfinal-idxc-indexer-698cc59f86`.
+- HTTPS restoration lifecycle completion: `2026-08-04T06:09:19Z`.
+- First exact post-restoration Search Head peer convergence:
+  `2026-08-04T06:43:05Z` (2,026 seconds after lifecycle completion).
+- HTTPS restoration monitor SHA-256:
+  `bc8ea042c3f7642089f50a27c6069962ba98dac1d83c908db8bf7fca075362f1`.
+- HTTPS restoration final Events SHA-256:
+  `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`.
+- HTTPS restoration effective configuration SHA-256:
+  `430c7a1e498a40eb5c11142ce584ddd50525db7ab33256333524b48195949b90`.
+- Accepted Operator image index:
+  `sha256:a9f2125097fa823d5182e8729683e5099116a889fdae8e892f0bd3110a8cdf3d`.
 
 ## Interfaces and Dependencies
 
