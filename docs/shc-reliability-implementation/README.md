@@ -83,11 +83,14 @@ evidence and limits are in
    response ownership correction and its immutable resource-soak gate.
 4. `SHC114BoundedSearchPeerObservationExecPlan.md` records the bounded,
    cancellation-aware peer-observation batch and its live controller gate.
-5. `SHC111ProtocolQualificationExecPlan.md` records explicit HTTP/HTTPS
+5. `SHC115ShortLivedRESTTransportOwnershipExecPlan.md` records the
+   repository-wide short-lived Splunk REST transport ownership rule and live
+   resource-soak gate.
+6. `SHC111ProtocolQualificationExecPlan.md` records explicit HTTP/HTTPS
    persistent-client variants and their distinct network-topology gates.
-6. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
+7. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
    long-lived Kubernetes Service client evidence and remaining live gates.
-7. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
+8. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
    Deployer/member overlap, exact source correction, completed regression
    gates, and remaining immutable Linux/EKS acceptance boundary.
 8. `SHC105AppFrameworkRequeueBoundaryExecPlan.md` records the live

@@ -523,6 +523,20 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   The immutable Linux image, EKS duration/cancellation campaign, controller
   replacement, and file-descriptor/socket soak remain open in
   `SHC114BoundedSearchPeerObservationExecPlan.md`.
+- [ ] (2026-08-04 UTC) Complete SHC-115 short-lived Splunk REST transport
+  ownership qualification. The repository-wide follow-up to SHC-113 and
+  SHC-114 found older lifecycle, status, license, bundle, Monitoring Console,
+  secret-sync, and telemetry callers that also construct private transports.
+  The isolated candidate explicitly releases every identified production
+  client on success and failure, preserves keep-alive within one client, and
+  gives future omissions a 90-second idle fallback. Exact source `cd3498393`
+  passed `make build`, all 43 Make suites, 192/192 specs, 78.7 percent
+  composite coverage, chart lint, all 150 Helm tests, changed-path race gates,
+  and `git diff --check`. A broad race run exposed an unrelated existing App
+  Framework worker-scheduler race outside the changed files; the normal full
+  suite passed. Immutable Linux, controller-restart, and EKS
+  file-descriptor/socket soak gates remain open in
+  `SHC115ShortLivedRESTTransportOwnershipExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP
