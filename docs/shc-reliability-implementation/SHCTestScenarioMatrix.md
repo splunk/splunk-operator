@@ -91,8 +91,24 @@ reconnected successfully, and the next identity sample selected Search Head 2
 on generation two. Search Head 2 became captain, the replacement member rejoined,
 at least two endpoints remained serving, and all 600 numbered events completed
 with zero logical failure or count regression. This qualifies HLT-014 for one
-unplanned active-captain replacement on the accepted image. Operator-owned
-rollout, indexer backend replacement, and network variants remain open.
+unplanned active-captain replacement on the accepted image.
+
+Indexer testing then established a different boundary. With transport-only
+recovery, an established Service connection remained pinned to a withdrawn
+indexer and Splunk returned HTTP 503 with `Connection: Keep-Alive`; 28 HEC
+submissions were not accepted. A direct diagnostic identified Splunk HEC code
+23, `Server is shutting down`. Exact test source `d57db8d7a` therefore closes
+and retries once only for that explicit rejection while retaining response
+failure counters. In a fresh Service-backed campaign, replacing the selected
+indexer caused one explicit response failure, one reconnect, and one recovered
+logical request. All 600 submissions were accepted and the final 600 events
+were complete and unique.
+
+That campaign also returned two HTTP-successful but lower aggregate search
+counts during indexer recovery. HEC delivery recovery passes for this bounded
+replacement; uninterrupted immediate distributed-search completeness does
+not. Operator-owned rollout, controller restart, network variants, the Splunkd
+shutdown connection-close requirement, and soak remain open.
 
 ## Drain and captain scenarios
 

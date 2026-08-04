@@ -54,6 +54,21 @@ The stable scenario identifier for this requirement is `HLT-014` in
   the same logical search recovered once, connection generation advanced from
   one to two, Search Head 2 became the selected member and captain, and all
   600 HEC/search requests and unique events completed exactly.
+- [x] (2026-08-04 01:43Z) Rejected a transport-only persistent-client result
+  during unplanned indexer replacement. The selected HEC connection remained
+  pinned after EndpointSlice withdrawal and received HTTP 503 with
+  `Connection: Keep-Alive`; 28 submissions were not accepted and two
+  HTTP-successful searches returned lower aggregate counts.
+- [x] (2026-08-04 01:46Z) Updated the qualification client to expose response
+  status/code and to close and retry once only when HEC explicitly returns
+  HTTP 503. Exact test-only source `d57db8d7a` passed 12 focused tests, 100
+  repeated Make runs, `make fmt vet`, and `git diff --check`.
+- [x] (2026-08-04 01:59Z) Passed a Service-backed unplanned replacement of the
+  selected indexer with response-aware retry. One explicit shutdown rejection
+  caused one bounded reconnect and one recovered logical request. All 600 HEC
+  submissions were accepted and all 600 unique events became searchable.
+  Two HTTP-successful aggregate searches still regressed while the indexer was
+  recovering, so immediate distributed-search completeness remains open.
 - [ ] Run the client before an Operator-owned Search Head `2 -> 1 -> 0`
   replacement and prove the connection pinned to each replaced member either
   stays valid until supported shutdown or reconnects with no logical request
@@ -125,6 +140,39 @@ The stable scenario identifier for this requirement is `HLT-014` in
   availability result. A separate work item must distinguish an expected
   transient during observed Pod termination/election from a persistent or
   quorum-threatening controller error.
+- Observation: EndpointSlice withdrawal does not migrate an established HEC
+  connection.
+  Evidence: during the rejected unplanned indexer campaign, the connection
+  selected indexer 2 and remained open after Kubernetes withdrew that endpoint.
+  Splunk returned HTTP 503 with `Connection: Keep-Alive`; the transport-only
+  client did not reconnect and 28 numbered submissions were not accepted.
+  Consequence: readiness protects new Service flows but cannot provide a
+  delivery guarantee for an already-established TCP/TLS flow.
+- Observation: the HEC shutdown response is intentional, but its connection
+  lifetime is not Kubernetes-friendly.
+  Evidence: the targeted indexer-0 diagnostic recorded HTTP 503 and Splunk HEC
+  code 23, `Server is shutting down`, while the response advertised
+  `Connection: Keep-Alive`. Local Splunk source shows manual detention calls
+  `HttpInputServer::stopHEC()`, the HEC transaction selects
+  `HttpInputShutDownHandler`, and that handler returns code 23 without marking
+  the transaction as the final connection request.
+  Consequence: register a Splunk Enterprise requirement to close the
+  connection when returning the shutdown rejection. Until that product
+  behavior is available, a capable producer can safely retry the explicit 503
+  once through the Service because that response says the request was not
+  accepted. Ambiguous transport failures still require HEC acknowledgement or
+  producer idempotency; they must not be treated as equivalent to an explicit
+  rejection.
+- Observation: a successful distributed-search HTTP response is not proof of
+  a complete result during indexer replacement.
+  Evidence: in the accepted response-aware campaign, sequence 61 returned
+  count 0 after sequence 60 returned 56; sequence 156 returned 96 after
+  sequence 155 returned 154. The client received no HTTP failure. The final
+  result converged exactly to 600 unique events.
+  Consequence: the HEC recovery result passes, but OPS-011 immediate search
+  completeness remains open. Splunk must either preserve the supported
+  completeness contract or expose machine-detectable partial-result status so
+  clients and qualification can distinguish an incomplete success.
 
 ## Decision Log
 
@@ -146,20 +194,28 @@ The stable scenario identifier for this requirement is `HLT-014` in
   Rationale: a test harness must not change the immutable production candidate
   being qualified.
   Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: retry only an explicit HEC HTTP 503 once and keep the response
+  failure visible in counters.
+  Rationale: code 23 states that Splunk did not accept the request, so retry is
+  safe and should select a current Service endpoint after closing the stale
+  connection. Transport loss after submission is ambiguous and is not covered
+  by this rule.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
-The deterministic test harness, stable reuse, and unplanned active-captain
-replacement behavior are qualified. The stable smoke reused one HEC and one
-Search Head TLS connection with exact results. During replacement, all 600 HEC
-writes stayed on one connection, the selected Search Head connection recorded
-one failed first attempt and one recovered request, and the replacement
-connection served the rest of the run. There were zero logical failures,
-server closes, count regressions, or missing/duplicate final events. At least
-two Search Head endpoints remained serving, the old captain was replaced by a
-new Pod UID, and the SHC returned to three registered members with zero
-container restarts. Operator-owned Search Head rollout, indexer replacement,
-Operator restart, network variants, and soak remain open.
+The deterministic harness, stable reuse, unplanned active-captain replacement,
+and one selected-indexer replacement are qualified for their bounded claims.
+The Search Head campaign recovered one visible transport boundary and
+completed 600 events exactly. The indexer campaign first proved that
+transport-only retry loses explicit 503-rejected HEC requests on an established
+connection. Exact source `d57db8d7a` then closed that stale connection and
+retried the explicit rejection once through the Service: one response failure
+was recovered, all 600 submissions were accepted, and the final result was
+complete and unique. This is a client mitigation result, not a Splunkd fix.
+Two silently incomplete successful searches during recovery keep the immediate
+distributed-search completeness requirement open. Operator-owned Search Head
+and indexer rollouts, Operator restart, network variants, and soak remain open.
 
 ## Context and Orientation
 
@@ -231,7 +287,8 @@ Acceptance requires:
 - Warning Events and Operator/runtime ERROR/FATAL logs are explained and
   contain no new lifecycle or credential-exposure defect.
 
-HTTP server close behavior, search-count regression, or a failed first attempt
+HTTP server close behavior, explicit response rejection, search-count
+regression, or a failed first attempt
 must remain visible even when the final exit code is successful. Any such
 finding narrows the claim and may create a separate product requirement.
 
@@ -248,7 +305,9 @@ objects without affecting Splunk Pods or persistent volumes.
 
 - Qualification source branch:
   `codex/shc-107-persistent-client-qualification`.
-- Exact harness source: `f3ec88026bd316e56ff9cfcba46d5a547676cc14`.
+- Exact current harness source:
+  `d57db8d7a9ded74ec08862be06565f6d4675fa79`. Stable reuse and the
+  active-captain campaign used `f3ec88026bd316e56ff9cfcba46d5a547676cc14`.
 - Production Operator source under test for disruptive correction campaigns:
   `a6cda92a3` after native image construction. The completed stable smoke used
   the accepted Operator image explicitly recorded below; it did not claim to
@@ -282,6 +341,30 @@ objects without affecting Splunk Pods or persistent volumes.
   `a29c2adc5d6226c5df2c918b03ae86e393175547c3fc76abaaad8e41de1be43f`,
   and `shc107-keepalive-smoke-accepted-operator-20260804T0102Z.log`, SHA-256
   `c06ac53715a7fb606f17e68ddc2ba47747c62eabf596f6bfc23a60a3df94b70d`.
+- Rejected transport-only indexer result:
+  `shc107-unplanned-indexer-rejected-accepted-operator-20260804T0129Z.log`,
+  SHA-256
+  `4fbed017e6089abb7cb1840168e9104a509d5409a78d9bd9151258251eb14829`.
+  Its rollout monitor has SHA-256
+  `4f54fcdc61460ac6e8b937c1e52b4d7727e9469ee3e04e6e07dbdfffe1b0657e`.
+- Targeted HTTP 503 diagnostic:
+  `shc107-indexer0-targeted-503-diagnostic-20260804T0143Z.log`, SHA-256
+  `c1f8aae0b48cb69bfa5a14f3c61ba3b46b621b8d9db3f9a913a70d73db00dd11`.
+  The delete record has SHA-256
+  `7c1b4170bab7d4bf88f74a3bd0c94e538d27ebcb8b691c4c0f582944f75c993d`.
+- Response-aware selected-indexer result:
+  `shc107-hec503-retry-workload-20260804T0148Z.log`, SHA-256
+  `35edcfab76356bdcc2c6adc64fa5a9d30429084b4c55a817d89000cbb2165c77`.
+  The filtered Kubernetes Event window has SHA-256
+  `a260b79155225f636c68bb6842eedf5e66a859cbd46ab4315e3e7888ea9cfe76`;
+  the Operator log window has SHA-256
+  `2f27170f296a9d447d02a711d301d38bfff4df6d8d962921fc8690de1144df59`.
+  Indexer 3 changed from UID
+  `4cb64f16-ca10-43fa-ba62-ff48ef754f17` to
+  `a2ade4fe-bf36-4f46-8fb7-10507b0b70d0`, became Ready at
+  `01:52:43Z`, and retained zero container restarts. The final IndexerCluster
+  was Ready with four peers and four serving endpoints; the Operator window
+  contained zero ERROR/FATAL entries.
 - Operator-owned rollout, indexer, network-variant, controller-restart, and
   soak evidence: pending.
 
