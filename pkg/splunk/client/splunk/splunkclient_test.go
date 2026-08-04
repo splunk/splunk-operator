@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -595,6 +596,33 @@ func TestAutomateMCApplyChanges(t *testing.T) {
 		200, 200, 200, 200, 200, 200, 201, 200, 200, 200, 200,
 	}
 	splunkClientMultipleRequestTester(t, "TestAutomateMCApplyChanges", status, body, wantRequests, test)
+}
+
+func TestGetSearchDistributedPeers(t *testing.T) {
+	wantRequest, _ := http.NewRequest(
+		"GET",
+		"https://localhost:8089/services/search/distributed/peers?count=0&output_mode=json",
+		nil,
+	)
+	body := `{"entry":[{"name":"10.0.1.4:8089","content":{"guid":"peer-guid","status":"Up","disabled":false}},{"name":"10.0.0.4:8089","content":{"guid":"peer-guid","status":"Down","disabled":false}}]}`
+	test := func(c splunk.SplunkClient) error {
+		peers, err := c.GetSearchDistributedPeers()
+		if err != nil {
+			return err
+		}
+		wantPeers := []splunk.SearchDistributedPeerInfo{
+			{Name: "10.0.1.4:8089", ID: "peer-guid", Status: "Up", Disabled: false},
+			{Name: "10.0.0.4:8089", ID: "peer-guid", Status: "Down", Disabled: false},
+		}
+		if !reflect.DeepEqual(wantPeers, peers) {
+			t.Errorf("GetSearchDistributedPeers() = %#v, want %#v", peers, wantPeers)
+		}
+		return nil
+	}
+	splunkClientTester(t, "TestGetSearchDistributedPeers", 200, body, wantRequest, test)
+
+	// Negative testing
+	splunkClientErrorTester(t, test)
 }
 func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/server/info/server-info?count=0&output_mode=json", nil)

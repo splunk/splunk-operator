@@ -809,6 +809,38 @@ type MCDistributedPeers struct {
 	ServerRoles  []string `json:"server_roles"`
 }
 
+// SearchDistributedPeerInfo is one Search Head's current view of a
+// distributed-search peer. Name is the address used by that Search Head.
+type SearchDistributedPeerInfo struct {
+	Name     string `json:"-"`
+	ID       string `json:"guid"`
+	Status   string `json:"status"`
+	Disabled bool   `json:"disabled"`
+}
+
+// GetSearchDistributedPeers returns the complete distributed-peer inventory
+// from one Search Head. Callers must compare every entry because a retained
+// stale address can have the same peer GUID as its replacement.
+func (c *SplunkClient) GetSearchDistributedPeers() ([]SearchDistributedPeerInfo, error) {
+	apiResponse := struct {
+		Entry []struct {
+			Name    string                    `json:"name"`
+			Content SearchDistributedPeerInfo `json:"content"`
+		} `json:"entry"`
+	}{}
+	path := "/services/search/distributed/peers"
+	if err := c.Get(path, &apiResponse); err != nil {
+		return nil, err
+	}
+
+	peers := make([]SearchDistributedPeerInfo, 0, len(apiResponse.Entry))
+	for _, entry := range apiResponse.Entry {
+		entry.Content.Name = entry.Name
+		peers = append(peers, entry.Content)
+	}
+	return peers, nil
+}
+
 // AutomateMCApplyChanges change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
 func (c *SplunkClient) AutomateMCApplyChanges() error {
 	var configuredPeers, indexerMemberList, licenseManagerMemberList string
