@@ -36,6 +36,11 @@ current Operator and Docker-Splunk workstream.
 - [x] (2026-08-04 01:59Z) Proved the bounded compatibility behavior: close and
   retry one explicit rejection through the Service, with 600/600 accepted and
   exact final completeness.
+- [x] (2026-08-04 03:41Z) Repeated the compatibility behavior across a
+  complete Operator-owned indexer `3 -> 2 -> 1 -> 0` replacement. One
+  explicit HTTP 503/code 23 rejection caused one response-aware reconnect;
+  all 2,400 submissions were accepted and the final result on every Search
+  Head was exact.
 - [x] (2026-08-04 02:10Z) Traced the current behavior through local Splunk
   source without changing it.
 - [ ] Review and own the product change with the Splunk HEC/indexer team.
@@ -70,6 +75,16 @@ current Operator and Docker-Splunk workstream.
   recovery.
   Consequence: OPS-011 immediate search completeness remains a separate open
   product contract.
+- Observation: the response-aware workaround scales from one selected-indexer
+  replacement to a full four-indexer roll, but the server defect remains.
+  Evidence: the full accepted-image campaign used one persistent HEC
+  connection until Splunk returned one HTTP 503/code 23 response with
+  `Connection: Keep-Alive`. The client deliberately closed it, retried once
+  through the Service, and completed 2,400 events exactly with zero HEC
+  failure. There was no server-requested close.
+  Consequence: this strengthens the bounded client-mitigation evidence; it
+  does not qualify the required Splunkd behavior or prove that arbitrary HEC
+  producers implement this Splunk-specific response rule.
 
 ## Decision Log
 
@@ -94,9 +109,10 @@ current Operator and Docker-Splunk workstream.
 
 The failure, exact server response, client mitigation, and product ownership
 boundary are established. No Splunkd production change has been made. The
-bounded mitigation proves that explicit response-aware reconnect can avoid the
-observed loss, but SHC-109 remains open until an official Splunk build closes
-the connection and passes the complete qualification matrix.
+bounded mitigation avoided the observed loss in both a selected-indexer
+replacement and a full `3 -> 2 -> 1 -> 0` roll, delivering 600 and 2,400
+events exactly. SHC-109 remains open until an official Splunk build closes the
+connection and passes the complete qualification matrix.
 
 ## Context and Orientation
 
@@ -214,6 +230,14 @@ shutdown result for that request.
   `c1f8aae0b48cb69bfa5a14f3c61ba3b46b621b8d9db3f9a913a70d73db00dd11`.
 - Response-aware bounded mitigation workload SHA-256:
   `35edcfab76356bdcc2c6adc64fa5a9d30429084b4c55a817d89000cbb2165c77`.
+- Full indexer-roll compatibility workload SHA-256:
+  `0a5a0193e402084533cc91c163602823f9d80b71010a3ce0158ef883090c6150`.
+  It recorded one HEC response failure, one response-aware recovery, two HEC
+  connections, zero HEC logical or transport-first-attempt failure, and exact
+  2,400-event completion. The full-roll monitor SHA-256 is
+  `0aa60e7d2a93104702bddb1a1dddeff83dce880c74fc7146560dea77f6cdbdd3`;
+  its separate Search Head peer-convergence failure remains SHC-107/OPS-011
+  evidence rather than SHC-109 acceptance.
 - Related plan:
   [SHC107PersistentClientQualificationExecPlan.md](SHC107PersistentClientQualificationExecPlan.md).
 
