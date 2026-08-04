@@ -482,6 +482,17 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   later controller-leader-failover campaign recorded 13 regressions and
   maximum pending 329 at sequence 1239, again with zero request failures and
   exact eventual results.
+- [ ] (2026-08-04 UTC) Complete SHC-112 immutable qualification for the
+  Operator-owned advancement boundary. Isolated source `3ee9ebcfb` adds a
+  durable `AwaitingSearchPeerConvergence` stage and requires every managed
+  Search Head referencing the same Cluster Manager to report exactly one
+  current, enabled, `Up` replacement GUID/address before the next Indexer
+  ordinal is selected. This addresses the observed premature advancement but
+  does not close complete-or-explicitly-partial search semantics or the
+  Splunk-managed searchable-restart sequence. The exact source passed all 43
+  Make suites and 192 enterprise/controller specs. Linux image,
+  controller-restart, negative, multi-SHC, and EKS gates remain open in
+  `SHC112IndexerSearchPeerConvergenceGateExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP

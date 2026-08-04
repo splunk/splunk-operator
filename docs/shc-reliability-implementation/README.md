@@ -76,46 +76,49 @@ evidence and limits are in
 ## Review order
 
 1. `CurrentDevelopBaseline.md` establishes what exists now.
-2. `SHC111ProtocolQualificationExecPlan.md` records explicit HTTP/HTTPS
+2. `SHC112IndexerSearchPeerConvergenceGateExecPlan.md` records the durable
+   Operator-owned indexer advancement gate and its separate Splunk Enterprise
+   boundary.
+3. `SHC111ProtocolQualificationExecPlan.md` records explicit HTTP/HTTPS
    persistent-client variants and their distinct network-topology gates.
-3. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
+4. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
    long-lived Kubernetes Service client evidence and remaining live gates.
-4. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
+5. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
    Deployer/member overlap, exact source correction, completed regression
    gates, and remaining immutable Linux/EKS acceptance boundary.
-5. `SHC105AppFrameworkRequeueBoundaryExecPlan.md` records the live
+6. `SHC105AppFrameworkRequeueBoundaryExecPlan.md` records the live
    timing defect, exact source correction, completed regression gates, and the
    remaining immutable Linux/EKS acceptance boundary.
-6. `SHCFinalIntegrationExecPlan.md` records the assembly of the final Operator
+7. `SHCFinalIntegrationExecPlan.md` records the assembly of the final Operator
    and runtime feature branches and the exact remaining qualification gates.
-7. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
+8. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
    acceptance evidence.
-8. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
+9. `SHCWorkItemIndex.md` maps the bounded `SHC-*` execution records to
    immutable commits and stable scenario identifiers.
-9. `SHC98StableIndexerSearchAddressExecPlan.md` records the active bounded
+10. `SHC98StableIndexerSearchAddressExecPlan.md` records the active bounded
    distributed-peer convergence experiment.
-10. `SHC97DockerSplunkStartupQualification.md` records the latest completed
+11. `SHC97DockerSplunkStartupQualification.md` records the latest completed
    runtime startup and full-topology qualification.
-11. `SHC93OperatorReadinessQualification.md` and
+12. `SHC93OperatorReadinessQualification.md` and
    `SHC93OperatorReadinessExecPlan.md` record the latest manager-readiness
    contract, exact evidence, rejected candidates, and remaining boundaries.
-12. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
+13. `OperatorLifecycleTechnicalDesign.md` will define the CRD, controller state
    machine, StatefulSet strategy, and durable status contract.
-13. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
+14. `SHCImageUpgradeWorkflowTechnicalDesign.md` defines the OPS-007
    cluster-wide image-upgrade workflow and its composition with per-member
    lifecycle orchestration.
-14. `RuntimeLifecycleContract.md` defines the contract between the Operator,
+15. `RuntimeLifecycleContract.md` defines the contract between the Operator,
    Pod lifecycle, probe scripts, Docker-Splunk/Splunk Ansible, and splunkd.
-15. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
+16. `SplunkEnterpriseIndexerRollingRestartRequirements.md` records the
    Splunk-managed indexer restart boundary and the remote serving-recovery
    contract that cannot be completed by an Operator readiness probe.
-16. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
+17. `ParallelWorkstreamPlan.md` defines branch ownership, dependency waves,
    integration rules, and conflict prevention.
-17. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
+18. `SHCTestScenarioMatrix.md` defines the complete stable scenario inventory
    and common pass invariants.
-18. `QualificationObservabilityRolloutPlan.md` is the executable test,
+19. `QualificationObservabilityRolloutPlan.md` is the executable test,
    evidence, migration, release, and rollback plan.
-19. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
+20. `RuntimeLinuxBuildHandoffManifest.example.yaml` is the source-to-builder
    contract for Docker-Splunk image construction on a supported Linux host.
 
 The Operator design is a Wave 0 spike contract and the runtime design now
