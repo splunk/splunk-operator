@@ -50,8 +50,21 @@ changes neither Docker-Splunk nor Splunk Enterprise.
   `sha256:5259c53cbf6723c3636eb8fe6a3e59e417f1bdf8c1375634496db9c064af2508`.
 - [x] Repeated the full native-Linux Make gate at exact source: 43 suites,
   192/192 specs, zero failures, and 78.7 percent composite coverage.
-- [ ] Complete immutable EKS qualification, including controller replacement
-  during the delay.
+- [x] (2026-08-04 UTC) Replaced the active Operator during ordinal zero's
+  persisted propagation interval. The replacement manager recovered the exact
+  operation, target UID, observation, deadline, and sequence, and requested
+  decommission only after that deadline.
+- [x] (2026-08-04 18:20Z) Completed the fresh immutable EKS lifecycle monitor
+  across `3 -> 2 -> 1 -> 0`. It recorded 647 full snapshots from
+  `15:58:41Z` through `18:20:20Z`, all four Pod UID replacements with stable
+  PVC claims, zero container restarts, exact EndpointSlice/deadline ordering,
+  every post-replacement Search Head peer-convergence gate, and 60 consecutive
+  final-state snapshots. The monitor exited zero.
+- [x] (2026-08-04 19:26Z) The independent 10,800-sample Job reached Kubernetes
+  `Complete`: 10,800 submissions, zero HEC failures, zero search-request
+  failures, and exact final count/minimum/maximum/distinct values of
+  `10800/1/10800/10800`. Both runner exit codes are zero and all 25 hashes in
+  the evidence manifest verify.
 
 ## Surprises & Discoveries
 
@@ -72,6 +85,33 @@ changes neither Docker-Splunk nor Splunk Enterprise.
   independently of new Service routing decisions.
   Consequence: SHC-116 requires the persistent-client workload gate; the API
   observation alone is insufficient acceptance evidence.
+- Observation: `SHC98_STABLE_SAMPLES=60` means 60 consecutive complete
+  Kubernetes and Splunk observations, not a fixed five-minute wall-clock
+  window. The configured five seconds is a minimum sleep after each sample;
+  the retained-cluster sample itself took about eight additional seconds.
+  Evidence: the accepted final observations ran from `18:07:18Z` through
+  `18:20:20Z`, about 13 minutes for 60 full snapshots.
+  Consequence: describe acceptance in sample counts and observed timestamps,
+  not as a fixed five-minute duration.
+- Observation: an `OnDelete` StatefulSet can retain an older
+  `status.currentRevision` after every manually replaced Pod has reached
+  `status.updateRevision`.
+  Evidence: final StatefulSet current revision was
+  `splunk-shcfinal-idxc-indexer-6968767b9b`, update revision was
+  `splunk-shcfinal-idxc-indexer-5bc5fb9bd`, and all four live Pod revision
+  labels were `splunk-shcfinal-idxc-indexer-5bc5fb9bd`.
+  Consequence: `OnDelete` acceptance must inspect every Pod revision label;
+  equality of StatefulSet current and update revisions is a RollingUpdate-only
+  assertion.
+- Observation: the successful Job still recorded 19 intermediate distributed-
+  search count regressions. All occurred while the planned roll was active;
+  the last was at `17:40:34Z`. Maximum pending was 1,335 at sequence 5,358 and
+  `17:41:15Z`; no later count regression occurred before the Job completed at
+  `19:26:16Z`.
+  Consequence: SHC-116 qualifies zero request failure and eventual exact
+  delivery for this run, but it does not establish that every HTTP-successful
+  intermediate distributed search was complete. The existing SHC-107/SHC-112
+  Splunk Enterprise partial-result requirement remains open.
 
 ## Decision Log
 
@@ -94,13 +134,33 @@ changes neither Docker-Splunk nor Splunk Enterprise.
   Rationale: the default establishes a nonzero safety interval while allowing
   deployments to tune for their networking dataplane and operational evidence.
   Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: express the post-roll stability gate as 60 consecutive full
+  observations and record its actual timestamps, rather than label it a fixed
+  five-minute window.
+  Rationale: Kubernetes and Splunk REST collection time is part of each sample;
+  the configured five seconds is only the sleep between observations.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: for the retained `OnDelete` indexer StatefulSet, prove revision
+  convergence from every live Pod's revision label matching
+  `status.updateRevision`.
+  Rationale: Kubernetes can leave `status.currentRevision` on the prior hash
+  after all manually replaced Pods have converged, so current/update equality
+  would reject a healthy `OnDelete` result for the wrong reason.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
 
 The exact source and immutable Linux image are frozen. Source checks establish
-restart-safe and fail-closed state-machine behavior, but the live availability
-claim remains open until the same workload that reproduced the failure
-completes a full `3 -> 2 -> 1 -> 0` roll with the candidate controller.
+restart-safe and fail-closed state-machine behavior. Live EKS evidence now
+establishes restart recovery for one active propagation interval and a complete
+fresh `3 -> 2 -> 1 -> 0` lifecycle monitor with 60 consecutive final-state
+snapshots. No decommission preceded its persisted deadline, no more than one
+indexer was unavailable, all replacement UIDs retained their PVC claims, and
+container restarts remained zero. The independent Job completed with 10,800
+successful HEC and search requests and exact eventual uniqueness. This closes
+the bounded SHC-116 EKS request-success and eventual-delivery gate. It does not
+close the separate complete-intermediate-result requirement because 19
+HTTP-successful searches regressed in count during the planned roll.
 
 ## Plan of Work
 
@@ -173,7 +233,42 @@ status fields while a target is withdrawn.
   `sha256:5259c53cbf6723c3636eb8fe6a3e59e417f1bdf8c1375634496db9c064af2508`.
 - Baseline diagnostic: one HEC failure at `2026-08-04T13:40:27Z`, the
   decommission-request timestamp; no search request failure in that sample.
-- EKS candidate evidence: pending.
+- EKS controller-replacement sub-gate: ordinal-zero operation
+  `28f17551-4fa7-4567-b5b7-817f27851258:splunk-shcfinal-idxc-indexer-7795598cd8:1785857163531756307`
+  observed exact target UID `28f17551-4fa7-4567-b5b7-817f27851258` withdrawn at
+  `2026-08-04T15:26:14Z`, with immutable deadline
+  `2026-08-04T15:26:44Z` and sequence 1.
+- The old manager was removed during that interval. Replacement manager UID
+  `feb9a040-2053-4fcf-86d5-9dc450e68469` became Ready at
+  `2026-08-04T15:26:33Z` and retained the same durable fields. The decommission
+  request was recorded at `2026-08-04T15:26:53Z`, nine seconds after the
+  deadline. No duplicate or early request was observed.
+- EKS full-roll long-workload verdict: passed for request success and eventual
+  exact delivery. Job `Complete` at `2026-08-04T19:26:19Z`; 10,800 submitted,
+  zero HEC failures, zero search-request failures, final count/min/max/distinct
+  `10800/1/10800/10800`, and `complete=true`. Nineteen intermediate count
+  regressions and maximum pending 1,335 are a separate open Splunk
+  distributed-search completeness finding.
+- Fresh full-roll lifecycle monitor: exit code 0; 647 snapshots from
+  `2026-08-04T15:58:41Z` through `2026-08-04T18:20:20Z`; target order
+  `[3,2,1,0]`; 60 consecutive final-state samples from `18:07:18Z` through
+  `18:20:20Z`; all four Pod UIDs changed, every `etc` and `var` PVC claim was
+  preserved, and all four replacement Pods had zero restarts.
+- Monitor artifact SHA-256 values: TSV
+  `7bb72cc61397ba923fda5645e63146820f76f10b36541ca0eb14c6ba2d186a66`,
+  Events
+  `43c0ca28a2f3f4df819824e6a441df273490dcb71535c16b7c71c52a8c9e04af`,
+  final configuration
+  `492e557ab3ae3dc5aa77a2423abcdb871a35fd93a7f60e605cdc37d606d2e971`,
+  and monitor stdout
+  `16eebe9c61746e9841cac64f4c127c5336bde8efb59bc7341df6f53aeb27a676`.
+- Workload log SHA-256:
+  `ef779a56ad85c6813bf377aafa3ed5388064a15bcf31c93031504992cbc7c71e`.
+  Workload Job SHA-256:
+  `7fe374d35f7bc2519a0d1f0d215446a688c67da5e55b9f52753849b433572e77`.
+  Artifact-manifest SHA-256:
+  `7e46344af722395aa21225adbd48e47242a3c086a66f2dd9be46a29bc956faae`;
+  all 25 listed hashes verify from the repository root.
 
 ## Interfaces and Dependencies
 
@@ -183,3 +278,15 @@ adds `spec.lifecyclePolicy.endpointWithdrawalDelaySeconds` and durable
 the existing client-facing indexer Service and EndpointSlices and changes no
 Splunk REST endpoint. No Docker-Splunk or Splunk Enterprise source change is
 required.
+
+## Revision Note
+
+Updated on 2026-08-04 after the fresh EKS lifecycle monitor exited zero. This
+revision records only the completed full-roll and stability-snapshot evidence;
+it deliberately leaves the long-workload verdict open until the Kubernetes Job
+finishes and its final counters can be verified.
+
+Updated on 2026-08-04 after the 10,800-sample Job and outer runner completed.
+This revision closes the bounded request-success and eventual-exact-delivery
+gate, records all verified artifact hashes, and preserves the 19 intermediate
+count regressions as a separate Splunk distributed-search semantics finding.
