@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: shc107-persistent-client
+  labels:
+    qualification.splunk.com/scenario: shc107-persistent-client
+spec:
+  activeDeadlineSeconds: 7200
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        qualification.splunk.com/scenario: shc107-persistent-client
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: workload
+          image: 667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk@sha256:d6e11fe00dcadb6a3b168b23081950f85265daf0c923a314034160a495a6db4b
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/bin/python3
+            - /opt/qualification/shc107_persistent_client.py
+          env:
+            - name: HEC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: splunk-shc-final-qualification-secret
+                  key: hec_token
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: splunk-shc-final-qualification-secret
+                  key: password
+            - name: SHC107_SAMPLES
+              valueFrom:
+                configMapKeyRef:
+                  name: shc107-persistent-client
+                  key: SHC107_SAMPLES
+            - name: SHC107_INTERVAL_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: shc107-persistent-client
+                  key: SHC107_INTERVAL_SECONDS
+            - name: SHC107_SETTLE_ATTEMPTS
+              valueFrom:
+                configMapKeyRef:
+                  name: shc107-persistent-client
+                  key: SHC107_SETTLE_ATTEMPTS
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: workload
+              mountPath: /opt/qualification
+              readOnly: true
+      volumes:
+        - name: workload
+          configMap:
+            name: shc107-persistent-client
+            defaultMode: 0555
