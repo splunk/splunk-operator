@@ -16,11 +16,14 @@ that interval. A failed observation is operationally important, but it is not
 always a controller or availability failure.
 
 SHC-108 defines stage-aware, bounded classification for these observations.
-Expected transient observations remain visible with target identity, lifecycle
-stage, elapsed time, serving capacity, and recovery. A failure outside that
-known boundary, one that exceeds its budget, or one that threatens quorum or
-the serving floor remains an error. The goal is supportable evidence without
-alarm noise and without suppressing a real SHC failure.
+Expected planned observations remain visible with target identity, lifecycle
+stage, elapsed time, serving capacity, and recovery. An unplanned Pod deletion
+must still create one clear unexpected-disruption error; after Kubernetes has
+authoritatively identified that same deleted target, repeated identical polls
+can be deduplicated while capacity remains safe. A failure with no matching
+Pod event, one that exceeds its budget, or one that threatens quorum or the
+serving floor remains an error. The goal is supportable evidence without alarm
+noise and without suppressing a real SHC failure.
 
 This work item does not change captain election, captain-transfer safety,
 readiness, or rollout progression. It changes only how known observation
@@ -61,12 +64,30 @@ have been made.
   Consequence: classification must combine error type with durable operation
   identity, target UID, current stage, target Pod deletion state, EndpointSlice
   state, elapsed budget, and cluster capacity.
+- Observation: planned target-member unavailability is already classified in
+  current source, but captain observation and unplanned deletion are different
+  paths.
+  Evidence: `updateStatus` calls
+  `lifecycleMemberObservationExpectedUnavailable` and logs the owned lifecycle
+  target at info severity. The SHC-107 active-captain replacement was a direct
+  unplanned Pod deletion, so no durable Operator lifecycle operation owned that
+  target; member and captain observation failures followed the normal error
+  path.
+  Consequence: SHC-108 must extend/deduplicate the missing boundaries rather
+  than replacing the existing planned-member classification or pretending an
+  unplanned deletion is expected.
 
 ## Decision Log
 
 - Decision: classify an observation as expected-transient only when all
   required lifecycle and Kubernetes facts agree.
   Rationale: a network error by itself has no safe operational meaning.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: retain one error transition for an unplanned Pod deletion, then
+  deduplicate identical continuing observations while the same Kubernetes
+  disruption remains authoritative and capacity is safe.
+  Rationale: the initiating disruption is unexpected and alertable; every
+  controller poll is not a new incident.
   Date/Author: 2026-08-04, Codex with Vivek Reddy.
 - Decision: retain one bounded warning/condition and metrics rather than log
   every controller poll at warning or error severity.
@@ -94,7 +115,8 @@ deletion, Pod readiness, and Service endpoint conditions. Durable lifecycle
 status identifies the operation, target Pod UID, current stage, desired
 revision, and elapsed timeout budget.
 
-An observation failure can be classified as expected only when:
+An observation failure can be classified as a planned expected transient only
+when:
 
 1. a durable lifecycle operation identifies the same target Pod UID;
 2. the operation is in an explicit withdrawal, captain-transfer/election,
@@ -108,6 +130,15 @@ An observation failure can be classified as expected only when:
 7. SHC quorum and the minimum serving endpoint invariant remain satisfied.
 
 If any fact is absent or contradictory, normal error classification applies.
+
+For an unplanned Pod deletion there is no durable lifecycle operation. The
+first matching member/captain observation failure remains unexpected and must
+be recorded as an error transition. Continuing failures may be coalesced into
+that incident only when Kubernetes still identifies the same Pod UID as
+deleting/absent, the StatefulSet replacement is consistent with that loss,
+elapsed recovery remains bounded, unrelated members are healthy, and serving
+capacity/quorum stay above their required floors. Recovery closes the incident;
+timeout or any contradictory observation produces a new escalation.
 
 ## Plan of Work
 
@@ -130,6 +161,8 @@ Use that result consistently:
 
 - expected first occurrence creates one deduplicated Warning Event and a
   structured warning/info log;
+- unplanned deletion creates one deduplicated Error/Warning transition before
+  continuing identical polls are coalesced;
 - continuing identical polls update duration metrics without repeating the
   same Event or ERROR record;
 - recovery emits one Normal Event with total duration;
@@ -153,8 +186,10 @@ Source acceptance requires focused tests that inject:
 - an unrelated member failure during target replacement;
 - serving endpoints below the required minimum;
 - quorum or captain state that is stale or contradictory;
-- controller restart with the transient interval already in progress; and
-- recovery without duplicated Event or metric transition counts.
+- controller restart with the transient interval already in progress;
+- recovery without duplicated Event or metric transition counts; and
+- direct unplanned active-captain deletion with one initiating error,
+  coalesced continuing observations, and one recovery outcome.
 
 Live acceptance requires planned and unplanned active-captain replacement with
 continuous workload evidence, one controller restart during the observation
