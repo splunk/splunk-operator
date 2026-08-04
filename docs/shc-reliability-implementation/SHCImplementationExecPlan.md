@@ -511,6 +511,18 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   10/10 isolated retries before the clean 192/192 rerun. An immutable Linux
   image and bounded EKS file-descriptor/connection soak remain open in
   `SHC113SplunkRESTResponseClosureExecPlan.md`.
+- [ ] (2026-08-04 UTC) Complete SHC-114 bounded peer-observation
+  qualification. Source branch `codex/shc-114-bounded-peer-observation`
+  carries the reconcile context through Cluster Manager and Search Head REST
+  reads, caps Search Head fan-out at four, applies one 15-second batch budget,
+  evaluates results in deterministic Pod-name order, and closes the private
+  transports. Focused behavior passed 100 normal and 20 race-enabled
+  repetitions. Exact source `5440b8c2e` passed generation with no schema
+  drift, `make fmt vet build`, all 43 Make suites, 192/192 specs, 78.7 percent
+  composite coverage, chart lint, all 150 Helm tests, and `git diff --check`.
+  The immutable Linux image, EKS duration/cancellation campaign, controller
+  replacement, and file-descriptor/socket soak remain open in
+  `SHC114BoundedSearchPeerObservationExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP

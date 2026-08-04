@@ -81,17 +81,19 @@ evidence and limits are in
    boundary.
 3. `SHC113SplunkRESTResponseClosureExecPlan.md` records the shared REST-client
    response ownership correction and its immutable resource-soak gate.
-4. `SHC111ProtocolQualificationExecPlan.md` records explicit HTTP/HTTPS
+4. `SHC114BoundedSearchPeerObservationExecPlan.md` records the bounded,
+   cancellation-aware peer-observation batch and its live controller gate.
+5. `SHC111ProtocolQualificationExecPlan.md` records explicit HTTP/HTTPS
    persistent-client variants and their distinct network-topology gates.
-5. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
+6. `SHC107PersistentClientQualificationExecPlan.md` defines the bounded
    long-lived Kubernetes Service client evidence and remaining live gates.
-6. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
+7. `SHC106DeployerMemberCoordinationExecPlan.md` records the live
    Deployer/member overlap, exact source correction, completed regression
    gates, and remaining immutable Linux/EKS acceptance boundary.
-7. `SHC105AppFrameworkRequeueBoundaryExecPlan.md` records the live
+8. `SHC105AppFrameworkRequeueBoundaryExecPlan.md` records the live
    timing defect, exact source correction, completed regression gates, and the
    remaining immutable Linux/EKS acceptance boundary.
-8. `SHCFinalIntegrationExecPlan.md` records the assembly of the final Operator
+9. `SHCFinalIntegrationExecPlan.md` records the assembly of the final Operator
    and runtime feature branches and the exact remaining qualification gates.
 9. `SHCImplementationExecPlan.md` defines milestones, dependencies, gates, and
    acceptance evidence.
