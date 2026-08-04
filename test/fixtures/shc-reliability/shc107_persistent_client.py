@@ -32,6 +32,13 @@ class ConnectionStats:
     response_connection_headers: set[str] = field(default_factory=set)
 
 
+@dataclass(frozen=True)
+class HECResult:
+    accepted: bool
+    status: int
+    code: str
+
+
 class PersistentHTTPSClient:
     """Reuse one HTTPS connection and retry one interrupted logical request."""
 
@@ -166,7 +173,7 @@ def submit_event(
     token: str,
     run_id: str,
     sequence: int,
-) -> bool:
+) -> HECResult:
     payload = json.dumps(
         {
             "event": {"shc107_run": run_id, "seq": sequence},
@@ -188,11 +195,14 @@ def submit_event(
         },
     )
     if status != 200:
-        return False
+        return HECResult(False, status, "HTTPError")
     try:
-        return json.loads(response).get("code") == 0
+        code = json.loads(response).get("code")
     except json.JSONDecodeError:
-        return False
+        return HECResult(False, status, "InvalidJSON")
+    if not isinstance(code, int):
+        return HECResult(False, status, "Missing")
+    return HECResult(code == 0, status, str(code))
 
 
 def basic_authorization(password: str) -> str:
@@ -322,10 +332,10 @@ def main() -> int:
     try:
         for sequence in range(1, samples + 1):
             try:
-                hec_ok = submit_event(hec_client, token, run_id, sequence)
+                hec_result = submit_event(hec_client, token, run_id, sequence)
             except (OSError, http.client.HTTPException):
-                hec_ok = False
-            if not hec_ok:
+                hec_result = HECResult(False, 0, "TransportError")
+            if not hec_result.accepted:
                 hec_failures += 1
 
             try:
@@ -357,7 +367,9 @@ def main() -> int:
             pending = max(0, sequence - count)
             print(
                 f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} "
-                f"seq={sequence} hec={'ok' if hec_ok else 'fail'} "
+                f"seq={sequence} "
+                f"hec={'ok' if hec_result.accepted else 'fail'} "
+                f"hecStatus={hec_result.status} hecCode={hec_result.code} "
                 f"search={search_state} count={count} min={minimum} "
                 f"max={maximum} distinct={distinct} pending={pending} "
                 f"searchMember={search_member} "

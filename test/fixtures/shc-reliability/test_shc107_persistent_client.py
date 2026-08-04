@@ -157,6 +157,38 @@ class SearchResultTest(unittest.TestCase):
         self.assertIsNone(MODULE.parse_search_result(payload))
 
 
+class HECResultTest(unittest.TestCase):
+    def test_records_accepted_hec_response(self):
+        factory = FakeFactory([[FakeResponse(payload=b'{"text":"Success","code":0}')]])
+        client = MODULE.PersistentHTTPSClient(
+            "service", 8088, 5, connection_factory=factory
+        )
+
+        result = MODULE.submit_event(client, "token", "run", 1)
+
+        self.assertEqual(MODULE.HECResult(True, 200, "0"), result)
+
+    def test_records_http_rejection_without_response_body(self):
+        factory = FakeFactory([[FakeResponse(status=503, payload=b"")]])
+        client = MODULE.PersistentHTTPSClient(
+            "service", 8088, 5, connection_factory=factory
+        )
+
+        result = MODULE.submit_event(client, "token", "run", 1)
+
+        self.assertEqual(MODULE.HECResult(False, 503, "HTTPError"), result)
+
+    def test_records_hec_code_rejection(self):
+        factory = FakeFactory([[FakeResponse(payload=b'{"text":"Busy","code":9}')]])
+        client = MODULE.PersistentHTTPSClient(
+            "service", 8088, 5, connection_factory=factory
+        )
+
+        result = MODULE.submit_event(client, "token", "run", 1)
+
+        self.assertEqual(MODULE.HECResult(False, 200, "9"), result)
+
+
 class SearchHeadIdentityTest(unittest.TestCase):
     def test_reads_server_name_through_persistent_connection(self):
         payload = (

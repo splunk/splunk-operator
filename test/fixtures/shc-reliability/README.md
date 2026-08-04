@@ -525,6 +525,12 @@ kubectl -n shc-final-qualification logs -f \
   job/shc107-persistent-client
 ```
 
+For a diagnostic that must select one known backend, set
+`SHC107_HEC_SERVICE` or `SHC107_SEARCH_SERVICE` to that Pod's headless-Service
+DNS name. The default remains the normal Kubernetes Service. The workload log
+records the HTTP status and numeric HEC response code without printing the
+token or response text.
+
 A passing workload has zero logical HEC and search failures and exact final
 sequence completeness. Connection counters remain evidence rather than an
 unconditional success threshold: an HTTP server is allowed to advertise

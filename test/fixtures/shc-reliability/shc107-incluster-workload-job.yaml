@@ -46,6 +46,16 @@ spec:
                 configMapKeyRef:
                   name: shc107-persistent-client
                   key: SHC107_SETTLE_ATTEMPTS
+            - name: SHC107_HEC_SERVICE
+              valueFrom:
+                configMapKeyRef:
+                  name: shc107-persistent-client
+                  key: SHC107_HEC_SERVICE
+            - name: SHC107_SEARCH_SERVICE
+              valueFrom:
+                configMapKeyRef:
+                  name: shc107-persistent-client
+                  key: SHC107_SEARCH_SERVICE
           resources:
             requests:
               cpu: 100m
