@@ -55,13 +55,17 @@ remain separate requirements.
 - [x] (2026-08-04 UTC) Built and pushed the exact Linux AMD64 Operator candidate
   through the Makefile. Immutable OCI index digest is
   `sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`.
-- [x] (2026-08-04 UTC) Added qualification harness `49b6c5057`. Bash syntax and
-  ShellCheck pass. Its read-only rehearsal against the retained cluster proved
+- [x] (2026-08-04 UTC) Added qualification harness through `e378e1dbe`. Bash
+  syntax and ShellCheck pass. Its read-only rehearsal against the retained cluster proved
   exact Operator-image matching, a Ready three-member zero-restart baseline,
   closed partition, serving readiness gates, and three routable client
   endpoints without mutating the cluster. The harness also refuses to trigger
   without one active Ready API-independent workload client and fails on any
-  HEC or search request failure observed before lifecycle completion.
+  HEC or search request failure observed before lifecycle completion. A
+  separate mode now removes the policy field, identifies the source as the API
+  default, and verifies that the persisted deadline is exactly 30 seconds
+  after the endpoint-withdrawal observation; this prevents an explicitly set
+  value of 30 from being mistaken for defaulting evidence.
 - [ ] Qualify a complete Search Head roll on EKS, including controller
   replacement during the propagation interval.
 
@@ -128,6 +132,12 @@ remain separate requirements.
   Rationale: a newer timestamp alone cannot prove that the prior target and its
   endpoint-withdrawal ownership were safely completed; controller recovery and
   cancellation continue under the persisted operation identity.
+  Date/Author: 2026-08-04, Codex with Vivek Reddy.
+- Decision: qualify the 30-second default by omitting the field in a separate
+  steady-controller run, not by explicitly patching the value to 30.
+  Rationale: explicit-value coverage proves policy handling but cannot prove
+  CRD/API defaulting. The harness records the policy source and independently
+  checks the observation-to-deadline interval.
   Date/Author: 2026-08-04, Codex with Vivek Reddy.
 
 ## Outcomes & Retrospective
@@ -211,7 +221,7 @@ not discard the lifecycle operation before restoring serving eligibility.
   `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator@sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`.
 - Qualification branch:
   `codex/shc-118-search-head-endpoint-withdrawal-qualification` at
-  `49b6c5057`.
+  `e378e1dbe1660af0eeb1c568184a5d1ab42e60fb`.
 - EKS evidence: pending.
 
 ## Interfaces and Dependencies
@@ -222,3 +232,9 @@ model. It changes the v4 SearchHeadCluster policy/status schema and Operator
 logic only. It does not require Docker-Splunk or Splunk Enterprise source
 changes, and it does not replace the separate Splunk-side persistent-connection
 and explicit partial-result requirements.
+
+Revision note (2026-08-04 UTC): Corrected the qualification design so the
+default-policy campaign removes `endpointWithdrawalDelaySeconds`, records
+whether the policy came from the default or an explicit value, and proves the
+persisted observation-to-deadline interval. This replaces the earlier plan to
+exercise the default with an explicit value of 30.

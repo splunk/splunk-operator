@@ -573,10 +573,12 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   Linux gate also passed all 43 suites and 192/192 specs. The immutable
   Operator OCI index is
   `sha256:bc733990967abade9419be4caa85d68040355c959d86410a93bd8765830eed9f`;
-  qualification harness `49b6c5057` passes Bash/ShellCheck and a read-only
+  qualification harness `e378e1dbe` passes Bash/ShellCheck and a read-only
   retained-cluster preflight, and requires a live API-independent workload
-  before mutation. Destructive EKS gates remain open in
-  `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
+  before mutation. Its separate default-policy mode removes the field and
+  verifies the persisted 30-second observation-to-deadline interval rather
+  than mistaking an explicit value of 30 for API-default evidence. Destructive
+  EKS gates remain open in `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP
@@ -2991,3 +2993,8 @@ Revision note (2026-08-03 20:35Z): Closed SHC-102/103 with fail-closed probe
 ConfigMap ownership, cache-independent create semantics, deterministic and
 native-Linux regression gates, immutable live EKS creation, complete
 disposable cleanup, and exact accepted restoration.
+
+Revision note (2026-08-04 UTC): Corrected SHC-118 acceptance so its separate
+default-policy campaign omits the policy field and verifies the persisted
+30-second observation-to-deadline interval. An explicitly configured value of
+30 no longer serves as evidence that API defaulting works.
