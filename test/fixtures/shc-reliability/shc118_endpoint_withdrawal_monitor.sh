@@ -11,6 +11,7 @@ workload_job="${SHC118_WORKLOAD_JOB:-shc98-incluster-workload}"
 expected_operator_image="${SHC118_EXPECTED_OPERATOR_IMAGE:?SHC118_EXPECTED_OPERATOR_IMAGE is required}"
 withdrawal_seconds="${SHC118_WITHDRAWAL_SECONDS:-120}"
 restart_operator="${SHC118_RESTART_OPERATOR:-true}"
+use_policy_default="${SHC118_USE_POLICY_DEFAULT:-false}"
 preflight_only="${SHC118_PREFLIGHT_ONLY:-false}"
 timeout_seconds="${SHC118_TIMEOUT_SECONDS:-7200}"
 sample_interval="${SHC118_SAMPLE_INTERVAL_SECONDS:-2}"
@@ -51,6 +52,13 @@ case "${restart_operator}" in
     exit 1
     ;;
 esac
+case "${use_policy_default}" in
+  true | false) ;;
+  *)
+    printf 'FAIL: SHC118_USE_POLICY_DEFAULT must be true or false\n' >&2
+    exit 1
+    ;;
+esac
 case "${preflight_only}" in
   true | false) ;;
   *)
@@ -67,6 +75,14 @@ fi
 if [[ "${restart_operator}" == true && "${withdrawal_seconds}" -lt 60 ]]; then
   printf 'FAIL: controller-replacement qualification requires a withdrawal interval of at least 60 seconds\n' >&2
   exit 1
+fi
+if [[ "${use_policy_default}" == true && "${withdrawal_seconds}" -ne 30 ]]; then
+  printf 'FAIL: default-policy qualification requires SHC118_WITHDRAWAL_SECONDS=30\n' >&2
+  exit 1
+fi
+withdrawal_policy_source=explicit
+if [[ "${use_policy_default}" == true ]]; then
+  withdrawal_policy_source=default
 fi
 if ! [[ "${timeout_seconds}" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
   printf 'FAIL: SHC118_TIMEOUT_SECONDS must be positive\n' >&2
@@ -375,17 +391,26 @@ searchHeadCluster=${cr_name}
 operatorImage=${expected_operator_image}
 desiredReplicas=${desired_replicas}
 routableEndpoints=$(jq 'length' <<<"${initial_endpoint_pods}")
+withdrawalPolicySource=${withdrawal_policy_source}
 EOF
   printf 'PREFLIGHT PASS: context=%s namespace=%s shc=%s evidence=%s\n' \
     "${context}" "${namespace}" "${cr_name}" "${evidence_dir}"
   exit 0
 fi
 
-patch_json="$(jq -cn --argjson delay "${withdrawal_seconds}" --arg trigger "${trigger_value}" \
-  '{spec:{
-    lifecyclePolicy:{endpointWithdrawalDelaySeconds:$delay},
-    podAnnotations:{"qualification.splunk.com/shc118-endpoint-withdrawal":$trigger}
-  }}')"
+if [[ "${use_policy_default}" == true ]]; then
+  patch_json="$(jq -cn --arg trigger "${trigger_value}" \
+    '{spec:{
+      lifecyclePolicy:{endpointWithdrawalDelaySeconds:null},
+      podAnnotations:{"qualification.splunk.com/shc118-endpoint-withdrawal":$trigger}
+    }}')"
+else
+  patch_json="$(jq -cn --argjson delay "${withdrawal_seconds}" --arg trigger "${trigger_value}" \
+    '{spec:{
+      lifecyclePolicy:{endpointWithdrawalDelaySeconds:$delay},
+      podAnnotations:{"qualification.splunk.com/shc118-endpoint-withdrawal":$trigger}
+    }}')"
+fi
 shc_kube patch searchheadcluster.enterprise.splunk.com "${cr_name}" \
   --type=merge -p "${patch_json}" >/dev/null
 triggered=true
@@ -405,6 +430,13 @@ while (($(date -u +%s) - start_epoch < timeout_seconds)); do
     proof_observed_at="${observed_at}"
     proof_deadline_value="${proof_deadline}"
     proof_sequence_value="${proof_sequence}"
+    proof_observed_epoch="$(date -u -d "${proof_observed_at}" +%s 2>/dev/null ||
+      date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "${proof_observed_at}" +%s)"
+    proof_deadline_epoch="$(date -u -d "${proof_deadline_value}" +%s 2>/dev/null ||
+      date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "${proof_deadline_value}" +%s)"
+    if ((proof_deadline_epoch - proof_observed_epoch != withdrawal_seconds)); then
+      fail "persisted withdrawal deadline does not match the expected policy interval"
+    fi
     break
   fi
   sleep "${sample_interval}"
@@ -547,6 +579,7 @@ namespace=${namespace}
 searchHeadCluster=${cr_name}
 operatorImage=${expected_operator_image}
 withdrawalSeconds=${withdrawal_seconds}
+withdrawalPolicySource=${withdrawal_policy_source}
 operatorRestarted=${operator_restarted}
 ordinalOrder=${seen_order}
 minimumRoutableEndpoints=${minimum_endpoints}

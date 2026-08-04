@@ -72,8 +72,11 @@ test/fixtures/shc-reliability/shc118_endpoint_withdrawal_monitor.sh
 ```
 
 The 120-second test interval leaves enough time to replace the controller
-during the persisted barrier. A separate steady-controller run can set
-`SHC118_RESTART_OPERATOR=false` and use the product default of 30 seconds.
+during the persisted barrier. A separate steady-controller run must set
+`SHC118_RESTART_OPERATOR=false`, `SHC118_USE_POLICY_DEFAULT=true`, and
+`SHC118_WITHDRAWAL_SECONDS=30` to remove the policy field and exercise the
+product default rather than an explicit value of 30. The harness verifies that
+the persisted deadline is exactly the expected interval after the observation.
 Set `SHC118_PREFLIGHT_ONLY=true` to validate the selected context, exact
 Operator image, three-member Ready baseline, closed StatefulSet partition,
 serving readiness gates, and EndpointSlices without mutating the cluster.
