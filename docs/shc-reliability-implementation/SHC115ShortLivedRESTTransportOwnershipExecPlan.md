@@ -44,8 +44,17 @@ Docker-Splunk, Splunk Ansible, or Splunk Enterprise.
 - [x] (2026-08-04 UTC) Exact source `cd3498393` passed `make build`, all 43
   Make suites, 192/192 enterprise/controller specs, 78.7 percent composite
   coverage, chart lint, all 150 Helm tests, and the changed-path race gate.
-- [ ] Build the cumulative Linux image and qualify file-descriptor/socket
-  behavior together with SHC-112 through SHC-114 on EKS.
+- [x] (2026-08-04 UTC) Repeated the full Make test gate natively on the Linux
+  vWorkstation with the repository-pinned Ginkgo 2.32.0 toolchain: 43 suites,
+  192/192 specs, and 78.7 percent composite coverage; native `make build`, all
+  150 Helm tests, generation, and the final clean-tree check passed.
+- [x] Built and pushed the cumulative `linux/amd64` Operator image through the
+  repository Make targets. ECR reports immutable OCI index digest
+  `sha256:cd970e0d1039bb06aa5a7e29f9db16ed2e964885133b794464463caa38dccf26`;
+  its runnable `linux/amd64` manifest is
+  `sha256:be5de3cb5bab58de8e618b60bbf1665d3a806a5530d026056fc6e464cce81c60`.
+- [ ] Qualify file-descriptor/socket behavior together with SHC-112 through
+  SHC-114 on EKS.
 
 ## Surprises & Discoveries
 
@@ -93,8 +102,8 @@ Docker-Splunk, Splunk Ansible, or Splunk Enterprise.
 
 The source audit, full regression gate, and changed-path race gate establish a
 complete current-caller inventory and preserve request behavior. Exact source
-is frozen and present in both review repositories. Immutable-image and live
-resource-soak qualification remain open.
+is frozen and present in both review repositories, and the exact cumulative
+Linux image is frozen in ECR. Live resource-soak qualification remains open.
 
 ## Plan of Work
 
@@ -161,7 +170,16 @@ before changing the controller image.
 - Race: Splunk client and telemetry packages passed 20 repetitions; all
   changed enterprise lifecycle paths passed one race-enabled run.
 - Defensive idle-connection timeout: 90 seconds.
-- Immutable Operator image and EKS evidence: pending.
+- Immutable Operator image tag:
+  `667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/splunk/splunk-operator:shc115-cd3498393-linux-amd64`.
+- ECR OCI index digest:
+  `sha256:cd970e0d1039bb06aa5a7e29f9db16ed2e964885133b794464463caa38dccf26`.
+- Runnable `linux/amd64` manifest:
+  `sha256:be5de3cb5bab58de8e618b60bbf1665d3a806a5530d026056fc6e464cce81c60`.
+- The index's second child is the BuildKit provenance attestation at
+  `sha256:27cd6072ea26f1ce31188a1ab1ccccfc2beaf8a0f00e9ec102fb211005bec818`,
+  with platform `unknown/unknown`; it is not a runnable image.
+- EKS evidence: pending.
 
 ## Interfaces and Dependencies
 
