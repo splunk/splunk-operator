@@ -37,8 +37,16 @@ measured and bounded; it does not change Splunkd production code.
 - [x] (2026-08-04 02:25Z) Added test-only response status/code evidence and one
   bounded reconnect for the explicit HTTP 405 response at exact source
   `3e9f47751`; 15 tests and 100 repeated Make checks passed.
-- [ ] Complete the response-aware reverse-ordinal EKS campaign and record the
-  immutable result.
+- [x] (2026-08-04 02:43Z) Completed the transport-only negative control. The
+  run delivered all 1,800 events exactly but recorded 218 logical search
+  failures on persistent connections pinned to detained members: 86 on
+  ordinal 0, 111 on ordinal 1, and 21 on ordinal 2.
+- [x] (2026-08-04 02:49Z) Completed the response-aware EKS campaign across two
+  full Operator-owned reverse-ordinal rolls. Four explicit HTTP 405 responses
+  caused four bounded reconnects; all 1,200 HEC submissions and searches
+  completed exactly with zero logical, identity, or count-regression failure.
+  The second roll completed after the active Operator Pod was deleted while
+  ordinal 2 was in durable `WaitingForTermination`.
 - [ ] Review and own the server-side connection-close change with the Splunk
   search/SHC team.
 - [ ] Implement and qualify the official Splunkd behavior in a separately
@@ -69,6 +77,15 @@ measured and bounded; it does not change Splunkd production code.
   Consequence: the qualification mitigation retries once only on the known
   correct search-creation endpoint. A second 405 remains a logical failure and
   the first response remains visible in counters.
+- Observation: retrying the exact detention response is an effective bounded
+  client mitigation, but it is not equivalent to server-side closure.
+  Evidence: source `3e9f47751` recorded four first-response failures, four
+  recovered requests, five Search Head connections, zero first transport
+  failures, and exact 1,200-event completion across two complete rolls. The
+  response-aware rule explicitly closed the connection before every retry.
+  Consequence: existing clients that do not recognize this endpoint-specific
+  405 can continue failing until the socket breaks. SHC-110 remains a Splunkd
+  requirement even though the qualification client passed.
 
 ## Decision Log
 
@@ -90,11 +107,14 @@ measured and bounded; it does not change Splunkd production code.
 ## Outcomes & Retrospective
 
 The negative runtime behavior, exact source path, and bounded client behavior
-are identified. Source qualification for the client passes; live
-response-aware qualification and any Splunkd correction remain open. The
-existing Operator-owned rollout safely withdrew and replaced one target at a
-time, but that did not prevent logical failures on a connection created before
-withdrawal.
+are identified and live-qualified. The transport-only control produced 218
+logical failures despite correct serving-endpoint withdrawal. The
+response-aware client recovered four explicit detention responses and
+completed 1,200 events exactly across two full rolls, including active
+controller replacement. This proves a bounded mitigation, not closure of the
+product requirement. Splunkd implementation, native product tests, HTTP and
+HTTPS parity, search-type breadth, transparent mesh, and ingress qualification
+remain open.
 
 ## Context and Orientation
 
@@ -203,9 +223,21 @@ unbounded retry loop.
 - Planning branch: `codex/shc-110-search-detention-connection`.
 - Test-only response-aware source:
   `3e9f47751e439f7a1de49633616ef995f950f111`.
-- First Operator-owned negative workload and monitor evidence: pending final
-  capture.
-- Response-aware EKS evidence: in progress.
+- First Operator-owned negative workload:
+  `shc107-operator-owned-sh-roll-negative-workload-20260804T0210Z.log`,
+  SHA-256
+  `f99a12d7cefa2638126f0bb868149c0b0df5e14d449a3dc81c4929ad21ea7111`.
+  Its 311-sample lifecycle/EndpointSlice monitor has SHA-256
+  `e40e3d339efa1c9f03f40ddf0848e1494d036eb8b87e837ea2d52d4fdde5e198`.
+- Response-aware workload:
+  `shc107-response-aware-sh-roll-workload-20260804T0226Z.log`, SHA-256
+  `ef141b12057a97e50d7eaddee59302b9ef6125a45a0fde542bccf6b68d9fe179`.
+  Its final 184-sample monitor has SHA-256
+  `df5c1ff1d680e1fab99de4be5291d6e8830bbe7afe13dcbc0372d8ea3555568e`.
+- Final SearchHeadCluster state record SHA-256:
+  `7ba25bf43601301e8d3e433aea88437a117f8081b8be9d9521edc307be4fae8d`.
+  Generation 18 was Ready with three `Up` members, three serving endpoints, a
+  ready captain, equal Search Head revisions, and zero restarts.
 - Related plan:
   [SHC107PersistentClientQualificationExecPlan.md](SHC107PersistentClientQualificationExecPlan.md).
 
