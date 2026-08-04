@@ -87,8 +87,12 @@ remain separate requirements.
   endpoints were 2, maximum unready Pods 1, all three UIDs changed while claims
   remained stable, invalidation delta was 0, restarts/request failures were 0,
   and 12 stability samples passed. Harness exit code is zero.
-- [ ] Allow the default campaign's independent 3,600-sample Job to reach
-  Kubernetes `Complete`, verify final uniqueness/counters, and seal hashes.
+- [x] (2026-08-04 21:54Z) The omitted-field campaign's independent Job reached
+  Kubernetes `Complete`: 3,600 submissions, zero HEC failures, zero
+  search-request failures, one transient count regression, maximum pending 3,
+  and exact final count/min/max/distinct `3600/1/3600/3600`. Runner, workload
+  wait, and finalizer exit codes are zero; all 30 listed artifact hashes
+  verify.
 
 ## Surprises & Discoveries
 
@@ -145,6 +149,14 @@ remain separate requirements.
   lifecycle-operation ledger. Status operation IDs and retained samples prove
   exact cardinality; the Event gate requires at least one observation per
   replacement and zero invalidations rather than equality to replica count.
+- Observation: the omitted-field workload recorded one HTTP-successful search
+  count regression at sequence 1,996 after all three replacement operations
+  were complete. The reported count moved from 1,994 to 1,993 and then to
+  1,997 on the next sample; maximum pending was 3 and final uniqueness was
+  exact.
+  Consequence: SHC-118 closes the bounded request-availability and eventual-
+  delivery gate, but it does not close the existing Splunk requirement for an
+  explicit complete-intermediate-result or partial-result contract.
 
 ## Decision Log
 
@@ -194,13 +206,17 @@ that proof during status merge; and exposes bounded Events, reasons, and the
 `splunk_operator_search_head_endpoint_withdrawal_total` metric. Both Pod-update
 and scale-down detention paths fail closed until the interval completes.
 
-The explicit-120-second EKS campaign passes end to end, including manager
-replacement inside an active interval, the active-captain ordinal, 3,600
-successful HEC/search requests, zero count regressions, exact eventual
-uniqueness, and verified artifacts. The omitted-field 30-second lifecycle
-harness also passes, but its independent Job has not yet reached its terminal
-exact-delivery verdict. This is therefore not yet the final SHC-118 availability
-claim.
+Both EKS campaigns pass end to end. The explicit-120-second campaign includes
+manager replacement inside an active interval, the active-captain ordinal,
+3,600 successful HEC/search requests, zero count regressions, exact eventual
+uniqueness, and verified artifacts. The independent omitted-field campaign
+proves the Operator-resolved 30-second policy across every ordinal, dynamic
+captain transfer, exact eventual uniqueness, and verified artifacts without a
+controller restart. Its one transient HTTP-successful count regression keeps
+the separate Splunk partial-result semantics requirement open; it is not a
+request outage or final-delivery failure. SHC-118 is complete for its bounded
+Kubernetes endpoint-withdrawal, request-availability, and eventual-delivery
+scope.
 
 ## Plan of Work
 
@@ -295,8 +311,8 @@ not discard the lifecycle operation before restoring serving eligibility.
   `fd7de67bdadc243609d191bbd5ce9041a0b69bbfbf96d8d545c6daab5e9697e7`.
   All 37 manifest entries verify from the repository root. Structured final
   Operator logs contain no `ERROR` or `FATAL` level record.
-- Omitted-field Operator-default lifecycle: passed; terminal workload and
-  artifact gates pending.
+- Omitted-field Operator-default campaign: passed end to end, including the
+  terminal workload and artifact gates.
 - Omitted-field lifecycle harness: pass, exit code 0, policy source
   `operator-default`, target order `[2,1,0]`, minimum endpoints 2, maximum
   unready Pods 1, Operator not restarted, Event count delta 4, invalidation
@@ -313,7 +329,29 @@ not discard the lifecycle operation before restoring serving eligibility.
   and ordinal 0
   `ca1839a6-c1ca-439e-b9be-0061cda85252 -> 268d4dcf-d812-4896-9994-1b91d17cc61d`;
   every `etc` and `var` claim was preserved.
-- Omitted-field workload final counters and evidence hashes: pending.
+- Omitted-field workload: 3,600 submissions, HEC failures 0, search-request
+  failures 0, count regressions 1, maximum pending 3 at sequence 1,996, final
+  count/min/max/distinct `3600/1/3600/3600`, and `complete=true`. The count
+  regression was a one-sample move from 1,994 to 1,993 followed by 1,997; it
+  occurred after lifecycle completion and did not prevent exact final delivery.
+- Omitted-field SHA-256 values: samples
+  `8a30d38a504d9071e8003b4d16a89cea024661d78a3076814904134eb0a91a82`,
+  summary
+  `90e3c33f59485e79c9f2befdce2f1fd95b7422d79774a72f8e8efb7f739e1062`,
+  workload
+  `75ed96724fe0b78265a34e24cc23504124c6ad490b0a981566f1db3a93c207ac`,
+  Job
+  `80e2a331808bdc9a39e950f6450aaaea40a7c70efee858bacb14ae5e690529dc`,
+  final Pods
+  `b928053617e50785db21029250d50b4fcef54c057a92b1a0fefca4c3f8953cfe`,
+  final Operator log
+  `922cb876657ed5cbb91047d756ccd3ddc4111b41bc5cdbeff58b97ae25ca6fc1`,
+  and artifact manifest
+  `56c4d7da0bb9ff8b4dbb50e4f6417023eef52ebeddd6c51db1a71115afe1d2d8`.
+  All 30 manifest entries verify. Structured final Operator logs contain no
+  `ERROR` or `FATAL` record. Final captured and live state both show the field
+  omitted, phase `Ready`, lifecycle stage `Completed`, three Ready and serving
+  zero-restart Search Heads, and three routable client endpoints.
 
 ## Interfaces and Dependencies
 
@@ -349,3 +387,9 @@ replacement, dynamic captain transfer, stable claims, bounded endpoints, and
 zero request failures through roll completion. Its Job and final hashes remain
 open. The revision also distinguishes correlated Kubernetes Event counts from
 the exact three-operation status/sample ledger.
+
+Revision note (2026-08-04 21:54Z): Closed the omitted-field workload and
+artifact gates with exact final delivery, zero request failures, zero process
+exit codes, and 30 verified hashes. Recorded the single transient successful-
+search count regression separately so SHC-118's bounded completion does not
+overstate Splunk's still-open intermediate-result semantics.

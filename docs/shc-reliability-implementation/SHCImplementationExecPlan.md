@@ -598,8 +598,13 @@ identifiers are recorded in `SHCWorkItemIndex.md`.
   default lifecycle harness also passed target order `2,1,0`, exact 30-second
   persisted intervals, dynamic captain transfer, stable claims, minimum two
   endpoints, maximum one unready Pod, zero invalidations/restarts/request
-  failures, and 12 stable samples. Its 3,600-sample Job and hashes remain open in
-  `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
+  failures, and 12 stable samples. Its Job completed 3,600 submissions with
+  zero HEC/search failures, one transient count regression, maximum pending 3,
+  exact final uniqueness, zero runner/wait/finalizer exit codes, and all 30
+  hashes verified. SHC-118 is complete for its bounded endpoint-withdrawal,
+  request-availability, and eventual-delivery scope. The single successful-
+  search regression keeps the separate Splunk intermediate-result semantics
+  requirement open in `SHC118SearchHeadEndpointWithdrawalExecPlan.md`.
 - [ ] (2026-08-03 UTC) Complete SHC-98, the bounded stable indexer search
   address experiment. Live and source inspection established that indexers
   without `register_search_address` are distributed to Search Heads by Pod IP
@@ -3041,3 +3046,9 @@ Revision note (2026-08-04 21:03Z): Recorded the passing omitted-field
 Operator-default lifecycle harness and left only its independent workload and
 artifact gates open. Kubernetes Event-series counts remain operational signals;
 exact operation cardinality comes from status and samples.
+
+Revision note (2026-08-04 21:54Z): Closed SHC-118's omitted-field workload and
+artifact gates with exact 3,600-event final delivery, zero request failures,
+zero process exit codes, and 30 verified hashes. Preserved one transient
+HTTP-successful count regression as evidence for the separate Splunk
+intermediate-result semantics requirement.
