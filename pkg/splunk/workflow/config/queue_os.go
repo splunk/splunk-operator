@@ -84,6 +84,14 @@ func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerCli
 			}
 			cfg.OS.S3.Endpoint = ep
 		}
+		if cfg.OS.S3.EncryptionScheme != nil && *cfg.OS.S3.EncryptionScheme == "sse-c" &&
+			cfg.OS.S3.KMSEndpoint == nil && cfg.Queue.SQS.AuthRegion != "" {
+			ep, err := s3aws.ResolveKMSEndpoint(ctx, cfg.Queue.SQS.AuthRegion)
+			if err != nil {
+				return nil, err
+			}
+			cfg.OS.S3.KMSEndpoint = &ep
+		}
 	}
 
 	if (cfg.Queue.Provider == "sqs" || cfg.Queue.Provider == "sqs_cp") && cfg.Queue.SQS.SecretKeyRef != nil {

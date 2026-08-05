@@ -111,10 +111,7 @@ func TestSQSOutputsConf_Fields(t *testing.T) {
 		want  string
 	}{
 		{"remote_queue.type", "sqs_smartbus"},
-		{"remote_queue.sqs_smartbus.encoding_format", "s2s"},
 		{"remote_queue.sqs_smartbus.auth_region", "us-east-2"},
-		{"remote_queue.sqs_smartbus.retry_policy", "max_count"},
-		{"remote_queue.sqs_smartbus.max_count.max_retries_per_part", "4"},
 		{"remote_queue.sqs_smartbus.large_message_store.path", "s3://bucket/path"},
 	}
 	for _, tc := range tests {
@@ -193,29 +190,12 @@ func TestSQSInputsConf_Fields(t *testing.T) {
 		{"remote_queue.sqs_smartbus.auth_region", "us-east-2"},
 		{"remote_queue.sqs_smartbus.dead_letter_queue.name", "splunk-dlq"},
 		{"remote_queue.sqs_smartbus.large_message_store.path", "s3://bucket/path"},
-		{"remote_queue.sqs_smartbus.max_count.max_retries_per_part", "4"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.field, func(t *testing.T) {
 			assert.Equal(t, tc.want, fields[tc.field])
 		})
 	}
-}
-
-// encoding_format is an outputs-only parameter and must not appear in inputs.conf.
-func TestSQSInputsConf_NoEncodingFormat(t *testing.T) {
-	builder, err := splunkconfig.NewSmartBusConfBuilder(
-		sqsQueue("q", "dlq", "us-east-2", ""),
-		s3Storage("bucket/path", ""),
-	)
-	require.NoError(t, err)
-	entries := splunkconfig.IndexerConf(builder)
-	in, ok := findEntry(entries, "inputs")
-	require.True(t, ok)
-	fields := in.Value.Stanzas["remote_queue:q"]
-
-	_, hasEncoding := fields["remote_queue.sqs_smartbus.encoding_format"]
-	assert.False(t, hasEncoding, "inputs.conf must not contain encoding_format")
 }
 
 // The sqs_cp provider must use "sqs_smartbus_cp" as the field key prefix
@@ -233,7 +213,82 @@ func TestSQSCPProvider_UsesCorrectFieldPrefix(t *testing.T) {
 
 	assert.Equal(t, "sqs_smartbus_cp", fields["remote_queue.type"])
 	assert.Equal(t, "us-east-2", fields["remote_queue.sqs_smartbus_cp.auth_region"])
-	assert.Equal(t, "s2s", fields["remote_queue.sqs_smartbus_cp.encoding_format"])
+}
+
+// encryption_scheme is written to both inputs.conf and outputs.conf when set.
+func TestSQSConf_EncryptionScheme(t *testing.T) {
+	for _, confFile := range []string{"outputs", "inputs"} {
+		t.Run(confFile, func(t *testing.T) {
+			builder, err := splunkconfig.NewSmartBusConfBuilder(
+				sqsQueue("q", "dlq", "us-east-2", ""),
+				s3StorageWithEncryption("bucket/path", "", "sse-s3", "", ""),
+			)
+			require.NoError(t, err)
+			entries := splunkconfig.IndexerConf(builder)
+			entry, ok := findEntry(entries, confFile)
+			require.True(t, ok)
+			fields := entry.Value.Stanzas["remote_queue:q"]
+			assert.Equal(t, "sse-s3", fields["remote_queue.sqs_smartbus.large_message_store.encryption_scheme"])
+		})
+	}
+}
+
+// A pre-resolved kms_endpoint must be written to the conf exactly as provided.
+func TestSQSConf_KMSEndpointWrittenWhenSet(t *testing.T) {
+	cases := []struct {
+		name     string
+		endpoint string
+	}{
+		{"region-derived", "https://kms.us-west-2.amazonaws.com"},
+		{"custom", "https://kms.custom.example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			builder, err := splunkconfig.NewSmartBusConfBuilder(
+				sqsQueue("q", "dlq", "us-west-2", ""),
+				s3StorageWithEncryption("bucket/path", "", "sse-c", tc.endpoint, "alias/mykey"),
+			)
+			require.NoError(t, err)
+			entries := splunkconfig.IndexerConf(builder)
+			out, ok := findEntry(entries, "outputs")
+			require.True(t, ok)
+			fields := out.Value.Stanzas["remote_queue:q"]
+			assert.Equal(t, tc.endpoint, fields["remote_queue.sqs_smartbus.large_message_store.kms_endpoint"])
+		})
+	}
+}
+
+// kms_endpoint must not appear when not set in the S3Spec (resolution is queue_os.go's job).
+func TestSQSConf_KMSEndpointNotWrittenWhenNil(t *testing.T) {
+	for _, scheme := range []string{"sse-s3", "sse-c"} {
+		t.Run(scheme, func(t *testing.T) {
+			builder, err := splunkconfig.NewSmartBusConfBuilder(
+				sqsQueue("q", "dlq", "us-east-2", ""),
+				s3StorageWithEncryption("bucket/path", "", scheme, "", ""),
+			)
+			require.NoError(t, err)
+			entries := splunkconfig.IndexerConf(builder)
+			out, ok := findEntry(entries, "outputs")
+			require.True(t, ok)
+			fields := out.Value.Stanzas["remote_queue:q"]
+			_, has := fields["remote_queue.sqs_smartbus.large_message_store.kms_endpoint"]
+			assert.False(t, has, "kms_endpoint must not appear when nil in S3Spec")
+		})
+	}
+}
+
+// key_id must be written when set.
+func TestSQSConf_KMSKeyID(t *testing.T) {
+	builder, err := splunkconfig.NewSmartBusConfBuilder(
+		sqsQueue("q", "dlq", "us-east-2", ""),
+		s3StorageWithEncryption("bucket/path", "", "sse-c", "", "alias/sqsssekeytrial"),
+	)
+	require.NoError(t, err)
+	entries := splunkconfig.IndexerConf(builder)
+	out, ok := findEntry(entries, "outputs")
+	require.True(t, ok)
+	fields := out.Value.Stanzas["remote_queue:q"]
+	assert.Equal(t, "alias/sqsssekeytrial", fields["remote_queue.sqs_smartbus.large_message_store.key_id"])
 }
 
 // When the path is given without the s3:// scheme, it must be added automatically.

@@ -40,6 +40,7 @@ type ObjectStorageSpec struct {
 	S3 S3Spec `json:"s3"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.encryptionScheme) || self.encryptionScheme != 'sse-c' || has(self.kmsKeyId)",message="kmsKeyId is required when encryptionScheme is sse-c"
 type S3Spec struct {
 	// +optional
 	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
@@ -50,6 +51,21 @@ type S3Spec struct {
 	// +kubebuilder:validation:Pattern=`^(?:s3://)?[a-z0-9.-]{3,63}(?:/[^\s]+)?$`
 	// S3 bucket path
 	Path string `json:"path"`
+
+	// +optional
+	// +kubebuilder:validation:Enum=sse-s3;sse-c;none
+	// The encryption scheme used by remote storage.
+	EncryptionScheme *string `json:"encryptionScheme,omitempty"`
+
+	// +optional
+	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
+	// The endpoint to connect to for generating KMS keys. Required when encryptionScheme is sse-c.
+	KMSEndpoint *string `json:"kmsEndpoint,omitempty"`
+
+	// +optional
+	// +kubebuilder:validation:Pattern=`^(arn:aws[-a-z]*:kms:[a-z0-9-]+:[0-9]{12}:(key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|key/mrk-[0-9a-f]{32}|alias/[a-zA-Z0-9/_-]+)|alias/[a-zA-Z0-9/_-]+|mrk-[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`
+	// The ID for the primary key that KMS uses to generate a data key pair. Required when encryptionScheme is sse-c.
+	KMSKeyID *string `json:"kmsKeyId,omitempty"`
 }
 
 // ObjectStorageStatus defines the observed state of ObjectStorage.

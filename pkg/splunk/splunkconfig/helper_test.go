@@ -49,3 +49,23 @@ func s3Storage(path, endpoint string) *enterpriseApi.ObjectStorageSpec {
 		},
 	}
 }
+
+func s3StorageWithEncryption(path, endpoint, scheme, kmsEndpoint, kmsKeyID string) *enterpriseApi.ObjectStorageSpec {
+	s3 := enterpriseApi.S3Spec{
+		Path:     path,
+		Endpoint: endpoint,
+	}
+	if scheme != "" {
+		s3.EncryptionScheme = &scheme
+	}
+	if kmsEndpoint != "" {
+		s3.KMSEndpoint = &kmsEndpoint
+	}
+	if kmsKeyID != "" {
+		s3.KMSKeyID = &kmsKeyID
+	}
+	return &enterpriseApi.ObjectStorageSpec{
+		Provider: "s3",
+		S3:       s3,
+	}
+}
