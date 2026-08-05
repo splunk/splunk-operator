@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 )
 
 var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
@@ -221,9 +222,15 @@ func UpdateIndexerCluster(instance *enterpriseApi.IndexerCluster, status enterpr
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewIndexerCluster(instance.Name, instance.Namespace, "image")
-	ssSpec.ResourceVersion = instance.ResourceVersion
-	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
+	Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current := &enterpriseApi.IndexerCluster{}
+		if err := k8sClient.Get(context.Background(), key, current); err != nil {
+			return err
+		}
+		ssSpec := testutils.NewIndexerCluster(instance.Name, instance.Namespace, "image")
+		ssSpec.ResourceVersion = current.ResourceVersion
+		return k8sClient.Update(context.Background(), ssSpec)
+	})).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
 	By("Expecting IndexerCluster custom resource to be created successfully")

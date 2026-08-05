@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/util/retry"
 )
 
 var _ = Describe("LicenseMaster Controller", Label("integration"), func() {
@@ -165,9 +166,15 @@ func UpdateLicenseMaster(instance *enterpriseApiV3.LicenseMaster, status enterpr
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewLicenseMaster(instance.Name, instance.Namespace, "image")
-	ssSpec.ResourceVersion = instance.ResourceVersion
-	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
+	Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current := &enterpriseApiV3.LicenseMaster{}
+		if err := k8sClient.Get(context.Background(), key, current); err != nil {
+			return err
+		}
+		ssSpec := testutils.NewLicenseMaster(instance.Name, instance.Namespace, "image")
+		ssSpec.ResourceVersion = current.ResourceVersion
+		return k8sClient.Update(context.Background(), ssSpec)
+	})).Should(Succeed())
 
 	By("Expecting LicenseMaster custom resource to be updated successfully")
 	ss := &enterpriseApiV3.LicenseMaster{}
