@@ -36,6 +36,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 )
 
 var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
@@ -931,9 +932,15 @@ func UpdateIngestorCluster(instance *enterpriseApi.IngestorCluster, status enter
 		Namespace: instance.Namespace,
 	}
 
-	icSpec := testutils.NewIngestorCluster(instance.Name, instance.Namespace, "image", os, queue)
-	icSpec.ResourceVersion = instance.ResourceVersion
-	Expect(k8sClient.Update(context.Background(), icSpec)).Should(Succeed())
+	Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current := &enterpriseApi.IngestorCluster{}
+		if err := k8sClient.Get(context.Background(), key, current); err != nil {
+			return err
+		}
+		icSpec := testutils.NewIngestorCluster(instance.Name, instance.Namespace, "image", os, queue)
+		icSpec.ResourceVersion = current.ResourceVersion
+		return k8sClient.Update(context.Background(), icSpec)
+	})).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
 	ic := &enterpriseApi.IngestorCluster{}

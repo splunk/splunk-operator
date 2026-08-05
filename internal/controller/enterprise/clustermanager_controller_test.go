@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	"k8s.io/client-go/util/retry"
 )
 
 var _ = Describe("ClusterManager Controller", Label("integration"), func() {
@@ -225,9 +226,15 @@ func UpdateClusterManager(instance *enterpriseApi.ClusterManager, status enterpr
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewClusterManager(instance.Name, instance.Namespace, "image")
-	ssSpec.ResourceVersion = instance.ResourceVersion
-	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
+	Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current := &enterpriseApi.ClusterManager{}
+		if err := k8sClient.Get(context.Background(), key, current); err != nil {
+			return err
+		}
+		ssSpec := testutils.NewClusterManager(instance.Name, instance.Namespace, "image")
+		ssSpec.ResourceVersion = current.ResourceVersion
+		return k8sClient.Update(context.Background(), ssSpec)
+	})).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
 	By("Expecting ClusterManager custom resource to be created successfully")

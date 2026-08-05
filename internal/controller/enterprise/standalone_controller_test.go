@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 
 	"fmt"
 
@@ -227,9 +228,15 @@ func UpdateStandalone(instance *enterpriseApi.Standalone, status enterpriseApi.P
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewStandalone(instance.Name, instance.Namespace, "image")
-	ssSpec.ResourceVersion = instance.ResourceVersion
-	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
+	Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current := &enterpriseApi.Standalone{}
+		if err := k8sClient.Get(context.Background(), key, current); err != nil {
+			return err
+		}
+		ssSpec := testutils.NewStandalone(instance.Name, instance.Namespace, "image")
+		ssSpec.ResourceVersion = current.ResourceVersion
+		return k8sClient.Update(context.Background(), ssSpec)
+	})).Should(Succeed())
 
 	By("Expecting Standalone custom resource to be updated successfully")
 	ss := &enterpriseApi.Standalone{}
