@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 
@@ -40,6 +41,7 @@ const (
 	superUsername    = "postgres"
 	postgresPort     = "5432"
 	dbConnectTimeout = 10 * time.Second
+	dbCloseTimeout   = 10 * time.Second
 
 	pgCodeClassInvalidAuthorizationSpecification = "28"
 	pgCodeInsufficientPrivilege                  = "42501"
@@ -64,6 +66,7 @@ type pgRows interface {
 type grantTx interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
 }
 
 type pgxDBConn struct {
@@ -92,22 +95,60 @@ type pgDBRepository struct {
 	conn dbConn
 }
 
+// closeConnection closes a repository-owned connection with a fresh bounded context.
+// Cleanup failures are logged but never replace the primary operation result.
+func (r *pgDBRepository) closeConnection(logCtx context.Context) {
+	closeCtx, cancel := context.WithTimeout(context.Background(), dbCloseTimeout)
+	defer cancel()
+
+	if err := r.conn.close(closeCtx); err != nil {
+		logging.FromContext(logCtx).WarnContext(logCtx,
+			"PostgreSQL connection close failed",
+			"error_category", "connection_close_failed",
+		)
+	}
+}
+
+// rollbackTransaction explicitly aborts a transaction after Begin with a fresh,
+// bounded context. pgx.ErrTxClosed is the expected result when Commit already
+// succeeded; other cleanup failures are logged without masking the primary
+// operation result.
+func rollbackTransaction(logCtx context.Context, tx grantTx) {
+	rollbackCtx, cancel := context.WithTimeout(context.Background(), dbCloseTimeout)
+	defer cancel()
+
+	if err := tx.Rollback(rollbackCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		logging.FromContext(logCtx).WarnContext(logCtx,
+			"PostgreSQL transaction rollback failed",
+			"error_category", "transaction_rollback_failed",
+		)
+	}
+}
+
+// safePostgresOperationError keeps driver errors inside the adapter. Driver error text can include
+// connection details, so callers receive only a safe operation message while terminal failures
+// retain the existing sentinel used for reconciliation classification.
+func safePostgresOperationError(operation string, err error) error {
+	if isTerminalPostgresError(err) {
+		return fmt.Errorf("%w: PostgreSQL %s failed", dbcore.ErrTerminal, operation)
+	}
+	return fmt.Errorf("PostgreSQL %s failed", operation)
+}
+
 // ExecGrants applies all privilege grants needed for the RW role on a single database.
 // GRANT ON ALL TABLES/SEQUENCES covers existing objects; ALTER DEFAULT PRIVILEGES covers
 // future ones created by the admin role (e.g. via migrations).
 func (r *pgDBRepository) ExecGrants(ctx context.Context, dbName string) error {
-	defer r.conn.close(context.Background())
+	defer r.closeConnection(ctx)
 
 	adminRole := dbName + "_admin"
 	rwRole := dbName + "_rw"
 
 	tx, err := r.conn.begin(ctx)
 	if err != nil {
-		if isTerminalPostgresError(err) {
-			return fmt.Errorf("%w: beginning transaction: %w", dbcore.ErrTerminal, err)
-		}
-		return fmt.Errorf("beginning transaction: %w", err)
+		return safePostgresOperationError("grant transaction begin", err)
 	}
+	defer rollbackTransaction(ctx, tx)
 
 	// SQL identifiers cannot be parameterised; dbName is quoted and escaped defensively.
 	// Role names are derived from dbName so carry the same safety guarantee.
@@ -123,18 +164,12 @@ func (r *pgDBRepository) ExecGrants(ctx context.Context, dbName string) error {
 
 	for _, stmt := range stmts {
 		if _, err := tx.Exec(ctx, stmt); err != nil {
-			if isTerminalPostgresError(err) {
-				return fmt.Errorf("%w: executing grant %q: %w", dbcore.ErrTerminal, stmt, err)
-			}
-			return fmt.Errorf("executing grant %q: %w", stmt, err)
+			return safePostgresOperationError("grant execution", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		if isTerminalPostgresError(err) {
-			return fmt.Errorf("%w: committing grants: %w", dbcore.ErrTerminal, err)
-		}
-		return fmt.Errorf("committing grants: %w", err)
+		return safePostgresOperationError("grant transaction commit", err)
 	}
 	return nil
 }
@@ -158,14 +193,12 @@ WHERE rolcanlogin = true
 // All roles are disabled — including managed ones. The ManagedRoles reconciler runs
 // immediately after and re-enables managed roles with fresh credentials.
 // CNPG-owned roles (streaming_replica, cnpg_pooler_pgbouncer) are preserved.
-func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) error {
-	// Close on its own background context: if ctx is already cancelled/timed-out (the very
-	// situations where cleanup matters most), passing it here would abort the close itself.
-	defer r.conn.close(context.Background())
+func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) (int, error) {
+	defer r.closeConnection(ctx)
 
 	rows, err := r.conn.query(ctx, sweepRolesQuery)
 	if err != nil {
-		return fmt.Errorf("querying pg_roles: %w", err)
+		return 0, safePostgresOperationError("role sweep query", err)
 	}
 
 	var toDisable []string
@@ -173,13 +206,13 @@ func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) er
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			rows.Close()
-			return fmt.Errorf("scanning role name: %w", err)
+			return 0, safePostgresOperationError("role sweep query", err)
 		}
 		toDisable = append(toDisable, name)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return fmt.Errorf("iterating pg_roles: %w", err)
+		return 0, safePostgresOperationError("role sweep query", err)
 	}
 	// Release the rows before opening the transaction — pgx allows only one active
 	// operation per connection at a time.
@@ -190,8 +223,9 @@ func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) er
 	// disabled, some still carrying restored credentials).
 	tx, err := r.conn.begin(ctx)
 	if err != nil {
-		return fmt.Errorf("beginning sweep transaction: %w", err)
+		return 0, safePostgresOperationError("role sweep transaction begin", err)
 	}
+	defer rollbackTransaction(ctx, tx)
 
 	for _, name := range toDisable {
 		// PASSWORD NULL is intentional: it wipes the password hash restored from the source
@@ -200,14 +234,14 @@ func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) er
 		// re-provisions managed roles with fresh secrets immediately after.
 		// Identifiers cannot be parameterised — name comes from pg_roles, not user input.
 		if _, err := tx.Exec(ctx, fmt.Sprintf("ALTER ROLE %s NOLOGIN PASSWORD NULL", pgx.Identifier{name}.Sanitize())); err != nil {
-			return fmt.Errorf("disabling role %s: %w", name, err)
+			return 0, safePostgresOperationError("role sweep execution", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("committing sweep: %w", err)
+		return 0, safePostgresOperationError("role sweep transaction commit", err)
 	}
-	return nil
+	return len(toDisable), nil
 }
 
 // openRepository opens a direct superuser connection and wraps it in the pgx adapter.
@@ -226,10 +260,7 @@ func openRepository(ctx context.Context, host, dbName, password string) (*pgDBRe
 
 	conn, err := pgxConnectConfig(ctx, cfg)
 	if err != nil {
-		if isTerminalPostgresError(err) {
-			return nil, fmt.Errorf("%w: connecting to %s/%s: %w", dbcore.ErrTerminal, host, dbName, err)
-		}
-		return nil, fmt.Errorf("connecting to %s/%s: %w", host, dbName, err)
+		return nil, safePostgresOperationError("connection", err)
 	}
 	return &pgDBRepository{conn: pgxDBConn{conn: conn}}, nil
 }

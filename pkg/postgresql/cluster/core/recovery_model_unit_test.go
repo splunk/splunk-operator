@@ -463,7 +463,7 @@ func TestValidateBootstrapFrom(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			errs := validateBootstrapFrom(tt.class, clusterWith(tt.bootstrap))
+			errs := validateBootstrapFrom(clusterWith(tt.bootstrap))
 			if tt.wantField == "" {
 				assert.Empty(t, errs, "expected no errors, got %v", errs)
 				return

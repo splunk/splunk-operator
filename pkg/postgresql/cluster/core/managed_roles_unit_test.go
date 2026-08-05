@@ -16,12 +16,18 @@ limitations under the License.
 package core
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/stretchr/testify/assert"
@@ -533,9 +539,98 @@ func TestManagedRolesNeedsCredentialSweep(t *testing.T) {
 
 type stubRoleSweeperOK struct{ sweepCalled *bool }
 
-func (s *stubRoleSweeperOK) SweepUnmanagedRolesAfterRestore(_ context.Context) error {
+func (s *stubRoleSweeperOK) SweepUnmanagedRolesAfterRestore(_ context.Context) (int, error) {
 	*s.sweepCalled = true
-	return nil
+	return 0, nil
+}
+
+type stubRoleSweeperResult struct {
+	rolesSwept int
+	err        error
+}
+
+func (s stubRoleSweeperResult) SweepUnmanagedRolesAfterRestore(_ context.Context) (int, error) {
+	return s.rolesSwept, s.err
+}
+
+func TestManagedRolesCredentialSweepLogsCompleteOperation(t *testing.T) {
+	tests := []struct {
+		name           string
+		newSweeperErr  error
+		sweepResult    stubRoleSweeperResult
+		wantOutcome    string
+		wantStage      string
+		wantCategory   string
+		wantRolesSwept int
+	}{
+		{
+			name:           "success",
+			sweepResult:    stubRoleSweeperResult{rolesSwept: 3},
+			wantOutcome:    "success",
+			wantRolesSwept: 3,
+		},
+		{
+			name:          "retryable connect failure",
+			newSweeperErr: errors.New("connection failure containing supersecret"),
+			wantOutcome:   "failure",
+			wantStage:     "connect",
+			wantCategory:  "retryable",
+		},
+		{
+			name:         "sweep failure",
+			sweepResult:  stubRoleSweeperResult{err: errors.New("sweep failure containing supersecret")},
+			wantOutcome:  "failure",
+			wantStage:    "sweep",
+			wantCategory: "terminal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var logOutput bytes.Buffer
+			ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(&logOutput, nil)))
+			cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+			contracts := &reconcileContracts{
+				CNPGCluster: &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1"}},
+				Secret:      &corev1.Secret{Data: map[string][]byte{secretKeyPassword: []byte("supersecret")}},
+			}
+			model := &managedRolesModel{
+				cluster:   cluster,
+				contracts: contracts,
+				newRoleSweeper: func(_ context.Context, _, _, _ string) (ports.RoleSweeper, error) {
+					if tt.newSweeperErr != nil {
+						return nil, tt.newSweeperErr
+					}
+					return tt.sweepResult, nil
+				},
+			}
+
+			err := model.runCredentialSweep(ctx)
+
+			if tt.wantOutcome == "success" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				assert.NotContains(t, err.Error(), "supersecret")
+			}
+			assert.NotContains(t, logOutput.String(), "supersecret")
+
+			decoder := json.NewDecoder(&logOutput)
+			var record map[string]any
+			require.NoError(t, decoder.Decode(&record))
+			assert.Equal(t, "pg1-rw.default", record["host"])
+			assert.Equal(t, defaultDatabaseName, record["database"])
+			assert.NotNil(t, record["duration"])
+			assert.Equal(t, tt.wantOutcome, record["outcome"])
+			if tt.wantOutcome == "success" {
+				assert.Equal(t, float64(tt.wantRolesSwept), record["roles_swept"])
+			} else {
+				assert.Equal(t, tt.wantStage, record["failure_stage"])
+				assert.Equal(t, tt.wantCategory, record["error_category"])
+			}
+			assert.ErrorIs(t, decoder.Decode(&record), io.EOF)
+		})
+	}
 }
 
 // TestManagedRolesCredentialSweepSuccess verifies that on a restore-bootstrapped cluster:
@@ -716,8 +811,8 @@ func TestManagedRolesCredentialSweepConnectTerminal(t *testing.T) {
 
 type stubRoleSweeperExecFails struct{}
 
-func (stubRoleSweeperExecFails) SweepUnmanagedRolesAfterRestore(_ context.Context) error {
-	return assert.AnError
+func (stubRoleSweeperExecFails) SweepUnmanagedRolesAfterRestore(_ context.Context) (int, error) {
+	return 0, errors.New("sweep failure containing supersecret")
 }
 
 // TestManagedRolesCredentialSweepExecFails verifies that a failed sweep query surfaces as a
@@ -762,8 +857,11 @@ func TestManagedRolesCredentialSweepExecFails(t *testing.T) {
 	require.ErrorIs(t, reconcileErr, errSweepTerminal)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errSweepTerminal)
+	assert.NotContains(t, reconcileErr.Error(), "supersecret")
+	assert.NotContains(t, err.Error(), "supersecret")
 	assert.Equal(t, pgcConstants.Failed, health.State)
 	assert.Equal(t, reasonManagedRolesFailed, health.Reason)
+	assert.NotContains(t, health.Message, "supersecret")
 
 	// Status must NOT record completion.
 	assert.Nil(t, cluster.Status.Restore)

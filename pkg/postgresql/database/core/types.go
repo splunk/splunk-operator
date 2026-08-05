@@ -71,6 +71,14 @@ const (
 	// Privileges failure handling.
 	reconcileFailurePrivileges = "Privileges"
 
+	// Privilege reconciliation log values.
+	privilegeLogOutcomeSuccess string = "success"
+	privilegeLogOutcomeFailure string = "failure"
+	privilegeLogStageConnect   string = "connect"
+	privilegeLogStageGrant     string = "grant"
+	privilegeLogTerminal       string = "terminal"
+	privilegeLogRetryable      string = "retryable"
+
 	// DB reconcile phases
 	readyDBPhase        reconcileDBPhases = "Ready"
 	pendingDBPhase      reconcileDBPhases = "Pending"
@@ -103,7 +111,6 @@ const (
 	reasonExternalSecretMissingKeys  conditionReasons = "ExternalSecretMissingKeys"
 	reasonExternalSecretMissingLabel conditionReasons = "ExternalSecretMissingReloadLabel"
 	reasonWaitingForCNPG             conditionReasons = "WaitingForCNPG"
-	reasonRolesCreationFailed        conditionReasons = "RolesCreationFailed"
 	reasonRolesAvailable             conditionReasons = "RolesAvailable"
 	reasonRoleConflict               conditionReasons = "RoleConflict"
 	reasonRoleReconcileFailed        conditionReasons = "RoleReconcileFailed"
@@ -115,8 +122,6 @@ const (
 	reasonPrivilegesGranted          conditionReasons = "PrivilegesGranted"
 	reasonPrivilegesGrantFailed      conditionReasons = "PrivilegesGrantFailed"
 	reasonPrivilegesTerminalFailure  conditionReasons = "PrivilegesTerminalFailure"
-	reasonCustomMetricsReady         conditionReasons = "CustomMetricsReady"
-	reasonCustomMetricsDisabled      conditionReasons = "CustomMetricsDisabled"
 	reasonCustomMetricsPending       conditionReasons = "CustomMetricsPending"
 	reasonCustomMetricsFailed        conditionReasons = "CustomMetricsFailed"
 	cnpgReasonRecovery               conditionReasons = "CNPGClusterRecovery"

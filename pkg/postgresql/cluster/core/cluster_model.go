@@ -541,7 +541,7 @@ func ValidateCrossResource(class *enterprisev4.PostgresClusterClass, cluster *en
 		})
 	}
 
-	errs = append(errs, validateBootstrapFrom(class, cluster)...)
+	errs = append(errs, validateBootstrapFrom(cluster)...)
 
 	return errs
 }
@@ -550,7 +550,7 @@ func ValidateCrossResource(class *enterprisev4.PostgresClusterClass, cluster *en
 // that CEL on a single type cannot express: exactly one source, the walArchive-required-for-PITR
 // coupling, and the requirement that a WAL/object-store source has a class object store to resolve
 // bucket path and credentials from.
-func validateBootstrapFrom(class *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) []ConfigValidationError {
+func validateBootstrapFrom(cluster *enterprisev4.PostgresCluster) []ConfigValidationError {
 	b := cluster.Spec.BootstrapFrom
 	if b == nil {
 		return nil

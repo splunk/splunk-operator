@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -134,20 +135,54 @@ func (m *managedRolesModel) needsCredentialSweep() bool {
 //   - success → nil. Observe detects the completed sweep (needsCredentialSweep still true because
 //     status is not yet written) and records status.Restore, then requeues to re-enable roles.
 func (m *managedRolesModel) runCredentialSweep(ctx context.Context) error {
+	started := time.Now()
 	pw := string(m.contracts.Secret.Data[secretKeyPassword])
 	rwHost := fmt.Sprintf("%s-rw.%s", m.contracts.CNPGCluster.Name, m.cluster.Namespace)
+	logger := logging.FromContext(ctx)
 
 	repo, err := m.newRoleSweeper(ctx, rwHost, defaultDatabaseName, pw)
 	if err != nil {
 		if errors.Is(err, ports.ErrSweeperConnectTerminal) {
-			return fmt.Errorf("%w: %w", errSweepTerminal, err)
+			logger.ErrorContext(ctx, "PostgreSQL post-restore credential sweep failed",
+				"host", rwHost,
+				"database", defaultDatabaseName,
+				"duration", time.Since(started),
+				"outcome", credentialSweepLogOutcomeFailure,
+				"failure_stage", credentialSweepLogStageConnect,
+				"error_category", credentialSweepLogTerminal,
+			)
+			return errSweepTerminal
 		}
-		return fmt.Errorf("%w: %w", errSweepConnect, err)
+		logger.ErrorContext(ctx, "PostgreSQL post-restore credential sweep failed",
+			"host", rwHost,
+			"database", defaultDatabaseName,
+			"duration", time.Since(started),
+			"outcome", credentialSweepLogOutcomeFailure,
+			"failure_stage", credentialSweepLogStageConnect,
+			"error_category", credentialSweepLogRetryable,
+		)
+		return errSweepConnect
 	}
 
-	if err := repo.SweepUnmanagedRolesAfterRestore(ctx); err != nil {
-		return fmt.Errorf("%w: %w", errSweepTerminal, err)
+	rolesSwept, err := repo.SweepUnmanagedRolesAfterRestore(ctx)
+	if err != nil {
+		logger.ErrorContext(ctx, "PostgreSQL post-restore credential sweep failed",
+			"host", rwHost,
+			"database", defaultDatabaseName,
+			"duration", time.Since(started),
+			"outcome", credentialSweepLogOutcomeFailure,
+			"failure_stage", credentialSweepLogStageSweep,
+			"error_category", credentialSweepLogTerminal,
+		)
+		return errSweepTerminal
 	}
+	logger.InfoContext(ctx, "PostgreSQL post-restore credential sweep completed",
+		"host", rwHost,
+		"database", defaultDatabaseName,
+		"duration", time.Since(started),
+		"outcome", credentialSweepLogOutcomeSuccess,
+		"roles_swept", rolesSwept,
+	)
 	return nil
 }
 
@@ -170,10 +205,10 @@ func (m *managedRolesModel) computeHealth(reconcileErr error) (componentHealth, 
 		return h, nil
 	}
 	// A terminal sweep failure (terminal connect or failed role disable) is not recoverable by
-	// retrying — surface Failed with the wrapped cause.
+	// retrying — surface Failed without exposing the driver cause.
 	if errors.Is(reconcileErr, errSweepTerminal) {
 		m.events.emitWarning(m.cluster, EventUnmanagedRolesSweepFailed, fmt.Sprintf("failed to sweep unmanaged roles for PostgresCluster %s — check operator logs", m.cluster.Name))
-		return newFailedHealth(managedRolesReady, reasonManagedRolesFailed, fmt.Sprintf("Failed to sweep unmanaged roles: %v", reconcileErr)), reconcileErr
+		return newFailedHealth(managedRolesReady, reasonManagedRolesFailed, "Failed to sweep unmanaged roles; check operator logs"), reconcileErr
 	}
 
 	if errors.Is(reconcileErr, errDatabaseListUnavailable) {
