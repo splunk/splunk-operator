@@ -93,10 +93,8 @@ func init() {
 		fmt.Sprintf("remote_queue.sqs_smartbus.endpoint = %s", sqsEndpoint),
 		fmt.Sprintf("remote_queue.sqs_smartbus.large_message_store.endpoint = %s", s3Endpoint),
 		fmt.Sprintf("remote_queue.sqs_smartbus.large_message_store.path = s3://%s", s3BucketPath),
-		"remote_queue.sqs_smartbus.retry_policy = max_count",
-		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4",
 	}
-	outputs = append(inputs, "remote_queue.sqs_smartbus.encoding_format = s2s", "remote_queue.sqs_smartbus.send_interval = 5s")
+	outputs = inputs
 
 	defaultsAll = []string{
 		"[pipeline:remotequeueruleset]\ndisabled = false",
@@ -119,10 +117,8 @@ func init() {
 		fmt.Sprintf("[remote_queue:%s]", sqsQueueName),
 		fmt.Sprintf("remote_queue.sqs_smartbus.dead_letter_queue.name = %s", sqsDLQName),
 		fmt.Sprintf("remote_queue.sqs_smartbus.large_message_store.path = s3://%s", s3BucketPath),
-		"remote_queue.sqs_smartbus.retry_policy = max_count",
-		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4",
 	}
-	outputsShouldNotContain = append(inputs, "remote_queue.sqs_smartbus.send_interval = 5s")
+	outputsShouldNotContain = inputs
 }
 
 // TestIndexIngestionSeparation is the main entry point

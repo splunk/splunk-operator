@@ -107,10 +107,8 @@ func (b *sqsConfBuilder) s3Path() string {
 func (b *sqsConfBuilder) baseFields() common.StanzaFields {
 	pk := b.providerKey()
 	fields := common.StanzaFields{
-		"remote_queue.type":                                      pk,
-		"remote_queue." + pk + ".auth_region":                    b.sqs.AuthRegion,
-		"remote_queue." + pk + ".retry_policy":                   "max_count",
-		"remote_queue." + pk + ".max_count.max_retries_per_part": "4",
+		"remote_queue.type":                   pk,
+		"remote_queue." + pk + ".auth_region": b.sqs.AuthRegion,
 	}
 	if b.sqs.Endpoint != "" {
 		fields["remote_queue."+pk+".endpoint"] = b.sqs.Endpoint
@@ -119,14 +117,21 @@ func (b *sqsConfBuilder) baseFields() common.StanzaFields {
 		fields["remote_queue."+pk+".large_message_store.endpoint"] = b.s3.Endpoint
 	}
 	fields["remote_queue."+pk+".large_message_store.path"] = b.s3Path()
+	if b.s3.EncryptionScheme != nil {
+		scheme := *b.s3.EncryptionScheme
+		fields["remote_queue."+pk+".large_message_store.encryption_scheme"] = scheme
+		if b.s3.KMSEndpoint != nil {
+			fields["remote_queue."+pk+".large_message_store.kms_endpoint"] = *b.s3.KMSEndpoint
+		}
+		if b.s3.KMSKeyID != nil {
+			fields["remote_queue."+pk+".large_message_store.key_id"] = *b.s3.KMSKeyID
+		}
+	}
 	return fields
 }
 
 func (b *sqsConfBuilder) BuildOutputsConf() common.ConfFileEntry {
 	fields := b.baseFields()
-	pk := b.providerKey()
-	fields["remote_queue."+pk+".encoding_format"] = "s2s"
-	fields["remote_queue."+pk+".send_interval"] = "5s"
 
 	return common.ConfFileEntry{
 		ConfFileName: "outputs",

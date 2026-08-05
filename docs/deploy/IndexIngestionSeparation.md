@@ -802,15 +802,11 @@ disabled = true
     
 sh-4.4$ cat /opt/splunk/etc/apps/100-sok/local/outputs.conf 
 [remote_queue:sqs-test]
-remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
 remote_queue.sqs_smartbus.dead_letter_queue.name = sqs-dlq-test
-remote_queue.sqs_smartbus.encoding_format = s2s
 remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.path = s3://ingestion/smartbus-test
-remote_queue.sqs_smartbus.retry_policy = max_count
-remote_queue.sqs_smartbus.send_interval = 5s
 remote_queue.type = sqs_smartbus
 ```
 
@@ -878,25 +874,19 @@ sh-4.4$ cat /opt/splunk/etc/apps/100-sok/local/inputs.conf
 disabled = 0
 
 [remote_queue:sqs-test]
-remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
 remote_queue.sqs_smartbus.dead_letter_queue.name = sqs-dlq-test
 remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.path = s3://ingestion/smartbus-test
-remote_queue.sqs_smartbus.retry_policy = max_count
 remote_queue.type = sqs_smartbus
 sh-4.4$ cat /opt/splunk/etc/apps/100-sok/local/outputs.conf 
 [remote_queue:sqs-test]
-remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
 remote_queue.sqs_smartbus.dead_letter_queue.name = sqs-dlq-test
-remote_queue.sqs_smartbus.encoding_format = s2s
 remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.path = s3://ingestion/smartbus-test
-remote_queue.sqs_smartbus.retry_policy = max_count
-remote_queue.sqs_smartbus.send_interval = 5s
 remote_queue.type = sqs_smartbus
 sh-4.4$ cat /opt/splunk/etc/apps/100-sok/local/default-mode.conf 
 [pipeline:remotequeueruleset]

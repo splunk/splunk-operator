@@ -64,9 +64,26 @@ spec:
               s3:
                 description: s3 specific inputs
                 properties:
+                  encryptionScheme:
+                    description: The encryption scheme used by remote storage.
+                    enum:
+                    - sse-s3
+                    - sse-c
+                    - none
+                    type: string
                   endpoint:
                     description: S3-compatible Service endpoint
                     pattern: ^https?://[^\s/$.?#].[^\s]*$
+                    type: string
+                  kmsEndpoint:
+                    description: The endpoint to connect to for generating KMS keys.
+                      Required when encryptionScheme is sse-c.
+                    pattern: ^https?://[^\s/$.?#].[^\s]*$
+                    type: string
+                  kmsKeyId:
+                    description: The ID for the primary key that KMS uses to generate
+                      a data key pair. Required when encryptionScheme is sse-c.
+                    pattern: ^(arn:aws[-a-z]*:kms:[a-z0-9-]+:[0-9]{12}:(key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|key/mrk-[0-9a-f]{32}|alias/[a-zA-Z0-9/_-]+)|alias/[a-zA-Z0-9/_-]+|mrk-[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$
                     type: string
                   path:
                     description: S3 bucket path
@@ -75,6 +92,10 @@ spec:
                 required:
                 - path
                 type: object
+                x-kubernetes-validations:
+                - message: kmsKeyId is required when encryptionScheme is sse-c
+                  rule: '!has(self.encryptionScheme) || self.encryptionScheme != ''sse-c''
+                    || has(self.kmsKeyId)'
             required:
             - provider
             - s3

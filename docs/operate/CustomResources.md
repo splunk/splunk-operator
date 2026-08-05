@@ -427,7 +427,10 @@ S3 object storage inputs can be found in the table below.
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
-| endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
+| endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint |
+| encryptionScheme | string | [Optional] Encryption scheme used by remote storage. Allowed values: `sse-s3`, `sse-c`, `none` |
+| kmsEndpoint | string | [Optional] KMS endpoint for generating data keys. Required when `encryptionScheme` is `sse-c`; auto-derived from region if not provided |
+| kmsKeyId | string | [Optional] ID of the primary KMS key (UUID, alias, or ARN). Required when `encryptionScheme` is `sse-c` |
 
 Change of any of the object storage inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 

@@ -75,3 +75,55 @@ func TestResolveS3EndpointUsesRegionParam(t *testing.T) {
 		t.Errorf("ResolveS3Endpoint(%q) = %q, expected it to contain the region", region, got)
 	}
 }
+
+func TestResolveKMSEndpoint(t *testing.T) {
+	ctx := context.TODO()
+	cases := []struct {
+		name    string
+		region  string
+		want    string
+		wantErr bool
+	}{
+		{"us-west-2", "us-west-2", "https://kms.us-west-2.amazonaws.com", false},
+		{"us-east-1", "us-east-1", "https://kms.us-east-1.amazonaws.com", false},
+		{"eu-central-1", "eu-central-1", "https://kms.eu-central-1.amazonaws.com", false},
+		{"empty region", "", "", true},
+		{"invalid chars", "invalid_region!", "", true},
+		{"space in region", "gov cloud", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := storageaws.ResolveKMSEndpoint(ctx, tc.region)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("ResolveKMSEndpoint(%q) = %q, want an error", tc.region, got)
+				}
+				if got != "" {
+					t.Errorf("ResolveKMSEndpoint(%q) returned endpoint %q on error, want empty string", tc.region, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("ResolveKMSEndpoint(%q) returned unexpected error: %v", tc.region, err)
+				return
+			}
+			if got != tc.want {
+				t.Errorf("ResolveKMSEndpoint(%q) = %q, want %q", tc.region, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestResolveKMSEndpointUsesRegionParam verifies the endpoint is derived from the
+// region argument passed to the function, not from ambient AWS configuration.
+func TestResolveKMSEndpointUsesRegionParam(t *testing.T) {
+	ctx := context.TODO()
+	const region = "ca-central-1"
+	got, err := storageaws.ResolveKMSEndpoint(ctx, region)
+	if err != nil {
+		t.Fatalf("ResolveKMSEndpoint(%q) returned unexpected error: %v", region, err)
+	}
+	if !strings.Contains(got, region) {
+		t.Errorf("ResolveKMSEndpoint(%q) = %q, expected it to contain the region", region, got)
+	}
+}
