@@ -27,7 +27,8 @@ type RoleSweeper interface {
 	// CNPG restores password hashes verbatim, so without this step all pre-restore credentials
 	// would still work. The ManagedRoles reconciler runs immediately after and re-enables only
 	// the roles declared by PostgresDatabase CRs, with fresh credentials.
-	SweepUnmanagedRolesAfterRestore(ctx context.Context) error
+	// It returns the number of roles whose login was disabled after the transaction commits.
+	SweepUnmanagedRolesAfterRestore(ctx context.Context) (int, error)
 }
 
 // NewRoleSweeperFunc constructs a RoleSweeper for a direct superuser connection.

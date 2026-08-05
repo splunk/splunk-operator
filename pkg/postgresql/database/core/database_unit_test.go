@@ -24,15 +24,20 @@ package core
 // - deleteRemovedResources
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 	"unicode"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
@@ -650,8 +655,8 @@ func TestReconcileRWRolePrivileges(t *testing.T) {
 				"audit":     {"audit"},
 			},
 			wantErrContains: []string{
-				"database payments: connect failed",
-				"database analytics: grant failed",
+				"connecting on database payments failed",
+				"granting RW privileges on database analytics failed",
 			},
 		},
 	}
@@ -692,6 +697,65 @@ func TestReconcileRWRolePrivileges(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReconcileRWRolePrivilegesLogsCompleteOperationWithoutCredentials(t *testing.T) {
+	var logOutput bytes.Buffer
+	ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(&logOutput, nil)))
+	terminalErr := fmt.Errorf("%w: authentication error containing supersecret", ErrTerminal)
+	retryableGrantErr := errors.New("grant failure containing supersecret")
+	newDBRepo := func(_ context.Context, _, dbName, _ string) (DBRepo, error) {
+		if dbName == "analytics" {
+			return nil, terminalErr
+		}
+		if dbName == "audit" {
+			return &stubDBRepo{execErr: retryableGrantErr}, nil
+		}
+		return &stubDBRepo{}, nil
+	}
+
+	err := reconcileRWRolePrivileges(ctx, "rw.example.internal", "supersecret", []string{"payments", "analytics", "audit"}, newDBRepo)
+
+	require.ErrorIs(t, err, ErrTerminal)
+	assert.NotErrorIs(t, err, terminalErr)
+	assert.NotErrorIs(t, err, retryableGrantErr)
+	assert.NotContains(t, err.Error(), "supersecret")
+	assert.NotContains(t, logOutput.String(), "supersecret")
+
+	decoder := json.NewDecoder(&logOutput)
+	var records []map[string]any
+	for {
+		var record map[string]any
+		if err := decoder.Decode(&record); err == io.EOF {
+			break
+		} else {
+			require.NoError(t, err)
+		}
+		records = append(records, record)
+	}
+	require.Len(t, records, 3)
+
+	assert.Equal(t, "PostgreSQL privilege reconciliation completed", records[0]["msg"])
+	assert.Equal(t, "rw.example.internal", records[0]["host"])
+	assert.Equal(t, "payments", records[0]["database"])
+	assert.NotNil(t, records[0]["duration"])
+	assert.Equal(t, "success", records[0]["outcome"])
+
+	assert.Equal(t, "PostgreSQL privilege reconciliation failed", records[1]["msg"])
+	assert.Equal(t, "rw.example.internal", records[1]["host"])
+	assert.Equal(t, "analytics", records[1]["database"])
+	assert.NotNil(t, records[1]["duration"])
+	assert.Equal(t, "failure", records[1]["outcome"])
+	assert.Equal(t, "connect", records[1]["failure_stage"])
+	assert.Equal(t, "terminal", records[1]["error_category"])
+
+	assert.Equal(t, "PostgreSQL privilege reconciliation failed", records[2]["msg"])
+	assert.Equal(t, "rw.example.internal", records[2]["host"])
+	assert.Equal(t, "audit", records[2]["database"])
+	assert.NotNil(t, records[2]["duration"])
+	assert.Equal(t, "failure", records[2]["outcome"])
+	assert.Equal(t, "grant", records[2]["failure_stage"])
+	assert.Equal(t, "retryable", records[2]["error_category"])
 }
 
 func TestGetClusterReadyStatus(t *testing.T) {
@@ -1013,9 +1077,6 @@ func TestReconcileCustomMetricsGateMapsAPIState(t *testing.T) {
 			DatabaseName:         "orders",
 			Namespace:            namespace,
 		},
-		Revision:  ordersRevision,
-		Exists:    true,
-		Selectors: []mtypes.QuerySelector{querySelector},
 	}
 	require.Len(t, repository.identities, 1)
 	assert.Equal(t, ordersContribution.Identity, repository.identities[0])
@@ -3322,6 +3383,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		wantRepoCalls                int
 		wantErr                      bool
 		wantErrContains              []string
+		wantErrExcludes              []string
 		statusUpdateErrOnReason      conditionReasons
 		statusUpdateConflictOnReason conditionReasons
 		wantResult                   ctrl.Result
@@ -3337,11 +3399,13 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		wantProvisioningObservations *int
 	}{
 		{
-			name:                     "retryable privileges error stays provisioning",
-			generation:               7,
-			databases:                []enterprisev4.DatabaseDefinition{{Name: "payments"}},
-			statusPhase:              strPtr(string(readyDBPhase)),
-			newDBRepo:                failingGrantRepoFunc("payments"),
+			name:        "retryable privileges error stays provisioning",
+			generation:  7,
+			databases:   []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			statusPhase: strPtr(string(readyDBPhase)),
+			newDBRepo: func(_ context.Context, _, _, _ string) (DBRepo, error) {
+				return &stubDBRepo{execErr: errors.New("grant failure containing supersecret")}, nil
+			},
 			wantErr:                  true,
 			wantFailureFieldsCleared: true,
 			wantPhase:                provisioningDBPhase,
@@ -3349,6 +3413,8 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantConditionMessageContains: []string{
 				"Will retry automatically",
 			},
+			wantConditionMessageExcludes: []string{"supersecret"},
+			wantErrExcludes:              []string{"supersecret"},
 		},
 		{
 			name:                         "provisioning blocker after routine update records one duration on recovery",
@@ -3609,7 +3675,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantErr:                 true,
 			statusUpdateErrOnReason: reasonPrivilegesGrantFailed,
 			wantErrContains: []string{
-				"grant failed for payments",
+				"granting RW privileges on database payments failed",
 				"failed to persist privileges status",
 				"apiserver timeout",
 			},
@@ -3632,7 +3698,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantErr:                 true,
 			statusUpdateErrOnReason: reasonPrivilegesTerminalFailure,
 			wantErrContains: []string{
-				"password authentication failed",
+				"connecting on database payments failed",
 				"failed to persist terminal privileges status",
 				"apiserver timeout",
 			},
@@ -3727,6 +3793,9 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 				require.Error(t, err)
 				for _, wantErr := range tst.wantErrContains {
 					assert.Contains(t, err.Error(), wantErr)
+				}
+				for _, unwantedErr := range tst.wantErrExcludes {
+					assert.NotContains(t, err.Error(), unwantedErr)
 				}
 			} else {
 				require.NoError(t, err)

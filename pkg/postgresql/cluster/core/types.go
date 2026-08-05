@@ -219,6 +219,14 @@ const (
 	configMapsReady    conditionTypes = "ConfigMapsReady"
 	customMetricsReady conditionTypes = "CustomMetricsReady"
 
+	// credential-sweep log values
+	credentialSweepLogOutcomeSuccess string = "success"
+	credentialSweepLogOutcomeFailure string = "failure"
+	credentialSweepLogStageConnect   string = "connect"
+	credentialSweepLogStageSweep     string = "sweep"
+	credentialSweepLogTerminal       string = "terminal"
+	credentialSweepLogRetryable      string = "retryable"
+
 	// condition reasons — cross-component
 	reasonUpstreamNotReady conditionReasons = "UpstreamNotReady"
 
@@ -265,12 +273,11 @@ const (
 	reasonAllInstancesReady          conditionReasons = "AllInstancesReady"
 
 	// condition reasons — backupReady
-	reasonBackupDisabled              conditionReasons = "BackupDisabled"
-	reasonBackupConfigured            conditionReasons = "BackupConfigured"
-	reasonBackupVolumeSnapshotMissing conditionReasons = "BackupVolumeSnapshotMissing"
-	reasonBackupProviderMissing       conditionReasons = "BackupProviderMissing"
-	reasonScheduledBackupCreated      conditionReasons = "ScheduledBackupCreated"
-	reasonScheduledBackupFailed       conditionReasons = "ScheduledBackupFailed"
+	reasonBackupDisabled         conditionReasons = "BackupDisabled"
+	reasonBackupConfigured       conditionReasons = "BackupConfigured"
+	reasonBackupProviderMissing  conditionReasons = "BackupProviderMissing"
+	reasonScheduledBackupCreated conditionReasons = "ScheduledBackupCreated"
+	reasonScheduledBackupFailed  conditionReasons = "ScheduledBackupFailed"
 
 	// condition reasons — objectStoreReady
 	reasonObjectStoreDisabled        conditionReasons = "ObjectStoreDisabled"
@@ -283,7 +290,6 @@ const (
 	reasonCustomMetricsInvalidQuery        conditionReasons = "InvalidQueryDefinition"
 	reasonCustomMetricsMetricNameCollision conditionReasons = "MetricNameCollision"
 	reasonCustomMetricsConfigTooLarge      conditionReasons = "CustomMetricsConfigTooLarge"
-	reasonCustomMetricsTranslationFailed   conditionReasons = "CustomMetricsTranslationFailed"
 	reasonCustomMetricsApplyFailed         conditionReasons = "CustomMetricsApplyFailed"
 	reasonCustomMetricsApplyRetrying       conditionReasons = "CustomMetricsApplyRetrying"
 	reasonCustomMetricsConfiguring         conditionReasons = "CustomMetricsConfiguring"
@@ -314,7 +320,6 @@ const (
 	msgCNPGPendingCreation           statusMessage = "CNPG cluster is pending creation"
 	msgFmtCNPGProvisioning           statusMessage = "CNPG cluster provisioning: %s"
 	msgCNPGSwitchover                statusMessage = "Cluster changing primary node"
-	msgCNPGFailingOver               statusMessage = "Pod missing, need to change primary"
 	msgFmtCNPGRestarting             statusMessage = "CNPG cluster restarting: %s"
 	msgFmtCNPGUpgrading              statusMessage = "CNPG cluster upgrading: %s"
 	msgCNPGApplyingConfiguration     statusMessage = "Configuration change is being applied"
@@ -332,10 +337,8 @@ const (
 	msgFmtCNPGStorageResizing        statusMessage = "Resizing storage: %d/%d PVCs pending"
 
 	// status messages — backup
-	msgBackupDisabled              statusMessage = "Backup is not enabled"
-	msgBackupVolumeSnapshotMissing statusMessage = "Backup enabled but cnpg.backup.volumeSnapshot is not configured in the class"
-	msgScheduledBackupReady        statusMessage = "Scheduled backup is configured and active"
-	msgFmtScheduledBackupFailed    statusMessage = "Failed to reconcile scheduled backup: %v"
+	msgBackupDisabled       statusMessage = "Backup is not enabled"
+	msgScheduledBackupReady statusMessage = "Scheduled backup is configured and active"
 
 	msgCustomMetricsReady                statusMessage = "Custom metrics are configured and applied"
 	msgCustomMetricsDisabled             statusMessage = "No custom metrics configured"
@@ -358,7 +361,6 @@ const (
 	msgFmtPoolerTLSLeafInvalidCert    statusMessage = "Server TLS secret %s/%s cannot be parsed; see operator logs"
 	msgPoolersReady                   statusMessage = "Connection poolers are ready"
 	msgConfigMapRefNotPublished       statusMessage = "ConfigMap reference not published yet"
-	msgConfigMapNotFoundYet           statusMessage = "ConfigMap not found yet"
 	msgConfigMapCAMetadataPending     statusMessage = "Waiting for CA metadata in access ConfigMap"
 	msgFmtConfigMapMissingRequiredKey statusMessage = "ConfigMap missing required key %q"
 	msgAccessConfigMapReady           statusMessage = "Access ConfigMap is ready"

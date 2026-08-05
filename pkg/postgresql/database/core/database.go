@@ -463,7 +463,7 @@ func PostgresDatabaseService(
 		if err := reconcileRWRolePrivileges(ctx, endpoints.RWHost, string(pw), dbNames, newDBRepo); err != nil {
 			if failureType, ok := terminalFailureType(err); ok {
 				upsertFailureState(postgresDB, failureType)
-				logger.ErrorContext(ctx, "RW role privileges grant failed terminally", "error", err)
+				logger.ErrorContext(ctx, "RW role privileges grant failed terminally", "error_category", "terminal")
 				msg := "Failed to grant RW role privileges. Manual intervention required: " +
 					"fix the PostgresDatabase spec or referenced configuration, then redeploy with a spec change."
 				eventMsg := fmt.Sprintf("Failed to grant RW role privileges for PostgresDatabase %s. Manual intervention required: "+
@@ -482,9 +482,7 @@ func PostgresDatabaseService(
 				return ctrl.Result{}, nil
 			}
 
-			msg := fmt.Sprintf(
-				"Failed to grant RW role privileges: %v. Will retry automatically.", err,
-			)
+			msg := "Failed to grant RW role privileges. Will retry automatically; check operator logs for details."
 			eventMsg := fmt.Sprintf("failed to grant RW role privileges for PostgresDatabase %s — check operator logs", postgresDB.Name)
 			rc.emitWarning(postgresDB, EventPrivilegesGrantFailed, eventMsg)
 			if statusErr := updateStatus(privilegesReady, metav1.ConditionFalse, reasonPrivilegesGrantFailed,
@@ -570,21 +568,60 @@ func reconcileRWRolePrivileges(
 	dbNames []string,
 	newDBRepo NewDBRepoFunc,
 ) error {
-	logger := logging.FromContext(ctx)
 	var errs []error
+	logger := logging.FromContext(ctx)
 	for _, dbName := range dbNames {
+		started := time.Now()
 		repo, err := newDBRepo(ctx, rwHost, dbName, superPassword)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("connecting to database %s: %w", dbName, err))
+			errorCategory := privilegeLogRetryable
+			if stderrors.Is(err, ErrTerminal) {
+				errorCategory = privilegeLogTerminal
+			}
+			logger.ErrorContext(ctx, "PostgreSQL privilege reconciliation failed",
+				"host", rwHost,
+				"database", dbName,
+				"duration", time.Since(started),
+				"outcome", privilegeLogOutcomeFailure,
+				"failure_stage", privilegeLogStageConnect,
+				"error_category", errorCategory,
+			)
+			errs = append(errs, safePrivilegeOperationError("connecting", dbName, err))
 			continue
 		}
 		if err := repo.ExecGrants(ctx, dbName); err != nil {
-			errs = append(errs, fmt.Errorf("granting RW privileges on database %s: %w", dbName, err))
+			errorCategory := privilegeLogRetryable
+			if stderrors.Is(err, ErrTerminal) {
+				errorCategory = privilegeLogTerminal
+			}
+			logger.ErrorContext(ctx, "PostgreSQL privilege reconciliation failed",
+				"host", rwHost,
+				"database", dbName,
+				"duration", time.Since(started),
+				"outcome", privilegeLogOutcomeFailure,
+				"failure_stage", privilegeLogStageGrant,
+				"error_category", errorCategory,
+			)
+			errs = append(errs, safePrivilegeOperationError("granting RW privileges", dbName, err))
 			continue
 		}
-		logger.InfoContext(ctx, "RW role privileges granted", "database", dbName, "rwRole", rwRoleName(dbName))
+		logger.InfoContext(ctx, "PostgreSQL privilege reconciliation completed",
+			"host", rwHost,
+			"database", dbName,
+			"duration", time.Since(started),
+			"outcome", privilegeLogOutcomeSuccess,
+		)
 	}
 	return stderrors.Join(errs...)
+}
+
+// safePrivilegeOperationError prevents adapter error text from reaching controller logs or
+// status while preserving the terminal marker that controls retry behavior.
+func safePrivilegeOperationError(operation, dbName string, err error) error {
+	if stderrors.Is(err, ErrTerminal) {
+		return fmt.Errorf("%w: %s on database %s failed", ErrTerminal, operation, dbName)
+	}
+	return fmt.Errorf("%s on database %s failed", operation, dbName)
 }
 
 func fetchCluster(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase) (*enterprisev4.PostgresCluster, error) {
