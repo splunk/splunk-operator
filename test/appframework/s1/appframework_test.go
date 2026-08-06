@@ -149,6 +149,12 @@ var _ = Describe("s1appfw test", func() {
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
+			// Snapshot ObjectHashes for the currently-installed (V1) apps before uploading V2,
+			// since a newly-added app (e.g. TA-LDAP in appListV2) has no recorded hash yet and
+			// would fail the snapshot if captured against the V2 list.
+			oldHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot app object hashes before upgrade")
+
 			// Upload V2 apps to S3 for Standalone and Monitoring Console
 			appVersion = "V2"
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
@@ -158,9 +164,8 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
-
+			// Wait for the operator to pick up the new content (ObjectHash flip) and reinstall (Status==303)
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, oldHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Standalone")
 			// Wait for Standalone to be in READY status
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -267,13 +272,16 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 			appFileList = testenv.GetAppFileList(appListV1)
 
+			// Snapshot ObjectHashes while V2 is still installed so we can detect the hash flip after upload
+			oldHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot app object hashes before downgrade")
+
 			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
-
+			// Wait for the operator to pick up the new content (ObjectHash flip) and reinstall (Status==303)
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, oldHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Standalone")
 			// Wait for Standalone to be in READY status
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -561,8 +569,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Wait for Standalone to be in READY status
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -671,8 +678,7 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Wait for Standalone to be in READY status
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -857,9 +863,10 @@ var _ = Describe("s1appfw test", func() {
 
 			testcaseEnvInst.Log.Info("Step: Wait for Phase Change")
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
-
+			// Check for changes in App phase to determine if next poll has been triggered.
+			// Best-effort: manual poll has not been enabled yet at this point, so a phase
+			// change is not guaranteed to be observable here.
+			_ = testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, testenv.BestEffortProbeTimeout)
 			testcaseEnvInst.Log.Info("Step: Standalone Ready")
 
 			// Wait for Standalone to be in READY status
@@ -1350,8 +1357,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileName)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileName, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Wait for Standalone to be in READY status
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1483,9 +1489,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
-
+			// With invalid credentials the operator cannot list the app source, so there may be
+			// no phase transition — ignore the error here. The point of this section is the
+			// VerifyAppFrameworkState assertion below: that no apps were updated.
+			_ = testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, testenv.BestEffortProbeTimeout)
 			// Check no apps are updated as auth key is incorrect
 			_, err = testcaseEnvInst.VerifyAppFrameworkState(ctx, deployment, allAppSourceInfo, splunkPodUIDs, "")
 			Expect(err).To(Succeed(), "Failed to verify app framework state")
@@ -1496,8 +1503,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Wait for Standalone to be in READY status
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)
@@ -1587,8 +1593,7 @@ var _ = Describe("s1appfw test", func() {
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
-
+			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), standalone.Kind, appSourceName, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Wait for Standalone to be in READY status
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyStandaloneReady(ctx, deployment, deployment.GetName(), standalone)

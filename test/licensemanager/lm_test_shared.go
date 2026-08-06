@@ -162,7 +162,7 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	uploadedApps = append(uploadedApps, uploadedFiles...)
 
 	// Wait for operator to detect V2 apps (any app leaves Install phase)
-	testcaseEnvInst.WaitforPhaseChange(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appFileList)
+	Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 
 	// Wait for License Manager/Master to finish processing V2 apps and become Ready
 	Eventually(func() error { return config.LicenseManagerReady(ctx, deployment, testcaseEnvInst) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready after V2 upload")
