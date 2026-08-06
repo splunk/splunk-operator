@@ -661,6 +661,11 @@ func (ppln *AppInstallPipeline) downloadPhaseManager(ctx context.Context) {
 downloadPhase:
 	for {
 		select {
+		case <-ctx.Done():
+			// Stop scheduling/waiting on new download work immediately so the
+			// operator pod doesn't hold S3 connections open past shutdown.
+			scopedLog.Info("Context cancelled, stopping download phase manager")
+			break downloadPhase
 		case _, channelOpen := <-ppln.sigTerm:
 			if !channelOpen {
 				scopedLog.InfoContext(ctx, "received the termination request from the scheduler")
@@ -1120,6 +1125,9 @@ func (ppln *AppInstallPipeline) podCopyPhaseManager(ctx context.Context) {
 podCopyPhase:
 	for {
 		select {
+		case <-ctx.Done():
+			scopedLog.Info("Context cancelled, stopping pod copy phase manager")
+			break podCopyPhase
 		case _, channelOpen := <-ppln.sigTerm:
 			if !channelOpen {
 				scopedLog.InfoContext(ctx, "received the termination request from the scheduler")
@@ -1301,6 +1309,13 @@ installHandler:
 	}
 
 	for {
+		select {
+		case <-ctx.Done():
+			scopedLog.InfoContext(ctx, "context cancelled, skipping cluster scoped playbook loop")
+			goto clusterScopeDone
+		default:
+		}
+
 		if needToRunClusterScopedPlaybook(ppln) {
 			targetPodName := getApplicablePodNameForAppFramework(ppln.cr, 0)
 			podExecClient := splutil.GetPodExecClient(ppln.client, ppln.cr, targetPodName)
@@ -1319,6 +1334,7 @@ installHandler:
 		// Sleep for a second before retry
 		time.Sleep(phaseManagerBusyWaitDuration)
 	}
+clusterScopeDone:
 
 	// Wait for all the workers to finish
 	scopedLog.InfoContext(ctx, "waiting for all the workers to finish")
@@ -1361,6 +1377,9 @@ func (ppln *AppInstallPipeline) installPhaseManager(ctx context.Context) {
 installPhase:
 	for {
 		select {
+		case <-ctx.Done():
+			scopedLog.Info("Context cancelled, stopping install phase manager")
+			break installPhase
 		case _, channelOpen := <-ppln.sigTerm:
 			if !channelOpen {
 				scopedLog.InfoContext(ctx, "received the termination request from the scheduler")
@@ -2347,6 +2366,13 @@ func (ppln *AppInstallPipeline) afwYieldWatcher(ctx context.Context) {
 yieldScheduler:
 	for {
 		select {
+		case <-ctx.Done():
+			// Observe cancellation directly instead of relying on the phase
+			// managers to drain the pipeline first — they may still have
+			// queued workers when SIGTERM lands, which would otherwise delay
+			// closing sigTerm until SchedulerYieldInterval expires.
+			scopedLog.InfoContext(ctx, "yielding from AFW scheduler due to context cancellation")
+			break yieldScheduler
 		case <-yieldTrigger:
 			scopedLog.InfoContext(ctx, "yielding from AFW scheduler", "timeElapsed", time.Now().Unix()-ppln.afwEntryTime)
 			break yieldScheduler
