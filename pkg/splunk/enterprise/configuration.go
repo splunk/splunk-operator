@@ -1778,10 +1778,10 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 		appContext.AppsStatusMaxConcurrentAppDownloads = splcommon.DefaultMaxConcurrentAppDownloads
 	}
 
-	appDownloadVolume := splcommon.AppDownloadVolume
-	_, _ = os.Stat(appDownloadVolume)
-
-	// check whether the temporary volume to download apps is mounted or not on the operator pod
+	// check whether the temporary volume to download apps is mounted or not on the operator pod;
+	// use the resolved path (which may have fallen back to TmpAppDownloadDir) rather than the
+	// configured const, since a missing mount is expected to fall back, not fail validation.
+	appDownloadVolume := getResolvedAppDownloadVolume()
 	if _, err := os.Stat(appDownloadVolume); errors.Is(err, os.ErrNotExist) {
 		logger.ErrorContext(ctx, "volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod", "error", err, "volumePath", appDownloadVolume)
 		return err

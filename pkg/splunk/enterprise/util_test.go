@@ -1214,7 +1214,7 @@ func TestGetAvailableDiskSpaceShouldFail(t *testing.T) {
 	_ = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
-	size, _ := getAvailableDiskSpace(ctx)
+	size, _, _ := getAvailableDiskSpace(ctx)
 	if size == 0 {
 		t.Errorf("getAvailableDiskSpace should have returned a non-zero size.")
 	}
@@ -2069,8 +2069,8 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 		t.Errorf("Expected appPkgLocal Path %s, but got %s", expectedAppPkgLocalPath, calculatedAppPkgLocalPath)
 	}
 
-	// When the explicit volume is set for the app framework, that path should be used for the app package location
-	splcommon.AppDownloadVolume = "/opt/splunk/appframework"
+	// When the resolved download volume differs from the temp fallback, that path should be used for the app package location
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = "/opt/splunk/appframework"
 	calculatedAppPkgLocalPath = getAppPackageLocalPath(ctx, worker)
 	expectedAppPkgLocalPath = "/opt/splunk/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
 	if calculatedAppPkgLocalPath != expectedAppPkgLocalPath {
@@ -2089,9 +2089,8 @@ func TestInitGlobalResourceTracker(t *testing.T) {
 		t.Errorf("operatorResourceTracker or commonResourceTracker should have been initialized")
 	}
 
-	// When the volume exists, should not return an error
-	splcommon.AppDownloadVolume = "/"
-	initGlobalResourceTracker()
+	// Whether or not splcommon.AppDownloadVolume is mounted, initStorageTracker falls back to
+	// TmpAppDownloadDir, so availableDiskSpace should always resolve to a non-zero value.
 	if operatorResourceTracker.storage.availableDiskSpace == 0 {
 		t.Errorf("availableDiskSpace should not be 0")
 	}
@@ -2107,6 +2106,7 @@ func TestGetResourceMutex(t *testing.T) {
 }
 
 func TestUpdateStorageTracker(t *testing.T) {
+	defer initGlobalResourceTracker()
 	ctx := context.TODO()
 	// When the resource tracker is not initialized, should return an error
 	operatorResourceTracker = nil
@@ -2115,25 +2115,20 @@ func TestUpdateStorageTracker(t *testing.T) {
 		t.Errorf("When the operator resource tracker is not initialized, should return an error")
 	}
 
-	// When the volume is not configured, should return an error
-	splcommon.AppDownloadVolume = "/non-existingdir"
-	err = updateStorageTracker(ctx)
-	if err == nil {
-		t.Errorf("When the volume doesn't exist should return an error")
-	}
-
-	// When the volume exists, should not return an error
+	// When the storage tracker is initialized, should not return an error, regardless of
+	// whether splcommon.AppDownloadVolume is mounted, since getAvailableDiskSpace falls back
+	// to TmpAppDownloadDir instead of failing.
 	operatorResourceTracker = &globalResourceTracker{
 		storage: &storageTracker{},
 	}
-	splcommon.AppDownloadVolume = "/"
 	err = updateStorageTracker(ctx)
 	if err != nil {
-		t.Errorf("When the volume exists should not return an error. Error: %v", err)
+		t.Errorf("When the storage tracker is initialized should not return an error. Error: %v", err)
 	}
 }
 
 func TestIsPersistentVolConfigured(t *testing.T) {
+	defer initGlobalResourceTracker()
 	// when the resource tracker not initialized, should return false
 	operatorResourceTracker = nil
 	if isPersistentVolConfigured() {
@@ -2154,6 +2149,7 @@ func TestIsPersistentVolConfigured(t *testing.T) {
 }
 
 func TestReserveStorage(t *testing.T) {
+	defer initGlobalResourceTracker()
 	// when the resource tracker is not intiailzed, should return an error
 	operatorResourceTracker = nil
 
@@ -2182,6 +2178,7 @@ func TestReserveStorage(t *testing.T) {
 }
 
 func TestReleaseStorage(t *testing.T) {
+	defer initGlobalResourceTracker()
 	// When the resource tracker not initialized, should return an error
 	operatorResourceTracker = nil
 
@@ -2523,19 +2520,16 @@ func TestCheckAndMigrateAppDeployStatus(t *testing.T) {
 		t.Errorf("unable to apply statefulset")
 	}
 
-	defaultVol := splcommon.AppDownloadVolume
-	splcommon.AppDownloadVolume = "/tmp/testdir"
-	defer func() {
-		os.RemoveAll(splcommon.AppDownloadVolume)
-		splcommon.AppDownloadVolume = defaultVol
-	}()
+	// to pass the validation stage, add the directory to download apps
+	resolvedVolume := filepath.Join(t.TempDir(), "appdownload")
+	defer func(defaultVol string) {
+		operatorResourceTracker.storage.resolvedAppDownloadVolume = defaultVol
+	}(operatorResourceTracker.storage.resolvedAppDownloadVolume)
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = resolvedVolume
 
-	_, err = os.Stat(splcommon.AppDownloadVolume)
-	if os.IsNotExist(err) {
-		err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-		if err != nil {
-			t.Errorf("Unable to create the directory, error: %v", err)
-		}
+	err = os.MkdirAll(resolvedVolume, 0755)
+	if err != nil {
+		t.Errorf("Unable to create the directory, error: %v", err)
 	}
 
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, appDeployContext, appFrameworkConfig, true)

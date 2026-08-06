@@ -462,7 +462,7 @@ func (downloadWorker *PipelineWorker) createDownloadDirOnOperator(ctx context.Co
 	// For e.g., if the we are trying to download app app1.tgz under "admin" app source name, for a Standalone CR with name "stand1"
 	// in default namespace, then it will be downloaded at the path -
 	// /opt/splunk/appframework/downloadedApps/default/Standalone/stand1/local/admin/app1.tgz_<hash>
-	localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", downloadWorker.cr.GetNamespace(), kind, downloadWorker.cr.GetName(), scope, downloadWorker.appSrcName) + "/"
+	localPath := filepath.Join(getResolvedAppDownloadVolume(), "downloadedApps", downloadWorker.cr.GetNamespace(), kind, downloadWorker.cr.GetName(), scope, downloadWorker.appSrcName) + "/"
 	// create the sub-directories on the volume for downloading scoped apps
 	err := createAppDownloadDir(ctx, localPath)
 	if err != nil {
