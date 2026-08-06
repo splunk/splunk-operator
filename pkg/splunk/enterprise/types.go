@@ -81,6 +81,10 @@ type storageTracker struct {
 	// represents the available disk space on operator pod
 	availableDiskSpace int64
 
+	// resolvedAppDownloadVolume is the actual path used for app downloads: either
+	// splcommon.AppDownloadVolume, or TmpAppDownloadDir when that volume isn't mounted
+	resolvedAppDownloadVolume string
+
 	// mutex to serialize the access
 	mutex sync.Mutex
 }

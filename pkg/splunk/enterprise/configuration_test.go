@@ -22,8 +22,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -823,16 +823,13 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
 	ctx := context.TODO()
 
-	currentDownloadVolume := splcommon.AppDownloadVolume
-	splcommon.AppDownloadVolume = fmt.Sprintf("/tmp/appdownload-%d", rand.Intn(1000))
+	// Point the resolved download path at a unique, not-yet-created directory so the
+	// mount-existence check below can be reliably driven between missing and present.
+	resolvedVolume := filepath.Join(t.TempDir(), "appdownload")
+	defaultVol := operatorResourceTracker.storage.resolvedAppDownloadVolume
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = resolvedVolume
 	defer func() {
-		// remove the AppDownloadVolume if exist just to make sure
-		// previous test case have not created directory
-		err = os.RemoveAll(splcommon.AppDownloadVolume)
-		if err != nil {
-			t.Errorf("unable to delete directory %s", splcommon.AppDownloadVolume)
-		}
-		splcommon.AppDownloadVolume = currentDownloadVolume
+		operatorResourceTracker.storage.resolvedAppDownloadVolume = defaultVol
 	}()
 
 	// Valid app framework config
@@ -872,11 +869,10 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	err = os.MkdirAll(resolvedVolume, 0755)
 	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+		t.Errorf("Unable to create download directory for apps :%s", resolvedVolume)
 	}
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false, "")
 

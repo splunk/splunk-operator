@@ -97,13 +97,14 @@ func getResourceMutex(resourceName string) *sync.Mutex {
 func initStorageTracker() error {
 	ctx := context.TODO()
 	// For now, App framework is the only functionality using the storage space tracker
-	availableDiskSpace, err := getAvailableDiskSpace(ctx)
+	availableDiskSpace, resolvedPath, err := getAvailableDiskSpace(ctx)
 	if err != nil {
 		return err
 	}
 
 	operatorResourceTracker.storage = &storageTracker{
-		availableDiskSpace: availableDiskSpace,
+		availableDiskSpace:        availableDiskSpace,
+		resolvedAppDownloadVolume: resolvedPath,
 	}
 
 	return err
@@ -116,7 +117,7 @@ func updateStorageTracker(ctx context.Context) error {
 
 	}
 
-	availableDiskSpace, err := getAvailableDiskSpace(ctx)
+	availableDiskSpace, resolvedPath, err := getAvailableDiskSpace(ctx)
 	if err != nil {
 		return err
 	}
@@ -126,8 +127,22 @@ func updateStorageTracker(ctx context.Context) error {
 		defer operatorResourceTracker.storage.mutex.Unlock()
 
 		operatorResourceTracker.storage.availableDiskSpace = availableDiskSpace
+		operatorResourceTracker.storage.resolvedAppDownloadVolume = resolvedPath
 		return err
 	}()
+}
+
+// getResolvedAppDownloadVolume returns the app download path actually in use: either
+// splcommon.AppDownloadVolume, or TmpAppDownloadDir if that volume isn't mounted. Falls back
+// to splcommon.AppDownloadVolume if the storage tracker hasn't been initialized yet.
+func getResolvedAppDownloadVolume() string {
+	if !isPersistentVolConfigured() {
+		return splcommon.AppDownloadVolume
+	}
+
+	operatorResourceTracker.storage.mutex.Lock()
+	defer operatorResourceTracker.storage.mutex.Unlock()
+	return operatorResourceTracker.storage.resolvedAppDownloadVolume
 }
 
 // GetRemoteStorageClient returns the corresponding RemoteDataClient
@@ -523,33 +538,36 @@ func createAppDownloadDir(_ context.Context, path string) error {
 	return err
 }
 
-// getAvailableDiskSpace returns the disk space available to download apps at volume "/opt/splunk/appframework"
-func getAvailableDiskSpace(ctx context.Context) (int64, error) {
+// getAvailableDiskSpace returns the disk space available to download apps, along with the
+// resolved volume path used (splcommon.AppDownloadVolume, falling back to TmpAppDownloadDir
+// if that volume isn't mounted on the operator pod).
+func getAvailableDiskSpace(ctx context.Context) (int64, string, error) {
 	var availDiskSpace int64
 	var stat syscall.Statfs_t
 
 	scopedLog := logging.FromContext(ctx).With("func", "getAvailableDiskSpace", "volume mount", splcommon.AppDownloadVolume)
 
-	err := syscall.Statfs(splcommon.AppDownloadVolume, &stat)
+	resolvedVolume := splcommon.AppDownloadVolume
+	err := syscall.Statfs(resolvedVolume, &stat)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "there is no default volume configured for the App framework, use the temporary location", "dir", TmpAppDownloadDir, "error", err)
-		splcommon.AppDownloadVolume = TmpAppDownloadDir
-		err = os.MkdirAll(splcommon.AppDownloadVolume, 0700)
+		resolvedVolume = TmpAppDownloadDir
+		err = os.MkdirAll(resolvedVolume, 0700)
 		if err != nil {
-			scopedLog.ErrorContext(ctx, "unable to create the directory", "dir", splcommon.AppDownloadVolume, "error", err)
-			return 0, err
+			scopedLog.ErrorContext(ctx, "unable to create the directory", "dir", resolvedVolume, "error", err)
+			return 0, resolvedVolume, err
 		}
 	}
 
-	err = syscall.Statfs(splcommon.AppDownloadVolume, &stat)
+	err = syscall.Statfs(resolvedVolume, &stat)
 	if err != nil {
-		return 0, err
+		return 0, resolvedVolume, err
 	}
 
 	availDiskSpace = int64(stat.Bavail) * int64(stat.Bsize)
 	scopedLog.InfoContext(ctx, "current available disk space in GB", "availableDiskSpace(GB)", availDiskSpace/1024/1024/1024)
 
-	return availDiskSpace, err
+	return availDiskSpace, resolvedVolume, err
 }
 
 // getRemoteObjectKey gets the remote object key
@@ -620,7 +638,7 @@ func getRemoteDataClientMgr(ctx context.Context, client splcommon.ControllerClie
 
 // getAppPackageLocalDir returns the Operator volume directory for a given app package
 func getAppPackageLocalDir(cr splcommon.MetaObject, scope string, appSrcName string) string {
-	return filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.GetNamespace(), cr.GroupVersionKind().Kind, cr.GetName(), scope, appSrcName) + "/"
+	return filepath.Join(getResolvedAppDownloadVolume(), "downloadedApps", cr.GetNamespace(), cr.GroupVersionKind().Kind, cr.GetName(), scope, appSrcName) + "/"
 }
 
 // getAppPackageName returns the app package name
@@ -1404,7 +1422,7 @@ func isAppAlreadyDownloaded(ctx context.Context, downloadWorker *PipelineWorker)
 	scope := getAppSrcScope(ctx, downloadWorker.afwConfig, downloadWorker.appSrcName)
 	kind := downloadWorker.cr.GetObjectKind().GroupVersionKind().Kind
 
-	localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", downloadWorker.cr.GetNamespace(), kind, downloadWorker.cr.GetName(), scope, downloadWorker.appSrcName) + "/"
+	localPath := filepath.Join(getResolvedAppDownloadVolume(), "downloadedApps", downloadWorker.cr.GetNamespace(), kind, downloadWorker.cr.GetName(), scope, downloadWorker.appSrcName) + "/"
 	localAppFileName := getLocalAppFileName(ctx, localPath, downloadWorker.appDeployInfo.AppName, downloadWorker.appDeployInfo.ObjectHash)
 
 	// check if the app is present on operator pod

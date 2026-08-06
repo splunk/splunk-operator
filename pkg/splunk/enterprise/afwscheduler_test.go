@@ -1553,13 +1553,13 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 
 	for index, appSrc := range cr.Spec.AppFrameworkConfig.AppSources {
 
-		localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", cr.Namespace, cr.Kind, cr.Name, appSrc.Scope, appSrc.Name) + "/"
+		localPath := filepath.Join(getResolvedAppDownloadVolume(), "downloadedApps", cr.Namespace, cr.Kind, cr.Name, appSrc.Scope, appSrc.Name) + "/"
 		// create the app download directory locally
 		err := createAppDownloadDir(ctx, localPath)
 		if err != nil {
 			t.Errorf("Unable to create the download directory")
 		}
-		defer os.RemoveAll(splcommon.AppDownloadVolume)
+		defer os.RemoveAll(getResolvedAppDownloadVolume())
 
 		// create the dummy app packages locally
 		appFileName := testApps[index] + "_" + testHashes[index]
@@ -1826,12 +1826,12 @@ func TestScheduleDownloads(t *testing.T) {
 	}
 
 	// create the local directory
-	localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", "test" /*namespace*/, "Standalone", cr.Name, "local", "appSrc1") + "/"
+	localPath := filepath.Join(getResolvedAppDownloadVolume(), "downloadedApps", "test" /*namespace*/, "Standalone", cr.Name, "local", "appSrc1") + "/"
 	err := createAppDownloadDir(ctx, localPath)
 	if err != nil {
 		t.Errorf("Unable to create the download directory")
 	}
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
+	defer os.RemoveAll(getResolvedAppDownloadVolume())
 
 	// create the dummy app package for appSrc1 locally, to test the case
 	// where an app is already downloaded and hence we dont re-download it
@@ -1946,12 +1946,12 @@ func TestScheduleDownloadsFailRemoteDataClientMgr(t *testing.T) {
 	}
 
 	// create the local directory
-	localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", "test" /*namespace*/, "Standalone", cr.Name, "local", "appSrc1") + "/"
+	localPath := filepath.Join(getResolvedAppDownloadVolume(), "downloadedApps", "test" /*namespace*/, "Standalone", cr.Name, "local", "appSrc1") + "/"
 	err := createAppDownloadDir(ctx, localPath)
 	if err != nil {
 		t.Errorf("Unable to create the download directory")
 	}
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
+	defer os.RemoveAll(getResolvedAppDownloadVolume())
 
 	// create the dummy app package for appSrc1 locally, to test the case
 	// where an app is already downloaded and hence we dont re-download it
@@ -2275,10 +2275,10 @@ func TestRunPodCopyWorker(t *testing.T) {
 	waiter.Add(1)
 	ch <- struct{}{}
 
-	defaultVol := splcommon.AppDownloadVolume
-	splcommon.AppDownloadVolume = "/tmp/"
+	defaultVol := operatorResourceTracker.storage.resolvedAppDownloadVolume
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = "/tmp/"
 	defer func() {
-		splcommon.AppDownloadVolume = defaultVol
+		operatorResourceTracker.storage.resolvedAppDownloadVolume = defaultVol
 	}()
 
 	runPodCopyWorker(ctx, worker, ch)
@@ -2425,11 +2425,11 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 		podExecClient: mockPodExecClient, // Inject the mock to avoid real network I/O
 	}
 
-	defaultVol := splcommon.AppDownloadVolume
-	splcommon.AppDownloadVolume = "/tmp/splunk/"
+	defaultVol := operatorResourceTracker.storage.resolvedAppDownloadVolume
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = "/tmp/splunk/"
 	defer func() {
-		os.RemoveAll(splcommon.AppDownloadVolume)
-		splcommon.AppDownloadVolume = defaultVol
+		os.RemoveAll(operatorResourceTracker.storage.resolvedAppDownloadVolume)
+		operatorResourceTracker.storage.resolvedAppDownloadVolume = defaultVol
 	}()
 
 	appPkgFileName := worker.appDeployInfo.AppName + "_" + strings.Trim(worker.appDeployInfo.ObjectHash, "\"")
@@ -3601,10 +3601,10 @@ func TestDeleteAppPkgFromOperator(t *testing.T) {
 		afwConfig: &cr.Spec.AppFrameworkConfig,
 	}
 
-	defaultVol := splcommon.AppDownloadVolume
-	splcommon.AppDownloadVolume = "/tmp/"
+	defaultVol := operatorResourceTracker.storage.resolvedAppDownloadVolume
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = "/tmp/"
 	defer func() {
-		splcommon.AppDownloadVolume = defaultVol
+		operatorResourceTracker.storage.resolvedAppDownloadVolume = defaultVol
 	}()
 
 	appSrcScope := appFrameworkConfig.AppSources[0].Scope
@@ -3859,11 +3859,11 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 		afwConfig:  appFrameworkConfig,
 	}
 
-	defaultVol := splcommon.AppDownloadVolume
-	splcommon.AppDownloadVolume = "/tmp/splunk/"
+	defaultVol := operatorResourceTracker.storage.resolvedAppDownloadVolume
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = "/tmp/splunk/"
 	defer func() {
-		os.RemoveAll(splcommon.AppDownloadVolume)
-		splcommon.AppDownloadVolume = defaultVol
+		os.RemoveAll(operatorResourceTracker.storage.resolvedAppDownloadVolume)
+		operatorResourceTracker.storage.resolvedAppDownloadVolume = defaultVol
 	}()
 
 	appPkgLocalPath := getAppPackageLocalPath(ctx, worker)

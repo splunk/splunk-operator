@@ -115,9 +115,10 @@ const (
 	Rerr = "randomError"
 )
 
-// AppDownloadVolume is the mount volume on the operator pod to temporarily download apps
-// sgontla: ToDo: being a constant will be a blocker for the UT to pass. relaxing a bit. Find a better alternative
-var AppDownloadVolume string = "/opt/splunk/appframework/"
+// AppDownloadVolume is the default mount volume on the operator pod to temporarily download apps.
+// It is a const: the resolved path (which may fall back to a tmp dir when this volume isn't
+// mounted) is tracked per-process in operatorResourceTracker.storage, not by mutating this value.
+const AppDownloadVolume string = "/opt/splunk/appframework/"
 
 var EventPublisherKey contextKey = "eventPublisher"
 var EventRecorderKey contextKey = "eventRecorder"
