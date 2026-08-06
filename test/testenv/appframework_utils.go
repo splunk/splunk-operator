@@ -440,10 +440,31 @@ func (testenvInstance *TestCaseEnv) GenerateAppFrameworkSpec(ctx context.Context
 	return appFrameworkSpec
 }
 
-// WaitforPhaseChange Wait for timeout or when phase change is seen on a CR for any particular app
-// Deprecated: Use WaitForAppPhaseChange instead for better timeout control
-func (testenvInstance *TestCaseEnv) WaitforPhaseChange(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, appList []string) {
-	_ = testenvInstance.WaitForAppPhaseChange(ctx, deployment, name, crKind, appSourceName, appList, 2*time.Minute)
+// WaitForAppContentUpdate waits until every app in appList has been re-installed with new content:
+//
+//	(a) ObjectHash != oldHashes[app]  — operator detected new remote content
+//	(b) top-level PhaseInfo.Status == AppPkgInstallComplete (303) — all replicas done
+//
+// This is a durable-state replacement for WaitForAppPhaseChange, which races on a transient
+// download phase that completes faster than PollInterval on single-pod fan-out CRs (Standalone).
+func (testenvInstance *TestCaseEnv) WaitForAppContentUpdate(ctx context.Context, deployment *Deployment, name string, crKind string, appSourceName string, appList []string, oldHashes map[string]string, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		for _, appName := range appList {
+			info, err := testenvInstance.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
+			if err != nil {
+				testenvInstance.Log.Error(err, "WaitForAppContentUpdate: failed to get app info, retrying", "app", appName)
+				return false, nil
+			}
+			oldHash := oldHashes[appName]
+			hashChanged := oldHash == "" || info.ObjectHash != oldHash
+			installed := info.PhaseInfo.Status == enterpriseApi.AppPkgInstallComplete
+			testenvInstance.Log.Info("WaitForAppContentUpdate poll", "app", appName, "oldHash", oldHash, "currentHash", info.ObjectHash, "status", info.PhaseInfo.Status, "hashChanged", hashChanged, "installed", installed)
+			if !hashChanged || !installed {
+				return false, nil
+			}
+		}
+		return true, nil
+	})
 }
 
 // WaitForAppPhaseChange waits for any app in the list to change from PhaseInstall to another phase
