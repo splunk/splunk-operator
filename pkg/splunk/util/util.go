@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -238,7 +239,34 @@ func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName s
 	streamOptions.Stdout = stdout
 	streamOptions.Stderr = stderr
 
-	err = exec.Stream(*streamOptions)
+	// Use StreamWithContext so the exec session is aborted as soon as ctx is
+	// cancelled (e.g. on SIGTERM), instead of holding the pod connection open
+	// for the full command duration regardless of shutdown. Run it in a
+	// goroutine and select on ctx.Done(): the SPDY connection can be stuck in
+	// a TLS IO wait that does not itself respond to context cancellation, so
+	// calling StreamWithContext synchronously can still block here even
+	// though ctx is already cancelled (see streamWithContextGuard in
+	// test/testenv/deployment.go for the same pattern).
+	streamDone := make(chan error, 1)
+	go func() {
+		streamDone <- exec.StreamWithContext(ctx, *streamOptions)
+	}()
+	select {
+	case err = <-streamDone:
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+
+	// If Stdin is a pipe (e.g. CopyFileToPod's tar stream), a cancelled context can
+	// return here while the feeding goroutine is still writing; close the reader so
+	// that goroutine doesn't block forever on an abandoned pipe.
+	if pipeReader, ok := streamOptions.Stdin.(interface{ CloseWithError(error) error }); ok {
+		closeErr := err
+		if closeErr == nil {
+			closeErr = io.ErrClosedPipe
+		}
+		_ = pipeReader.CloseWithError(closeErr)
+	}
 
 	return stdout.String(), stderr.String(), err
 }
