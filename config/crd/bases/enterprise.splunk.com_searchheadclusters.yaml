@@ -1322,6 +1322,13 @@ spec:
                   will be installed on the CM, standalone, search head deployer
                   or license manager instance.
                 type: string
+              detentionTimeoutSeconds:
+                description: |-
+                  Max seconds to wait for active searches to drain before forced recycle of a member during a rolling update.
+                  Timeout begins when the operator first observes the member in ManualDetention. Changes take effect
+                  immediately against the already-running timer. Defaults to 3600 (1 hour).
+                format: int32
+                type: integer
               disableResourceDefaults:
                 default: false
                 description: DisableResourceDefaults prevents the operator from filling
@@ -4861,6 +4868,21 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              detainedMemberName:
+                description: Name of the SHC member that is currently awaiting search
+                  drain
+                type: string
+              detainedPodRevision:
+                description: |-
+                  StatefulSet controller-revision-hash of the pod that started the current detention episode.
+                  Resets the timer when a replacement pod with a new revision enters ManualDetention.
+                type: string
+              detentionStartTimestamp:
+                description: |-
+                  Timestamp when the operator first observed the current individual search head
+                  cluster member in ManualDetention
+                format: int64
+                type: integer
               initialized:
                 description: true if the search head cluster has finished initialization
                 type: boolean
@@ -4889,6 +4911,11 @@ spec:
                       type: boolean
                     name:
                       description: Name of the search head cluster member
+                      type: string
+                    podRevision:
+                      description: |-
+                        StatefulSet controller-revision-hash label of the pod, populated by updateStatus
+                        so PrepareRecycle can detect when a replacement pod (new revision) enters ManualDetention.
                       type: string
                     status:
                       description: Indicates the status of the member.
@@ -6510,6 +6537,13 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              detentionTimeoutSeconds:
+                description: |-
+                  Max seconds to wait for active searches to drain before forced recycle of a member during a rolling update.
+                  Timeout begins when the operator first observes the member in ManualDetention. Changes take effect
+                  immediately against the already-running timer. Defaults to 3600 (1 hour).
+                format: int32
+                type: integer
               disableResourceDefaults:
                 default: false
                 description: DisableResourceDefaults prevents the operator from filling
@@ -10112,6 +10146,21 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              detainedMemberName:
+                description: Name of the SHC member that is currently awaiting search
+                  drain
+                type: string
+              detainedPodRevision:
+                description: |-
+                  StatefulSet controller-revision-hash of the pod that started the current detention episode.
+                  Resets the timer when a replacement pod with a new revision enters ManualDetention.
+                type: string
+              detentionStartTimestamp:
+                description: |-
+                  Timestamp when the operator first observed the current individual search head
+                  cluster member in ManualDetention
+                format: int64
+                type: integer
               initialized:
                 description: true if the search head cluster has finished initialization
                 type: boolean
@@ -10140,6 +10189,11 @@ spec:
                       type: boolean
                     name:
                       description: Name of the search head cluster member
+                      type: string
+                    podRevision:
+                      description: |-
+                        StatefulSet controller-revision-hash label of the pod — populated by updateStatus
+                        so PrepareRecycle can detect when a replacement pod (new revision) enters ManualDetention.
                       type: string
                     status:
                       description: Indicates the status of the member.

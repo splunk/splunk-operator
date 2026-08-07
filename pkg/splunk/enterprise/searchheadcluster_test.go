@@ -291,7 +291,9 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2]}, "Create": {funcCalls[1]}}
+	// funcCalls[2] (Pod-search-head-0) appears twice: once for the Splunk client admin
+	// password lookup and once for the controller-revision-hash read in updateStatus.
+	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
 
 	// test API failure
 	method := "searchHeadClusterPodManager.Update(API failure)"
@@ -340,7 +342,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		},
 	}
 	method = "searchHeadClusterPodManager.Update(All pods ready)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => transition to detention
@@ -360,7 +362,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	)
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v0"
 	method = "searchHeadClusterPodManager.Update(Quarantine Pod)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for searches to drain
@@ -368,13 +370,13 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"status":"Up"`, `"status":"ManualDetention"`, 1)
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":0`, `"active_historical_search_count":1`, 1)
 	method = "searchHeadClusterPodManager.Update(Draining Searches)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => delete pod
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":1`, `"active_historical_search_count":0`, 1)
 	method = "searchHeadClusterPodManager.Update(Delete Pod)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod update finished => release from detention
@@ -387,7 +389,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		Body:   ``,
 	})
 	method = "searchHeadClusterPodManager.Update(Release Quarantine)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[2], funcCalls[0], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => remove member
@@ -416,7 +418,9 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"}, // controller-revision-hash read
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"}, // controller-revision-hash read
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
@@ -2727,5 +2731,564 @@ func TestShcScaledUpScaledDownEvent(t *testing.T) {
 	}
 	if len(recorder.events) != 0 {
 		t.Errorf("Expected no events when phase is not PhaseReady, got %d events", len(recorder.events))
+	}
+}
+
+func newTestSHCPodManager(cr *enterpriseApi.SearchHeadCluster) *searchHeadClusterPodManager {
+	return &searchHeadClusterPodManager{
+		cr: cr,
+		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
+			return splclient.NewSplunkClient(managementURI, username, password)
+		},
+	}
+}
+
+func newTestSHCCR(memberStatus string, historicalSearches, realtimeSearches int) *enterpriseApi.SearchHeadCluster {
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shc",
+			Namespace: "test",
+		},
+	}
+	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+		{
+			Name:                        "splunk-test-shc-search-head-0",
+			Status:                      memberStatus,
+			ActiveHistoricalSearchCount: historicalSearches,
+			ActiveRealtimeSearchCount:   realtimeSearches,
+		},
+	}
+	return cr
+}
+
+func TestPrepareRecycle_NormalDrain(t *testing.T) {
+	ctx := context.Background()
+
+	// Step 1: active searches present, not timed out — should wait
+	cr := newTestSHCCR("ManualDetention", 3, 2)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 10
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ready {
+		t.Error("expected (false, nil) while searches are active and timeout not exceeded")
+	}
+
+	// Step 2: searches drained — should return true and zero the timer fields
+	cr.Status.Members[0].ActiveHistoricalSearchCount = 0
+	cr.Status.Members[0].ActiveRealtimeSearchCount = 0
+	ready, err = mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected (true, nil) when searches have drained")
+	}
+	if cr.Status.DetentionStartTimestamp != 0 {
+		t.Error("expected DetentionStartTimestamp to be zeroed after drain")
+	}
+	if cr.Status.DetainedMemberName != "" {
+		t.Error("expected DetainedMemberName to be cleared after drain")
+	}
+}
+
+func TestPrepareRecycle_TimeoutForced(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("ManualDetention", 1, 2)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	savedTimestamp := time.Now().Unix() - 3700
+	cr.Status.DetentionStartTimestamp = savedTimestamp
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+	cr.Status.DetainedPodRevision = "v1"
+	cr.Status.Members[0].PodRevision = "v1"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected (true, nil) when timeout exceeded")
+	}
+	// Fields must NOT be cleared here — FinishRecycle owns cleanup after pod deletion succeeds.
+	// Clearing here causes a fresh full timeout if the pod delete fails transiently.
+	if cr.Status.DetentionStartTimestamp != savedTimestamp {
+		t.Error("expected DetentionStartTimestamp to be preserved after timeout — FinishRecycle clears it")
+	}
+	if cr.Status.DetainedMemberName != "splunk-test-shc-search-head-0" {
+		t.Error("expected DetainedMemberName to be preserved after timeout — FinishRecycle clears it")
+	}
+}
+
+func TestPrepareRecycle_TimeoutForcedWhenPodRevisionUnavailable(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("ManualDetention", 1, 2)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	savedTimestamp := time.Now().Unix() - 3700
+	cr.Status.DetentionStartTimestamp = savedTimestamp
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected timeout to force recycle when pod revision is unavailable")
+	}
+	if cr.Status.DetentionStartTimestamp != savedTimestamp {
+		t.Error("expected empty pod revision not to reset an expired detention timer")
+	}
+}
+
+func TestPrepareRecycle_FirstObservedPodRevisionDoesNotResetTimer(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("ManualDetention", 1, 2)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	savedTimestamp := time.Now().Unix() - 3700
+	cr.Status.DetentionStartTimestamp = savedTimestamp
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+	cr.Status.DetainedPodRevision = ""
+	cr.Status.Members[0].PodRevision = "revision-1"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected timeout to force recycle when first observed pod revision appears after timeout")
+	}
+	if cr.Status.DetentionStartTimestamp != savedTimestamp {
+		t.Error("expected first observed pod revision not to reset an expired detention timer")
+	}
+	if cr.Status.DetainedPodRevision != "revision-1" {
+		t.Errorf("expected first observed pod revision to be recorded, got %q", cr.Status.DetainedPodRevision)
+	}
+}
+
+func TestPrepareRecycle_TimestampSetOnFirstEntry(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("ManualDetention", 0, 2)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	cr.Status.DetentionStartTimestamp = 0
+	cr.Status.DetainedMemberName = ""
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ready {
+		t.Error("expected (false, nil) on first entry with active searches")
+	}
+	if cr.Status.DetentionStartTimestamp == 0 {
+		t.Error("expected DetentionStartTimestamp to be set on first entry")
+	}
+	if cr.Status.DetainedMemberName != "splunk-test-shc-search-head-0" {
+		t.Errorf("expected DetainedMemberName to be set, got %q", cr.Status.DetainedMemberName)
+	}
+}
+
+func TestPrepareRecycle_CustomTimeout(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("ManualDetention", 0, 1)
+	cr.Spec.DetentionTimeoutSeconds = 60
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 70
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+	cr.Status.DetainedPodRevision = "v1"
+	cr.Status.Members[0].PodRevision = "v1"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected (true, nil) when custom timeout of 60s exceeded after 70s")
+	}
+}
+
+func TestPrepareRecycle_DetentionTimeoutSecondsDefault(t *testing.T) {
+	ctx := context.Background()
+
+	// DetentionTimeoutSeconds = 0 means unset — should use defaultSearchHeadDetentionTimeoutSeconds (3600)
+	cr := newTestSHCCR("ManualDetention", 0, 1)
+	cr.Spec.DetentionTimeoutSeconds = 0
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 3700
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+	cr.Status.DetainedPodRevision = "v1"
+	cr.Status.Members[0].PodRevision = "v1"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected (true, nil) when default timeout of 3600s exceeded after 3700s")
+	}
+}
+
+func TestPrepareRecycle_NegativeTimeout(t *testing.T) {
+	ctx := context.Background()
+
+	// Negative DetentionTimeoutSeconds should fall back to default (3600)
+	cr := newTestSHCCR("ManualDetention", 0, 1)
+	cr.Spec.DetentionTimeoutSeconds = -1
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 3700
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+	cr.Status.DetainedPodRevision = "v1"
+	cr.Status.Members[0].PodRevision = "v1"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected (true, nil) — negative timeout should use default of 3600s, exceeded after 3700s")
+	}
+}
+
+func TestPrepareRecycle_NegativeActiveSearches(t *testing.T) {
+	ctx := context.Background()
+
+	// Negative search count (corrupted REST response) should be treated as drained
+	cr := newTestSHCCR("ManualDetention", -1, -1)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 10
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected (true, nil) — negative search count should be treated as drained")
+	}
+}
+
+func TestPrepareRecycle_TimerResetOnMemberChange(t *testing.T) {
+	ctx := context.Background()
+
+	// Timer was set for a different member (e.g. after operator restart mid-rolling-update)
+	// Should reset timestamp and member name for the new member
+	cr := newTestSHCCR("ManualDetention", 0, 2)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 100
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-1" // different member
+	cr.Status.DetainedPodRevision = "revision-1"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ready {
+		t.Error("expected (false, nil) — timer just reset for new member, timeout not exceeded")
+	}
+	if cr.Status.DetainedMemberName != "splunk-test-shc-search-head-0" {
+		t.Errorf("expected DetainedMemberName to be updated to current member, got %q", cr.Status.DetainedMemberName)
+	}
+	if cr.Status.DetainedPodRevision != "" {
+		t.Errorf("expected stale DetainedPodRevision to be cleared on member change, got %q", cr.Status.DetainedPodRevision)
+	}
+	// Timestamp should have been reset to approximately now, not the old value
+	if time.Now().Unix()-cr.Status.DetentionStartTimestamp > 2 {
+		t.Error("expected DetentionStartTimestamp to be reset to approximately now for new member")
+	}
+}
+
+func TestFinishRecycle_ClearsTimerFields(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("ManualDetention", 0, 0)
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 100
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+
+	// FinishRecycle clears the timer fields before calling SetSearchHeadDetention.
+	// We verify the in-memory CR fields are zeroed regardless of whether the REST call succeeds.
+	// getClient requires a controller client for secret retrieval; use defer/recover to catch
+	// the nil-client panic and still assert the fields were cleared before the call was made.
+	func() {
+		defer func() { recover() }() // suppress nil-client panic from getClient
+		mgr := newTestSHCPodManager(cr)
+		_, _ = mgr.FinishRecycle(ctx, 0)
+	}()
+
+	if cr.Status.DetentionStartTimestamp != 0 {
+		t.Error("expected DetentionStartTimestamp to be zeroed by FinishRecycle ManualDetention case")
+	}
+	if cr.Status.DetainedMemberName != "" {
+		t.Error("expected DetainedMemberName to be cleared by FinishRecycle ManualDetention case")
+	}
+}
+
+func TestFinishRecycle_ClearsTimerFields_UpStatus(t *testing.T) {
+	ctx := context.Background()
+
+	// After a timeout-forced recycle, the pod comes back Up — FinishRecycle Up branch must clear timer
+	cr := newTestSHCCR("Up", 0, 0)
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 100
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.FinishRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected (true, nil) when member is Up")
+	}
+	if cr.Status.DetentionStartTimestamp != 0 {
+		t.Error("expected DetentionStartTimestamp to be zeroed when member returns Up after timeout-forced recycle")
+	}
+	if cr.Status.DetainedMemberName != "" {
+		t.Error("expected DetainedMemberName to be cleared when member returns Up after timeout-forced recycle")
+	}
+}
+
+func TestPrepareRecycle_TimerSurvivesUpdateStatus(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("ManualDetention", 0, 2)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 10
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+
+	savedTimestamp := cr.Status.DetentionStartTimestamp
+	savedName := cr.Status.DetainedMemberName
+
+	// Simulate what updateStatus() does — rebuild Members slice from REST API
+	// This overwrites Members[n] but must NOT touch cluster-level timer fields
+	cr.Status.Members[0] = enterpriseApi.SearchHeadClusterMemberStatus{
+		Name:                        "splunk-test-shc-search-head-0",
+		Status:                      "ManualDetention",
+		ActiveHistoricalSearchCount: 0,
+		ActiveRealtimeSearchCount:   2,
+	}
+
+	if cr.Status.DetentionStartTimestamp != savedTimestamp {
+		t.Error("updateStatus() must not wipe DetentionStartTimestamp — it is a cluster-level field")
+	}
+	if cr.Status.DetainedMemberName != savedName {
+		t.Error("updateStatus() must not wipe DetainedMemberName — it is a cluster-level field")
+	}
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ready {
+		t.Error("expected (false, nil) — searches still active, timer should have survived updateStatus()")
+	}
+}
+
+func TestPrepareRecycle_StaleTimerClearedOnNewDetentionCycle(t *testing.T) {
+	ctx := context.Background()
+
+	// Simulate: timeout fired in a previous recycle episode, timer fields were NOT cleared
+	// (FinishRecycle was skipped because a new revision arrived before the pod returned to Up).
+	// The pod is now Up again and a new recycle episode is starting.
+	cr := newTestSHCCR("Up", 0, 0)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 3700 // stale expired timestamp
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+
+	// PrepareRecycle on an Up pod detains it — the stale timer must be cleared first
+	// so the next ManualDetention cycle gets a fresh 3600s window, not an instant force-recycle.
+	// getClient panics with nil controller client in unit tests; recover and assert timer was cleared.
+	func() {
+		defer func() { recover() }()
+		mgr := newTestSHCPodManager(cr)
+		_, _ = mgr.PrepareRecycle(ctx, 0)
+	}()
+
+	if cr.Status.DetentionStartTimestamp != 0 {
+		t.Error("expected stale DetentionStartTimestamp to be cleared when pod re-enters Up state")
+	}
+	if cr.Status.DetainedMemberName != "" {
+		t.Error("expected stale DetainedMemberName to be cleared when pod re-enters Up state")
+	}
+}
+
+func TestPrepareRecycle_TimerResetOnRevisionChange(t *testing.T) {
+	ctx := context.Background()
+
+	// Simulate: timeout fired for revision-1, timer not cleared, pod restarted as revision-2.
+	// The replacement pod is reporting ManualDetention (rejoined SHC in detention state).
+	// PrepareRecycle must reset the timer for the new revision so it gets a fresh timeout window.
+	cr := newTestSHCCR("ManualDetention", 0, 1)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 3700 // stale expired timestamp
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+	cr.Status.DetainedPodRevision = "revision-1"
+	// New pod is on revision-2 — simulate updateStatus having populated PodRevision
+	cr.Status.Members[0].PodRevision = "revision-2"
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ready {
+		t.Error("expected (false, nil) — timer was reset for new revision, not an instant force-recycle")
+	}
+	if cr.Status.DetainedPodRevision != "revision-2" {
+		t.Errorf("expected DetainedPodRevision updated to revision-2, got %q", cr.Status.DetainedPodRevision)
+	}
+	// Timer should have been reset to approximately now, not the old expired value
+	if time.Now().Unix()-cr.Status.DetentionStartTimestamp > 2 {
+		t.Error("expected DetentionStartTimestamp to be reset to approximately now for new revision")
+	}
+}
+
+func TestUpdateStatusPreservesPodRevisionByMemberName(t *testing.T) {
+	ctx := context.Background()
+	restoreSearchHeadClusterInfoStubs(t)
+
+	replicas := int32(2)
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
+	}
+	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+		{Name: "splunk-test-shc-search-head-1", PodRevision: "revision-1"},
+		{Name: "splunk-test-shc-search-head-0", PodRevision: "revision-0"},
+	}
+
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-shc-search-head-0",
+				Namespace: "test",
+			},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-shc-search-head-1",
+				Namespace: "test",
+			},
+		},
+	})
+	mgr := newTestSHCPodManager(cr)
+	mgr.c = c
+
+	err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", replicas))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := cr.Status.Members[0].PodRevision; got != "revision-0" {
+		t.Errorf("expected revision-0 preserved by member name, got %q", got)
+	}
+	if got := cr.Status.Members[1].PodRevision; got != "revision-1" {
+		t.Errorf("expected revision-1 preserved by member name, got %q", got)
+	}
+}
+
+func TestUpdateStatusPreservesPodRevisionWhenPodReadFails(t *testing.T) {
+	ctx := context.Background()
+	restoreSearchHeadClusterInfoStubs(t)
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
+	}
+	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+		{Name: "splunk-test-shc-search-head-0", PodRevision: "revision-0"},
+	}
+
+	mgr := newTestSHCPodManager(cr)
+	mgr.c = spltest.NewMockClient()
+
+	err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", 1))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := cr.Status.Members[0].PodRevision; got != "revision-0" {
+		t.Errorf("expected revision-0 preserved after pod read failure, got %q", got)
+	}
+}
+
+func TestUpdateStatusUsesCurrentPodRevisionWhenPresent(t *testing.T) {
+	ctx := context.Background()
+	restoreSearchHeadClusterInfoStubs(t)
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
+	}
+	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
+		{Name: "splunk-test-shc-search-head-0", PodRevision: "old-revision"},
+	}
+
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-shc-search-head-0",
+				Namespace: "test",
+				Labels: map[string]string{
+					"controller-revision-hash": "current-revision",
+				},
+			},
+		},
+	})
+	mgr := newTestSHCPodManager(cr)
+	mgr.c = c
+
+	err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", 1))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := cr.Status.Members[0].PodRevision; got != "current-revision" {
+		t.Errorf("expected current pod revision to win, got %q", got)
+	}
+}
+
+func restoreSearchHeadClusterInfoStubs(t *testing.T) {
+	t.Helper()
+	originalMemberInfo := GetSearchHeadClusterMemberInfo
+	originalCaptainInfo := GetSearchHeadCaptainInfo
+	t.Cleanup(func() {
+		GetSearchHeadClusterMemberInfo = originalMemberInfo
+		GetSearchHeadCaptainInfo = originalCaptainInfo
+	})
+
+	GetSearchHeadClusterMemberInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadClusterMemberInfo, error) {
+		return &splclient.SearchHeadClusterMemberInfo{
+			Status:     "Up",
+			Adhoc:      true,
+			Registered: true,
+		}, nil
+	}
+	GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
+		return &splclient.SearchHeadCaptainInfo{
+			Label:          "splunk-test-shc-search-head-0",
+			ServiceReady:   true,
+			Initialized:    true,
+			MinPeersJoined: true,
+		}, nil
+	}
+}
+
+func searchHeadStatefulSet(name string, replicas int32) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-" + name + "-search-head", Namespace: "test"},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: replicas,
+		},
 	}
 }

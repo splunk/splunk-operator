@@ -19,9 +19,67 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// SearchHeadPodName returns the pod name for a given search head index within an SHC deployment.
+// Uses the operator's naming convention: splunk-<name>-search-head-<index>.
+// Note: SearchHeadPod constant includes "-shc-" and is only correct when the CR name
+// already has "-shc" appended (e.g. from DeploySingleSiteCluster). For direct SHC
+// deployments using deployment.GetName() as the CR name, use this helper instead.
+func SearchHeadPodName(deploymentName string, index int) string {
+	return fmt.Sprintf("splunk-%s-search-head-%d", deploymentName, index)
+}
+
+// StartRealtimeSearch starts a never-ending real-time search on a search head pod via the Splunk REST API.
+// The search runs until the pod is restarted or the job is explicitly cancelled.
+// Retries for up to 2 minutes to handle the window between PhaseReady and the pod being exec-ready.
+func StartRealtimeSearch(ctx context.Context, deployment *Deployment, podName string) error {
+	stdin := `curl -k -u admin:$(cat /mnt/splunk-secrets/password) \
+		--data-urlencode "search=search index=_internal" \
+		-d "earliest_time=rt&latest_time=rt&exec_mode=normal&search_mode=realtime" \
+		https://localhost:8089/services/search/jobs`
+	return podExecWithRetry(ctx, deployment, podName, stdin)
+}
+
+// StartHistoricalSearch starts a bounded historical search that completes naturally.
+// Used to verify that normal search drain does not trigger the detention timeout.
+// Retries for up to 2 minutes to handle the window between PhaseReady and the pod being exec-ready.
+func StartHistoricalSearch(ctx context.Context, deployment *Deployment, podName string) error {
+	stdin := `curl -k -u admin:$(cat /mnt/splunk-secrets/password) \
+		--data-urlencode "search=search index=_internal | head 1000" \
+		-d "earliest_time=-5m&latest_time=now&exec_mode=normal" \
+		https://localhost:8089/services/search/jobs`
+	return podExecWithRetry(ctx, deployment, podName, stdin)
+}
+
+// podExecWithRetry retries a shell command on a pod for up to 2 minutes to handle
+// the window between PhaseReady and the pod being exec-ready. The 2-minute deadline
+// is enforced independently of the caller's context so that a persistent exec failure
+// reports quickly rather than blocking for the full spec timeout.
+func podExecWithRetry(ctx context.Context, deployment *Deployment, podName string, stdin string) error {
+	retryCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	command := []string{"/bin/sh"}
+	var lastErr error
+	for {
+		select {
+		case <-retryCtx.Done():
+			return fmt.Errorf("pod exec on %s did not succeed within 2 minutes: %w", podName, lastErr)
+		default:
+		}
+		_, _, err := deployment.PodExecCommand(retryCtx, podName, command, stdin, false)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		logf.Log.Info("Retrying pod exec", "pod", podName, "error", err)
+		time.Sleep(10 * time.Second)
+	}
+}
 
 // DeployerAppChecksum Get the checksum for each app on the deployer
 func DeployerAppChecksum(ctx context.Context, deployment *Deployment) map[string]string {

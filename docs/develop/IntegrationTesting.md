@@ -34,6 +34,7 @@ Each directory under `test/` is a separate Ginkgo test suite (Go package) with i
 | `test/appframework_aws/` | App Framework with AWS S3 (`s1/`, `c3/`, `m4/` sub-suites) |
 | `test/appframework_az/` | App Framework with Azure Blob (`s1/`, `c3/`, `m4/`) |
 | `test/appframework_gcp/` | App Framework with GCP Storage (`s1/`, `c3/`, `m4/`) |
+| `test/shc_detention/` | SHC rolling update detention timeout: normal drain, forced timeout (CSPL-4966), no regression |
 | `test/example/` | **Template** — copy this to start a new suite |
 
 ### KUTTL Tests
@@ -295,7 +296,7 @@ Test selection is driven by Ginkgo `Label(...)` arguments on `It` blocks and fil
 - A **variant** label (where a CR has V3/V4 variants): `variant:manager` (ClusterManager / V4) or `variant:master` (ClusterMaster / V3).
 - A **feature** label — exactly one, matching the test's directory:
   `feature:appframework` (under `test/appframework_*`), `feature:smartstore`, `feature:monitoringconsole`,
-  `feature:secret`, `feature:crcrud`, `feature:deletecr`, `feature:licensemanager`, `feature:ingestsearch`, `feature:indingsep`, `feature:basic`, `feature:idxclustering`.
+  `feature:secret`, `feature:crcrud`, `feature:deletecr`, `feature:licensemanager`, `feature:ingestsearch`, `feature:indingsep`, `feature:basic`, `feature:idxclustering`, `feature:detention` (under `test/shc_detention/`).
 - **Extra / scenario** labels when they carry meaning orthogonal to the above:
   `suite:mc1` / `suite:mc2` (CI parallelization groups),
   `feature:scaling` (added in addition to the test's primary `feature:*` label on scale-up/scale-down scenarios so the `managerscaling` CI job can target them).
@@ -591,6 +592,8 @@ make docker-buildx IMG=$OPERATOR_IMG PLATFORMS=linux/amd64
 
 Tests deploy Splunk Enterprise pods using the image passed via `-splunk-image`. The public image on Docker Hub is `splunk/splunk` (see `SPLUNK_ENTERPRISE_RELEASE_IMAGE` in `.env` for the version used in CI). If your cluster can pull from Docker Hub directly, no action is needed — you already set `SPLUNK_IMG` to the public image in step 4.
 
+Suites that exercise an image-based rolling update (currently `test/shc_detention/`) also require `-splunk-upgrade-image` set to a **distinct** Splunk Enterprise image — typically the next patch version (e.g. `splunk/splunk:10.2.1` when the base is `splunk/splunk:10.2.0`). The suite `BeforeSuite` will fail fast if the two images are identical. In CI this is handled automatically via `JOB_SPLUNK_UPGRADE_IMAGE` in `runtime.yml`.
+
 If your cluster uses a private registry (common for EKS, air-gapped environments), pull and push it:
 
 ```bash
@@ -675,6 +678,33 @@ ginkgo -v --trace --timeout=240m ./test/indexing_clustering -- \
   -cluster-wide=true
 ```
 
+The SHC detention suite requires a deployed operator and two Splunk Enterprise images (base and upgrade target). Use the Makefile target:
+
+```bash
+# SPLUNK_IMG: base Splunk Enterprise image (e.g. docker.io/splunk/splunk:9.4.13)
+# SPLUNK_UPGRADE_IMG: must differ from SPLUNK_IMG to trigger a rolling update (e.g. docker.io/splunk/splunk:9.4)
+make test-shc-detention \
+  OPERATOR_IMG=<operator-image> \
+  SPLUNK_IMG=$SPLUNK_ENTERPRISE_IMAGE \
+  SPLUNK_UPGRADE_IMG=<newer-splunk-image>
+```
+
+Or run directly with ginkgo to target a specific scenario:
+
+```bash
+# Run all detention tests
+ginkgo -v --label-filter="feature:detention" ./test/shc_detention -- \
+  -operator-image=<operator-image> \
+  -splunk-image=docker.io/splunk/splunk:9.4.13 \
+  -splunk-upgrade-image=docker.io/splunk/splunk:9.4
+
+# Run only the forced timeout scenario
+ginkgo -v --focus="forced timeout recycles member" ./test/shc_detention -- \
+  -operator-image=<operator-image> \
+  -splunk-image=docker.io/splunk/splunk:9.4.13 \
+  -splunk-upgrade-image=docker.io/splunk/splunk:9.4
+```
+
 ### Run a Specific Test by Name or Label
 
 Use `--focus` with a regex on the `It` description, or `--label-filter` with a Ginkgo label expression. Always target a **specific suite directory** — using `-r ./test/` recurses into all suites, triggering their `BeforeSuite` blocks (including cloud setup) even when filters exclude their tests.
@@ -732,6 +762,12 @@ Tests run automatically on:
 - **Manual trigger:**
 
 For integration test workflows, CI provisions an EKS cluster, builds and pushes operator images to ECR, then runs `make int-test`. Smoke tests run on the existing CI infrastructure without provisioning a dedicated cluster.
+
+The SHC detention suite runs in two pipeline jobs defined in `gitlab-ci/includes/runtime.yml`:
+- **`qualification-shc-detention-validation`** — runs on MR and push events
+- **`nightly-eks-integration-shc-detention-validation`** — runs on the nightly schedule against `develop`
+
+Both jobs set `JOB_INT_ENTERPRISE_IMAGE` and `JOB_SPLUNK_UPGRADE_IMAGE` to provide the two distinct Splunk images required by the suite.
 
 **JUnit report naming:**
 
