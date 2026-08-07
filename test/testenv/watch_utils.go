@@ -86,6 +86,24 @@ func (testenv *TestCaseEnv) WatchForSearchHeadClusterPhase(ctx context.Context, 
 	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "SearchHeadCluster", &enterpriseApi.SearchHeadCluster{}, expectedPhase, timeout)
 }
 
+// WatchForSHCObservedGeneration waits until status.observedGeneration >= the expected generation,
+// confirming the operator has reconciled the latest spec change before asserting phase.
+func (testenv *TestCaseEnv) WatchForSHCObservedGeneration(ctx context.Context, deployment *Deployment, namespace, crName string, expectedGeneration int64, timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		shc := &enterpriseApi.SearchHeadCluster{}
+		err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: crName, Namespace: namespace}, shc)
+		if err != nil {
+			testenv.Log.Info("Failed to get SHC", "name", crName, "error", err)
+			return false, nil
+		}
+		if shc.Status.ObservedGeneration >= expectedGeneration {
+			testenv.Log.Info("SHC observedGeneration reached expected", "name", crName, "observedGeneration", shc.Status.ObservedGeneration)
+			return true, nil
+		}
+		return false, nil
+	})
+}
+
 // WatchForIndexerClusterPhase waits for IndexerCluster to reach expected phase
 func (testenv *TestCaseEnv) WatchForIndexerClusterPhase(ctx context.Context, deployment *Deployment, namespace, crName string, expectedPhase enterpriseApi.Phase, timeout time.Duration) error {
 	return testenv.WatchForCRPhase(ctx, deployment, namespace, crName, "IndexerCluster", &enterpriseApi.IndexerCluster{}, expectedPhase, timeout)

@@ -15,7 +15,26 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const defaultSearchHeadDetentionTimeoutSeconds = 3600
+
+// clearDetentionTimer zeroes the cluster-level detention timer fields if they belong to memberName.
+// Also resets the active search count gauges to zero so stale values don't persist in Prometheus.
+func (mgr *searchHeadClusterPodManager) clearDetentionTimer(memberName string) {
+	if mgr.cr.Status.DetainedMemberName == memberName {
+		mgr.cr.Status.DetentionStartTimestamp = 0
+		mgr.cr.Status.DetainedMemberName = ""
+		mgr.cr.Status.DetainedPodRevision = ""
+		metrics.ActiveHistoricalSearchCount.With(prometheus.Labels{
+			"sh_name": memberName,
+		}).Set(0)
+		metrics.ActiveRealtimeSearchCount.With(prometheus.Labels{
+			"sh_name": memberName,
+		}).Set(0)
+	}
+}
 
 // searchHeadClusterPodManager is used to manage the pods within a search head cluster
 type searchHeadClusterPodManager struct {
@@ -132,6 +151,10 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 		return false, err
 	}
 
+	// FinishRecycle is never called on the scale-down path; clear timer fields only after
+	// RemoveSearchHeadClusterMember succeeds to avoid resetting the clock on a transient failure.
+	mgr.clearDetentionTimer(memberName)
+
 	// all done -> ok to scale down the statefulset
 	return true, nil
 }
@@ -143,6 +166,11 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 
 	switch mgr.cr.Status.Members[n].Status {
 	case "Up":
+		// Clear any stale timer from a prior recycle episode before starting a new one.
+		// This handles the case where a timeout-forced recycle left a non-zero timestamp
+		// that was never cleared by FinishRecycle (e.g. a new revision arrived before
+		// the pod returned to Up and FinishRecycle was skipped).
+		mgr.clearDetentionTimer(memberName)
 		// Detain search head
 		logger.InfoContext(ctx, "detaining SearchHeadCluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
@@ -190,14 +218,68 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 			"sh_name": mgr.cr.Status.Members[n].Name,
 		}).Set(float64(mgr.cr.Status.Members[n].ActiveRealtimeSearchCount))
 
-		// Wait until active searches have drained
-		searchesComplete := mgr.cr.Status.Members[n].ActiveHistoricalSearchCount+mgr.cr.Status.Members[n].ActiveRealtimeSearchCount == 0
-		if searchesComplete {
-			logger.InfoContext(ctx, "detention complete", "memberName", memberName)
-		} else {
-			logger.InfoContext(ctx, "waiting for active searches to complete", "memberName", memberName)
+		timeout := int64(mgr.cr.Spec.DetentionTimeoutSeconds)
+		if timeout <= 0 {
+			timeout = defaultSearchHeadDetentionTimeoutSeconds
 		}
-		return searchesComplete, nil
+
+		// Initialize the timer when first observed or member changed.
+		// Only reset the timer when a previously recorded non-empty revision changes; this
+		// identifies a genuine replacement pod. If DetainedPodRevision was empty (revision
+		// not yet observed) and currentRevision is now non-empty, that is the first successful
+		// label read for the same pod; record the revision without moving the timestamp.
+		currentRevision := mgr.cr.Status.Members[n].PodRevision
+		revisionChanged := mgr.cr.Status.DetainedPodRevision != "" &&
+			currentRevision != "" &&
+			mgr.cr.Status.DetainedPodRevision != currentRevision
+		startNewDetentionWindow := mgr.cr.Status.DetentionStartTimestamp == 0 ||
+			mgr.cr.Status.DetainedMemberName != memberName ||
+			revisionChanged
+		if startNewDetentionWindow {
+			mgr.cr.Status.DetentionStartTimestamp = time.Now().Unix()
+			mgr.cr.Status.DetainedMemberName = memberName
+			mgr.cr.Status.DetainedPodRevision = currentRevision
+		} else if currentRevision != "" {
+			// Record the first observed revision without moving an already-running timer.
+			mgr.cr.Status.DetainedPodRevision = currentRevision
+		}
+
+		activeSearches := mgr.cr.Status.Members[n].ActiveHistoricalSearchCount +
+			mgr.cr.Status.Members[n].ActiveRealtimeSearchCount
+		timeElapsed := time.Now().Unix() - mgr.cr.Status.DetentionStartTimestamp
+
+		if activeSearches <= 0 {
+			logger.InfoContext(ctx, "detention complete", "memberName", memberName)
+			mgr.clearDetentionTimer(memberName)
+			return true, nil
+		}
+
+		if timeElapsed >= timeout {
+			logger.WarnContext(ctx, "detention timeout exceeded; forcing recycle",
+				"memberName", memberName,
+				"elapsedSeconds", timeElapsed,
+				"timeoutSeconds", timeout,
+				"activeHistoricalSearchCount", mgr.cr.Status.Members[n].ActiveHistoricalSearchCount,
+				"activeRealtimeSearchCount", mgr.cr.Status.Members[n].ActiveRealtimeSearchCount)
+			eventPublisher := GetEventPublisher(ctx, mgr.cr)
+			if eventPublisher != nil {
+				eventPublisher.Warning(ctx, EventReasonDetentionTimeoutForced,
+					fmt.Sprintf("Member %s forced recycle after %ds in detention with %d active searches",
+						memberName, timeElapsed, activeSearches))
+			} else {
+				logger.WarnContext(ctx, "event publisher unavailable, skipping DetentionTimeoutForced event",
+					"memberName", memberName)
+			}
+			return true, nil
+		}
+
+		logger.InfoContext(ctx, "waiting for active searches to complete",
+			"memberName", memberName,
+			"activeSearches", activeSearches,
+			"elapsedSeconds", timeElapsed,
+			"timeoutSeconds", timeout)
+
+		return false, nil
 
 	case "": // this can happen after the member has already been recycled and we're just waiting for state to update
 		logger.InfoContext(ctx, "member has empty Status", "memberName", memberName)
@@ -215,12 +297,14 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 
 	switch mgr.cr.Status.Members[n].Status {
 	case "Up":
-		// not in detention
+		// not in detention; clear any stale timer fields left by a timeout-forced recycle
+		mgr.clearDetentionTimer(memberName)
 		return true, nil
 
 	case "ManualDetention":
 		// release from detention
 		logger.InfoContext(ctx, "releasing SearchHeadCluster member from detention", "memberName", memberName)
+		mgr.clearDetentionTimer(memberName)
 		c := mgr.getClient(ctx, n)
 		return false, c.SetSearchHeadDetention(false)
 
@@ -291,6 +375,12 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	// populate members status using REST API to get search head cluster member info
 	previousCaptain := mgr.cr.Status.Captain
 	previousMemberCount := int32(len(mgr.cr.Status.Members))
+	previousPodRevisions := make(map[string]string, len(mgr.cr.Status.Members))
+	for _, member := range mgr.cr.Status.Members {
+		if member.PodRevision != "" {
+			previousPodRevisions[member.Name] = member.PodRevision
+		}
+	}
 
 	mgr.cr.Status.Captain = ""
 	mgr.cr.Status.CaptainReady = false
@@ -314,6 +404,22 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
 		} else {
 			shcLogger.ErrorContext(ctx, "unable to retrieve SearchHeadCluster member info", "memberName", memberName, "error", err)
+		}
+
+		// Populate PodRevision from the pod's controller-revision-hash label so PrepareRecycle
+		// can detect when a replacement pod enters ManualDetention with a new revision.
+		// Preserve the last known non-empty revision when the pod read fails or the label is
+		// transiently absent; a transient miss must not reset the detention timer.
+		var pod corev1.Pod
+		podKey := client.ObjectKey{Namespace: mgr.cr.GetNamespace(), Name: memberName}
+		if podErr := mgr.c.Get(ctx, podKey, &pod); podErr == nil {
+			if rev := pod.GetLabels()["controller-revision-hash"]; rev != "" {
+				memberStatus.PodRevision = rev
+			} else {
+				memberStatus.PodRevision = previousPodRevisions[memberName]
+			}
+		} else {
+			memberStatus.PodRevision = previousPodRevisions[memberName]
 		}
 
 		if err == nil && !gotCaptainInfo {

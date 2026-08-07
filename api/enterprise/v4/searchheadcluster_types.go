@@ -52,6 +52,12 @@ type SearchHeadClusterSpec struct {
 
 	// Splunk Deployer Node Affinity
 	DeployerNodeAffinity *corev1.NodeAffinity `json:"deployerNodeAffinity,omitempty"`
+
+	// Max seconds to wait for active searches to drain before forced recycle of a member during a rolling update.
+	// Timeout begins when the operator first observes the member in ManualDetention. Changes take effect
+	// immediately against the already-running timer. Defaults to 3600 (1 hour).
+	// +optional
+	DetentionTimeoutSeconds int32 `json:"detentionTimeoutSeconds,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -73,6 +79,10 @@ type SearchHeadClusterMemberStatus struct {
 
 	// Number of currently running realtime searches.
 	ActiveRealtimeSearchCount int `json:"active_realtime_search_count"`
+
+	// StatefulSet controller-revision-hash label of the pod — populated by updateStatus
+	// so PrepareRecycle can detect when a replacement pod (new revision) enters ManualDetention.
+	PodRevision string `json:"podRevision,omitempty"`
 }
 
 // SearchHeadClusterStatus defines the observed state of a Splunk Enterprise search head cluster
@@ -150,6 +160,17 @@ type SearchHeadClusterStatus struct {
 	UpgradeStartTimestamp int64 `json:"upgradeStartTimestamp"`
 
 	UpgradeEndTimestamp int64 `json:"upgradeEndTimestamp"`
+
+	// Timestamp when the operator first observed the current individual search head
+	// cluster member in ManualDetention
+	DetentionStartTimestamp int64 `json:"detentionStartTimestamp,omitempty"`
+
+	// Name of the SHC member that is currently awaiting search drain
+	DetainedMemberName string `json:"detainedMemberName,omitempty"`
+
+	// StatefulSet controller-revision-hash of the pod that started the current detention episode.
+	// Resets the timer when a replacement pod with a new revision enters ManualDetention.
+	DetainedPodRevision string `json:"detainedPodRevision,omitempty"`
 }
 
 type UpgradePhase string

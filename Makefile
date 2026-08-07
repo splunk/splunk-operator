@@ -531,6 +531,13 @@ test-e2e-pr: ## Run PR-gate e2e tests (label=tier:e2e-pr). Requires deployed ope
 test-e2e-full: ## Run full nightly e2e tests (label=tier:e2e-full). Requires deployed operator.
 	@TEST_LABELS=tier:e2e-full test/run-tests.sh
 
+.PHONY: test-shc-detention
+test-shc-detention: setup/ginkgo ## Run SHC detention timeout e2e tests. Requires deployed operator, SPLUNK_IMG and SPLUNK_UPGRADE_IMG set.
+	$(shell go env GOPATH)/bin/ginkgo -v --label-filter="feature:detention" ./test/shc_detention -- \
+	  -operator-image=$(OPERATOR_IMG) \
+	  -splunk-image=$(SPLUNK_IMG) \
+	  -splunk-upgrade-image=$(SPLUNK_UPGRADE_IMG)
+
 .PHONY: helm-package
 helm-package:
 	@mkdir -p helm-chart/splunk-enterprise/charts

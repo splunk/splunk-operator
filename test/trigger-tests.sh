@@ -195,6 +195,11 @@ ginkgo_cmd+=(
   "-job-id=${CI_JOB_ID:-}"
 )
 
+if [ -n "${JOB_SPLUNK_UPGRADE_IMAGE:-}" ]; then
+  private_splunk_upgrade_image="$(SPLUNK_ENTERPRISE_IMAGE="${JOB_SPLUNK_UPGRADE_IMAGE}" bash "${topdir}/test/get-private-registry-enterprise.sh")" || exit $?
+  ginkgo_cmd+=("-splunk-upgrade-image=${private_splunk_upgrade_image}")
+fi
+
 printf '%q ' "${ginkgo_cmd[@]}"
 echo
 "${ginkgo_cmd[@]}"

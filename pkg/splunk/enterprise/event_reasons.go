@@ -78,6 +78,7 @@ const (
 	// Warning event reasons — upgrade
 	EventReasonUpgradeCheckFailed            splcommon.EventReason = "UpgradeCheckFailed"
 	EventReasonUpgradeBlockedVersionMismatch splcommon.EventReason = "UpgradeBlockedVersionMismatch"
+	EventReasonDetentionTimeoutForced        splcommon.EventReason = "DetentionTimeoutForced"
 
 	// Stalled condition transition events
 	EventReasonStalled         splcommon.EventReason = "Stalled"

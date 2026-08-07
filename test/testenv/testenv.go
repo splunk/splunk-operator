@@ -136,14 +136,15 @@ const (
 )
 
 var (
-	metricsHost              = "0.0.0.0"
-	metricsPort              = 8383
-	specifiedOperatorImage   = defaultOperatorImage
-	specifiedSplunkImage     = defaultSplunkImage
-	specifiedSkipTeardown    = false
-	specifiedLicenseFilePath = ""
-	specifiedCommitHash      = ""
-	specifiedJobID           = ""
+	metricsHost                 = "0.0.0.0"
+	metricsPort                 = 8383
+	specifiedOperatorImage      = defaultOperatorImage
+	specifiedSplunkImage        = defaultSplunkImage
+	specifiedSplunkUpgradeImage = ""
+	specifiedSkipTeardown       = false
+	specifiedLicenseFilePath    = ""
+	specifiedCommitHash         = ""
+	specifiedJobID              = ""
 	// SpecifiedTestTimeout exported test timeout time as this can be
 	// configured per test case if needed
 	SpecifiedTestTimeout       = defaultTestTimeout
@@ -194,6 +195,7 @@ type TestEnv struct {
 	operatorName         string
 	operatorImage        string
 	splunkImage          string
+	splunkUpgradeImage   string
 	initialized          bool
 	SkipTeardown         bool
 	licenseFilePath      string
@@ -224,6 +226,7 @@ func init() {
 	}
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
 	flag.IntVar(&SpecifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
+	flag.StringVar(&specifiedSplunkUpgradeImage, "splunk-upgrade-image", "", "Splunk Enterprise image to upgrade to for rolling update tests")
 	flag.StringVar(&specifiedCommitHash, "commit-hash", "", "commit hash string to use as part of the name")
 	flag.StringVar(&specifiedJobID, "job-id", os.Getenv("CI_JOB_ID"), "CI job ID used to label test namespaces for isolated post-job cleanup")
 	flag.StringVar(&installOperatorClusterWide, "cluster-wide", "true", "install operator clusterwide, if not install per test case")
@@ -266,6 +269,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		operatorName:         "splunk-op-" + envName,
 		operatorImage:        operatorImage,
 		splunkImage:          splunkImage,
+		splunkUpgradeImage:   specifiedSplunkUpgradeImage,
 		SkipTeardown:         specifiedSkipTeardown,
 		licenseCMName:        envName,
 		licenseFilePath:      licenseFilePath,
@@ -326,6 +330,15 @@ func (testenv *TestEnv) GetName() string {
 
 // GetSplunkImage returns the Splunk Enterprise image configured for this testenv.
 func (testenv *TestEnv) GetSplunkImage() string {
+	return testenv.splunkImage
+}
+
+// GetSplunkUpgradeImage returns the Splunk Enterprise upgrade image for rolling update tests.
+// Falls back to splunkImage if no upgrade image is configured.
+func (testenv *TestEnv) GetSplunkUpgradeImage() string {
+	if testenv.splunkUpgradeImage != "" {
+		return testenv.splunkUpgradeImage
+	}
 	return testenv.splunkImage
 }
 
