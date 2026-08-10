@@ -859,6 +859,8 @@ spec:
 ```
 ## Managing global kubernetes secret object
 
+**Note:** the steps below manage the global secret object directly with `kubectl`. If you want an external secret manager (Azure Key Vault, HashiCorp Vault, AWS Secrets Manager, etc.) to own and rotate these values instead, see [Populating the global secret object using External Secrets Operator (ESO)](../operate/PasswordManagement.md#populating-the-global-secret-object-using-external-secrets-operator-eso).
+
 ### Creating global kubernetes secret object
 
 Use the kubectl command to create the global kubernetes secret object:
