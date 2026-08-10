@@ -310,7 +310,10 @@ func TestTelemetryCollectDeploymentTelData_AllKinds(t *testing.T) {
 	}
 	fakeClient := &FakeListClient{crs: crs}
 	deploymentData := make(map[string]interface{})
-	crWithTelAppList := collectDeploymentTelData(ctx, fakeClient, deploymentData)
+	crWithTelAppList, err := collectDeploymentTelData(ctx, fakeClient, deploymentData)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
 	kinds := []string{"Standalone", "LicenseManager", "LicenseMaster", "SearchHeadCluster", "IndexerCluster", "ClusterManager", "ClusterMaster"}
 	for _, kind := range kinds {
 		if _, ok := deploymentData[kind]; !ok {
@@ -341,10 +344,10 @@ func TestTelemetryCollectDeploymentTelData_AllKinds(t *testing.T) {
 
 func TestApplyTelemetry_NoCRs(t *testing.T) {
 	cm := &corev1.ConfigMap{Data: map[string]string{}}
-	mockClient := test.NewMockClient()
-	result, err := ApplyTelemetry(context.TODO(), mockClient, cm)
-	if err == nil {
-		t.Errorf("expected error when no CRs are present")
+	fakeClient := &FakeListClient{MockClient: *test.NewMockClient()}
+	result, err := ApplyTelemetry(context.TODO(), fakeClient, cm)
+	if err != nil {
+		t.Errorf("expected no error when no CRs are present, got %v", err)
 	}
 	if result != (reconcile.Result{}) && !result.Requeue {
 		t.Errorf("expected requeue to be true")
@@ -426,29 +429,30 @@ func TestApplyTelemetry_Success(t *testing.T) {
 
 func TestApplyTelemetry_ConfigMapWithExistingData(t *testing.T) {
 	cm := &corev1.ConfigMap{Data: map[string]string{"foo": "bar"}}
-	mockClient := test.NewMockClient()
-	result, err := ApplyTelemetry(context.TODO(), mockClient, cm)
-	if err == nil {
-		t.Errorf("expected error when no CRs are present, even with configmap data")
+	fakeClient := &FakeListClient{MockClient: *test.NewMockClient()}
+	result, err := ApplyTelemetry(context.TODO(), fakeClient, cm)
+	if err != nil {
+		t.Errorf("expected no error when no CRs are present, even with configmap data, got %v", err)
 	}
 	if result != (reconcile.Result{}) && !result.Requeue {
 		t.Errorf("expected requeue to be true")
 	}
 }
 
-// Fix TestApplyTelemetry_CRNoTelAppInstalled signature
 func TestApplyTelemetry_CRNoTelAppInstalled(t *testing.T) {
 	cm := &corev1.ConfigMap{Data: map[string]string{}}
-	mockClient := test.NewMockClient()
 	cr := &enterpriseApi.Standalone{
 		TypeMeta:   metav1.TypeMeta{Kind: "Standalone"},
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Status:     enterpriseApi.StandaloneStatus{TelAppInstalled: false},
 	}
-	_ = mockClient.Create(context.TODO(), cr)
-	result, err := ApplyTelemetry(context.TODO(), mockClient, cm)
-	if err == nil {
-		t.Errorf("expected error when no CRs with TelAppInstalled=true")
+	fakeClient := &FakeListClient{
+		MockClient: *test.NewMockClient(),
+		crs:        map[string][]client.Object{"Standalone": {cr}},
+	}
+	result, err := ApplyTelemetry(context.TODO(), fakeClient, cm)
+	if err != nil {
+		t.Errorf("expected no error when no CRs have TelAppInstalled=true, got %v", err)
 	}
 	if result != (reconcile.Result{}) && !result.Requeue {
 		t.Errorf("expected requeue to be true")
