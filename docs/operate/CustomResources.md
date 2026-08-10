@@ -126,6 +126,21 @@ configuration parameters:
 | serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
 | topologySpreadConstraint       | [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) | Template used to create Kubernetes [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) |
 
+### Postgres Node Sidecar
+
+Starting with Splunk Enterprise 10.6, SOK disables the Postgres node sidecar by default on all managed pods by injecting `SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED=true`. No SOK-supported use case requires the sidecar on Kubernetes (DMX, SPL2, and Data Orchestrator are unsupported on CMP-K), and on 10.4+ it would otherwise silently start a database accumulating data in an unsupported configuration.
+
+To re-enable the sidecar, set the variable to a different value in `spec.extraEnv`:
+
+```yaml
+spec:
+  extraEnv:
+    - name: SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED
+      value: "false"
+```
+
+> **Note:** This override may be removed in a future SOK release. Enabling the Postgres sidecar in SOK deployments is not officially supported.
+
 ## Common Spec Parameters for Splunk Enterprise Resources
 
 ```yaml
