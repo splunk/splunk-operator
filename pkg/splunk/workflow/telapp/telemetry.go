@@ -80,7 +80,15 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	telDeployment = make(map[string]interface{})
 	data[telDeploymentKey] = telDeployment
 	// Add SOK telemetry
-	crWithTelAppList := collectDeploymentTelData(ctx, client, telDeployment)
+	crWithTelAppList, collectErr := collectDeploymentTelData(ctx, client, telDeployment)
+	if collectErr != nil {
+		return result, fmt.Errorf("failed to collect deployment telemetry data: %w", collectErr)
+	}
+	if len(crWithTelAppList) == 0 {
+		logger.InfoContext(ctx, "no CRs with telemetry app installed found, nothing to send")
+		return result, nil
+	}
+
 	/*
 	 * Add other component's telemetry set in splunk-operator-manager-telemetry configmap.
 	 * i.e splunk POD's telemetry
@@ -154,7 +162,7 @@ type crListHandler struct {
 	checkTelApp bool
 }
 
-func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerClient, deploymentData map[string]interface{}) map[string][]splcommon.MetaObject {
+func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerClient, deploymentData map[string]interface{}) (map[string][]splcommon.MetaObject, error) {
 	logger := logging.FromContext(ctx).With("func", "collectDeploymentTelData")
 
 	var crWithTelAppList map[string][]splcommon.MetaObject
@@ -171,13 +179,16 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		{kind: "ClusterManager", handlerFunc: handleClusterManagers, checkTelApp: true},
 		{kind: "ClusterMaster", handlerFunc: handleClusterMasters, checkTelApp: true},
 		{kind: "MonitoringConsole", handlerFunc: handleMonitoringConsoles, checkTelApp: false},
+		{kind: "IngestorCluster", handlerFunc: handleIngestorClusters, checkTelApp: true},
 	}
 
 	// Process each CR type using the same logic
+	var errs []error
 	for _, handler := range handlers {
 		data, crs, err := handler.handlerFunc(ctx, client)
 		if err != nil {
 			logger.ErrorContext(ctx, "error processing CR type", "error", err, "kind", handler.kind)
+			errs = append(errs, fmt.Errorf("%s: %w", handler.kind, err))
 			continue
 		}
 		if handler.checkTelApp && crs != nil && len(crs) > 0 {
@@ -189,7 +200,7 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 	}
 
 	logger.InfoContext(ctx, "successfully collected deployment telemetry data", "deploymentData", deploymentData)
-	return crWithTelAppList
+	return crWithTelAppList, errors.Join(errs...)
 }
 
 func handleStandalones(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
@@ -368,6 +379,29 @@ func handleMonitoringConsoles(ctx context.Context, client splcommon.ControllerCl
 	return retData, nil, nil
 }
 
+func handleIngestorClusters(ctx context.Context, client splcommon.ControllerClient) (interface{}, []splcommon.MetaObject, error) {
+	var list enterpriseApi.IngestorClusterList
+	err := client.List(ctx, &list)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil, nil
+	}
+
+	retData := make(map[string]interface{})
+	retCRs := make([]splcommon.MetaObject, 0)
+	for i := range list.Items {
+		cr := &list.Items[i]
+		if cr.Status.TelAppInstalled {
+			retCRs = append(retCRs, cr)
+		}
+		retData[cr.GetName()] = collectResourceTelData(crDeploymentSpec{Spec: cr.Spec.CommonSplunkSpec.Spec, Replicas: &cr.Spec.Replicas})
+	}
+	return retData, retCRs, nil
+}
+
 func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string]interface{}) {
 	logger := logging.FromContext(ctx).With("func", "collectCMTelData")
 	logger.InfoContext(ctx, "start")
@@ -434,6 +468,8 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		instanceID = splcommon.SplunkClusterMaster
 	case "ClusterManager":
 		instanceID = splcommon.SplunkClusterManager
+	case "IngestorCluster":
+		instanceID = splcommon.SplunkIngestor
 	default:
 		logger.ErrorContext(ctx, "failed to determine instance type for telemetry", "error", fmt.Errorf("unknown CR kind"))
 		return false
