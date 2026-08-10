@@ -127,6 +127,10 @@
               {
                 "name": "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH",
                 "value": "true"
+              },
+              {
+                "name": "SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED",
+                "value": "true"
               }
             ],
             "resources": {

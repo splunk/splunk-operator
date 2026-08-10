@@ -121,6 +121,10 @@
                 "value": "true"
               },
               {
+                "name": "SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED",
+                "value": "true"
+              },
+              {
                 "name": "SPLUNK_LICENSE_MASTER_URL",
                 "value": "splunk-stack1-license-manager-service.test.svc.cluster.local"
               }
