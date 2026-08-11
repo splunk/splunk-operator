@@ -145,3 +145,4 @@ AGENTS.override.md
 .secrets
 .env.local
 .env.*.local
+test/postgrescontrollers/*.log

@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
@@ -281,8 +282,15 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)
 
 	// Scheme
-	enterpriseApi.SchemeBuilder.AddToScheme(scheme.Scheme)
-	enterpriseApiV3.SchemeBuilder.AddToScheme(scheme.Scheme)
+	if err := enterpriseApi.SchemeBuilder.AddToScheme(scheme.Scheme); err != nil {
+		return nil, err
+	}
+	if err := enterpriseApiV3.SchemeBuilder.AddToScheme(scheme.Scheme); err != nil {
+		return nil, err
+	}
+	if err := cnpgv1.AddToScheme(scheme.Scheme); err != nil {
+		return nil, err
+	}
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
