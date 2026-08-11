@@ -230,6 +230,19 @@ func deriveConditionsFromPhase(existingConditions []metav1.Condition, in PhaseCo
 	}
 	stalledCondition.LastTransitionTime = getTransitionTime(stalledCondition.Type, stalledCondition.Status)
 
+	// Preserve any conditions managed outside this function (e.g. ConditionRestarting).
+	managedTypes := map[string]struct{}{
+		string(enterpriseApi.ConditionReady):       {},
+		string(enterpriseApi.ConditionProgressing): {},
+		string(enterpriseApi.ConditionPaused):      {},
+		string(enterpriseApi.ConditionStalled):     {},
+	}
+	for _, c := range existingConditions {
+		if _, managed := managedTypes[c.Type]; !managed {
+			conditions = append(conditions, c)
+		}
+	}
+
 	conditions = append(conditions, readyCondition, progressingCondition, pausedCondition, stalledCondition)
 	return conditions
 }

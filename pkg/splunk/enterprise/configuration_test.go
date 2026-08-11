@@ -197,7 +197,6 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	want = strings.ReplaceAll(want, " ", "")
 
 	require.JSONEq(t, normalizeGeneratedConfigJSON(t, want), normalizeGeneratedConfigJSON(t, string(got)))
 }

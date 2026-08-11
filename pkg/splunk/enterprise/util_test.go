@@ -30,6 +30,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -3568,4 +3569,105 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 	if !found {
 		t.Errorf("Expected AppRepositoryConnectionFailed event to be published")
 	}
+}
+
+func TestApplyIngestorPodDisruptionBudget(t *testing.T) {
+	ctx := context.TODO()
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	utilruntime.Must(policyv1.AddToScheme(sch))
+
+	makeCR := func(replicas int32) *enterpriseApi.IngestorCluster {
+		return &enterpriseApi.IngestorCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "test",
+			},
+			Spec: enterpriseApi.IngestorClusterSpec{
+				Replicas: replicas,
+			},
+		}
+	}
+
+	pdbName := GetSplunkStatefulsetName(SplunkIngestor, "test")
+
+	// Create case: PDB does not exist yet
+	t.Run("create", func(t *testing.T) {
+		c := newFakeClientBuilder(sch).Build()
+		cr := makeCR(3)
+		if err := ApplyIngestorPodDisruptionBudget(ctx, c, cr); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var pdb policyv1.PodDisruptionBudget
+		if err := c.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: "test"}, &pdb); err != nil {
+			t.Fatalf("PDB not found after create: %v", err)
+		}
+		if pdb.Spec.MaxUnavailable == nil {
+			t.Fatal("MaxUnavailable is nil")
+		}
+		if pdb.Spec.MaxUnavailable.IntValue() != 1 {
+			t.Errorf("MaxUnavailable = %d; want 1", pdb.Spec.MaxUnavailable.IntValue())
+		}
+		wantInstance := "splunk-test-ingestor"
+		if got := pdb.Spec.Selector.MatchLabels["app.kubernetes.io/instance"]; got != wantInstance {
+			t.Errorf("spec selector instance = %q; want %q", got, wantInstance)
+		}
+		if got := pdb.Labels["app.kubernetes.io/managed-by"]; got != "splunk-operator" {
+			t.Errorf("metadata label managed-by = %q; want splunk-operator", got)
+		}
+		if got := pdb.Labels["app.kubernetes.io/instance"]; got != wantInstance {
+			t.Errorf("metadata label instance = %q; want %q", got, wantInstance)
+		}
+	})
+
+	// Conflict case: PDB with matching labels exists but is owned by a different CR
+	t.Run("error-when-owned-by-other-cr", func(t *testing.T) {
+		foreign := &policyv1.PodDisruptionBudget{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pdbName,
+				Namespace: "test",
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "splunk-operator",
+					"app.kubernetes.io/instance":   "splunk-test-ingestor",
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{UID: "some-other-uid"},
+				},
+			},
+		}
+		c := newFakeClientBuilder(sch).WithObjects(foreign).Build()
+		cr := makeCR(3)
+		if err := ApplyIngestorPodDisruptionBudget(ctx, c, cr); err == nil {
+			t.Fatal("expected error for PDB owned by different CR, got nil")
+		}
+	})
+
+	// Idempotent case: PDB already exists and is owned by this CR; must not be updated
+	t.Run("no-update-when-exists", func(t *testing.T) {
+		c := newFakeClientBuilder(sch).Build()
+		cr := makeCR(3)
+
+		// First call creates the PDB
+		if err := ApplyIngestorPodDisruptionBudget(ctx, c, cr); err != nil {
+			t.Fatalf("unexpected error on create: %v", err)
+		}
+
+		// Second call (different replica count) must be a no-op
+		cr2 := makeCR(5)
+		if err := ApplyIngestorPodDisruptionBudget(ctx, c, cr2); err != nil {
+			t.Fatalf("unexpected error on second call: %v", err)
+		}
+
+		// MaxUnavailable must still be 1
+		var pdb policyv1.PodDisruptionBudget
+		if err := c.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: "test"}, &pdb); err != nil {
+			t.Fatalf("PDB not found: %v", err)
+		}
+		if pdb.Spec.MaxUnavailable == nil || pdb.Spec.MaxUnavailable.IntValue() != 1 {
+			t.Errorf("MaxUnavailable changed after scale; want 1")
+		}
+	})
 }
