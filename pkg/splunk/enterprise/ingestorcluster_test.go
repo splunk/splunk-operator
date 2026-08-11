@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
@@ -117,6 +118,7 @@ func TestApplyIngestorClusterTerminalFailures(t *testing.T) {
 		_ = enterpriseApi.AddToScheme(scheme)
 		_ = corev1.AddToScheme(scheme)
 		_ = appsv1.AddToScheme(scheme)
+		_ = policyv1.AddToScheme(scheme)
 		c := newFakeClientBuilder(scheme).Build()
 
 		// Create the Queue CR so only the ObjectStorage CR is missing.
@@ -155,6 +157,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	_ = enterpriseApi.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 	c := newFakeClientBuilder(scheme).Build()
 
 	queue := &enterpriseApi.Queue{
@@ -335,7 +338,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	result, err := ApplyIngestorCluster(ctx, c, cr)
 	assert.NoError(t, err)
-	assert.True(t, result.Requeue)
+	assert.NotZero(t, result.RequeueAfter)
 	assert.NotEqual(t, enterpriseApi.PhaseError, cr.Status.Phase)
 	// No QueueConfigUpdated / IngestorsRestarted events expected: config is declarative.
 }
@@ -879,6 +882,7 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	_ = enterpriseApi.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 	c := newFakeClientBuilder(scheme).Build()
 
 	queue := &enterpriseApi.Queue{
@@ -1015,11 +1019,15 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	cr.Status.Replicas = threeReplicas
 	cr.Status.ReadyReplicas = threeReplicas
 
-	sts.Spec.Replicas = &oneReplica
-	_ = c.Update(ctx, sts)
-	sts.Status.Replicas = oneReplica
-	sts.Status.ReadyReplicas = oneReplica
-	_ = c.Status().Update(ctx, sts)
+	// Read the current STS from the fake client (it has the lifecycle fields injected by earlier reconciles)
+	// and only update the replica count, so we don't overwrite the spec with the stale original sts.
+	currentSts := &appsv1.StatefulSet{}
+	_ = c.Get(ctx, client.ObjectKey{Name: sts.Name, Namespace: sts.Namespace}, currentSts)
+	currentSts.Spec.Replicas = &oneReplica
+	_ = c.Update(ctx, currentSts)
+	currentSts.Status.Replicas = oneReplica
+	currentSts.Status.ReadyReplicas = oneReplica
+	_ = c.Status().Update(ctx, currentSts)
 	for i := int32(1); i < threeReplicas; i++ {
 		_ = c.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), i), Namespace: cr.GetNamespace()}})
 	}
@@ -1207,5 +1215,69 @@ func TestIngQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 	for _, event := range recorder.events {
 		assert.NotEqual(t, "QueueConfigUpdated", event.reason, "declarative path must not emit QueueConfigUpdated on ref change")
 		assert.NotEqual(t, "IngestorsRestarted", event.reason, "declarative path must not emit IngestorsRestarted on ref change")
+	}
+}
+func TestGetIngestorStatefulSetPreStop(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.IngestorCluster{
+		TypeMeta: metav1.TypeMeta{Kind: "IngestorCluster"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas:         1,
+			QueueRef:         corev1.ObjectReference{Name: "queue", Namespace: "test"},
+			ObjectStorageRef: corev1.ObjectReference{Name: "os", Namespace: "test"},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("ApplyNamespaceScopedSecretObject: %v", err)
+	}
+	if err := validateIngestorClusterSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateIngestorClusterSpec: %v", err)
+	}
+
+	ss, err := getIngestorStatefulSet(ctx, c, &cr)
+	if err != nil {
+		t.Fatalf("getIngestorStatefulSet: %v", err)
+	}
+
+	if ss.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
+		t.Fatal("TerminationGracePeriodSeconds is nil")
+	}
+	if *ss.Spec.Template.Spec.TerminationGracePeriodSeconds != 60 {
+		t.Errorf("TerminationGracePeriodSeconds = %d; want 60", *ss.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	}
+
+	for i, c := range ss.Spec.Template.Spec.Containers {
+		if c.Lifecycle == nil {
+			t.Errorf("container[%d] Lifecycle is nil", i)
+			continue
+		}
+		if c.Lifecycle.PreStop == nil {
+			t.Errorf("container[%d] PreStop is nil", i)
+			continue
+		}
+		if c.Lifecycle.PreStop.Exec == nil {
+			t.Errorf("container[%d] PreStop.Exec is nil", i)
+			continue
+		}
+		wantCmd := []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk stop"}
+		cmd := c.Lifecycle.PreStop.Exec.Command
+		if len(cmd) != len(wantCmd) {
+			t.Errorf("container[%d] Command = %v; want %v", i, cmd, wantCmd)
+			continue
+		}
+		for j := range wantCmd {
+			if cmd[j] != wantCmd[j] {
+				t.Errorf("container[%d] Command[%d] = %q; want %q", i, j, cmd[j], wantCmd[j])
+			}
+		}
 	}
 }

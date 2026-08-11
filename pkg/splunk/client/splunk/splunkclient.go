@@ -1021,6 +1021,31 @@ func (c *SplunkClient) GetLicenseInfo() (map[string]LicenseInfo, error) {
 	return licenses, nil
 }
 
+// GetRestartRequired returns true if Splunk has a pending restart_required message.
+// Returns (false, nil) on HTTP 404, meaning no restart is needed.
+func (c *SplunkClient) GetRestartRequired(ctx context.Context) (bool, error) {
+	endpoint := fmt.Sprintf("%s/services/messages/restart_required?output_mode=json", c.ManagementURI)
+	request, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return false, err
+	}
+	request.SetBasicAuth(c.Username, c.Password)
+	response, err := c.Client.Do(request)
+	if err != nil {
+		return false, err
+	}
+	defer response.Body.Close()
+	switch response.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		body, _ := io.ReadAll(response.Body)
+		return false, fmt.Errorf("unexpected status %d from restart_required: %s", response.StatusCode, string(body))
+	}
+}
+
 // RestartSplunk restarts specific Splunk instance
 // Can be used for any Splunk Instance
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTsystem#server.2Fcontrol.2Frestart

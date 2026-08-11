@@ -214,6 +214,17 @@
               "seccompProfile": {
                 "type": "RuntimeDefault"
               }
+            },
+            "lifecycle": {
+              "preStop": {
+                "exec": {
+                  "command": [
+                    "/bin/sh",
+                    "-c",
+                    "/opt/splunk/bin/splunk stop"
+                  ]
+                }
+              }
             }
           }
         ],
@@ -246,7 +257,8 @@
             ]
           }
         },
-        "schedulerName": "default-scheduler"
+        "schedulerName": "default-scheduler",
+        "terminationGracePeriodSeconds": 60
       }
     },
     "volumeClaimTemplates": [

@@ -59,6 +59,8 @@ type IngestorClusterReconciler struct {
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues;objectstorages,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues/status;objectstorages/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues/finalizers;objectstorages/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=pods/eviction,verbs=create
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=list;create;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

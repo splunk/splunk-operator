@@ -17,11 +17,13 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
@@ -37,14 +39,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+const (
+	ingestorTerminationGracePeriodSeconds = int64(60)
+)
+
 // ApplyIngestorCluster reconciles the state of an IngestorCluster custom resource
 func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
 	var err error
 
-	// Unless modified, reconcile for this object will be requeued after 5 seconds
+	// Default requeue interval for the rolling eviction polling loop.
 	result := reconcile.Result{
 		Requeue:      true,
-		RequeueAfter: time.Second * 5,
+		RequeueAfter: time.Minute,
 	}
 
 	logger := logging.FromContext(ctx).With("func", "ApplyIngestorCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -164,6 +170,13 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Apply of service failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
+		return result, err
+	}
+
+	// Create PodDisruptionBudget for ingestor cluster if it does not already exist
+	if err = ApplyIngestorPodDisruptionBudget(ctx, client, cr); err != nil {
+		eventPublisher.Warning(ctx, "ApplyPodDisruptionBudgetFailed", "Apply of PodDisruptionBudget failed. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create PodDisruptionBudget")
 		return result, err
 	}
 
@@ -293,13 +306,29 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 	}
 
-	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
-	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
-	if !result.Requeue {
-		result.RequeueAfter = 0
+	// Poll each ingestor pod for restart_required and evict pods gated by PDB.
+	// Skip while app framework deployment is in progress: ansible's REST conf
+	// writes transiently set restart_required on pod startup, which would
+	// otherwise trigger unintended evictions during app download/install.
+	var evictResult reconcile.Result
+	if !cr.Status.AppContext.IsDeploymentInProgress {
+		evictResult, err = RunRollingEviction(ctx, client, cr, logger)
+		if err != nil {
+			eventPublisher.Warning(ctx, "RollingEvictionFailed", "Failed during rolling eviction. Check operator logs for details.")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed during rolling eviction")
+		}
 	}
 
-	return result, nil
+	// Always requeue to drive the rolling eviction polling loop, capped at 1 minute.
+	// Honour a shorter interval if eviction or the app-framework requested one.
+	if result.RequeueAfter == 0 || result.RequeueAfter > time.Minute {
+		result.RequeueAfter = time.Minute
+	}
+	if evictResult.RequeueAfter > 0 && evictResult.RequeueAfter < result.RequeueAfter {
+		result.RequeueAfter = evictResult.RequeueAfter
+	}
+
+	return result, err
 }
 
 // validateIngestorClusterSpec checks validity and makes default updates to a IngestorClusterSpec and returns error if something is wrong
@@ -383,8 +412,54 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 		return nil, err
 	}
 
+	// Set graceful shutdown: preStop runs splunk stop before kubelet sends SIGTERM
+	gracePeriod := ingestorTerminationGracePeriodSeconds
+	ss.Spec.Template.Spec.TerminationGracePeriodSeconds = &gracePeriod
+	for i := range ss.Spec.Template.Spec.Containers {
+		ss.Spec.Template.Spec.Containers[i].Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk stop"},
+				},
+			},
+		}
+	}
+
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, nil
+}
+
+type ingestorClusterPodManager struct {
+	c               splcommon.ControllerClient
+	log             *slog.Logger
+	cr              *enterpriseApi.IngestorCluster
+	secrets         *corev1.Secret
+	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
+var newIngestorClusterPodManager = func(log *slog.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
+	return ingestorClusterPodManager{
+		log:             log,
+		cr:              cr,
+		secrets:         secret,
+		newSplunkClient: newSplunkClient,
+		c:               c,
+	}
+}
+
+func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
+	logger := slog.With("func", "ingestorClusterPodManager.getClient", "name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+
+	memberName := GetSplunkStatefulsetPodName(SplunkIngestor, mgr.cr.GetName(), n)
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(SplunkIngestor, mgr.cr.GetName(), true)))
+
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
+	if err != nil {
+		logger.WarnContext(ctx, "couldn't retrieve the admin password from pod", "error", err)
+	}
+
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }

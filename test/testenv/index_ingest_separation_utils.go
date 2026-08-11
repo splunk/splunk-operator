@@ -39,6 +39,11 @@ func DeployQueueAndObjectStorage(ctx context.Context, deployment *Deployment, qS
 
 // SetupIngestorStack deploys the full Queue/ObjectStorage/IngestorCluster/ClusterManager/IndexerCluster stack
 // and verifies each component reaches the Ready phase.
+//
+// Deployment order matters for stability: ClusterManager and IndexerCluster are started first and
+// verified ready before the IngestorCluster is deployed. This avoids all pods racing for node
+// resources simultaneously, which caused KVStore (MongoDB) crashes during Splunk's first restart
+// cycle when credentials were written and a restart was triggered under memory pressure.
 func (testcaseEnvInst *TestCaseEnv) SetupIngestorStack(ctx context.Context, deployment *Deployment, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec, cmSpec enterpriseApi.ClusterManagerSpec) error {
 	secretName := testcaseEnvInst.GetIndexIngestSepSecretName()
 	qSpec.SQS.SecretKeyRef = &enterpriseApi.SQSSecretKeyRef{
@@ -51,10 +56,9 @@ func (testcaseEnvInst *TestCaseEnv) SetupIngestorStack(ctx context.Context, depl
 		return err
 	}
 
-	if _, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, ""); err != nil {
-		return fmt.Errorf("unable to deploy Ingestor Cluster: %w", err)
-	}
-
+	// Deploy ClusterManager and IndexerCluster first and wait for them to be ready.
+	// Ingestors depend on the indexer cluster being healthy (SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH
+	// aside, KVStore initialization races with concurrent pod startups under memory pressure).
 	if _, err := deployment.DeployClusterManagerWithGivenSpec(ctx, deployment.GetName(), cmSpec); err != nil {
 		return fmt.Errorf("unable to deploy Cluster Manager: %w", err)
 	}
@@ -63,14 +67,20 @@ func (testcaseEnvInst *TestCaseEnv) SetupIngestorStack(ctx context.Context, depl
 		return fmt.Errorf("unable to deploy Indexer Cluster: %w", err)
 	}
 
-	if err := testcaseEnvInst.VerifyIngestorReady(ctx, deployment); err != nil {
-		return fmt.Errorf("ingestor not ready: %w", err)
-	}
 	if err := testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment); err != nil {
 		return fmt.Errorf("cluster manager not ready: %w", err)
 	}
 	if err := testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment); err != nil {
 		return fmt.Errorf("indexers not ready: %w", err)
+	}
+
+	// Deploy IngestorCluster only after the indexer cluster is ready.
+	if _, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, ""); err != nil {
+		return fmt.Errorf("unable to deploy Ingestor Cluster: %w", err)
+	}
+
+	if err := testcaseEnvInst.VerifyIngestorReady(ctx, deployment); err != nil {
+		return fmt.Errorf("ingestor not ready: %w", err)
 	}
 	return nil
 }

@@ -35,10 +35,12 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -2548,4 +2550,56 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	cr.SetAnnotations(annotations)
 	err := c.Update(ctx, cr)
 	return err
+}
+
+// ApplyIngestorPodDisruptionBudget creates a PodDisruptionBudget for an IngestorCluster if one
+// does not already exist. It finds the PDB by listing with label selectors rather than by name,
+// so the lookup is scoped to PDBs that actually target this IngestorCluster's pods.
+// maxUnavailable=1 allows exactly one voluntary disruption at a time regardless of replica count.
+// If a matching PDB exists but is not owned by this IngestorCluster, an error is returned.
+func ApplyIngestorPodDisruptionBudget(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) error {
+	instanceLabel := fmt.Sprintf("splunk-%s-ingestor", cr.GetName())
+	maxUnavailable := intstr.FromInt(1)
+	desired := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+			Namespace: cr.GetNamespace(),
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "splunk-operator",
+				"app.kubernetes.io/instance":   instanceLabel,
+			},
+			OwnerReferences: []metav1.OwnerReference{splcommon.AsOwner(cr, true)},
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MaxUnavailable: &maxUnavailable,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app.kubernetes.io/instance": instanceLabel,
+				},
+			},
+		},
+	}
+
+	var list policyv1.PodDisruptionBudgetList
+	if err := c.List(ctx, &list,
+		client.InNamespace(cr.GetNamespace()),
+		client.MatchingLabels{
+			"app.kubernetes.io/managed-by": "splunk-operator",
+			"app.kubernetes.io/instance":   instanceLabel,
+		},
+	); err != nil {
+		return err
+	}
+	if len(list.Items) == 0 {
+		return splutil.CreateResource(ctx, c, desired)
+	}
+	for _, pdb := range list.Items {
+		for _, ref := range pdb.OwnerReferences {
+			if ref.UID == cr.GetUID() {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("PodDisruptionBudget for IngestorCluster %q exists in namespace %q but is not owned by this CR",
+		cr.GetName(), cr.GetNamespace())
 }

@@ -169,6 +169,9 @@ const (
 
 	// ConditionStalled indicates the resource is stalled due to a failure that will not self-recover
 	ConditionStalled ConditionType = "Stalled"
+
+	// ConditionRestarting indicates a rolling restart of pods is in progress, gated by PDB
+	ConditionRestarting ConditionType = "Restarting"
 )
 
 // ConditionReason represents the reason for a condition's status
@@ -200,6 +203,12 @@ const (
 	// Stalled reasons
 	ReasonStalled    ConditionReason = "Stalled"
 	ReasonNotStalled ConditionReason = "NotStalled"
+
+	// Restarting reasons
+	ReasonRollingRestartInProgress ConditionReason = "RollingRestartInProgress"
+	ReasonRollingRestartComplete   ConditionReason = "RollingRestartComplete"
+	ReasonRestartBlockedByPDB      ConditionReason = "RestartBlockedByPDB"
+	ReasonRestartCheckIncomplete   ConditionReason = "RestartCheckIncomplete"
 )
 
 // Probe defines set of configurable values for Startup, Readiness, and Liveness probes

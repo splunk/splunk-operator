@@ -27,6 +27,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +40,7 @@ import (
 )
 
 func init() {
-	MockObjectCopiers = append(MockObjectCopiers, coreObjectCopier, appsObjectCopier, enterpriseObjCopier)
+	MockObjectCopiers = append(MockObjectCopiers, coreObjectCopier, appsObjectCopier, policyObjectCopier, enterpriseObjCopier)
 	MockObjectListCopiers = append(MockObjectListCopiers, coreObjectListCopier, enterpriseObjListCopier)
 }
 
@@ -149,6 +150,19 @@ func coreObjectListCopier(dst, src *client.ObjectList) bool {
 		default:
 			return false
 		}
+	}
+	return true
+}
+
+// policyObjectCopier is used to copy policyv1 client.Objects
+func policyObjectCopier(dst, src *client.Object) bool {
+	srcP := *src
+	dstP := *dst
+	switch srcP.(type) {
+	case *policyv1.PodDisruptionBudget:
+		*dstP.(*policyv1.PodDisruptionBudget) = *srcP.(*policyv1.PodDisruptionBudget)
+	default:
+		return false
 	}
 	return true
 }
@@ -271,10 +285,11 @@ func (c MockSubResourceReader) Get(ctx context.Context, obj client.Object, subRe
 var _ client.SubResourceWriter = &MockSubResourceWriter{}
 
 type MockSubResourceWriter struct {
+	CreateErr error
 }
 
 func (c MockSubResourceWriter) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
-	return nil
+	return c.CreateErr
 }
 
 func (c MockSubResourceWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
@@ -313,6 +328,9 @@ type MockClient struct {
 
 	// error returned when an object is not found
 	NotFoundError error
+
+	// SubResourceCreateErr is returned by SubResource("eviction").Create() when set
+	SubResourceCreateErr error
 
 	// induceError is used to induce an error whenever required
 	InduceErrorKind map[string]error
@@ -608,9 +626,10 @@ func setupScheme(scheme *runtime.Scheme) {
 	// Add other necessary APIs
 }
 
-// AddObject adds an object to the MockClient's state
 func (c *MockClient) SubResource(subResource string) client.SubResourceClient {
-	src := MockSubResourceClient{}
+	src := MockSubResourceClient{
+		SubResourceWriter: MockSubResourceWriter{CreateErr: c.SubResourceCreateErr},
+	}
 	return &src
 }
 

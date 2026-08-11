@@ -87,6 +87,12 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods/eviction
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
   - pods/exec
   verbs:
   - create
@@ -95,6 +101,14 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - list
   - watch
 - apiGroups:
   - ""

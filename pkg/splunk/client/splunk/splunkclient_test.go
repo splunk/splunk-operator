@@ -35,7 +35,7 @@ var invalidUrlByteArray = []byte{0x7F}
 func splunkClientErrorTester(t *testing.T, test func(splunk.SplunkClient) error) {
 	url := string(invalidUrlByteArray)
 	mockSplunkClient := &spltest.MockHTTPClient{}
-	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "")
 	c.Client = mockSplunkClient
 	err := test(*c)
 	if err == nil {
@@ -46,7 +46,7 @@ func splunkClientErrorTester(t *testing.T, test func(splunk.SplunkClient) error)
 func splunkClientTester(t *testing.T, testMethod string, status int, body string, wantRequest *http.Request, test func(splunk.SplunkClient) error) {
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandler(wantRequest, status, body, nil)
-	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "")
 	c.Client = mockSplunkClient
 	err := test(*c)
 	if err != nil {
@@ -60,7 +60,7 @@ func splunkClientMultipleRequestTester(t *testing.T, testMethod string, status [
 	for i := 0; i < len(wantRequest); i++ {
 		mockSplunkClient.AddHandler(wantRequest[i], status[i], body[i], nil)
 	}
-	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "")
 	c.Client = mockSplunkClient
 	err := test(*c)
 	if err != nil {
@@ -72,7 +72,7 @@ func splunkClientMultipleRequestTester(t *testing.T, testMethod string, status [
 func TestSplunkClientDo(t *testing.T) {
 	// Test error in do
 	mockSplunkClient := &spltest.MockHTTPClient{}
-	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "")
 	c.Client = mockSplunkClient
 	hreq := http.Request{
 		Header: http.Header{},
@@ -471,7 +471,7 @@ func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 	// Test negative conditions
 	url := string(invalidUrlByteArray)
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "")
 	c.Client = mockSplunkHttpClient
 	c.GetMonitoringconsoleServerRoles()
 }
@@ -517,7 +517,7 @@ func TestGetMonitoringconsoleAssetTable(t *testing.T) {
 	// Test negative conditions
 	url := string(invalidUrlByteArray)
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "")
 	c.Client = mockSplunkHttpClient
 	c.GetMonitoringconsoleAssetTable()
 }
@@ -557,7 +557,7 @@ func TestGetMonitoringConsoleUISettings(t *testing.T) {
 	// Test negative conditions
 	url := string(invalidUrlByteArray)
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "")
 	c.Client = mockSplunkHttpClient
 	c.GetMonitoringConsoleUISettings()
 }
@@ -582,7 +582,7 @@ func TestUpdateLookupUISettings(t *testing.T) {
 	// Test negative conditions
 	url := string(invalidUrlByteArray)
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "")
 	c.Client = mockSplunkHttpClient
 	c.GetMonitoringConsoleUISettings()
 }
@@ -624,7 +624,7 @@ func TestGetClusterInfo(t *testing.T) {
 
 	// Test mock call
 	mockSplunkHttpClient := &spltest.MockHTTPClient{}
-	c := splunk.NewSplunkClient(url, "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient(url, "admin", "")
 	c.Client = mockSplunkHttpClient
 	c.GetClusterInfo(true)
 
@@ -719,7 +719,7 @@ func TestUpdateConfFile(t *testing.T) {
 	mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
 	mockSplunkClient.AddHandler(wantUpdateRequest, 200, "", nil)
 
-	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c := splunk.NewSplunkClient("https://localhost:8089", "admin", "")
 	c.Client = mockSplunkClient
 
 	err := c.UpdateConfFile(ctx, fileName, property, [][]string{{key, value}})
@@ -746,4 +746,50 @@ func TestUpdateConfFile(t *testing.T) {
 	if err == nil {
 		t.Errorf("UpdateConfFile expected error on update, got nil")
 	}
+}
+
+func TestGetRestartRequired(t *testing.T) {
+	ctx := context.Background()
+	wantURL := "https://localhost:8089/services/messages/restart_required?output_mode=json"
+
+	// HTTP 200 → restart_required is set
+	wantRequest, _ := http.NewRequest("GET", wantURL, nil)
+	splunkClientTester(t, "TestGetRestartRequired-200", 200, `{"messages":[]}`, wantRequest, func(c splunk.SplunkClient) error {
+		got, err := c.GetRestartRequired(ctx)
+		if err != nil {
+			return err
+		}
+		if !got {
+			return fmt.Errorf("expected true, got false")
+		}
+		return nil
+	})
+
+	// HTTP 404 → no restart needed; must return (false, nil) — use MockHTTPClient directly
+	// because splunkClientTester calls t.Errorf on any non-nil error
+	{
+		mockHTTP := &spltest.MockHTTPClient{}
+		req404, _ := http.NewRequest("GET", wantURL, nil)
+		mockHTTP.AddHandler(req404, 404, `{"messages":[{"type":"ERROR","text":"Could not find object id=restart_required"}]}`, nil)
+		c := splunk.NewSplunkClient("https://localhost:8089", "admin", "")
+		c.Client = mockHTTP
+		got, err := c.GetRestartRequired(ctx)
+		if err != nil {
+			t.Errorf("TestGetRestartRequired-404 unexpected error: %v", err)
+		}
+		if got {
+			t.Errorf("TestGetRestartRequired-404 expected false, got true")
+		}
+		mockHTTP.CheckRequests(t, "TestGetRestartRequired-404")
+	}
+
+	// HTTP 500 → unexpected status, must return error
+	wantRequest500, _ := http.NewRequest("GET", wantURL, nil)
+	splunkClientTester(t, "TestGetRestartRequired-500", 500, "", wantRequest500, func(c splunk.SplunkClient) error {
+		_, err := c.GetRestartRequired(ctx)
+		if err == nil {
+			return fmt.Errorf("expected error on 500, got nil")
+		}
+		return nil
+	})
 }
