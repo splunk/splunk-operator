@@ -317,11 +317,16 @@ func retryAnnotationChanged(oldAnnotations, newAnnotations map[string]string) bo
 }
 
 // cnpgClusterPredicator triggers on spec changes, phase changes, scale progress,
-// primary changes, or storage resize progress. Generation catches spec drift
-// before CNPG reflects it in status. Instance counts and CurrentPrimary are
-// watched explicitly because CNPG keeps Phase=Healthy during scale-down; the
-// only signal that anything is happening is ReadyInstances ticking down.
-// ResizingPVC is watched so the reconciler wakes when PVC expansion completes.
+// primary changes, storage resize progress, managed-roles status changes, or
+// metrics ConfigMap revision changes. Generation catches spec drift before
+// CNPG reflects it in status. Instance counts and CurrentPrimary are watched
+// explicitly because CNPG keeps Phase=Healthy during scale-down; the only
+// signal that anything is happening is ReadyInstances ticking down.
+// ResizingPVC is watched so the reconciler wakes when PVC expansion
+// completes. ManagedRolesStatus is watched so the reconciler wakes as soon as
+// CNPG's instance manager confirms a role drop — without it, a cluster that
+// is otherwise Ready never requeues and a role drop confirmed only in CNPG
+// status is never observed.
 func cnpgClusterPredicator() predicate.Predicate {
 	return predicate.Or(
 		predicate.GenerationChangedPredicate{},
@@ -346,6 +351,7 @@ func cnpgClusterPredicator() predicate.Predicate {
 					oldObj.Status.ReadyInstances != newObj.Status.ReadyInstances ||
 					oldObj.Status.CurrentPrimary != newObj.Status.CurrentPrimary ||
 					len(oldObj.Status.ResizingPVC) != len(newObj.Status.ResizingPVC) ||
+					!equality.Semantic.DeepEqual(oldObj.Status.ManagedRolesStatus, newObj.Status.ManagedRolesStatus) ||
 					!equality.Semantic.DeepEqual(
 						oldObj.Status.ConfigMapResourceVersion.Metrics,
 						newObj.Status.ConfigMapResourceVersion.Metrics,

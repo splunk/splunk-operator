@@ -1412,7 +1412,44 @@ func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase, flags ...
 	if len(flags) > 1 {
 		exists = flags[1]
 	}
-	return populateDatabaseStatusForDefinitions(postgresDB, postgresDB.Spec.Databases, ready, exists, includeRoles)
+	statuses := populateDatabaseStatusForDefinitions(postgresDB, postgresDB.Spec.Databases, ready, exists, includeRoles)
+	if includeRoles {
+		statuses = append(statuses, removedDatabaseTombstones(postgresDB)...)
+	}
+	return statuses
+}
+
+// removedDatabaseTombstones re-publishes an Exists:false tombstone for any database that
+// was previously reported in status but has since been removed from Spec.Databases while
+// the PostgresDatabase itself is not being deleted (e.g. a spec edit, not a CR deletion).
+// Without this, the role simply disappears from status with no drop signal, and
+// computeDesiredRoles (pkg/postgresql/cluster/core/managed_roles_model.go) has no explicit
+// drop to observe, so it keeps treating the role as still owned forever. This mirrors the
+// tombstoning cleanupManagedRoles performs for a full CR deletion.
+func removedDatabaseTombstones(postgresDB *enterprisev4.PostgresDatabase) []enterprisev4.DatabaseInfo {
+	inSpec := make(map[string]struct{}, len(postgresDB.Spec.Databases))
+	for _, dbSpec := range postgresDB.Spec.Databases {
+		inSpec[dbSpec.Name] = struct{}{}
+	}
+	var tombstones []enterprisev4.DatabaseInfo
+	for _, existing := range postgresDB.Status.Databases {
+		if _, ok := inSpec[existing.Name]; ok {
+			continue
+		}
+		if len(existing.Roles) == 0 {
+			continue
+		}
+		tombstone := enterprisev4.DatabaseInfo{Name: existing.Name}
+		for _, role := range existing.Roles {
+			tombstone.Roles = append(tombstone.Roles, enterprisev4.DatabaseRoleInfo{
+				Name:      role.Name,
+				SecretRef: role.SecretRef,
+				Exists:    false,
+			})
+		}
+		tombstones = append(tombstones, tombstone)
+	}
+	return tombstones
 }
 
 func populateDatabaseStatusForDefinitions(postgresDB *enterprisev4.PostgresDatabase, definitions []enterprisev4.DatabaseDefinition, ready bool, exists bool, includeRoles ...bool) []enterprisev4.DatabaseInfo {
