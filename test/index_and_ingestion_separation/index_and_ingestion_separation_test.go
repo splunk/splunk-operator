@@ -210,13 +210,18 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testenv.VerifyCRConditionsForPhase("IngestorCluster", ic.Name, ic.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "IngestorCluster conditions not met")
 		})
 
-		It("Splunk Operator can update IngestorCluster and IndexerCluster queueRef and objectStorageRef", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("Splunk Operator can update IngestorCluster and IndexerCluster queueRef and objectStorageRef", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			Expect(testcaseEnvInst.SetupIngestorStack(ctx, deployment, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
 
 			// Deploy a second Queue and ObjectStorage with different names
 			queue2 := queue
 			queue2.SQS.Name = queue.SQS.Name + "-v2"
 			queue2.SQS.DLQ = queue.SQS.DLQ + "-v2"
+			secretName := testcaseEnvInst.GetIndexIngestSepSecretName()
+			queue2.SQS.SecretKeyRef = &enterpriseApi.SQSSecretKeyRef{
+				AwsAccessKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_access_key"},
+				AwsSecretKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_secret_key"},
+			}
 			q2, err := deployment.DeployQueue(ctx, "queue-v2", queue2)
 			Expect(err).To(Succeed(), "Unable to deploy second Queue")
 			os2, err := deployment.DeployObjectStorage(ctx, "os-v2", objectStorage)

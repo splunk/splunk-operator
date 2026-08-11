@@ -357,39 +357,73 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterReady(ctx context.Context, de
 // VerifySingleSiteIndexersReady verify single site indexers go to ready state
 func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, deployment *Deployment) error {
 	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
-	// Use optimized watch to wait for Ready phase
-	err := testenv.WatchForIndexerClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, IndexerClusterReadyTimeout)
-	if err != nil {
-		return fmt.Errorf("IndexerCluster failed to reach Ready phase: %w", err)
-	}
 
-	// Refresh the instance to get latest state
+	// Honor the deployment's configured timeout so suites that explicitly opt
+	// into a larger budget aren't silently hard-capped at IndexerClusterReadyTimeout.
+	// Default to IndexerClusterReadyTimeout (45m) rather than DefaultTimeout (30m):
+	// on initial C3 deploy under CI contention, peers can be SIGKILLed by the
+	// startup probe and need several restart cycles to converge (e.g. job 256831840).
+	overallTimeout := deployment.GetTimeout()
+	if overallTimeout <= 0 {
+		overallTimeout = IndexerClusterReadyTimeout
+	}
+	overallDeadline := time.Now().Add(overallTimeout)
+
 	idc := &enterpriseApi.IndexerCluster{}
-	err = deployment.GetInstance(ctx, instanceName, idc)
-	if err != nil {
-		return fmt.Errorf("failed to get IndexerCluster instance: %w", err)
-	}
-	testenv.Log.Info("IndexerCluster reached Ready phase", "instance", instanceName, "phase", idc.Status.Phase)
-	DumpGetPods(testenv.GetName())
+	// Retry the "wait for Ready + verify it stays Ready" cycle as a single
+	// unit, bounded by the deployment timeout. A brief flip back to Updating
+	// (e.g. right after a live CR ref update triggers a real reconcile, or
+	// pods rolling one after another) should not fail the whole spec — we
+	// just re-wait for the next steady Ready and retry the consistency window.
+	for {
+		remaining := time.Until(overallDeadline)
+		if remaining <= 0 {
+			return fmt.Errorf("IndexerCluster did not reach steady Ready phase within %s", overallTimeout)
+		}
 
-	// In a steady state, we should stay in Ready and not flip-flop around.
-	// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
-	firstFailure := true
-	return PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
+		// Use optimized watch to wait for Ready phase. Cap each wait attempt
+		// at the remaining overall budget.
+		err := testenv.WatchForIndexerClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, remaining)
+		if err != nil {
+			return fmt.Errorf("IndexerCluster failed to reach Ready phase: %w", err)
+		}
+
+		// Refresh the instance to get latest state
 		if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
-			testenv.Log.Info("Transient error refreshing IndexerCluster during consistency check", "error", err)
+			return fmt.Errorf("failed to get IndexerCluster instance: %w", err)
 		}
-		testenv.Log.Info("Check for Consistency indexer instance's phase to be ready", "instance", instanceName, "phase", idc.Status.Phase)
-		if idc.Status.Phase != enterpriseApi.PhaseReady {
-			if firstFailure {
-				DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
-				firstFailure = false
+		testenv.Log.Info("IndexerCluster reached Ready phase", "instance", instanceName, "phase", idc.Status.Phase)
+		DumpGetPods(testenv.GetName())
+
+		// In a steady state, we should stay in Ready and not flip-flop around.
+		// Allow up to 2 consecutive non-Ready observations to tolerate transient phase churn.
+		firstFailure := true
+		consistencyErr := PollConsistentlyWithTolerance(ctx, ConsistentDuration, ConsistentPollInterval, 2, func() error {
+			if err := deployment.GetInstance(ctx, instanceName, idc); err != nil {
+				testenv.Log.Info("Transient error refreshing IndexerCluster during consistency check", "error", err)
 			}
-			return fmt.Errorf("indexer phase flipped to %s", idc.Status.Phase)
+			testenv.Log.Info("Check for Consistency indexer instance's phase to be ready", "instance", instanceName, "phase", idc.Status.Phase)
+			if idc.Status.Phase != enterpriseApi.PhaseReady {
+				if firstFailure {
+					DumpGetSplunkVersion(ctx, testenv.GetName(), deployment, "-idxc-indexer-")
+					firstFailure = false
+				}
+				return fmt.Errorf("indexer phase flipped to %s", idc.Status.Phase)
+			}
+			firstFailure = true
+			return VerifyCRConditionsForPhase("IndexerCluster", instanceName, idc.Status.Conditions, enterpriseApi.PhaseReady)
+		})
+		if consistencyErr == nil {
+			return nil
 		}
-		firstFailure = true
-		return VerifyCRConditionsForPhase("IndexerCluster", instanceName, idc.Status.Conditions, enterpriseApi.PhaseReady)
-	})
+
+		// Bail out immediately on context cancellation rather than spinning.
+		if ctx.Err() != nil {
+			return fmt.Errorf("context cancelled while waiting for steady IndexerCluster Ready: %w", consistencyErr)
+		}
+
+		testenv.Log.Info("IndexerCluster consistency check failed, will re-wait for steady Ready", "error", consistencyErr, "remaining", time.Until(overallDeadline))
+	}
 }
 
 // IngestorsReady verify ingestors go to ready state
