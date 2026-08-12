@@ -439,8 +439,8 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 		var secretReconcileErr secretReconcileError
 		require.ErrorAs(t, err, &secretReconcileErr)
 		assert.Equal(t, reasonExternalSecretMissingLabel, secretReconcileErr.reason)
-		assert.False(t, errors.Is(err, reconcile.TerminalError(nil)),
-			"a present-but-invalid secret stays requeueable — only an absent secret is terminal")
+		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)),
+			"a missing reload label is deterministic — retrying cannot fix it, so it must be terminal")
 		assert.Equal(t, pgcConstants.Failed, health.State)
 		assert.Equal(t, reasonExternalSecretMissingLabel, health.Reason)
 		assert.Equal(t, 0, counter.count,
@@ -570,6 +570,198 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 		require.Equal(t, reasonExternalSecretInvalidUsername, health.Reason)
 		require.Equal(t, reasonExternalSecretInvalidUsername, secretReconcileErr.reason)
 	})
+}
+
+// TestSecretModel_DeterministicValidationFailuresAreTerminal covers CPI-2109: an
+// invalid external superuser Secret used to return a plain reconcile error and be
+// retried with controller-runtime backoff until the Secret changed, producing a
+// retry storm for failures no retry can fix. Each deterministic validation
+// failure must now terminalize after SecretsReady=False is persisted, with
+// recovery driven by the external-Secret watch instead of backoff.
+func TestSecretModel_DeterministicValidationFailuresAreTerminal(t *testing.T) {
+	scheme := newTestScheme()
+
+	const (
+		validUsername = "postgres"
+		validPassword = "EXT-su-pw"
+	)
+	reloadLabel := map[string]string{labelCNPGReload: "true"}
+
+	tests := []struct {
+		name       string
+		secretName string
+		labels     map[string]string
+		data       map[string][]byte
+		createRef  bool
+		wantReason conditionReasons
+	}{
+		{
+			name:       "empty reference",
+			secretName: "",
+			wantReason: reasonExternalSecretInvalid,
+		},
+		{
+			name:       "secret absent",
+			secretName: "absent-secret",
+			wantReason: reasonExternalSecretMissing,
+		},
+		{
+			name:       "empty data",
+			secretName: "empty-data-secret",
+			labels:     reloadLabel,
+			createRef:  true,
+			wantReason: reasonExternalSecretMissingData,
+		},
+		{
+			name:       "missing password key",
+			secretName: "missing-keys-secret",
+			labels:     reloadLabel,
+			data:       map[string][]byte{secretKeyUsername: []byte(validUsername)},
+			createRef:  true,
+			wantReason: reasonExternalSecretMissingKeys,
+		},
+		{
+			name:       "invalid username",
+			secretName: "invalid-username-secret",
+			labels:     reloadLabel,
+			data: map[string][]byte{
+				secretKeyUsername: []byte("not-postgres"),
+				secretKeyPassword: []byte(validPassword),
+			},
+			createRef:  true,
+			wantReason: reasonExternalSecretInvalidUsername,
+		},
+		{
+			name:       "missing reload label",
+			secretName: "missing-label-secret",
+			data: map[string][]byte{
+				secretKeyUsername: []byte(validUsername),
+				secretKeyPassword: []byte(validPassword),
+			},
+			createRef:  true,
+			wantReason: reasonExternalSecretMissingLabel,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster := provideExternalSecretsPostgresCluster()
+			cluster.Spec.PasswordConfig.SuperuserExternalSecretRef.Name = tc.secretName
+
+			c := fake.NewClientBuilder().WithScheme(scheme).Build()
+			if tc.createRef {
+				createExternalClusterSecret(t, c, tc.secretName, cluster.Namespace, tc.labels, tc.data)
+			}
+
+			status := &capturedStatus{}
+			s := newSecretModel(c, scheme, noopEventEmitter{}, status.updater(), cluster, "pg1-superuser", &reconcileContracts{})
+
+			reconcileErr := s.Reconcile(t.Context())
+			health, err := s.Observe(t.Context(), reconcileErr)
+
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, reconcile.TerminalError(nil)),
+				"a deterministic validation failure must be terminal so controller-runtime stops retrying")
+
+			var secretErr secretReconcileError
+			require.ErrorAs(t, err, &secretErr)
+			assert.Equal(t, tc.wantReason, secretErr.reason)
+
+			assert.Equal(t, pgcConstants.Failed, health.State)
+			assert.Equal(t, secretsReady, health.Condition)
+			assert.Equal(t, failedClusterPhase, health.Phase)
+
+			// SecretsReady=False must be written before terminalizing, otherwise the
+			// precise reason would never reach the user.
+			require.Equal(t, 1, status.count, "Observe must persist status exactly once")
+			assert.Equal(t, health, status.health)
+		})
+	}
+}
+
+// TestSecretModel_TerminalFailureRecoversOnSecretFix asserts the other half of
+// CPI-2109: terminalizing must not strand the cluster. Once the Secret is
+// corrected, a re-reconcile (which the external-Secret watch triggers) must reach
+// SecretsReady=True.
+func TestSecretModel_TerminalFailureRecoversOnSecretFix(t *testing.T) {
+	scheme := newTestScheme()
+	const externalSecretName = "external-superuser-secret"
+
+	cluster := provideExternalSecretsPostgresCluster()
+	cluster.Spec.PasswordConfig.SuperuserExternalSecretRef.Name = externalSecretName
+
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	// Starts invalid: correct data but no cnpg.io/reload label.
+	createExternalClusterSecret(t, c, externalSecretName, cluster.Namespace, nil, map[string][]byte{
+		secretKeyUsername: []byte("postgres"),
+		secretKeyPassword: []byte("EXT-su-pw"),
+	})
+
+	status := &capturedStatus{}
+	contracts := &reconcileContracts{}
+	s := newSecretModel(c, scheme, noopEventEmitter{}, status.updater(), cluster, "pg1-superuser", contracts)
+
+	health, err := s.Observe(t.Context(), s.Reconcile(t.Context()))
+	require.Error(t, err)
+	require.True(t, errors.Is(err, reconcile.TerminalError(nil)))
+	require.Equal(t, reasonExternalSecretMissingLabel, health.Reason)
+	require.Nil(t, contracts.Secret, "an invalid secret must not be published on the contract")
+
+	// The user adds the reload label — a label change the ExternalSecret predicate
+	// forwards, re-enqueueing the cluster.
+	fixed := &corev1.Secret{}
+	require.NoError(t, c.Get(t.Context(),
+		client.ObjectKey{Name: externalSecretName, Namespace: cluster.Namespace}, fixed))
+	fixed.Labels = map[string]string{labelCNPGReload: "true"}
+	require.NoError(t, c.Update(t.Context(), fixed))
+
+	health, err = s.Observe(t.Context(), s.Reconcile(t.Context()))
+	require.NoError(t, err, "a corrected secret must reconcile cleanly, not stay stuck in the terminal state")
+	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, secretsReady, health.Condition)
+	assert.Equal(t, reasonSuperUserSecretReady, health.Reason)
+	assert.NotNil(t, contracts.Secret, "a valid secret must be published on the contract")
+}
+
+// TestSecretModel_EmptyRefRecoversOnSpecFix guards the one terminal reason the
+// external-Secret watch cannot recover: an empty superuserExternalSecretRef is
+// fixable only by editing the PostgresCluster spec, which re-enqueues via the
+// generation-change predicate.
+func TestSecretModel_EmptyRefRecoversOnSpecFix(t *testing.T) {
+	scheme := newTestScheme()
+	const externalSecretName = "external-superuser-secret"
+
+	cluster := provideExternalSecretsPostgresCluster()
+	require.Empty(t, cluster.Spec.PasswordConfig.SuperuserExternalSecretRef.Name)
+
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	createExternalClusterSecret(t, c, externalSecretName, cluster.Namespace,
+		map[string]string{labelCNPGReload: "true"}, map[string][]byte{
+			secretKeyUsername: []byte("postgres"),
+			secretKeyPassword: []byte("EXT-su-pw"),
+		})
+
+	status := &capturedStatus{}
+	contracts := &reconcileContracts{}
+	s := newSecretModel(c, scheme, noopEventEmitter{}, status.updater(), cluster, "pg1-superuser", contracts)
+
+	health, err := s.Observe(t.Context(), s.Reconcile(t.Context()))
+	require.Error(t, err)
+	require.True(t, errors.Is(err, reconcile.TerminalError(nil)),
+		"an empty ref is deterministic and must be terminal")
+	var secretErr secretReconcileError
+	require.ErrorAs(t, err, &secretErr)
+	require.Equal(t, reasonExternalSecretInvalid, secretErr.reason)
+	require.Nil(t, contracts.Secret)
+
+	// The user points the spec at the existing valid Secret.
+	cluster.Spec.PasswordConfig.SuperuserExternalSecretRef.Name = externalSecretName
+
+	health, err = s.Observe(t.Context(), s.Reconcile(t.Context()))
+	require.NoError(t, err, "a corrected spec ref must reconcile cleanly, not stay stuck")
+	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, reasonSuperUserSecretReady, health.Reason)
+	assert.NotNil(t, contracts.Secret)
 }
 
 // TestSecretModel_ActuateDispatch pins the dispatch in Reconcile/computeHealth:
