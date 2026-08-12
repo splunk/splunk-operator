@@ -388,6 +388,8 @@ spec:
                           type: string
                       type: object
                       x-kubernetes-map-type: atomic
+                    message:
+                      type: string
                     name:
                       type: string
                     ready:
