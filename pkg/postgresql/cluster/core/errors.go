@@ -45,10 +45,12 @@ func (e *reconcileFailure) Unwrap() error { return e.err }
 // secretReconcileError is the single typed, terminal failure raised while
 // reconciling an externally managed superuser secret — covering both "absent"
 // (reasonExternalSecretMissing) and "present but invalid" (empty/missing data,
-// missing required keys, invalid username, missing reload label). It carries the
-// conditionReason so the observe step maps it directly onto the secret's health
-// without re-deriving the cause, and downstream callers branch on reason rather
-// than on a distinct type. message holds only user-facing context.
+// missing required keys, invalid username, missing reload label). Every case is
+// deterministic, so Observe terminalizes on this type rather than retrying; only
+// transient failures are returned untyped. It carries the conditionReason so the
+// observe step maps it directly onto the secret's health without re-deriving the
+// cause, and downstream callers branch on reason rather than on a distinct type.
+// message holds only user-facing context.
 type secretReconcileError struct {
 	message string
 	reason  conditionReasons

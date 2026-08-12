@@ -99,10 +99,12 @@ func (s *secretModel) Observe(_ context.Context, reconcileErr error) (componentH
 	statusErr := writeComponentStatus(s.updateStatus, before, health)
 	observeErr := errors.Join(err, statusErr)
 
-	// missing external secret == terminal
-	// recovery is driven by the external-Secret watch predicate.
+	// secretReconcileError only carries deterministic validation verdicts, so
+	// retrying cannot fix them: terminalize and let the external-Secret watch (or,
+	// for an empty ref, a spec edit) drive recovery. Transient Get failures are
+	// returned untyped and stay retryable.
 	var se secretReconcileError
-	if errors.As(reconcileErr, &se) && se.reason == reasonExternalSecretMissing {
+	if errors.As(reconcileErr, &se) {
 		switch {
 		case apierrors.IsConflict(statusErr):
 			return health, statusErr
