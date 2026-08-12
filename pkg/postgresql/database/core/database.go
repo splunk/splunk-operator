@@ -340,7 +340,7 @@ func PostgresDatabaseService(
 
 	switch gate := evaluateRoleGate(postgresDB, cluster.Status.ManagedRolesStatus); gate.State {
 	case roleGateConflict:
-		conflictMsg := fmt.Sprintf("Role conflict in PostgresDatabase %s: %s", postgresDB.Name, gate.Message)
+		conflictMsg := fmt.Sprintf(msgFmtRoleConflict, postgresDB.Name, gate.Message)
 		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRoleConflict, conflictMsg)
 		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleConflict, conflictMsg, failedDBPhase); statusErr != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictRoleConflictStatus, "persisting role conflict status"); ok {
@@ -349,9 +349,15 @@ func PostgresDatabaseService(
 			logger.ErrorContext(ctx, "failed to persist role conflict status", "error", statusErr)
 			return ctrl.Result{}, statusErr
 		}
+		if err := persistDatabaseMessages(ctx, c, postgresDB, roleGateReasons(postgresDB, gate)); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRoleConflictStatus, "persisting role conflict status"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	case roleGateFailed:
-		failedMsg := fmt.Sprintf("Role reconciliation failed for PostgresDatabase %s: %s", postgresDB.Name, gate.Message)
+		failedMsg := fmt.Sprintf(msgFmtRoleReconcileFailed, postgresDB.Name, gate.Message)
 		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRoleReconcileFailed, failedMsg)
 		if statusErr := updateStatus(rolesReady, metav1.ConditionFalse, reasonRoleReconcileFailed, failedMsg, failedDBPhase); statusErr != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictRolesStatus, "persisting role reconcile failed status"); ok {
@@ -360,9 +366,21 @@ func PostgresDatabaseService(
 			logger.ErrorContext(ctx, "failed to persist role reconcile failed status", "error", statusErr)
 			return ctrl.Result{}, statusErr
 		}
+		if err := persistDatabaseMessages(ctx, c, postgresDB, roleGateReasons(postgresDB, gate)); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRolesStatus, "persisting role reconcile failed status"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	case roleGatePending:
 		if err := updateStatus(rolesReady, metav1.ConditionFalse, reasonWaitingForCNPG, gate.Message, provisioningDBPhase); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRolesStatus, "persisting roles pending status"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
+		}
+		if err := persistDatabaseMessages(ctx, c, postgresDB, roleGateReasons(postgresDB, gate)); err != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictRolesStatus, "persisting roles pending status"); ok {
 				return result, conflictErr
 			}
@@ -396,7 +414,8 @@ func PostgresDatabaseService(
 		rc.emitNormal(postgresDB, EventResourcesAdopted, fmt.Sprintf("Adopted retained databases: %v", adopted))
 	}
 
-	notReadyDBs, err := verifyDatabasesReady(ctx, c, postgresDB)
+	notReadyReasons := make(map[string]string)
+	notReadyDBs, err := verifyDatabasesReady(ctx, c, postgresDB, notReadyReasons)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to verify database readiness: %w", err)
 	}
@@ -409,11 +428,26 @@ func PostgresDatabaseService(
 			}
 			return ctrl.Result{}, err
 		}
+		// Persisted separately: the condition message is stable across requeues, so a
+		// change confined to a per-database message would be invisible to updateStatus.
+		if err := persistDatabaseMessages(ctx, c, postgresDB, notReadyReasons); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases pending status"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
 	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabasesReady, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)))
 	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable,
 		fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), readyDBPhase); err != nil {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases ready status"); ok {
+			return result, conflictErr
+		}
+		return ctrl.Result{}, err
+	}
+	// Clear now-stale per-database messages before a later phase can fail and return early.
+	if err := persistDatabaseMessages(ctx, c, postgresDB, nil); err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases ready status"); ok {
 			return result, conflictErr
 		}
@@ -608,6 +642,9 @@ const (
 type roleGateDecision struct {
 	State   roleGateState
 	Message string
+	// Role is the specific managed role that drove a non-Proceed decision, when one
+	// is implicated. Empty for cluster-level waits with no single offending role.
+	Role string
 }
 
 func evaluateRoleGate(postgresDB *enterprisev4.PostgresDatabase, status *enterprisev4.ManagedRolesStatus) roleGateDecision {
@@ -615,31 +652,35 @@ func evaluateRoleGate(postgresDB *enterprisev4.PostgresDatabase, status *enterpr
 		return roleGateDecision{State: roleGatePending, Message: "Waiting for cluster to publish managed role status"}
 	}
 	self := enterprisev4.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
-	roleSet := make(map[string]struct{}, len(getDesiredRoles(postgresDB)))
-	for _, role := range getDesiredRoles(postgresDB) {
+	// Iterate desiredRoles in order so a multi-role failure blames the same role
+	// (and therefore the same database) on every reconcile; map iteration would
+	// pick an arbitrary offender and flap the published messages.
+	desiredRoles := getDesiredRoles(postgresDB)
+	roleSet := make(map[string]struct{}, len(desiredRoles))
+	for _, role := range desiredRoles {
 		roleSet[role] = struct{}{}
 	}
 	for _, conflict := range status.Conflicts {
 		if _, wanted := roleSet[conflict.Role]; wanted && sameRoleOwner(conflict.AttemptedBy, self) {
-			return roleGateDecision{State: roleGateConflict, Message: fmt.Sprintf("role %s is already claimed", conflict.Role)}
+			return roleGateDecision{State: roleGateConflict, Message: fmt.Sprintf("role %s is already claimed", conflict.Role), Role: conflict.Role}
 		}
 	}
-	for role := range roleSet {
+	for _, role := range desiredRoles {
 		if reason, failed := status.Failed[role]; failed {
-			return roleGateDecision{State: roleGateFailed, Message: fmt.Sprintf("role %s failed to reconcile: %s", role, reason)}
+			return roleGateDecision{State: roleGateFailed, Message: fmt.Sprintf("role %s failed to reconcile: %s", role, reason), Role: role}
 		}
 	}
 	reconciled := make(map[string]struct{}, len(status.Reconciled))
 	for _, role := range status.Reconciled {
 		reconciled[role] = struct{}{}
 	}
-	for role := range roleSet {
+	for _, role := range desiredRoles {
 		owner, owned := status.RoleOwners[role]
 		if !owned || !sameRoleOwner(owner, self) {
-			return roleGateDecision{State: roleGatePending, Message: fmt.Sprintf("Waiting for role %s to be owned by this PostgresDatabase", role)}
+			return roleGateDecision{State: roleGatePending, Message: fmt.Sprintf("Waiting for role %s to be owned by this PostgresDatabase", role), Role: role}
 		}
 		if _, ok := reconciled[role]; !ok {
-			return roleGateDecision{State: roleGatePending, Message: fmt.Sprintf("Waiting for role %s to be reconciled", role)}
+			return roleGateDecision{State: roleGatePending, Message: fmt.Sprintf("Waiting for role %s to be reconciled", role), Role: role}
 		}
 	}
 	return roleGateDecision{State: roleGateProceed, Message: "Roles are reconciled and owned by this PostgresDatabase"}
@@ -680,7 +721,10 @@ func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtim
 	return adopted, nil
 }
 
-func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase) ([]string, error) {
+func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, reasons map[string]string) ([]string, error) {
+	if reasons == nil {
+		reasons = map[string]string{}
+	}
 	var notReady []string
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		cnpgDBName := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
@@ -688,15 +732,31 @@ func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *ente
 		if err := c.Get(ctx, types.NamespacedName{Name: cnpgDBName, Namespace: postgresDB.Namespace}, cnpgDB); err != nil {
 			if errors.IsNotFound(err) {
 				notReady = append(notReady, dbSpec.Name)
+				reasons[dbSpec.Name] = reasonCNPGDatabaseNotFound
 				continue
 			}
 			return nil, fmt.Errorf("getting CNPG Database %s: %w", cnpgDBName, err)
 		}
 		if cnpgDB.Status.Applied == nil || !*cnpgDB.Status.Applied {
 			notReady = append(notReady, dbSpec.Name)
+			reasons[dbSpec.Name] = cnpgNotReadyReason(cnpgDB)
 		}
 	}
 	return notReady, nil
+}
+
+func cnpgNotReadyReason(cnpgDB *cnpgv1.Database) string {
+	// The top-level Message is a generic summary; the actionable, per-database detail
+	// lives in the failing sub-object's message.
+	for _, ext := range cnpgDB.Status.Extensions {
+		if !ext.Applied && ext.Message != "" {
+			return fmt.Sprintf("extension %q: %s", ext.Name, ext.Message)
+		}
+	}
+	if cnpgDB.Status.Message != "" {
+		return cnpgDB.Status.Message
+	}
+	return reasonCNPGDatabaseApplying
 }
 
 func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder, db *enterprisev4.PostgresDatabase, wasReadyAtReconcileStart bool, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases,
@@ -1331,6 +1391,24 @@ func persistDatabaseInfos(ctx context.Context, c client.Client, postgresDB *ente
 	return c.Status().Update(ctx, postgresDB)
 }
 
+// persistDatabaseMessages overlays per-database readiness onto existing status entries: a
+// database is ready exactly when the reasons map holds no failure for it, and carries that
+// reason as its message otherwise. Roles and the DatabaseRef provisioning marker hasNewDatabases
+// relies on are never touched, so reporting a failure here cannot re-run the privileges phase.
+func persistDatabaseMessages(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, reasons map[string]string) error {
+	before := postgresDB.Status.DeepCopy()
+	for i := range postgresDB.Status.Databases {
+		reason, hasReason := reasons[postgresDB.Status.Databases[i].Name]
+		postgresDB.Status.Databases[i].Message = reason
+		postgresDB.Status.Databases[i].Ready = !hasReason
+	}
+	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
+	if equality.Semantic.DeepEqual(*before, postgresDB.Status) {
+		return nil
+	}
+	return c.Status().Update(ctx, postgresDB)
+}
+
 func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase, flags ...bool) []enterprisev4.DatabaseInfo {
 	ready := true
 	exists := true
@@ -1350,21 +1428,33 @@ func populateDatabaseStatusForDefinitions(postgresDB *enterprisev4.PostgresDatab
 	if len(includeRoles) > 0 {
 		publishRoles = includeRoles[0]
 	}
-	existingReady := make(map[string]bool, len(postgresDB.Status.Databases))
+	existingProvisioned := make(map[string]bool, len(postgresDB.Status.Databases))
+	existingMessage := make(map[string]string, len(postgresDB.Status.Databases))
 	for _, existing := range postgresDB.Status.Databases {
-		if existing.Ready || len(existing.Roles) == 0 {
-			existingReady[existing.Name] = true
+		if databaseProvisioned(existing) {
+			existingProvisioned[existing.Name] = true
 		}
+		existingMessage[existing.Name] = existing.Message
 	}
 	databases := make([]enterprisev4.DatabaseInfo, 0, len(definitions))
 	for _, dbSpec := range definitions {
 		adminSecretName, rwSecretName := resolveSecretNames(postgresDB.Name, dbSpec)
 		info := enterprisev4.DatabaseInfo{
 			Name:               dbSpec.Name,
-			Ready:              ready || (exists && existingReady[dbSpec.Name]),
+			Ready:              ready,
 			AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: adminSecretName}, Key: secretKeyPassword},
 			RWUserSecretRef:    &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: rwSecretName}, Key: secretKeyPassword},
 			ConfigMapRef:       &corev1.LocalObjectReference{Name: configMapName(postgresDB.Name, dbSpec.Name)},
+		}
+		// DatabaseRef is the sticky provisioned marker hasNewDatabases keys off: stamped once a
+		// database reaches ready, then preserved so a later not-ready blip does not re-run the
+		// privileges phase. Ready alone is transient and must not gate provisioning.
+		if ready || (exists && existingProvisioned[dbSpec.Name]) {
+			info.DatabaseRef = &corev1.LocalObjectReference{Name: cnpgDatabaseName(postgresDB.Name, dbSpec.Name)}
+		}
+		// Preserve any existing not-ready message; persistDatabaseMessages owns setting and clearing it.
+		if !info.Ready {
+			info.Message = existingMessage[dbSpec.Name]
 		}
 		if publishRoles {
 			info.Roles = []enterprisev4.DatabaseRoleInfo{
@@ -1377,11 +1467,18 @@ func populateDatabaseStatusForDefinitions(postgresDB *enterprisev4.PostgresDatab
 	return databases
 }
 
+// databaseProvisioned reports whether a status entry represents an already-provisioned
+// database. DatabaseRef is stamped once a database reaches ready and stays put, so this
+// stays true across a later not-ready blip — unlike Ready, which the message overlay clears.
+// Entries with no role status are legacy credential-only rows and count as provisioned.
+func databaseProvisioned(dbInfo enterprisev4.DatabaseInfo) bool {
+	return dbInfo.DatabaseRef != nil || len(dbInfo.Roles) == 0
+}
+
 func hasNewDatabases(postgresDB *enterprisev4.PostgresDatabase) bool {
 	existing := make(map[string]bool, len(postgresDB.Status.Databases))
 	for _, dbInfo := range postgresDB.Status.Databases {
-		// Entries with no role status are treated as provisioned database status.
-		if dbInfo.Ready || len(dbInfo.Roles) == 0 {
+		if databaseProvisioned(dbInfo) {
 			existing[dbInfo.Name] = true
 		}
 	}
@@ -1391,6 +1488,34 @@ func hasNewDatabases(postgresDB *enterprisev4.PostgresDatabase) bool {
 		}
 	}
 	return false
+}
+
+// roleGateReasons maps each spec database to a not-ready message for a role-gate
+// failure. The database owning the offending role gets the specific gate message;
+// the rest are reported as blocked by it, since the gate fails the CR as a whole.
+func roleGateReasons(postgresDB *enterprisev4.PostgresDatabase, gate roleGateDecision) map[string]string {
+	blamed := databaseForRole(postgresDB, gate.Role)
+	reasons := make(map[string]string, len(postgresDB.Spec.Databases))
+	for _, dbSpec := range postgresDB.Spec.Databases {
+		if dbSpec.Name == blamed {
+			reasons[dbSpec.Name] = gate.Message
+		} else if blamed != "" {
+			reasons[dbSpec.Name] = fmt.Sprintf("blocked by role gate on database %q", blamed)
+		} else {
+			reasons[dbSpec.Name] = gate.Message
+		}
+	}
+	return reasons
+}
+
+// databaseForRole resolves a managed role name back to its spec database, or "" if none matches.
+func databaseForRole(postgresDB *enterprisev4.PostgresDatabase, role string) string {
+	for _, dbSpec := range postgresDB.Spec.Databases {
+		if role == adminRoleName(dbSpec.Name) || role == rwRoleName(dbSpec.Name) {
+			return dbSpec.Name
+		}
+	}
+	return ""
 }
 
 // Naming helpers — single source of truth shared by creation and status wiring.

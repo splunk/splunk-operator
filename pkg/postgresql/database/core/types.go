@@ -115,6 +115,14 @@ const (
 	cnpgReasonRecovery               conditionReasons = "CNPGClusterRecovery"
 	cnpgReasonFailingOver            conditionReasons = "CNPGFailingOver"
 
+	// Per-database DatabaseInfo.Message strings.
+	reasonCNPGDatabaseNotFound = "CNPG Database not found"
+	reasonCNPGDatabaseApplying = "Waiting for CNPG to apply the database"
+
+	// Role-gate condition/event message formats (postgresDB name, gate detail).
+	msgFmtRoleConflict        = "Role conflict in PostgresDatabase %s: %s"
+	msgFmtRoleReconcileFailed = "Role reconciliation failed for PostgresDatabase %s: %s"
+
 	// ClusterReady sentinel values returned by getClusterReadyStatus.
 	ClusterNotReady         clusterReadyStatus = "NotReady"
 	ClusterNoProvisionerRef clusterReadyStatus = "NoProvisionerRef"

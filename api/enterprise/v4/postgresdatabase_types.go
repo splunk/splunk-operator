@@ -74,8 +74,10 @@ type PasswordConfig struct {
 }
 
 type DatabaseInfo struct {
-	Name               string                       `json:"name"`
-	Ready              bool                         `json:"ready"`
+	Name  string `json:"name"`
+	Ready bool   `json:"ready"`
+	// +optional
+	Message            string                       `json:"message,omitempty"`
 	DatabaseRef        *corev1.LocalObjectReference `json:"databaseRef,omitempty"`
 	AdminUserSecretRef *corev1.SecretKeySelector    `json:"adminUserSecretRef,omitempty"`
 	RWUserSecretRef    *corev1.SecretKeySelector    `json:"rwUserSecretRef,omitempty"`
