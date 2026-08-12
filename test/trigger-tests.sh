@@ -130,6 +130,31 @@ case ${CLUSTER_PROVIDER} in
           export S3_REGION="${AWS_S3_REGION}"
         fi
         ;;
+    "kraken")
+        # Kraken provides a vCluster — KUBECONFIG is already set by the caller.
+        # AppFramework tests that need cloud storage should set TEST_BUCKET,
+        # TEST_INDEXES_S3_BUCKET, ENTERPRISE_LICENSE_LOCATION, and S3_REGION
+        # directly in the workflow via secrets/vars; defaults below are fallbacks.
+        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to default"
+          export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_S3_PATH}"
+        fi
+
+        if [[ -z "${TEST_BUCKET}" ]]; then
+          echo "Data bucket not set. Changing to default"
+          export TEST_BUCKET="${TEST_S3_BUCKET}"
+        fi
+
+        if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
+          echo "Test bucket not set. Changing to default"
+          export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
+        fi
+
+        if [[ -z "${S3_REGION}" ]]; then
+          echo "S3 Region not set. Changing to default"
+          export S3_REGION="${AWS_S3_REGION}"
+        fi
+        ;;
 esac
 
 
