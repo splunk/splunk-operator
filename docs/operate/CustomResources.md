@@ -141,6 +141,19 @@ spec:
 
 > **Note:** This override may be removed in a future SOK release. Enabling the Postgres sidecar in SOK deployments is not officially supported.
 
+### KV Store Default Type
+
+SOK configures Splunk Enterprise pods to use local KV Store by default by injecting `SPLUNK_KVSTORE_DEFAULT_TYPE=local` into managed pods, except for `IngestorCluster`. Splunk Ansible consumes this variable and writes `[kvstore] defaultKVStoreType` to `server.conf`. This setting requires Splunk Enterprise 10.6.0 or later.
+
+The only supported value is `local`. If the variable is set in `spec.extraEnv`, it must use the same value:
+
+```yaml
+spec:
+  extraEnv:
+    - name: SPLUNK_KVSTORE_DEFAULT_TYPE
+      value: "local"
+```
+
 ## Common Spec Parameters for Splunk Enterprise Resources
 
 ```yaml

@@ -30,6 +30,11 @@ import (
 // storageCapacityRegex validates storage capacity format (e.g., "10Gi", "100Gi")
 var storageCapacityRegex = regexp.MustCompile(`^[0-9]+Gi$`)
 
+const (
+	splunkKVStoreDefaultTypeEnv = "SPLUNK_KVSTORE_DEFAULT_TYPE"
+	splunkKVStoreTypeLocal      = "local"
+)
+
 // validateCommonSplunkSpec validates fields common to all Splunk CRDs
 func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
@@ -61,6 +66,14 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 				fmt.Sprintf("environment variable name %q is duplicate (same as extraEnv[%d])", env.Name, firstIdx)))
 		} else {
 			seenEnvNames[env.Name] = i
+		}
+
+		if env.Name == splunkKVStoreDefaultTypeEnv &&
+			env.Value != splunkKVStoreTypeLocal {
+			allErrs = append(allErrs, field.NotSupported(
+				fldPath.Child("extraEnv").Index(i).Child("value"),
+				env.Value,
+				[]string{splunkKVStoreTypeLocal}))
 		}
 	}
 
