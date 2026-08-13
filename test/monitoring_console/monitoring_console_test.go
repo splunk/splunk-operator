@@ -15,12 +15,10 @@ package monitoringconsole
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
@@ -174,42 +172,6 @@ var _ = Describe("Monitoring Console test (manager)", func() {
 			Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, standaloneOne)).To(Succeed(), "Standalone Ready condition not met")
 		})
 
-		It("mastermc, integration, cert: MonitoringConsole mounts server-role and no-role certs and detects rotation", func() {
-			ctx := context.TODO()
-			ns := testcaseEnvInst.GetName()
-			c := testenvInstance.GetKubeClient()
-
-			// Create pre-baked TLS secrets directly — no cert-manager dependency
-			Expect(testenv.CreateServerCertSecret(ctx, c, ns, "mc-server-cert")).To(Succeed())
-			Expect(testenv.CreateCustomCertSecret(ctx, c, ns, "mc-custom-ca")).To(Succeed())
-
-			// Deploy MonitoringConsole with certs in the initial spec
-			mcName := deployment.GetName()
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: testenvInstance.GetSplunkImage()},
-					Certs: []enterpriseApi.CertSpec{
-						{SecretRef: corev1.LocalObjectReference{Name: "mc-server-cert"}, Role: enterpriseApi.CertRoleServer},
-						{SecretRef: corev1.LocalObjectReference{Name: "mc-custom-ca"}},
-					},
-				},
-			}
-			_, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed())
-
-			mcPod := fmt.Sprintf(testenv.MonitoringConsolePod, mcName)
-			testenv.WaitForPodRunning(ctx, deployment, mcPod)
-			testenv.VerifyCertSecretMounted(ctx, deployment, mcPod, "/mnt/tls/splunk-server-tls-cert")
-			testenv.VerifyCertSecretMounted(ctx, deployment, mcPod, "/mnt/tls/mc-custom-ca")
-			mcSts := fmt.Sprintf("splunk-%s-monitoring-console", mcName)
-			testenv.VerifyCertRevAnnotation(ctx, c, ns, mcSts, "mc-server-cert")
-			testenv.VerifyCertRevAnnotation(ctx, c, ns, mcSts, "mc-custom-ca")
-
-			// Cert rotation
-			initialHash := testenv.GetCertRevAnnotation(ctx, c, ns, mcSts, "mc-server-cert")
-			testenv.RotateCertSecret(ctx, deployment, c, ns, "mc-server-cert")
-			testenv.VerifyCertRotation(ctx, c, ns, mcSts, "mc-server-cert", initialHash)
-		})
 	})
 
 	Context("Standalone deployment (S1)", func() {

@@ -26,6 +26,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
 	gomega "github.com/onsi/gomega"
@@ -286,6 +287,9 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		return nil, err
 	}
 	if err := enterpriseApiV3.SchemeBuilder.AddToScheme(scheme.Scheme); err != nil {
+		return nil, err
+	}
+	if err := cmapi.AddToScheme(scheme.Scheme); err != nil {
 		return nil, err
 	}
 	if err := cnpgv1.AddToScheme(scheme.Scheme); err != nil {

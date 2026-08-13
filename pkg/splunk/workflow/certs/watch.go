@@ -20,11 +20,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
 )
 
 // CertSecretMapper returns a handler.MapFunc that maps a cert Secret update to
@@ -45,8 +45,8 @@ func CertSecretMapper(c client.Client, crList client.ObjectList) func(ctx contex
 		}
 
 		if err := c.List(ctx, crList, client.InNamespace(secret.Namespace)); err != nil {
-			log.FromContext(ctx).Error(err, "CertSecretMapper: failed to list CRs",
-				"secret", secret.Name, "namespace", secret.Namespace)
+			logging.FromContext(ctx).With("func", "CertSecretMapper").ErrorContext(ctx, "failed to list CRs",
+				"secret", secret.Name, "namespace", secret.Namespace, "error", err)
 			return nil
 		}
 

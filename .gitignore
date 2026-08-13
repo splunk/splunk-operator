@@ -111,6 +111,7 @@ ci-output/
 
 # Helm dependency tgz archives — resolved at build time from file:// deps in Chart.yaml
 helm-chart/splunk-enterprise/charts/*.tgz
+helm-chart/splunk-operator/charts/*.tgz
 
 # Python bytecode caches
 __pycache__/

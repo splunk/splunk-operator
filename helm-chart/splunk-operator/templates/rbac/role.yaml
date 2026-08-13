@@ -25,6 +25,30 @@ rules:
   - update
   - watch
 - apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# clusterissuers is cluster-scoped: Kubernetes RBAC does not support namespacing
+# cluster-scoped resources, so this rule is still enforced cluster-wide even
+# though it lives in a namespaced Role bound by a namespaced RoleBinding.
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - clusterissuers
+  - issuers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - ""
   resources:
   - configmaps

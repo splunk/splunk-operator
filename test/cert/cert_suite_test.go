@@ -20,6 +20,7 @@
 package cert
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -49,10 +50,12 @@ var _ = BeforeSuite(func() {
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
+	Expect(testenv.SetupCertManagerDeps(context.TODO())).To(Succeed())
 })
 
 var _ = AfterSuite(func() {
 	if testenvInstance != nil {
 		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 	}
+	Expect(testenv.TeardownCertManagerDeps(context.TODO())).To(Succeed())
 })

@@ -1176,8 +1176,58 @@ spec:
                 items:
                   description: |-
                     CertSpec declares one certificate that should be mounted into Splunk pods.
-                    Phase 1: mount-only. IssuerRef and DNSNames are reserved for Phase 2 (cert generation).
+                    IssuerRef/DNSNames: when the referenced Secret does not exist, the operator
+                    auto-generates it via cert-manager.
                   properties:
+                    dnsNames:
+                      description: |-
+                        DNSNames are the DNS SANs for the generated cert. If absent, SANs are
+                        auto-derived from the CR's service and pod FQDNs. Ignored when
+                        secretRef already exists.
+                      items:
+                        type: string
+                      type: array
+                    duration:
+                      default: 8760h
+                      description: |-
+                        Duration is the requested validity period of the generated certificate.
+                        Defaults to one year when unset. Ignored when secretRef already exists.
+                        Note this is only a request — the issuer may choose to ignore it (e.g.
+                        a public ACME issuer always issues its own fixed lifetime).
+                      type: string
+                    issuerRef:
+                      description: |-
+                        IssuerRef is the cert-manager Issuer or ClusterIssuer to use when
+                        auto-generating this cert. The referenced Issuer/ClusterIssuer must
+                        already exist in the namespace/cluster — the operator never creates
+                        one, and reconciliation fails if it is not found. Required when
+                        auto-generation is desired; ignored when secretRef already exists.
+                      properties:
+                        kind:
+                          default: Issuer
+                          description: |-
+                            Kind of the resource being referred to, "Issuer" or "ClusterIssuer".
+                            Defaults to "Issuer" when unset.
+                          enum:
+                          - Issuer
+                          - ClusterIssuer
+                          type: string
+                        name:
+                          description: Name of the Issuer or ClusterIssuer.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    renewBefore:
+                      description: |-
+                        RenewBefore is how long before expiry cert-manager should renew the
+                        generated certificate. Defaults to cert-manager's own default when
+                        unset. Ignored when secretRef already exists.
+                        No +kubebuilder:default is set here deliberately: cert-manager's own
+                        fallback is proportional (2/3 through the cert's actual lifetime, see
+                        pkg/util/pki/renewaltime.go), not a fixed value, so a static CRD
+                        default would not scale with Duration.
+                      type: string
                     role:
                       description: |-
                         Role identifies the cert type and determines the fixed platform mount path
@@ -1186,6 +1236,21 @@ spec:
                       enum:
                       - server
                       - input
+                      type: string
+                    rotationPolicy:
+                      default: Never
+                      description: |-
+                        RotationPolicy controls whether cert-manager reuses the existing
+                        private key on renewal ("Never") or generates a new one ("Always").
+                        Defaults to "Never" when unset — this mirrors cert-manager's own
+                        default for its Certificate.Spec.PrivateKey.RotationPolicy field
+                        (kept for backward compatibility upstream); see
+                        pkg/controller/certificates/keymanager/keymanager_controller.go in
+                        cert-manager, which treats a nil PrivateKey the same as
+                        RotationPolicy: "Never". Ignored when secretRef already exists.
+                      enum:
+                      - Never
+                      - Always
                       type: string
                     secretRef:
                       description: |-

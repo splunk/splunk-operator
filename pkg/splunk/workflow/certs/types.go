@@ -15,6 +15,7 @@
 package certs
 
 import (
+	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +33,11 @@ type ErrCertSecretMalformed struct {
 func (e *ErrCertSecretMalformed) Error() string {
 	return fmt.Sprintf("cert secret %s/%s is missing required key %q", e.Namespace, e.SecretName, e.MissingKey)
 }
+
+// ErrCertGenerationDisabled is returned by ReconcileCerts when a user-declared
+// cert's secret does not exist but the CertManagerCertGeneration feature gate
+// is disabled, so the operator will not auto-generate it via cert-manager.
+var ErrCertGenerationDisabled = errors.New("certificate generation is disabled")
 
 // CertificateRequester is an optional interface implemented by CR types whose
 // controllers need to inject cert references derived from other CR fields

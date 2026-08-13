@@ -47,10 +47,12 @@ When running the operator binary directly, pass feature gates at startup:
 
 ## Current Feature Gates
 
-| Gate                  | Default | Stage | Since   | Description                                              |
-|-----------------------|---------|-------|---------|----------------------------------------------------------|
-| `ValidationWebhook`   | `false` | Alpha | v3.2.0  | Centralized validation webhook server for CR admission   |
-| `PostgresController`  | `false` | Alpha | ?       | PostgresCluster, PostgresClusterClass, and PostgresDatabase controllers and CRDs |
+| Gate                        | Default | Stage | Since   | Description                                              |
+|-----------------------------|---------|-------|---------|----------------------------------------------------------|
+| `ValidationWebhook`         | `false` | Alpha | v3.2.0  | Centralized validation webhook server for CR admission   |
+| `PostgresController`        | `false` | Alpha | ?       | PostgresCluster, PostgresClusterClass, and PostgresDatabase controllers and CRDs |
+| `CertManagement`            | `true`  | Beta  | ?       | spec.certs[] mounting/rotation across Splunk Enterprise CR types |
+| `CertManagerCertGeneration` | `true`  | Beta  | ?       | Auto-generation of missing user-declared cert secrets via cert-manager |
 
 ## Adding a New Feature Gate
 

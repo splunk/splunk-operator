@@ -51,6 +51,14 @@ const defaultTestTimeout = 5400
 // complete in seconds; this value is a generous safety net.
 const DefaultTimeout = 30 * time.Minute
 
+// CertTimeout bounds the Eventually polls in certutil.go (pod running, secret
+// populated, mount checks, cert-rev annotation, TLS handshake, rotation).
+// These are all in-cluster ops that settle within a couple minutes even under
+// load, so a dedicated tighter budget lets a genuine regression fail fast
+// instead of consuming the full 30-minute DefaultTimeout meant for slower
+// infrastructure-level polls.
+const CertTimeout = 30 * time.Minute
+
 // ReadinessPollTimeout is the per-attempt timeout for individual CR readiness
 // polls inside Verify*Ready helpers. It must be shorter than DefaultTimeout so
 // that an outer Eventually wrapper has room to retry on transient failures.

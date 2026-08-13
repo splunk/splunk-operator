@@ -5,6 +5,16 @@ splunk-operator:
 image:
   repository: docker.io/splunk/splunk:10.0.0
 
+# cert-manager (https://cert-manager.io/) — optional dependency used by the operator's
+# CertManagement feature gate to auto-generate TLS certificates for Splunk components.
+# Disabled by default: enable only if the target cluster does not already have
+# cert-manager installed. See https://artifacthub.io/packages/helm/cert-manager/cert-manager
+# for the full set of configurable values.
+cert-manager:
+  enabled: false
+  crds:
+    enabled: true
+
 # Splunk Operator configurations
 splunkOperator:
 

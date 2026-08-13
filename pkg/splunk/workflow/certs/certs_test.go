@@ -20,15 +20,20 @@ import (
 	"fmt"
 	"testing"
 
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
+	certlib "github.com/splunk/splunk-operator/pkg/splunk/client/certmanager"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -38,7 +43,41 @@ func scheme() *runtime.Scheme {
 	s := runtime.NewScheme()
 	_ = corev1.AddToScheme(s)
 	_ = enterpriseApi.AddToScheme(s)
+	_ = cmapi.AddToScheme(s)
 	return s
+}
+
+// restMapperWithCertificateCRD returns a RESTMapper that resolves the
+// cert-manager Certificate GVK, simulating a cluster with the CRD installed.
+func restMapperWithCertificateCRD() apimeta.RESTMapper {
+	m := apimeta.NewDefaultRESTMapper([]schema.GroupVersion{cmapi.SchemeGroupVersion})
+	m.Add(cmapi.SchemeGroupVersion.WithKind(cmapi.CertificateKind), apimeta.RESTScopeNamespace)
+	return m
+}
+
+// emptyRESTMapper returns a RESTMapper with no registered types, simulating
+// a cluster without the cert-manager CRDs installed.
+func emptyRESTMapper() apimeta.RESTMapper {
+	return apimeta.NewDefaultRESTMapper(nil)
+}
+
+func buildClientWithMapper(mapper apimeta.RESTMapper, objs ...client.Object) client.Client {
+	return fake.NewClientBuilder().
+		WithScheme(scheme()).
+		WithRESTMapper(mapper).
+		WithObjects(objs...).
+		Build()
+}
+
+func namespacedIssuer(ns, name string) *cmapi.Issuer {
+	return &cmapi.Issuer{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
+		Status: cmapi.IssuerStatus{
+			Conditions: []cmapi.IssuerCondition{
+				{Type: cmapi.IssuerConditionReady, Status: cmmeta.ConditionTrue},
+			},
+		},
+	}
 }
 
 func makeSecret(ns, name string, data map[string][]byte) *corev1.Secret {
@@ -60,6 +99,12 @@ func noCASecret(ns, name string) *corev1.Secret {
 	return makeSecret(ns, name, map[string][]byte{
 		CertTLSCRTKey: []byte("CERT"),
 		CertTLSKeyKey: []byte("KEY"),
+	})
+}
+
+func caOnlySecret(ns, name string) *corev1.Secret {
+	return makeSecret(ns, name, map[string][]byte{
+		CertCAKey: []byte("CA"),
 	})
 }
 
@@ -115,6 +160,20 @@ func TestValidateCertSecret_MissingTLSKey(t *testing.T) {
 func TestValidateCertSecret_CAOptional(t *testing.T) {
 	// ca.crt absent → should succeed (ACME issuers omit it)
 	s := noCASecret("ns", "s")
+	c := fake.NewClientBuilder().WithScheme(scheme()).WithObjects(s).Build()
+	got, err := ValidateCertSecret(context.Background(), c, "ns", "s")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Name != "s" {
+		t.Fatalf("wrong secret returned: %s", got.Name)
+	}
+}
+
+func TestValidateCertSecret_CAOnly(t *testing.T) {
+	// only ca.crt present, tls.crt/tls.key both absent → should succeed
+	// (e.g. mounting an externally-managed postgres CA cert).
+	s := caOnlySecret("ns", "s")
 	c := fake.NewClientBuilder().WithScheme(scheme()).WithObjects(s).Build()
 	got, err := ValidateCertSecret(context.Background(), c, "ns", "s")
 	if err != nil {
@@ -197,17 +256,17 @@ func TestReconcileCerts_NoCerts(t *testing.T) {
 	}
 }
 
-func TestReconcileCerts_MissingSecret_Skipped(t *testing.T) {
+func TestReconcileCerts_MissingSecret_CertManagerNotInstalled_ReturnsError(t *testing.T) {
 	cr := standaloneWithCerts("ns", "s1", []enterpriseApi.CertSpec{
 		{SecretRef: corev1.LocalObjectReference{Name: "missing-cert"}},
 	})
 	c := buildClient(cr)
 	cfg, err := ReconcileCerts(context.Background(), c, cr, specToCertEntries(cr.Spec.Certs))
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, certlib.ErrCertManagerNotInstalled) {
+		t.Fatalf("expected ErrCertManagerNotInstalled, got: %v", err)
 	}
 	if cfg != nil {
-		t.Fatal("expected nil config — missing secret should be skipped")
+		t.Fatal("expected nil config on error")
 	}
 }
 
@@ -389,6 +448,251 @@ func TestReconcileCerts_MultipleCerts(t *testing.T) {
 	}
 	if len(cfg.Volumes) != 2 {
 		t.Errorf("expected 2 volumes, got %d", len(cfg.Volumes))
+	}
+}
+
+func TestReconcileCerts_AutoGenerate_MissingSecret_CreatesCertificate(t *testing.T) {
+	issuer := namespacedIssuer("ns", "my-issuer")
+	cr := standaloneWithCerts("ns", "s1", nil)
+	c := buildClientWithMapper(restMapperWithCertificateCRD(), cr, issuer)
+
+	entries := []CertEntry{
+		{
+			SecretName: "auto-cert",
+			Role:       string(enterpriseApi.CertRoleServer),
+			IssuerRef:  &certlib.IssuerRef{Name: "my-issuer"},
+			DNSNames:   []string{"svc.ns.svc.cluster.local"},
+		},
+	}
+
+	cfg, err := ReconcileCerts(context.Background(), c, cr, entries)
+	if !errors.Is(err, certlib.ErrCertificateNotReady) {
+		t.Fatalf("expected ErrCertificateNotReady while cert-manager issues the cert, got: %v", err)
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil config while cert-manager issues the cert, got: %+v", cfg)
+	}
+
+	created := &cmapi.Certificate{}
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "ns", Name: "auto-cert"}, created); err != nil {
+		t.Fatalf("expected Certificate CR to be created: %v", err)
+	}
+	if created.Spec.SecretName != "auto-cert" {
+		t.Errorf("SecretName = %q, want %q", created.Spec.SecretName, "auto-cert")
+	}
+	if created.Spec.IssuerRef.Name != "my-issuer" {
+		t.Errorf("IssuerRef.Name = %q, want %q", created.Spec.IssuerRef.Name, "my-issuer")
+	}
+	if len(created.OwnerReferences) != 1 || created.OwnerReferences[0].Name != "s1" {
+		t.Errorf("expected owner reference to s1, got: %+v", created.OwnerReferences)
+	}
+}
+
+func TestReconcileCerts_AutoGenerate_NoIssuerRef_ReturnsError(t *testing.T) {
+	cr := standaloneWithCerts("ns", "s1", nil)
+	c := buildClientWithMapper(restMapperWithCertificateCRD(), cr)
+
+	entries := []CertEntry{
+		{SecretName: "auto-cert", Role: string(enterpriseApi.CertRoleServer)},
+	}
+
+	cfg, err := ReconcileCerts(context.Background(), c, cr, entries)
+	if err == nil {
+		t.Fatal("expected error when issuerRef is missing")
+	}
+	if !errors.Is(err, certlib.ErrIssuerRefRequired) {
+		t.Errorf("expected ErrIssuerRefRequired, got: %v", err)
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil config on error, got: %+v", cfg)
+	}
+}
+
+func TestReconcileCerts_AutoGenerate_IssuerNotFound_ReturnsError(t *testing.T) {
+	cr := standaloneWithCerts("ns", "s1", nil)
+	c := buildClientWithMapper(restMapperWithCertificateCRD(), cr)
+
+	entries := []CertEntry{
+		{SecretName: "auto-cert", IssuerRef: &certlib.IssuerRef{Name: "missing-issuer"}},
+	}
+
+	_, err := ReconcileCerts(context.Background(), c, cr, entries)
+	if !errors.Is(err, certlib.ErrIssuerNotFound) {
+		t.Fatalf("expected ErrIssuerNotFound, got: %v", err)
+	}
+}
+
+func TestReconcileCerts_AutoGenerate_CertManagerNotInstalled_ReturnsError(t *testing.T) {
+	cr := standaloneWithCerts("ns", "s1", nil)
+	c := buildClientWithMapper(emptyRESTMapper(), cr)
+
+	entries := []CertEntry{
+		{SecretName: "auto-cert", IssuerRef: &certlib.IssuerRef{Name: "my-issuer"}},
+	}
+
+	cfg, err := ReconcileCerts(context.Background(), c, cr, entries)
+	if !errors.Is(err, certlib.ErrCertManagerNotInstalled) {
+		t.Fatalf("expected ErrCertManagerNotInstalled, got: %v", err)
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil config on error, got: %+v", cfg)
+	}
+}
+
+func TestReconcileCerts_AutoGenerate_CertGenerationGateDisabled_ReturnsError(t *testing.T) {
+	config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagerCertGeneration): false})
+	t.Cleanup(func() {
+		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagerCertGeneration): true})
+	})
+
+	cr := standaloneWithCerts("ns", "s1", nil)
+	c := buildClientWithMapper(restMapperWithCertificateCRD(), cr)
+
+	entries := []CertEntry{
+		{SecretName: "auto-cert", IssuerRef: &certlib.IssuerRef{Name: "my-issuer"}},
+	}
+
+	cfg, err := ReconcileCerts(context.Background(), c, cr, entries)
+	if !errors.Is(err, ErrCertGenerationDisabled) {
+		t.Fatalf("expected ErrCertGenerationDisabled, got: %v", err)
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil config on error, got: %+v", cfg)
+	}
+
+	created := &cmapi.Certificate{}
+	getErr := c.Get(context.Background(), client.ObjectKey{Namespace: "ns", Name: "auto-cert"}, created)
+	if getErr == nil {
+		t.Fatal("expected no Certificate CR to be created when gate is disabled")
+	}
+}
+
+func TestReconcileCerts_AutoGenerate_AlreadyExistsNotReady_ReturnsError(t *testing.T) {
+	issuer := namespacedIssuer("ns", "my-issuer")
+	cr := standaloneWithCerts("ns", "s1", nil)
+	existing := &cmapi.Certificate{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "auto-cert"}}
+	c := buildClientWithMapper(restMapperWithCertificateCRD(), cr, issuer, existing)
+
+	entries := []CertEntry{
+		{SecretName: "auto-cert", IssuerRef: &certlib.IssuerRef{Name: "my-issuer"}},
+	}
+
+	cfg, err := ReconcileCerts(context.Background(), c, cr, entries)
+	if !errors.Is(err, certlib.ErrCertificateNotReady) {
+		t.Fatalf("expected ErrCertificateNotReady while Certificate is not yet ready, got: %v", err)
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil config while Certificate is not yet ready, got: %+v", cfg)
+	}
+}
+
+func TestReconcileCerts_AutoGenerate_StampsGeneratedForUIDAnnotation(t *testing.T) {
+	issuer := namespacedIssuer("ns", "my-issuer")
+	cr := standaloneWithCerts("ns", "s1", nil)
+	cr.UID = "cr-uid-1"
+	c := buildClientWithMapper(restMapperWithCertificateCRD(), cr, issuer)
+
+	entries := []CertEntry{
+		{SecretName: "auto-cert", IssuerRef: &certlib.IssuerRef{Name: "my-issuer"}, DNSNames: []string{"svc.ns.svc.cluster.local"}},
+	}
+
+	if _, err := ReconcileCerts(context.Background(), c, cr, entries); !errors.Is(err, certlib.ErrCertificateNotReady) {
+		t.Fatalf("expected ErrCertificateNotReady, got: %v", err)
+	}
+
+	created := &cmapi.Certificate{}
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "ns", Name: "auto-cert"}, created); err != nil {
+		t.Fatalf("expected Certificate CR to be created: %v", err)
+	}
+	if created.Spec.SecretTemplate == nil {
+		t.Fatal("expected SecretTemplate to be set on the generated Certificate")
+	}
+	if got := created.Spec.SecretTemplate.Annotations[CertGeneratedForUIDAnnotation]; got != "cr-uid-1" {
+		t.Errorf("SecretTemplate annotation %s = %q, want %q", CertGeneratedForUIDAnnotation, got, "cr-uid-1")
+	}
+}
+
+func TestReconcileCerts_AutoGeneratedSecret_RejectedForDifferentCR(t *testing.T) {
+	// Simulates a Secret that cert-manager populated from a Certificate whose
+	// SecretTemplate stamped it as generated for a different CR's UID.
+	secret := noCASecret("ns", "auto-cert")
+	secret.Annotations = map[string]string{CertGeneratedForUIDAnnotation: "other-cr-uid"}
+	cr := standaloneWithCerts("ns", "s1", []enterpriseApi.CertSpec{
+		{SecretRef: corev1.LocalObjectReference{Name: "auto-cert"}},
+	})
+	cr.UID = "cr-uid-1"
+	c := buildClient(cr, secret)
+
+	cfg, err := ReconcileCerts(context.Background(), c, cr, specToCertEntries(cr.Spec.Certs))
+	if err == nil {
+		t.Fatal("expected error when reusing another CR's auto-generated secret")
+	}
+	if reason, ok := splcommon.TerminalReason(err); !ok || reason != EventReasonCertSecretWrongOwner {
+		t.Errorf("expected TerminalError with reason %s, got: %v", EventReasonCertSecretWrongOwner, err)
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil config on error, got: %+v", cfg)
+	}
+}
+
+func TestReconcileCerts_AutoGeneratedSecret_AllowedForOwningCR(t *testing.T) {
+	secret := noCASecret("ns", "auto-cert")
+	secret.Annotations = map[string]string{CertGeneratedForUIDAnnotation: "cr-uid-1"}
+	cr := standaloneWithCerts("ns", "s1", []enterpriseApi.CertSpec{
+		{SecretRef: corev1.LocalObjectReference{Name: "auto-cert"}},
+	})
+	cr.UID = "cr-uid-1"
+	c := buildClient(cr, secret)
+
+	cfg, err := ReconcileCerts(context.Background(), c, cr, specToCertEntries(cr.Spec.Certs))
+	if err != nil {
+		t.Fatalf("unexpected error mounting own auto-generated secret: %v", err)
+	}
+	if cfg == nil || len(cfg.Volumes) != 1 {
+		t.Fatalf("expected 1 volume mounted, got: %+v", cfg)
+	}
+}
+
+func TestReconcileCerts_CustomerProvidedSecret_SharedAcrossCRs(t *testing.T) {
+	// A customer-provided secret (no CertGeneratedForUIDAnnotation) must remain
+	// mountable by any CR, regardless of UID.
+	secret := noCASecret("ns", "shared-customer-cert")
+	certSpec := []enterpriseApi.CertSpec{
+		{SecretRef: corev1.LocalObjectReference{Name: "shared-customer-cert"}},
+	}
+
+	crA := standaloneWithCerts("ns", "a", certSpec)
+	crA.UID = "cr-uid-a"
+	cA := buildClient(crA, secret)
+	if _, err := ReconcileCerts(context.Background(), cA, crA, specToCertEntries(certSpec)); err != nil {
+		t.Fatalf("unexpected error for crA: %v", err)
+	}
+
+	crB := standaloneWithCerts("ns", "b", certSpec)
+	crB.UID = "cr-uid-b"
+	cB := buildClient(crB, secret)
+	if _, err := ReconcileCerts(context.Background(), cB, crB, specToCertEntries(certSpec)); err != nil {
+		t.Fatalf("unexpected error for crB: %v", err)
+	}
+}
+
+func TestReconcileCerts_OperatorDriven_AutoGeneratedSecret_RejectedForDifferentCR(t *testing.T) {
+	secret := noCASecret("ns", "op-cert")
+	secret.Annotations = map[string]string{CertGeneratedForUIDAnnotation: "other-cr-uid"}
+	cr := standaloneWithCerts("ns", "s1", nil)
+	cr.UID = "cr-uid-1"
+	c := buildClient(cr, secret)
+	wrapped := &certRequesterStandalone{Standalone: cr, secrets: []string{"op-cert"}}
+
+	cfg, err := ReconcileCerts(context.Background(), c, wrapped, nil)
+	if err == nil {
+		t.Fatal("expected error when reusing another CR's auto-generated secret via operator-driven path")
+	}
+	if reason, ok := splcommon.TerminalReason(err); !ok || reason != EventReasonCertSecretWrongOwner {
+		t.Errorf("expected TerminalError with reason %s, got: %v", EventReasonCertSecretWrongOwner, err)
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil config on error, got: %+v", cfg)
 	}
 }
 
