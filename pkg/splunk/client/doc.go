@@ -23,4 +23,5 @@
 //	storage/azure/   Azure Blob Storage remote storage client
 //	storage/gcp/     Google Cloud Storage remote storage client
 //	storage/minio/   Minio/S3-compatible remote storage client
+//	certmanager/     cert-manager Certificate/Issuer client library
 package client

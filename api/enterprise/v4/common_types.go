@@ -17,6 +17,7 @@ package v4
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -776,8 +777,41 @@ const (
 	CertTypeTLS CertType = "tls"
 )
 
+// PrivateKeyRotationPolicy controls whether cert-manager reuses or
+// regenerates a certificate's private key on renewal, mirroring
+// cert-manager's own PrivateKeyRotationPolicy.
+type PrivateKeyRotationPolicy string
+
+const (
+	// PrivateKeyRotationPolicyNever reuses the existing private key on renewal.
+	PrivateKeyRotationPolicyNever PrivateKeyRotationPolicy = "Never"
+
+	// PrivateKeyRotationPolicyAlways generates a new private key on renewal.
+	PrivateKeyRotationPolicyAlways PrivateKeyRotationPolicy = "Always"
+)
+
+// IssuerReference identifies a cert-manager Issuer or ClusterIssuer that
+// must already exist in the cluster. Unlike cert-manager's own
+// cmmeta.ObjectReference, this type has no Group field: cert-manager treats
+// an empty Group as its own API group (cert-manager.io), so a Splunk CR has
+// no legitimate reason to reference an Issuer/ClusterIssuer from any other
+// API group.
+type IssuerReference struct {
+	// Name of the Issuer or ClusterIssuer.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Kind of the resource being referred to, "Issuer" or "ClusterIssuer".
+	// Defaults to "Issuer" when unset.
+	// +kubebuilder:validation:Enum=Issuer;ClusterIssuer
+	// +kubebuilder:default=Issuer
+	// +optional
+	Kind string `json:"kind,omitempty"`
+}
+
 // CertSpec declares one certificate that should be mounted into Splunk pods.
-// Phase 1: mount-only. IssuerRef and DNSNames are reserved for Phase 2 (cert generation).
+// IssuerRef/DNSNames: when the referenced Secret does not exist, the operator
+// auto-generates it via cert-manager.
 type CertSpec struct {
 	// SecretRef references the Kubernetes Secret containing the cert material.
 	// The Secret must contain tls.crt and tls.key; ca.crt is optional.
@@ -796,6 +830,51 @@ type CertSpec struct {
 	// +kubebuilder:validation:Enum=tls
 	// +optional
 	Type CertType `json:"type,omitempty"`
+
+	// IssuerRef is the cert-manager Issuer or ClusterIssuer to use when
+	// auto-generating this cert. The referenced Issuer/ClusterIssuer must
+	// already exist in the namespace/cluster — the operator never creates
+	// one, and reconciliation fails if it is not found. Required when
+	// auto-generation is desired; ignored when secretRef already exists.
+	// +optional
+	IssuerRef *IssuerReference `json:"issuerRef,omitempty"`
+
+	// DNSNames are the DNS SANs for the generated cert. If absent, SANs are
+	// auto-derived from the CR's service and pod FQDNs. Ignored when
+	// secretRef already exists.
+	// +optional
+	DNSNames []string `json:"dnsNames,omitempty"`
+
+	// Duration is the requested validity period of the generated certificate.
+	// Defaults to one year when unset. Ignored when secretRef already exists.
+	// Note this is only a request — the issuer may choose to ignore it (e.g.
+	// a public ACME issuer always issues its own fixed lifetime).
+	// +kubebuilder:default:="8760h"
+	// +optional
+	Duration *metav1.Duration `json:"duration,omitempty"`
+
+	// RenewBefore is how long before expiry cert-manager should renew the
+	// generated certificate. Defaults to cert-manager's own default when
+	// unset. Ignored when secretRef already exists.
+	// No +kubebuilder:default is set here deliberately: cert-manager's own
+	// fallback is proportional (2/3 through the cert's actual lifetime, see
+	// pkg/util/pki/renewaltime.go), not a fixed value, so a static CRD
+	// default would not scale with Duration.
+	// +optional
+	RenewBefore *metav1.Duration `json:"renewBefore,omitempty"`
+
+	// RotationPolicy controls whether cert-manager reuses the existing
+	// private key on renewal ("Never") or generates a new one ("Always").
+	// Defaults to "Never" when unset — this mirrors cert-manager's own
+	// default for its Certificate.Spec.PrivateKey.RotationPolicy field
+	// (kept for backward compatibility upstream); see
+	// pkg/controller/certificates/keymanager/keymanager_controller.go in
+	// cert-manager, which treats a nil PrivateKey the same as
+	// RotationPolicy: "Never". Ignored when secretRef already exists.
+	// +kubebuilder:validation:Enum=Never;Always
+	// +kubebuilder:default=Never
+	// +optional
+	RotationPolicy PrivateKeyRotationPolicy `json:"rotationPolicy,omitempty"`
 }
 
 // GetCerts returns the list of cert declarations from the CR spec.

@@ -19,19 +19,40 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/splunk/splunk-operator/pkg/logging"
 )
 
-// ValidateCertSecret fetches the named secret and checks it contains the
-// required keys tls.crt and tls.key. ca.crt is optional (absent for ACME issuers).
-// Returns the secret on success, a not-found error if missing, or a descriptive
-// error if a required key is absent.
+// ValidateCertSecret fetches the named secret and checks it has one of two
+// valid shapes:
+//   - tls.crt and tls.key, with ca.crt optional (absent for ACME issuers).
+//   - ca.crt only, with tls.crt and tls.key both absent. This shape is for
+//     mounting a CA cert to trust an externally-managed TLS endpoint (e.g. a
+//     postgres server's CA) without SOK managing a client cert/key for it.
+//
+// Returns the secret on success, a not-found error if missing, or a
+// descriptive error if neither valid shape is present.
 func ValidateCertSecret(ctx context.Context, c client.Client, namespace, secretName string) (*corev1.Secret, error) {
+	logger := logging.FromContext(ctx).With("func", "ValidateCertSecret", "secret", secretName, "namespace", namespace)
 	secret := &corev1.Secret{}
 	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: secretName}, secret); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			logger.ErrorContext(ctx, "failed to fetch cert secret", "error", err)
+		}
 		return nil, err
 	}
+
+	_, hasCrt := secret.Data[CertTLSCRTKey]
+	_, hasKey := secret.Data[CertTLSKeyKey]
+	_, hasCA := secret.Data[CertCAKey]
+
+	if hasCA && !hasCrt && !hasKey {
+		return secret, nil
+	}
+
 	for _, key := range []string{CertTLSCRTKey, CertTLSKeyKey} {
 		if _, ok := secret.Data[key]; !ok {
 			certErr := &ErrCertSecretMalformed{Namespace: namespace, SecretName: secretName, MissingKey: key}

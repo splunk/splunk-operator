@@ -163,6 +163,8 @@ HELM_ENTERPRISE_CHART = helm-chart/splunk-enterprise
 
 .PHONY: helm-lint
 helm-lint: ## Lint Helm charts
+	helm repo add jetstack https://charts.jetstack.io --force-update
+	helm dependency build $(HELM_OPERATOR_CHART)
 	helm lint $(HELM_OPERATOR_CHART)
 	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234! --set splunkConfig.splunkGeneralTerms=$(SPLUNK_GENERAL_TERMS)
 	@mkdir -p $(HELM_ENTERPRISE_CHART)/charts

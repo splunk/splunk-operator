@@ -41,15 +41,21 @@ const (
 	// Enterprise CR types (ReconcileCerts + the cert-secret watch mapper).
 	// When disabled, spec.certs[] is ignored and no cert volumes are mounted.
 	CertManagement featuregate.Feature = "CertManagement"
+	// CertManagerCertGeneration gates auto-generation of missing user-declared
+	// cert secrets via cert-manager (ReconcileCerts' EnsureCertificate call).
+	// When disabled, a missing secret is not auto-generated: reconciliation
+	// fails with an error instead. Existing secrets are still mounted as-is.
+	CertManagerCertGeneration featuregate.Feature = "CertManagerCertGeneration"
 )
 
 // defaultFeatureGates is the authoritative registry of all feature gates and
 // their default state / maturity. Each entry here automatically becomes
 // available via --feature-gates on the operator binary.
 var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
-	ValidationWebhook:  {Default: false, PreRelease: featuregate.Alpha},
-	PostgresController: {Default: false, PreRelease: featuregate.Alpha},
-	CertManagement:     {Default: true, PreRelease: featuregate.Beta},
+	ValidationWebhook:         {Default: false, PreRelease: featuregate.Alpha},
+	PostgresController:        {Default: false, PreRelease: featuregate.Alpha},
+	CertManagement:            {Default: true, PreRelease: featuregate.Beta},
+	CertManagerCertGeneration: {Default: true, PreRelease: featuregate.Beta},
 }
 
 var DefaultMutableFeatureGate featuregate.MutableFeatureGate = featuregate.NewFeatureGate()

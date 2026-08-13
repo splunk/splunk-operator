@@ -34,3 +34,13 @@ version: "3.1.0"
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
 appVersion: "3.1.0"
+
+# cert-manager is an optional dependency used to auto-generate TLS certificates for
+# Splunk components (see splunkOperator's CertManagement feature gate). Disabled by
+# default via cert-manager.enabled — enable it only if the cluster does not already
+# have cert-manager installed.
+dependencies:
+  - name: cert-manager
+    version: "v1.17.2"
+    repository: "https://charts.jetstack.io"
+    condition: cert-manager.enabled
