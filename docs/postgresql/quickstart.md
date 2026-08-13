@@ -364,7 +364,7 @@ spec:
   clusterRef:
     name: quickstart-postgres
   databases:
-    # Database names must use lowercase letters, digits, and underscores.
+    # Database names must start with a lowercase letter and use only lowercase letters and digits.
     - name: appdb
       # Why: remove the database too when the quickstart resource is deleted.
       # Use Retain when deleting the PostgresDatabase must leave its data in place.
@@ -383,6 +383,12 @@ example produces `quickstart-db-appdb-rw`. The database ConfigMap is named
 `<PostgresDatabase>-<database>-config`; it contains the endpoint, port, database name, and role
 name. The temporary client Pod below references those generated resources directly. Its Pod spec
 contains Secret and ConfigMap references, not the decoded password.
+
+Database names must begin with a lowercase letter and contain only lowercase letters and digits.
+Underscores are invalid in the derived Kubernetes resource names, while hyphens do not fit the
+PostgreSQL identifiers and roles derived from the same value. Both are rejected when the
+`PostgresDatabase` is submitted. The exact generated Secret and ConfigMap names are also published
+in `status.databases[].adminUserSecretRef`, `rwUserSecretRef`, and `configMapRef`.
 
 ```bash
 export DATABASE_CONFIG=quickstart-db-appdb-config

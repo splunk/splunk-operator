@@ -121,10 +121,14 @@ spec:
                             rule: self.all(x, x.key.size() > 0)
                       type: object
                     name:
-                      description: Name of the PostgreSQL database to create.
+                      description: |-
+                        Name of the PostgreSQL database to create. It must start with a lowercase
+                        letter and contain only lowercase letters and digits because it is also
+                        used to derive Kubernetes resource names. Underscores and hyphens are not
+                        allowed.
                       maxLength: 30
                       minLength: 1
-                      pattern: ^[a-z_][a-z0-9_]*$
+                      pattern: ^[a-z][a-z0-9]*$
                       type: string
                     passwordConfig:
                       description: |-
