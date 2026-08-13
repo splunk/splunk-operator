@@ -649,8 +649,11 @@ database-level authorization, and it does not replace PostgreSQL roles or Kubern
 
 Required fields and impact:
 
-- `resourceNames` must match the generated Secret names: `<PostgresDatabase>-<database>-admin` and
-  `<PostgresDatabase>-<database>-rw`.
+- Database names must begin with a lowercase letter and contain only lowercase letters and digits;
+  underscores and hyphens are rejected at admission. Generated Secret names are therefore
+  predictable as `<PostgresDatabase>-<database>-admin` and `<PostgresDatabase>-<database>-rw`. The
+  exact names are also published in `PostgresDatabase.status.databases[].adminUserSecretRef` and
+  `rwUserSecretRef`.
 - `subjects[].name` must be the ServiceAccount used by the consuming workload Pods.
 - `podSelector.matchLabels` on the `NetworkPolicy` selects the database-side Pods to protect.
 - `ingress[].from[].podSelector` selects the application Pods allowed to connect.

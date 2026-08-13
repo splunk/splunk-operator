@@ -608,16 +608,16 @@ func TestGetDesiredRoles(t *testing.T) {
 	postgresDB := &enterprisev4.PostgresDatabase{
 		Spec: enterprisev4.PostgresDatabaseSpec{
 			Databases: []enterprisev4.DatabaseDefinition{
-				{Name: "main_db"},
-				{Name: "secondary_db"},
+				{Name: "maindb"},
+				{Name: "secondarydb"},
 			},
 		},
 	}
 	want := []string{
-		"main_db_admin",
-		"main_db_rw",
-		"secondary_db_admin",
-		"secondary_db_rw",
+		"maindb_admin",
+		"maindb_rw",
+		"secondarydb_admin",
+		"secondarydb_rw",
 	}
 
 	got := getDesiredRoles(postgresDB)

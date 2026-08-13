@@ -53,11 +53,14 @@ type DatabaseMonitoring struct {
 // +kubebuilder:validation:XValidation:rule="(has(self.passwordConfig) == has(oldSelf.passwordConfig))",message="passwordConfig cannot be altered after creation"
 // +kubebuilder:validation:XValidation:rule="!has(self.passwordConfig) || self.passwordConfig == oldSelf.passwordConfig",message="passwordConfig is immutable once set"
 type DatabaseDefinition struct {
-	// Name of the PostgreSQL database to create.
+	// Name of the PostgreSQL database to create. It must start with a lowercase
+	// letter and contain only lowercase letters and digits because it is also
+	// used to derive Kubernetes resource names. Underscores and hyphens are not
+	// allowed.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=30
-	// +kubebuilder:validation:Pattern=`^[a-z_][a-z0-9_]*$`
+	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9]*$`
 	Name string `json:"name"`
 	// PostgreSQL extensions to install in this database (e.g. "pg_trgm", "uuid-ossp").
 	Extensions []string `json:"extensions,omitempty"`

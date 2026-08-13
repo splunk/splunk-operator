@@ -710,6 +710,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				Expect(current.Status.Databases).To(HaveLen(1))
 				Expect(current.Status.CustomMetricsPublication.Contributions[0].Revision).To(Equal(revision))
 				current.Status.Databases[0].Ready = true
+				current.Status.Databases[0].DatabaseRef = &corev1.LocalObjectReference{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName)}
 				Expect(k8sClient.Status().Update(ctx, current)).To(Succeed())
 				markCNPGDatabaseApplied(ctx, cnpgDatabase)
 
@@ -2079,6 +2080,26 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 		})
 	})
 	When("a PostgresDatabase resource is created, the kubebuilder validation works and", func() {
+		It("rejects database names containing underscores or hyphens", func() {
+			for i, databaseName := range []string{"my_db", "_mydb", "my__db", "my-db", "-mydb", "my--db"} {
+				postgresDB := &enterprisev4.PostgresDatabase{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("invalid-database-name-%d", i),
+						Namespace: namespace,
+					},
+					Spec: enterprisev4.PostgresDatabaseSpec{
+						ClusterRef: corev1.LocalObjectReference{Name: "tenant-cluster"},
+						Databases:  []enterprisev4.DatabaseDefinition{{Name: databaseName}},
+					},
+				}
+
+				err := k8sClient.Create(ctx, postgresDB)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("spec.databases[0].name"))
+				Expect(err.Error()).To(ContainSubstring("should match '^[a-z][a-z0-9]*$'"))
+			}
+		})
+
 		It("should catch empty secrets", func() {
 			scenario := newReadyClusterScenario(namespace, "password-config-wrong", "tenant-cluster", "tenant-cnpg", dbAppdb)
 			postgresDB := &enterprisev4.PostgresDatabase{
