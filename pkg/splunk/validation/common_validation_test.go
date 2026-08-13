@@ -76,6 +76,25 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 			},
 			wantErrCount: 2, // VAR1[1] and VAR1[2] are duplicates of VAR1[0]
 		},
+		{
+			name: "extraEnv - KV Store default type local is valid",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ExtraEnv: []corev1.EnvVar{
+					{Name: "SPLUNK_KVSTORE_DEFAULT_TYPE", Value: "local"},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "extraEnv - invalid KV Store default type",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				ExtraEnv: []corev1.EnvVar{
+					{Name: "SPLUNK_KVSTORE_DEFAULT_TYPE", Value: "remote"},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.extraEnv[0].value",
+		},
 		// imagePullSecrets uniqueness validation tests
 		{
 			name: "imagePullSecrets - unique names are valid",

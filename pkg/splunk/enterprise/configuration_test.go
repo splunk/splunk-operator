@@ -191,6 +191,15 @@ func configTester(t *testing.T, method string, f func() (interface{}, error), wa
 	marshalAndCompare(t, result, method, want)
 }
 
+func getStatefulSetEnvValue(sts *appsv1.StatefulSet, name string) (string, bool) {
+	for _, env := range sts.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == name {
+			return env.Value, true
+		}
+	}
+	return "", false
+}
+
 func marshalAndCompare(t *testing.T, compare interface{}, method string, want string) {
 	t.Helper()
 	got, err := json.Marshal(compare)
@@ -1981,6 +1990,45 @@ func TestGetSplunkPorts(t *testing.T) {
 	test(SplunkIndexer)
 	test(SplunkIngestor)
 	test(SplunkMonitoringConsole)
+}
+
+func TestKVStoreDefaultTypeEnv(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
+	require.NoError(t, err)
+
+	cr := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	sts, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, 1, nil, nil)
+	require.NoError(t, err)
+	value, found := getStatefulSetEnvValue(sts, splunkKVStoreDefaultTypeEnv)
+	require.True(t, found)
+	require.Equal(t, splunkKVStoreTypeLocal, value)
+
+	ingestor := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	sts, err = getSplunkStatefulSet(ctx, client, ingestor, &ingestor.Spec.CommonSplunkSpec, SplunkIngestor, 1, nil, nil)
+	require.NoError(t, err)
+	_, found = getStatefulSetEnvValue(sts, splunkKVStoreDefaultTypeEnv)
+	require.False(t, found)
+}
+
+func TestValidateKVStoreDefaultTypeExtraEnv(t *testing.T) {
+	valid := []corev1.EnvVar{{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal}}
+	require.NoError(t, validateKVStoreDefaultTypeExtraEnv(valid))
+
+	invalid := []corev1.EnvVar{{Name: splunkKVStoreDefaultTypeEnv, Value: "remote"}}
+	require.ErrorContains(t, validateKVStoreDefaultTypeExtraEnv(invalid), "SPLUNK_KVSTORE_DEFAULT_TYPE")
 }
 
 func TestConfigMapVolAnnotationStamped(t *testing.T) {
