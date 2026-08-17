@@ -3671,3 +3671,73 @@ func TestApplyIngestorPodDisruptionBudget(t *testing.T) {
 		}
 	})
 }
+
+func TestClearAppContextIfSourcesRemoved(t *testing.T) {
+	makeDeployStatus := func() map[string]enterpriseApi.AppSrcDeployInfo {
+		return map[string]enterpriseApi.AppSrcDeployInfo{
+			"myAppSrc": {},
+		}
+	}
+
+	t.Run("spec empty and status non-nil clears context", func(t *testing.T) {
+		spec := &enterpriseApi.AppFrameworkSpec{AppSources: nil}
+		ctx := &enterpriseApi.AppDeploymentContext{
+			AppsSrcDeployStatus:                 makeDeployStatus(),
+			IsDeploymentInProgress:              true,
+			AppFrameworkConfig:                  enterpriseApi.AppFrameworkSpec{AppSources: []enterpriseApi.AppSourceSpec{{Name: "stale"}}},
+			LastAppInfoCheckTime:                12345,
+			AppsRepoStatusPollInterval:          60,
+			AppsStatusMaxConcurrentAppDownloads: 5,
+			BundlePushStatus:                    enterpriseApi.BundlePushTracker{RetryCount: 3},
+		}
+		got := clearAppContextIfSourcesRemoved(spec, ctx)
+		if !got {
+			t.Error("expected true (cleared), got false")
+		}
+		if ctx.AppsSrcDeployStatus != nil {
+			t.Error("AppsSrcDeployStatus should be nil after clear")
+		}
+		if ctx.IsDeploymentInProgress {
+			t.Error("IsDeploymentInProgress should be false after clear")
+		}
+		if len(ctx.AppFrameworkConfig.AppSources) != 0 {
+			t.Error("AppFrameworkConfig.AppSources should be empty after clear")
+		}
+		if ctx.LastAppInfoCheckTime != 0 {
+			t.Error("LastAppInfoCheckTime should be 0 after clear")
+		}
+		if ctx.AppsRepoStatusPollInterval != 0 {
+			t.Error("AppsRepoStatusPollInterval should be 0 after clear")
+		}
+		if ctx.AppsStatusMaxConcurrentAppDownloads != 0 {
+			t.Error("AppsStatusMaxConcurrentAppDownloads should be 0 after clear")
+		}
+		if ctx.BundlePushStatus.RetryCount != 0 {
+			t.Error("BundlePushStatus should be zeroed after clear")
+		}
+	})
+
+	t.Run("spec non-empty is a no-op", func(t *testing.T) {
+		spec := &enterpriseApi.AppFrameworkSpec{
+			AppSources: []enterpriseApi.AppSourceSpec{{Name: "active"}},
+		}
+		status := makeDeployStatus()
+		ctx := &enterpriseApi.AppDeploymentContext{AppsSrcDeployStatus: status}
+		got := clearAppContextIfSourcesRemoved(spec, ctx)
+		if got {
+			t.Error("expected false (no-op), got true")
+		}
+		if ctx.AppsSrcDeployStatus == nil {
+			t.Error("AppsSrcDeployStatus should be unchanged")
+		}
+	})
+
+	t.Run("spec empty and status already nil is a no-op", func(t *testing.T) {
+		spec := &enterpriseApi.AppFrameworkSpec{}
+		ctx := &enterpriseApi.AppDeploymentContext{AppsSrcDeployStatus: nil}
+		got := clearAppContextIfSourcesRemoved(spec, ctx)
+		if got {
+			t.Error("expected false (no-op), got true")
+		}
+	})
+}
