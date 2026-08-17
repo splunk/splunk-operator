@@ -2120,6 +2120,8 @@ func handleAppFrameworkActivity(ctx context.Context, client splcommon.Controller
 		RequeueAfter: maxRecDuration,
 	}
 
+	clearAppContextIfSourcesRemoved(appFrameworkConfig, appDeployContext)
+
 	// Consider the polling interval for next reconcile
 	if isAppRepoPollingEnabled(appDeployContext) {
 		requeueAfter := GetNextRequeueTime(ctx, appDeployContext.AppsRepoStatusPollInterval, appDeployContext.LastAppInfoCheckTime)
@@ -2137,6 +2139,24 @@ func handleAppFrameworkActivity(ctx context.Context, client splcommon.Controller
 	}
 
 	return finalResult
+}
+
+// clearAppContextIfSourcesRemoved clears stale app deploy status when all AppSources have
+// been removed from spec. Without this, the scheduler loops every ~5s from stale
+// AppsSrcDeployStatus while /operator-staging is not mounted (no volume injected when
+// spec is empty), causing a permanent Permission Denied loop.
+func clearAppContextIfSourcesRemoved(appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appDeployContext *enterpriseApi.AppDeploymentContext) bool {
+	if len(appFrameworkConfig.AppSources) != 0 || appDeployContext.AppsSrcDeployStatus == nil {
+		return false
+	}
+	appDeployContext.AppsSrcDeployStatus = nil
+	appDeployContext.AppFrameworkConfig = enterpriseApi.AppFrameworkSpec{}
+	appDeployContext.IsDeploymentInProgress = false
+	appDeployContext.LastAppInfoCheckTime = 0
+	appDeployContext.AppsRepoStatusPollInterval = 0
+	appDeployContext.AppsStatusMaxConcurrentAppDownloads = 0
+	appDeployContext.BundlePushStatus = enterpriseApi.BundlePushTracker{}
+	return true
 }
 
 // checkAndMigrateAppDeployStatus (if required) upgrades the appframework status context
