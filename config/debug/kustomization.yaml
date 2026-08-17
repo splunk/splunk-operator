@@ -128,6 +128,8 @@ patches:
         value: splunk-operator
       - name: SPLUNK_GENERAL_TERMS
         value: SPLUNK_GENERAL_TERMS_VALUE
+      - name: SPLUNK_PROVISION_IMAGE
+        value: SPLUNK_PROVISION_IMAGE_VALUE
       - name: POD_NAME
         valueFrom:
           fieldRef:

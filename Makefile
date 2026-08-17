@@ -60,6 +60,11 @@ BUNDLE_IMG ?= ${IMAGE_TAG_BASE}-bundle:v${VERSION}
 
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
+
+# SPLUNK_PROVISION_IMG is the dedicated splunk-provision init image injected into
+# Splunk pods (see injectSplunkProvision in pkg/splunk/enterprise/configuration.go).
+# TODO(SPL-306631): remove once splunk-provision is available in the Splunk docker image.
+SPLUNK_PROVISION_IMG ?=
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 # Automatically derive the version from go.mod
 ENVTEST_VERSION := $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
@@ -200,9 +205,6 @@ build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
-docker-build: #test ## Build docker image with the manager.
-	docker build -t ${IMG} .
-
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
@@ -210,6 +212,9 @@ docker-push: ## Push docker image with the manager.
 # IMG is a mandatory argument to specify the image name
 # Pass only what is required, the rest will use the Dockerfile defaults
 PLATFORMS ?= linux/amd64,linux/arm64
+
+docker-build: #test ## Build docker image with the manager.
+	docker build -t ${IMG} .
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -331,6 +336,7 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: SPLUNK_GENERAL_TERMS_VALUE/value: \"${SPLUNK_GENERAL_TERMS}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s|value: MANAGER_EXTRA_ARG_VALUE|value: \"${MANAGER_EXTRA_ARG}\"|g"  config/${ENVIRONMENT}/kustomization.yaml
+	@if [ -n "${SPLUNK_PROVISION_IMG}" ]; then $(SED) "s|SPLUNK_PROVISION_IMAGE_VALUE|${SPLUNK_PROVISION_IMG}|g"  config/${ENVIRONMENT}/kustomization.yaml; fi
 	$(SED) 's/\("sokVersion": \)"[^"]*"/\1"$(VERSION)"/' config/manager/controller_manager_telemetry.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl apply --server-side --force-conflicts -f -
@@ -339,6 +345,7 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: \"${SPLUNK_GENERAL_TERMS}\"/value: SPLUNK_GENERAL_TERMS_VALUE/g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s|value: \"${MANAGER_EXTRA_ARG}\"|value: MANAGER_EXTRA_ARG_VALUE|g"  config/${ENVIRONMENT}/kustomization.yaml
+	@if [ -n "${SPLUNK_PROVISION_IMG}" ]; then $(SED) "s|${SPLUNK_PROVISION_IMG}|SPLUNK_PROVISION_IMAGE_VALUE|g"  config/${ENVIRONMENT}/kustomization.yaml; fi
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl delete -f -
@@ -506,7 +513,7 @@ int-test:
 	@test/run-tests.sh
 
 # ---------------------------------------------------------------------------
-# Label-driven test entry points 
+# Label-driven test entry points
 # Underlying selection is `ginkgo --label-filter="$(TEST_LABELS)"`.
 # ---------------------------------------------------------------------------
 

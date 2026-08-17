@@ -852,6 +852,51 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 	return configMap
 }
 
+// TODO(SPL-307034): Move this check to `splunk-provision` - it should know which roles it support
+// This does not account for unsupported common features - like IPv6, multisite etc.
+func splunkProvisionSupportsRole(instanceType InstanceType) bool {
+	return instanceType == SplunkSearchHead || instanceType == SplunkDeployer
+}
+
+// injectSplunkProvision adds the init container, shared volume, and mounts needed
+// to run splunk-provision instead of Ansible. SPLUNK_PROVISION_IMAGE must be set
+// in the operator Deployment env (see config/manager/manager.yaml).
+func injectSplunkProvision(splunkProvisionImage string, podTemplateSpec *corev1.PodTemplateSpec, extraEnv *[]corev1.EnvVar) {
+	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
+		Name:         "splunk-provision-bin",
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	})
+	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, corev1.Container{
+		Name:            "splunk-provision-init",
+		Image:           splunkProvisionImage,
+		ImagePullPolicy: corev1.PullAlways,
+		Command: []string{"bash", "-c",
+			"cp /opt/splunk-provision/splunk-provision /mnt/splunk-provision/splunk-provision && " +
+				"cp /opt/splunk-provision/entrypoint.sh /mnt/splunk-provision/entrypoint.sh && " +
+				"chmod 755 /mnt/splunk-provision/splunk-provision /mnt/splunk-provision/entrypoint.sh",
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "splunk-provision-bin", MountPath: "/mnt/splunk-provision"},
+		},
+	})
+	for idx := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(
+			podTemplateSpec.Spec.Containers[idx].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      "splunk-provision-bin",
+				MountPath: "/sbin/entrypoint.sh",
+				SubPath:   "entrypoint.sh",
+			},
+			corev1.VolumeMount{
+				Name:      "splunk-provision-bin",
+				MountPath: "/opt/splunk/bin/splunk-provision",
+				SubPath:   "splunk-provision",
+			},
+		)
+	}
+	*extraEnv = append([]corev1.EnvVar{{Name: "SPLUNK_NO_ANSIBLE", Value: "true"}}, *extraEnv...)
+}
+
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) error {
 
@@ -880,6 +925,20 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					MountPath: "/mnt/" + spec.Volumes[v].Name,
 				})
 			}
+		}
+	}
+
+	// TODO(SPL-306631): remove once the `splunk-provision` is available in the Splunk docker image
+	// TODO(SPL-306655): and once the `entrypoint.sh` has been modified in the Splunk docker image
+	crAnnotations := cr.GetAnnotations()
+	if strings.ToLower(crAnnotations[enterpriseApi.SplunkProvisionAnnotation]) == "true" &&
+		splunkProvisionSupportsRole(instanceType) {
+		splunkProvisionImage := os.Getenv("SPLUNK_PROVISION_IMAGE")
+		if splunkProvisionImage == "" || splunkProvisionImage == "SPLUNK_PROVISION_IMAGE_VALUE" {
+			logger.WarnContext(ctx, "skipping splunk-provision injection", "reason", "SPLUNK_PROVISION_IMAGE not set or unresolved placeholder")
+		} else {
+			logger.Info("injecting splunk-provision as volume via init-container")
+			injectSplunkProvision(splunkProvisionImage, podTemplateSpec, &extraEnv)
 		}
 	}
 

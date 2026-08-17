@@ -2,6 +2,8 @@
 
 : "${SPLUNK_OPERATOR_IMAGE:=splunk/splunk-operator:latest}"
 : "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:latest}"
+# TODO(SPL-306631): remove once splunk-provision is available in the Splunk docker image.
+: "${SPLUNK_PROVISION_IMG:=}"
 : "${CLUSTER_PROVIDER:=eks}"
 : "${CLUSTER_NAME:=integration-test-cluster-eks}"
 : "${NUM_WORKERS:=3}"
