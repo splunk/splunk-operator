@@ -565,6 +565,18 @@ func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterM
 
 func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object) (client.Object, error) {
 
+	// Apply splunk-provision annotations when SPLUNK_PROVISION_ENABLED=true
+	if len(d.testenv.splunkProvisionAnnotations) > 0 {
+		annotations := cr.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		for k, v := range d.testenv.splunkProvisionAnnotations {
+			annotations[k] = v
+		}
+		cr.SetAnnotations(annotations)
+	}
+
 	err := d.testenv.GetKubeClient().Create(ctx, cr)
 	if err != nil {
 		return nil, err

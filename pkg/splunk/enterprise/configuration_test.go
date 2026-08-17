@@ -2416,3 +2416,99 @@ func TestUpdateSplunkPodTemplateLooksUpClusterManagerInRefNamespace(t *testing.T
 	}
 	require.True(t, found, "expected SPLUNK_LICENSE_MASTER_URL to be qualified with the ClusterManager's namespace")
 }
+
+func TestSplunkProvisionInjection(t *testing.T) {
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+
+	spec := &enterpriseApi.CommonSplunkSpec{}
+
+	makeCR := func(annotations map[string]string) *enterpriseApi.SearchHeadCluster {
+		return &enterpriseApi.SearchHeadCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "shc1", Namespace: "test", Annotations: annotations},
+		}
+	}
+
+	makePodTemplate := func() corev1.PodTemplateSpec {
+		return corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{}},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
+			},
+		}
+	}
+
+	allMountPaths := func(pod corev1.PodTemplateSpec) []string {
+		var paths []string
+		for _, c := range pod.Spec.Containers {
+			for _, m := range c.VolumeMounts {
+				paths = append(paths, m.MountPath)
+			}
+		}
+		return paths
+	}
+
+	envVars := func(pod corev1.PodTemplateSpec) map[string]string {
+		m := map[string]string{}
+		for _, c := range pod.Spec.Containers {
+			for _, e := range c.Env {
+				m[e.Name] = e.Value
+			}
+		}
+		return m
+	}
+
+	t.Run("no annotation leaves pod unchanged", func(t *testing.T) {
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod, makeCR(nil), spec, SplunkSearchHead, nil, "secret")
+		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
+	t.Run("annotation=false leaves pod unchanged", func(t *testing.T) {
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod,
+			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "false"}),
+			spec, SplunkSearchHead, nil, "secret")
+		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
+	t.Run("annotation=true routes provisioning to splunk-provision", func(t *testing.T) {
+		t.Setenv("SPLUNK_PROVISION_IMAGE", "splunk-provision:latest")
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod,
+			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "true"}),
+			spec, SplunkSearchHead, nil, "secret")
+
+		require.Equal(t, "true", envVars(pod)["SPLUNK_NO_ANSIBLE"])
+		require.Contains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.Contains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
+	t.Run("annotation=true with SPLUNK_PROVISION_IMAGE unset skips injection", func(t *testing.T) {
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod,
+			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "true"}),
+			spec, SplunkSearchHead, nil, "secret")
+
+		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
+	t.Run("annotation=true with SPLUNK_PROVISION_IMAGE unresolved placeholder skips injection", func(t *testing.T) {
+		t.Setenv("SPLUNK_PROVISION_IMAGE", "SPLUNK_PROVISION_IMAGE_VALUE")
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod,
+			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "true"}),
+			spec, SplunkSearchHead, nil, "secret")
+
+		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
+}

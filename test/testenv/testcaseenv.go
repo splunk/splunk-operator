@@ -20,9 +20,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,25 +38,26 @@ import (
 
 // TestCaseEnv represents a namespaced-isolated k8s cluster environment (aka virtual k8s cluster) to run test cases against
 type TestCaseEnv struct {
-	kubeClient           client.Client
-	name                 string
-	namespace            string
-	serviceAccountName   string
-	roleName             string
-	roleBindingName      string
-	operatorName         string
-	operatorImage        string
-	splunkImage          string
-	initialized          bool
-	SkipTeardown         bool
-	licenseFilePath      string
-	licenseCMName        string
-	s3IndexSecret        string
-	indexIngestSepSecret string
-	Log                  logr.Logger
-	cleanupFuncs         []cleanupFunc
-	debug                string
-	clusterWideOperator  string
+	kubeClient                 client.Client
+	name                       string
+	namespace                  string
+	serviceAccountName         string
+	roleName                   string
+	roleBindingName            string
+	operatorName               string
+	operatorImage              string
+	splunkImage                string
+	initialized                bool
+	SkipTeardown               bool
+	licenseFilePath            string
+	licenseCMName              string
+	s3IndexSecret              string
+	indexIngestSepSecret       string
+	Log                        logr.Logger
+	cleanupFuncs               []cleanupFunc
+	debug                      string
+	clusterWideOperator        string
+	splunkProvisionAnnotations map[string]string
 	// teardownCtx is an optional parent context for cleanup operations.
 	// When set (typically to a Ginkgo SpecContext via SetTeardownContext),
 	// per-cleanup deadlines derive from it so that Ginkgo NodeTimeout cancellation
@@ -113,23 +116,32 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 		return nil, fmt.Errorf("name %s has exceeded 24 chars", name)
 	}
 
+	var splunkProvisionAnnotations map[string]string
+	if strings.ToLower(os.Getenv("SPLUNK_PROVISION_ENABLED")) == "true" {
+		splunkProvisionAnnotations = map[string]string{
+			enterpriseApi.SplunkProvisionAnnotation: "true",
+		}
+
+	}
+
 	testenv := &TestCaseEnv{
-		kubeClient:           kubeClient,
-		name:                 name,
-		namespace:            name,
-		serviceAccountName:   name,
-		roleName:             name,
-		roleBindingName:      name,
-		operatorName:         "splunk-op-" + name,
-		operatorImage:        operatorImage,
-		splunkImage:          splunkImage,
-		SkipTeardown:         specifiedSkipTeardown,
-		licenseCMName:        name,
-		licenseFilePath:      licenseFilePath,
-		s3IndexSecret:        "splunk-s3-index-" + name,
-		indexIngestSepSecret: "splunk--index-ingest-sep-" + name,
-		debug:                os.Getenv("DEBUG"),
-		clusterWideOperator:  installOperatorClusterWide,
+		kubeClient:                 kubeClient,
+		name:                       name,
+		namespace:                  name,
+		serviceAccountName:         name,
+		roleName:                   name,
+		roleBindingName:            name,
+		operatorName:               "splunk-op-" + name,
+		operatorImage:              operatorImage,
+		splunkImage:                splunkImage,
+		SkipTeardown:               specifiedSkipTeardown,
+		licenseCMName:              name,
+		licenseFilePath:            licenseFilePath,
+		s3IndexSecret:              "splunk-s3-index-" + name,
+		indexIngestSepSecret:       "splunk--index-ingest-sep-" + name,
+		debug:                      os.Getenv("DEBUG"),
+		clusterWideOperator:        installOperatorClusterWide,
+		splunkProvisionAnnotations: splunkProvisionAnnotations,
 	}
 
 	testenv.Log = logf.Log.WithValues("testcaseenv", testenv.name)

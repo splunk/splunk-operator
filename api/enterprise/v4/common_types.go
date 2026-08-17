@@ -27,6 +27,9 @@ const (
 
 	// TotalWorker concurrent workers to reconcile
 	TotalWorker int = 15
+
+	// SplunkProvisionAnnotation enables `splunk-provision` based provisioning when set to "true" on any CR.
+	SplunkProvisionAnnotation = "enterprise.splunk.com/splunk-provision"
 )
 
 // default all fields to being optional

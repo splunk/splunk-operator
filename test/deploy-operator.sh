@@ -37,7 +37,8 @@ elif [  "${CLUSTER_WIDE}" != "true" ]; then
   bin/kustomize build config/crd | kubectl create -f -
 else
   echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE} using enterprise image from ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
-  make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com" WATCH_NAMESPACE="" ENVIRONMENT=debug MANAGER_EXTRA_ARG="${MANAGER_EXTRA_ARG:-}"
+  # TODO(SPL-306631): remove once splunk-provision is available in the Splunk docker image.
+  make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com" WATCH_NAMESPACE="" ENVIRONMENT=debug MANAGER_EXTRA_ARG="${MANAGER_EXTRA_ARG:-}" SPLUNK_PROVISION_IMG=${SPLUNK_PROVISION_IMG}
 fi
 
 if [ $? -ne 0 ]; then
