@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -30,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	wait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -250,6 +252,20 @@ func streamWithContextGuard(ctx context.Context, executor remotecommand.Executor
 	}
 }
 
+func newPodExecExecutor(restConfig *rest.Config, execURL *url.URL) (remotecommand.Executor, error) {
+	spdyExecutor, err := remotecommand.NewSPDYExecutor(restConfig, http.MethodPost, execURL)
+	if err != nil {
+		return nil, err
+	}
+	websocketExecutor, err := remotecommand.NewWebSocketExecutor(restConfig, http.MethodGet, execURL.String())
+	if err != nil {
+		return nil, err
+	}
+	return remotecommand.NewFallbackExecutor(websocketExecutor, spdyExecutor, func(err error) bool {
+		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
+	})
+}
+
 // PodExecCommand execute a shell command in the specified pod
 func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []string, stdin string, tty bool) (string, string, error) {
 	pod := &corev1.Pod{}
@@ -279,7 +295,7 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 		option,
 		scheme.ParameterCodec,
 	)
-	exec, err := remotecommand.NewSPDYExecutor(restConfig, http.MethodPost, execReq.URL())
+	exec, err := newPodExecExecutor(restConfig, execReq.URL())
 	if err != nil {
 		return "", "", err
 	}
