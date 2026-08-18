@@ -9,9 +9,8 @@ nav_order: 3
 ## Repository Structure
 
 ```
-├── api/              Custom Resource Definitions (CRDs) for all API versions
-│   ├── v4/           Current stable API version
-│   └── v3/           Previous API version
+├── api/
+│   └── enterprise/   CRD Go types for current and compatibility API versions
 ├── cmd/              Main entry point for the operator
 ├── config/           Kubernetes manifests and configuration
 │   ├── crd/          CRD base files

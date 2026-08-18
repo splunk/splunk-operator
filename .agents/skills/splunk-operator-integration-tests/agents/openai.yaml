@@ -1,0 +1,4 @@
+interface:
+  display_name: "Splunk Operator Integration Tests"
+  short_description: "Design and validate operator integration tests"
+  default_prompt: "Use $splunk-operator-integration-tests to design, change, review, or safely validate the scoped integration-test surface in this request."
