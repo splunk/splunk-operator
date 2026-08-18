@@ -111,9 +111,7 @@ func RunS1CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 	testenv.WaitForPodRunning(ctx, deployment, podName)
 
 	verifyServerAutogenCertMounted(ctx, deployment, podName)
-	// TLS handshake checks are commented out in pipeline — they don't work in
-	// CI/CD; uncomment locally when testing against a live cluster.
-	//testenv.VerifyServerCertTLS(ctx, deployment, podName, serviceFQDN)
+	testenv.VerifyServerCertTLS(ctx, deployment, podName, serviceFQDN)
 
 	existingPath := "/mnt/tls/" + existingSecret
 	testenv.VerifyCertFileMounted(ctx, deployment, podName, existingPath, "tls.crt")
@@ -181,9 +179,7 @@ func RunC3CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 		testenv.WaitForCertSecretKeys(ctx, deployment, lmSecret, "tls.crt", "tls.key", "ca.crt")
 		testenv.WaitForPodRunning(ctx, deployment, lmPod)
 		verifyServerAutogenCertMounted(ctx, deployment, lmPod)
-		// TLS handshake checks are commented out in pipeline — they don't work in
-		// CI/CD; uncomment locally when testing against a live cluster.
-		//testenv.VerifyServerCertTLS(ctx, deployment, lmPod, lmServiceFQDN)
+		testenv.VerifyServerCertTLS(ctx, deployment, lmPod, lmServiceFQDN)
 	}
 
 	// Deploy ClusterManager — replicas is always 1 conceptually (single instance), matching
@@ -210,9 +206,7 @@ func RunC3CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 	testenv.WaitForCertSecretKeys(ctx, deployment, cmSecret, "tls.crt", "tls.key", "ca.crt")
 	testenv.WaitForPodRunning(ctx, deployment, cmPod)
 	verifyServerAutogenCertMounted(ctx, deployment, cmPod)
-	// TLS handshake checks are commented out in pipeline — they don't work in
-	// CI/CD; uncomment locally when testing against a live cluster.
-	//testenv.VerifyServerCertTLS(ctx, deployment, cmPod, cmServiceFQDN)
+	testenv.VerifyServerCertTLS(ctx, deployment, cmPod, cmServiceFQDN)
 
 	// Deploy IndexerCluster — replicas=1, matching the RF=1 set on ClusterManager above.
 	idxcName := deployment.GetName() + "-idxc"
@@ -233,9 +227,7 @@ func RunC3CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 	testenv.WaitForCertSecretKeys(ctx, deployment, idxcSecret, "tls.crt", "tls.key", "ca.crt")
 	testenv.WaitForPodRunning(ctx, deployment, idxcPod)
 	verifyServerAutogenCertMounted(ctx, deployment, idxcPod)
-	// TLS handshake checks are commented out in pipeline — they don't work in
-	// CI/CD; uncomment locally when testing against a live cluster.
-	//testenv.VerifyServerCertTLS(ctx, deployment, idxcPod, idxcServiceFQDN)
+	testenv.VerifyServerCertTLS(ctx, deployment, idxcPod, idxcServiceFQDN)
 
 	// Deploy SearchHeadCluster — DNS SANs always include the wildcard SH headless SAN plus
 	// the SH and deployer service FQDNs, matching autoDNSNamesSearchHeadCluster.
@@ -258,14 +250,12 @@ func RunC3CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 	testenv.WaitForCertSecretKeys(ctx, deployment, shcSecret, "tls.crt", "tls.key", "ca.crt")
 	testenv.WaitForPodRunning(ctx, deployment, deployerPod)
 	verifyServerAutogenCertMounted(ctx, deployment, deployerPod)
-	// TLS handshake checks are commented out in pipeline — they don't work in
-	// CI/CD; uncomment locally when testing against a live cluster.
-	//testenv.VerifyServerCertTLS(ctx, deployment, deployerPod, shcDeployerFQDN)
+	testenv.VerifyServerCertTLS(ctx, deployment, deployerPod, shcDeployerFQDN)
 
 	shPod := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
 	testenv.WaitForPodRunning(ctx, deployment, shPod)
 	verifyServerAutogenCertMounted(ctx, deployment, shPod)
-	//testenv.VerifyServerCertTLS(ctx, deployment, shPod, shcServiceFQDN)
+	testenv.VerifyServerCertTLS(ctx, deployment, shPod, shcServiceFQDN)
 }
 
 // RunICCertTestTopology deploys an IngestorCluster (with its required Queue/ObjectStorage
