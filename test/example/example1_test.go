@@ -14,22 +14,18 @@
 package example
 
 import (
-	"math/rand"
-	"time"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = XDescribe("Example1", func() {
+var _ = Describe("Example integration test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 
-	// This is invoke for each "It" spec below
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
 		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
 		Expect(err).To(Succeed(), "Failed to setup test case environment")
@@ -39,25 +35,15 @@ var _ = XDescribe("Example1", func() {
 		Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
-	// "It" spec
-	It("deploys successfully", func() {
-		// Add your test spec!!
-		// eg deployment.DeployStandalone()
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-		testcaseEnvInst.Log.Info("Running test spec", "name", deployment.GetName())
-	})
+	It("can deploy a standalone instance",
+		// Replace tier:template and the other labels after copying this suite.
+		Label("tier:template", "sva:s1", "cloud:any", "feature:basic"),
+		NodeTimeout(testenv.ShortTimeout),
+		func(ctx SpecContext) {
+			result, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
-	// "It" spec
-	It("can update volumes", func() {
-		// Add your test spec!!
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-		testcaseEnvInst.Log.Info("Running test spec", "name", deployment.GetName())
-	})
-
-	// "It" spec
-	It("can update service ports", func() {
-		// Add your test spec!!
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-		testcaseEnvInst.Log.Info("Running test spec", "name", deployment.GetName())
-	})
+			Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, result.Standalone)).
+				To(Succeed(), "Standalone Ready condition not met")
+		})
 })
