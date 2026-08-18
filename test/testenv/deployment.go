@@ -103,6 +103,7 @@ func (d *Deployment) Teardown() error {
 
 	// Formatted string for pod logs
 	podLogFile := "%s-%s.log"
+	splunkdLogFile := "%s-%s-splunkd.log"
 
 	// Saving Operator and Splunk Pod Logs to File
 	podNames := DumpGetPods(d.testenv.GetName())
@@ -127,6 +128,28 @@ func (d *Deployment) Teardown() error {
 				d.testenv.Log.Info(fmt.Sprintf("Finished writing %s log to file %s", podName, logFileName))
 			}
 			logFile.Close()
+		}
+
+		// splunkd.log lives inside the container filesystem and is never
+		// written to stdout, so `kubectl logs` above never captures it.
+		// Pull it separately via exec -- best-effort, since a crash-looping
+		// pod may not have a live container to exec into.
+		splunkdCtx, splunkdCancel := context.WithTimeout(context.Background(), KubectlExecTimeout)
+		splunkdOutput, splunkdErr := exec.CommandContext(splunkdCtx, "kubectl", "exec", "-n", d.testenv.GetName(), podName, "--", "cat", "/opt/splunk/var/log/splunk/splunkd.log").Output()
+		splunkdCancel()
+		if splunkdErr != nil {
+			d.testenv.Log.Error(splunkdErr, fmt.Sprintf("Failed to get splunkd.log from Pod %s", podName))
+		} else {
+			splunkdLogFileName := fmt.Sprintf(splunkdLogFile, d.GetName(), podName)
+			d.testenv.Log.Info(fmt.Sprintf("Writing %s splunkd.log to file %s ", podName, splunkdLogFileName))
+			splunkdFile, err := os.Create(splunkdLogFileName)
+			if err != nil {
+				d.testenv.Log.Error(err, fmt.Sprintf("Failed to create splunkd log file %s", splunkdLogFileName))
+			} else {
+				splunkdFile.Write(splunkdOutput)
+				splunkdFile.Close()
+				d.testenv.Log.Info(fmt.Sprintf("Finished writing %s splunkd.log to file %s", podName, splunkdLogFileName))
+			}
 		}
 	}
 

@@ -85,7 +85,8 @@ func GetMountedKey(ctx context.Context, deployment *Deployment, podName string, 
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
 		return ""
 	}
-	logf.Log.Info("Key found on pod", "podName", podName, "stdout", stdout, "stderr", stderr)
+	// stdout is the mounted secret's plaintext value, so it is not logged
+	logf.Log.Info("Key found on pod", "podName", podName, "key", key, "stderr", stderr)
 	return stdout
 }
 
@@ -103,7 +104,7 @@ func GetSecretFromServerConf(ctx context.Context, deployment *Deployment, podNam
 		return "", "", err
 	}
 
-	secretList := strings.Split(confline, "=")
+	secretList := strings.SplitN(confline, "=", 2)
 	key := strings.TrimSpace(secretList[0])
 	value := DecryptSplunkEncodedSecret(ctx, deployment, podName, strings.TrimSpace(secretList[1]))
 	return key, value, nil
@@ -114,13 +115,12 @@ func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, pod
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk show-decrypted --value '%s'", secretValue)
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
+	// stdin embeds the obfuscated secret and stdout is its plaintext, so neither is logged
 	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
+		logf.Log.Error(err, "Failed to decrypt secret on pod", "pod", podName, "command", command)
 		return "Failed"
 	}
-	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-
-	logf.Log.Info("Decrypted Key Value", "decryptedKey", stdout)
+	logf.Log.Info("Decrypted secret on pod", "pod", podName, "command", command, "stderr", stderr)
 	return strings.TrimSuffix(stdout, "\n")
 }
 
@@ -203,7 +203,7 @@ func GetSecretFromInputsConf(ctx context.Context, deployment *Deployment, podNam
 		logf.Log.Error(err, "Failed to get secret from pod", "podName", podName, "secretName", configName)
 		return "", "", err
 	}
-	secretList := strings.Split(confline, "=")
+	secretList := strings.SplitN(confline, "=", 2)
 	key := strings.TrimSpace(secretList[0])
 	value := strings.TrimSpace(secretList[1])
 	return key, value, nil
