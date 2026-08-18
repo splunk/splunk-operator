@@ -131,4 +131,33 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 			Expect(err.Error()).To(ContainSubstring("postgresVersion"))
 		},
 	)
+
+	It("postgrescontrollers, integration, postgres-validation: apiserver rejects enabled backup without a provider",
+		Label("tier:e2e-full", "tier:e2e-pr", "sva:s1", "cloud:aws", "feature:postgres"),
+		NodeTimeout(testenv.ShortTimeout),
+		func(ctx SpecContext) {
+			ns := testcaseEnvInst.GetName()
+			schedule := "* * * * *"
+			pgClass := &enterprisev4.PostgresClusterClass{
+				ObjectMeta: metav1.ObjectMeta{Name: "postgres-backup-validation-" + ns},
+				Spec: enterprisev4.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &enterprisev4.PostgresClusterClassConfig{
+						Instances: ptr.To(int32(1)),
+						Backup: &enterprisev4.BackupConfig{
+							Enabled:  ptr.To(true),
+							Schedule: &schedule,
+						},
+					},
+					CNPG: &enterprisev4.CNPGConfig{},
+				},
+			}
+
+			err := testcaseEnvInst.GetKubeClient().Create(ctx, pgClass)
+			Expect(err).To(HaveOccurred(), "expected apiserver to reject enabled backup without a provider")
+			Expect(err.Error()).To(ContainSubstring(
+				"cnpg.backup.volumeSnapshot or cnpg.backup.barmanObjectStore must be set when config.backup.enabled is true",
+			))
+		},
+	)
 })
