@@ -221,7 +221,12 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
-		It("can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
+		// Disabled: newImage is hardcoded to splunk/splunk:latest, which is older than
+		// the pre-release image the pipeline supplies as the base, so this drives an
+		// unsupported Splunk downgrade. Splunk 10.6 writes secrets as $8$; on downgrade
+		// 10.4.2 re-obfuscates that ciphertext as $7$ cleartext, corrupting the
+		// server.pem passphrase and crash-looping splunkd.
+		PIt("can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "variant:manager", "feature:appframework"), NodeTimeout(testenv.LongTimeout), func(ctx SpecContext) {
 
 			//################## SETUP ####################
 
