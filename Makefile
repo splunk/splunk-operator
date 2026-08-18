@@ -522,11 +522,11 @@ test-unit: ## Run unit tests only (./pkg/splunk/...). No cluster required.
 	go test ./pkg/splunk/... -count=1
 
 .PHONY: test-integration
-test-integration: manifests generate fmt vet setup-envtest ## Run integration tests (envtest, ./internal/controller).
+test-integration: manifests generate fmt vet setup-envtest ## Run all controller envtest specs, including Postgres controllers.
 	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-integration_test.xml}"; \
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" \
 	  ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going \
-	  --timeout=$${TEST_TIMEOUT:-30m} --label-filter=integration ./internal/controller
+	  --timeout=$${TEST_TIMEOUT:-30m} ./internal/controller/enterprise
 
 .PHONY: test-smoke
 test-smoke: ## Run in-cluster smoke tests (label=tier:e2e-pr && feature:basic). Requires deployed operator.
