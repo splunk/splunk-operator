@@ -549,6 +549,8 @@ test-shc-detention: setup/ginkgo ## Run SHC detention timeout e2e tests. Require
 
 .PHONY: helm-package
 helm-package:
+	@helm repo add jetstack https://charts.jetstack.io --force-update
+	@helm dependency build helm-chart/splunk-operator
 	@mkdir -p helm-chart/splunk-enterprise/charts
 	@rm -f helm-chart/splunk-enterprise/charts/splunk-operator-*.tgz
 	@helm package helm-chart/splunk-operator --destination .
