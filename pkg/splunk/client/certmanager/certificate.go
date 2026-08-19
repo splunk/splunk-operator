@@ -194,7 +194,7 @@ func EnsureCertificate(ctx context.Context, c client.Client, secretName, namespa
 // ErrIssuerNotFound or ErrIssuerNotReady otherwise. The operator never
 // creates or repairs issuers on the caller's behalf — the admin owns their
 // lifecycle entirely.
-func resolveIssuerRef(ctx context.Context, c client.Client, namespace string, ref IssuerRef) (cmmeta.ObjectReference, error) {
+func resolveIssuerRef(ctx context.Context, c client.Client, namespace string, ref IssuerRef) (cmmeta.IssuerReference, error) {
 	kind := ref.Kind
 	if kind == "" {
 		kind = cmapi.IssuerKind
@@ -217,10 +217,10 @@ func resolveIssuerRef(ctx context.Context, c client.Client, namespace string, re
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.ErrorContext(ctx, "referenced issuer not found", "error", err)
-			return cmmeta.ObjectReference{}, fmt.Errorf("%w: %s %q in namespace %q", ErrIssuerNotFound, kind, ref.Name, namespace)
+			return cmmeta.IssuerReference{}, fmt.Errorf("%w: %s %q in namespace %q", ErrIssuerNotFound, kind, ref.Name, namespace)
 		}
 		logger.ErrorContext(ctx, "failed to check for issuer", "error", err)
-		return cmmeta.ObjectReference{}, fmt.Errorf("checking for issuer %s %q: %w", kind, ref.Name, err)
+		return cmmeta.IssuerReference{}, fmt.Errorf("checking for issuer %s %q: %w", kind, ref.Name, err)
 	}
 
 	ready := false
@@ -232,10 +232,10 @@ func resolveIssuerRef(ctx context.Context, c client.Client, namespace string, re
 	}
 	if !ready {
 		logger.ErrorContext(ctx, "referenced issuer is not ready")
-		return cmmeta.ObjectReference{}, fmt.Errorf("%w: %s %q in namespace %q", ErrIssuerNotReady, kind, ref.Name, namespace)
+		return cmmeta.IssuerReference{}, fmt.Errorf("%w: %s %q in namespace %q", ErrIssuerNotReady, kind, ref.Name, namespace)
 	}
 
-	return cmmeta.ObjectReference{Name: ref.Name, Kind: kind}, nil
+	return cmmeta.IssuerReference{Name: ref.Name, Kind: kind}, nil
 }
 
 // checkCertificateReady fetches the existing Certificate CR and reports
