@@ -72,6 +72,24 @@
         "matchPackageNames": ["github.com/cloudnative-pg/cloudnative-pg"],
         "matchUpdateTypes": ["major", "minor"],
         "enabled": false
+    },
+    {
+        "matchPackageNames": ["cert-manager", "github.com/cert-manager/cert-manager"],
+        "groupName": "cert-manager"
+    },
+    {
+        "matchPackageNames": ["cert-manager", "github.com/cert-manager/cert-manager"],
+        "matchUpdateTypes": ["patch"],
+        "automerge": true,
+        "addLabels": [
+            "dependency-update",
+            "auto-merge-enabled"
+        ]
+    },
+    {
+        "matchPackageNames": ["cert-manager", "github.com/cert-manager/cert-manager"],
+        "matchUpdateTypes": ["major", "minor"],
+        "enabled": false
     }
   ]
 }

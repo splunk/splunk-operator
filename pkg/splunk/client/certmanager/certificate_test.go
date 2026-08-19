@@ -113,7 +113,7 @@ func notReadyClusterIssuer(name string) *cmapi.ClusterIssuer {
 func defaultDesiredSpec(secretName, issuerName string) cmapi.CertificateSpec {
 	return cmapi.CertificateSpec{
 		SecretName: secretName,
-		IssuerRef:  cmmeta.ObjectReference{Name: issuerName, Kind: cmapi.IssuerKind},
+		IssuerRef:  cmmeta.IssuerReference{Name: issuerName, Kind: cmapi.IssuerKind},
 		CommonName: defaultCommonName,
 		Usages:     defaultUsages,
 	}
