@@ -124,8 +124,8 @@ spec:
         name: my-server-cert
       role: server
       issuerRef:
-        name: my-selfsigned-issuer
-        kind: ClusterIssuer   # or "Issuer" (default)
+        name: my-ca-issuer
+        kind: Issuer   # or "ClusterIssuer"
       dnsNames:
         - example.splunk.svc.cluster.local
 ```
@@ -135,16 +135,61 @@ spec:
 Auto-generation has two hard prerequisites that the operator does **not** set up for you:
 
 1. **cert-manager must be installed in the cluster.** The Splunk Operator's helm chart includes cert-manager as an optional dependency, disabled by default — enable it with `--set cert-manager.enabled=true` (or the equivalent `values.yaml` setting) if the cluster does not already have cert-manager installed. If your cluster already runs cert-manager (installed independently of this chart), leave it disabled here and use your existing installation.
-2. **You must create your own `Issuer` or `ClusterIssuer`.** The operator never creates one for you, whether self-signed, CA-based, or ACME. Reconciliation fails (and is retried) if the Issuer/ClusterIssuer named in `issuerRef` is missing or not yet `Ready`. For development or internal-only deployments where clients explicitly trust the generated CA, a self-signed `ClusterIssuer` can work; for production or externally reached endpoints, use an issuer backed by a trusted organizational/public CA:
+2. **You must create your own `Issuer` or `ClusterIssuer`.** The operator never creates one for you, whether self-signed, CA-based, or ACME. Reconciliation fails (and is retried) if the Issuer/ClusterIssuer named in `issuerRef` is missing or not yet `Ready`.
 
-```yaml
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: my-selfsigned-issuer
-spec:
-  selfSigned: {}
-```
+   Use a **`ca`-type** issuer, backed by a persistent CA key pair, so leaf certificates keep chaining to the same trust root across renewals — a `selfSigned` issuer has no such root and each renewal mints an unrelated CA, breaking mutual trust between cluster members that haven't all picked up the same renewal (see [Certificate rotation](#certificate-rotation)). A `ca` issuer's `spec.ca.secretName` names the Secret holding that root CA's certificate + private key, which cert-manager uses to sign every leaf certificate it issues through this issuer. Bootstrap the root CA once with a temporary `selfSigned` issuer, then reference its Secret from a `ca` issuer:
+
+   ```yaml
+   # One-time bootstrap: mint a root CA certificate
+   apiVersion: cert-manager.io/v1
+   kind: Issuer
+   metadata:
+     name: bootstrap-selfsigned-issuer
+     namespace: my-namespace
+   spec:
+     selfSigned: {}
+   ---
+   apiVersion: cert-manager.io/v1
+   kind: Certificate
+   metadata:
+     name: my-root-ca
+     namespace: my-namespace
+   spec:
+     isCA: true
+     commonName: my-root-ca
+     secretName: my-root-ca-secret
+     privateKey:
+       algorithm: ECDSA
+       size: 256
+     issuerRef:
+       name: bootstrap-selfsigned-issuer
+       kind: Issuer
+   ---
+   # The issuer you actually reference from spec.certs[].issuerRef
+   apiVersion: cert-manager.io/v1
+   kind: Issuer
+   metadata:
+     name: my-ca-issuer
+     namespace: my-namespace
+   spec:
+     ca:
+       secretName: my-root-ca-secret
+   ```
+
+   Referenced from the CR's `spec.certs[]`:
+
+   ```yaml
+   spec:
+     certs:
+       - secretRef:
+           name: my-server-cert
+         role: server
+         issuerRef:
+           name: my-ca-issuer
+           kind: Issuer
+   ```
+
+   **The CA Secret's required namespace depends on `Issuer` vs `ClusterIssuer`**: a namespaced `Issuer` (as above) only looks for `ca.secretName` in its own namespace — so it must be the same namespace as the Splunk CR. A `ClusterIssuer` instead looks in cert-manager's cluster resource namespace (default: the namespace cert-manager is installed into, e.g. `cert-manager`; set via cert-manager's `--cluster-resource-namespace` flag).
 
 Once both prerequisites are met, the operator creates a cert-manager `Certificate` object requesting the given `dnsNames`, `duration`, `renewBefore`, and `rotationPolicy`, waits for cert-manager to populate the target Secret, and then proceeds exactly as it would for a Secret you provided yourself.
 
