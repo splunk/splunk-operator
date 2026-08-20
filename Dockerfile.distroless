@@ -1,5 +1,5 @@
 # Setup defaults for build arguments
-ARG BUILDER_IMAGE=golang:1.26.6
+ARG BUILDER_IMAGE=golang:1.27.0
 ARG GOTOOLCHAIN=auto
 ARG BUILDPLATFORM
 
