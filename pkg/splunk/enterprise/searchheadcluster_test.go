@@ -45,7 +45,7 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -2443,7 +2443,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 
 	//setownerReference
-	err = splctrl.SetStatefulSetOwnerRef(ctx, c, searchheadcluster, namespacedName)
+	err = k8sops.SetStatefulSetOwnerRef(ctx, c, searchheadcluster, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}

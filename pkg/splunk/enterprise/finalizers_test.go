@@ -31,7 +31,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -330,9 +330,9 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	var err error
 	deleted, err := delete(cr, c)
 	if deleted != wantDeleted || err != nil {
-		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)
+		t.Errorf("k8sops.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)
 	}
-	c.CheckCalls(t, "Testsplctrl.CheckForDeletion", mockCalls)
+	c.CheckCalls(t, "Testk8sops.CheckForDeletion", mockCalls)
 }
 
 func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(context.Context, splcommon.MetaObject, splcommon.ControllerClient) (bool, error)) {
@@ -400,9 +400,9 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 	c.ListObj = &pvclist
 	deleted, err := delete(ctx, cr, c)
 	if deleted != wantDeleted || err != nil {
-		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)
+		t.Errorf("k8sops.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)
 	}
-	c.CheckCalls(t, "Testsplctrl.CheckForDeletion", mockCalls)
+	c.CheckCalls(t, "Testk8sops.CheckForDeletion", mockCalls)
 }
 func TestDeleteSplunkPvc(t *testing.T) {
 	ctx := context.TODO()
@@ -415,20 +415,20 @@ func TestDeleteSplunkPvc(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	splunkPVCDeletionTester(t, &cr, splctrl.CheckForDeletion)
+	splunkPVCDeletionTester(t, &cr, k8sops.CheckForDeletion)
 
 	now := time.Now().Add(time.Second * 100)
 	currentTime := metav1.NewTime(now)
 	cr.ObjectMeta.DeletionTimestamp = &currentTime
 	cr.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
-	splunkPVCDeletionTester(t, &cr, splctrl.CheckForDeletion)
+	splunkPVCDeletionTester(t, &cr, k8sops.CheckForDeletion)
 
 	// try with unrecognized finalizer
 	c := spltest.NewMockClient()
 	cr.ObjectMeta.Finalizers = append(cr.ObjectMeta.Finalizers, "bad-finalizer")
-	deleted, err := splctrl.CheckForDeletion(ctx, &cr, c)
+	deleted, err := k8sops.CheckForDeletion(ctx, &cr, c)
 	if deleted != false || err == nil {
-		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want false, (error)", deleted, err)
+		t.Errorf("k8sops.CheckForDeletion() returned %t, %v; want false, (error)", deleted, err)
 	}
 }
 
@@ -443,20 +443,20 @@ func TestDeleteSplunkClusterManagerPvc(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-	splunkPVCDeletionTester(t, &cr, splctrl.CheckForDeletion)
+	splunkPVCDeletionTester(t, &cr, k8sops.CheckForDeletion)
 
 	now := time.Now().Add(time.Second * 100)
 	currentTime := metav1.NewTime(now)
 	cr.ObjectMeta.DeletionTimestamp = &currentTime
 	cr.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
-	splunkPVCDeletionTester(t, &cr, splctrl.CheckForDeletion)
+	splunkPVCDeletionTester(t, &cr, k8sops.CheckForDeletion)
 
 	// try with unrecognized finalizer
 	c := spltest.NewMockClient()
 	cr.ObjectMeta.Finalizers = append(cr.ObjectMeta.Finalizers, "bad-finalizer")
-	deleted, err := splctrl.CheckForDeletion(ctx, &cr, c)
+	deleted, err := k8sops.CheckForDeletion(ctx, &cr, c)
 	if deleted != false || err == nil {
-		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want false, (error)", deleted, err)
+		t.Errorf("k8sops.CheckForDeletion() returned %t, %v; want false, (error)", deleted, err)
 	}
 }
 

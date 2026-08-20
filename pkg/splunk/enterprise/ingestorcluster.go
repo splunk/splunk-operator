@@ -25,8 +25,8 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splunkconfig "github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
@@ -148,7 +148,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIngestor)
 
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
@@ -158,7 +158,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 
 	// Create or update a headless service for ingestor cluster
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, true))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Apply of headless service failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
@@ -166,7 +166,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 
 	// Create or update a regular service for ingestor cluster
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, false))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Apply of service failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
@@ -189,7 +189,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Status.ReadyReplicas > 0 {
 		statefulsetName := GetSplunkStatefulsetName(SplunkIngestor, cr.GetName())
 
-		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
+		isStatefulSetScaling, err := k8sops.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to determine Scaling state")
 			return result, err
@@ -244,7 +244,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		return result, err
 	}
 
-	mgr := splctrl.DefaultStatefulSetPodManager{}
+	mgr := k8sops.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err != nil {
@@ -275,7 +275,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		// Upgrade from automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
+		err = k8sops.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, EventReasonMonitoringConsoleCleanupFailed, fmt.Sprintf("Failed to clean up automated monitoring console for %s — check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "delete of reference to automated MC failed", "error", err.Error())

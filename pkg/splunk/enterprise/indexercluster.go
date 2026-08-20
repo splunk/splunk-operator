@@ -31,8 +31,8 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splunkconfig "github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
@@ -146,7 +146,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
 
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 			cr.Status.ClusterManagerPhase = enterpriseApi.PhaseTerminating
@@ -159,7 +159,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		return result, err
 	}
 	// create or update a headless service for indexer cluster
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of headless service for Indexer Cluster failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
@@ -167,7 +167,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 
 	// create or update a regular service for indexer cluster (ingestion)
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of service for Indexer Cluster failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
@@ -295,7 +295,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 		if cmMonitoringConsoleConfigRef != "" {
 			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
-			_, err := splctrl.GetStatefulSetByName(ctx, client, namespacedName)
+			_, err := k8sops.GetStatefulSetByName(ctx, client, namespacedName)
 			//if MC pod already exists
 			if err == nil {
 				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
@@ -340,7 +340,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		if len(cr.Spec.ClusterManagerRef.Name) > 0 {
 			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterManagerRef.Name)}
 		}
-		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
+		err = k8sops.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRefFailed", "Set stateful set owner reference failed. Check operator logs for details.")
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to set StatefulSet owner reference")
@@ -449,7 +449,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
 
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 			cr.Status.ClusterMasterPhase = enterpriseApi.PhaseTerminating
@@ -463,14 +463,14 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// create or update a headless service for indexer cluster
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of headless service for Indexer Cluster failed. Check operator logs for details.")
 		return result, fmt.Errorf("apply headless service: %w", err)
 	}
 
 	// create or update a regular service for indexer cluster (ingestion)
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of service for Indexer Cluster failed. Check operator logs for details.")
 		return result, fmt.Errorf("apply service: %w", err)
@@ -592,7 +592,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 		if cmMonitoringConsoleConfigRef != "" {
 			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
-			_, err := splctrl.GetStatefulSetByName(ctx, client, namespacedName)
+			_, err := k8sops.GetStatefulSetByName(ctx, client, namespacedName)
 			//if MC pod already exists
 			if err == nil {
 				c := mgr.getMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
@@ -632,7 +632,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		// Set indexer cluster CR as owner reference for clustermaster
 		logger.DebugContext(ctx, "setting IndexerCluster as owner for ClusterMaster")
 		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
-		err = splctrl.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
+		err = k8sops.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRefFailed", "Set stateful set owner reference failed. Check operator logs for details.")
 			result.Requeue = true
@@ -873,7 +873,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 				podSecret.Data[splcommon.IdxcSecret] = splunkReadableData[splcommon.IdxcSecret]
 				podSecret.Data["default.yml"] = splunkReadableData["default.yml"]
 
-				_, err = splctrl.ApplySecret(ctx, mgr.c, podSecret)
+				_, err = k8sops.ApplySecret(ctx, mgr.c, podSecret)
 				if err != nil {
 					return err
 				}
@@ -914,7 +914,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	}
 	// update statefulset, if necessary
 	if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseReady || mgr.cr.Status.ClusterMasterPhase == enterpriseApi.PhaseReady {
-		_, err = splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
+		_, err = k8sops.ApplyStatefulSet(ctx, mgr.c, statefulSet)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
 		}
@@ -935,7 +935,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	// update CR status with IDXC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
-		if termErr := splctrl.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
+		if termErr := k8sops.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
 			mgr.log.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
 			return enterpriseApi.PhaseError, termErr
 		}
@@ -944,7 +944,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	}
 
 	// manage scaling and updates
-	phase, err := splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	phase, err := k8sops.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
 	if err != nil {
 		return phase, err
 	}

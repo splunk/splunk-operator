@@ -45,7 +45,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -457,7 +457,7 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -525,7 +525,7 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -598,7 +598,7 @@ func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -713,7 +713,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 			"status":       "off",
 		},
 	}
-	_, err := splctrl.ApplyConfigMap(ctx, client, crConfigMap1)
+	_, err := k8sops.ApplyConfigMap(ctx, client, crConfigMap1)
 	if err != nil {
 		t.Errorf("ApplyConfigMap should not have returned error for %s", crConfigMap1.Name)
 	}
@@ -732,7 +732,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 			"status":       "off",
 		},
 	}
-	_, err = splctrl.ApplyConfigMap(ctx, client, crConfigMap2)
+	_, err = k8sops.ApplyConfigMap(ctx, client, crConfigMap2)
 	if err != nil {
 		t.Errorf("ApplyConfigMap should not have returned error for %s", crConfigMap2.Name)
 	}
@@ -747,7 +747,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 	var configMap *corev1.ConfigMap
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-	_, err = splctrl.GetConfigMap(ctx, client, namespacedName)
+	_, err = k8sops.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		t.Errorf("Unable to get configMap")
 	}
@@ -766,7 +766,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}
 
-	_, err = splctrl.GetConfigMap(ctx, client, namespacedName)
+	_, err = k8sops.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		t.Errorf("Unable to get configMap")
 	}
@@ -785,9 +785,9 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
 
-	configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
+	configMap = k8sops.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
 
-	_, err = splctrl.ApplyConfigMap(ctx, client, configMap)
+	_, err = k8sops.ApplyConfigMap(ctx, client, configMap)
 	if err != nil {
 		t.Errorf("ApplyConfigMap should not have returned error")
 	}
@@ -1363,7 +1363,7 @@ func TestUpdateManualAppUpdateConfigMapLocked(t *testing.T) {
 
 	crKindMap := make(map[string]string)
 	crKindMap["manualUpdate"] = "off"
-	crConfigMap := splctrl.PrepareConfigMap(fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName()), cr.GetNamespace(), crKindMap)
+	crConfigMap := k8sops.PrepareConfigMap(fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName()), cr.GetNamespace(), crKindMap)
 
 	// now add the confiMap to the client
 	c.AddObject(crConfigMap)
@@ -1372,7 +1372,7 @@ func TestUpdateManualAppUpdateConfigMapLocked(t *testing.T) {
 	configMapData := `status: on
 refCount: 1`
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
-	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
+	configMap := k8sops.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
 
 	// now add the confiMap to the client
 	c.AddObject(configMap)
@@ -1446,7 +1446,7 @@ func TestShouldCheckAppRepoStatus(t *testing.T) {
 refCount: 1`
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
 
-	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
+	configMap := k8sops.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
 	c.AddObject(configMap)
 	shouldCheck = shouldCheckAppRepoStatus(ctx, c, &cr, &appStatusContext, cr.GetObjectKind().GroupVersionKind().Kind, &turnOffManualChecking)
 	if shouldCheck != true {
@@ -1513,7 +1513,7 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	//create configmap
-	_, err := splctrl.ApplyConfigMap(ctx, client, &currentCM)
+	_, err := k8sops.ApplyConfigMap(ctx, client, &currentCM)
 	if err != nil {
 		t.Errorf("Failed to create the configMap. Error: %s", err.Error())
 	}
@@ -1621,7 +1621,7 @@ refCount: 1`
 	crKindMap[kind] = configMapData
 	configMapName := GetSplunkManualAppUpdateConfigMapName(stand1.GetNamespace())
 
-	configMap := splctrl.PrepareConfigMap(configMapName, stand1.GetNamespace(), crKindMap)
+	configMap := k8sops.PrepareConfigMap(configMapName, stand1.GetNamespace(), crKindMap)
 
 	client.AddObject(configMap)
 
@@ -2318,7 +2318,7 @@ func TestMigrateAfwStatus(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := k8sops.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -2516,7 +2516,7 @@ func TestCheckAndMigrateAppDeployStatus(t *testing.T) {
 		},
 	}
 
-	_, err = splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err = k8sops.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}

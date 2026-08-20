@@ -15,8 +15,7 @@
 
 /*
 Package k8sops provides the Kubernetes API layer: read, create-or-update with
-diff/merge, and finalizer execution. Renamed from splkcontroller/ to reflect
-its actual scope (full K8s CRUD) and avoid confusion with reconcile/<cr>/.
+diff/merge, and finalizer execution.
 
 Allowed imports from pkg/splunk/:
 

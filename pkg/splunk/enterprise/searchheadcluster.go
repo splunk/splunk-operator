@@ -28,7 +28,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
@@ -145,7 +145,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkSearchHead)
 
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 			cr.Status.DeployerPhase = enterpriseApi.PhaseTerminating
@@ -159,21 +159,21 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// create or update a headless search head cluster service
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, true))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, true))
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head headless service")
 		return result, err
 	}
 
 	// create or update a regular search head cluster service
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, false))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, false))
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head service")
 		return result, err
 	}
 
 	// create or update a deployer service
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, false))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, false))
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer service")
 		return result, err
@@ -203,7 +203,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		}
 	}
 
-	deployerManager := splctrl.DefaultStatefulSetPodManager{}
+	deployerManager := k8sops.DefaultStatefulSetPodManager{}
 	phase, err := deployerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Deployer pods")
@@ -253,7 +253,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
+		err = k8sops.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
@@ -454,7 +454,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 				return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
 			}
 			podSecret.Data["password"] = []byte(nsAdminSecret)
-			_, err = splctrl.ApplySecret(ctx, mgr.c, podSecret)
+			_, err = k8sops.ApplySecret(ctx, mgr.c, podSecret)
 			if err != nil {
 				return err
 			}

@@ -40,7 +40,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -381,7 +381,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -488,7 +488,7 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -501,7 +501,7 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 		Data: map[string]string{configToken: ""},
 	}
 
-	_, err = splctrl.ApplyConfigMap(ctx, client, &smartstoreConfigMap)
+	_, err = k8sops.ApplyConfigMap(ctx, client, &smartstoreConfigMap)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -562,7 +562,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -1474,7 +1474,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	}
 
 	//setownerReference
-	err = splctrl.SetStatefulSetOwnerRef(ctx, c, clustermaster, namespacedName)
+	err = k8sops.SetStatefulSetOwnerRef(ctx, c, clustermaster, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}

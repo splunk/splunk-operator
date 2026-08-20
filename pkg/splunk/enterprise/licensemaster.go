@@ -32,7 +32,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
@@ -110,7 +110,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkLicenseMaster)
 
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {
@@ -123,7 +123,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 
 	// create or update a service
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, false))
+	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, false))
 	if err != nil {
 		return result, err
 	}
@@ -140,7 +140,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 		return result, err
 	}
 
-	mgr := splctrl.DefaultStatefulSetPodManager{}
+	mgr := k8sops.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
 		return result, err
@@ -158,7 +158,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
-		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
+		err = k8sops.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}

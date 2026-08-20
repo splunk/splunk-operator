@@ -24,8 +24,8 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/stretchr/testify/assert"
@@ -479,7 +479,7 @@ func TestGetIngestorStatefulSet_ConfigMapVolAnnotation(t *testing.T) {
 	require.NoError(t, err)
 
 	cmData := map[string]string{"default.yml": "splunk:\n  conf: value1"}
-	cm := splctrl.PrepareConfigMap("my-defaults-cm", "test", cmData)
+	cm := k8sops.PrepareConfigMap("my-defaults-cm", "test", cmData)
 	require.NoError(t, splutil.CreateResource(ctx, c, cm))
 
 	require.NoError(t, validateIngestorClusterSpec(ctx, c, &cr))

@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package splkcontroller
+package k8sops
 
 import (
 	"context"
@@ -212,108 +212,15 @@ func TestMergePodUpdates(t *testing.T) {
 	podUpdateTester("Container removed")
 }
 
-func TestMergeServiceSpecUpdates(t *testing.T) {
-	ctx := context.TODO()
-	var current, revised corev1.ServiceSpec
-	name := "test-svc"
-	matcher := func() bool { return false }
-
-	svcUpdateTester := func(param string) {
-		if !MergeServiceSpecUpdates(ctx, &current, &revised, name) {
-			t.Errorf("MergeServiceSpecUpdates() returned %t; want %t", false, true)
-		}
-		if !matcher() {
-			t.Errorf("MergeServiceSpecUpdates() to detect change: %s", param)
-		}
-		if MergeServiceSpecUpdates(ctx, &current, &revised, name) {
-			t.Errorf("MergeServiceSpecUpdates() re-run returned %t; want %t", true, false)
-		}
-	}
-
-	// should be no updates to merge if they are empty
-	if MergeServiceSpecUpdates(ctx, &current, &revised, name) {
-		t.Errorf("MergeServiceSpecUpdates() returned %t; want %t", true, false)
-	}
-
-	// check new Port added
-	revised.Ports = []corev1.ServicePort{{Name: "new-port-added", Port: 32000}}
-	matcher = func() bool { return reflect.DeepEqual(current.Ports, revised.Ports) }
-	svcUpdateTester("Service Ports added")
-
-	// check Port changed
-	current.Ports = []corev1.ServicePort{{Name: "port-changed", Port: 32320}}
-	revised.Ports = []corev1.ServicePort{{Name: "port-changed", Port: 32000}}
-	matcher = func() bool { return reflect.DeepEqual(current.Ports, revised.Ports) }
-	svcUpdateTester("Service Ports change")
-
-	// new ExternalIPs
-	revised.ExternalIPs = []string{"1.2.3.4"}
-	matcher = func() bool { return reflect.DeepEqual(current.ExternalIPs, revised.ExternalIPs) }
-	svcUpdateTester("Service ExternalIPs added")
-
-	// updated ExternalIPs
-	current.ExternalIPs = []string{"1.2.3.4"}
-	revised.ExternalIPs = []string{"1.1.3.4"}
-	matcher = func() bool { return reflect.DeepEqual(current.ExternalIPs, revised.ExternalIPs) }
-	svcUpdateTester("Service ExternalIPs changed")
-
-	// Type change
-	current.Type = corev1.ServiceTypeClusterIP
-	revised.Type = corev1.ServiceTypeNodePort
-	matcher = func() bool { return current.Type == revised.Type }
-	svcUpdateTester("Service Type changed")
-
-	current.ExternalName = "splunk.example.com"
-	revised.ExternalName = "splunk2.example.com"
-	matcher = func() bool { return current.ExternalName == revised.ExternalName }
-	svcUpdateTester("Service ExternalName changed")
-
-	current.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
-	revised.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
-	matcher = func() bool { return current.ExternalTrafficPolicy == revised.ExternalTrafficPolicy }
-	svcUpdateTester("Service ExternalTrafficPolicy changed")
-}
-
-func TestMergeServiceSpecUpdatesEmptyRevisedType(t *testing.T) {
-	ctx := context.TODO()
-
-	// Case 1: current is already ClusterIP and revised has no Type set
-	// (the common steady-state case). Must not report a diff and must
-	// not overwrite the current value.
-	current := corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP}
-	revised := corev1.ServiceSpec{}
-	if MergeServiceSpecUpdates(ctx, &current, &revised, "test-svc") {
-		t.Errorf("MergeServiceSpecUpdates() reported a diff for empty revised.Type against ClusterIP; want no diff")
-	}
-	if current.Type != corev1.ServiceTypeClusterIP {
-		t.Errorf("current.Type was overwritten to %q; want it preserved as ClusterIP", current.Type)
-	}
-
-	// Case 2: rollback path. The CR previously customized the service to
-	// LoadBalancer/NodePort via spec.serviceTemplate; the override is now
-	// removed so revised.Type is empty. The merge must drive the live
-	// Service back to the default ClusterIP.
-	for _, fromType := range []corev1.ServiceType{corev1.ServiceTypeLoadBalancer, corev1.ServiceTypeNodePort} {
-		current := corev1.ServiceSpec{Type: fromType}
-		revised := corev1.ServiceSpec{}
-		if !MergeServiceSpecUpdates(ctx, &current, &revised, "test-svc") {
-			t.Errorf("MergeServiceSpecUpdates() did not detect rollback from %q to default ClusterIP", fromType)
-		}
-		if current.Type != corev1.ServiceTypeClusterIP {
-			t.Errorf("rollback from %q: current.Type = %q; want ClusterIP", fromType, current.Type)
-		}
-	}
-}
-
-func TestSortStatefulSetSlices(t *testing.T) {
+func TestSortPodSlices(t *testing.T) {
 	ctx := context.TODO()
 	var unsorted, sorted corev1.PodSpec
 	matcher := func() bool { return false }
 
 	sortTester := func(sortSlice string) {
-		SortStatefulSetSlices(ctx, &unsorted, sortSlice)
+		SortPodSlices(ctx, &unsorted, sortSlice)
 		if !matcher() {
-			t.Errorf("SortStatefulSetSlices() didn't sort %s", sortSlice)
+			t.Errorf("SortPodSlices() didn't sort %s", sortSlice)
 		}
 	}
 
@@ -363,58 +270,4 @@ func TestSortStatefulSetSlices(t *testing.T) {
 	}
 	sortTester("Env variables")
 
-}
-
-func TestHasProbeChanged(t *testing.T) {
-	var current, revised corev1.PodTemplateSpec
-	revised.Spec.Containers = []corev1.Container{{Image: "splunk/splunk"}}
-	revised.Spec.Containers[0].LivenessProbe = &corev1.Probe{InitialDelaySeconds: 120}
-
-	current.Spec.Containers = []corev1.Container{{Image: "splunk/splunk"}}
-	current.Spec.Containers[0].LivenessProbe = &corev1.Probe{InitialDelaySeconds: 100}
-
-	// Check return is false when both probes are nil
-	result := hasProbeChanged(nil, nil)
-	if result {
-		t.Errorf("Both probes nil. hasProbeChanged() returned %t; want %t", true, false)
-	}
-
-	// Check return is true when currentProbe is true and revisedProbe is not nil
-	result = hasProbeChanged(nil, revised.Spec.Containers[0].LivenessProbe)
-	if !result {
-		t.Errorf("current Probe nil. hasProbeChanged() returned %t; want %t", false, true)
-	}
-
-	// Check return is true when current probe and revised probe InitialDelaySeconds is different
-	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
-	if !result {
-		t.Errorf("InitialDelaySeconds different. hasProbeChanged() returned %t; want %t", false, true)
-	}
-
-	// Check return is true when current probe and revised probe TimeoutSeconds is different
-	current.Spec.Containers[0].LivenessProbe.InitialDelaySeconds = revised.Spec.Containers[0].LivenessProbe.InitialDelaySeconds
-	current.Spec.Containers[0].LivenessProbe.TimeoutSeconds = 120
-	revised.Spec.Containers[0].LivenessProbe.TimeoutSeconds = 100
-	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
-	if !result {
-		t.Errorf("TimoutSeconds different. hasProbeChanged() returned %t; want %t", false, true)
-	}
-
-	// Check return is true when current probe and revised probe PeriodSeconds is different
-	current.Spec.Containers[0].LivenessProbe.TimeoutSeconds = revised.Spec.Containers[0].LivenessProbe.TimeoutSeconds
-	current.Spec.Containers[0].LivenessProbe.PeriodSeconds = 120
-	revised.Spec.Containers[0].LivenessProbe.PeriodSeconds = 100
-	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
-	if !result {
-		t.Errorf("PeriodSeconds different. hasProbeChanged() returned %t; want %t", false, true)
-	}
-
-	// Check return is true when current probe and revised probe FailureThreshold is different
-	current.Spec.Containers[0].LivenessProbe.PeriodSeconds = revised.Spec.Containers[0].LivenessProbe.PeriodSeconds
-	current.Spec.Containers[0].LivenessProbe.FailureThreshold = 120
-	revised.Spec.Containers[0].LivenessProbe.FailureThreshold = 100
-	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
-	if !result {
-		t.Errorf("FailureThreshold different. hasProbeChanged() returned %t; want %t", false, true)
-	}
 }

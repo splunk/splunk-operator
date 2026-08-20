@@ -42,8 +42,8 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
@@ -696,7 +696,7 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 	configMap.Data[GetStartupScriptName()] = data
 
 	// Apply the configured config map
-	_, err = splctrl.ApplyConfigMap(ctx, client, &configMap)
+	_, err = k8sops.ApplyConfigMap(ctx, client, &configMap)
 	if err != nil {
 		return &configMap, err
 	}
@@ -800,7 +800,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	// add serviceaccount if configured
 	if spec.ServiceAccount != "" {
 		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: spec.ServiceAccount}
-		_, err := splctrl.GetServiceAccount(ctx, client, namespacedName)
+		_, err := k8sops.GetServiceAccount(ctx, client, namespacedName)
 		if err == nil {
 			// serviceAccount exists
 			statefulSet.Spec.Template.Spec.ServiceAccountName = spec.ServiceAccount
@@ -846,7 +846,7 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 	if instanceType == SplunkStandalone || isCMDeployed(instanceType) {
 		smartStoreConfigMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
-		configMap, _ = splctrl.GetConfigMap(ctx, client, namespacedName)
+		configMap, _ = k8sops.GetConfigMap(ctx, client, namespacedName)
 	}
 
 	return configMap
@@ -970,7 +970,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 		// We stamp a content hash of configMap.Data (not ResourceVersion) so that
 		// owner-reference-only writes during bootstrap do not trigger pod restarts.
-		configMapObj, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+		configMapObj, err := k8sops.GetConfigMap(ctx, client, namespacedName)
 		if err == nil {
 			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configDataHash(configMapObj.Data)
 		} else {
@@ -989,7 +989,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		switch {
 		case vol.ConfigMap != nil:
 			cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: vol.ConfigMap.Name}
-			cm, err := splctrl.GetConfigMap(ctx, client, cmNS)
+			cm, err := k8sops.GetConfigMap(ctx, client, cmNS)
 			if err != nil {
 				logger.ErrorContext(ctx, "Failed to fetch ConfigMap for restart annotation", "volume", vol.Name, "error", err)
 				break
@@ -998,7 +998,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				// Consumer handles dynamic reload; skip the restart-triggering annotation.
 				break
 			}
-			hash, err := splctrl.GetConfigMapDataHash(ctx, client, cmNS, vol.ConfigMap.Items)
+			hash, err := k8sops.GetConfigMapDataHash(ctx, client, cmNS, vol.ConfigMap.Items)
 			if err == nil {
 				podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+vol.Name] = hash
 			} else {
@@ -1010,7 +1010,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					continue
 				}
 				cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: src.ConfigMap.Name}
-				cm, err := splctrl.GetConfigMap(ctx, client, cmNS)
+				cm, err := k8sops.GetConfigMap(ctx, client, cmNS)
 				if err != nil {
 					logger.ErrorContext(ctx, "Failed to fetch projected ConfigMap for restart annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
 					continue
@@ -1018,7 +1018,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
 					continue
 				}
-				hash, err := splctrl.GetConfigMapDataHash(ctx, client, cmNS, src.ConfigMap.Items)
+				hash, err := k8sops.GetConfigMapDataHash(ctx, client, cmNS, src.ConfigMap.Items)
 				if err == nil {
 					// Build a collision-free annotation key suffix ≤63 chars.
 					// vol.Name is a DNS label (≤63 chars); appending ".<n>" can push past the
@@ -1487,9 +1487,9 @@ func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.Control
 	var configMap *corev1.ConfigMap
 	var err error
 	var newConfigMap bool
-	configMap, err = splctrl.GetConfigMap(ctx, client, namespacedName)
+	configMap, err = k8sops.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
-		configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
+		configMap = k8sops.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
 		newConfigMap = true
 	}
 
@@ -1521,7 +1521,7 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 	logger := logging.FromContext(ctx).With("func", "getManualUpdateStatus")
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	configMap, err := k8sops.GetConfigMap(ctx, client, namespacedName)
 	result := ""
 	if err == nil {
 		statusRegex := ".*status: (?P<status>.*).*"
@@ -1543,7 +1543,7 @@ func getManualUpdatePerCrStatus(ctx context.Context, client splcommon.Controller
 	logger := logging.FromContext(ctx).With("func", "getManualUpdatePerCrStatus")
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
-	crconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	crconfigMap, err := k8sops.GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
 		logger.InfoContext(ctx, "custom configMap value is set to", "name", configMapName, "data", crconfigMap.Data)
 		data := crconfigMap.Data["manualUpdate"]
@@ -1560,7 +1560,7 @@ func getManualUpdateRefCount(ctx context.Context, client splcommon.ControllerCli
 	logger := logging.FromContext(ctx).With("func", "getManualUpdateRefCount")
 	var refCount int
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	configMap, err := k8sops.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		logger.ErrorContext(ctx, "unable to get the configMap", "name", configMapName, "error", err)
 		return refCount
@@ -1591,7 +1591,7 @@ func createOrUpdateAppUpdateConfigMap(ctx context.Context, client splcommon.Cont
 	mux := getResourceMutex(configMapName)
 	mux.Lock()
 	defer mux.Unlock()
-	configMap, err = splctrl.GetConfigMap(ctx, client, namespacedName)
+	configMap, err = k8sops.GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
 		// If this CR is already an owner reference, then do nothing.
 		// This can happen if we have already set this CR as ownerRef in the first time,

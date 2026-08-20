@@ -32,7 +32,7 @@ import (
 	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1429,7 +1429,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -1658,7 +1658,7 @@ func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
 	dataMap["a"] = "x"
 	dataMap["b"] = "y"
 	dataMap["z"] = "z"
-	cm := splctrl.PrepareConfigMap(configMapName, namespace, dataMap)
+	cm := k8sops.PrepareConfigMap(configMapName, namespace, dataMap)
 	var mode int32 = 755
 
 	test := func(cm *corev1.ConfigMap, mode *int32, want string) {
@@ -2064,7 +2064,7 @@ func TestConfigMapVolAnnotationStamped(t *testing.T) {
 
 	// Pre-create the ConfigMap so GetConfigMapDataHash can find it.
 	cmData := map[string]string{"default.yml": "splunk:\n  conf: value1"}
-	cm := splctrl.PrepareConfigMap("my-defaults-cm", "test", cmData)
+	cm := k8sops.PrepareConfigMap("my-defaults-cm", "test", cmData)
 	err = splutil.CreateResource(ctx, c, cm)
 	require.NoError(t, err)
 
@@ -2085,7 +2085,7 @@ func TestConfigMapVolAnnotationStamped(t *testing.T) {
 		t.Errorf("expected annotation %q to be non-empty, got empty string", annotationKey)
 	}
 	// Verify the hash is stable: same data must produce the same hash.
-	hash2, err := splctrl.GetConfigMapDataHash(ctx, c, types.NamespacedName{Namespace: "test", Name: "my-defaults-cm"}, nil)
+	hash2, err := k8sops.GetConfigMapDataHash(ctx, c, types.NamespacedName{Namespace: "test", Name: "my-defaults-cm"}, nil)
 	require.NoError(t, err)
 	if hash != hash2 {
 		t.Errorf("annotation hash %q does not match expected data hash %q", hash, hash2)
@@ -2169,7 +2169,7 @@ func TestConfigMapVolAnnotationMultipleVolumes(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, name := range []string{"cm-a", "cm-b"} {
-		cm := splctrl.PrepareConfigMap(name, "test", map[string]string{"default.yml": "val"})
+		cm := k8sops.PrepareConfigMap(name, "test", map[string]string{"default.yml": "val"})
 		require.NoError(t, splutil.CreateResource(ctx, c, cm))
 	}
 
@@ -2234,7 +2234,7 @@ func TestProjectedConfigMapAnnotationLongVolName(t *testing.T) {
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	require.NoError(t, err)
 
-	cm := splctrl.PrepareConfigMap("proj-cm", "test", map[string]string{"key": "val"})
+	cm := k8sops.PrepareConfigMap("proj-cm", "test", map[string]string{"key": "val"})
 	require.NoError(t, splutil.CreateResource(ctx, c, cm))
 
 	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
@@ -2294,7 +2294,7 @@ func TestConfigMapVolAnnotationOptOut(t *testing.T) {
 	require.NoError(t, err)
 
 	// ConfigMap opts out of operator-triggered restarts.
-	cm := splctrl.PrepareConfigMap("app-config-cm", "test", map[string]string{"config.json": `{"key":"value"}`})
+	cm := k8sops.PrepareConfigMap("app-config-cm", "test", map[string]string{"config.json": `{"key":"value"}`})
 	cm.Annotations = map[string]string{
 		splcommon.ConfigMapRestartOptOutAnnotation: "false",
 	}
@@ -2348,7 +2348,7 @@ func TestConfigMapVolAnnotationOptOutProjected(t *testing.T) {
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	require.NoError(t, err)
 
-	cm := splctrl.PrepareConfigMap("proj-cm-opt-out", "test", map[string]string{"sidecar.conf": "reload=true"})
+	cm := k8sops.PrepareConfigMap("proj-cm-opt-out", "test", map[string]string{"sidecar.conf": "reload=true"})
 	cm.Annotations = map[string]string{
 		splcommon.ConfigMapRestartOptOutAnnotation: "false",
 	}

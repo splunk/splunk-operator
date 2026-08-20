@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package splkcontroller
+package k8sops
 
 import (
 	"context"
@@ -144,7 +144,7 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 		// a pod recycle unnecessarily. To avoid the same, sort the slices during the
 		// statefulSet creation.
 		// Note: During the update scenario below, MergePodUpdates takes care of sorting.
-		SortStatefulSetSlices(ctx, &revised.Spec.Template.Spec, revised.GetObjectMeta().GetName())
+		SortPodSlices(ctx, &revised.Spec.Template.Spec, revised.GetObjectMeta().GetName())
 
 		// no StatefulSet exists -> just create a new one
 		err = splutil.CreateResource(ctx, c, revised)
@@ -447,14 +447,6 @@ func DeleteReferencesToAutomatedMCIfExists(ctx context.Context, client splcommon
 	}
 
 	return nil
-}
-
-// isCurrentCROwner returns true if current CR is the ONLY owner of the automated MC
-func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerReference) bool {
-	// adding extra verification as unit test cases fails since fakeclient do not set UID
-	return reflect.DeepEqual(currentOwners[0].UID, cr.GetUID()) &&
-		(currentOwners[0].Kind == cr.GetObjectKind().GroupVersionKind().Kind) &&
-		(currentOwners[0].Name == cr.GetName())
 }
 
 // IsStatefulSetScalingUpOrDown checks if we are currently scaling up or down

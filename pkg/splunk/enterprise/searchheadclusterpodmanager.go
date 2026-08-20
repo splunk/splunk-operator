@@ -11,7 +11,7 @@ import (
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -70,7 +70,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	previousReadyReplicas := mgr.cr.Status.ReadyReplicas
 
 	// update statefulset, if necessary
-	_, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
+	_, err := k8sops.ApplyStatefulSet(ctx, mgr.c, statefulSet)
 	if err != nil {
 		return enterpriseApi.PhaseError, err
 	}
@@ -87,7 +87,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
-		if termErr := splctrl.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
+		if termErr := k8sops.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
 			logger.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
 			return enterpriseApi.PhaseError, termErr
 		}
@@ -107,7 +107,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	}
 
 	// manage scaling and updates
-	phase, err := splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
+	phase, err := k8sops.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
 	if err != nil {
 		return phase, err
 	}
