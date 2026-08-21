@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onsi/ginkgo/v2"
+	ginkgotypes "github.com/onsi/ginkgo/v2/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -98,12 +100,42 @@ func (d *Deployment) popCleanupFunc() (cleanupFunc, error) {
 	return fn, nil
 }
 
+// writeKubectlDiag runs a kubectl command and writes its combined output to
+// fileName. It is best-effort: a non-zero exit (e.g. no previous container to
+// dump) still records whatever kubectl printed plus the error, so the artifact
+// documents the attempt rather than silently vanishing. Errors are logged, never
+// returned, so diagnostic collection never blocks teardown.
+func (d *Deployment) writeKubectlDiag(fileName string, args ...string) {
+	ctx, cancel := context.WithTimeout(context.Background(), KubectlExecTimeout)
+	defer cancel()
+	// CombinedOutput so kubectl's stderr (the actual reason, e.g. "previous
+	// terminated container not found") lands in the artifact too.
+	output, err := exec.CommandContext(ctx, "kubectl", args...).CombinedOutput()
+	if err != nil {
+		output = append(output, []byte(fmt.Sprintf("\n[kubectl %s exited with error: %v]\n", strings.Join(args, " "), err))...)
+	}
+	if writeErr := os.WriteFile(fileName, output, 0644); writeErr != nil {
+		d.testenv.Log.Error(writeErr, fmt.Sprintf("Failed to write diagnostics file %s", fileName))
+		return
+	}
+	d.testenv.Log.Info(fmt.Sprintf("Wrote diagnostics to file %s", fileName))
+}
+
 // Teardown teardowns the deployment resources
 func (d *Deployment) Teardown() error {
 
 	// Formatted string for pod logs
 	podLogFile := "%s-%s.log"
 	splunkdLogFile := "%s-%s-splunkd.log"
+
+	// On a failed/timed-out spec, collect crash diagnostics (previous-container
+	// logs, pod describe, namespace events) that plain `kubectl logs` on the
+	// current container can't show. Gated on the spec's failure state — which
+	// includes SpecStateTimedout, the state a NodeTimeout produces — so passing
+	// specs don't pay the extra wall clock. These *.log files are picked up by
+	// the CI artifact collector alongside the regular pod logs.
+	collectDiag := ginkgotypes.SpecState(ginkgo.CurrentSpecReport().State).Is(ginkgotypes.SpecStateFailureStates)
+	ns := d.testenv.GetName()
 
 	// Saving Operator and Splunk Pod Logs to File
 	podNames := DumpGetPods(d.testenv.GetName())
@@ -151,6 +183,39 @@ func (d *Deployment) Teardown() error {
 				d.testenv.Log.Info(fmt.Sprintf("Finished writing %s splunkd.log to file %s", podName, splunkdLogFileName))
 			}
 		}
+
+		if collectDiag {
+			// Previous-container logs reveal why a crash-looping pod's prior
+			// container instance exited (the current `kubectl logs` only shows
+			// the latest, still-starting attempt).
+			d.writeKubectlDiag(fmt.Sprintf("%s-%s.previous.log", d.GetName(), podName),
+				"logs", "-n", ns, podName, "--previous")
+			// Pod describe carries restart counts, Last State (exit code /
+			// OOMKilled) and probe-failure events per container.
+			d.writeKubectlDiag(fmt.Sprintf("%s-%s.describe.log", d.GetName(), podName),
+				"describe", "pod", "-n", ns, podName)
+			// In-container provisioning artifacts, none of which reach stdout or
+			// the API server: splunk-container.state (the startup probe gates on
+			// this reaching running|started before it even curls 8089), the tail
+			// of the ansible provisioning logs, and splunkd_stderr.log (a splunkd
+			// start/bind failure often lands here and nowhere else). Best-effort
+			// exec -- needs a live container.
+			artifactCmd := "echo '===== splunk-container.state ====='; " +
+				"cat \"${CONTAINER_ARTIFACT_DIR:-/opt/container_artifact}/splunk-container.state\" 2>&1; " +
+				"echo; echo '===== ansible logs (tail) ====='; " +
+				"tail -n 500 \"${CONTAINER_ARTIFACT_DIR:-/opt/container_artifact}\"/*.log 2>&1; " +
+				"echo; echo '===== splunkd_stderr.log (tail) ====='; " +
+				"tail -n 200 /opt/splunk/var/log/splunk/splunkd_stderr.log 2>&1"
+			d.writeKubectlDiag(fmt.Sprintf("%s-%s.container-artifact.log", d.GetName(), podName),
+				"exec", "-n", ns, podName, "--", "bash", "-c", artifactCmd)
+		}
+	}
+
+	if collectDiag {
+		// Namespace events capture kubelet Unhealthy/Killing/BackOff messages
+		// (with the offending probe named) that no single pod log records.
+		d.writeKubectlDiag(fmt.Sprintf("%s-events.log", d.GetName()),
+			"get", "events", "-n", ns, "--sort-by=.lastTimestamp")
 	}
 
 	// adding operator pod for each test case, currently this log contains previously run test case operator log
