@@ -18,32 +18,24 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
-	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	snapshotclient "github.com/kubernetes-csi/external-snapshotter/client/v8/clientset/versioned"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	pgtesthelpers "github.com/splunk/splunk-operator/test/postgrescontrollers/helpers"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	kubescheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 const backupRestoreDatabaseName = "appdb"
-
-const (
-	postgresExecAttemptTimeout = 40 * time.Second
-	postgresExecRetryTimeout   = 2 * time.Minute
-)
 
 type postgresDatabaseChildren struct {
 	database  types.NamespacedName
@@ -99,57 +91,6 @@ func stopIfPostgresClusterFailed(cluster *enterprisev4.PostgresCluster) {
 	if cluster.Status.Phase != nil && *cluster.Status.Phase == "Failed" {
 		StopTrying(postgresClusterFailure(cluster)).Now()
 	}
-}
-
-func createReadyPostgresDatabase(
-	ctx context.Context,
-	kubeClient client.Client,
-	namespace, name, clusterName string,
-) *enterprisev4.PostgresDatabase {
-	database := &enterprisev4.PostgresDatabase{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			ClusterRef: corev1.LocalObjectReference{Name: clusterName},
-			Databases: []enterprisev4.DatabaseDefinition{{
-				Name:           backupRestoreDatabaseName,
-				DeletionPolicy: "Delete",
-			}},
-		},
-	}
-	Expect(kubeClient.Create(ctx, database)).To(Succeed())
-
-	key := types.NamespacedName{Name: name, Namespace: namespace}
-	var ready *enterprisev4.PostgresDatabase
-	Eventually(func(g Gomega) {
-		current := &enterprisev4.PostgresDatabase{}
-		g.Expect(kubeClient.Get(ctx, key, current)).To(Succeed())
-		if current.Status.Phase != nil && *current.Status.Phase == "Failed" {
-			StopTrying(postgresDatabaseFailure(current)).Now()
-		}
-		g.Expect(current.Status.Phase).To(HaveValue(Equal("Ready")))
-		g.Expect(current.Status.Databases).To(HaveLen(1))
-		if len(current.Status.Databases) != 1 {
-			return
-		}
-		g.Expect(current.Status.Databases[0].Name).To(Equal(backupRestoreDatabaseName))
-		g.Expect(current.Status.Databases[0].AdminUserSecretRef).NotTo(BeNil())
-		g.Expect(current.Status.Databases[0].RWUserSecretRef).NotTo(BeNil())
-		ready = current.DeepCopy()
-	}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
-	return ready
-}
-
-func postgresDatabaseFailure(database *enterprisev4.PostgresDatabase) string {
-	failures := make([]string, 0, len(database.Status.Conditions))
-	for _, condition := range database.Status.Conditions {
-		if condition.Status == metav1.ConditionFalse {
-			failures = append(failures, fmt.Sprintf("%s/%s: %s", condition.Type, condition.Reason, condition.Message))
-		}
-	}
-	if len(failures) == 0 {
-		failures = append(failures, "no failing condition was reported")
-	}
-	return fmt.Sprintf("PostgresDatabase %s/%s entered Failed: %s", database.Namespace, database.Name, strings.Join(failures, "; "))
 }
 
 func databaseSecretUIDs(ctx context.Context, kubeClient client.Client, database *enterprisev4.PostgresDatabase) map[types.UID]struct{} {
@@ -219,80 +160,6 @@ func postgresClusterSuperuserSecretUID(
 	return secret.UID
 }
 
-func registerBackupRestoreFailureDump(kubeClient client.Client, snapshots snapshotclient.Interface, namespace string) {
-	DeferCleanup(func(ctx SpecContext) {
-		if !CurrentSpecReport().Failed() {
-			return
-		}
-
-		clusters := &enterprisev4.PostgresClusterList{}
-		if err := kubeClient.List(ctx, clusters, client.InNamespace(namespace)); err != nil {
-			fmt.Fprintf(GinkgoWriter, "backup/restore diagnostics: listing PostgresClusters: %v\n", err)
-		} else {
-			for i := range clusters.Items {
-				cluster := &clusters.Items[i]
-				fmt.Fprintf(GinkgoWriter, "PostgresCluster %s phase=%v backup=%+v restore=%+v\n",
-					cluster.Name, cluster.Status.Phase, cluster.Status.BackupStatus, cluster.Status.Restore)
-				for _, condition := range cluster.Status.Conditions {
-					fmt.Fprintf(GinkgoWriter, "  condition type=%s status=%s reason=%s observedGeneration=%d message=%q\n",
-						condition.Type, condition.Status, condition.Reason, condition.ObservedGeneration, condition.Message)
-				}
-			}
-		}
-
-		cnpgClusters := &cnpgv1.ClusterList{}
-		if err := kubeClient.List(ctx, cnpgClusters, client.InNamespace(namespace)); err != nil {
-			fmt.Fprintf(GinkgoWriter, "backup/restore diagnostics: listing CNPG Clusters: %v\n", err)
-		} else {
-			for i := range cnpgClusters.Items {
-				cluster := &cnpgClusters.Items[i]
-				fmt.Fprintf(GinkgoWriter, "CNPG Cluster %s phase=%s currentPrimary=%s\n",
-					cluster.Name, cluster.Status.Phase, cluster.Status.CurrentPrimary)
-			}
-		}
-
-		schedules := &cnpgv1.ScheduledBackupList{}
-		if err := kubeClient.List(ctx, schedules, client.InNamespace(namespace)); err != nil {
-			fmt.Fprintf(GinkgoWriter, "backup/restore diagnostics: listing ScheduledBackups: %v\n", err)
-		} else {
-			for i := range schedules.Items {
-				schedule := &schedules.Items[i]
-				fmt.Fprintf(GinkgoWriter, "ScheduledBackup %s method=%s cluster=%s last=%v next=%v\n",
-					schedule.Name, schedule.Spec.Method, schedule.Spec.Cluster.Name,
-					schedule.Status.LastScheduleTime, schedule.Status.NextScheduleTime)
-			}
-		}
-
-		backups := &cnpgv1.BackupList{}
-		if err := kubeClient.List(ctx, backups, client.InNamespace(namespace)); err != nil {
-			fmt.Fprintf(GinkgoWriter, "backup/restore diagnostics: listing Backups: %v\n", err)
-		} else {
-			for i := range backups.Items {
-				backup := &backups.Items[i]
-				fmt.Fprintf(GinkgoWriter, "Backup %s method=%s cluster=%s phase=%s error=%q\n",
-					backup.Name, backup.Spec.Method, backup.Spec.Cluster.Name, backup.Status.Phase, backup.Status.Error)
-			}
-		}
-
-		volumeSnapshots, err := snapshots.SnapshotV1().VolumeSnapshots(namespace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			fmt.Fprintf(GinkgoWriter, "backup/restore diagnostics: listing VolumeSnapshots: %v\n", err)
-			return
-		}
-		for i := range volumeSnapshots.Items {
-			snapshot := &volumeSnapshots.Items[i]
-			if snapshot.Status == nil {
-				fmt.Fprintf(GinkgoWriter, "VolumeSnapshot %s class=%v status=unavailable\n",
-					snapshot.Name, snapshot.Spec.VolumeSnapshotClassName)
-				continue
-			}
-			fmt.Fprintf(GinkgoWriter, "VolumeSnapshot %s class=%v ready=%v boundContent=%v error=%v\n",
-				snapshot.Name, snapshot.Spec.VolumeSnapshotClassName, snapshot.Status.ReadyToUse,
-				snapshot.Status.BoundVolumeSnapshotContentName, snapshot.Status.Error)
-		}
-	})
-}
-
 func executePostgresSQL(
 	ctx context.Context,
 	kubeClient client.Client,
@@ -300,14 +167,6 @@ func executePostgresSQL(
 	clusterKey types.NamespacedName,
 	sql string,
 ) (string, error) {
-	cluster := &enterprisev4.PostgresCluster{}
-	if err := kubeClient.Get(ctx, clusterKey, cluster); err != nil {
-		return "", fmt.Errorf("getting PostgresCluster primary: %w", err)
-	}
-	if cluster.Status.CurrentPrimary == nil || *cluster.Status.CurrentPrimary == "" {
-		return "", fmt.Errorf("PostgresCluster %s has no current primary", clusterKey)
-	}
-
 	command := []string{
 		"psql",
 		"--username=postgres",
@@ -321,25 +180,20 @@ func executePostgresSQL(
 		"--command", sql,
 	}
 
-	var stdout, stderr string
-	var execErr error
-	pollErr := wait.PollUntilContextTimeout(ctx, testenv.PollInterval, postgresExecRetryTimeout, true, func(attemptCtx context.Context) (bool, error) {
-		execCtx, cancel := context.WithTimeout(attemptCtx, postgresExecAttemptTimeout)
-		defer cancel()
-		stdout, stderr, execErr = deployment.PodExecCommand(execCtx, *cluster.Status.CurrentPrimary, command, "", false)
-		if execErr == nil {
-			return true, nil
+	resolvePrimary := func(attemptCtx context.Context) (string, error) {
+		cluster := &enterprisev4.PostgresCluster{}
+		if err := kubeClient.Get(attemptCtx, clusterKey, cluster); err != nil {
+			return "", fmt.Errorf("getting PostgresCluster primary: %w", err)
 		}
-		if strings.TrimSpace(stderr) != "" {
-			return false, fmt.Errorf("executing PostgreSQL verification query: %w (stderr: %s)", execErr, strings.TrimSpace(stderr))
+		if cluster.Status.CurrentPrimary == nil || *cluster.Status.CurrentPrimary == "" {
+			return "", fmt.Errorf("PostgresCluster %s has no current primary", clusterKey)
 		}
-		return false, nil
-	})
-	if pollErr != nil {
-		if execErr != nil {
-			return "", fmt.Errorf("executing PostgreSQL verification query after retries: %w (stderr: %s)", execErr, strings.TrimSpace(stderr))
-		}
-		return "", fmt.Errorf("executing PostgreSQL verification query after retries: %w", pollErr)
+		return *cluster.Status.CurrentPrimary, nil
+	}
+
+	stdout, stderr, err := pgtesthelpers.ExecutePostgresPodCommand(ctx, deployment, resolvePrimary, command, "")
+	if err != nil {
+		return "", fmt.Errorf("executing PostgreSQL verification query after retries: %w (stderr: %s)", err, strings.TrimSpace(stderr))
 	}
 	return strings.TrimSpace(stdout), nil
 }

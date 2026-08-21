@@ -21,7 +21,7 @@ import "context"
 type PgUpgrade interface {
 	ApplyTargetImage(context.Context) error
 	UpgradeComplete(context.Context) (bool, error)
-	VerifyUpgrade(context.Context) error
+	VerifyUpgrade(context.Context) (bool, error)
 }
 
 type Notifier interface {

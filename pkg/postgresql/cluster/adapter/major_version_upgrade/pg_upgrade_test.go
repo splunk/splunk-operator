@@ -73,25 +73,38 @@ func TestPgUpgradeDriverUpgradeCompleteWaitsForCNPGMajorUpgrade(t *testing.T) {
 	assert.False(t, complete)
 }
 
-func TestPgUpgradeDriverUpgradeCompleteDetectsHealthyTargetImage(t *testing.T) {
-	ctx := t.Context()
-	k8sClient, key := newPgUpgradeTestClient(t, &cnpgv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pg1",
-			Namespace: "default",
-		},
-		Spec: cnpgv1.ClusterSpec{
-			ImageName: "ghcr.io/cloudnative-pg/postgresql:18",
-		},
-		Status: cnpgv1.ClusterStatus{
-			Phase:          cnpgv1.PhaseHealthy,
-			Instances:      3,
-			ReadyInstances: 3,
-			CurrentPrimary: "pg1-1",
-		},
-	})
+func TestPgUpgradeDriverUpgradeCompleteRequiresCNPGConversionEvidence(t *testing.T) {
+	tests := []struct {
+		name              string
+		pgDataMajor       int
+		conversionPending bool
+		want              bool
+	}{
+		{name: "old PGDATA despite matching desired image", pgDataMajor: 17},
+		{name: "conversion marker remains", pgDataMajor: 18, conversionPending: true},
+		{name: "target PGDATA and conversion complete", pgDataMajor: 18, want: true},
+	}
 
-	complete, err := NewPgUpgradeDriver(k8sClient, key, "18").UpgradeComplete(ctx)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k8sClient, key := newPgUpgradeTestClient(t, healthyUpgradeCluster(tt.pgDataMajor, tt.conversionPending))
+			complete, err := NewPgUpgradeDriver(k8sClient, key, "18").UpgradeComplete(t.Context())
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, complete)
+		})
+	}
+}
+
+func TestPgUpgradeDriverUpgradeCompleteDoesNotWaitForRebuildingReplica(t *testing.T) {
+	cluster := healthyUpgradeCluster(18, false)
+	cluster.Status.Instances = 3
+	cluster.Status.ReadyInstances = 2
+	cluster.Status.InstancesStatus = map[cnpgv1.PodStatus][]string{
+		cnpgv1.PodHealthy: {cluster.Status.CurrentPrimary, "pg1-2"},
+	}
+	k8sClient, key := newPgUpgradeTestClient(t, cluster)
+
+	complete, err := NewPgUpgradeDriver(k8sClient, key, "18").UpgradeComplete(t.Context())
 	require.NoError(t, err)
 	assert.True(t, complete)
 }
@@ -114,9 +127,43 @@ func TestPgUpgradeDriverVerifyUpgradeRejectsWrongImage(t *testing.T) {
 		},
 	})
 
-	err := NewPgUpgradeDriver(k8sClient, key, "18").VerifyUpgrade(ctx)
+	verified, err := NewPgUpgradeDriver(k8sClient, key, "18").VerifyUpgrade(ctx)
 	require.Error(t, err)
+	assert.False(t, verified)
 	assert.Contains(t, err.Error(), "does not match target image")
+}
+
+func TestPgUpgradeDriverVerifyUpgradeRejectsOldPGData(t *testing.T) {
+	k8sClient, key := newPgUpgradeTestClient(t, healthyUpgradeCluster(17, false))
+
+	verified, err := NewPgUpgradeDriver(k8sClient, key, "18").VerifyUpgrade(t.Context())
+	require.Error(t, err)
+	assert.False(t, verified)
+	assert.Contains(t, err.Error(), "targetMajor=18 observedPGDataMajor=17")
+}
+
+func TestPgUpgradeDriverVerifyUpgradeWaitsForTransientClusterHealth(t *testing.T) {
+	cluster := healthyUpgradeCluster(18, false)
+	cluster.Status.InstancesStatus = nil
+	k8sClient, key := newPgUpgradeTestClient(t, cluster)
+
+	verified, err := NewPgUpgradeDriver(k8sClient, key, "18").VerifyUpgrade(t.Context())
+	require.NoError(t, err)
+	assert.False(t, verified)
+}
+
+func TestPgUpgradeDriverVerifyUpgradeDoesNotWaitForRebuildingReplica(t *testing.T) {
+	cluster := healthyUpgradeCluster(18, false)
+	cluster.Status.Instances = 3
+	cluster.Status.ReadyInstances = 2
+	cluster.Status.InstancesStatus = map[cnpgv1.PodStatus][]string{
+		cnpgv1.PodHealthy: {cluster.Status.CurrentPrimary, "pg1-2"},
+	}
+	k8sClient, key := newPgUpgradeTestClient(t, cluster)
+
+	verified, err := NewPgUpgradeDriver(k8sClient, key, "18").VerifyUpgrade(t.Context())
+	require.NoError(t, err)
+	assert.True(t, verified)
 }
 
 func TestPgUpgradeDriverReturnsBlockingCNPGPhaseError(t *testing.T) {
@@ -188,6 +235,26 @@ func TestPgUpgradeDriverApplyTargetImageTerminatesOnUnresolvableImage(t *testing
 		ApplyTargetImage(ctx)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, mvutypes.ErrUpgradeFlowFailed))
+}
+
+func healthyUpgradeCluster(pgDataMajor int, conversionPending bool) *cnpgv1.Cluster {
+	cluster := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
+		Spec:       cnpgv1.ClusterSpec{ImageName: "ghcr.io/cloudnative-pg/postgresql:18"},
+		Status: cnpgv1.ClusterStatus{
+			Phase:           cnpgv1.PhaseHealthy,
+			Instances:       1,
+			ReadyInstances:  1,
+			CurrentPrimary:  "pg1-1",
+			TargetPrimary:   "pg1-1",
+			InstancesStatus: map[cnpgv1.PodStatus][]string{cnpgv1.PodHealthy: {"pg1-1"}},
+			PGDataImageInfo: &cnpgv1.ImageInfo{MajorVersion: pgDataMajor},
+		},
+	}
+	if conversionPending {
+		cluster.Status.TargetPGDataImageInfo = &cnpgv1.ImageInfo{MajorVersion: 18}
+	}
+	return cluster
 }
 
 func newPgUpgradeTestClient(t *testing.T, cluster *cnpgv1.Cluster) (client.Client, client.ObjectKey) {

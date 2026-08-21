@@ -171,6 +171,6 @@ const (
 	MediumLongSuiteTimeout = 150 * time.Minute
 
 	// LongSuiteTimeout for heavy suites:
-	// crcrud, c3appfw, m4appfw.
+	// crcrud, c3appfw, m4appfw, postgrescontrollers.
 	LongSuiteTimeout = 225 * time.Minute
 )

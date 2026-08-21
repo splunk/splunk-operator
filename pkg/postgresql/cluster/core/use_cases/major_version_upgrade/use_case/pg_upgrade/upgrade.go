@@ -129,9 +129,19 @@ func (v *pgUpgradeFlow) onVerifying(ctx context.Context) (reconciliationTypes.Re
 	if v.driver == nil {
 		return mvutypes.ReportFromError(errDriverNotConfigured), errDriverNotConfigured
 	}
-	if err := v.driver.VerifyUpgrade(ctx); err != nil {
+	verified, err := v.driver.VerifyUpgrade(ctx)
+	if err != nil {
 		err := errors.Join(mvutypes.ErrUpgradeVerificationFailed, err)
 		return mvutypes.ReportFromError(err), err
+	}
+	if !verified {
+		return reconciliationTypes.Report{
+			Name:    mvutypes.UseCaseName,
+			Phase:   string(mvutypes.Verifying),
+			Reason:  mvutypes.ReasonUpgradeFlowPending,
+			Message: mvutypes.MessagePgUpgradeVerificationPending,
+			Retry:   true,
+		}, nil
 	}
 
 	return reconciliationTypes.Report{

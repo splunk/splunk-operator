@@ -73,12 +73,14 @@ func (d *PgUpgradeDriver) UpgradeComplete(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	targetMajor, err := d.targetMajorVersion()
+	if err != nil {
+		return false, err
+	}
 
 	// Distinguish whether the failure occured
 	// either post or pre pgData conversion for clarity
 	if cluster.Status.Phase == cnpgv1.PhaseUnrecoverable {
-		majorStr, _, _ := strings.Cut(d.targetPgVersion, ".")
-		targetMajor, _ := strconv.Atoi(majorStr)
 		if cluster.Status.PGDataImageInfo != nil &&
 			cluster.Status.PGDataImageInfo.MajorVersion == targetMajor {
 			return false, fmt.Errorf("%w: %s",
@@ -94,28 +96,61 @@ func (d *PgUpgradeDriver) UpgradeComplete(ctx context.Context) (bool, error) {
 	if cluster.Spec.ImageName != targetImage {
 		return false, nil
 	}
-	return clusterCnpg.ClusterReady(cluster), nil
+	return cnpgUpgradeConverged(cluster, targetMajor), nil
 }
 
-func (d *PgUpgradeDriver) VerifyUpgrade(ctx context.Context) error {
+func (d *PgUpgradeDriver) VerifyUpgrade(ctx context.Context) (bool, error) {
 	cluster, targetImage, err := d.targetImage(ctx)
 	if err != nil {
-		return err
+		return false, err
+	}
+	targetMajor, err := d.targetMajorVersion()
+	if err != nil {
+		return false, err
 	}
 	if err := clusterCnpg.ClusterBlockingError(cluster); err != nil {
-		return errors.Join(mvutypes.ErrUpgradeFlowFailed, err)
+		return false, errors.Join(mvutypes.ErrUpgradeFlowFailed, err)
 	}
 	if cluster.Spec.ImageName != targetImage {
-		return fmt.Errorf("cnpg cluster image %q does not match target image %q", cluster.Spec.ImageName, targetImage)
+		return false, fmt.Errorf("cnpg cluster image %q does not match target image %q", cluster.Spec.ImageName, targetImage)
 	}
-	if !clusterCnpg.ClusterReady(cluster) {
-		return fmt.Errorf("cnpg cluster is not ready after pg_upgrade: phase=%q readyInstances=%d instances=%d currentPrimary=%q",
-			cluster.Status.Phase,
-			cluster.Status.ReadyInstances,
-			cluster.Status.Instances,
-			cluster.Status.CurrentPrimary)
+	if !cnpgUpgradeConverted(cluster, targetMajor) {
+		observedMajor := 0
+		if cluster.Status.PGDataImageInfo != nil {
+			observedMajor = cluster.Status.PGDataImageInfo.MajorVersion
+		}
+		return false, fmt.Errorf("cnpg cluster has inconsistent conversion state after pg_upgrade: targetMajor=%d observedPGDataMajor=%d conversionPending=%t",
+			targetMajor,
+			observedMajor,
+			cluster.Status.TargetPGDataImageInfo != nil)
 	}
-	return nil
+	if !clusterCnpg.PrimaryReady(cluster) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func cnpgUpgradeConverged(cluster *cnpgv1.Cluster, targetMajor int) bool {
+	return cnpgUpgradeConverted(cluster, targetMajor) && clusterCnpg.PrimaryReady(cluster)
+}
+
+func cnpgUpgradeConverted(cluster *cnpgv1.Cluster, targetMajor int) bool {
+	return cluster != nil &&
+		cluster.Status.PGDataImageInfo != nil &&
+		cluster.Status.PGDataImageInfo.MajorVersion == targetMajor &&
+		cluster.Status.TargetPGDataImageInfo == nil
+}
+
+func (d *PgUpgradeDriver) targetMajorVersion() (int, error) {
+	major, _, _ := strings.Cut(d.targetPgVersion, ".")
+	parsed, err := strconv.Atoi(major)
+	if err != nil || parsed <= 0 {
+		return 0, errors.Join(
+			mvutypes.ErrUpgradeFlowFailed,
+			fmt.Errorf("invalid PostgreSQL target version %q", d.targetPgVersion),
+		)
+	}
+	return parsed, nil
 }
 
 func (d *PgUpgradeDriver) targetImage(ctx context.Context) (*cnpgv1.Cluster, string, error) {

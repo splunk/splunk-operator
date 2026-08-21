@@ -201,6 +201,19 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 // covered by the per-namespace TestCaseEnv teardown — the name is keyed by namespace
 // to keep parallel specs isolated.
 func createPGClass(ctx SpecContext, kubeClient client.Client, ns string) *enterprisev4.PostgresClusterClass {
+	return createPGClassAtVersion(ctx, kubeClient, ns, "")
+}
+
+// createPGClassAtVersion creates a class with an explicit PostgreSQL version.
+// An empty version retains the API default used by general scenarios.
+func createPGClassAtVersion(ctx SpecContext, kubeClient client.Client, ns, postgresVersion string) *enterprisev4.PostgresClusterClass {
+	config := &enterprisev4.PostgresClusterClassConfig{
+		Instances: ptr.To(int32(1)),
+	}
+	if postgresVersion != "" {
+		config.PostgresVersion = ptr.To(postgresVersion)
+	}
+
 	pgClass := &enterprisev4.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "postgres-e2e-" + ns,
@@ -210,10 +223,8 @@ func createPGClass(ctx SpecContext, kubeClient client.Client, ns string) *enterp
 		},
 		Spec: enterprisev4.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
-			Config: &enterprisev4.PostgresClusterClassConfig{
-				Instances: ptr.To(int32(1)),
-			},
-			CNPG: &enterprisev4.CNPGConfig{},
+			Config:      config,
+			CNPG:        &enterprisev4.CNPGConfig{},
 		},
 	}
 	Expect(kubeClient.Create(ctx, pgClass)).To(Succeed())

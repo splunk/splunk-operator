@@ -579,7 +579,7 @@ func (f *fakePgUpgrade) ApplyTargetImage(context.Context) error { return nil }
 func (f *fakePgUpgrade) UpgradeComplete(context.Context) (bool, error) {
 	return true, nil
 }
-func (f *fakePgUpgrade) VerifyUpgrade(context.Context) error { return nil }
+func (f *fakePgUpgrade) VerifyUpgrade(context.Context) (bool, error) { return true, nil }
 
 type majorUpgradeInfoStoreFunc func(context.Context) (mvutypes.Intent, bool, error)
 

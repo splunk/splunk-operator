@@ -22,8 +22,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	snapshotclient "github.com/kubernetes-csi/external-snapshotter/client/v8/clientset/versioned"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	pgtesthelpers "github.com/splunk/splunk-operator/test/postgrescontrollers/helpers"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-restore",
@@ -58,15 +57,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 				snapshotClassName := os.Getenv("POSTGRES_E2E_VOLUME_SNAPSHOT_CLASS")
 				Expect(snapshotClassName).NotTo(BeEmpty(), "set POSTGRES_E2E_VOLUME_SNAPSHOT_CLASS to the PGDATA CSI snapshot class")
 
-				restConfig, err := config.GetConfig()
-				Expect(err).To(Succeed())
-				snapshots, err := snapshotclient.NewForConfig(restConfig)
-				Expect(err).To(Succeed())
-				snapshotClass, err := snapshots.SnapshotV1().VolumeSnapshotClasses().Get(ctx, snapshotClassName, metav1.GetOptions{})
-				Expect(err).To(Succeed(), "required VolumeSnapshotClass %q is unavailable", snapshotClassName)
-				Expect(snapshotClass.Driver).NotTo(BeEmpty())
-				Expect(string(snapshotClass.DeletionPolicy)).To(Equal("Delete"),
-					"the E2E VolumeSnapshotClass must delete backing snapshots during cleanup")
+				snapshots, snapshotDriver := pgtesthelpers.RequireVolumeSnapshotClass(ctx, snapshotClassName)
 
 				apiClient, err := newDirectPostgresClient()
 				Expect(err).To(Succeed())
@@ -103,7 +94,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 						Expect(err).To(Succeed(), "failed to clean up snapshot PostgresClusterClass")
 					}
 				})
-				registerBackupRestoreFailureDump(apiClient, snapshots, namespace)
+				pgtesthelpers.RegisterSnapshotFailureDump(apiClient, snapshots, namespace)
 
 				source := &enterprisev4.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "snapshot-source", Namespace: namespace},
@@ -128,7 +119,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 					effectiveDriver = primaryPV.Spec.CSI.Driver
 				}
 				if effectiveDriver != "" {
-					Expect(effectiveDriver).To(Equal(snapshotClass.Driver),
+					Expect(effectiveDriver).To(Equal(snapshotDriver),
 						"VolumeSnapshotClass driver must match the source PGDATA volume")
 				} else {
 					fmt.Fprintf(GinkgoWriter,
@@ -193,7 +184,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 					g.Expect(scheduled.Spec.BackupOwnerReference).To(Equal("cluster"))
 				}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
-				sourceDatabase := createReadyPostgresDatabase(ctx, apiClient, namespace, "snapshot-source-db", source.Name)
+				sourceDatabase := pgtesthelpers.CreateReadyPostgresDatabase(
+					ctx, apiClient, namespace, "snapshot-source-db", source.Name, backupRestoreDatabaseName,
+				)
 				sourceSecretUIDs := databaseSecretUIDs(ctx, apiClient, sourceDatabase)
 				sourceDatabaseChildren := postgresDatabaseChildResources(sourceDatabase)
 				expectPostgresDatabaseChildrenPresent(ctx, apiClient, sourceDatabaseChildren)
@@ -339,7 +332,9 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`)
 				err = apiClient.Get(ctx, types.NamespacedName{Name: restored.Name + "-backup", Namespace: namespace}, &cnpgv1.ScheduledBackup{})
 				Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
-				restoredDatabase := createReadyPostgresDatabase(ctx, apiClient, namespace, "snapshot-restored-db", restored.Name)
+				restoredDatabase := pgtesthelpers.CreateReadyPostgresDatabase(
+					ctx, apiClient, namespace, "snapshot-restored-db", restored.Name, backupRestoreDatabaseName,
+				)
 				restoredSecretUIDs := databaseSecretUIDs(ctx, apiClient, restoredDatabase)
 				restoredDatabaseChildren := postgresDatabaseChildResources(restoredDatabase)
 				expectPostgresDatabaseChildrenPresent(ctx, apiClient, restoredDatabaseChildren)

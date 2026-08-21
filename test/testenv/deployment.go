@@ -292,7 +292,9 @@ func newPodExecExecutor(restConfig *rest.Config, execURL *url.URL) (remotecomman
 // PodExecCommand execute a shell command in the specified pod
 func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []string, stdin string, tty bool) (string, string, error) {
 	pod := &corev1.Pod{}
-	d.GetInstance(ctx, podName, pod)
+	if err := d.GetInstance(ctx, podName, pod); err != nil {
+		return "", "", err
+	}
 	gvk, _ := apiutil.GVKForObject(pod, scheme.Scheme)
 	restConfig, err := config.GetConfig()
 	if err != nil {
@@ -331,7 +333,7 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 		Stderr: stderr,
 	})
 	if err != nil {
-		return "", "", err
+		return stdout.String(), stderr.String(), err
 	}
 	return stdout.String(), stderr.String(), nil
 }

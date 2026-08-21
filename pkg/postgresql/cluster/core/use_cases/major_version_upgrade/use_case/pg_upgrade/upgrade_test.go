@@ -210,6 +210,24 @@ func TestPgUpgradeFlowVerifyingMovesToPostUpgradeBackup(t *testing.T) {
 	}
 }
 
+func TestPgUpgradeFlowVerificationWaitsWhileProviderHealthIsPending(t *testing.T) {
+	driver := &fakePgUpgrade{verifyPending: true}
+
+	report, err := NewPgUpgradeFlow(driver, mvutypes.Verifying).Upgrade(t.Context())
+	if err != nil {
+		t.Fatalf("Upgrade() error = %v", err)
+	}
+	if report.Phase != string(mvutypes.Verifying) {
+		t.Fatalf("phase = %q, want %q", report.Phase, mvutypes.Verifying)
+	}
+	if !report.Retry {
+		t.Fatal("pending provider health must remain retryable")
+	}
+	if report.Message != mvutypes.MessagePgUpgradeVerificationPending {
+		t.Fatalf("message = %q, want %q", report.Message, mvutypes.MessagePgUpgradeVerificationPending)
+	}
+}
+
 func TestPgUpgradeFlowVerificationFailureReportsFailedPhase(t *testing.T) {
 	driver := &fakePgUpgrade{verifyErr: errors.Join(mvutypes.ErrUpgradeVerificationFailed, errors.New("data checksum mismatch"))}
 
@@ -220,12 +238,13 @@ func TestPgUpgradeFlowVerificationFailureReportsFailedPhase(t *testing.T) {
 }
 
 type fakePgUpgrade struct {
-	started     bool
-	applyErr    error
-	complete    bool
-	completeErr error
-	verified    bool
-	verifyErr   error
+	started       bool
+	applyErr      error
+	complete      bool
+	completeErr   error
+	verified      bool
+	verifyPending bool
+	verifyErr     error
 }
 
 func (f *fakePgUpgrade) ApplyTargetImage(context.Context) error {
@@ -240,10 +259,10 @@ func (f *fakePgUpgrade) UpgradeComplete(context.Context) (bool, error) {
 	return f.complete, f.completeErr
 }
 
-func (f *fakePgUpgrade) VerifyUpgrade(context.Context) error {
+func (f *fakePgUpgrade) VerifyUpgrade(context.Context) (bool, error) {
 	if f.verifyErr != nil {
-		return f.verifyErr
+		return false, f.verifyErr
 	}
 	f.verified = true
-	return nil
+	return !f.verifyPending, nil
 }

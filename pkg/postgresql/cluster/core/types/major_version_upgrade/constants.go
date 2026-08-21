@@ -71,12 +71,13 @@ const (
 )
 
 const (
-	MessagePreflightCheckPassed      = "The PostgreSQL major upgrade preflight checks passed."
-	MessagePgUpgradeStarted          = "The PostgreSQL pg_upgrade flow has started."
-	MessagePgUpgradeStartPending     = "The PostgreSQL pg_upgrade flow has not started yet. The operator will retry."
-	MessagePgUpgradeObservedComplete = "The PostgreSQL pg_upgrade flow completed and is ready for verification."
-	MessagePgUpgradeStillRunning     = "The PostgreSQL pg_upgrade flow is still running."
-	MessagePgUpgradeFinalized        = "The PostgreSQL major upgrade completed verification and is ready for the post-upgrade backup."
+	MessagePreflightCheckPassed         = "The PostgreSQL major upgrade preflight checks passed."
+	MessagePgUpgradeStarted             = "The PostgreSQL pg_upgrade flow has started."
+	MessagePgUpgradeStartPending        = "The PostgreSQL pg_upgrade flow has not started yet. The operator will retry."
+	MessagePgUpgradeObservedComplete    = "The PostgreSQL pg_upgrade flow completed and is ready for verification."
+	MessagePgUpgradeVerificationPending = "The PostgreSQL pg_upgrade conversion is complete; waiting for the CNPG Cluster to return to Ready."
+	MessagePgUpgradeStillRunning        = "The PostgreSQL pg_upgrade flow is still running."
+	MessagePgUpgradeFinalized           = "The PostgreSQL major upgrade completed verification and is ready for the post-upgrade backup."
 )
 
 const (

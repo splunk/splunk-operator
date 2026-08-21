@@ -18,6 +18,7 @@ package majorupgradeadapter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -64,6 +65,30 @@ func (r *RollbackCapabilityAdapter) CreateBackup(ctx context.Context, intent mvu
 
 	// Backup names are deterministic per gate and source→target pair, making every reconcile idempotent
 	backupName := fmt.Sprintf("%s-%s", owner.Name, generateBackupName(intent))
+	result, found, err := r.backend.GetBackup(ctx, owner, backupName, r.key.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("observing rollback backup: %w", err)
+	}
+	if !found {
+		cluster, err := cnpginfra.GetCnpgCluster(ctx, r.client, r.key)
+		if err != nil {
+			return nil, errors.Join(
+				mvutypes.ErrRollbackCapabilityNotReady,
+				fmt.Errorf("fetching CNPG Cluster for rollback backup: %w", err),
+			)
+		}
+		if readinessErr := cnpginfra.BackupTargetReadiness(&cluster); readinessErr != nil {
+			logging.FromContext(ctx).InfoContext(ctx, "waiting for CNPG backup target",
+				"cluster", cluster.Name,
+				"reason", readinessErr.Error())
+			return nil, fmt.Errorf(
+				"%w: CNPG Cluster %s backup target is not ready: %v",
+				mvutypes.ErrRollbackCapabilityNotReady,
+				cluster.Name,
+				readinessErr,
+			)
+		}
+	}
 
 	req := backuptypes.BackupRequest{
 		Name:            backupName,
@@ -74,13 +99,15 @@ func (r *RollbackCapabilityAdapter) CreateBackup(ctx context.Context, intent mvu
 		PluginName:      r.pluginName,
 	}
 
-	if _, err := r.backend.BackupNow(ctx, owner, req); err != nil {
-		return nil, fmt.Errorf("triggering rollback backup: %w", err)
-	}
+	if !found {
+		if _, err := r.backend.BackupNow(ctx, owner, req); err != nil {
+			return nil, fmt.Errorf("triggering rollback backup: %w", err)
+		}
 
-	result, found, err := r.backend.GetBackup(ctx, owner, backupName, r.key.Namespace)
-	if err != nil {
-		return nil, fmt.Errorf("observing rollback backup: %w", err)
+		result, found, err = r.backend.GetBackup(ctx, owner, backupName, r.key.Namespace)
+		if err != nil {
+			return nil, fmt.Errorf("observing rollback backup: %w", err)
+		}
 	}
 	if !found {
 		return nil, mvutypes.ErrBackupStatusMissing
