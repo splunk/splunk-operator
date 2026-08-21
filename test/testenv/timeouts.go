@@ -29,7 +29,8 @@ const (
 
 	// MediumTimeout for moderate tests:
 	// mc s1/m4, crcrud shc/PVC, lmanager c3,
-	// secret s1, deletecr c3, most c3/m4 appfw, smoke m4.
+	// secret s1, deletecr c3, most c3/m4 appfw, smoke m4,
+	// indingsep resource-default opt-out (setup + 3-pod rolling restart).
 	MediumTimeout = 45 * time.Minute
 
 	// MediumLongTimeout for heavier tests:
@@ -64,6 +65,12 @@ const CertTimeout = 30 * time.Minute
 // that an outer Eventually wrapper has room to retry on transient failures.
 const ReadinessPollTimeout = 5 * time.Minute
 
+// IndexerClusterReadyTimeout bounds VerifySingleSiteIndexersReady. On initial C3
+// deploy under CI contention, peers can be SIGKILLed by the startup probe and need
+// several restart cycles to converge; the 30m DefaultTimeout has expired seconds
+// short (e.g. job 256831840). Callers with a shorter attemptCtx are unaffected.
+const IndexerClusterReadyTimeout = 45 * time.Minute
+
 // AppInstallTimeout is the timeout for waiting for apps to reach Install phase on a CR.
 // C3 deployments require bundle push across all indexers and SHC deployer which can exceed
 // 5 minutes; under nightly load the initial bundle push alone (gated by SHC/CM readiness
@@ -88,6 +95,11 @@ const MonitoringConsoleReadyTimeout = 45 * time.Minute
 // after a namespace-scoped secret update. The event is emitted shortly
 // after the CR reaches Ready, so a small window is sufficient.
 const PasswordSyncEventTimeout = 2 * time.Minute
+
+// DetentionTimeoutEventBudget is the budget for WatchForEventWithReason calls
+// waiting for DetentionTimeoutForced. Covers DetentionTimeoutSeconds (120s in
+// tests) plus operator/Splunk startup overhead on loaded CI runners (~3 min).
+const DetentionTimeoutEventBudget = 5 * time.Minute
 
 // SecretUpdateClusterReadyTimeout is the per-CR budget used in the C3/M4
 // secret-update tests when waiting for IndexerCluster and SearchHeadCluster

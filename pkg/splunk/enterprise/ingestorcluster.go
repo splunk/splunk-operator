@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	ingestorTerminationGracePeriodSeconds = int64(60)
+	ingestorTerminationGracePeriodSeconds = int64(300)
 )
 
 // ApplyIngestorCluster reconciles the state of an IngestorCluster custom resource
