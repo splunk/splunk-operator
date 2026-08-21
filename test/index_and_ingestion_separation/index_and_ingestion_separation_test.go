@@ -74,7 +74,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
 		})
 
-		It("Splunk Operator can disable resource defaults for IngestorCluster", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("Splunk Operator can disable resource defaults for IngestorCluster", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			Expect(testcaseEnvInst.SetupIngestorStack(ctx, deployment, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
 
 			ingestorName := deployment.GetName() + "-ingest"

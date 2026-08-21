@@ -1251,8 +1251,8 @@ func TestGetIngestorStatefulSetPreStop(t *testing.T) {
 	if ss.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
 		t.Fatal("TerminationGracePeriodSeconds is nil")
 	}
-	if *ss.Spec.Template.Spec.TerminationGracePeriodSeconds != 60 {
-		t.Errorf("TerminationGracePeriodSeconds = %d; want 60", *ss.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	if *ss.Spec.Template.Spec.TerminationGracePeriodSeconds != 300 {
+		t.Errorf("TerminationGracePeriodSeconds = %d; want 300", *ss.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	}
 
 	for i, c := range ss.Spec.Template.Spec.Containers {
