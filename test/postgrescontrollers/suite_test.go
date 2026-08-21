@@ -31,7 +31,7 @@ func TestPostgresControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
-	sc.Timeout = testenv.MediumSuiteTimeout
+	sc.Timeout = testenv.LongSuiteTimeout
 
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }

@@ -21,6 +21,7 @@ import (
 	"errors"
 	"testing"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
@@ -35,19 +36,25 @@ import (
 
 // fakeBackupBackend is a controllable stand-in for onDemandBackupClient.
 type fakeBackupBackend struct {
-	backupNowErr error
-	getResult    backuptypes.BackupResult
-	getFound     bool
-	getErr       error
-	capturedReq  backuptypes.BackupRequest
+	backupNowErr     error
+	backupNowCalls   int
+	foundAfterCreate bool
+	getResult        backuptypes.BackupResult
+	getFound         bool
+	getErr           error
+	capturedReq      backuptypes.BackupRequest
 }
 
 func (f *fakeBackupBackend) BackupNow(_ context.Context, _ client.Object, req backuptypes.BackupRequest) (bool, error) {
+	f.backupNowCalls++
 	f.capturedReq = req
 	return true, f.backupNowErr
 }
 
 func (f *fakeBackupBackend) GetBackup(_ context.Context, _ client.Object, _, _ string) (backuptypes.BackupResult, bool, error) {
+	if f.foundAfterCreate && f.backupNowCalls == 0 {
+		return backuptypes.BackupResult{}, false, f.getErr
+	}
 	return f.getResult, f.getFound, f.getErr
 }
 
@@ -64,11 +71,23 @@ func newBackupTestAdapter(t *testing.T, method backuptypes.BackupMethod, pluginN
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
 
 	owner := &enterprisev4.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg-demo", Namespace: "default"},
 	}
-	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner).Build()
+	cluster := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: owner.Name, Namespace: owner.Namespace},
+		Status: cnpgv1.ClusterStatus{
+			Phase:           cnpgv1.PhaseHealthy,
+			Instances:       1,
+			ReadyInstances:  1,
+			CurrentPrimary:  "pg-demo-1",
+			TargetPrimary:   "pg-demo-1",
+			InstancesStatus: map[cnpgv1.PodStatus][]string{cnpgv1.PodHealthy: {"pg-demo-1"}},
+		},
+	}
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, cluster).Build()
 	key := types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}
 
 	adapter := &RollbackCapabilityAdapter{
@@ -79,6 +98,49 @@ func newBackupTestAdapter(t *testing.T, method backuptypes.BackupMethod, pluginN
 		pluginName: pluginName,
 	}
 	return adapter, key
+}
+
+func TestCreateBackupWaitsForCNPGHealthyTargetStatus(t *testing.T) {
+	backend := &fakeBackupBackend{}
+	adapter, key := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
+
+	cluster := &cnpgv1.Cluster{}
+	require.NoError(t, adapter.client.Get(t.Context(), key, cluster))
+	cluster.Status.InstancesStatus = nil
+	require.NoError(t, adapter.client.Update(t.Context(), cluster))
+
+	info, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PostUpgradeBackupName)
+	require.ErrorIs(t, err, mvutypes.ErrRollbackCapabilityNotReady)
+	assert.Contains(t, err.Error(), `target primary "pg-demo-1"`)
+	assert.Nil(t, info)
+	assert.Zero(t, backend.backupNowCalls, "must not create a CNPG Backup before its target is healthy in cluster status")
+
+	cluster.Status.InstancesStatus = map[cnpgv1.PodStatus][]string{cnpgv1.PodHealthy: {cluster.Status.TargetPrimary}}
+	require.NoError(t, adapter.client.Update(t.Context(), cluster))
+	backend.foundAfterCreate = true
+	backend.getFound = true
+	backend.getResult = backuptypes.BackupResult{Done: true}
+
+	info, err = adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PostUpgradeBackupName)
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	assert.Equal(t, 1, backend.backupNowCalls)
+}
+
+func TestCreateBackupObservesExistingBackupWhileCNPGIsUpgrading(t *testing.T) {
+	backend := &fakeBackupBackend{getFound: true, getResult: backuptypes.BackupResult{Done: true}}
+	adapter, key := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
+
+	cluster := &cnpgv1.Cluster{}
+	require.NoError(t, adapter.client.Get(t.Context(), key, cluster))
+	cluster.Status.Phase = cnpgv1.PhaseMajorUpgrade
+	cluster.Status.InstancesStatus = nil
+	require.NoError(t, adapter.client.Update(t.Context(), cluster))
+
+	info, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	assert.Zero(t, backend.backupNowCalls, "an existing backup must not be recreated")
 }
 
 func TestCreateBackupReturnsMissingWhenNotDone(t *testing.T) {
@@ -137,7 +199,7 @@ func TestCreateBackupReturnsDoneWithoutVolumeSnapshotStatusForPluginMethod(t *te
 }
 
 func TestCreateBackupPassesMethodAndPluginToBackend(t *testing.T) {
-	backend := &fakeBackupBackend{getFound: true, getResult: backuptypes.BackupResult{Done: true}}
+	backend := &fakeBackupBackend{foundAfterCreate: true, getFound: true, getResult: backuptypes.BackupResult{Done: true}}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodPlugin, "barman-cloud.cloudnative-pg.io", backend)
 
 	_, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
@@ -147,7 +209,7 @@ func TestCreateBackupPassesMethodAndPluginToBackend(t *testing.T) {
 }
 
 func TestCreateBackupProducesDeterministicName(t *testing.T) {
-	backend := &fakeBackupBackend{getFound: true, getResult: backuptypes.BackupResult{Done: true}}
+	backend := &fakeBackupBackend{foundAfterCreate: true, getFound: true, getResult: backuptypes.BackupResult{Done: true}}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
 
 	info, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)

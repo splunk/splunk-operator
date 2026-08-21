@@ -185,6 +185,14 @@ func markCNPGClusterHealthy(cnpg *cnpgv1.Cluster, clusterName, caSecretName stri
 	}
 }
 
+func markCNPGClusterBackupReady(cnpg *cnpgv1.Cluster, clusterName, caSecretName string) {
+	markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+	cnpg.Status.TargetPrimary = cnpg.Status.CurrentPrimary
+	cnpg.Status.InstancesStatus = map[cnpgv1.PodStatus][]string{
+		cnpgv1.PodHealthy: {cnpg.Status.CurrentPrimary, clusterName + "-2"},
+	}
+}
+
 func currentMajorUpgradePhase(ctx context.Context, key types.NamespacedName) string {
 	GinkgoHelper()
 	pc := &enterprisev4.PostgresCluster{}
@@ -616,7 +624,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				Expect(cnpg.Spec.ImageName).To(Equal(initialImage))
 				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
-				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+				markCNPGClusterBackupReady(cnpg, clusterName, caSecretName)
 				cnpg.Status.Image = initialImage
 				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: initialImage, MajorVersion: 15}
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
@@ -702,7 +710,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(metrics.provisioningDurations).To(BeEmpty())
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
+				markCNPGClusterBackupReady(cnpg, clusterName, caSecretName)
 				cnpg.Status.Image = targetImage
 				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: targetImage, MajorVersion: 16}
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())

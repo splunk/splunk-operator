@@ -42,6 +42,63 @@ func TestClusterReadyRequiresHealthyReadyInstancesAndPrimary(t *testing.T) {
 	assert.True(t, ClusterReady(cluster))
 }
 
+func TestPrimaryReadyDoesNotRequireEveryReplica(t *testing.T) {
+	cluster := &cnpgv1.Cluster{
+		Status: cnpgv1.ClusterStatus{
+			Phase:           cnpgv1.PhaseHealthy,
+			Instances:       3,
+			ReadyInstances:  2,
+			CurrentPrimary:  "pg1-1",
+			InstancesStatus: map[cnpgv1.PodStatus][]string{cnpgv1.PodHealthy: {"pg1-1", "pg1-2"}},
+		},
+	}
+
+	assert.True(t, PrimaryReady(cluster))
+	cluster.Status.InstancesStatus = nil
+	assert.False(t, PrimaryReady(cluster))
+}
+
+func TestBackupTargetReadinessRequiresPublishedHealthyPrimaryFallback(t *testing.T) {
+	err := BackupTargetReadiness(nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cluster is missing")
+
+	cluster := &cnpgv1.Cluster{
+		Status: cnpgv1.ClusterStatus{
+			Phase:           cnpgv1.PhaseHealthy,
+			Instances:       1,
+			ReadyInstances:  1,
+			CurrentPrimary:  "pg1-1",
+			TargetPrimary:   "pg1-1",
+			InstancesStatus: map[cnpgv1.PodStatus][]string{cnpgv1.PodHealthy: {"pg1-1"}},
+		},
+	}
+
+	targetPrimary := cluster.Status.TargetPrimary
+	cluster.Status.TargetPrimary = ""
+	err = BackupTargetReadiness(cluster)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "target primary is not published")
+	cluster.Status.TargetPrimary = targetPrimary
+
+	require.NoError(t, BackupTargetReadiness(cluster))
+
+	cluster.Status.Instances = 3
+	cluster.Status.ReadyInstances = 2
+	cluster.Status.InstancesStatus = map[cnpgv1.PodStatus][]string{
+		cnpgv1.PodHealthy: {"pg1-1", "pg1-2"},
+	}
+	require.NoError(t, BackupTargetReadiness(cluster), "a rebuilding replica must not block the usable backup target")
+
+	cluster.Status.InstancesStatus = map[cnpgv1.PodStatus][]string{
+		cnpgv1.PodHealthy: {"pg1-2"},
+	}
+	err = BackupTargetReadiness(cluster)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `target primary "pg1-1"`)
+	assert.Contains(t, err.Error(), "pg1-2")
+}
+
 func TestClusterBlockingErrorReturnsUserActionError(t *testing.T) {
 	err := ClusterBlockingError(&cnpgv1.Cluster{
 		Status: cnpgv1.ClusterStatus{
