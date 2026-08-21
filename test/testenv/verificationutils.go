@@ -358,7 +358,7 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterReady(ctx context.Context, de
 func (testenv *TestCaseEnv) VerifySingleSiteIndexersReady(ctx context.Context, deployment *Deployment) error {
 	instanceName := fmt.Sprintf("%s-idxc", deployment.GetName())
 	// Use optimized watch to wait for Ready phase
-	err := testenv.WatchForIndexerClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, DefaultTimeout)
+	err := testenv.WatchForIndexerClusterPhase(ctx, deployment, testenv.GetName(), instanceName, enterpriseApi.PhaseReady, IndexerClusterReadyTimeout)
 	if err != nil {
 		return fmt.Errorf("IndexerCluster failed to reach Ready phase: %w", err)
 	}
@@ -1425,6 +1425,7 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 	if phase == enterpriseApi.PhaseDownload || phase == enterpriseApi.PhasePodCopy {
 		for _, appName := range appList {
 			testenv.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase not to be %s", crKind, name, appName, phase))
+			var lastState enterpriseApi.AppDeploymentInfo
 			err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
 				appDeploymentInfo, err := testenv.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
 				if err != nil {
@@ -1435,16 +1436,18 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 					testenv.Log.Info(fmt.Sprintf("App deployment info not found yet for app %s (CR %s/%s, AppSource %s), continuing to poll", appName, crKind, name, appSourceName))
 					return false, nil // Continue polling
 				}
+				lastState = appDeploymentInfo
 				testenv.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase should not be %s", crKind, name, appName, phase), "actualPhase", appDeploymentInfo.PhaseInfo.Phase, "appState", appDeploymentInfo)
 				return appDeploymentInfo.PhaseInfo.Phase != phase, nil
 			})
 			if err != nil {
-				return fmt.Errorf("app %s on CR %s/%s did not move past phase %s: %w", appName, crKind, name, phase, err)
+				return fmt.Errorf("app %s on CR %s/%s did not move past phase %s: last observed state: %+v: %w", appName, crKind, name, phase, lastState, err)
 			}
 		}
 	} else {
 		for _, appName := range appList {
 			testenv.Log.Info(fmt.Sprintf("Check App Status for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase))
+			var lastState enterpriseApi.AppDeploymentInfo
 			err := wait.PollUntilContextTimeout(ctx, PollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
 				appDeploymentInfo, err := testenv.GetAppDeploymentInfo(ctx, deployment, name, crKind, appSourceName, appName)
 				if err != nil {
@@ -1455,6 +1458,7 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 					testenv.Log.Info(fmt.Sprintf("App deployment info not found yet for app %s (CR %s/%s, AppSource %s), continuing to poll", appName, crKind, name, appSourceName))
 					return false, nil // Continue polling
 				}
+				lastState = appDeploymentInfo
 				testenv.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "actualPhase", appDeploymentInfo.PhaseInfo.Phase, "appPhaseStatus", appDeploymentInfo.PhaseInfo.Status, "appState", appDeploymentInfo)
 				if appDeploymentInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
 					testenv.Log.Info("Phase Install Not Complete.", "phaseFound", appDeploymentInfo.PhaseInfo.Phase, "phaseStatusFound", appDeploymentInfo.PhaseInfo.Status)
@@ -1463,7 +1467,7 @@ func (testenv *TestCaseEnv) VerifyAppListPhase(ctx context.Context, deployment *
 				return appDeploymentInfo.PhaseInfo.Phase == phase, nil
 			})
 			if err != nil {
-				return fmt.Errorf("app %s on CR %s/%s did not reach phase %s: %w", appName, crKind, name, phase, err)
+				return fmt.Errorf("app %s on CR %s/%s did not reach phase %s: last observed state: %+v: %w", appName, crKind, name, phase, lastState, err)
 			}
 		}
 	}

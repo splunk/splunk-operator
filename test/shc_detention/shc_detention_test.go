@@ -113,11 +113,11 @@ var _ = Describe("SHC Detention Timeout", func() {
 				shc.Generation+1, testenv.DefaultTimeout)).To(Succeed(),
 				"SHC operator did not observe spec update")
 
-			// Assert DetentionTimeoutForced event appears within timeout + margin (120s + 30s)
+			// Assert DetentionTimeoutForced event appears within timeout + overhead margin
 			err = testcaseEnvInst.WatchForEventWithReason(ctx, deployment,
 				testcaseEnvInst.GetName(), deployment.GetName(),
-				"DetentionTimeoutForced", 3*time.Minute)
-			Expect(err).To(Succeed(), "Expected DetentionTimeoutForced event within 3 minutes")
+				"DetentionTimeoutForced", testenv.DetentionTimeoutEventBudget)
+			Expect(err).To(Succeed(), "Expected DetentionTimeoutForced event within budget")
 
 			// Assert rolling update completes and SHC recovers to Ready
 			err = testcaseEnvInst.WatchForSearchHeadClusterPhase(ctx, deployment,

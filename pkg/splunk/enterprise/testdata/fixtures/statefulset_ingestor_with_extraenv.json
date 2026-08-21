@@ -263,7 +263,7 @@
           }
         },
         "schedulerName": "default-scheduler",
-        "terminationGracePeriodSeconds": 60
+        "terminationGracePeriodSeconds": 300
       }
     },
     "volumeClaimTemplates": [

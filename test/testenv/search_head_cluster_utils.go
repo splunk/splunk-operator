@@ -36,11 +36,13 @@ func SearchHeadPodName(deploymentName string, index int) string {
 // StartRealtimeSearch starts a never-ending real-time search on a search head pod via the Splunk REST API.
 // The search runs until the pod is restarted or the job is explicitly cancelled.
 // Retries for up to 2 minutes to handle the window between PhaseReady and the pod being exec-ready.
+// The command fails (non-zero exit) if Splunk rejects the job, ensuring the search is actually running.
 func StartRealtimeSearch(ctx context.Context, deployment *Deployment, podName string) error {
-	stdin := `curl -k -u admin:$(cat /mnt/splunk-secrets/password) \
+	stdin := `out=$(curl -sk -u admin:$(cat /mnt/splunk-secrets/password) \
 		--data-urlencode "search=search index=_internal" \
-		-d "earliest_time=rt&latest_time=rt&exec_mode=normal&search_mode=realtime" \
-		https://localhost:8089/services/search/jobs`
+		-d "earliest_time=rt&latest_time=rt&exec_mode=normal&search_mode=realtime&output_mode=json" \
+		https://localhost:8089/services/search/jobs); \
+		echo "$out" | grep -q '"sid"' || { echo "search job not created: $out" >&2; exit 1; }`
 	return podExecWithRetry(ctx, deployment, podName, stdin)
 }
 
