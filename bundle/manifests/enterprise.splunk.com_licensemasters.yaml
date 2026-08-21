@@ -8,16 +8,6 @@ metadata:
     name: splunk-operator
   name: licensemasters.enterprise.splunk.com
 spec:
-  conversion:
-    strategy: Webhook
-    webhook:
-      clientConfig:
-        service:
-          name: webhook-service
-          namespace: splunk-operator
-          path: /convert
-      conversionReviewVersions:
-      - v1
   group: enterprise.splunk.com
   names:
     kind: LicenseMaster

@@ -23,15 +23,15 @@ patchesStrategicMerge:
 - patches/patch_preserve_unknown_fields.yaml
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
-- patches/webhook_in_clustermanagers.yaml
-- patches/webhook_in_clustermasters.yaml
-- patches/webhook_in_indexerclusters.yaml
-- patches/webhook_in_ingestorclusters.yaml
-- patches/webhook_in_licensemasters.yaml
-- patches/webhook_in_licensemanagers.yaml
-- patches/webhook_in_monitoringconsoles.yaml
-- patches/webhook_in_searchheadclusters.yaml
-- patches/webhook_in_standalones.yaml
+#- patches/webhook_in_clustermanagers.yaml
+#- patches/webhook_in_clustermasters.yaml
+#- patches/webhook_in_indexerclusters.yaml
+#- patches/webhook_in_ingestorclusters.yaml
+#- patches/webhook_in_licensemasters.yaml
+#- patches/webhook_in_licensemanagers.yaml
+#- patches/webhook_in_monitoringconsoles.yaml
+#- patches/webhook_in_searchheadclusters.yaml
+#- patches/webhook_in_standalones.yaml
 #+kubebuilder:scaffold:crdkustomizewebhookpatch
 
 # [CERTMANAGER] CA injection is now handled via replacements in config/default/kustomization.yaml
