@@ -29,7 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -1606,7 +1606,7 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 
 	statefulsetName := GetSplunkStatefulsetName(instanceID, cr.GetName())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: statefulsetName}
-	sts, err := splctrl.GetStatefulSetByName(ctx, client, namespacedName)
+	sts, err := k8sops.GetStatefulSetByName(ctx, client, namespacedName)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "unable to get the stateful set", "error", err)
 	}
@@ -1831,7 +1831,7 @@ func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.
 
 	shcStsName := GetSplunkStatefulsetName(SplunkSearchHead, shcPlaybookContext.cr.GetName())
 	shcStsNamespaceName := types.NamespacedName{Namespace: shcPlaybookContext.cr.GetNamespace(), Name: shcStsName}
-	shcSts, err := splctrl.GetStatefulSetByName(ctx, shcPlaybookContext.client, shcStsNamespaceName)
+	shcSts, err := k8sops.GetStatefulSetByName(ctx, shcPlaybookContext.client, shcStsNamespaceName)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "unable to get the stateful set", "error", err)
 		return err
@@ -2055,7 +2055,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 
 			idxcStsName := GetSplunkStatefulsetName(SplunkIndexer, idxcCR.GetName())
 			idxcStsNamespaceName := types.NamespacedName{Namespace: idxcCR.GetNamespace(), Name: idxcStsName}
-			idxcSts, err := splctrl.GetStatefulSetByName(ctx, idxcPlaybookContext.client, idxcStsNamespaceName)
+			idxcSts, err := k8sops.GetStatefulSetByName(ctx, idxcPlaybookContext.client, idxcStsNamespaceName)
 			if err != nil {
 				scopedLog.ErrorContext(ctx, "unable to get the stateful set", "error", err)
 				// Probably a dangling owner reference, just ignore and continue

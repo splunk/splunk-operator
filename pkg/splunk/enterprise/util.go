@@ -48,7 +48,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
 	// Used to move files between pods
@@ -260,7 +260,7 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 	if spec.Defaults != "" {
 		defaultsMap := getSplunkDefaults(cr.GetName(), cr.GetNamespace(), instanceType, spec.Defaults)
 		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-		_, err = splctrl.ApplyConfigMap(ctx, client, defaultsMap)
+		_, err = k8sops.ApplyConfigMap(ctx, client, defaultsMap)
 		if err != nil {
 			return nil, err
 		}
@@ -285,7 +285,7 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 	configMapName := fmt.Sprintf(perCrConfigMapNameStr, d, cr.GetName())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
-	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	configMap, err := k8sops.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Create a new config map if it doesn't exist
@@ -702,20 +702,20 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 
 	// Create smartstore config consisting indexes.conf
 	configMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), crKind)
-	SplunkOperatorAppConfigMap := splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), mapSplunkConfDetails)
+	SplunkOperatorAppConfigMap := k8sops.PrepareConfigMap(configMapName, cr.GetNamespace(), mapSplunkConfDetails)
 
 	SplunkOperatorAppConfigMap.SetOwnerReferences(append(SplunkOperatorAppConfigMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
 	// if existing configmap contains key conftoken then add that back
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	configMap, err := k8sops.GetConfigMap(ctx, client, namespacedName)
 	if err == nil && configMap != nil && configMap.Data != nil && reflect.ValueOf(configMap.Data).Kind() == reflect.Map {
 		if _, ok := configMap.Data[configToken]; ok {
 			SplunkOperatorAppConfigMap.Data[configToken] = configMap.Data[configToken]
 		}
 	}
 
-	configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
+	configMapDataChanged, err = k8sops.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "config map create/update failed", "error", err)
 		return nil, configMapDataChanged, err
@@ -731,7 +731,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 		// Apply the configMap with a fresh token
 		retryCnt := 10
 		for i := 0; i < retryCnt; i++ {
-			configMapDataChanged, err = splctrl.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
+			configMapDataChanged, err = k8sops.ApplyConfigMap(ctx, client, SplunkOperatorAppConfigMap)
 			if (err != nil && !k8serrors.IsConflict(err)) || err == nil {
 				break
 			}
@@ -857,7 +857,7 @@ func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.Con
 	// during its deletion/other conditions(For eg. on IndexerCluster when we change
 	// from clusterMasterRef to clusterManagerRef)
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(instanceType, cr.GetName())}
-	err = splctrl.RemoveUnwantedOwnerRefSs(ctx, client, namespacedName, cr)
+	err = k8sops.RemoveUnwantedOwnerRefSs(ctx, client, namespacedName, cr)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "owner Reference removal failed for statefulSet", "error", err)
 		return err
@@ -1575,7 +1575,7 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 		mux := getResourceMutex(configMapName)
 		mux.Lock()
 		defer mux.Unlock()
-		configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+		configMap, err := k8sops.GetConfigMap(ctx, client, namespacedName)
 		if err != nil {
 			scopedLog.ErrorContext(ctx, "unable to get configMap", "name", namespacedName.Name, "error", err)
 			return err
@@ -1624,7 +1624,7 @@ func updateCrSpecificManualAppUpdateConfigMap(ctx context.Context, client splcom
 	// now check namespace specific configmap if it contains manualUpdate settings
 	crScopedConfigMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
 	crNamespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: crScopedConfigMapName}
-	configMap, err := splctrl.GetConfigMap(ctx, client, crNamespacedName)
+	configMap, err := k8sops.GetConfigMap(ctx, client, crNamespacedName)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "unable to get configMap", "name", namespacedName.Name, "error", err)
 		return err
@@ -1780,7 +1780,7 @@ func UpdateOrRemoveEntryFromConfigMapLocked(ctx context.Context, c splcommon.Con
 	mux := getResourceMutex(configMapName)
 	mux.Lock()
 	defer mux.Unlock()
-	configMap, err := splctrl.GetConfigMap(ctx, c, namespacedName)
+	configMap, err := k8sops.GetConfigMap(ctx, c, namespacedName)
 	if err != nil {
 		scopedLog.ErrorContext(ctx, "unable to get config map", "name", namespacedName.Name, "error", err)
 		return err
@@ -1823,7 +1823,7 @@ func RemoveConfigMapOwnerRef(ctx context.Context, client splcommon.ControllerCli
 	var refCount uint = 0
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	configMap, err := k8sops.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
 		return 0, err
 	}

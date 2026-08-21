@@ -20,7 +20,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -61,7 +61,7 @@ func ApplyQueue(ctx context.Context, client client.Client, cr *enterpriseApi.Que
 
 	// Check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {

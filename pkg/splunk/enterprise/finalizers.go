@@ -21,13 +21,13 @@ import (
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func init() {
-	splctrl.SplunkFinalizerRegistry["enterprise.splunk.com/delete-pvc"] = DeleteSplunkPvc
+	k8sops.SplunkFinalizerRegistry["enterprise.splunk.com/delete-pvc"] = DeleteSplunkPvc
 }
 
 // DeleteSplunkPvc removes all corresponding PersistentVolumeClaims that are associated with a custom resource.

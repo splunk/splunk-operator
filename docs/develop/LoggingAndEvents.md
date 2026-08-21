@@ -365,7 +365,7 @@ After computing the new `Stalled` condition (and before persisting it), every en
 
 These events are visible via `kubectl describe <cr-type> <name>` and can be used in alerting pipelines to detect stalls without polling the condition array. `EmitStalledTransitionEvents` is defined in `pkg/splunk/enterprise/events.go`.
 
-**Terminal container waiting states** detected by `splctrl.CheckPodsForTerminalFailures`:
+**Terminal container waiting states** detected by `k8sops.CheckPodsForTerminalFailures`:
 
 | Container `Waiting.Reason` | Cause |
 |---------------------------|-------|

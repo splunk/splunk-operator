@@ -30,7 +30,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -110,7 +110,7 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := k8sops.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -695,7 +695,7 @@ func TestPhaseManagersTermination(t *testing.T) {
 		},
 	}
 
-	_, err := splctrl.ApplyStatefulSet(ctx, c, sts)
+	_, err := k8sops.ApplyStatefulSet(ctx, c, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -801,7 +801,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	client.AddObject(pod)
 
 	// Create the statefulset
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := k8sops.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -1343,7 +1343,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, err := splctrl.ApplyStatefulSet(ctx, c, &current)
+	_, err := k8sops.ApplyStatefulSet(ctx, c, &current)
 	if err != nil {
 		return
 	}
@@ -1360,7 +1360,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	_, _ = k8sops.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for SHC deployer")
 	}
@@ -1374,7 +1374,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	_, _ = k8sops.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for LicenseManager")
 	}
@@ -1388,7 +1388,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	_, _ = k8sops.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for Standalone")
 	}
@@ -1402,7 +1402,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	_, _ = k8sops.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for IngestorCluster")
 	}
@@ -2817,7 +2817,7 @@ func TestSetLivenessProbeLevelForIDXC(t *testing.T) {
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-stack1-cluster-manager"}
 
 	//setownerReference
-	err = splctrl.SetStatefulSetOwnerRef(ctx, c, idxcCr, namespacedName)
+	err = k8sops.SetStatefulSetOwnerRef(ctx, c, idxcCr, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s. Error: %s", cmSts.GetName(), err.Error())
 	}
@@ -3772,7 +3772,7 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := k8sops.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -4069,7 +4069,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 		},
 	}
 
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := k8sops.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -4272,7 +4272,7 @@ func TestAfwSchedulerEntry(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := k8sops.ApplyStatefulSet(ctx, client, sts)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}

@@ -109,7 +109,7 @@ func RunRollingEviction(
 	// controller-revision-hash label doesn't match UpdateRevision is being recycled by
 	// the operator's OnDelete handler. Unlike a PDB eviction, a template rollout changes
 	// UpdateRevision and leaves stale-hash pods behind until they are recycled one-by-one.
-	// This is the same per-pod check the operator uses in splkcontroller/statefulset.go.
+	// This is the same per-pod check the operator uses in k8sops/statefulset.go.
 	if sts.Status.UpdateRevision != "" {
 		for i := range pods {
 			if pods[i].Labels["controller-revision-hash"] != sts.Status.UpdateRevision {

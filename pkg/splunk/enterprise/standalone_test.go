@@ -37,7 +37,7 @@ import (
 
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -314,7 +314,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -559,7 +559,7 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -573,7 +573,7 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 	secret.Data[s3AccessKey] = []byte("changed")
 	current.Status.ResourceRevMap["splunk-test-secret"] = "3456"
 
-	_, err = splctrl.ApplySecret(ctx, client, secret)
+	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -1605,7 +1605,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	}
 
 	//setownerReference
-	err = splctrl.SetStatefulSetOwnerRef(ctx, c, &standalone, namespacedName)
+	err = k8sops.SetStatefulSetOwnerRef(ctx, c, &standalone, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}

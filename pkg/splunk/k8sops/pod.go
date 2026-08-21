@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package splkcontroller
+package k8sops
 
 import (
 	"context"
@@ -25,6 +25,38 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
+
+// SortPodSlices sorts required slices in a Pod spec
+func SortPodSlices(ctx context.Context, current *corev1.PodSpec, name string) error {
+	scopedLog := logging.FromContext(ctx).With("func", "SortPodSlices", "name", name)
+
+	// Sort tolerations
+	splcommon.SortSlice(current.Tolerations, splcommon.SortFieldKey)
+
+	// Sort TopologySpreadConstraints
+	splcommon.SortSlice(current.TopologySpreadConstraints, splcommon.SortFieldTopologyKey)
+
+	// Sort volumes
+	splcommon.SortSlice(current.Volumes, splcommon.SortFieldName)
+
+	// Sort ImagePullSecrets
+	splcommon.SortSlice(current.ImagePullSecrets, splcommon.SortFieldName)
+
+	// Sort slices inside container specs
+	for idx := range current.Containers {
+		// Sort container ports
+		splcommon.SortSlice(current.Containers[idx].Ports, splcommon.SortFieldContainerPort)
+
+		// Sort VolumeMounts
+		splcommon.SortSlice(current.Containers[idx].VolumeMounts, splcommon.SortFieldName)
+
+		// Sort env variables
+		splcommon.SortSlice(current.Containers[idx].Env, splcommon.SortFieldName)
+	}
+	scopedLog.InfoContext(ctx, "successfully sorted slices in statefulSet")
+
+	return nil
+}
 
 // MergePodUpdates looks for material differences between a Pod's current
 // config and a revised config. It merges material changes from revised to
@@ -236,120 +268,4 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 	}
 
 	return result
-}
-
-// SortStatefulSetSlices sorts required slices in a statefulSet
-func SortStatefulSetSlices(ctx context.Context, current *corev1.PodSpec, name string) error {
-	scopedLog := logging.FromContext(ctx).With("func", "SortStatefulSetSlices", "name", name)
-
-	// Sort tolerations
-	splcommon.SortSlice(current.Tolerations, splcommon.SortFieldKey)
-
-	// Sort TopologySpreadConstraints
-	splcommon.SortSlice(current.TopologySpreadConstraints, splcommon.SortFieldTopologyKey)
-
-	// Sort volumes
-	splcommon.SortSlice(current.Volumes, splcommon.SortFieldName)
-
-	// Sort ImagePullSecrets
-	splcommon.SortSlice(current.ImagePullSecrets, splcommon.SortFieldName)
-
-	// Sort slices inside container specs
-	for idx := range current.Containers {
-		// Sort container ports
-		splcommon.SortSlice(current.Containers[idx].Ports, splcommon.SortFieldContainerPort)
-
-		// Sort VolumeMounts
-		splcommon.SortSlice(current.Containers[idx].VolumeMounts, splcommon.SortFieldName)
-
-		// Sort env variables
-		splcommon.SortSlice(current.Containers[idx].Env, splcommon.SortFieldName)
-	}
-	scopedLog.InfoContext(ctx, "successfully sorted slices in statefulSet")
-
-	return nil
-}
-
-// MergeServiceSpecUpdates merges the current and revised spec of the service object
-func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, revised *corev1.ServiceSpec, name string) bool {
-	scopedLog := logging.FromContext(ctx).With("func", "MergeServiceSpecUpdates", "name", name)
-	result := false
-
-	// check service Type. An empty revised.Type means the controller did not
-	// explicitly set one; Kubernetes defaults it to ClusterIP server-side.
-	// Treat the empty value as ClusterIP so we (1) avoid an endless
-	// reconcile->update->watch loop against the API-server-defaulted ClusterIP,
-	// while (2) still driving a previously customized Service (e.g. LoadBalancer
-	// or NodePort set via spec.serviceTemplate) back to the default ClusterIP
-	// when the override is removed from the CR.
-	currentType := current.Type
-	if currentType == "" {
-		currentType = corev1.ServiceTypeClusterIP
-	}
-	revisedType := revised.Type
-	if revisedType == "" {
-		revisedType = corev1.ServiceTypeClusterIP
-	}
-	if currentType != revisedType {
-		scopedLog.InfoContext(ctx, "service Type differs",
-			"current", current.Type,
-			"revised", revisedType)
-		current.Type = revisedType
-		result = true
-	}
-
-	if current.ExternalName != revised.ExternalName {
-		scopedLog.InfoContext(ctx, "external Name differs",
-			"current", current.ExternalName,
-			"revised", revised.ExternalName)
-		current.ExternalName = revised.ExternalName
-		result = true
-	}
-
-	if current.ExternalTrafficPolicy != revised.ExternalTrafficPolicy {
-		scopedLog.InfoContext(ctx, "external Traffic Policy differs",
-			"current", current.ExternalTrafficPolicy,
-			"revised", revised.ExternalTrafficPolicy)
-		current.ExternalTrafficPolicy = revised.ExternalTrafficPolicy
-		result = true
-	}
-
-	if splcommon.CompareSortedStrings(current.ExternalIPs, revised.ExternalIPs) {
-		scopedLog.InfoContext(ctx, "external IPs differs",
-			"current", current.ExternalIPs,
-			"revised", revised.ExternalIPs)
-		current.ExternalIPs = revised.ExternalIPs
-		result = true
-	}
-
-	// check for changes in Ports
-	if splcommon.CompareServicePorts(current.Ports, revised.Ports) {
-		scopedLog.InfoContext(ctx, "service Ports differs",
-			"current", current.Ports,
-			"revised", revised.Ports)
-		current.Ports = revised.Ports
-		result = true
-	}
-
-	return result
-}
-
-// hasProbeChanged checks for changes in given current probe
-func hasProbeChanged(currentProbe *corev1.Probe, revisedProbe *corev1.Probe) bool {
-	if currentProbe == nil {
-		return revisedProbe != nil
-	}
-	if currentProbe.InitialDelaySeconds != revisedProbe.InitialDelaySeconds {
-		return true
-	}
-	if currentProbe.TimeoutSeconds != revisedProbe.TimeoutSeconds {
-		return true
-	}
-	if currentProbe.PeriodSeconds != revisedProbe.PeriodSeconds {
-		return true
-	}
-	if currentProbe.FailureThreshold != revisedProbe.FailureThreshold {
-		return true
-	}
-	return false
 }

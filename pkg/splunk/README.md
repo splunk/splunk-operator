@@ -103,8 +103,7 @@ returns constructed objects. No `client.Create/Update`, no external API calls.
 ### `k8sops/`
 
 Kubernetes API layer — read, create-or-update with diff/merge, and finalizer
-execution. Renamed from `splkcontroller/` to reflect its actual scope and avoid
-confusion with `reconcile/<cr>/`.
+execution.
 
 ### `client/<system>/`
 
