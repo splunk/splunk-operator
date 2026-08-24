@@ -145,13 +145,12 @@ const SHCScalingTransitionTimeout = 20 * time.Minute
 const KubectlExecTimeout = 25 * time.Second
 
 // BestEffortProbeTimeout bounds the log-only diagnostic probes
-// (VerifyIsDeploymentInProgressFlagIsSet / WaitForAppPhaseChange) that run
-// between an app-framework CR update and its C3/M4 readiness check. These
-// probes only log a miss and never fail the spec, since a small app diff can
-// complete within a single reconcile and flip the flag/phase back before the
-// probe observes it. A 2-minute poll on a guaranteed-miss adds real wall
-// clock across the many call sites that repeat this pattern, so keep it just
-// long enough for one or two PollInterval cycles.
+// (VerifyIsDeploymentInProgressFlagIsSet) that run between an app-framework
+// CR update and its C3/M4 readiness check. These probes only log a miss and
+// never fail the spec, since a small app diff can complete within a single
+// reconcile and flip the flag back before the probe observes it. A 2-minute
+// poll on a guaranteed-miss adds real wall clock, so keep it just long enough
+// for one or two PollInterval cycles.
 const BestEffortProbeTimeout = 20 * time.Second
 
 // Suite-level timeouts. Applied via GinkgoConfiguration().Timeout in suite files.
