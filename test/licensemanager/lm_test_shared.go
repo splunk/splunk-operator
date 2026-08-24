@@ -148,6 +148,11 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	testenv.DeleteUploadedFiles(ctx, testS3Bucket, uploadedApps)
 	uploadedApps = nil
 
+	// Snapshot hashes for V1 apps before uploading V2 — newly-added V2 apps (NewAppsAddedBetweenPolls)
+	// have no recorded hash yet and must be excluded from the snapshot.
+	oldHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appFileList)
+	Expect(err).To(Succeed(), "Unable to snapshot app object hashes before V2 upgrade")
+
 	// Create a list of apps to upload to S3 after poll period
 	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
 	appFileList = testenv.GetAppFileList(appListV2)
@@ -161,8 +166,8 @@ func RunLMC3AppFrameworkTest(ctx context.Context, deployment *testenv.Deployment
 	Expect(err).To(Succeed(), "Unable to upload V2 app files")
 	uploadedApps = append(uploadedApps, uploadedFiles...)
 
-	// Wait for operator to detect V2 apps (any app leaves Install phase)
-	Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
+	// Wait for operator to detect new content (ObjectHash flip) and complete installation
+	Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, deployment.GetName(), config.CrKind, appSourceName, appFileList, oldHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on License Manager")
 
 	// Wait for License Manager/Master to finish processing V2 apps and become Ready
 	Eventually(func() error { return config.LicenseManagerReady(ctx, deployment, testcaseEnvInst) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "License Manager not ready after V2 upload")
