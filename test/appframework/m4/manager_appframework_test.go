@@ -159,6 +159,12 @@ var _ = Describe("m4appfw test", func() {
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
 			uploadedApps = nil
 
+			// Snapshot hashes for V1 apps before uploading V2
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Manager app object hashes before V2 upgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before V2 upgrade")
+
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
@@ -173,10 +179,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps for Monitoring Console
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Manager")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			// Upload V2 apps for Monitoring Console
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -285,6 +292,12 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############# DOWNGRADE APPS ################
+			// Snapshot hashes for V2 apps before downgrading to V1
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Manager app object hashes before V1 downgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before V1 downgrade")
+
 			// Delete V2 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 
@@ -305,8 +318,9 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Manager")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -676,6 +690,12 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
+			// Snapshot hashes for V1 apps before upgrading to V2
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Manager app object hashes before V2 upgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before V2 upgrade")
+
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -695,8 +715,9 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Manager")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
 
 			// Ensure M4 indexers and SHC are ready
 			Expect(testcaseEnvInst.VerifyM4IndexersAndSHCReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 Indexers and SHC not ready")
@@ -806,6 +827,11 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			// ############### UPGRADE APPS ################
+			// Snapshot hashes for V1 apps before upgrading to V2
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Manager app object hashes before V2 upgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before V2 upgrade")
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
@@ -820,9 +846,6 @@ var _ = Describe("m4appfw test", func() {
 			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -847,6 +870,10 @@ var _ = Describe("m4appfw test", func() {
 			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
+
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Manager")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
@@ -977,6 +1004,12 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
+			// Snapshot hashes for V1 apps before upgrading to V2
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Manager app object hashes before V2 upgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before V2 upgrade")
+
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -995,9 +1028,6 @@ var _ = Describe("m4appfw test", func() {
 			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure M4 indexers and SHC are ready
 			Expect(testcaseEnvInst.VerifyM4IndexersAndSHCReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 Indexers and SHC not ready")
@@ -1018,6 +1048,9 @@ var _ = Describe("m4appfw test", func() {
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
+			// Wait for operator to detect new content on Cluster Manager (ObjectHash flip)
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Manager")
+
 			// Ensure that the Cluster Manager goes to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
 
@@ -1035,6 +1068,9 @@ var _ = Describe("m4appfw test", func() {
 			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
+
+			// Wait for operator to detect new content on Search Head Cluster (ObjectHash flip)
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
 
 			// Ensure Search Head Cluster go to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Search Head Cluster not ready")
@@ -1202,6 +1238,12 @@ var _ = Describe("m4appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
+			// Snapshot hashes for V1 apps before upgrading to V2
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameLocalIdxc, localappFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Manager app object hashes before V2 upgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameLocalShc, localappFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before V2 upgrade")
+
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -1244,8 +1286,9 @@ var _ = Describe("m4appfw test", func() {
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameLocalIdxc, localappFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Manager")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameLocalShc, localappFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
 
 			// Ensure M4 cluster is ready
 			Expect(testcaseEnvInst.VerifyM4ClusterReady(ctx, deployment, siteCount, testcaseEnvInst.VerifyClusterManagerReady)).To(Succeed(), "M4 cluster not ready")
@@ -1730,12 +1773,16 @@ var _ = Describe("m4appfw test", func() {
 			appFileName := testenv.GetAppFileList([]string{appName})
 			Expect(testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])).To(Succeed(), "App repo state verification failed")
 
+			// Snapshot hashes before disabling app
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileName)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Manager app object hashes before disabling app")
+
 			// Disable the app
 			err = cloudBackend.DisableApps(ctx, downloadDirV1, appFileName, s3TestDirIdxc)
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
+			// Wait for operator to detect disabled app content (ObjectHash flip)
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileName, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "Disabled app content not detected on Cluster Manager")
 
 			// Ensure Cluster Manager goes to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")
@@ -2025,6 +2072,12 @@ var _ = Describe("m4appfw test", func() {
 			// Verify App Download is in progress on Cluster Manager
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 
+			// Snapshot hashes for V1 apps before concurrent V2 upload
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Manager app object hashes before V2 concurrent upload")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before V2 concurrent upload")
+
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
 			appListV2 := []string{appListV2[0]}
@@ -2043,15 +2096,17 @@ var _ = Describe("m4appfw test", func() {
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs := testenv.GetPodUIDs(testcaseEnvInst.GetName())
 
+			// Wait for operator to detect new V2 content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Manager")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
+
 			//########## VERIFICATIONS ##########
 			appVersion = "V1"
 			Eventually(func() error {
 				return testcaseEnvInst.VerifyAppInstalled(ctx, deployment, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}, appListV1, false, "enabled", false, false)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
-			// Check for changes in App phase to determine if next poll has been triggered
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.BestEffortWaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			Eventually(func() error { return testcaseEnvInst.VerifyClusterManagerReady(ctx, deployment) }, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed(), "Cluster Manager not ready")

@@ -157,6 +157,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
+			// Snapshot hashes before uploading new version
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Master app object hashes before upgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before upgrade")
+
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -176,32 +182,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Best-effort check that the scheduler picked up the app change — for small
-			// diffs the whole download/install pipeline can finish within a single
-			// reconcile, so the flag flips back to false before the status update
-			// persists, and this would never observe it. VerifyC3ClusterReadyAndRFSF's
-			// larger retry budget is what actually absorbs the SHC/IDXC recycle chain.
-			func() {
-				flagCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(flagCtx, deployment, cm.Name, cm.Kind); err != nil {
-					testcaseEnvInst.Log.Info("IsDeploymentInProgress flag not observed as true; app pipeline may have completed within a single reconcile", "crKind", "CM", "error", err)
-				}
-			}()
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Master")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
+
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
-			// Best-effort check for app phase change — for small diffs the whole
-			// download/install pipeline can finish within a single reconcile, so the
-			// phase can cycle back to PhaseInstall before this ever observes the
-			// transient change. VerifyAppFrameworkState (below) independently verifies
-			// the true final install state, so this check is best-effort only.
-			func() {
-				phaseCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.WaitForAppPhaseChange(phaseCtx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.BestEffortProbeTimeout); err != nil {
-					testcaseEnvInst.Log.Info("App phase change not observed; app pipeline may have completed within a single reconcile", "crKind", cm.Kind, "error", err)
-				}
-			}()
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -305,6 +291,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############## DOWNGRADE APPS ###############
+			// Snapshot hashes before uploading new version
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Master app object hashes before downgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before downgrade")
+
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -324,32 +316,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Best-effort check that the scheduler picked up the app change — for small
-			// diffs the whole download/install pipeline can finish within a single
-			// reconcile, so the flag flips back to false before the status update
-			// persists, and this would never observe it. VerifyC3ClusterReadyAndRFSF's
-			// larger retry budget is what actually absorbs the SHC/IDXC recycle chain.
-			func() {
-				flagCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(flagCtx, deployment, cm.Name, cm.Kind); err != nil {
-					testcaseEnvInst.Log.Info("IsDeploymentInProgress flag not observed as true; app pipeline may have completed within a single reconcile", "crKind", "CM", "error", err)
-				}
-			}()
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Master")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
+
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
-			// Best-effort check for app phase change — for small diffs the whole
-			// download/install pipeline can finish within a single reconcile, so the
-			// phase can cycle back to PhaseInstall before this ever observes the
-			// transient change. VerifyAppFrameworkState (below) independently verifies
-			// the true final install state, so this check is best-effort only.
-			func() {
-				phaseCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.WaitForAppPhaseChange(phaseCtx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.BestEffortProbeTimeout); err != nil {
-					testcaseEnvInst.Log.Info("App phase change not observed; app pipeline may have completed within a single reconcile", "crKind", cm.Kind, "error", err)
-				}
-			}()
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -727,6 +699,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
+			// Snapshot hashes before uploading new version
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Master app object hashes before upgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before upgrade")
+
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -743,32 +721,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Best-effort check that the scheduler picked up the app change — for small
-			// diffs the whole download/install pipeline can finish within a single
-			// reconcile, so the flag flips back to false before the status update
-			// persists, and this would never observe it. VerifyC3ClusterReadyAndRFSF's
-			// larger retry budget is what actually absorbs the SHC/IDXC recycle chain.
-			func() {
-				flagCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.VerifyIsDeploymentInProgressFlagIsSet(flagCtx, deployment, cm.Name, cm.Kind); err != nil {
-					testcaseEnvInst.Log.Info("IsDeploymentInProgress flag not observed as true; app pipeline may have completed within a single reconcile", "crKind", "CM", "error", err)
-				}
-			}()
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Master")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
+
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
-			// Best-effort check for app phase change — for small diffs the whole
-			// download/install pipeline can finish within a single reconcile, so the
-			// phase can cycle back to PhaseInstall before this ever observes the
-			// transient change. VerifyAppFrameworkState (below) independently verifies
-			// the true final install state, so this check is best-effort only.
-			func() {
-				phaseCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.WaitForAppPhaseChange(phaseCtx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.BestEffortProbeTimeout); err != nil {
-					testcaseEnvInst.Log.Info("App phase change not observed; app pipeline may have completed within a single reconcile", "crKind", cm.Kind, "error", err)
-				}
-			}()
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -923,6 +881,8 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			previousClusterAppHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 			Expect(err).To(Succeed(), "Unable to capture app object hashes before upgrade")
+			previousClusterSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameClusterShc, clusterappFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before upgrade")
 
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
@@ -953,23 +913,15 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameClusterIdxc, clusterappFileList, previousClusterAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Master")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameClusterShc, clusterappFileList, previousClusterSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
+
 			// Object hash changes remain observable even if the transient app phases
 			// complete between test polling intervals.
 			Expect(testcaseEnvInst.WaitForAppObjectHashChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, previousClusterAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "Updated app object hash not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
-			// Best-effort check for app phase change — for small diffs the whole
-			// download/install pipeline can finish within a single reconcile, so the
-			// phase can cycle back to PhaseInstall before this ever observes the
-			// transient change. VerifyAppFrameworkState (below) independently verifies
-			// the true final install state, so this check is best-effort only.
-			func() {
-				phaseCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.WaitForAppPhaseChange(phaseCtx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.BestEffortProbeTimeout); err != nil {
-					testcaseEnvInst.Log.Info("App phase change not observed; app pipeline may have completed within a single reconcile", "crKind", cm.Kind, "error", err)
-				}
-			}()
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1143,6 +1095,8 @@ var _ = Describe("c3appfw test", func() {
 			//############# DOWNGRADE APPS ################
 			previousClusterAppHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 			Expect(err).To(Succeed(), "Unable to capture app object hashes before downgrade")
+			previousClusterSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameClusterShc, clusterappFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before downgrade")
 
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
@@ -1173,21 +1127,13 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameClusterIdxc, clusterappFileList, previousClusterAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Master")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameClusterShc, clusterappFileList, previousClusterSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
+
 			Expect(testcaseEnvInst.WaitForAppObjectHashChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, previousClusterAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "Downgraded app object hash not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
-			// Best-effort check for app phase change — for small diffs the whole
-			// download/install pipeline can finish within a single reconcile, so the
-			// phase can cycle back to PhaseInstall before this ever observes the
-			// transient change. VerifyAppFrameworkState (below) independently verifies
-			// the true final install state, so this check is best-effort only.
-			func() {
-				phaseCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.WaitForAppPhaseChange(phaseCtx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.BestEffortProbeTimeout); err != nil {
-					testcaseEnvInst.Log.Info("App phase change not observed; app pipeline may have completed within a single reconcile", "crKind", cm.Kind, "error", err)
-				}
-			}()
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1383,6 +1329,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			// ############### UPGRADE APPS ################
+			// Snapshot hashes before uploading new version
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Master app object hashes before upgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before upgrade")
+
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -1400,11 +1352,6 @@ var _ = Describe("c3appfw test", func() {
 			uploadedFiles, err = cloudBackend.UploadFiles(ctx, s3TestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Check for changes in App phase to determine if next poll has been triggered.
-			// Best-effort: manual poll has not been enabled yet at this point, so a phase
-			// change is not guaranteed to be observable here.
-			_ = testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.BestEffortProbeTimeout)
 
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
@@ -1470,6 +1417,10 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
+
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Master")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1581,6 +1532,12 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyNoPodResetByUID(ctx, splunkPodUIDs, nil)).To(Succeed(), "Unexpected pod reset detected")
 
 			//############### UPGRADE APPS ################
+			// Snapshot hashes before uploading new version
+			oldCMHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Cluster Master app object hashes before upgrade")
+			oldSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before upgrade")
+
 			// Delete V1 apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
 			Expect(cloudBackend.DeleteFiles(ctx, uploadedApps)).To(Succeed(), "S3 file deletion failed")
@@ -1597,8 +1554,6 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
 
@@ -1653,6 +1608,10 @@ var _ = Describe("c3appfw test", func() {
 				defer cancel()
 				return testcaseEnvInst.VerifyRFSFMet(attemptCtx, deployment)
 			}, deployment.GetTimeout(), testenv.PollInterval).Should(Succeed(), "RF/SF not met")
+
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, oldCMHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Master")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, oldSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -1808,6 +1767,8 @@ var _ = Describe("c3appfw test", func() {
 			//############### UPGRADE APPS ################
 			previousClusterAppHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList)
 			Expect(err).To(Succeed(), "Unable to capture app object hashes before manual upgrade")
+			previousClusterSHCHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameClusterShc, clusterappFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before manual upgrade")
 
 			// Delete apps on S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
@@ -1850,21 +1811,13 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameClusterIdxc, clusterappFileList, previousClusterAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Master")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameClusterShc, clusterappFileList, previousClusterSHCHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
+
 			Expect(testcaseEnvInst.WaitForAppObjectHashChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, previousClusterAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "Manually updated app object hash not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
-			// Best-effort check for app phase change — for small diffs the whole
-			// download/install pipeline can finish within a single reconcile, so the
-			// phase can cycle back to PhaseInstall before this ever observes the
-			// transient change. VerifyAppFrameworkState (below) independently verifies
-			// the true final install state, so this check is best-effort only.
-			func() {
-				phaseCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.WaitForAppPhaseChange(phaseCtx, deployment, deployment.GetName(), cm.Kind, appSourceNameClusterIdxc, clusterappFileList, testenv.BestEffortProbeTimeout); err != nil {
-					testcaseEnvInst.Log.Info("App phase change not observed; app pipeline may have completed within a single reconcile", "crKind", cm.Kind, "error", err)
-				}
-			}()
 
 			// Get Pod age to check for pod resets later
 			splunkPodUIDs = testenv.GetPodUIDs(testcaseEnvInst.GetName())
@@ -2357,12 +2310,16 @@ var _ = Describe("c3appfw test", func() {
 			appFileName := testenv.GetAppFileList([]string{appName})
 			Expect(testcaseEnvInst.VerifyAppRepoState(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])).To(Succeed(), "App repo state verification failed")
 
+			// Snapshot hashes before disabling the app so WaitForAppContentUpdate can detect the change
+			oldHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
+			Expect(err).To(Succeed(), "Unable to snapshot app object hashes before disable")
+
 			// Disable the app
 			err = cloudBackend.DisableApps(ctx, downloadDirV1, appFileName, s3TestDirIdxc)
 			Expect(err).To(Succeed(), "Unable to disable apps on S3")
 
-			// Check for changes in App phase to determine if next poll has been triggered
-			Expect(testcaseEnvInst.WaitForAppPhaseChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName, testenv.AppInstallTimeout)).To(Succeed(), "App phase change not detected")
+			// Wait for operator to detect the disabled app (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName, oldHashes, testenv.AppInstallTimeout)).To(Succeed(), "App content change not detected after disable")
 			// Ensure Cluster Master goes to Ready phase
 			Eventually(func() error {
 				attemptCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
@@ -2459,6 +2416,8 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.VerifyAppState(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending, testenv.AppStateVerificationTimeout)).To(Succeed(), "App state verification failed")
 			previousAppHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 			Expect(err).To(Succeed(), "Unable to capture app object hashes before update")
+			previousSHCAppHashes, err := testcaseEnvInst.GetAppObjectHashes(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to snapshot Search Head Cluster app object hashes before update")
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
@@ -2485,21 +2444,12 @@ var _ = Describe("c3appfw test", func() {
 			}, deployment.GetTimeout(), testenv.PollInterval).Should(Succeed(), "App installation verification failed")
 
 			appFileList = testenv.GetAppFileList(appListV2)
+			// Wait for operator to detect new content (ObjectHash flip) and complete installation
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, cm.Name, cm.Kind, appSourceNameIdxc, appFileList, previousAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Cluster Master")
+			Expect(testcaseEnvInst.WaitForAppContentUpdate(ctx, deployment, shc.Name, shc.Kind, appSourceNameShc, appFileList, previousSHCAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "New app content not picked up and installed on Search Head Cluster")
 			Expect(testcaseEnvInst.WaitForAppObjectHashChange(ctx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, previousAppHashes, testenv.AppInstallTimeout)).To(Succeed(), "Updated app object hash not detected")
 			// Ensure C3 cluster is ready and RF/SF met
 			Expect(testcaseEnvInst.VerifyC3ClusterReadyAndRFSF(ctx, deployment, testcaseEnvInst.VerifyClusterMasterReady)).To(Succeed(), "C3 cluster not ready or RF/SF not met")
-			// Best-effort check for app phase change — for small diffs the whole
-			// download/install pipeline can finish within a single reconcile, so the
-			// phase can cycle back to PhaseInstall before this ever observes the
-			// transient change. VerifyAppFrameworkState (below) independently verifies
-			// the true final install state, so this check is best-effort only.
-			func() {
-				phaseCtx, cancel := context.WithTimeout(ctx, testenv.BestEffortProbeTimeout)
-				defer cancel()
-				if err := testcaseEnvInst.WaitForAppPhaseChange(phaseCtx, deployment, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, testenv.BestEffortProbeTimeout); err != nil {
-					testcaseEnvInst.Log.Info("App phase change not observed; app pipeline may have completed within a single reconcile", "crKind", cm.Kind, "error", err)
-				}
-			}()
 
 			//############  UPGRADE VERIFICATIONS ############
 			appVersion = "V2"
