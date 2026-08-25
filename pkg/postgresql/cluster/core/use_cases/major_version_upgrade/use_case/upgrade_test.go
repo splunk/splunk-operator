@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
@@ -100,7 +100,7 @@ func TestMajorUpgradeUseCaseScheduleBlocksCompletedIntent(t *testing.T) {
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &phase,
 			Strategy:        &strategy,
 			SourcePgVersion: &source,
@@ -129,7 +129,7 @@ func TestMajorUpgradeUseCaseScheduleBlocksFailedIntentWithoutNewerRetryAnnotatio
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &phase,
 			Strategy:        &strategy,
 			SourcePgVersion: &source,
@@ -163,7 +163,7 @@ func TestMajorUpgradeUseCaseScheduleAllowsFailedIntentWithNewerRetryAnnotation(t
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &phase,
 			Strategy:        &strategy,
 			SourcePgVersion: &source,
@@ -444,7 +444,7 @@ func TestMajorUpgradeUseCaseRetryAfterTerminalFailureResumesFlow(t *testing.T) {
 		SourcePgVersion:  source,
 		TargetPgVersion:  target,
 		RetryRequestedAt: &retryAt,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &phase,
 			Strategy:        &strategy,
 			SourcePgVersion: &source,
@@ -532,7 +532,7 @@ func TestMajorUpgradeUseCaseDoesNotReemitPreUpgradeBackupStartedOnRetry(t *testi
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &preUpgradeBackup,
 			Strategy:        &strategy,
 			SourcePgVersion: &source,
@@ -564,7 +564,7 @@ func postUpgradeIntent(phase string) mvutypes.Intent {
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &phase,
 			Strategy:        &strategy,
 			SourcePgVersion: &source,

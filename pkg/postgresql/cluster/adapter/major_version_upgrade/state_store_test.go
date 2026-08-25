@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	"github.com/stretchr/testify/assert"
@@ -33,10 +33,10 @@ import (
 )
 
 func TestMajorUpgradeInputFromClusterRequiresAllow(t *testing.T) {
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{
+	cluster := &platformv1alpha1.PostgresCluster{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: ptr.To("18"),
-			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: ptr.To(false),
 			},
 		},
@@ -49,10 +49,10 @@ func TestMajorUpgradeInputFromClusterRequiresAllow(t *testing.T) {
 }
 
 func TestMajorUpgradeInputFromClusterUsesPostgresVersionAsTarget(t *testing.T) {
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{
+	cluster := &platformv1alpha1.PostgresCluster{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: ptr.To("18"),
-			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: ptr.To(true),
 			},
 		},
@@ -67,9 +67,9 @@ func TestMajorUpgradeInputFromClusterUsesPostgresVersionAsTarget(t *testing.T) {
 
 func TestMajorUpgradeStateStoreReadsClusterFromSpecification(t *testing.T) {
 	reader := NewMajorUpgradeStateStore(fakeStateStore{
-		spec: &enterprisev4.PostgresClusterSpec{
+		spec: &platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: ptr.To("18"),
-			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: ptr.To(true),
 			},
 		},
@@ -86,16 +86,16 @@ func TestMajorUpgradeStateStoreComposesSpecificationStatusAndAnnotations(t *test
 	target := "17"
 	retryAt := "2026-06-24T10:00:00Z"
 	reader := NewMajorUpgradeStateStore(fakeStateStore{
-		spec: &enterprisev4.PostgresClusterSpec{
+		spec: &platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: ptr.To("18"),
-			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: ptr.To(true),
 			},
 		},
 		annotations: map[string]string{
 			mvutypes.AnnotationMajorUpgradeRetryAt: retryAt,
 		},
-		entries: []enterprisev4.PostgresMajorUpgradeStatus{{
+		entries: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &completed,
 			TargetPgVersion: &target,
 		}},
@@ -118,15 +118,15 @@ func TestMajorUpgradeInputFromClusterSkipsWhenSourceMajorMatchesTargetMajor(t *t
 	source := "17"
 	target := "18"
 
-	cluster := &enterprisev4.PostgresCluster{
-		Spec: enterprisev4.PostgresClusterSpec{
+	cluster := &platformv1alpha1.PostgresCluster{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: ptr.To("18.2"),
-			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: ptr.To(true),
 			},
 		},
-		Status: enterprisev4.PostgresClusterStatus{
-			PostgresMajorUpgradeStatus: []enterprisev4.PostgresMajorUpgradeStatus{{
+		Status: platformv1alpha1.PostgresClusterStatus{
+			PostgresMajorUpgradeStatus: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 				Phase:           &completed,
 				Strategy:        &strategy,
 				SourcePgVersion: &source,
@@ -164,7 +164,7 @@ func TestStateWithReportClearsTerminalFailureAfterRetry(t *testing.T) {
 		SourcePgVersion:  source,
 		TargetPgVersion:  target,
 		RetryRequestedAt: &retryAt,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &phase,
 			Strategy:        &strategy,
 			SourcePgVersion: &source,
@@ -225,7 +225,7 @@ func TestStateWithReportClearsRetryableFailureWhenProgressResumes(t *testing.T) 
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &phase,
 			Strategy:        &strategy,
 			SourcePgVersion: &source,
@@ -263,7 +263,7 @@ func TestStateWithReportStartsFreshEntryForNewIntent(t *testing.T) {
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
 			Phase:           &completed,
 			Strategy:        &strategy,
 			SourcePgVersion: &oldSource,
@@ -309,7 +309,7 @@ func TestStateWithReportUpdatesMatchingEntryAndPreservesHistory(t *testing.T) {
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{
 			{
 				Phase:           &completed,
 				Strategy:        &strategy,
@@ -424,9 +424,9 @@ func TestRemoveConditionDoesNotMutateOriginalSlice(t *testing.T) {
 // case where spec.PostgresVersion is nil — the input must report disabled so
 // the use case is not activated before the version is resolved.
 func TestMajorUpgradeInputFromPartsNilPostgresVersion(t *testing.T) {
-	spec := &enterprisev4.PostgresClusterSpec{
+	spec := &platformv1alpha1.PostgresClusterSpec{
 		PostgresVersion: nil,
-		PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+		PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 			Allow: ptr.To(true),
 		},
 	}
@@ -445,9 +445,9 @@ func TestMajorUpgradeInputFromPartsNilPostgresVersion(t *testing.T) {
 // class-inherited resolved version so the intent is enabled.
 func TestMajorUpgradeInputFromPartsNilPostgresVersionWithOverride(t *testing.T) {
 	reader := NewMajorUpgradeStateStoreWithTarget(fakeStateStore{
-		spec: &enterprisev4.PostgresClusterSpec{
+		spec: &platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: nil,
-			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: ptr.To(true),
 			},
 		},
@@ -504,7 +504,7 @@ func TestStateWithReportPhaseForDuplicateEntries(t *testing.T) {
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State: []enterprisev4.PostgresMajorUpgradeStatus{
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{
 			{
 				Phase:           &firstPhase,
 				Strategy:        &strategy,
@@ -548,18 +548,18 @@ func TestPreUpgradeBackupNameSurvivesTerminalFailure(t *testing.T) {
 	preUpgradePhase := string(mvutypes.PreUpgradeBackup)
 
 	// Seed a prior state entry that already has the pre-upgrade backup name recorded.
-	prior := enterprisev4.PostgresMajorUpgradeStatus{
+	prior := platformv1alpha1.PostgresMajorUpgradeStatus{
 		Phase:           &preUpgradePhase,
 		Strategy:        &strategy,
 		SourcePgVersion: &source,
 		TargetPgVersion: &target,
-		BackupNames:     &enterprisev4.UpgradeBackupNames{PreUpgrade: &preUpgradeName},
+		BackupNames:     &platformv1alpha1.UpgradeBackupNames{PreUpgrade: &preUpgradeName},
 	}
 	intent := mvutypes.Intent{
 		Strategy:        strategy,
 		SourcePgVersion: source,
 		TargetPgVersion: target,
-		State:           []enterprisev4.PostgresMajorUpgradeStatus{prior},
+		State:           []platformv1alpha1.PostgresMajorUpgradeStatus{prior},
 	}
 	failedReport := reconciliationTypes.Report{
 		Name:  mvutypes.UseCaseName,
@@ -581,7 +581,7 @@ func TestPreUpgradeBackupNameSurvivesTerminalFailure(t *testing.T) {
 // allowing a spurious retry.
 func TestRetryRequestedAfterTerminalFailureEmptyConditions(t *testing.T) {
 	retryAt := metav1.NewTime(time.Date(2026, 6, 24, 10, 1, 0, 0, time.UTC))
-	entry := enterprisev4.PostgresMajorUpgradeStatus{
+	entry := platformv1alpha1.PostgresMajorUpgradeStatus{
 		Conditions: nil, // no conditions written yet
 	}
 	if mvutypes.RetryRequestedAfterTerminalFailure(&retryAt, entry) {
@@ -590,29 +590,29 @@ func TestRetryRequestedAfterTerminalFailureEmptyConditions(t *testing.T) {
 }
 
 type fakeStateStore struct {
-	spec            *enterprisev4.PostgresClusterSpec
+	spec            *platformv1alpha1.PostgresClusterSpec
 	annotations     map[string]string
-	entries         []enterprisev4.PostgresMajorUpgradeStatus
+	entries         []platformv1alpha1.PostgresMajorUpgradeStatus
 	sourcePgVersion string
 	specErr         error
 	statusErr       error
 }
 
-func (f fakeStateStore) GetSpecificationWithAnnotations(context.Context) (*enterprisev4.PostgresClusterSpec, map[string]string, error) {
+func (f fakeStateStore) GetSpecificationWithAnnotations(context.Context) (*platformv1alpha1.PostgresClusterSpec, map[string]string, error) {
 	if f.specErr != nil {
 		return nil, nil, f.specErr
 	}
 	if f.spec != nil {
 		return f.spec, f.annotations, nil
 	}
-	return &enterprisev4.PostgresClusterSpec{}, f.annotations, nil
+	return &platformv1alpha1.PostgresClusterSpec{}, f.annotations, nil
 }
 
-func (f fakeStateStore) GetMajorUpgradeStatus(context.Context) ([]enterprisev4.PostgresMajorUpgradeStatus, error) {
+func (f fakeStateStore) GetMajorUpgradeStatus(context.Context) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error) {
 	return f.entries, f.statusErr
 }
 
-func (f fakeStateStore) SetMajorUpgradeStatus(context.Context, []enterprisev4.PostgresMajorUpgradeStatus) error {
+func (f fakeStateStore) SetMajorUpgradeStatus(context.Context, []platformv1alpha1.PostgresMajorUpgradeStatus) error {
 	return f.statusErr
 }
 

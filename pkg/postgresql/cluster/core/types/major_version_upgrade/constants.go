@@ -53,7 +53,7 @@ const (
 )
 
 const (
-	AnnotationMajorUpgradeRetryAt = "enterprise.splunk.com/major-upgrade-retry-at"
+	AnnotationMajorUpgradeRetryAt = "platform.splunk.com/major-upgrade-retry-at"
 )
 
 const (

@@ -33,8 +33,8 @@ pooling, TLS, and version upgrades are all easy to get wrong. We need a way to:
   cluster) as well as dedicated clusters;
 - deliver HA, backup/PITR, pooling, TLS, and upgrades without re-implementing
   them in the operator;
-- integrate with the existing Splunk Operator (its API group, scheme, RBAC, and
-  release cadence) rather than shipping a separate operator.
+- integrate with the existing Splunk Operator runtime and release cadence while
+  retaining a separately owned API group and RBAC boundary.
 
 ## Considered alternatives
 
@@ -52,11 +52,11 @@ per-database churn, and makes shared multi-tenant clusters awkward. We chose a
 `PostgresCluster` and `PostgresDatabase` (service team, namespaced).
 (See [ADR-0001](adr/0001-crd-structure-and-api-group.md).)
 
-**A new `database.splunk.com` API group.** Rejected. A separate group means a
-second scheme, second RBAC group rules, a separate conversion-webhook story, and
-its own version timeline. Because the resources are shipped by and only
-meaningful within the Splunk Operator, we chose to **reuse
-`enterprise.splunk.com/v4`** (API group migration tracked in CPI-2030).
+**Keep the PostgreSQL types in `enterprise.splunk.com/v4`.** Rejected. The
+enterprise API is a stable public contract governed by SOK API owners, while the
+PostgreSQL API is pre-v1 and owned by its developing team. We chose the dedicated
+**`platform.splunk.com/v1alpha1`** group so it can evolve independently while
+remaining part of the Splunk Operator (migration tracked in CPI-2030).
 
 **Mutable classes / everything overridable.** Rejected. Mutating a shared
 template silently reconfigures every cluster built on it, and letting service
@@ -95,7 +95,7 @@ sharing only small helpers. (See
 ## Chosen approach
 
 The Splunk Operator manages PostgreSQL by **orchestrating CNPG declaratively**
-through three CRDs on the existing `enterprise.splunk.com/v4` group:
+through three CRDs in the dedicated `platform.splunk.com/v1alpha1` group:
 
 1. **`PostgresClusterClass`** (cluster-scoped, immutable) carries platform
    policy and overridable defaults. Service teams reference it by name.

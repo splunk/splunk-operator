@@ -26,7 +26,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,7 +57,7 @@ func ScrapePostgresMetrics(
 	scrapeCtx, cancel := context.WithTimeout(ctx, postgresMetricsScrapeTimeout)
 	defer cancel()
 
-	cluster := &enterprisev4.PostgresCluster{}
+	cluster := &platformv1alpha1.PostgresCluster{}
 	if err := kubeClient.Get(scrapeCtx, clusterKey, cluster); err != nil {
 		return nil, fmt.Errorf("getting PostgresCluster primary for metrics scrape: %w", err)
 	}

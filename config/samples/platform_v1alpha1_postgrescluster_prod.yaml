@@ -1,6 +1,6 @@
 # This is a sample PostgresCluster manifest with default values for all fields. 
 # Defaults are inherited from the ClusterClass "postgresql-dev" (see enterprise_v4_clusterclass_dev.yaml) and can be overridden here.
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   labels:

@@ -18,7 +18,7 @@ package prometheus
 import (
 	"context"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,7 +37,7 @@ func NewFleetCollector() *FleetCollector {
 func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Client, recorder ports.Recorder) {
 	logger := log.FromContext(ctx)
 
-	var list enterprisev4.PostgresClusterList
+	var list platformv1alpha1.PostgresClusterList
 	if err := c.List(ctx, &list); err != nil {
 		logger.Error(err, "Failed to list PostgresClusters for fleet metrics")
 		return
@@ -93,7 +93,7 @@ func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Cl
 func (fc *FleetCollector) CollectDatabaseMetrics(ctx context.Context, c client.Client, recorder ports.Recorder) {
 	logger := log.FromContext(ctx)
 
-	var list enterprisev4.PostgresDatabaseList
+	var list platformv1alpha1.PostgresDatabaseList
 	if err := c.List(ctx, &list); err != nil {
 		logger.Error(err, "Failed to list PostgresDatabases for fleet metrics")
 		return

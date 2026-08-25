@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -49,11 +49,11 @@ type objectStoreModel struct {
 	scheme       *runtime.Scheme
 	events       eventEmitter
 	updateStatus healthStatusUpdater
-	cluster      *enterprisev4.PostgresCluster
+	cluster      *platformv1alpha1.PostgresCluster
 	mergedConfig *MergedConfig
 }
 
-func newObjectStoreModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, mergedConfig *MergedConfig) *objectStoreModel {
+func newObjectStoreModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, mergedConfig *MergedConfig) *objectStoreModel {
 	return &objectStoreModel{
 		client:       c,
 		scheme:       scheme,
@@ -102,7 +102,7 @@ func (o *objectStoreModel) computeHealth(reconcileErr error) (componentHealth, e
 	return newReadyHealth(objectStoreReady, reasonObjectStoreConfigured, "ObjectStore is configured"), nil
 }
 
-func (o *objectStoreModel) createOrUpdateObjectStore(ctx context.Context, cfg *enterprisev4.CNPGBarmanObjectStoreConfig) error {
+func (o *objectStoreModel) createOrUpdateObjectStore(ctx context.Context, cfg *platformv1alpha1.CNPGBarmanObjectStoreConfig) error {
 	name := objectStoreName(o.cluster.Name)
 	desired := o.buildObjectStore(name, cfg)
 
@@ -173,7 +173,7 @@ func (o *objectStoreModel) deleteObjectStore(ctx context.Context) error {
 // structs. If that CRD schema changes (field renames/restructures), these keys
 // must be updated in lockstep — a mismatch produces an ObjectStore the plugin
 // rejects rather than a compile error. See ObjectStoreGVK for the pinned version.
-func (o *objectStoreModel) buildObjectStore(name string, cfg *enterprisev4.CNPGBarmanObjectStoreConfig) *unstructured.Unstructured {
+func (o *objectStoreModel) buildObjectStore(name string, cfg *platformv1alpha1.CNPGBarmanObjectStoreConfig) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(ObjectStoreGVK)
 	obj.SetName(name)

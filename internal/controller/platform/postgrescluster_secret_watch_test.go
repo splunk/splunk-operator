@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -29,7 +29,7 @@ func newClusterWatchScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	return scheme
 }
 
@@ -48,23 +48,23 @@ func TestExtractExternalSuperuserSecretName(t *testing.T) {
 		},
 		{
 			name: "no PasswordConfig yields nil",
-			obj:  &enterprisev4.PostgresCluster{},
+			obj:  &platformv1alpha1.PostgresCluster{},
 			want: nil,
 		},
 		{
 			name: "empty SuperuserExternalSecretRef.Name yields nil",
-			obj: &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{
-					PasswordConfig: &enterprisev4.SuperuserPasswordConfig{},
+			obj: &platformv1alpha1.PostgresCluster{
+				Spec: platformv1alpha1.PostgresClusterSpec{
+					PasswordConfig: &platformv1alpha1.SuperuserPasswordConfig{},
 				},
 			},
 			want: nil,
 		},
 		{
 			name: "external ref name is indexed",
-			obj: &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{
-					PasswordConfig: &enterprisev4.SuperuserPasswordConfig{
+			obj: &platformv1alpha1.PostgresCluster{
+				Spec: platformv1alpha1.PostgresClusterSpec{
+					PasswordConfig: &platformv1alpha1.SuperuserPasswordConfig{
 						SuperuserExternalSecretRef: corev1.LocalObjectReference{Name: "ext-sup"},
 					},
 				},
@@ -92,21 +92,21 @@ func TestEnqueueClustersForExternalSecret(t *testing.T) {
 		clusterRef = "pg1"
 	)
 
-	matchingPC := &enterprisev4.PostgresCluster{
+	matchingPC := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: clusterRef, Namespace: ns},
-		Spec: enterprisev4.PostgresClusterSpec{
-			PasswordConfig: &enterprisev4.SuperuserPasswordConfig{
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			PasswordConfig: &platformv1alpha1.SuperuserPasswordConfig{
 				SuperuserExternalSecretRef: corev1.LocalObjectReference{Name: extSecret},
 			},
 		},
 	}
-	internalPC := &enterprisev4.PostgresCluster{
+	internalPC := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "internal-pg", Namespace: ns},
 	}
-	otherNSPC := &enterprisev4.PostgresCluster{
+	otherNSPC := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg-elsewhere", Namespace: otherNS},
-		Spec: enterprisev4.PostgresClusterSpec{
-			PasswordConfig: &enterprisev4.SuperuserPasswordConfig{
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			PasswordConfig: &platformv1alpha1.SuperuserPasswordConfig{
 				SuperuserExternalSecretRef: corev1.LocalObjectReference{Name: extSecret},
 			},
 		},
@@ -114,7 +114,7 @@ func TestEnqueueClustersForExternalSecret(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithIndex(&enterprisev4.PostgresCluster{}, indexExternalSuperuserSecret, extractExternalSuperuserSecretName).
+		WithIndex(&platformv1alpha1.PostgresCluster{}, indexExternalSuperuserSecret, extractExternalSuperuserSecretName).
 		WithObjects(matchingPC, internalPC, otherNSPC).
 		Build()
 
@@ -145,7 +145,7 @@ func TestEnqueueClustersForExternalSecret(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: ownedName, Namespace: ns,
 				OwnerReferences: []metav1.OwnerReference{{
-					APIVersion: enterprisev4.GroupVersion.String(),
+					APIVersion: platformv1alpha1.GroupVersion.String(),
 					Kind:       "PostgresCluster",
 					Name:       clusterRef,
 					Controller: ptr.To(true),

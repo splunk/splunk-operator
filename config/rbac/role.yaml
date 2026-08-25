@@ -94,8 +94,6 @@ rules:
   - licensemasters
   - monitoringconsoles
   - objectstorages
-  - postgresclusters
-  - postgresdatabases
   - queues
   - searchheadclusters
   - standalones
@@ -118,8 +116,6 @@ rules:
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
   - objectstorages/finalizers
-  - postgresclusters/finalizers
-  - postgresdatabases/finalizers
   - queues/finalizers
   - searchheadclusters/finalizers
   - standalones/finalizers
@@ -136,7 +132,6 @@ rules:
   - licensemasters/status
   - monitoringconsoles/status
   - objectstorages/status
-  - postgresclusters/status
   - queues/status
   - searchheadclusters/status
   - standalones/status
@@ -145,7 +140,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - enterprise.splunk.com
+  - platform.splunk.com
   resources:
   - postgresclusterclasses
   verbs:
@@ -153,7 +148,35 @@ rules:
   - list
   - watch
 - apiGroups:
-  - enterprise.splunk.com
+  - platform.splunk.com
+  resources:
+  - postgresclusters
+  - postgresdatabases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - postgresclusters/finalizers
+  - postgresdatabases/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - postgresclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - platform.splunk.com
   resources:
   - postgresdatabases/status
   verbs:

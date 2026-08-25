@@ -98,7 +98,7 @@ After fixing the issue, redeploy the `PostgresDatabase` with a spec change. The 
 For example, update a real spec field that matches the intended configuration change:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: <name>

@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
@@ -42,14 +42,14 @@ type poolerModel struct {
 	scheme         *runtime.Scheme
 	events         poolerEmitter
 	updateStatus   healthStatusUpdater
-	cluster        *enterprisev4.PostgresCluster
-	clusterClass   *enterprisev4.PostgresClusterClass
+	cluster        *platformv1alpha1.PostgresCluster
+	clusterClass   *platformv1alpha1.PostgresClusterClass
 	mergedConfig   *MergedConfig
 	contracts      *reconcileContracts
 	metricsEnabled bool
 }
 
-func newPoolerModel(c client.Client, scheme *runtime.Scheme, events poolerEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, clusterClass *enterprisev4.PostgresClusterClass, mergedConfig *MergedConfig, contracts *reconcileContracts) *poolerModel {
+func newPoolerModel(c client.Client, scheme *runtime.Scheme, events poolerEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, clusterClass *platformv1alpha1.PostgresClusterClass, mergedConfig *MergedConfig, contracts *reconcileContracts) *poolerModel {
 	model := &poolerModel{
 		client:       c,
 		scheme:       scheme,
@@ -102,14 +102,14 @@ func (p *poolerModel) rwPoolerWanted() bool {
 
 // isPoolerEnabled reports whether the connection pooler is enabled by the
 // supplied ConnectionPoolerEnableConfig (nil-safe).
-func isPoolerEnabled(c *enterprisev4.ConnectionPoolerEnableConfig) bool {
+func isPoolerEnabled(c *platformv1alpha1.ConnectionPoolerEnableConfig) bool {
 	return c != nil && c.Enabled != nil && *c.Enabled
 }
 
 // poolerReadWriteWanted reports whether the RW pooler is opted-in. Default is
 // true when the parent struct exists; consumers should pair this with
 // isPoolerEnabled before acting on it.
-func poolerReadWriteWanted(c *enterprisev4.ConnectionPoolerEnableConfig) bool {
+func poolerReadWriteWanted(c *platformv1alpha1.ConnectionPoolerEnableConfig) bool {
 	if c == nil {
 		return false
 	}
@@ -119,7 +119,7 @@ func poolerReadWriteWanted(c *enterprisev4.ConnectionPoolerEnableConfig) bool {
 // poolerReadOnlyWanted reports whether the RO pooler is opted-in. Default is
 // true when the parent struct exists; consumers should pair this with
 // isPoolerEnabled and the instances>=2 check before acting on it.
-func poolerReadOnlyWanted(c *enterprisev4.ConnectionPoolerEnableConfig) bool {
+func poolerReadOnlyWanted(c *platformv1alpha1.ConnectionPoolerEnableConfig) bool {
 	if c == nil {
 		return false
 	}
@@ -140,11 +140,11 @@ func PoolerReadOnlyRequested(merged *MergedConfig) bool {
 // on top of the class-level defaults at the sub-field granularity, so cluster
 // overrides one field (e.g. ReadOnly) without dropping the class-supplied
 // values for the rest. Returns nil only when both inputs are nil.
-func mergeConnectionPoolerEnable(cluster, class *enterprisev4.ConnectionPoolerEnableConfig) *enterprisev4.ConnectionPoolerEnableConfig {
+func mergeConnectionPoolerEnable(cluster, class *platformv1alpha1.ConnectionPoolerEnableConfig) *platformv1alpha1.ConnectionPoolerEnableConfig {
 	if cluster == nil && class == nil {
 		return nil
 	}
-	out := &enterprisev4.ConnectionPoolerEnableConfig{}
+	out := &platformv1alpha1.ConnectionPoolerEnableConfig{}
 	if cluster != nil {
 		out.Enabled = cluster.Enabled
 		out.ReadWrite = cluster.ReadWrite
@@ -335,7 +335,7 @@ func (p *poolerModel) computeHealth(ctx context.Context, reconcileErr error) (co
 		return newPendingHealth(poolerReady, reasonPoolerCreating, msgPoolersNotReady), nil
 	}
 
-	p.cluster.Status.ConnectionPoolerStatus = &enterprisev4.ConnectionPoolerStatus{
+	p.cluster.Status.ConnectionPoolerStatus = &platformv1alpha1.ConnectionPoolerStatus{
 		Enabled:          true,
 		ReadWriteEnabled: rwWanted,
 		ReadOnlyEnabled:  roWanted,
@@ -349,7 +349,7 @@ func poolerResourceName(clusterName, poolerType string) string {
 	return fmt.Sprintf("%s%s%s", clusterName, defaultPoolerSuffix, poolerType)
 }
 
-func poolerExists(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, poolerType string) (bool, error) {
+func poolerExists(ctx context.Context, c client.Client, cluster *platformv1alpha1.PostgresCluster, poolerType string) (bool, error) {
 	pooler := &cnpgv1.Pooler{}
 	err := c.Get(ctx, types.NamespacedName{
 		Name:      poolerResourceName(cluster.Name, poolerType),
@@ -386,7 +386,7 @@ func isPoolerReady(pooler *cnpgv1.Pooler) bool {
 }
 
 // createOrUpdateConnectionPoolers creates RW and RO poolers if they don't exist.
-func createOrUpdateConnectionPoolers(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerMetricsEnabled bool) error {
+func createOrUpdateConnectionPoolers(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerMetricsEnabled bool) error {
 	if err := createAndUpdateConnectionPooler(ctx, c, scheme, cluster, cfg, cnpgCluster, readWriteEndpoint, poolerMetricsEnabled); err != nil {
 		return fmt.Errorf("reconciling RW pooler: %w", err)
 	}
@@ -396,7 +396,7 @@ func createOrUpdateConnectionPoolers(ctx context.Context, c client.Client, schem
 	return nil
 }
 
-func createAndUpdateConnectionPooler(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool) error {
+func createAndUpdateConnectionPooler(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool) error {
 	logger := logging.FromContext(ctx).With("func", "createAndUpdateConnectionPooler")
 	poolerName := poolerResourceName(cluster.Name, poolerType)
 	existing := &cnpgv1.Pooler{}
@@ -463,7 +463,7 @@ func normalizeCNPGPoolerSpec(spec cnpgv1.PoolerSpec) normalizedCNPGPoolerSpec {
 	return normalized
 }
 
-func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool) (*cnpgv1.Pooler, error) {
+func buildCNPGPooler(scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool) (*cnpgv1.Pooler, error) {
 	if cfg == nil || cfg.CNPG == nil || cfg.CNPG.ConnectionPooler == nil {
 		return nil, fmt.Errorf("connection pooler config is required")
 	}
@@ -503,7 +503,7 @@ func buildCNPGPooler(scheme *runtime.Scheme, cluster *enterprisev4.PostgresClust
 }
 
 // deleteConnectionPoolers removes RW and RO poolers if they exist.
-func deleteConnectionPoolers(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster) error {
+func deleteConnectionPoolers(ctx context.Context, c client.Client, cluster *platformv1alpha1.PostgresCluster) error {
 	for _, poolerType := range []string{readWriteEndpoint, readOnlyEndpoint} {
 		if err := deleteConnectionPooler(ctx, c, cluster, poolerType); err != nil {
 			return err
@@ -513,7 +513,7 @@ func deleteConnectionPoolers(ctx context.Context, c client.Client, cluster *ente
 }
 
 // deleteConnectionPooler removes a single pooler (by type) if it exists.
-func deleteConnectionPooler(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, poolerType string) error {
+func deleteConnectionPooler(ctx context.Context, c client.Client, cluster *platformv1alpha1.PostgresCluster, poolerType string) error {
 	logger := logging.FromContext(ctx).With("func", "deleteConnectionPooler")
 	poolerName := poolerResourceName(cluster.Name, poolerType)
 	exist, err := poolerExists(ctx, c, cluster, poolerType)

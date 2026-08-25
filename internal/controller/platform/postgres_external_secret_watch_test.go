@@ -18,7 +18,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -63,8 +63,8 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 		secretName    string
 		pgClusterKey  types.NamespacedName
 		extSecretKey  types.NamespacedName
-		pgCluster     *enterprisev4.PostgresCluster
-		clusterClass  *enterprisev4.PostgresClusterClass
+		pgCluster     *platformv1alpha1.PostgresCluster
+		clusterClass  *platformv1alpha1.PostgresClusterClass
 		externalCreds = map[string][]byte{
 			"username": []byte("postgres"),
 			"password": []byte("p4ssw0rd-rotated"),
@@ -72,7 +72,7 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 	)
 
 	secretsReady := func(g Gomega) *metav1.Condition {
-		pc := &enterprisev4.PostgresCluster{}
+		pc := &platformv1alpha1.PostgresCluster{}
 		if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
 			if apierrors.IsNotFound(err) {
 				return nil
@@ -125,27 +125,27 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 		pgClusterKey = types.NamespacedName{Name: clusterName, Namespace: namespace}
 		extSecretKey = types.NamespacedName{Name: secretName, Namespace: namespace}
 
-		clusterClass = &enterprisev4.PostgresClusterClass{
+		clusterClass = &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: className},
-			Spec: enterprisev4.PostgresClusterClassSpec{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: "postgresql.cnpg.io",
-				Config: &enterprisev4.PostgresClusterClassConfig{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:        ptr.To(instances),
 					Storage:          ptr.To(resource.MustParse(storageAmount)),
 					PostgresVersion:  ptr.To(postgresVersion),
-					ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(false)},
+					ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(false)},
 				},
-				CNPG: &enterprisev4.CNPGConfig{},
+				CNPG: &platformv1alpha1.CNPGConfig{},
 			},
 		}
 		Expect(k8sClient.Create(ctx, clusterClass)).To(Succeed())
 
-		pgCluster = &enterprisev4.PostgresCluster{
+		pgCluster = &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
-			Spec: enterprisev4.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{
 				Class:                 className,
 				ClusterDeletionPolicy: ptr.To("Delete"),
-				PasswordConfig: &enterprisev4.SuperuserPasswordConfig{
+				PasswordConfig: &platformv1alpha1.SuperuserPasswordConfig{
 					SuperuserExternalSecretRef: corev1.LocalObjectReference{Name: secretName},
 				},
 			},
@@ -155,7 +155,7 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 
 	AfterAll(func() {
 
-		_ = k8sClient.Delete(ctx, &enterprisev4.PostgresCluster{
+		_ = k8sClient.Delete(ctx, &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
 		})
 		_ = k8sClient.Delete(ctx, &corev1.Secret{
@@ -164,7 +164,7 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 		_ = k8sClient.Delete(ctx, clusterClass)
 
 		Eventually(func() bool {
-			pc := &enterprisev4.PostgresCluster{}
+			pc := &platformv1alpha1.PostgresCluster{}
 			err := k8sClient.Get(ctx, pgClusterKey, pc)
 			return apierrors.IsNotFound(err)
 		}, watchTimeout, pollInterval).Should(BeTrue(),

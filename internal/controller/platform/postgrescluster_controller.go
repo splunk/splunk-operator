@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	majorupgradeadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/major_version_upgrade"
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
@@ -74,12 +74,12 @@ type PostgresClusterReconciler struct {
 	FleetCollector *pgprometheus.FleetCollector
 }
 
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters/finalizers,verbs=update
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusterclasses,verbs=get;list;watch
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases,verbs=get;list;watch
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases/status,verbs=get;list;watch
+// +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresclusters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresclusters/finalizers,verbs=update
+// +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresclusterclasses,verbs=get;list;watch
+// +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresdatabases,verbs=get;list;watch
+// +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresdatabases/status,verbs=get;list;watch
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters/status,verbs=get
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=poolers,verbs=get;list;watch;create;update;patch;delete
@@ -114,7 +114,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // themselves contain no decision logic; they only build. Adding a use case
 // means adding one relevance check + factory here, not growing a shared ports
 // aggregate built up front.
-func (r *PostgresClusterReconciler) useCaseRegistry(key types.NamespacedName, cluster *enterprisev4.PostgresCluster, mergedConfig *clustercore.MergedConfig) map[string]usecases.Factory {
+func (r *PostgresClusterReconciler) useCaseRegistry(key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, mergedConfig *clustercore.MergedConfig) map[string]usecases.Factory {
 	return map[string]usecases.Factory{
 		majorversionupgradetypes.UseCaseName: r.newMajorUpgradeUseCase(key, cluster, mergedConfig),
 	}
@@ -124,7 +124,7 @@ func (r *PostgresClusterReconciler) useCaseRegistry(key types.NamespacedName, cl
 // case: it closes over the per-reconcile runtime state and wires the three
 // adapters when invoked, with no relevance logic of its own (useCaseRegistry
 // already decided this use case is relevant before registering it).
-func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedName, cluster *enterprisev4.PostgresCluster, mergedConfig *clustercore.MergedConfig) usecases.Factory {
+func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, mergedConfig *clustercore.MergedConfig) usecases.Factory {
 	return func() usecases.UseCase {
 		targetVersion := ""
 		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.PostgresVersion != nil {
@@ -155,7 +155,7 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
-		&enterprisev4.PostgresCluster{},
+		&platformv1alpha1.PostgresCluster{},
 		indexExternalSuperuserSecret,
 		extractExternalSuperuserSecretName,
 	); err != nil {
@@ -164,7 +164,7 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
-		&enterprisev4.PostgresCluster{},
+		&platformv1alpha1.PostgresCluster{},
 		indexClusterCustomQueryConfigMaps,
 		extractClusterCustomQueryConfigMapNames,
 	); err != nil {
@@ -173,7 +173,7 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
-		&enterprisev4.PostgresDatabase{},
+		&platformv1alpha1.PostgresDatabase{},
 		indexDatabaseCustomQueryConfigMaps,
 		extractDatabaseCustomQueryConfigMapNames,
 	); err != nil {
@@ -182,13 +182,13 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
-		For(&enterprisev4.PostgresCluster{}, builder.WithPredicates(postgresClusterPredicator())).
+		For(&platformv1alpha1.PostgresCluster{}, builder.WithPredicates(postgresClusterPredicator())).
 		Owns(&cnpgv1.Cluster{}, builder.WithPredicates(cnpgClusterPredicator())).
 		Owns(&cnpgv1.Pooler{}, builder.WithPredicates(cnpgPoolerPredicator())).
 		Owns(&cnpgv1.ScheduledBackup{}, builder.WithPredicates(scheduledBackupPredicator())).
 		Owns(&corev1.Secret{}, builder.WithPredicates(secretPredicator())).
 		Owns(&corev1.ConfigMap{}, builder.WithPredicates(configMapPredicator())).
-		Watches(&enterprisev4.PostgresDatabase{},
+		Watches(&platformv1alpha1.PostgresDatabase{},
 			handler.EnqueueRequestsFromMapFunc(mapDatabaseToCluster),
 			builder.WithPredicates(postgresDatabaseForClusterPredicator())).
 		Watches(&corev1.Secret{},
@@ -255,7 +255,7 @@ func objectStorePredicator() predicate.Predicate {
 }
 
 func mapDatabaseToCluster(_ context.Context, obj client.Object) []reconcile.Request {
-	db, ok := obj.(*enterprisev4.PostgresDatabase)
+	db, ok := obj.(*platformv1alpha1.PostgresDatabase)
 	if !ok || db.Spec.ClusterRef.Name == "" {
 		return nil
 	}
@@ -265,12 +265,12 @@ func mapDatabaseToCluster(_ context.Context, obj client.Object) []reconcile.Requ
 func postgresDatabaseForClusterPredicator() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			db, ok := e.Object.(*enterprisev4.PostgresDatabase)
+			db, ok := e.Object.(*platformv1alpha1.PostgresDatabase)
 			return ok && (len(db.Status.Databases) > 0 || db.Status.CustomMetricsPublication != nil)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldDB, oldOK := e.ObjectOld.(*enterprisev4.PostgresDatabase)
-			newDB, newOK := e.ObjectNew.(*enterprisev4.PostgresDatabase)
+			oldDB, oldOK := e.ObjectOld.(*platformv1alpha1.PostgresDatabase)
+			newDB, newOK := e.ObjectNew.(*platformv1alpha1.PostgresDatabase)
 			if !oldOK || !newOK {
 				return false
 			}
@@ -450,7 +450,7 @@ func configMapPredicator() predicate.Predicate {
 //
 // Package-private so unit tests can drive it directly without a fake client.
 func extractExternalSuperuserSecretName(obj client.Object) []string {
-	pc, ok := obj.(*enterprisev4.PostgresCluster)
+	pc, ok := obj.(*platformv1alpha1.PostgresCluster)
 	if !ok {
 		return nil
 	}
@@ -477,7 +477,7 @@ func (r *PostgresClusterReconciler) enqueueClustersForExternalSecret(ctx context
 	}
 
 	if owner := metav1.GetControllerOf(secret); owner != nil &&
-		owner.APIVersion == enterprisev4.GroupVersion.String() &&
+		owner.APIVersion == platformv1alpha1.GroupVersion.String() &&
 		owner.Kind == "PostgresCluster" {
 		return nil
 	}
@@ -489,7 +489,7 @@ func (r *PostgresClusterReconciler) enqueueClustersForExternalSecret(ctx context
 		"namespace", secret.Namespace,
 	)
 
-	var list enterprisev4.PostgresClusterList
+	var list platformv1alpha1.PostgresClusterList
 	if err := r.Client.List(ctx, &list,
 		client.InNamespace(secret.Namespace),
 		client.MatchingFields{indexExternalSuperuserSecret: secret.Name},

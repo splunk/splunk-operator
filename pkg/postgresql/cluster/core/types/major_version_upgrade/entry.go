@@ -17,11 +17,11 @@ limitations under the License.
 package majorversionupgradetypes
 
 import (
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func MatchesIntent(entry enterprisev4.PostgresMajorUpgradeStatus, intent Intent) bool {
+func MatchesIntent(entry platformv1alpha1.PostgresMajorUpgradeStatus, intent Intent) bool {
 	deref := func(s *string) string {
 		if s == nil {
 			return ""
@@ -33,7 +33,7 @@ func MatchesIntent(entry enterprisev4.PostgresMajorUpgradeStatus, intent Intent)
 		deref(entry.Strategy) == intent.Strategy
 }
 
-func RetryRequestedAfterTerminalFailure(retryRequestedAt *metav1.Time, entry enterprisev4.PostgresMajorUpgradeStatus) bool {
+func RetryRequestedAfterTerminalFailure(retryRequestedAt *metav1.Time, entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
 	if retryRequestedAt == nil {
 		return false
 	}

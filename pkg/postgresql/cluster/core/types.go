@@ -18,7 +18,7 @@ package core
 import (
 	"time"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
@@ -60,7 +60,7 @@ type ReconcileContext struct {
 // registers all known use cases unconditionally — relevance is not its concern.
 // The reconciler owns the trigger policies and skips any use case whose policy
 // returns false for the current spec, so factories stay pure builders.
-type UseCaseRegistryProvider func(types.NamespacedName, *enterprisev4.PostgresCluster, *MergedConfig) map[string]usecases.Factory
+type UseCaseRegistryProvider func(types.NamespacedName, *platformv1alpha1.PostgresCluster, *MergedConfig) map[string]usecases.Factory
 
 // normalizedCNPGClusterSpec is a subset of cnpgv1.ClusterSpec fields used for drift detection.
 // Only fields we set in buildCNPGClusterSpec are included — CNPG-injected defaults are excluded
@@ -154,8 +154,8 @@ type normalizedCNPGPoolerSpec struct {
 
 // MergedConfig is the resolved configuration after overlaying PostgresCluster on PostgresClusterClass defaults.
 type MergedConfig struct {
-	Spec *enterprisev4.PostgresClusterSpec
-	CNPG *enterprisev4.CNPGConfig
+	Spec *platformv1alpha1.PostgresClusterSpec
+	CNPG *platformv1alpha1.CNPGConfig
 }
 
 type reconcileClusterPhases string
@@ -193,7 +193,7 @@ const (
 
 	// PostgresClusterFinalizerName is exported so the primary adapter (controller) can
 	// reference it in event predicates without duplicating the string.
-	PostgresClusterFinalizerName string = "postgresclusters.enterprise.splunk.com/finalizer"
+	PostgresClusterFinalizerName string = "postgresclusters.platform.splunk.com/finalizer"
 
 	// postgresqlParametersFieldManager owns only CNPG spec.postgresql.parameters keys applied from PostgresCluster.spec.postgresqlConfig.
 	postgresqlParametersFieldManager string = "splunk-postgrescluster-postgresql-parameters"

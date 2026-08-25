@@ -31,7 +31,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgtesthelpers "github.com/splunk/splunk-operator/test/postgrescontrollers/helpers"
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -78,15 +78,15 @@ var _ = Describe("postgrescontrollers, integration, postgres-upgrade", Label("ti
 			pgtesthelpers.RegisterSnapshotFailureDump(kubeClient, snapshots, ns)
 
 			pgClass := createPGClassWithSnapshotBackup(ctx, kubeClient, ns, pgUpgradeSourceVersion)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "major-upgrade", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 					PostgresVersion:       ptr.To(pgUpgradeSourceVersion),
 					// allow is inert until spec.postgresVersion actually changes, so
 					// setting it up front keeps the upgrade request below a single patch.
-					PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+					PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 						Allow:    ptr.To(true),
 						Strategy: ptr.To(mvutypes.MajorUpgradeFlowPgUpgrade),
 					},
@@ -104,7 +104,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-upgrade", Label("ti
 			pgDB := pgtesthelpers.CreateReadyPostgresDatabase(ctx, kubeClient, ns, "upgrade-db", pgCluster.Name, "appdb")
 			dbKey := types.NamespacedName{Name: pgDB.Name, Namespace: ns}
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(presentRoleNames(pc)).To(ContainElements("appdb_admin", "appdb_rw"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
@@ -145,7 +145,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			var observedPhases []string
 			By("observing the upgrade advance through status to Completed")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				entry := currentUpgradeEntry(g, pc)
 				g.Expect(entry.Phase).NotTo(BeNil())
@@ -161,7 +161,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			}, testenv.MediumLongTimeout, testenv.PollInterval).Should(Succeed())
 
 			By("verifying both backup safety gates completed")
-			pc := &enterprisev4.PostgresCluster{}
+			pc := &platformv1alpha1.PostgresCluster{}
 			Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 			entry := pc.Status.PostgresMajorUpgradeStatus[len(pc.Status.PostgresMajorUpgradeStatus)-1]
 			Expect(entry.SourcePgVersion).To(HaveValue(Equal(majorOf(pgUpgradeSourceVersion))))
@@ -187,7 +187,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 
 			By("waiting for PostgresCluster to return to Ready on the target major version")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"), "cluster did not return to Ready: %s", clusterConditionSummary(pc))
@@ -214,12 +214,12 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 
 			By("verifying managed roles remain available and PostgresDatabase is Ready")
 			Eventually(func(g Gomega) {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(presentRoleNames(pc)).To(ContainElements("appdb_admin", "appdb_rw"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
@@ -249,13 +249,13 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			// createPGClassAtVersion configures no backup provider, so the upgrade workflow's
 			// rollback baseline can never be established.
 			pgClass := createPGClassAtVersion(ctx, kubeClient, ns, pgUpgradeSourceVersion)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-no-backup", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 					PostgresVersion:       ptr.To(pgUpgradeSourceVersion),
-					PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+					PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 						Allow:    ptr.To(true),
 						Strategy: ptr.To(mvutypes.MajorUpgradeFlowPgUpgrade),
 					},
@@ -280,7 +280,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 
 			By("asserting the upgrade terminally fails with an actionable BackupProviderMissing reason")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				entry := currentUpgradeEntry(g, pc)
 				g.Expect(entry.Phase).To(HaveValue(Equal(string(mvutypes.Failed))))
@@ -293,7 +293,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			By("verifying the blocked upgrade left PostgreSQL on the source major version")
-			pc := &enterprisev4.PostgresCluster{}
+			pc := &platformv1alpha1.PostgresCluster{}
 			Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 			Expect(pc.Status.CurrentPgVersion).To(Equal(majorOf(pgUpgradeSourceVersion)))
 
@@ -311,9 +311,9 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClassAtVersion(ctx, kubeClient, ns, pgUpgradeSourceVersion)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-not-allowed", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 					PostgresVersion:       ptr.To(pgUpgradeSourceVersion),
@@ -338,7 +338,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 
 			By("asserting the cluster reports the change is held pending explicit opt-in")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				condition := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
 				g.Expect(condition).NotTo(BeNil(), "cluster conditions: %s", clusterConditionSummary(pc))
@@ -351,7 +351,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			By("verifying no upgrade was started and the CNPG image is unchanged")
-			pc := &enterprisev4.PostgresCluster{}
+			pc := &platformv1alpha1.PostgresCluster{}
 			Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 			Expect(pc.Status.PostgresMajorUpgradeStatus).To(BeEmpty(), "no upgrade should be recorded without allow=true")
 			Expect(pc.Status.CurrentPgVersion).To(Equal(majorOf(pgUpgradeSourceVersion)))
@@ -367,30 +367,30 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 // createPGClassWithSnapshotBackup creates a PostgresClusterClass with CSI volume
 // snapshot backups enabled, which the major-version upgrade workflow requires as
 // its rollback baseline. Cleanup mirrors createPGClass.
-func createPGClassWithSnapshotBackup(ctx SpecContext, kubeClient client.Client, ns, pgVersion string) *enterprisev4.PostgresClusterClass {
+func createPGClassWithSnapshotBackup(ctx SpecContext, kubeClient client.Client, ns, pgVersion string) *platformv1alpha1.PostgresClusterClass {
 	GinkgoHelper()
-	pgClass := &enterprisev4.PostgresClusterClass{
+	pgClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "postgres-e2e-backup-" + ns,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "e2e-test",
 			},
 		},
-		Spec: enterprisev4.PostgresClusterClassSpec{
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
-			Config: &enterprisev4.PostgresClusterClassConfig{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{
 				Instances:       ptr.To(int32(1)),
 				PostgresVersion: ptr.To(pgVersion),
-				Backup: &enterprisev4.BackupConfig{
+				Backup: &platformv1alpha1.BackupConfig{
 					Enabled:  ptr.To(true),
 					Schedule: ptr.To("0 2 * * *"),
 				},
 			},
-			CNPG: &enterprisev4.CNPGConfig{
-				Backup: &enterprisev4.CNPGBackupConfig{
+			CNPG: &platformv1alpha1.CNPGConfig{
+				Backup: &platformv1alpha1.CNPGBackupConfig{
 					// Single-instance cluster, so there is no standby to prefer.
 					Target: ptr.To("primary"),
-					VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{
+					VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
 						ClassName: ptr.To(pgVolumeSnapshotClass),
 						Online:    ptr.To(true),
 						// Garbage collect snapshots with the CNPG Cluster so the
@@ -413,12 +413,12 @@ func createPGClassWithSnapshotBackup(ctx SpecContext, kubeClient client.Client, 
 
 // currentUpgradeEntry returns the newest major-upgrade history entry, matching
 // how the controller appends one entry per upgrade hop.
-func currentUpgradeEntry(g Gomega, pc *enterprisev4.PostgresCluster) enterprisev4.PostgresMajorUpgradeStatus {
+func currentUpgradeEntry(g Gomega, pc *platformv1alpha1.PostgresCluster) platformv1alpha1.PostgresMajorUpgradeStatus {
 	g.Expect(pc.Status.PostgresMajorUpgradeStatus).NotTo(BeEmpty(), "no major upgrade recorded in status")
 	return pc.Status.PostgresMajorUpgradeStatus[len(pc.Status.PostgresMajorUpgradeStatus)-1]
 }
 
-func findUpgradeCondition(entry enterprisev4.PostgresMajorUpgradeStatus, conditionType string) *metav1.Condition {
+func findUpgradeCondition(entry platformv1alpha1.PostgresMajorUpgradeStatus, conditionType string) *metav1.Condition {
 	for i := range entry.Conditions {
 		if entry.Conditions[i].Type == conditionType {
 			return &entry.Conditions[i]
@@ -430,7 +430,7 @@ func findUpgradeCondition(entry enterprisev4.PostgresMajorUpgradeStatus, conditi
 // clusterConditionSummary renders the PostgresCluster conditions so a wait that
 // times out on the phase alone reports why the operator is unhappy instead of
 // just echoing "Failed".
-func clusterConditionSummary(pc *enterprisev4.PostgresCluster) string {
+func clusterConditionSummary(pc *platformv1alpha1.PostgresCluster) string {
 	parts := make([]string, 0, len(pc.Status.Conditions))
 	for _, c := range pc.Status.Conditions {
 		parts = append(parts, fmt.Sprintf("%s=%s/%s (%s)", c.Type, c.Status, c.Reason, c.Message))
@@ -438,7 +438,7 @@ func clusterConditionSummary(pc *enterprisev4.PostgresCluster) string {
 	return strings.Join(parts, "; ")
 }
 
-func upgradeConditionSummary(entry enterprisev4.PostgresMajorUpgradeStatus) string {
+func upgradeConditionSummary(entry platformv1alpha1.PostgresMajorUpgradeStatus) string {
 	parts := make([]string, 0, len(entry.Conditions))
 	for _, c := range entry.Conditions {
 		parts = append(parts, fmt.Sprintf("%s=%s/%s (%s)", c.Type, c.Status, c.Reason, c.Message))
@@ -488,10 +488,10 @@ type pgCredentials struct {
 func managedRoleCredentials(ctx SpecContext, kubeClient client.Client, dbKey types.NamespacedName, database string) (admin, rw pgCredentials) {
 	GinkgoHelper()
 
-	pd := &enterprisev4.PostgresDatabase{}
+	pd := &platformv1alpha1.PostgresDatabase{}
 	Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 
-	var info *enterprisev4.DatabaseInfo
+	var info *platformv1alpha1.DatabaseInfo
 	for i := range pd.Status.Databases {
 		if pd.Status.Databases[i].Name == database {
 			info = &pd.Status.Databases[i]
@@ -528,7 +528,7 @@ func readRoleSecret(ctx SpecContext, kubeClient client.Client, ns string, ref *c
 func runSQL(ctx SpecContext, kubeClient client.Client, deployment *testenv.Deployment, clusterKey types.NamespacedName, database, sql string) string {
 	GinkgoHelper()
 
-	pc := &enterprisev4.PostgresCluster{}
+	pc := &platformv1alpha1.PostgresCluster{}
 	Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 	Expect(pc.Status.Resources).NotTo(BeNil(), "PostgresCluster status has no resource references")
 	Expect(pc.Status.Resources.SuperUserSecretRef).NotTo(BeNil(), "PostgresCluster status has no superuser Secret")
@@ -552,7 +552,7 @@ func runSQL(ctx SpecContext, kubeClient client.Client, deployment *testenv.Deplo
 	return runSQLAs(ctx, kubeClient, deployment, clusterKey, pgCredentials{user: user, password: string(password)}, database, sql)
 }
 
-func connectionConfigMap(ctx SpecContext, kubeClient client.Client, clusterKey types.NamespacedName, pc *enterprisev4.PostgresCluster) *corev1.ConfigMap {
+func connectionConfigMap(ctx SpecContext, kubeClient client.Client, clusterKey types.NamespacedName, pc *platformv1alpha1.PostgresCluster) *corev1.ConfigMap {
 	GinkgoHelper()
 	Expect(pc.Status.Resources).NotTo(BeNil(), "PostgresCluster status has no resource references")
 	Expect(pc.Status.Resources.ConfigMapRef).NotTo(BeNil(), "PostgresCluster status has no connection ConfigMap")
@@ -573,7 +573,7 @@ func connectionConfigMap(ctx SpecContext, kubeClient client.Client, clusterKey t
 func runSQLAs(ctx SpecContext, kubeClient client.Client, deployment *testenv.Deployment, clusterKey types.NamespacedName, creds pgCredentials, database, sql string) string {
 	GinkgoHelper()
 
-	pc := &enterprisev4.PostgresCluster{}
+	pc := &platformv1alpha1.PostgresCluster{}
 	Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 
 	connInfo := connectionConfigMap(ctx, kubeClient, clusterKey, pc)

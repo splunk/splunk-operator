@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/test/testenv"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,7 +47,7 @@ func ExecutePostgresSQLInDatabase(
 	}
 
 	resolvePrimary := func(attemptCtx context.Context) (string, error) {
-		cluster := &enterprisev4.PostgresCluster{}
+		cluster := &platformv1alpha1.PostgresCluster{}
 		if err := kubeClient.Get(attemptCtx, clusterKey, cluster); err != nil {
 			return "", fmt.Errorf("getting PostgresCluster primary: %w", err)
 		}

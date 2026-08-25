@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,7 +39,7 @@ type PostgresDatabaseChildren struct {
 func DatabaseSecretUIDs(
 	ctx context.Context,
 	kubeClient client.Client,
-	database *enterprisev4.PostgresDatabase,
+	database *platformv1alpha1.PostgresDatabase,
 ) map[types.UID]struct{} {
 	GinkgoHelper()
 	result := make(map[types.UID]struct{}, 2)
@@ -54,7 +54,7 @@ func DatabaseSecretUIDs(
 	return result
 }
 
-func PostgresDatabaseChildResources(database *enterprisev4.PostgresDatabase) PostgresDatabaseChildren {
+func PostgresDatabaseChildResources(database *platformv1alpha1.PostgresDatabase) PostgresDatabaseChildren {
 	GinkgoHelper()
 	Expect(database.Status.Databases).To(HaveLen(1))
 	status := database.Status.Databases[0]
@@ -106,7 +106,7 @@ func ExpectPostgresDatabaseChildrenDeleted(
 func PostgresClusterSuperuserSecretUID(
 	ctx context.Context,
 	kubeClient client.Client,
-	cluster *enterprisev4.PostgresCluster,
+	cluster *platformv1alpha1.PostgresCluster,
 ) types.UID {
 	GinkgoHelper()
 	Expect(cluster.Status.Resources).NotTo(BeNil())

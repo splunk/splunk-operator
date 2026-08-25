@@ -264,7 +264,7 @@ func checkCertificateReady(ctx context.Context, c client.Client, name, namespace
 // can distinguish "not installed" from a transient discovery failure.
 //
 // Mirrors the probe pattern used for the optional barman-cloud ObjectStore
-// CRD in internal/controller/enterprise/postgrescluster_controller.go.
+// CRD in internal/controller/platform/postgrescluster_controller.go.
 func CertManagerInstalled(mapper meta.RESTMapper) (bool, error) {
 	gvk := cmapi.SchemeGroupVersion.WithKind(cmapi.CertificateKind)
 	_, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)

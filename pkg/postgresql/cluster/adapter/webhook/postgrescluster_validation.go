@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	core "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	cnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
@@ -40,17 +40,17 @@ import (
 var recoveryBackend = cnpgadapter.NewRecoveryBackend()
 
 // ValidatePostgresClusterCreate validates a PostgresCluster on CREATE.
-func ValidatePostgresClusterCreate(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
+func ValidatePostgresClusterCreate(ctx context.Context, obj *platformApi.PostgresCluster, reader client.Reader) field.ErrorList {
 	return validatePostgresCluster(ctx, obj, nil, reader, false)
 }
 
 // ValidatePostgresClusterUpdate validates a PostgresCluster on UPDATE.
-func ValidatePostgresClusterUpdate(ctx context.Context, obj, oldObj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
+func ValidatePostgresClusterUpdate(ctx context.Context, obj, oldObj *platformApi.PostgresCluster, reader client.Reader) field.ErrorList {
 	specUnchanged := oldObj != nil && reflect.DeepEqual(obj.Spec, oldObj.Spec)
 	return validatePostgresCluster(ctx, obj, oldObj, reader, specUnchanged)
 }
 
-func validatePostgresCluster(ctx context.Context, obj, oldObj *enterpriseApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {
+func validatePostgresCluster(ctx context.Context, obj, oldObj *platformApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
@@ -90,7 +90,7 @@ func validatePostgresCluster(ctx context.Context, obj, oldObj *enterpriseApi.Pos
 	return allErrs
 }
 
-func validateCustomMetrics(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader) field.ErrorList {
+func validateCustomMetrics(ctx context.Context, obj *platformApi.PostgresCluster, reader client.Reader) field.ErrorList {
 	if obj.Spec.Monitoring == nil {
 		return nil
 	}
@@ -122,7 +122,7 @@ func validateCustomMetrics(ctx context.Context, obj *enterpriseApi.PostgresClust
 	return allErrs
 }
 
-func clusterMonitoringSelectorsUnchanged(obj, oldObj *enterpriseApi.PostgresCluster) bool {
+func clusterMonitoringSelectorsUnchanged(obj, oldObj *platformApi.PostgresCluster) bool {
 	oldRefs := func() []corev1.ConfigMapKeySelector {
 		if oldObj == nil || oldObj.Spec.Monitoring == nil {
 			return nil
@@ -146,7 +146,7 @@ func clusterMonitoringSelectorsUnchanged(obj, oldObj *enterpriseApi.PostgresClus
 	return true
 }
 
-func validateExternalSuperuserSecret(ctx context.Context, obj *enterpriseApi.PostgresCluster, reader client.Reader) *field.Error {
+func validateExternalSuperuserSecret(ctx context.Context, obj *platformApi.PostgresCluster, reader client.Reader) *field.Error {
 	if obj.Spec.PasswordConfig == nil {
 		return nil
 	}
@@ -171,10 +171,10 @@ func validateExternalSuperuserSecret(ctx context.Context, obj *enterpriseApi.Pos
 	return nil
 }
 
-func validateAgainstClass(ctx context.Context, obj, oldObj *enterpriseApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {
+func validateAgainstClass(ctx context.Context, obj, oldObj *platformApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {
 	var allErrs field.ErrorList
 
-	class := &enterpriseApi.PostgresClusterClass{}
+	class := &platformApi.PostgresClusterClass{}
 	if err := reader.Get(ctx, client.ObjectKey{Name: obj.Spec.Class}, class); err != nil {
 		if apierrors.IsNotFound(err) && specUnchanged {
 			return nil
@@ -198,7 +198,7 @@ func validateAgainstClass(ctx context.Context, obj, oldObj *enterpriseApi.Postgr
 	return allErrs
 }
 
-func validateStorageTransition(class *enterpriseApi.PostgresClusterClass, obj, oldObj *enterpriseApi.PostgresCluster) field.ErrorList {
+func validateStorageTransition(class *platformApi.PostgresClusterClass, obj, oldObj *platformApi.PostgresCluster) field.ErrorList {
 	if oldObj == nil {
 		return nil
 	}
@@ -220,7 +220,7 @@ func validateStorageTransition(class *enterpriseApi.PostgresClusterClass, obj, o
 // the RO pooler at instances<2 rather than failing, so this fail-fast lives here
 // (not in ValidateCrossResource) to reject explicit readOnly=true the cluster
 // can never satisfy.
-func validatePoolerEndpoints(class *enterpriseApi.PostgresClusterClass, obj *enterpriseApi.PostgresCluster) field.ErrorList {
+func validatePoolerEndpoints(class *platformApi.PostgresClusterClass, obj *platformApi.PostgresCluster) field.ErrorList {
 	merged := core.GetMergedConfig(class, obj)
 	if !core.PoolerReadOnlyRequested(merged) {
 		return nil
@@ -244,11 +244,11 @@ func toFieldErrors(errs []core.ConfigValidationError) field.ErrorList {
 }
 
 // GetPostgresClusterWarningsOnCreate returns warnings for PostgresCluster CREATE.
-func GetPostgresClusterWarningsOnCreate(obj *enterpriseApi.PostgresCluster) []string {
+func GetPostgresClusterWarningsOnCreate(obj *platformApi.PostgresCluster) []string {
 	return nil
 }
 
 // GetPostgresClusterWarningsOnUpdate returns warnings for PostgresCluster UPDATE.
-func GetPostgresClusterWarningsOnUpdate(obj, oldObj *enterpriseApi.PostgresCluster) []string {
+func GetPostgresClusterWarningsOnUpdate(obj, oldObj *platformApi.PostgresCluster) []string {
 	return nil
 }

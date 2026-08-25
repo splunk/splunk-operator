@@ -149,7 +149,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "enterprise.splunk.com/v4",
+          "apiVersion": "platform.splunk.com/v1alpha1",
           "kind": "PostgresCluster",
           "metadata": {
             "labels": {
@@ -177,7 +177,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "enterprise.splunk.com/v4",
+          "apiVersion": "platform.splunk.com/v1alpha1",
           "kind": "PostgresClusterClass",
           "metadata": {
             "name": "postgresql-dev"
@@ -223,7 +223,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "enterprise.splunk.com/v4",
+          "apiVersion": "platform.splunk.com/v1alpha1",
           "kind": "PostgresDatabase",
           "metadata": {
             "name": "splunk-databases"
@@ -389,18 +389,18 @@ spec:
         PostgresClusterClass defines a reusable template and policy for postgres cluster provisioning.
       displayName: Postgres Cluster Class
       kind: PostgresClusterClass
-      name: postgresclusterclasses.enterprise.splunk.com
-      version: v4
+      name: postgresclusterclasses.platform.splunk.com
+      version: v1alpha1
     - description: PostgresCluster is the Schema for the postgresclusters API.
       displayName: Postgres Cluster
       kind: PostgresCluster
-      name: postgresclusters.enterprise.splunk.com
-      version: v4
+      name: postgresclusters.platform.splunk.com
+      version: v1alpha1
     - description: PostgresDatabase is the Schema for the postgresdatabases API.
       displayName: Postgres Database
       kind: PostgresDatabase
-      name: postgresdatabases.enterprise.splunk.com
-      version: v4
+      name: postgresdatabases.platform.splunk.com
+      version: v1alpha1
     - description: Queue is the Schema for the queues API
       displayName: Queue
       kind: Queue
@@ -517,11 +517,22 @@ spec:
           - licensemasters
           - monitoringconsoles
           - objectstorages
-          - postgresclusters
-          - postgresdatabases
           - queues
           - searchheadclusters
           - standalones
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - platform.splunk.com
+          resources:
+          - postgresclusters
+          - postgresdatabases
           verbs:
           - create
           - delete
@@ -541,11 +552,16 @@ spec:
           - licensemasters/finalizers
           - monitoringconsoles/finalizers
           - objectstorages/finalizers
-          - postgresclusters/finalizers
-          - postgresdatabases/finalizers
           - queues/finalizers
           - searchheadclusters/finalizers
           - standalones/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - platform.splunk.com
+          resources:
+          - postgresclusters/finalizers
+          - postgresdatabases/finalizers
           verbs:
           - update
         - apiGroups:
@@ -559,8 +575,6 @@ spec:
           - licensemasters/status
           - monitoringconsoles/status
           - objectstorages/status
-          - postgresclusters/status
-          - postgresdatabases/status
           - queues/status
           - searchheadclusters/status
           - standalones/status
@@ -569,7 +583,25 @@ spec:
           - patch
           - update
         - apiGroups:
-          - enterprise.splunk.com
+          - platform.splunk.com
+          resources:
+          - postgresclusters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - platform.splunk.com
+          resources:
+          - postgresdatabases/status
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - platform.splunk.com
           resources:
           - postgresclusterclasses
           verbs:

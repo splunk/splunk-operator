@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,12 +38,12 @@ func NewDataRepository(c client.Client) DataRepository {
 
 // Database spec does not cross this boundary; only committed status is consumed.
 func (r DataRepository) ListDatabaseContributions(ctx context.Context, namespace, clusterName string) (mtypes.DatabaseContributionSnapshot, error) {
-	list := &enterprisev4.PostgresDatabaseList{}
+	list := &platformv1alpha1.PostgresDatabaseList{}
 	if err := r.client.List(ctx, list,
 		client.InNamespace(namespace),
-		client.MatchingFields{enterprisev4.PostgresDatabaseClusterRefNameField: clusterName},
+		client.MatchingFields{platformv1alpha1.PostgresDatabaseClusterRefNameField: clusterName},
 	); err != nil {
-		list = &enterprisev4.PostgresDatabaseList{}
+		list = &platformv1alpha1.PostgresDatabaseList{}
 		if fallbackErr := r.client.List(ctx, list, client.InNamespace(namespace)); fallbackErr != nil {
 			return mtypes.DatabaseContributionSnapshot{}, fmt.Errorf("listing PostgresDatabases for cluster %s: indexed=%v fallback=%w", clusterName, err, fallbackErr)
 		}

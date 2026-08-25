@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -48,7 +48,7 @@ func GetMonitoringFeatureOwner(
 	c client.Client,
 	namespace, name, uid string,
 ) (MonitoringFeatureOwner, error) {
-	cluster := &enterprisev4.PostgresCluster{}
+	cluster := &platformv1alpha1.PostgresCluster{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, cluster); err != nil {
 		return MonitoringFeatureOwner{}, fmt.Errorf("getting PostgresCluster %s/%s: %w", namespace, name, err)
 	}
@@ -63,7 +63,7 @@ func GetMonitoringFeatureOwner(
 	}
 	return MonitoringFeatureOwner{
 		Object:     cluster,
-		APIVersion: enterprisev4.GroupVersion.String(),
+		APIVersion: platformv1alpha1.GroupVersion.String(),
 		Kind:       "PostgresCluster",
 	}, nil
 }

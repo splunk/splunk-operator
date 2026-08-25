@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,12 +78,12 @@ type backupModel struct {
 	events       backupEmitter
 	backend      BackupBackend
 	updateStatus healthStatusUpdater
-	cluster      *enterprisev4.PostgresCluster
+	cluster      *platformv1alpha1.PostgresCluster
 	mergedConfig *MergedConfig
 	contracts    *reconcileContracts
 }
 
-func newBackupModel(backend BackupBackend, events backupEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, mergedConfig *MergedConfig, contracts *reconcileContracts) *backupModel {
+func newBackupModel(backend BackupBackend, events backupEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, mergedConfig *MergedConfig, contracts *reconcileContracts) *backupModel {
 	return &backupModel{
 		events:       events,
 		backend:      backend,
@@ -177,7 +177,7 @@ func (b *backupModel) CheckContracts() error {
 
 // barmanObjectStoreCfg returns the BarmanObjectStore config from MergedConfig, or nil if not set.
 // Used by both backupModel and objectStoreModel to avoid duplicating the nil-guard chain.
-func barmanObjectStoreCfg(cfg *MergedConfig) *enterprisev4.CNPGBarmanObjectStoreConfig {
+func barmanObjectStoreCfg(cfg *MergedConfig) *platformv1alpha1.CNPGBarmanObjectStoreConfig {
 	if cfg == nil || cfg.CNPG == nil || cfg.CNPG.Backup == nil {
 		return nil
 	}
@@ -192,7 +192,7 @@ func backupIsEnabled(cfg *MergedConfig) bool {
 		*cfg.Spec.Backup.Enabled
 }
 
-func activeBarmanObjectStoreCfg(cfg *MergedConfig) *enterprisev4.CNPGBarmanObjectStoreConfig {
+func activeBarmanObjectStoreCfg(cfg *MergedConfig) *platformv1alpha1.CNPGBarmanObjectStoreConfig {
 	if !backupIsEnabled(cfg) {
 		return nil
 	}
@@ -287,7 +287,7 @@ func (b *backupModel) computeHealth(ctx context.Context, reconcileErr error) (co
 
 	// Build status per configured provider. Each provider has its own ScheduledBackup; report
 	// Pending if any expected one has not appeared yet, Failed on a get error.
-	status := &enterprisev4.BackupStatus{}
+	status := &platformv1alpha1.BackupStatus{}
 	for _, p := range b.activeBackupProviders() {
 		schedule, err := b.backend.GetSchedule(ctx, p.sbName, b.cluster.Namespace)
 		if err != nil {
@@ -298,13 +298,13 @@ func (b *backupModel) computeHealth(ctx context.Context, reconcileErr error) (co
 		}
 		switch p.kind {
 		case providerObjectStore:
-			status.ObjectStore = &enterprisev4.ObjectStoreBackupStatus{
+			status.ObjectStore = &platformv1alpha1.ObjectStoreBackupStatus{
 				Enabled:          true,
 				LastScheduleTime: schedule.LastScheduleTime,
 				NextScheduleTime: schedule.NextScheduleTime,
 			}
 		case providerVolumeSnapshot:
-			status.VolumeSnapshot = &enterprisev4.VolumeSnapshotBackupStatus{
+			status.VolumeSnapshot = &platformv1alpha1.VolumeSnapshotBackupStatus{
 				Enabled:          true,
 				LastScheduleTime: schedule.LastScheduleTime,
 				NextScheduleTime: schedule.NextScheduleTime,

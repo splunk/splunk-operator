@@ -13,9 +13,9 @@ resources:
 - bases/enterprise.splunk.com_ingestorclusters.yaml
 - bases/enterprise.splunk.com_queues.yaml
 - bases/enterprise.splunk.com_objectstorages.yaml
-- bases/enterprise.splunk.com_postgresdatabases.yaml
-- bases/enterprise.splunk.com_postgresclusterclasses.yaml
-- bases/enterprise.splunk.com_postgresclusters.yaml
+- bases/platform.splunk.com_postgresdatabases.yaml
+- bases/platform.splunk.com_postgresclusterclasses.yaml
+- bases/platform.splunk.com_postgresclusters.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 

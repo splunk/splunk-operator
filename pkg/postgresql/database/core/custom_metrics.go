@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
@@ -34,8 +34,8 @@ import (
 func reconcileCustomMetricsGate(
 	ctx context.Context,
 	rc *ReconcileContext,
-	postgresDB *enterprisev4.PostgresDatabase,
-	cluster *enterprisev4.PostgresCluster,
+	postgresDB *platformv1alpha1.PostgresDatabase,
+	cluster *platformv1alpha1.PostgresCluster,
 ) (dbmetrics.Outcome, error) {
 	var repository dbmetrics.AcknowledgementRepository = emptyAcknowledgementRepository{}
 	if rc.NewCustomMetricsAcknowledgementRepo != nil {
@@ -51,7 +51,7 @@ func reconcileCustomMetricsGate(
 	return dbmetrics.NewModel(repository).Reconcile(ctx, input)
 }
 
-func customMetricsPublicationInput(postgresDB *enterprisev4.PostgresDatabase) dbmetrics.PublicationInput {
+func customMetricsPublicationInput(postgresDB *platformv1alpha1.PostgresDatabase) dbmetrics.PublicationInput {
 	input := dbmetrics.PublicationInput{
 		OwnerName: postgresDB.Name,
 		OwnerUID:  string(postgresDB.UID),
@@ -72,7 +72,7 @@ func customMetricsPublicationInput(postgresDB *enterprisev4.PostgresDatabase) db
 	return input
 }
 
-func customMetricsGateInput(postgresDB *enterprisev4.PostgresDatabase) dbmetrics.GateInput {
+func customMetricsGateInput(postgresDB *platformv1alpha1.PostgresDatabase) dbmetrics.GateInput {
 	input := dbmetrics.GateInput{ClusterName: postgresDB.Spec.ClusterRef.Name}
 	if postgresDB.Status.CustomMetricsPublication == nil {
 		return input
@@ -108,7 +108,7 @@ func (emptyAcknowledgementRepository) Find(_ context.Context, _ mtypes.Contribut
 func persistCustomMetricsPublication(
 	ctx context.Context,
 	c client.Client,
-	postgresDB *enterprisev4.PostgresDatabase,
+	postgresDB *platformv1alpha1.PostgresDatabase,
 ) (bool, error) {
 	contributions := dbmetrics.PlanPublication(customMetricsPublicationInput(postgresDB))
 	previouslyActive := make(map[string]struct{})
@@ -120,12 +120,12 @@ func persistCustomMetricsPublication(
 		}
 	}
 	disabledAcknowledgementRequired := false
-	desired := &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+	desired := &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 		ObservedGeneration: postgresDB.Generation,
-		Contributions:      make([]enterprisev4.DatabaseCustomMetricsContribution, 0, len(contributions)),
+		Contributions:      make([]platformv1alpha1.DatabaseCustomMetricsContribution, 0, len(contributions)),
 	}
 	for _, contribution := range contributions {
-		info := enterprisev4.DatabaseCustomMetricsContribution{
+		info := platformv1alpha1.DatabaseCustomMetricsContribution{
 			DatabaseName: contribution.Identity.DatabaseName,
 			Revision:     contribution.Revision,
 			Exists:       contribution.Exists,
@@ -168,7 +168,7 @@ func persistCustomMetricsPublication(
 func persistCustomMetricsStatus(
 	ctx context.Context,
 	rc *ReconcileContext,
-	postgresDB *enterprisev4.PostgresDatabase,
+	postgresDB *platformv1alpha1.PostgresDatabase,
 	outcome dbmetrics.Outcome,
 	status metav1.ConditionStatus,
 	phase reconcileDBPhases,
@@ -181,7 +181,7 @@ func persistCustomMetricsStatus(
 
 func applyCustomMetricsStatus(
 	rc *ReconcileContext,
-	postgresDB *enterprisev4.PostgresDatabase,
+	postgresDB *platformv1alpha1.PostgresDatabase,
 	outcome dbmetrics.Outcome,
 	status metav1.ConditionStatus,
 	phase reconcileDBPhases,

@@ -26,7 +26,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/google/go-cmp/cmp"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/stretchr/testify/assert"
@@ -193,7 +193,7 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	restart := "restart"
 	switchover := "switchover"
 
-	baseSpec := &enterprisev4.PostgresClusterSpec{
+	baseSpec := &platformv1alpha1.PostgresClusterSpec{
 		Instances:        &instances,
 		PostgresVersion:  &version,
 		Storage:          &storageSize,
@@ -203,17 +203,17 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	}
 	currentConfig := &MergedConfig{
 		Spec: baseSpec.DeepCopy(),
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: &restart},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: &restart},
 	}
 	desiredConfig := &MergedConfig{
 		Spec: baseSpec.DeepCopy(),
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: &switchover},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: &switchover},
 	}
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 	existingCNPG := &cnpgv1.Cluster{
@@ -247,17 +247,17 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 	instances := int32(1)
 	storageSize := resource.MustParse("10Gi")
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: &requestedVersion,
 		},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 	currentConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &currentVersion,
 			Storage:          &storageSize,
@@ -265,10 +265,10 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 	desiredConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &requestedVersion,
 			Storage:          &storageSize,
@@ -276,7 +276,7 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
@@ -322,20 +322,20 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 	instances := int32(1)
 	storageSize := resource.MustParse("10Gi")
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: &requestedVersion,
-			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: ptr.To(true),
 			},
 		},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 	currentConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &currentVersion,
 			Storage:          &storageSize,
@@ -343,10 +343,10 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 	desiredConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &requestedVersion,
 			Storage:          &storageSize,
@@ -354,7 +354,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
@@ -412,20 +412,20 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 	instances := int32(1)
 	storageSize := resource.MustParse("10Gi")
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: &requestedVersion,
-			PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: ptr.To(true),
 			},
 		},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 	currentConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &currentVersion,
 			Storage:          &storageSize,
@@ -433,10 +433,10 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 	desiredConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &requestedVersion,
 			Storage:          &storageSize,
@@ -444,7 +444,7 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
@@ -499,7 +499,7 @@ func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 	version := "16"
 	storageSize := resource.MustParse("10Gi")
 
-	currentSpec := &enterprisev4.PostgresClusterSpec{
+	currentSpec := &platformv1alpha1.PostgresClusterSpec{
 		Instances:       &instances,
 		PostgresVersion: &version,
 		Storage:         &storageSize,
@@ -517,17 +517,17 @@ func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 
 	currentConfig := &MergedConfig{
 		Spec: currentSpec,
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 	desiredConfig := &MergedConfig{
 		Spec: desiredSpec,
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 	existingCNPG := &cnpgv1.Cluster{
@@ -566,7 +566,7 @@ func TestClusterModelAdoptsAndPrunesLegacyPostgreSQLParameters(t *testing.T) {
 	version := "16"
 	storageSize := resource.MustParse("10Gi")
 
-	currentSpec := &enterprisev4.PostgresClusterSpec{
+	currentSpec := &platformv1alpha1.PostgresClusterSpec{
 		Instances:       &instances,
 		PostgresVersion: &version,
 		Storage:         &storageSize,
@@ -584,17 +584,17 @@ func TestClusterModelAdoptsAndPrunesLegacyPostgreSQLParameters(t *testing.T) {
 
 	currentConfig := &MergedConfig{
 		Spec: currentSpec,
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 	desiredConfig := &MergedConfig{
 		Spec: desiredSpec,
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 	existingCNPG := &cnpgv1.Cluster{
@@ -651,10 +651,10 @@ func TestGetMergedConfig(t *testing.T) {
 	classInstances := int32(1)
 	classVersion := "17"
 	classStorage := resource.MustParse("50Gi")
-	baseClass := &enterprisev4.PostgresClusterClass{
+	baseClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "standard"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{
 				Instances:        &classInstances,
 				PostgresVersion:  &classVersion,
 				Storage:          &classStorage,
@@ -662,7 +662,7 @@ func TestGetMergedConfig(t *testing.T) {
 				PostgreSQLConfig: map[string]string{"shared_buffers": "128MB"},
 				PgHBA:            []string{"host all all 0.0.0.0/0 md5"},
 			},
-			CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
+			CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
 		},
 	}
 
@@ -670,8 +670,8 @@ func TestGetMergedConfig(t *testing.T) {
 		overrideInstances := int32(5)
 		overrideVersion := "18"
 		overrideStorage := resource.MustParse("100Gi")
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
 				Instances:        &overrideInstances,
 				PostgresVersion:  &overrideVersion,
 				Storage:          &overrideStorage,
@@ -691,8 +691,8 @@ func TestGetMergedConfig(t *testing.T) {
 	})
 
 	t.Run("class defaults fill in nil cluster fields", func(t *testing.T) {
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{},
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{},
 		}
 
 		cfg := GetMergedConfig(baseClass, cluster)
@@ -705,12 +705,12 @@ func TestGetMergedConfig(t *testing.T) {
 	})
 
 	t.Run("returns error when required fields missing from both", func(t *testing.T) {
-		emptyClass := &enterprisev4.PostgresClusterClass{
+		emptyClass := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "empty"},
-			Spec:       enterprisev4.PostgresClusterClassSpec{},
+			Spec:       platformv1alpha1.PostgresClusterClassSpec{},
 		}
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{},
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{},
 		}
 
 		cfg := GetMergedConfig(emptyClass, cluster)
@@ -719,8 +719,8 @@ func TestGetMergedConfig(t *testing.T) {
 	})
 
 	t.Run("CNPG config comes from class not cluster", func(t *testing.T) {
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{},
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{},
 		}
 
 		cfg := GetMergedConfig(baseClass, cluster)
@@ -731,10 +731,10 @@ func TestGetMergedConfig(t *testing.T) {
 	})
 
 	t.Run("rejects postgresqlConfig containing CNPG fixed parameters", func(t *testing.T) {
-		badClass := &enterprisev4.PostgresClusterClass{
+		badClass := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "bad"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: &enterprisev4.PostgresClusterClassConfig{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:        &classInstances,
 					PostgresVersion:  &classVersion,
 					Storage:          &classStorage,
@@ -743,7 +743,7 @@ func TestGetMergedConfig(t *testing.T) {
 				},
 			},
 		}
-		cluster := &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{}}
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{}}
 
 		cfg := GetMergedConfig(badClass, cluster)
 		errs := ValidateMergedConfig(cfg, badClass.Name)
@@ -751,8 +751,8 @@ func TestGetMergedConfig(t *testing.T) {
 		assert.Contains(t, errs[0].Error(), "postgresqlConfig must not set CNPG-managed parameters")
 		assert.Contains(t, errs[0].Error(), "ssl")
 
-		clusterOverride := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{
+		clusterOverride := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
 				Instances:       &classInstances,
 				PostgresVersion: &classVersion,
 				Storage:         &classStorage,
@@ -770,18 +770,18 @@ func TestGetMergedConfig(t *testing.T) {
 	})
 
 	t.Run("nil maps and slices initialized to safe zero values", func(t *testing.T) {
-		classWithNoMaps := &enterprisev4.PostgresClusterClass{
+		classWithNoMaps := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "minimal"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: &enterprisev4.PostgresClusterClassConfig{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       &classInstances,
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
 				},
 			},
 		}
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{},
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{},
 		}
 
 		cfg := GetMergedConfig(classWithNoMaps, cluster)
@@ -795,9 +795,9 @@ func TestGetMergedConfig(t *testing.T) {
 	t.Run("rejects 6-field cron schedule", func(t *testing.T) {
 		enabled := true
 		sixField := "0 */5 * * * *"
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{
-				Backup: &enterprisev4.BackupConfig{
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
+				Backup: &platformv1alpha1.BackupConfig{
 					Enabled:  &enabled,
 					Schedule: &sixField,
 				},
@@ -815,9 +815,9 @@ func TestGetMergedConfig(t *testing.T) {
 	t.Run("accepts valid 5-field cron schedule", func(t *testing.T) {
 		enabled := true
 		fiveField := "*/5 * * * *"
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{
-				Backup: &enterprisev4.BackupConfig{
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
+				Backup: &platformv1alpha1.BackupConfig{
 					Enabled:  &enabled,
 					Schedule: &fiveField,
 				},
@@ -837,7 +837,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 	storage := resource.MustParse("50Gi")
 	primaryUpdateMethod := "switchover"
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: &version,
 			Instances:       &instances,
 			Storage:         &storage,
@@ -851,7 +851,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 			},
 			Resources: &corev1.ResourceRequirements{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{
+		CNPG: &platformv1alpha1.CNPGConfig{
 			PrimaryUpdateMethod: &primaryUpdateMethod,
 		},
 	}
@@ -908,10 +908,10 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		enabled := true
 		className := "csi-snapclass"
 		specCopy := *cfg.Spec
-		specCopy.Backup = &enterprisev4.BackupConfig{Enabled: &enabled}
+		specCopy.Backup = &platformv1alpha1.BackupConfig{Enabled: &enabled}
 		cnpgCopy := *cfg.CNPG
-		cnpgCopy.Backup = &enterprisev4.CNPGBackupConfig{
-			VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{
+		cnpgCopy.Backup = &platformv1alpha1.CNPGBackupConfig{
+			VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
 				ClassName: &className,
 			},
 		}
@@ -933,7 +933,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 
 		disabled := false
 		specCopy := *cfg.Spec
-		specCopy.Backup = &enterprisev4.BackupConfig{Enabled: &disabled}
+		specCopy.Backup = &platformv1alpha1.BackupConfig{Enabled: &disabled}
 		cnpgCopy := *cfg.CNPG
 		disabledCfg := MergedConfig{Spec: &specCopy, CNPG: &cnpgCopy}
 
@@ -945,13 +945,13 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 
 func TestBuildCNPGCluster(t *testing.T) {
 	scheme := runtime.NewScheme()
-	enterprisev4.AddToScheme(scheme)
+	platformv1alpha1.AddToScheme(scheme)
 	cnpgv1.AddToScheme(scheme)
 
 	instances := int32(3)
 	version := "18"
 	storage := resource.MustParse("50Gi")
-	postgresCluster := &enterprisev4.PostgresCluster{
+	postgresCluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
 			Namespace: "db-ns",
@@ -959,7 +959,7 @@ func TestBuildCNPGCluster(t *testing.T) {
 		},
 	}
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storage,
@@ -967,7 +967,7 @@ func TestBuildCNPGCluster(t *testing.T) {
 			PgHBA:            []string{},
 			Resources:        &corev1.ResourceRequirements{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{
+		CNPG: &platformv1alpha1.CNPGConfig{
 			PrimaryUpdateMethod: ptr.To("restart"),
 		},
 	}
@@ -1477,7 +1477,7 @@ func TestClusterModelAdoptsOrphanedCNPGCluster(t *testing.T) {
 	version := "16"
 	storageSize := resource.MustParse("10Gi")
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -1485,10 +1485,10 @@ func TestClusterModelAdoptsOrphanedCNPGCluster(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
-	clusterClass := &enterprisev4.PostgresClusterClass{ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+	clusterClass := &platformv1alpha1.PostgresClusterClass{ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"}}
 	orphanedCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
 		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "pg1-secret", false),
@@ -1516,10 +1516,10 @@ func TestClusterModelContractsNotReadyIsUpstreamPending(t *testing.T) {
 	t.Parallel()
 
 	// Arrange: contracts has no Secret — clusterModel is the root and checks only for Secret.
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"}}
+	clusterClass := &platformv1alpha1.PostgresClusterClass{ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"}}
 	contracts := &reconcileContracts{} // Secret is nil
 	model := newClusterModel(
 		fake.NewClientBuilder().Build(), nil, noopEventEmitter{}, nil, cluster, clusterClass, &MergedConfig{}, contracts,
@@ -1543,11 +1543,11 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	exampleClusterClass := &enterprisev4.PostgresClusterClass{
+	exampleClusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{
-				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 			},
 		},
 	}
@@ -1561,10 +1561,10 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			configMapKeySuperUserSecretRef:   "pg1-secret",
 		},
 	}
-	examplePgCluster := &enterprisev4.PostgresCluster{
+	examplePgCluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Status: enterprisev4.PostgresClusterStatus{
-			Resources: &enterprisev4.PostgresClusterResources{
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Resources: &platformv1alpha1.PostgresClusterResources{
 				ConfigMapRef: &corev1.LocalObjectReference{Name: "pg1-config"},
 				SuperUserSecretRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
@@ -1586,7 +1586,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 	version := "16"
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -1594,12 +1594,12 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 
 	// makeContracts builds a contracts object with a healthy CNPG cluster pre-populated,
 	// simulating a prior successful clusterModel reconcile (owner reference already set).
-	makeContracts := func(cluster *enterprisev4.PostgresCluster, withCA bool) *reconcileContracts {
+	makeContracts := func(cluster *platformv1alpha1.PostgresCluster, withCA bool) *reconcileContracts {
 		cnpgStatus := cnpgv1.ClusterStatus{
 			Phase:        cnpgv1.PhaseHealthy,
 			WriteService: cluster.Name + "-rw",
@@ -1752,10 +1752,10 @@ func TestRunComponentsStopsOnObserveError(t *testing.T) {
 
 	// Arrange: two components — first returns an error from Observe, second must not run.
 	scheme := newTestScheme()
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Status: enterprisev4.PostgresClusterStatus{
-			Resources: &enterprisev4.PostgresClusterResources{
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Resources: &platformv1alpha1.PostgresClusterResources{
 				SuperUserSecretRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
 					Key:                  "password",
@@ -1806,9 +1806,9 @@ func TestRunComponentsSkipsReconcileWhenCheckContractsFails(t *testing.T) {
 	// Arrange: configmap model with missing contracts — CheckContracts returns errContractsNotReady,
 	// so Reconcile must never be called (which would panic on nil CNPGCluster).
 	scheme := newTestScheme()
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+		Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 	}
 	contracts := &reconcileContracts{} // CNPGCluster and Secret both nil
 	model := newConfigMapModel(fake.NewClientBuilder().WithScheme(scheme).Build(), scheme, noopEventEmitter{}, nil, cluster, contracts)
@@ -1969,7 +1969,7 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 	t.Parallel()
 
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 	require.NoError(t, corev1.AddToScheme(scheme))
 
@@ -1978,7 +1978,7 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 	storageSize := resource.MustParse("10Gi")
 
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -1986,13 +1986,13 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 
@@ -2009,7 +2009,7 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 
 	updatedInstances := int32(5)
 	driftedCfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &updatedInstances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -2017,7 +2017,7 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 
 	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
@@ -2043,18 +2043,18 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 	version := "16"
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
 			Resources:        &corev1.ResourceRequirements{},
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
-			ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+			ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	}
 	existingCNPG := &cnpgv1.Cluster{
@@ -2065,10 +2065,10 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 		Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}},
 	}
 	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 	model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts)
@@ -2414,7 +2414,7 @@ func defaultRoundTripFixture() roundTripFixture {
 
 func (f roundTripFixture) mergedConfig() *MergedConfig {
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        ptr.To(f.instances),
 			PostgresVersion:  ptr.To(f.postgresVersion),
 			Storage:          ptr.To(f.storage),
@@ -2424,7 +2424,7 @@ func (f roundTripFixture) mergedConfig() *MergedConfig {
 		},
 	}
 	if f.primaryUpdateMethod != nil {
-		cfg.CNPG = &enterprisev4.CNPGConfig{PrimaryUpdateMethod: f.primaryUpdateMethod}
+		cfg.CNPG = &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: f.primaryUpdateMethod}
 	}
 	return cfg
 }
@@ -2579,7 +2579,7 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 	version := "16"
 	storageSize := resource.MustParse("10Gi")
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -2587,13 +2587,13 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 
 	// makeModel builds a clusterModel with cnpgPatch and cnpgCluster already set,
 	// simulating the post-Reconcile state seen by Observe.
 	makeModel := func(patchKind cnpgPatchKind, cnpgPhase, specImage, statusImage, pgDataImage string) *clusterModel {
-		cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+		cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 		cnpg := &cnpgv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 			Spec:       cnpgv1.ClusterSpec{ImageName: specImage},
@@ -2609,7 +2609,7 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
 		contracts := &reconcileContracts{CNPGCluster: cnpg}
-		model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, &enterprisev4.PostgresClusterClass{}, cfg, contracts)
+		model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, &platformv1alpha1.PostgresClusterClass{}, cfg, contracts)
 		model.cnpgCluster = cnpg
 		model.cnpgPatch = patchKind
 		return model
@@ -2698,14 +2698,14 @@ func TestClusterModelObserve_AdoptedClusterDoesNotStallAtProvisioning(t *testing
 	// Arrange: simulate Reconcile having adopted an orphaned CNPG cluster —
 	// patchKind is Metadata (only owner reference changed), CNPG is already Healthy.
 	scheme := newTestScheme()
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cnpg).Build()
 	contracts := &reconcileContracts{CNPGCluster: cnpg}
-	model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, &enterprisev4.PostgresClusterClass{}, &MergedConfig{}, contracts)
+	model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, &platformv1alpha1.PostgresClusterClass{}, &MergedConfig{}, contracts)
 	model.cnpgCluster = cnpg
 	model.cnpgPatch = cnpgPatchMetadata
 
@@ -2739,7 +2739,7 @@ func TestClusterModelScaleInProgress(t *testing.T) {
 
 	desired := int32(3)
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{Instances: &desired},
+		Spec: &platformv1alpha1.PostgresClusterSpec{Instances: &desired},
 	}
 
 	tests := []struct {
@@ -2800,9 +2800,9 @@ func TestClusterModelComputeHealthMirrorsCNPGStatus(t *testing.T) {
 
 	desired := int32(3)
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{Instances: &desired, PostgreSQLConfig: map[string]string{}},
+		Spec: &platformv1alpha1.PostgresClusterSpec{Instances: &desired, PostgreSQLConfig: map[string]string{}},
 	}
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 	model := &clusterModel{
 		cluster:      cluster,
 		mergedConfig: cfg,
@@ -2836,11 +2836,11 @@ func TestClusterModelComputeHealthGatesScale(t *testing.T) {
 
 	desired := int32(3)
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{Instances: &desired, PostgreSQLConfig: map[string]string{}},
+		Spec: &platformv1alpha1.PostgresClusterSpec{Instances: &desired, PostgreSQLConfig: map[string]string{}},
 	}
 	newModel := func(instances, ready int) *clusterModel {
 		return &clusterModel{
-			cluster:      &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}},
+			cluster:      &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}},
 			mergedConfig: cfg,
 			cnpgCluster: &cnpgv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
@@ -2878,61 +2878,61 @@ func TestClusterModelComputeHealthGatesScale(t *testing.T) {
 func TestValidateCrossResourceScalingGuardrails(t *testing.T) {
 	t.Parallel()
 
-	switchoverClass := func(classInstances *int32) *enterprisev4.PostgresClusterClass {
-		return &enterprisev4.PostgresClusterClass{
+	switchoverClass := func(classInstances *int32) *platformv1alpha1.PostgresClusterClass {
+		return &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "switchover-class"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: &enterprisev4.PostgresClusterClassConfig{Instances: classInstances},
-				CNPG:   &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{Instances: classInstances},
+				CNPG:   &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
 			},
 		}
 	}
-	poolerClass := func(classInstances *int32) *enterprisev4.PostgresClusterClass {
-		return &enterprisev4.PostgresClusterClass{
+	poolerClass := func(classInstances *int32) *platformv1alpha1.PostgresClusterClass {
+		return &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "pooler-class"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: &enterprisev4.PostgresClusterClassConfig{Instances: classInstances},
-				CNPG:   &enterprisev4.CNPGConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{}},
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{Instances: classInstances},
+				CNPG:   &platformv1alpha1.CNPGConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{}},
 			},
 		}
 	}
 
 	tests := []struct {
 		name      string
-		class     *enterprisev4.PostgresClusterClass
-		cluster   *enterprisev4.PostgresCluster
+		class     *platformv1alpha1.PostgresClusterClass
+		cluster   *platformv1alpha1.PostgresCluster
 		wantField string // "" means expect no scaling/pooler guardrail error
 	}{
 		{
 			name:      "switchover with cluster instances=1 rejected",
 			class:     switchoverClass(ptr.To(int32(3))),
-			cluster:   &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{Instances: ptr.To(int32(1))}},
+			cluster:   &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Instances: ptr.To(int32(1))}},
 			wantField: "spec.instances",
 		},
 		{
 			name:      "switchover inheriting class default 1 rejected (cluster silent)",
 			class:     switchoverClass(ptr.To(int32(1))),
-			cluster:   &enterprisev4.PostgresCluster{},
+			cluster:   &platformv1alpha1.PostgresCluster{},
 			wantField: "spec.instances",
 		},
 		{
 			name:    "switchover with cluster instances=2 accepted",
 			class:   switchoverClass(ptr.To(int32(1))),
-			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{Instances: ptr.To(int32(2))}},
+			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Instances: ptr.To(int32(2))}},
 		},
 		{
 			name:  "readOnly pooler at instances=1 NOT rejected (runtime suppresses RO)",
 			class: poolerClass(ptr.To(int32(1))),
-			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{
-				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(true)},
+			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(true)},
 			}},
 		},
 		{
 			name:  "readOnly pooler with cluster instances=2 accepted",
 			class: poolerClass(ptr.To(int32(1))),
-			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{
+			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{
 				Instances:        ptr.To(int32(2)),
-				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(true)},
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(true)},
 			}},
 		},
 	}

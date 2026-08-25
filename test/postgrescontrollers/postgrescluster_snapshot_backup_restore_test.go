@@ -22,7 +22,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgtesthelpers "github.com/splunk/splunk-operator/test/postgrescontrollers/helpers"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -65,23 +65,23 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 				Expect(err).To(Succeed())
 
 				schedule := "* * * * *"
-				class := &enterprisev4.PostgresClusterClass{
+				class := &platformv1alpha1.PostgresClusterClass{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:   "postgres-snapshot-" + namespace,
 						Labels: map[string]string{"app.kubernetes.io/managed-by": "e2e-test"},
 					},
-					Spec: enterprisev4.PostgresClusterClassSpec{
+					Spec: platformv1alpha1.PostgresClusterClassSpec{
 						Provisioner: "postgresql.cnpg.io",
-						Config: &enterprisev4.PostgresClusterClassConfig{
+						Config: &platformv1alpha1.PostgresClusterClassConfig{
 							Instances: ptr.To(int32(1)),
-							Backup: &enterprisev4.BackupConfig{
+							Backup: &platformv1alpha1.BackupConfig{
 								Enabled:  ptr.To(true),
 								Schedule: &schedule,
 							},
 						},
-						CNPG: &enterprisev4.CNPGConfig{Backup: &enterprisev4.CNPGBackupConfig{
+						CNPG: &platformv1alpha1.CNPGConfig{Backup: &platformv1alpha1.CNPGBackupConfig{
 							Target: ptr.To("primary"),
-							VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{
+							VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
 								ClassName:              &snapshotClassName,
 								SnapshotOwnerReference: ptr.To("cluster"),
 								Online:                 ptr.To(true),
@@ -98,9 +98,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 				})
 				pgtesthelpers.RegisterSnapshotFailureDump(apiClient, snapshots, namespace)
 
-				source := &enterprisev4.PostgresCluster{
+				source := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "snapshot-source", Namespace: namespace},
-					Spec: enterprisev4.PostgresClusterSpec{
+					Spec: platformv1alpha1.PostgresClusterSpec{
 						Class:                 class.Name,
 						ClusterDeletionPolicy: ptr.To("Delete"),
 					},
@@ -129,7 +129,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 						primaryPV.Name)
 				}
 				Eventually(func(g Gomega) {
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(apiClient.Get(ctx, sourceKey, current)).To(Succeed())
 					pgtesthelpers.StopIfPostgresClusterFailed(current)
 					condition := meta.FindStatusCondition(current.Status.Conditions, "BackupReady")
@@ -153,7 +153,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 
 				sourceCNPG := &cnpgv1.Cluster{}
 				Eventually(func(g Gomega) {
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(apiClient.Get(ctx, sourceKey, current)).To(Succeed())
 					pgtesthelpers.StopIfPostgresClusterFailed(current)
 					g.Expect(apiClient.Get(ctx, sourceKey, sourceCNPG)).To(Succeed())
@@ -174,7 +174,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 
 				scheduledKey := types.NamespacedName{Name: source.Name + "-backup", Namespace: namespace}
 				Eventually(func(g Gomega) {
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(apiClient.Get(ctx, sourceKey, current)).To(Succeed())
 					pgtesthelpers.StopIfPostgresClusterFailed(current)
 					scheduled := &cnpgv1.ScheduledBackup{}
@@ -202,7 +202,7 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value;`)
 
 				baselineUIDs, err := pgtesthelpers.SnapshotBackupUIDs(ctx, apiClient, namespace, source.Name)
 				Expect(err).To(Succeed())
-				baselineCluster := &enterprisev4.PostgresCluster{}
+				baselineCluster := &platformv1alpha1.PostgresCluster{}
 				Expect(apiClient.Get(ctx, sourceKey, baselineCluster)).To(Succeed())
 				var baselineLastSchedule *metav1.Time
 				if baselineCluster.Status.BackupStatus != nil && baselineCluster.Status.BackupStatus.VolumeSnapshot != nil {
@@ -221,7 +221,7 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value;`)
 				Expect(snapshotElement.Name).NotTo(BeEmpty())
 
 				Eventually(func(g Gomega) {
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(apiClient.Get(ctx, sourceKey, current)).To(Succeed())
 					pgtesthelpers.StopIfPostgresClusterFailed(current)
 					g.Expect(current.Status.BackupStatus).NotTo(BeNil())
@@ -276,13 +276,13 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value;`)
 				}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 				By("disabling future source backups after selecting the restore point")
-				currentSource := &enterprisev4.PostgresCluster{}
+				currentSource := &platformv1alpha1.PostgresCluster{}
 				Expect(apiClient.Get(ctx, sourceKey, currentSource)).To(Succeed())
 				patch := client.MergeFrom(currentSource.DeepCopy())
-				currentSource.Spec.Backup = &enterprisev4.BackupConfig{Enabled: ptr.To(false)}
+				currentSource.Spec.Backup = &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)}
 				Expect(apiClient.Patch(ctx, currentSource, patch)).To(Succeed())
 				Eventually(func(g Gomega) {
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(apiClient.Get(ctx, sourceKey, current)).To(Succeed())
 					pgtesthelpers.StopIfPostgresClusterFailed(current)
 					condition := meta.FindStatusCondition(current.Status.Conditions, "BackupReady")
@@ -302,14 +302,14 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`)
 				Expect(err).To(Succeed())
 
 				restoreStarted := time.Now()
-				restored := &enterprisev4.PostgresCluster{
+				restored := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "snapshot-restored", Namespace: namespace},
-					Spec: enterprisev4.PostgresClusterSpec{
+					Spec: platformv1alpha1.PostgresClusterSpec{
 						Class:                 class.Name,
 						ClusterDeletionPolicy: ptr.To("Delete"),
-						Backup:                &enterprisev4.BackupConfig{Enabled: ptr.To(false)},
-						BootstrapFrom: &enterprisev4.BootstrapFrom{
-							VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: snapshotElement.Name},
+						Backup:                &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)},
+						BootstrapFrom: &platformv1alpha1.BootstrapFrom{
+							VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: snapshotElement.Name},
 						},
 					},
 				}
@@ -370,12 +370,12 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`)
 				Expect(err).To(Succeed())
 				Expect(apiClient.Delete(ctx, sourceDatabase)).To(Succeed())
 				Eventually(func() error {
-					return apiClient.Get(ctx, types.NamespacedName{Name: sourceDatabase.Name, Namespace: namespace}, &enterprisev4.PostgresDatabase{})
+					return apiClient.Get(ctx, types.NamespacedName{Name: sourceDatabase.Name, Namespace: namespace}, &platformv1alpha1.PostgresDatabase{})
 				}, testenv.DefaultTimeout, testenv.PollInterval).Should(Satisfy(apierrors.IsNotFound))
 				pgtesthelpers.ExpectPostgresDatabaseChildrenDeleted(ctx, apiClient, sourceDatabaseChildren)
 				Expect(apiClient.Delete(ctx, currentSource)).To(Succeed())
 				Eventually(func(g Gomega) {
-					g.Expect(apierrors.IsNotFound(apiClient.Get(ctx, sourceKey, &enterprisev4.PostgresCluster{}))).To(BeTrue())
+					g.Expect(apierrors.IsNotFound(apiClient.Get(ctx, sourceKey, &platformv1alpha1.PostgresCluster{}))).To(BeTrue())
 					g.Expect(apierrors.IsNotFound(apiClient.Get(ctx, sourceKey, &cnpgv1.Cluster{}))).To(BeTrue())
 					g.Expect(apierrors.IsNotFound(apiClient.Get(ctx, types.NamespacedName{Name: primaryPVC.Name, Namespace: namespace}, &corev1.PersistentVolumeClaim{}))).To(BeTrue())
 					g.Expect(apierrors.IsNotFound(apiClient.Get(ctx, types.NamespacedName{Name: backup.Name, Namespace: namespace}, &cnpgv1.Backup{}))).To(BeTrue())
@@ -393,12 +393,12 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`)
 				By("cleaning up the restored database and cluster")
 				Expect(apiClient.Delete(ctx, restoredDatabase)).To(Succeed())
 				Eventually(func() error {
-					return apiClient.Get(ctx, types.NamespacedName{Name: restoredDatabase.Name, Namespace: namespace}, &enterprisev4.PostgresDatabase{})
+					return apiClient.Get(ctx, types.NamespacedName{Name: restoredDatabase.Name, Namespace: namespace}, &platformv1alpha1.PostgresDatabase{})
 				}, testenv.DefaultTimeout, testenv.PollInterval).Should(Satisfy(apierrors.IsNotFound))
 				pgtesthelpers.ExpectPostgresDatabaseChildrenDeleted(ctx, apiClient, restoredDatabaseChildren)
 				Expect(apiClient.Delete(ctx, restored)).To(Succeed())
 				Eventually(func(g Gomega) {
-					g.Expect(apierrors.IsNotFound(apiClient.Get(ctx, restoredKey, &enterprisev4.PostgresCluster{}))).To(BeTrue())
+					g.Expect(apierrors.IsNotFound(apiClient.Get(ctx, restoredKey, &platformv1alpha1.PostgresCluster{}))).To(BeTrue())
 					g.Expect(apierrors.IsNotFound(apiClient.Get(ctx, restoredKey, &cnpgv1.Cluster{}))).To(BeTrue())
 					g.Expect(apierrors.IsNotFound(apiClient.Get(ctx, types.NamespacedName{Name: restoredPrimaryPVC.Name, Namespace: namespace}, &corev1.PersistentVolumeClaim{}))).To(BeTrue())
 				}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())

@@ -25,7 +25,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
@@ -52,7 +52,7 @@ const (
 	dbEventPostgresDatabaseReady = "PostgresDatabaseReady"
 )
 
-const postgresDatabaseFinalizer = "postgresdatabases.enterprise.splunk.com/finalizer"
+const postgresDatabaseFinalizer = "postgresdatabases.platform.splunk.com/finalizer"
 
 // condition types
 const (
@@ -89,7 +89,7 @@ const (
 )
 
 // annotations
-const retainedFromAnnotation = "enterprise.splunk.com/retained-from"
+const retainedFromAnnotation = "platform.splunk.com/retained-from"
 
 // database names used across tests
 const (
@@ -145,7 +145,7 @@ func containsEvent(events []string, eventType, reason string) bool {
 	return false
 }
 
-func publishedRoleNames(postgresDB *enterprisev4.PostgresDatabase) []string {
+func publishedRoleNames(postgresDB *platformv1alpha1.PostgresDatabase) []string {
 	var names []string
 	for _, db := range postgresDB.Status.Databases {
 		for _, role := range db.Roles {
@@ -171,11 +171,11 @@ func cnpgDatabaseNameForTest(resourceName, dbName string) string {
 	return fmt.Sprintf("%s-%s", resourceName, dbName)
 }
 
-func ownedByPostgresDatabase(postgresDB *enterprisev4.PostgresDatabase) []metav1.OwnerReference {
+func ownedByPostgresDatabase(postgresDB *platformv1alpha1.PostgresDatabase) []metav1.OwnerReference {
 	controller := true
 	blockOwnerDeletion := true
 	return []metav1.OwnerReference{{
-		APIVersion:         enterprisev4.GroupVersion.String(),
+		APIVersion:         platformv1alpha1.GroupVersion.String(),
 		Kind:               "PostgresDatabase",
 		Name:               postgresDB.Name,
 		UID:                postgresDB.UID,
@@ -184,14 +184,14 @@ func ownedByPostgresDatabase(postgresDB *enterprisev4.PostgresDatabase) []metav1
 	}}
 }
 
-func createPostgresDatabaseResource(ctx context.Context, namespace, resourceName, clusterName string, databases []enterprisev4.DatabaseDefinition, finalizers ...string) *enterprisev4.PostgresDatabase {
-	postgresDB := &enterprisev4.PostgresDatabase{
+func createPostgresDatabaseResource(ctx context.Context, namespace, resourceName, clusterName string, databases []platformv1alpha1.DatabaseDefinition, finalizers ...string) *platformv1alpha1.PostgresDatabase {
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       resourceName,
 			Namespace:  namespace,
 			Finalizers: finalizers,
 		},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: clusterName},
 			Databases:  databases,
 		},
@@ -200,13 +200,13 @@ func createPostgresDatabaseResource(ctx context.Context, namespace, resourceName
 	return postgresDB
 }
 
-func createPostgresClusterResource(ctx context.Context, namespace, clusterName string) *enterprisev4.PostgresCluster {
-	postgresCluster := &enterprisev4.PostgresCluster{
+func createPostgresClusterResource(ctx context.Context, namespace, clusterName string) *platformv1alpha1.PostgresCluster {
+	postgresCluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName,
 			Namespace: namespace,
 		},
-		Spec: enterprisev4.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			Class: "dev",
 		},
 	}
@@ -214,11 +214,11 @@ func createPostgresClusterResource(ctx context.Context, namespace, clusterName s
 	return postgresCluster
 }
 
-func markPostgresClusterReady(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgClusterName, namespace string, poolerEnabled bool) {
+func markPostgresClusterReady(ctx context.Context, postgresCluster *platformv1alpha1.PostgresCluster, cnpgClusterName, namespace string, poolerEnabled bool) {
 	markPostgresClusterReadyWithPooler(ctx, postgresCluster, cnpgClusterName, namespace, poolerEnabled, poolerEnabled, poolerEnabled)
 }
 
-func markPostgresClusterReadyWithPooler(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgClusterName, namespace string, poolerEnabled, rwEnabled, roEnabled bool) {
+func markPostgresClusterReadyWithPooler(ctx context.Context, postgresCluster *platformv1alpha1.PostgresCluster, cnpgClusterName, namespace string, poolerEnabled, rwEnabled, roEnabled bool) {
 	clusterPhase := "Ready"
 	postgresCluster.Status.Phase = &clusterPhase
 	postgresCluster.Status.ProvisionerRef = &corev1.ObjectReference{
@@ -228,7 +228,7 @@ func markPostgresClusterReadyWithPooler(ctx context.Context, postgresCluster *en
 		Namespace:  namespace,
 	}
 	if poolerEnabled {
-		postgresCluster.Status.ConnectionPoolerStatus = &enterprisev4.ConnectionPoolerStatus{
+		postgresCluster.Status.ConnectionPoolerStatus = &platformv1alpha1.ConnectionPoolerStatus{
 			Enabled:          true,
 			ReadWriteEnabled: rwEnabled,
 			ReadOnlyEnabled:  roEnabled,
@@ -295,7 +295,7 @@ func seedReadyClusterScenario(ctx context.Context, scenario readyClusterScenario
 }
 
 func seedReadyClusterScenarioWithInstances(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool, instances int) {
-	createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}})
+	createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{{Name: scenario.dbName}})
 	postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
 	// Mirror the cluster controller's roPoolerWanted gate so the seeded fixture matches what
 	// real reconciliation would publish: RO is suppressed below 2 declared instances.
@@ -315,19 +315,19 @@ func expectEmptyReconcileResult(result ctrl.Result, err error) {
 	Expect(result).To(Equal(ctrl.Result{}))
 }
 
-func fetchPostgresDatabase(ctx context.Context, requestName types.NamespacedName) *enterprisev4.PostgresDatabase {
-	current := &enterprisev4.PostgresDatabase{}
+func fetchPostgresDatabase(ctx context.Context, requestName types.NamespacedName) *platformv1alpha1.PostgresDatabase {
+	current := &platformv1alpha1.PostgresDatabase{}
 	Expect(k8sClient.Get(ctx, requestName, current)).To(Succeed())
 	return current
 }
 
-func expectFinalizerAdded(ctx context.Context, requestName types.NamespacedName) *enterprisev4.PostgresDatabase {
+func expectFinalizerAdded(ctx context.Context, requestName types.NamespacedName) *platformv1alpha1.PostgresDatabase {
 	current := fetchPostgresDatabase(ctx, requestName)
 	Expect(current.Finalizers).To(ContainElement(postgresDatabaseFinalizer))
 	return current
 }
 
-func seedExistingDatabaseStatus(ctx context.Context, current *enterprisev4.PostgresDatabase, dbName string) {
+func seedExistingDatabaseStatus(ctx context.Context, current *platformv1alpha1.PostgresDatabase, dbName string) {
 	for _, database := range current.Spec.Databases {
 		if database.Name != dbName || database.PasswordConfig != nil {
 			continue
@@ -356,11 +356,11 @@ func seedExistingDatabaseStatus(ctx context.Context, current *enterprisev4.Postg
 		}
 		break
 	}
-	current.Status.Databases = []enterprisev4.DatabaseInfo{{Name: dbName}}
+	current.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: dbName}}
 	Expect(k8sClient.Status().Update(ctx, current)).To(Succeed())
 }
 
-func expectProvisionedArtifacts(ctx context.Context, scenario readyClusterScenario, owner *enterprisev4.PostgresDatabase) {
+func expectProvisionedArtifacts(ctx context.Context, scenario readyClusterScenario, owner *platformv1alpha1.PostgresDatabase) {
 	adminSecret := &corev1.Secret{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: adminSecretNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, adminSecret)).To(Succeed())
 	Expect(adminSecret.Data).To(HaveKey("password"))
@@ -390,18 +390,18 @@ func expectManagedRolesPatched(ctx context.Context, scenario readyClusterScenari
 		adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName))
 }
 
-func simulateClusterRoleOwnership(ctx context.Context, clusterName, namespace string, owner *enterprisev4.PostgresDatabase, roleNames ...string) {
-	cluster := &enterprisev4.PostgresCluster{}
+func simulateClusterRoleOwnership(ctx context.Context, clusterName, namespace string, owner *platformv1alpha1.PostgresDatabase, roleNames ...string) {
+	cluster := &platformv1alpha1.PostgresCluster{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster)).To(Succeed())
-	owners := make(map[string]enterprisev4.RoleOwnerReference, len(roleNames))
+	owners := make(map[string]platformv1alpha1.RoleOwnerReference, len(roleNames))
 	for _, roleName := range roleNames {
-		owners[roleName] = enterprisev4.RoleOwnerReference{Name: owner.Name, UID: string(owner.UID)}
+		owners[roleName] = platformv1alpha1.RoleOwnerReference{Name: owner.Name, UID: string(owner.UID)}
 	}
-	cluster.Status.ManagedRolesStatus = &enterprisev4.ManagedRolesStatus{Reconciled: roleNames, RoleOwners: owners}
+	cluster.Status.ManagedRolesStatus = &platformv1alpha1.ManagedRolesStatus{Reconciled: roleNames, RoleOwners: owners}
 	Expect(k8sClient.Status().Update(ctx, cluster)).To(Succeed())
 }
 
-func expectCNPGDatabaseCreated(ctx context.Context, scenario readyClusterScenario, owner *enterprisev4.PostgresDatabase) *cnpgv1.Database {
+func expectCNPGDatabaseCreated(ctx context.Context, scenario readyClusterScenario, owner *platformv1alpha1.PostgresDatabase) *cnpgv1.Database {
 	cnpgDatabase := &cnpgv1.Database{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 	Expect(cnpgDatabase.Spec.Name).To(Equal(scenario.dbName))
@@ -425,12 +425,12 @@ func expectPoolerConfigMap(ctx context.Context, scenario readyClusterScenario) {
 }
 
 func seedMissingClusterScenario(ctx context.Context, namespace, resourceName string, finalizers ...string) types.NamespacedName {
-	createPostgresDatabaseResource(ctx, namespace, resourceName, "absent-cluster", []enterprisev4.DatabaseDefinition{{Name: dbAppdb}}, finalizers...)
+	createPostgresDatabaseResource(ctx, namespace, resourceName, "absent-cluster", []platformv1alpha1.DatabaseDefinition{{Name: dbAppdb}}, finalizers...)
 	return types.NamespacedName{Name: resourceName, Namespace: namespace}
 }
 
 func seedConflictScenario(ctx context.Context, namespace, resourceName, clusterName string) types.NamespacedName {
-	createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []enterprisev4.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
+	createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []platformv1alpha1.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
 	postgresCluster := createPostgresClusterResource(ctx, namespace, clusterName)
 	cnpgClusterName := clusterName + "-cnpg"
 	markPostgresClusterReady(ctx, postgresCluster, cnpgClusterName, namespace, false)
@@ -439,7 +439,7 @@ func seedConflictScenario(ctx context.Context, namespace, resourceName, clusterN
 	return types.NamespacedName{Name: resourceName, Namespace: namespace}
 }
 
-func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, clusterName string, postgresDB *enterprisev4.PostgresDatabase, dbNames ...string) {
+func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, clusterName string, postgresDB *platformv1alpha1.PostgresDatabase, dbNames ...string) {
 	ownerReferences := ownedByPostgresDatabase(postgresDB)
 	for _, dbName := range dbNames {
 		Expect(k8sClient.Create(ctx, &corev1.Secret{
@@ -489,8 +489,8 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 	}
 }
 
-func expectPublishedRoleExists(postgresDB *enterprisev4.PostgresDatabase, roleName string, exists bool) {
-	rolesByName := make(map[string]enterprisev4.DatabaseRoleInfo)
+func expectPublishedRoleExists(postgresDB *platformv1alpha1.PostgresDatabase, roleName string, exists bool) {
+	rolesByName := make(map[string]platformv1alpha1.DatabaseRoleInfo)
 	for _, db := range postgresDB.Status.Databases {
 		for _, role := range db.Roles {
 			rolesByName[role.Name] = role
@@ -511,19 +511,19 @@ func expectDeletedArtifact(ctx context.Context, name, namespace string, obj clie
 	Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected %s to be deleted", name)
 }
 
-func expectStatusPhase(current *enterprisev4.PostgresDatabase, expectedPhase string) {
+func expectStatusPhase(current *platformv1alpha1.PostgresDatabase, expectedPhase string) {
 	Expect(current.Status.Phase).NotTo(BeNil())
 	Expect(*current.Status.Phase).To(Equal(expectedPhase))
 }
 
-func expectStatusCondition(current *enterprisev4.PostgresDatabase, conditionType string, expectedStatus metav1.ConditionStatus, expectedReason string) {
+func expectStatusCondition(current *platformv1alpha1.PostgresDatabase, conditionType string, expectedStatus metav1.ConditionStatus, expectedReason string) {
 	condition := meta.FindStatusCondition(current.Status.Conditions, conditionType)
 	Expect(condition).NotTo(BeNil(), "missing status condition %s", conditionType)
 	Expect(condition.Status).To(Equal(expectedStatus), "unexpected status for %s", conditionType)
 	Expect(condition.Reason).To(Equal(expectedReason), "unexpected reason for %s", conditionType)
 }
 
-func expectReadyStatus(current *enterprisev4.PostgresDatabase, generation int64, expectedDatabase enterprisev4.DatabaseInfo) {
+func expectReadyStatus(current *platformv1alpha1.PostgresDatabase, generation int64, expectedDatabase platformv1alpha1.DatabaseInfo) {
 	expectStatusPhase(current, phaseReady)
 	Expect(current.Status.Databases).To(HaveLen(1))
 	Expect(current.Status.Databases[0].Name).To(Equal(expectedDatabase.Name))
@@ -535,7 +535,7 @@ func expectReadyStatus(current *enterprisev4.PostgresDatabase, generation int64,
 	Expect(*current.Status.ObservedGeneration).To(Equal(generation))
 }
 
-func reconcilePostgresDatabaseToReady(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool) *enterprisev4.PostgresDatabase {
+func reconcilePostgresDatabaseToReady(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool) *platformv1alpha1.PostgresDatabase {
 	seedReadyClusterScenario(ctx, scenario, poolerEnabled)
 
 	result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
@@ -558,7 +558,7 @@ func reconcilePostgresDatabaseToReady(ctx context.Context, scenario readyCluster
 	expectEmptyReconcileResult(result, err)
 
 	current = fetchPostgresDatabase(ctx, scenario.requestName)
-	expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+	expectReadyStatus(current, current.Generation, platformv1alpha1.DatabaseInfo{Name: scenario.dbName, Ready: true})
 	return current
 }
 
@@ -636,7 +636,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectEmptyReconcileResult(result, err)
 
 				current = fetchPostgresDatabase(ctx, scenario.requestName)
-				expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+				expectReadyStatus(current, current.Generation, platformv1alpha1.DatabaseInfo{Name: scenario.dbName, Ready: true})
 				expectStatusCondition(current, condClusterReady, metav1.ConditionTrue, reasonClusterAvailable)
 				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
 				expectStatusCondition(current, condConfigMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated)
@@ -660,9 +660,9 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
   value: value
 `},
 				})).To(Succeed())
-				createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{
+				createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{{
 					Name: scenario.dbName,
-					Monitoring: &enterprisev4.DatabaseMonitoring{
+					Monitoring: &platformv1alpha1.DatabaseMonitoring{
 						CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 							LocalObjectReference: corev1.LocalObjectReference{Name: sourceName},
 							Key:                  sourceKey,
@@ -723,10 +723,10 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 				setAcknowledgement := func(desiredRevision, appliedRevision string, status metav1.ConditionStatus, reason string) {
 					GinkgoHelper()
-					cluster := &enterprisev4.PostgresCluster{}
+					cluster := &platformv1alpha1.PostgresCluster{}
 					Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.clusterName, Namespace: namespace}, cluster)).To(Succeed())
-					cluster.Status.CustomMetricsStatus = &enterprisev4.CustomMetricsStatus{
-						DatabaseContributions: []enterprisev4.DatabaseCustomMetricsStatus{{
+					cluster.Status.CustomMetricsStatus = &platformv1alpha1.CustomMetricsStatus{
+						DatabaseContributions: []platformv1alpha1.DatabaseCustomMetricsStatus{{
 							PostgresDatabaseName: current.Name,
 							PostgresDatabaseUID:  string(current.UID),
 							DatabaseName:         scenario.dbName,
@@ -803,9 +803,9 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 				createPostgresDatabaseResource(ctx, scenario.namespace,
 					scenario.resourceName, scenario.clusterName,
-					[]enterprisev4.DatabaseDefinition{{
+					[]platformv1alpha1.DatabaseDefinition{{
 						Name: scenario.dbName,
-						PasswordConfig: &enterprisev4.PasswordConfig{
+						PasswordConfig: &platformv1alpha1.PasswordConfig{
 							ExternalAdminSecretRef: corev1.LocalObjectReference{
 								Name: "external-admin-secret"},
 							ExternalRWSecretRef: corev1.LocalObjectReference{
@@ -870,7 +870,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectEmptyReconcileResult(result, err)
 
 				current = fetchPostgresDatabase(ctx, scenario.requestName)
-				expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+				expectReadyStatus(current, current.Generation, platformv1alpha1.DatabaseInfo{Name: scenario.dbName, Ready: true})
 				expectStatusCondition(current, condClusterReady, metav1.ConditionTrue, reasonClusterAvailable)
 				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
 
@@ -891,9 +891,9 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 				createPostgresDatabaseResource(ctx, scenario.namespace,
 					scenario.resourceName, scenario.clusterName,
-					[]enterprisev4.DatabaseDefinition{{
+					[]platformv1alpha1.DatabaseDefinition{{
 						Name: scenario.dbName,
-						PasswordConfig: &enterprisev4.PasswordConfig{
+						PasswordConfig: &platformv1alpha1.PasswordConfig{
 							ExternalAdminSecretRef: corev1.LocalObjectReference{
 								Name: "external-admin-secret12"},
 							ExternalRWSecretRef: corev1.LocalObjectReference{
@@ -948,9 +948,9 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				)
 				createPostgresDatabaseResource(ctx, scenario.namespace,
 					scenario.resourceName, scenario.clusterName,
-					[]enterprisev4.DatabaseDefinition{{
+					[]platformv1alpha1.DatabaseDefinition{{
 						Name: scenario.dbName,
-						PasswordConfig: &enterprisev4.PasswordConfig{
+						PasswordConfig: &platformv1alpha1.PasswordConfig{
 							ExternalAdminSecretRef: corev1.LocalObjectReference{Name: adminSecretName},
 							ExternalRWSecretRef:    corev1.LocalObjectReference{Name: rwSecretName},
 						}}})
@@ -1036,9 +1036,9 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				)
 				createPostgresDatabaseResource(ctx, scenario.namespace,
 					scenario.resourceName, scenario.clusterName,
-					[]enterprisev4.DatabaseDefinition{{
+					[]platformv1alpha1.DatabaseDefinition{{
 						Name: scenario.dbName,
-						PasswordConfig: &enterprisev4.PasswordConfig{
+						PasswordConfig: &platformv1alpha1.PasswordConfig{
 							ExternalAdminSecretRef: corev1.LocalObjectReference{Name: adminSecretName},
 							ExternalRWSecretRef:    corev1.LocalObjectReference{Name: rwSecretName},
 						}}})
@@ -1117,9 +1117,9 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 				createPostgresDatabaseResource(ctx, scenario.namespace,
 					scenario.resourceName, scenario.clusterName,
-					[]enterprisev4.DatabaseDefinition{{
+					[]platformv1alpha1.DatabaseDefinition{{
 						Name: scenario.dbName,
-						PasswordConfig: &enterprisev4.PasswordConfig{
+						PasswordConfig: &platformv1alpha1.PasswordConfig{
 							ExternalAdminSecretRef: corev1.LocalObjectReference{
 								Name: "external-admin-secret"},
 							ExternalRWSecretRef: corev1.LocalObjectReference{
@@ -1184,7 +1184,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectEmptyReconcileResult(result, err)
 
 				current = fetchPostgresDatabase(ctx, scenario.requestName)
-				expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+				expectReadyStatus(current, current.Generation, platformv1alpha1.DatabaseInfo{Name: scenario.dbName, Ready: true})
 				expectStatusCondition(current, condClusterReady, metav1.ConditionTrue, reasonClusterAvailable)
 				expectStatusCondition(current, condSecretsReady, metav1.ConditionTrue, reasonSecretsCreated)
 				expectStatusCondition(current, condConfigMapsReady, metav1.ConditionTrue, reasonConfigMapsCreated)
@@ -1249,7 +1249,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterROEndpoint, ""))
 				Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyPoolerROEndpoint, ""))
 
-				postgresCluster := &enterprisev4.PostgresCluster{}
+				postgresCluster := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.clusterName, Namespace: scenario.namespace}, postgresCluster)).To(Succeed())
 				postgresCluster.Status.ConnectionPoolerStatus.ReadOnlyEnabled = true
 				Expect(k8sClient.Status().Update(ctx, postgresCluster)).To(Succeed())
@@ -1272,7 +1272,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	When("the referenced PostgresCluster exists but is not ready", func() {
 		It("waits for cluster to be provisioned and sets ClusterReady=False with reason ClusterProvisioning", func() {
 			scenario := newReadyClusterScenario(namespace, "not-ready-cluster", "not-ready-postgres", "not-ready-cnpg", dbAppdb)
-			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}})
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{{Name: scenario.dbName}})
 			createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
 			// Do NOT call markPostgresClusterReady to leave it in provisioning state
 
@@ -1307,7 +1307,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterRWEndpoint, "tenant-rw."+scenario.namespace+".svc.cluster.local"))
 
 			current := fetchPostgresDatabase(ctx, scenario.requestName)
-			expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+			expectReadyStatus(current, current.Generation, platformv1alpha1.DatabaseInfo{Name: scenario.dbName, Ready: true})
 			Expect(metav1.IsControlledBy(configMap, owner)).To(BeTrue())
 		})
 
@@ -1365,14 +1365,14 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(metav1.IsControlledBy(secret, owner)).To(BeTrue())
 
 			current := fetchPostgresDatabase(ctx, scenario.requestName)
-			expectReadyStatus(current, current.Generation, enterprisev4.DatabaseInfo{Name: scenario.dbName, Ready: true})
+			expectReadyStatus(current, current.Generation, platformv1alpha1.DatabaseInfo{Name: scenario.dbName, Ready: true})
 		})
 
 		It("creates secrets and configmaps for a newly added database while preserving existing ones", func() {
 			scenario := newReadyClusterScenario(namespace, "new-database", "tenant-cluster", "tenant-cnpg", "appdb")
 			current := reconcilePostgresDatabaseToReady(ctx, scenario, false)
 
-			current.Spec.Databases = append(current.Spec.Databases, enterprisev4.DatabaseDefinition{Name: "analytics"})
+			current.Spec.Databases = append(current.Spec.Databases, platformv1alpha1.DatabaseDefinition{Name: "analytics"})
 			Expect(k8sClient.Update(ctx, current)).To(Succeed())
 
 			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
@@ -1449,7 +1449,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	When("managed roles have been patched but CNPG has not reconciled them yet", func() {
 		It("waits for CNPG to reconcile roles and sets RolesReady=False with reason WaitingForCNPG", func() {
 			scenario := newReadyClusterScenario(namespace, "roles-wait", "tenant-cluster", "tenant-cnpg", dbAppdb)
-			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}})
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{{Name: scenario.dbName}})
 			postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
 			markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
 			cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
@@ -1521,10 +1521,10 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("blocks PostgresCluster updates that don't change ConnectionPoolerStatus", func() {
 			pred := postgresClusterForDatabasePredicator()
-			oldCluster := &enterprisev4.PostgresCluster{
+			oldCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
 				},
 			}
 			newCluster := oldCluster.DeepCopy()
@@ -1533,20 +1533,20 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("passes PostgresCluster updates that introduce ConnectionPoolerStatus", func() {
 			pred := postgresClusterForDatabasePredicator()
-			oldCluster := &enterprisev4.PostgresCluster{
+			oldCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
 			}
 			newCluster := oldCluster.DeepCopy()
-			newCluster.Status.ConnectionPoolerStatus = &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true}
+			newCluster.Status.ConnectionPoolerStatus = &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true}
 			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
 		})
 
 		It("passes PostgresCluster updates that toggle ReadOnlyEnabled", func() {
 			pred := postgresClusterForDatabasePredicator()
-			oldCluster := &enterprisev4.PostgresCluster{
+			oldCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: false},
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: false},
 				},
 			}
 			newCluster := oldCluster.DeepCopy()
@@ -1556,10 +1556,10 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("passes PostgresCluster updates that toggle ReadWriteEnabled", func() {
 			pred := postgresClusterForDatabasePredicator()
-			oldCluster := &enterprisev4.PostgresCluster{
+			oldCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
 				},
 			}
 			newCluster := oldCluster.DeepCopy()
@@ -1569,12 +1569,12 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("passes PostgresCluster custom-metrics acknowledgement updates", func() {
 			pred := postgresClusterForDatabasePredicator()
-			oldCluster := &enterprisev4.PostgresCluster{
+			oldCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
 			}
 			newCluster := oldCluster.DeepCopy()
-			newCluster.Status.CustomMetricsStatus = &enterprisev4.CustomMetricsStatus{
-				DatabaseContributions: []enterprisev4.DatabaseCustomMetricsStatus{{
+			newCluster.Status.CustomMetricsStatus = &platformv1alpha1.CustomMetricsStatus{
+				DatabaseContributions: []platformv1alpha1.DatabaseCustomMetricsStatus{{
 					PostgresDatabaseName: "app",
 					PostgresDatabaseUID:  "uid",
 					DatabaseName:         "orders",
@@ -1591,11 +1591,11 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			pred := postgresClusterForDatabasePredicator()
 			phaseReady := "Ready"
 			phaseProvisioning := "Provisioning"
-			oldCluster := &enterprisev4.PostgresCluster{
+			oldCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
-				Status: enterprisev4.PostgresClusterStatus{
+				Status: platformv1alpha1.PostgresClusterStatus{
 					Phase:                  &phaseReady,
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true},
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true},
 				},
 			}
 			newCluster := oldCluster.DeepCopy()
@@ -1605,10 +1605,10 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("passes PostgresCluster updates when ReadyInstances drops below the RO threshold", func() {
 			pred := postgresClusterForDatabasePredicator()
-			oldCluster := &enterprisev4.PostgresCluster{
+			oldCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
 					ReadyInstances:         ptr.To(int32(2)),
 				},
 			}
@@ -1619,10 +1619,10 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("passes PostgresCluster updates when ReadyInstances crosses to the RO threshold", func() {
 			pred := postgresClusterForDatabasePredicator()
-			oldCluster := &enterprisev4.PostgresCluster{
+			oldCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
 					ReadyInstances:         ptr.To(int32(1)),
 				},
 			}
@@ -1633,10 +1633,10 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("blocks PostgresCluster updates when ReadyInstances changes within the same RO-availability state", func() {
 			pred := postgresClusterForDatabasePredicator()
-			oldCluster := &enterprisev4.PostgresCluster{
+			oldCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
 					ReadyInstances:         ptr.To(int32(2)),
 				},
 			}
@@ -1647,7 +1647,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("does not trigger on annotation changes", func() {
 			pred := postgresDatabasePredicator()
-			oldDB := &enterprisev4.PostgresDatabase{
+			oldDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{
 					Generation: 1,
 					Annotations: map[string]string{
@@ -1655,7 +1655,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 					},
 				},
 			}
-			newDB := &enterprisev4.PostgresDatabase{
+			newDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{
 					Generation: 1,
 					Annotations: map[string]string{
@@ -1671,7 +1671,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	When("role ownership inversion is active", func() {
 		It("drives the status handshake from credential publication through the role gate", func() {
 			scenario := newReadyClusterScenario(namespace, "handshake-db", "handshake-pg", "handshake-cnpg", dbAppdb)
-			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}})
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{{Name: scenario.dbName}})
 			postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
 			markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
 			cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
@@ -1710,8 +1710,8 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			cnpgCluster := createCNPGClusterResource(ctx, namespace, cnpgClusterName)
 			markCNPGClusterReady(ctx, cnpgCluster, nil, "tenant-rw", "tenant-ro")
 
-			first := createPostgresDatabaseResource(ctx, namespace, "conflict-a", clusterName, []enterprisev4.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
-			second := createPostgresDatabaseResource(ctx, namespace, "conflict-b", clusterName, []enterprisev4.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
+			first := createPostgresDatabaseResource(ctx, namespace, "conflict-a", clusterName, []platformv1alpha1.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
+			second := createPostgresDatabaseResource(ctx, namespace, "conflict-b", clusterName, []platformv1alpha1.DatabaseDefinition{{Name: dbAppdb}}, postgresDatabaseFinalizer)
 
 			for _, nn := range []types.NamespacedName{{Name: first.Name, Namespace: namespace}, {Name: second.Name, Namespace: namespace}} {
 				result, err := reconcilePostgresDatabase(ctx, nn)
@@ -1719,15 +1719,15 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			}
 
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, postgresCluster)).To(Succeed())
-			postgresCluster.Status.ManagedRolesStatus = &enterprisev4.ManagedRolesStatus{Conflicts: []enterprisev4.RoleConflict{
-				{Role: adminRoleNameForTest(dbAppdb), AttemptedBy: enterprisev4.RoleOwnerReference{Name: first.Name, UID: string(first.UID)}},
-				{Role: rwRoleNameForTest(dbAppdb), AttemptedBy: enterprisev4.RoleOwnerReference{Name: first.Name, UID: string(first.UID)}},
-				{Role: adminRoleNameForTest(dbAppdb), AttemptedBy: enterprisev4.RoleOwnerReference{Name: second.Name, UID: string(second.UID)}},
-				{Role: rwRoleNameForTest(dbAppdb), AttemptedBy: enterprisev4.RoleOwnerReference{Name: second.Name, UID: string(second.UID)}},
+			postgresCluster.Status.ManagedRolesStatus = &platformv1alpha1.ManagedRolesStatus{Conflicts: []platformv1alpha1.RoleConflict{
+				{Role: adminRoleNameForTest(dbAppdb), AttemptedBy: platformv1alpha1.RoleOwnerReference{Name: first.Name, UID: string(first.UID)}},
+				{Role: rwRoleNameForTest(dbAppdb), AttemptedBy: platformv1alpha1.RoleOwnerReference{Name: first.Name, UID: string(first.UID)}},
+				{Role: adminRoleNameForTest(dbAppdb), AttemptedBy: platformv1alpha1.RoleOwnerReference{Name: second.Name, UID: string(second.UID)}},
+				{Role: rwRoleNameForTest(dbAppdb), AttemptedBy: platformv1alpha1.RoleOwnerReference{Name: second.Name, UID: string(second.UID)}},
 			}}
 			Expect(k8sClient.Status().Update(ctx, postgresCluster)).To(Succeed())
 
-			for _, db := range []*enterprisev4.PostgresDatabase{first, second} {
+			for _, db := range []*platformv1alpha1.PostgresDatabase{first, second} {
 				result, err := reconcilePostgresDatabase(ctx, types.NamespacedName{Name: db.Name, Namespace: namespace})
 				expectReconcileResult(result, err, 15*time.Second)
 				current := fetchPostgresDatabase(ctx, types.NamespacedName{Name: db.Name, Namespace: namespace})
@@ -1746,12 +1746,12 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			requestName := seedConflictScenario(ctx, namespace, resourceName, clusterName)
 
 			current := fetchPostgresDatabase(ctx, requestName)
-			cluster := &enterprisev4.PostgresCluster{}
+			cluster := &platformv1alpha1.PostgresCluster{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster)).To(Succeed())
-			incumbent := enterprisev4.RoleOwnerReference{Name: "other-db", UID: "other-uid"}
-			self := enterprisev4.RoleOwnerReference{Name: current.Name, UID: string(current.UID)}
-			cluster.Status.ManagedRolesStatus = &enterprisev4.ManagedRolesStatus{
-				Conflicts: []enterprisev4.RoleConflict{
+			incumbent := platformv1alpha1.RoleOwnerReference{Name: "other-db", UID: "other-uid"}
+			self := platformv1alpha1.RoleOwnerReference{Name: current.Name, UID: string(current.UID)}
+			cluster.Status.ManagedRolesStatus = &platformv1alpha1.ManagedRolesStatus{
+				Conflicts: []platformv1alpha1.RoleConflict{
 					{Role: adminRoleNameForTest(dbAppdb), ClaimedBy: &incumbent, AttemptedBy: self},
 					{Role: rwRoleNameForTest(dbAppdb), ClaimedBy: &incumbent, AttemptedBy: self},
 				},
@@ -1778,7 +1778,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			cnpgClusterName := "live-db-removal-cnpg"
 			requestName := types.NamespacedName{Name: resourceName, Namespace: namespace}
 
-			postgresDB := createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []enterprisev4.DatabaseDefinition{
+			postgresDB := createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []platformv1alpha1.DatabaseDefinition{
 				{Name: dbKeepdb},
 				{Name: dbDropdb},
 			}, postgresDatabaseFinalizer)
@@ -1798,7 +1798,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				adminRoleNameForTest(dbKeepdb), rwRoleNameForTest(dbKeepdb),
 				adminRoleNameForTest(dbDropdb), rwRoleNameForTest(dbDropdb))
 
-			postgresDB.Spec.Databases = []enterprisev4.DatabaseDefinition{{Name: dbKeepdb}}
+			postgresDB.Spec.Databases = []platformv1alpha1.DatabaseDefinition{{Name: dbKeepdb}}
 			Expect(k8sClient.Update(ctx, postgresDB)).To(Succeed())
 
 			result, err := reconcilePostgresDatabase(ctx, requestName)
@@ -1818,7 +1818,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				clusterName := "delete-postgres"
 				requestName := types.NamespacedName{Name: resourceName, Namespace: namespace}
 
-				postgresDB := createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []enterprisev4.DatabaseDefinition{
+				postgresDB := createPostgresDatabaseResource(ctx, namespace, resourceName, clusterName, []platformv1alpha1.DatabaseDefinition{
 					{Name: dbKeepdb, DeletionPolicy: "Retain"},
 					{Name: dbDropdb},
 				}, postgresDatabaseFinalizer)
@@ -1858,7 +1858,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				result, err = reconcilePostgresDatabase(ctx, requestName)
 				expectEmptyReconcileResult(result, err)
 
-				err = k8sClient.Get(ctx, requestName, &enterprisev4.PostgresDatabase{})
+				err = k8sClient.Get(ctx, requestName, &platformv1alpha1.PostgresDatabase{})
 				Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			})
 		})
@@ -1867,7 +1867,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	When("extensions are declared on a database", func() {
 		It("propagates them as ensure:present to the CNPG Database spec", func() {
 			scenario := newReadyClusterScenario(namespace, "ext-create", "tenant-cluster", "tenant-cnpg", dbAppdb)
-			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{
 				{Name: scenario.dbName, Extensions: []string{"pg_trgm", "unaccent"}},
 			}, postgresDatabaseFinalizer)
 			postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
@@ -1897,7 +1897,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("marks a removed extension as ensure:absent on the next reconcile", func() {
 			scenario := newReadyClusterScenario(namespace, "ext-remove", "tenant-cluster", "tenant-cnpg", dbAppdb)
-			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{
 				{Name: scenario.dbName, Extensions: []string{"pg_trgm", "unaccent"}},
 			}, postgresDatabaseFinalizer)
 			postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
@@ -1943,7 +1943,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	When("a retained CNPG Database exists without owner reference", func() {
 		It("re-adopts the resource and removes retained annotation", func() {
 			scenario := newReadyClusterScenario(namespace, "adopt-cnpg", "tenant-cluster", "tenant-cnpg", dbAppdb)
-			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []enterprisev4.DatabaseDefinition{{Name: scenario.dbName}}, postgresDatabaseFinalizer)
+			createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{{Name: scenario.dbName}}, postgresDatabaseFinalizer)
 			postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
 			markPostgresClusterReady(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, false)
 			cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
@@ -2000,7 +2000,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(*current.Status.Phase).To(Equal(phaseReady))
 
 			// Delete the PostgresCluster (simulating external deletion)
-			postgresCluster := &enterprisev4.PostgresCluster{}
+			postgresCluster := &platformv1alpha1.PostgresCluster{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.clusterName, Namespace: scenario.namespace}, postgresCluster)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, postgresCluster)).To(Succeed())
 
@@ -2059,8 +2059,8 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				FleetCollector: pgprometheus.NewFleetCollector(),
 			}
 			cluster := createPostgresClusterResource(ctx, namespace, "enqueue-cluster")
-			createPostgresDatabaseResource(ctx, namespace, "db-matches", "enqueue-cluster", []enterprisev4.DatabaseDefinition{{Name: dbAppdb}})
-			createPostgresDatabaseResource(ctx, namespace, "db-no-match", "other-cluster", []enterprisev4.DatabaseDefinition{{Name: dbAppdb}})
+			createPostgresDatabaseResource(ctx, namespace, "db-matches", "enqueue-cluster", []platformv1alpha1.DatabaseDefinition{{Name: dbAppdb}})
+			createPostgresDatabaseResource(ctx, namespace, "db-no-match", "other-cluster", []platformv1alpha1.DatabaseDefinition{{Name: dbAppdb}})
 			reqs := reconciler.enqueuePostgresDatabasesForCluster(ctx, cluster)
 
 			Expect(reqs).To(HaveLen(1))
@@ -2082,14 +2082,14 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	When("a PostgresDatabase resource is created, the kubebuilder validation works and", func() {
 		It("rejects database names containing underscores or hyphens", func() {
 			for i, databaseName := range []string{"my_db", "_mydb", "my__db", "my-db", "-mydb", "my--db"} {
-				postgresDB := &enterprisev4.PostgresDatabase{
+				postgresDB := &platformv1alpha1.PostgresDatabase{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      fmt.Sprintf("invalid-database-name-%d", i),
 						Namespace: namespace,
 					},
-					Spec: enterprisev4.PostgresDatabaseSpec{
+					Spec: platformv1alpha1.PostgresDatabaseSpec{
 						ClusterRef: corev1.LocalObjectReference{Name: "tenant-cluster"},
-						Databases:  []enterprisev4.DatabaseDefinition{{Name: databaseName}},
+						Databases:  []platformv1alpha1.DatabaseDefinition{{Name: databaseName}},
 					},
 				}
 
@@ -2102,16 +2102,16 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 		It("should catch empty secrets", func() {
 			scenario := newReadyClusterScenario(namespace, "password-config-wrong", "tenant-cluster", "tenant-cnpg", dbAppdb)
-			postgresDB := &enterprisev4.PostgresDatabase{
+			postgresDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       scenario.resourceName,
 					Namespace:  namespace,
 					Finalizers: []string{dbAppdb},
 				},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: scenario.clusterName},
-					Databases: []enterprisev4.DatabaseDefinition{{Name: scenario.dbName,
-						PasswordConfig: &enterprisev4.PasswordConfig{
+					Databases: []platformv1alpha1.DatabaseDefinition{{Name: scenario.dbName,
+						PasswordConfig: &platformv1alpha1.PasswordConfig{
 							ExternalAdminSecretRef: corev1.LocalObjectReference{Name: ""},
 							ExternalRWSecretRef:    corev1.LocalObjectReference{Name: ""},
 						}}}},
@@ -2120,16 +2120,16 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 		})
 		It("should catch indifferent secrets", func() {
 			scenario := newReadyClusterScenario(namespace, "password-config-wrong", "tenant-cluster", "tenant-cnpg", dbAppdb)
-			postgresDB := &enterprisev4.PostgresDatabase{
+			postgresDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       scenario.resourceName,
 					Namespace:  namespace,
 					Finalizers: []string{dbAppdb},
 				},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: scenario.clusterName},
-					Databases: []enterprisev4.DatabaseDefinition{{Name: scenario.dbName,
-						PasswordConfig: &enterprisev4.PasswordConfig{
+					Databases: []platformv1alpha1.DatabaseDefinition{{Name: scenario.dbName,
+						PasswordConfig: &platformv1alpha1.PasswordConfig{
 							ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "indiff"},
 							ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "indiff"},
 						}}}},

@@ -27,7 +27,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -56,9 +56,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			// Provision a ready PostgresCluster first.
 			pgClass := createPGClass(ctx, kubeClient, ns)
 
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "db-cluster", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -68,18 +68,18 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			clusterKey := types.NamespacedName{Name: pgCluster.Name, Namespace: ns}
 			By("waiting for PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			// Create the PostgresDatabase.
-			pgDB := &enterprisev4.PostgresDatabase{
+			pgDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-db", Namespace: ns},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: pgCluster.Name},
-					Databases: []enterprisev4.DatabaseDefinition{
+					Databases: []platformv1alpha1.DatabaseDefinition{
 						{Name: "appdb", DeletionPolicy: "Delete"},
 					},
 				},
@@ -90,7 +90,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 
 			By("waiting for PostgresDatabase to reach Ready")
 			Eventually(func(g Gomega) {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
@@ -103,7 +103,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			// reconciles them into Status.ManagedRolesStatus.Reconciled (see
 			// pkg/postgresql/cluster/core/managed_roles_model.go).
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(presentRoleNames(pc)).To(ContainElements("appdb_admin", "appdb_rw"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
@@ -119,9 +119,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
 
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "db-cluster-del", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -131,17 +131,17 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			clusterKey := types.NamespacedName{Name: pgCluster.Name, Namespace: ns}
 			By("waiting for PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
-			pgDB := &enterprisev4.PostgresDatabase{
+			pgDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{Name: "del-db", Namespace: ns},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: pgCluster.Name},
-					Databases: []enterprisev4.DatabaseDefinition{
+					Databases: []platformv1alpha1.DatabaseDefinition{
 						{Name: "dropme", DeletionPolicy: "Delete"},
 					},
 				},
@@ -151,7 +151,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			dbKey := types.NamespacedName{Name: pgDB.Name, Namespace: ns}
 			By("waiting for PostgresDatabase to reach Ready")
 			Eventually(func(g Gomega) {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
@@ -180,7 +180,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 
 			By("waiting for PostgresDatabase to be removed")
 			Eventually(func() error {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				return kubeClient.Get(ctx, dbKey, pd)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Satisfy(apierrors.IsNotFound))
 
@@ -190,7 +190,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			// Status.ManagedRolesStatus.Reconciled — by the time the PostgresDatabase CR itself
 			// is removed (waited for above), the roles are guaranteed to already be absent here.
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(presentRoleNames(pc)).NotTo(ContainElement("dropme_admin"))
 				g.Expect(presentRoleNames(pc)).NotTo(ContainElement("dropme_rw"))
@@ -233,9 +233,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "retain-db-cluster", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -245,17 +245,17 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			clusterKey := types.NamespacedName{Name: pgCluster.Name, Namespace: ns}
 			By("waiting for PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
-			pgDB := &enterprisev4.PostgresDatabase{
+			pgDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{Name: "retain-db", Namespace: ns},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: pgCluster.Name},
-					Databases: []enterprisev4.DatabaseDefinition{
+					Databases: []platformv1alpha1.DatabaseDefinition{
 						{Name: "keepme", DeletionPolicy: "Retain"},
 					},
 				},
@@ -265,7 +265,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			dbKey := types.NamespacedName{Name: pgDB.Name, Namespace: ns}
 			By("waiting for PostgresDatabase to reach Ready")
 			Eventually(func(g Gomega) {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
@@ -279,7 +279,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 
 			By("waiting for PostgresDatabase CR to be removed")
 			Eventually(func() error {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				return kubeClient.Get(ctx, dbKey, pd)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Satisfy(apierrors.IsNotFound))
 
@@ -294,7 +294,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			// well within the spec's NodeTimeout budget. 1m (vs. the default 2s) gives the
 			// cluster controller a realistic window to have processed the deletion.
 			Consistently(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(presentRoleNames(pc)).To(ContainElements("keepme_admin", "keepme_rw"))
 			}, time.Minute, testenv.ConsistentPollInterval).Should(Succeed())
@@ -309,9 +309,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "multi-db-cluster", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -321,17 +321,17 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			clusterKey := types.NamespacedName{Name: pgCluster.Name, Namespace: ns}
 			By("waiting for PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
-			pgDB := &enterprisev4.PostgresDatabase{
+			pgDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{Name: "multi-db", Namespace: ns},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: pgCluster.Name},
-					Databases: []enterprisev4.DatabaseDefinition{
+					Databases: []platformv1alpha1.DatabaseDefinition{
 						{Name: "alpha", DeletionPolicy: "Delete"},
 						{Name: "beta", DeletionPolicy: "Delete"},
 						{Name: "gamma", DeletionPolicy: "Delete"},
@@ -343,7 +343,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			dbKey := types.NamespacedName{Name: pgDB.Name, Namespace: ns}
 			By("waiting for PostgresDatabase to reach Ready")
 			Eventually(func(g Gomega) {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
@@ -351,7 +351,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 
 			By("verifying all role pairs are present on the PostgresCluster")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(presentRoleNames(pc)).To(ContainElements(
 					"alpha_admin", "alpha_rw",
@@ -381,9 +381,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "addremove-cluster", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -393,17 +393,17 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			clusterKey := types.NamespacedName{Name: pgCluster.Name, Namespace: ns}
 			By("waiting for PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
-			pgDB := &enterprisev4.PostgresDatabase{
+			pgDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{Name: "addremove-db", Namespace: ns},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: pgCluster.Name},
-					Databases: []enterprisev4.DatabaseDefinition{
+					Databases: []platformv1alpha1.DatabaseDefinition{
 						{Name: "first", DeletionPolicy: "Delete"},
 					},
 				},
@@ -413,7 +413,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			dbKey := types.NamespacedName{Name: pgDB.Name, Namespace: ns}
 			By("waiting for PostgresDatabase to reach Ready with first database")
 			Eventually(func(g Gomega) {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
@@ -422,14 +422,14 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			By("adding a second database")
 			Expect(kubeClient.Get(ctx, dbKey, pgDB)).To(Succeed())
 			patch := client.MergeFrom(pgDB.DeepCopy())
-			pgDB.Spec.Databases = append(pgDB.Spec.Databases, enterprisev4.DatabaseDefinition{
+			pgDB.Spec.Databases = append(pgDB.Spec.Databases, platformv1alpha1.DatabaseDefinition{
 				Name: "second", DeletionPolicy: "Delete",
 			})
 			Expect(kubeClient.Patch(ctx, pgDB, patch)).To(Succeed())
 
 			By("waiting for PostgresDatabase to return to Ready")
 			Eventually(func(g Gomega) {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
@@ -437,7 +437,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 
 			By("verifying both role pairs are present")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(presentRoleNames(pc)).To(ContainElements(
 					"first_admin", "first_rw",
@@ -448,14 +448,14 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			By("removing the first database from spec")
 			Expect(kubeClient.Get(ctx, dbKey, pgDB)).To(Succeed())
 			patch = client.MergeFrom(pgDB.DeepCopy())
-			pgDB.Spec.Databases = []enterprisev4.DatabaseDefinition{
+			pgDB.Spec.Databases = []platformv1alpha1.DatabaseDefinition{
 				{Name: "second", DeletionPolicy: "Delete"},
 			}
 			Expect(kubeClient.Patch(ctx, pgDB, patch)).To(Succeed())
 
 			By("verifying first db roles are flipped absent, second db roles remain present")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				roles := presentRoleNames(pc)
 				g.Expect(roles).NotTo(ContainElement("first_admin"))
@@ -473,11 +473,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			By("creating PostgresDatabase referencing a missing cluster")
-			pgDB := &enterprisev4.PostgresDatabase{
+			pgDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{Name: "notfound-db", Namespace: ns},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: "does-not-exist"},
-					Databases: []enterprisev4.DatabaseDefinition{
+					Databases: []platformv1alpha1.DatabaseDefinition{
 						{Name: "waitdb", DeletionPolicy: "Delete"},
 					},
 				},
@@ -488,7 +488,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 
 			By("asserting PostgresDatabase holds Pending with ClusterNotFound condition")
 			Eventually(func(g Gomega) {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Pending"))
@@ -503,9 +503,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 
 			By("creating the referenced PostgresCluster")
 			pgClass := createPGClass(ctx, kubeClient, ns)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "does-not-exist", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -514,7 +514,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 
 			By("waiting for PostgresDatabase to recover to Ready")
 			Eventually(func(g Gomega) {
-				pd := &enterprisev4.PostgresDatabase{}
+				pd := &platformv1alpha1.PostgresDatabase{}
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
@@ -528,7 +528,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 // in computeDesiredRoles/syncManagedRolesStatusFromCNPG in
 // pkg/postgresql/cluster/core/managed_roles_model.go). A role dropped by its
 // owning PostgresDatabase disappears from this list once CNPG confirms removal.
-func presentRoleNames(pc *enterprisev4.PostgresCluster) []string {
+func presentRoleNames(pc *platformv1alpha1.PostgresCluster) []string {
 	if pc.Status.ManagedRolesStatus == nil {
 		return nil
 	}

@@ -63,9 +63,9 @@ Confirm the three consumer-facing Postgres Operator CRDs and the backend CNPG CR
 
 ```bash
 kubectl get crd \
-  postgresclusterclasses.enterprise.splunk.com \
-  postgresclusters.enterprise.splunk.com \
-  postgresdatabases.enterprise.splunk.com \
+  postgresclusterclasses.platform.splunk.com \
+  postgresclusters.platform.splunk.com \
+  postgresdatabases.platform.splunk.com \
   clusters.postgresql.cnpg.io
 ```
 
@@ -240,9 +240,9 @@ kubectl rollout status deployment/splunk-operator-controller-manager \
 kubectl get deployment splunk-operator-controller-manager -n splunk-operator \
   -o jsonpath='{.spec.template.spec.containers[0].args}{"\n"}'
 kubectl get crd \
-  postgresclusterclasses.enterprise.splunk.com \
-  postgresclusters.enterprise.splunk.com \
-  postgresdatabases.enterprise.splunk.com \
+  postgresclusterclasses.platform.splunk.com \
+  postgresclusters.platform.splunk.com \
+  postgresdatabases.platform.splunk.com \
   clusters.postgresql.cnpg.io
 ```
 
@@ -280,7 +280,7 @@ class exists and you are allowed to create one, apply this development-only clas
 
 ```bash
 cat <<'EOF' | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-dev
@@ -324,7 +324,7 @@ cluster through the class policy selected in step 2:
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: quickstart-postgres
@@ -354,7 +354,7 @@ ConfigMap.
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: quickstart-db
@@ -492,9 +492,9 @@ installed in the current cluster or `kubectl` is using the wrong context. Rechec
 ```bash
 kubectl config current-context
 kubectl get crd \
-  postgresclusterclasses.enterprise.splunk.com \
-  postgresclusters.enterprise.splunk.com \
-  postgresdatabases.enterprise.splunk.com
+  postgresclusterclasses.platform.splunk.com \
+  postgresclusters.platform.splunk.com \
+  postgresdatabases.platform.splunk.com
 ```
 
 Use the appropriate [setup path](#setup-and-prerequisites) if a CRD is missing.
@@ -507,7 +507,7 @@ whether the current user can create classes:
 ```bash
 kubectl get postgresclusterclass postgresql-dev
 kubectl auth can-i create postgresclusterclasses \
-  --api-group=enterprise.splunk.com
+  --api-group=platform.splunk.com
 ```
 
 Use an approved existing class when one is available. For `Forbidden`, request the required
@@ -596,15 +596,15 @@ the read-only pooler require more than one effective database instance, so do no
 class to `instances: 1`.
 
 This is an adapted quickstart profile, not a verbatim copy of the repository's
-[`postgresql-prod` sample](../../config/samples/enterprise_v4_postgresclusterclass_prod.yaml): it
+[`postgresql-prod` sample](../../config/samples/platform_v1alpha1_postgresclusterclass_prod.yaml): it
 uses PostgreSQL `18` rather than the sample's pinned `18.1`, omits its workload-specific OLTP
 `postgresqlConfig` tuning, and explicitly enables both PgBouncer endpoints rather than relying on
 their `true` defaults. It adds the backup configuration from the
-[`postgresql-backup` sample](../../config/samples/enterprise_v4_postgresclusterclass_backup.yaml).
+[`postgresql-backup` sample](../../config/samples/platform_v1alpha1_postgresclusterclass_backup.yaml).
 Use the production sample as the baseline when its version pin and tuning match the workload.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-prod
@@ -656,8 +656,8 @@ spec:
 ```
 
 The `volumeSnapshot` fields come from the current
-[`CNPGVolumeSnapshotConfig` API](../../api/enterprise/v4/postgresclusterclass_types.go) and match
-the repository's [`postgresql-backup` sample](../../config/samples/enterprise_v4_postgresclusterclass_backup.yaml).
+[`CNPGVolumeSnapshotConfig` API](../../api/platform/v1alpha1/postgresclusterclass_types.go) and match
+the repository's [`postgresql-backup` sample](../../config/samples/platform_v1alpha1_postgresclusterclass_backup.yaml).
 Choose the snapshot class approved for the target environment; `csi-hostpath-snapclass` is the
 repository's development sample, not a portable production default. See
 [Automated Backups via Volume Snapshots](backup-volume-snapshots.md) for the required platform
@@ -670,7 +670,7 @@ database resources per workload so their generated credentials can be scoped ind
 Kubernetes RBAC.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-shared
@@ -702,7 +702,7 @@ spec:
         max_client_conn: "300"
         default_pool_size: "30"
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: shared-postgres
@@ -712,7 +712,7 @@ spec:
   # Why: deleting the CR should not immediately delete data shared by several teams.
   clusterDeletionPolicy: Retain
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: team-a-db
@@ -725,7 +725,7 @@ spec:
       # Why: delete the database, roles, generated Secrets, and ConfigMap with this CR.
       deletionPolicy: Delete
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: team-b-db
@@ -754,7 +754,7 @@ or connection policy. This example enforces TLS at the PostgreSQL access-policy 
 cluster when its CR is deleted.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-dedicated
@@ -779,7 +779,7 @@ spec:
   cnpg:
     primaryUpdateMethod: switchover
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: orders-postgres
@@ -789,7 +789,7 @@ spec:
   # Why: preserve the independently managed cluster if this CR is removed.
   clusterDeletionPolicy: Retain
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: orders-db
@@ -816,7 +816,7 @@ enable or disable the inherited pooler endpoints. This complete class creates on
 pooler, which is appropriate when replicas are reserved for HA rather than application reads.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-pooler-transaction

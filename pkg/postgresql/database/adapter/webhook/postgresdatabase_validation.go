@@ -25,13 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	core "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 )
 
 // ValidatePostgresDatabaseCreate validates a PostgresDatabase on CREATE.
-func ValidatePostgresDatabaseCreate(ctx context.Context, obj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+func ValidatePostgresDatabaseCreate(ctx context.Context, obj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
@@ -55,7 +55,7 @@ func ValidatePostgresDatabaseCreate(ctx context.Context, obj *enterpriseApi.Post
 }
 
 // Admission checks reference existence; keys and mutable content remain runtime concerns.
-func validateDatabaseCustomMetrics(ctx context.Context, obj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+func validateDatabaseCustomMetrics(ctx context.Context, obj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
 	var allErrs field.ErrorList
 	for i := range obj.Spec.Databases {
 		mon := obj.Spec.Databases[i].Monitoring
@@ -93,7 +93,7 @@ func validateDatabaseCustomMetrics(ctx context.Context, obj *enterpriseApi.Postg
 }
 
 // ValidatePostgresDatabaseUpdate validates a PostgresDatabase on UPDATE.
-func ValidatePostgresDatabaseUpdate(ctx context.Context, obj, oldObj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+func ValidatePostgresDatabaseUpdate(ctx context.Context, obj, oldObj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
@@ -117,7 +117,7 @@ func ValidatePostgresDatabaseUpdate(ctx context.Context, obj, oldObj *enterprise
 	return allErrs
 }
 
-func databaseMonitoringSelectorsUnchanged(obj, oldObj *enterpriseApi.PostgresDatabase) bool {
+func databaseMonitoringSelectorsUnchanged(obj, oldObj *platformApi.PostgresDatabase) bool {
 	if oldObj == nil || len(obj.Spec.Databases) != len(oldObj.Spec.Databases) {
 		return false
 	}
@@ -138,14 +138,14 @@ func databaseMonitoringSelectorsUnchanged(obj, oldObj *enterpriseApi.PostgresDat
 	return true
 }
 
-func configMapSelectorsFrom(mon *enterpriseApi.DatabaseMonitoring) []corev1.ConfigMapKeySelector {
+func configMapSelectorsFrom(mon *platformApi.DatabaseMonitoring) []corev1.ConfigMapKeySelector {
 	if mon == nil {
 		return nil
 	}
 	return mon.CustomQueriesConfigMap
 }
 
-func validateExternalDatabaseSecrets(ctx context.Context, obj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+func validateExternalDatabaseSecrets(ctx context.Context, obj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
 	var allErrs field.ErrorList
 	for i := range obj.Spec.Databases {
 		db := obj.Spec.Databases[i]
@@ -191,11 +191,11 @@ func validateExternalDatabaseSecret(ctx context.Context, namespace, name string,
 }
 
 // GetPostgresDatabaseWarningsOnCreate returns warnings for PostgresDatabase CREATE.
-func GetPostgresDatabaseWarningsOnCreate(obj *enterpriseApi.PostgresDatabase) []string {
+func GetPostgresDatabaseWarningsOnCreate(obj *platformApi.PostgresDatabase) []string {
 	return nil
 }
 
 // GetPostgresDatabaseWarningsOnUpdate returns warnings for PostgresDatabase UPDATE.
-func GetPostgresDatabaseWarningsOnUpdate(obj, oldObj *enterpriseApi.PostgresDatabase) []string {
+func GetPostgresDatabaseWarningsOnUpdate(obj, oldObj *platformApi.PostgresDatabase) []string {
 	return nil
 }

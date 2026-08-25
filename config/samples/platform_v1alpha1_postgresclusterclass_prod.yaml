@@ -1,7 +1,7 @@
 ---
 # Production PostgresClusterClass
 # Full configuration with HA, security, and tuned PostgreSQL settings
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-prod

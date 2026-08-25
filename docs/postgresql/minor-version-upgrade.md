@@ -94,7 +94,7 @@ Expected argument:
 For lower-downtime upgrades, use a `PostgresClusterClass` similar to:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-prod
@@ -116,7 +116,7 @@ spec:
 If brief write downtime is acceptable, a restart-based configuration can stay simpler:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-dev
@@ -160,7 +160,7 @@ export CLUSTER=postgresql-cluster-dev
 Update the tracked `PostgresCluster` manifest:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-dev
