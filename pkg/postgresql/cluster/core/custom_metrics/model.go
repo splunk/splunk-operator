@@ -325,6 +325,14 @@ func (m *Model) rollback(ctx context.Context, out *Outcome) error {
 		out.Configuring = true
 		out.Requeue = true
 		out.InvalidDetail = appendDiagnostic(out.InvalidDetail, observation.Message)
+		for i := range out.DatabaseContributions {
+			if out.DatabaseContributions[i].Status != mtypes.AcknowledgementTrue {
+				continue
+			}
+			out.DatabaseContributions[i].Status = mtypes.AcknowledgementUnknown
+			out.DatabaseContributions[i].Reason = "CustomMetricsConfiguring"
+			out.DatabaseContributions[i].Message = observation.Message
+		}
 	case mtypes.ObservationReady:
 		if !confirmedMatchesExpected(observation.Confirmed, restored.Expected) {
 			return fmt.Errorf("provisioner reported ready without confirming restored custom-metrics revision %q",

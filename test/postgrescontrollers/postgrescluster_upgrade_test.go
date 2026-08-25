@@ -97,7 +97,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-upgrade", Label("ti
 			clusterKey := types.NamespacedName{Name: pgCluster.Name, Namespace: ns}
 
 			By("waiting for PostgresCluster to reach Ready on the source major version")
-			readySource := waitForReadyPostgresCluster(ctx, kubeClient, clusterKey)
+			readySource := pgtesthelpers.WaitForReadyPostgresCluster(ctx, kubeClient, clusterKey)
 			Expect(readySource.Status.CurrentPgVersion).To(Equal(majorOf(pgUpgradeSourceVersion)))
 
 			By("deploying a PostgresDatabase and waiting for Ready")
@@ -266,7 +266,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			clusterKey := types.NamespacedName{Name: pgCluster.Name, Namespace: ns}
 
 			By("waiting for PostgresCluster to reach Ready on the source major version")
-			readySource := waitForReadyPostgresCluster(ctx, kubeClient, clusterKey)
+			readySource := pgtesthelpers.WaitForReadyPostgresCluster(ctx, kubeClient, clusterKey)
 			Expect(readySource.Status.CurrentPgVersion).To(Equal(majorOf(pgUpgradeSourceVersion)))
 
 			cnpgBefore := &cnpgv1.Cluster{}
@@ -324,7 +324,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			clusterKey := types.NamespacedName{Name: pgCluster.Name, Namespace: ns}
 
 			By("waiting for PostgresCluster to reach Ready on the source major version")
-			readySource := waitForReadyPostgresCluster(ctx, kubeClient, clusterKey)
+			readySource := pgtesthelpers.WaitForReadyPostgresCluster(ctx, kubeClient, clusterKey)
 			Expect(readySource.Status.CurrentPgVersion).To(Equal(majorOf(pgUpgradeSourceVersion)))
 
 			cnpgBefore := &cnpgv1.Cluster{}
