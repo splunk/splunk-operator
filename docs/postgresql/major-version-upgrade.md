@@ -21,7 +21,7 @@ to the target version and explicitly allowing the major-upgrade workflow with
 `PostgresCluster.spec.postgresMajorUpgradeConfig.allow=true`:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
@@ -85,7 +85,7 @@ export CLUSTER=postgresql-cluster-prod
 Update the tracked `PostgresCluster` manifest:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
@@ -170,7 +170,7 @@ Do not use a permanent `retry: true` field in the spec. For terminal failures, r
 
 ```bash
 kubectl annotate postgrescluster $CLUSTER \
-  enterprise.splunk.com/major-upgrade-retry-at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  platform.splunk.com/major-upgrade-retry-at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   -n $NS --overwrite
 ```
 
@@ -199,7 +199,7 @@ After the upgrade reports `Completed` for the requested target version:
 Example final manifest shape after a completed `15 -> 16` upgrade:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod

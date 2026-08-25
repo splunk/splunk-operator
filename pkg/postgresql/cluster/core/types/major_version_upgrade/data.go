@@ -19,7 +19,7 @@ package majorversionupgradetypes
 import (
 	"fmt"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,12 +29,12 @@ type Intent struct {
 	TargetPgVersion string
 
 	Policy           UpgradePolicy
-	State            []enterprisev4.PostgresMajorUpgradeStatus
+	State            []platformv1alpha1.PostgresMajorUpgradeStatus
 	RetryRequestedAt *metav1.Time
 }
 
 type BackupInfo struct {
-	BackupStatus *enterprisev4.BackupStatus
+	BackupStatus *platformv1alpha1.BackupStatus
 	BackupName   string
 }
 

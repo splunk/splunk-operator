@@ -16,7 +16,7 @@ resources:
 - enterprise_v4_ingestorcluster.yaml
 - enterprise_v4_queue.yaml
 - enterprise_v4_objectstorage.yaml
-- enterprise_v4_postgresdatabase.yaml
-- enterprise_v4_postgresclusterclass_dev.yaml
-- enterprise_v4_postgrescluster_dev.yaml
+- platform_v1alpha1_postgresdatabase.yaml
+- platform_v1alpha1_postgresclusterclass_dev.yaml
+- platform_v1alpha1_postgrescluster_dev.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

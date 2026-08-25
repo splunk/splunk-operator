@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	cnpginfra "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
@@ -58,7 +58,7 @@ func NewRollbackCapabilityAdapter(c client.Client, scheme *runtime.Scheme, key t
 }
 
 func (r *RollbackCapabilityAdapter) CreateBackup(ctx context.Context, intent mvutypes.Intent, generateBackupName func(mvutypes.Intent) string) (*mvutypes.BackupInfo, error) {
-	owner := &enterprisev4.PostgresCluster{}
+	owner := &platformv1alpha1.PostgresCluster{}
 	if err := r.client.Get(ctx, r.key, owner); err != nil {
 		return nil, fmt.Errorf("fetching PostgresCluster for rollback backup: %w", err)
 	}
@@ -122,12 +122,12 @@ func (r *RollbackCapabilityAdapter) CreateBackup(ctx context.Context, intent mvu
 	logging.FromContext(ctx).InfoContext(ctx, "backup section complete",
 		"backup-name", backupName)
 
-	backupStatus := &enterprisev4.BackupStatus{}
+	backupStatus := &platformv1alpha1.BackupStatus{}
 	switch r.method {
 	case backuptypes.BackupMethodVolumeSnapshot:
-		backupStatus.VolumeSnapshot = &enterprisev4.VolumeSnapshotBackupStatus{Enabled: true}
+		backupStatus.VolumeSnapshot = &platformv1alpha1.VolumeSnapshotBackupStatus{Enabled: true}
 	case backuptypes.BackupMethodPlugin:
-		backupStatus.ObjectStore = &enterprisev4.ObjectStoreBackupStatus{Enabled: true}
+		backupStatus.ObjectStore = &platformv1alpha1.ObjectStoreBackupStatus{Enabled: true}
 	}
 	return &mvutypes.BackupInfo{
 		BackupStatus: backupStatus,

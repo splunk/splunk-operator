@@ -142,7 +142,7 @@ keys it sets and coexists with CNPG-owned parameters.
 - Code: `pkg/postgresql/cluster/core/cluster_model.go` (desired-spec build +
   drift patch), `pkg/postgresql/cluster/core/types.go` (`normalized*` structs,
   CNPG phase → reason mapping), `pkg/postgresql/cluster/core/managed_roles_model.go`
-  (managed-roles arbitration and merge patch), `internal/controller/enterprise/postgrescluster_controller.go`
+  (managed-roles arbitration and merge patch), `internal/controller/platform/postgrescluster_controller.go`
   (`Owns`/`Watches`, `secretPredicator`, ObjectStore CRD probe)
 - Design docs: "PostgresCluster Controller Design Document",
   "PostgresCluster PostgreSQL Parameters SSA Spike", "PostgreSQL Components State Machine"

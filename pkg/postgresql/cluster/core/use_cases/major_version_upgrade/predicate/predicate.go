@@ -17,7 +17,7 @@ limitations under the License.
 package majorversionupgradepredicate
 
 import (
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 )
 
 // Predicate reports whether the major-version upgrade use case is possibly
@@ -26,7 +26,7 @@ import (
 // so the reconciler can skip construction and status reads entirely. The use
 // case's own Schedule makes the precise decision that needs live CNPG reads.
 // When spec is nil it returns true so a missing cluster falls through to Schedule.
-func Predicate(spec *enterprisev4.PostgresClusterSpec) bool {
+func Predicate(spec *platformv1alpha1.PostgresClusterSpec) bool {
 	if spec == nil {
 		return true
 	}

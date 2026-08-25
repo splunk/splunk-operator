@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,13 +38,13 @@ import (
 // poolerEnabledConfig returns a MergedConfig with pooler enabled and config present.
 func poolerEnabledConfig() *MergedConfig {
 	instances := int32(3)
-	mode := enterprisev4.ConnectionPoolerModeTransaction
+	mode := platformv1alpha1.ConnectionPoolerModeTransaction
 	return &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
-			ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+		Spec: &platformv1alpha1.PostgresClusterSpec{
+			ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 		},
-		CNPG: &enterprisev4.CNPGConfig{
-			ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+		CNPG: &platformv1alpha1.CNPGConfig{
+			ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
 				Instances: &instances,
 				Mode:      &mode,
 			},
@@ -214,9 +214,9 @@ func TestArePoolersReady(t *testing.T) {
 func TestPoolerExists(t *testing.T) {
 	scheme := runtime.NewScheme()
 	cnpgv1.AddToScheme(scheme)
-	enterprisev4.AddToScheme(scheme)
+	platformv1alpha1.AddToScheme(scheme)
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
 			Namespace: "default",
@@ -267,9 +267,9 @@ func TestPoolerExists(t *testing.T) {
 func TestDeleteConnectionPoolers(t *testing.T) {
 	scheme := runtime.NewScheme()
 	cnpgv1.AddToScheme(scheme)
-	enterprisev4.AddToScheme(scheme)
+	platformv1alpha1.AddToScheme(scheme)
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
 			Namespace: "default",
@@ -312,8 +312,8 @@ func TestCreateConnectionPooler(t *testing.T) {
 	scheme := newTestScheme()
 
 	poolerInstances := int32(2)
-	poolerMode := enterprisev4.ConnectionPoolerModeTransaction
-	cluster := &enterprisev4.PostgresCluster{
+	poolerMode := platformv1alpha1.ConnectionPoolerModeTransaction
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
 			Namespace: "default",
@@ -327,8 +327,8 @@ func TestCreateConnectionPooler(t *testing.T) {
 		},
 	}
 	cfg := &MergedConfig{
-		CNPG: &enterprisev4.CNPGConfig{
-			ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+		CNPG: &platformv1alpha1.CNPGConfig{
+			ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
 				Instances: &poolerInstances,
 				Mode:      &poolerMode,
 				Config:    map[string]string{"default_pool_size": "25"},
@@ -380,8 +380,8 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 	scheme := newTestScheme()
 
 	poolerInstances := int32(2)
-	poolerMode := enterprisev4.ConnectionPoolerModeTransaction
-	cluster := &enterprisev4.PostgresCluster{
+	poolerMode := platformv1alpha1.ConnectionPoolerModeTransaction
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
 			Namespace: "default",
@@ -395,8 +395,8 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 		},
 	}
 	cfg := &MergedConfig{
-		CNPG: &enterprisev4.CNPGConfig{
-			ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+		CNPG: &platformv1alpha1.CNPGConfig{
+			ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
 				Instances: &poolerInstances,
 				Mode:      &poolerMode,
 				Config:    map[string]string{"default_pool_size": "25"},
@@ -520,12 +520,12 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 
 func TestBuildCNPGPooler(t *testing.T) {
 	scheme := runtime.NewScheme()
-	enterprisev4.AddToScheme(scheme)
+	platformv1alpha1.AddToScheme(scheme)
 	cnpgv1.AddToScheme(scheme)
 
 	poolerInstances := int32(3)
-	poolerMode := enterprisev4.ConnectionPoolerModeTransaction
-	postgresCluster := &enterprisev4.PostgresCluster{
+	poolerMode := platformv1alpha1.ConnectionPoolerModeTransaction
+	postgresCluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
 			Namespace: "db-ns",
@@ -538,8 +538,8 @@ func TestBuildCNPGPooler(t *testing.T) {
 		},
 	}
 	cfg := &MergedConfig{
-		CNPG: &enterprisev4.CNPGConfig{
-			ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+		CNPG: &platformv1alpha1.CNPGConfig{
+			ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
 				Instances: &poolerInstances,
 				Mode:      &poolerMode,
 				Config:    map[string]string{"default_pool_size": "25"},
@@ -691,10 +691,10 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 	// healthyCNPG has no SANs in spec so both isSANPolicyConverged (poolerEnabled=true → needs
@@ -707,7 +707,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		t.Parallel()
 
 		// Arrange
-		cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+		cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 		contracts := &reconcileContracts{} // no CNPGCluster → contracts not ready
 		model := newPoolerModel(
 			fake.NewClientBuilder().WithScheme(scheme).Build(),
@@ -728,7 +728,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		t.Parallel()
 
 		// Arrange: CNPG with converged SANs + valid TLS cert so all gates pass
-		cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+		cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 		cnpgReady, tlsSecret := makePoolerReadyCNPG(t, "pg1", "default")
 		rwPooler := &cnpgv1.Pooler{
 			ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readWriteEndpoint), Namespace: cluster.Namespace},
@@ -750,7 +750,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 
 		// Assert
 		require.NoError(t, err)
-		assert.Equal(t, &enterprisev4.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true}, cluster.Status.ConnectionPoolerStatus)
+		assert.Equal(t, &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true}, cluster.Status.ConnectionPoolerStatus)
 		assert.Equal(t, pgcConstants.Ready, health.State)
 	})
 
@@ -758,7 +758,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		t.Parallel()
 
 		// Arrange
-		cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+		cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 		rwPooler := &cnpgv1.Pooler{
 			ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readWriteEndpoint), Namespace: cluster.Namespace},
 			Status:     cnpgv1.PoolerStatus{Instances: 1},
@@ -791,7 +791,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		t.Parallel()
 
 		// Arrange
-		cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+		cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 		rwPooler := &cnpgv1.Pooler{
 			ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readWriteEndpoint), Namespace: cluster.Namespace},
 			Status:     cnpgv1.PoolerStatus{Instances: 1},
@@ -824,14 +824,14 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		t.Parallel()
 
 		// Arrange
-		cluster := &enterprisev4.PostgresCluster{
+		cluster := &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-			Status:     enterprisev4.PostgresClusterStatus{ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{Enabled: true}},
+			Status:     platformv1alpha1.PostgresClusterStatus{ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true}},
 		}
 		contracts := &reconcileContracts{CNPGCluster: healthyCNPG}
 		model := newPoolerModel(
 			fake.NewClientBuilder().WithScheme(scheme).Build(),
-			scheme, noopEventEmitter{}, nil, cluster, clusterClass, &MergedConfig{Spec: &enterprisev4.PostgresClusterSpec{}}, contracts,
+			scheme, noopEventEmitter{}, nil, cluster, clusterClass, &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
 		)
 
 		// Act
@@ -851,11 +851,11 @@ func TestPoolerConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	// Arrange
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 	events := &captureEventEmitter{}
@@ -897,14 +897,14 @@ func TestPoolerModelConvergeWaitsForSANPolicy(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{
-				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 			},
 		},
 	}
@@ -937,14 +937,14 @@ func TestPoolerModelConvergeWaitsForTLSLeafMaterial(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{
-				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 			},
 		},
 	}
@@ -973,14 +973,14 @@ func TestPoolerModelConvergeTLSLeafInvalidCertEmitsFailed(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "demo"},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "demo"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{
-				ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
 			},
 		},
 	}
@@ -1028,10 +1028,10 @@ func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
 	}
 
@@ -1039,7 +1039,7 @@ func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
 	contracts := &reconcileContracts{} // no CNPGCluster — bootstrap race
 	model := newPoolerModel(
 		fake.NewClientBuilder().WithScheme(scheme).Build(),
-		scheme, events, nil, cluster, clusterClass, &MergedConfig{Spec: &enterprisev4.PostgresClusterSpec{}}, contracts,
+		scheme, events, nil, cluster, clusterClass, &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
 	)
 
 	reconcileErr := model.Reconcile(context.Background())
@@ -1052,9 +1052,9 @@ func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
 func TestPoolerModelROPoolerWanted(t *testing.T) {
 	t.Parallel()
 
-	poolerOptedIn := &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}
-	specWith := func(instances *int32, pooler *enterprisev4.ConnectionPoolerEnableConfig) *enterprisev4.PostgresClusterSpec {
-		return &enterprisev4.PostgresClusterSpec{Instances: instances, ConnectionPooler: pooler}
+	poolerOptedIn := &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}
+	specWith := func(instances *int32, pooler *platformv1alpha1.ConnectionPoolerEnableConfig) *platformv1alpha1.PostgresClusterSpec {
+		return &platformv1alpha1.PostgresClusterSpec{Instances: instances, ConnectionPooler: pooler}
 	}
 
 	tests := []struct {
@@ -1065,7 +1065,7 @@ func TestPoolerModelROPoolerWanted(t *testing.T) {
 		{name: "nil merged config", mergedCfg: nil, want: false},
 		{name: "nil spec", mergedCfg: &MergedConfig{}, want: false},
 		{name: "nil instances", mergedCfg: &MergedConfig{Spec: specWith(nil, poolerOptedIn)}, want: false},
-		{name: "ro opted out", mergedCfg: &MergedConfig{Spec: specWith(ptr.To(int32(2)), &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)})}, want: false},
+		{name: "ro opted out", mergedCfg: &MergedConfig{Spec: specWith(ptr.To(int32(2)), &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)})}, want: false},
 		{name: "instances 1", mergedCfg: &MergedConfig{Spec: specWith(ptr.To(int32(1)), poolerOptedIn)}, want: false},
 		{name: "instances 2", mergedCfg: &MergedConfig{Spec: specWith(ptr.To(int32(2)), poolerOptedIn)}, want: true},
 		{name: "instances 3", mergedCfg: &MergedConfig{Spec: specWith(ptr.To(int32(3)), poolerOptedIn)}, want: true},
@@ -1082,8 +1082,8 @@ func TestPoolerModelROPoolerWanted(t *testing.T) {
 func TestPoolerModelRWPoolerWanted(t *testing.T) {
 	t.Parallel()
 
-	specWith := func(pooler *enterprisev4.ConnectionPoolerEnableConfig) *enterprisev4.PostgresClusterSpec {
-		return &enterprisev4.PostgresClusterSpec{ConnectionPooler: pooler}
+	specWith := func(pooler *platformv1alpha1.ConnectionPoolerEnableConfig) *platformv1alpha1.PostgresClusterSpec {
+		return &platformv1alpha1.PostgresClusterSpec{ConnectionPooler: pooler}
 	}
 
 	tests := []struct {
@@ -1094,8 +1094,8 @@ func TestPoolerModelRWPoolerWanted(t *testing.T) {
 		{name: "nil merged config", mergedCfg: nil, want: false},
 		{name: "nil spec", mergedCfg: &MergedConfig{}, want: false},
 		{name: "nil pooler config", mergedCfg: &MergedConfig{Spec: specWith(nil)}, want: false},
-		{name: "rw default true", mergedCfg: &MergedConfig{Spec: specWith(&enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)})}, want: true},
-		{name: "rw opted out", mergedCfg: &MergedConfig{Spec: specWith(&enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(false)})}, want: false},
+		{name: "rw default true", mergedCfg: &MergedConfig{Spec: specWith(&platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)})}, want: true},
+		{name: "rw opted out", mergedCfg: &MergedConfig{Spec: specWith(&platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(false)})}, want: false},
 	}
 
 	for _, tt := range tests {
@@ -1111,28 +1111,28 @@ func TestMergeConnectionPoolerEnable(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		cluster *enterprisev4.ConnectionPoolerEnableConfig
-		class   *enterprisev4.ConnectionPoolerEnableConfig
-		want    *enterprisev4.ConnectionPoolerEnableConfig
+		cluster *platformv1alpha1.ConnectionPoolerEnableConfig
+		class   *platformv1alpha1.ConnectionPoolerEnableConfig
+		want    *platformv1alpha1.ConnectionPoolerEnableConfig
 	}{
 		{name: "both nil", cluster: nil, class: nil, want: nil},
 		{
 			name:    "class only",
 			cluster: nil,
-			class:   &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)},
-			want:    &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)},
+			class:   &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)},
+			want:    &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)},
 		},
 		{
 			name:    "cluster overrides one field, class supplies the rest",
-			cluster: &enterprisev4.ConnectionPoolerEnableConfig{ReadOnly: ptr.To(false)},
-			class:   &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(true), ReadOnly: ptr.To(true)},
-			want:    &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(true), ReadOnly: ptr.To(false)},
+			cluster: &platformv1alpha1.ConnectionPoolerEnableConfig{ReadOnly: ptr.To(false)},
+			class:   &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(true), ReadOnly: ptr.To(true)},
+			want:    &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(true), ReadOnly: ptr.To(false)},
 		},
 		{
 			name:    "cluster fully specified ignores class",
-			cluster: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(false), ReadWrite: ptr.To(false), ReadOnly: ptr.To(false)},
-			class:   &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(true), ReadOnly: ptr.To(true)},
-			want:    &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(false), ReadWrite: ptr.To(false), ReadOnly: ptr.To(false)},
+			cluster: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(false), ReadWrite: ptr.To(false), ReadOnly: ptr.To(false)},
+			class:   &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadWrite: ptr.To(true), ReadOnly: ptr.To(true)},
+			want:    &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(false), ReadWrite: ptr.To(false), ReadOnly: ptr.To(false)},
 		},
 		{
 			// Regression for MR1935 P1: a cluster that overrides only readOnly must still
@@ -1140,9 +1140,9 @@ func TestMergeConnectionPoolerEnable(t *testing.T) {
 			// nil "inherit" sentinel — which CRD-level +kubebuilder:default markers would
 			// have destroyed by materializing enabled=false onto the stored cluster object.
 			name:    "cluster overrides only readOnly, inherits enabled from minimal class",
-			cluster: &enterprisev4.ConnectionPoolerEnableConfig{ReadOnly: ptr.To(false)},
-			class:   &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
-			want:    &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)},
+			cluster: &platformv1alpha1.ConnectionPoolerEnableConfig{ReadOnly: ptr.To(false)},
+			class:   &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+			want:    &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(false)},
 		},
 	}
 

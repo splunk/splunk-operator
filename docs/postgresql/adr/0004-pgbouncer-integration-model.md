@@ -111,10 +111,10 @@ instances are ready, and only then does the cluster reach `Ready`
 
 ## References
 
-- Code: `api/enterprise/v4/postgresclusterclass_types.go`
+- Code: `api/platform/v1alpha1/postgresclusterclass_types.go`
   (`ConnectionPoolerEnableConfig`, `ConnectionPoolerConfig`,
   `ConnectionPoolerMode`), `pkg/postgresql/cluster/core/pooler_model.go`,
-  `api/enterprise/v4/postgrescluster_types.go` (`ConnectionPoolerStatus`)
+  `api/platform/v1alpha1/postgrescluster_types.go` (`ConnectionPoolerStatus`)
 - Design docs: "Integration & Onboarding Guide for Splunk Operator's PostgreSQL
   Support", "PostgreSQL Components State Machine"
 - Jira: CPI-2066

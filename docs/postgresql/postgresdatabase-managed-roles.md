@@ -21,7 +21,7 @@ privilege grants. The cluster controller reconciles the roles into CNPG
 ## Example
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: myapp-db

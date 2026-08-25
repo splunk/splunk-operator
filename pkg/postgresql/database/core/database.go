@@ -23,7 +23,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/sethvargo/go-password/password"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
@@ -107,7 +107,7 @@ func requeueOnConflict(ctx context.Context, err error, category reconcileConflic
 func PostgresDatabaseService(
 	ctx context.Context,
 	rc *ReconcileContext,
-	postgresDB *enterprisev4.PostgresDatabase,
+	postgresDB *platformv1alpha1.PostgresDatabase,
 	newDBRepo NewDBRepoFunc,
 ) (ctrl.Result, error) {
 	c := rc.Client
@@ -658,15 +658,15 @@ func safePrivilegeOperationError(operation, dbName string, err error) error {
 	return fmt.Errorf("%s on database %s failed", operation, dbName)
 }
 
-func fetchCluster(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase) (*enterprisev4.PostgresCluster, error) {
-	cluster := &enterprisev4.PostgresCluster{}
+func fetchCluster(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase) (*platformv1alpha1.PostgresCluster, error) {
+	cluster := &platformv1alpha1.PostgresCluster{}
 	if err := c.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
 		return nil, err
 	}
 	return cluster, nil
 }
 
-func isClusterInRecovery(cluster *enterprisev4.PostgresCluster) bool {
+func isClusterInRecovery(cluster *platformv1alpha1.PostgresCluster) bool {
 	cond := meta.FindStatusCondition(cluster.Status.Conditions, string(clusterReady))
 	if cond == nil {
 		return false
@@ -674,7 +674,7 @@ func isClusterInRecovery(cluster *enterprisev4.PostgresCluster) bool {
 	return cond.Reason == string(cnpgReasonRecovery) || cond.Reason == string(cnpgReasonFailingOver)
 }
 
-func getClusterReadyStatus(cluster *enterprisev4.PostgresCluster) clusterReadyStatus {
+func getClusterReadyStatus(cluster *platformv1alpha1.PostgresCluster) clusterReadyStatus {
 	if cluster.Status.Phase == nil || *cluster.Status.Phase != string(ClusterReady) {
 		return ClusterNotReady
 	}
@@ -684,7 +684,7 @@ func getClusterReadyStatus(cluster *enterprisev4.PostgresCluster) clusterReadySt
 	return ClusterReady
 }
 
-func getDesiredRoles(postgresDB *enterprisev4.PostgresDatabase) []string {
+func getDesiredRoles(postgresDB *platformv1alpha1.PostgresDatabase) []string {
 	users := make([]string, 0, len(postgresDB.Spec.Databases)*2)
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		users = append(users, adminRoleName(dbSpec.Name), rwRoleName(dbSpec.Name))
@@ -692,7 +692,7 @@ func getDesiredRoles(postgresDB *enterprisev4.PostgresDatabase) []string {
 	return users
 }
 
-func existingDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase) map[string]struct{} {
+func existingDatabaseStatus(postgresDB *platformv1alpha1.PostgresDatabase) map[string]struct{} {
 	existing := make(map[string]struct{}, len(postgresDB.Status.Databases))
 	for _, database := range postgresDB.Status.Databases {
 		existing[database.Name] = struct{}{}
@@ -717,11 +717,11 @@ type roleGateDecision struct {
 	Role string
 }
 
-func evaluateRoleGate(postgresDB *enterprisev4.PostgresDatabase, status *enterprisev4.ManagedRolesStatus) roleGateDecision {
+func evaluateRoleGate(postgresDB *platformv1alpha1.PostgresDatabase, status *platformv1alpha1.ManagedRolesStatus) roleGateDecision {
 	if status == nil {
 		return roleGateDecision{State: roleGatePending, Message: "Waiting for cluster to publish managed role status"}
 	}
-	self := enterprisev4.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
+	self := platformv1alpha1.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
 	// Iterate desiredRoles in order so a multi-role failure blames the same role
 	// (and therefore the same database) on every reconcile; map iteration would
 	// pick an arbitrary offender and flap the published messages.
@@ -756,11 +756,11 @@ func evaluateRoleGate(postgresDB *enterprisev4.PostgresDatabase, status *enterpr
 	return roleGateDecision{State: roleGateProceed, Message: "Roles are reconciled and owned by this PostgresDatabase"}
 }
 
-func sameRoleOwner(a, b enterprisev4.RoleOwnerReference) bool {
+func sameRoleOwner(a, b platformv1alpha1.RoleOwnerReference) bool {
 	return a.Name == b.Name && a.UID == b.UID
 }
 
-func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, cluster *enterprisev4.PostgresCluster) ([]string, error) {
+func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, cluster *platformv1alpha1.PostgresCluster) ([]string, error) {
 	logger := logging.FromContext(ctx)
 	var adopted []string
 	for _, dbSpec := range postgresDB.Spec.Databases {
@@ -791,7 +791,7 @@ func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtim
 	return adopted, nil
 }
 
-func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, reasons map[string]string) ([]string, error) {
+func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, reasons map[string]string) ([]string, error) {
 	if reasons == nil {
 		reasons = map[string]string{}
 	}
@@ -829,7 +829,7 @@ func cnpgNotReadyReason(cnpgDB *cnpgv1.Database) string {
 	return reasonCNPGDatabaseApplying
 }
 
-func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder, db *enterprisev4.PostgresDatabase, wasReadyAtReconcileStart bool, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases,
+func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder, db *platformv1alpha1.PostgresDatabase, wasReadyAtReconcileStart bool, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases,
 ) error {
 	before := db.Status.DeepCopy()
 	applyStatus(db, conditionType, conditionStatus, reason, message, phase)
@@ -843,7 +843,7 @@ func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder,
 	return c.Status().Update(ctx, db)
 }
 
-func applyStatus(db *enterprisev4.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) {
+func applyStatus(db *platformv1alpha1.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) {
 	meta.SetStatusCondition(&db.Status.Conditions, metav1.Condition{
 		Type:               string(conditionType),
 		Status:             conditionStatus,
@@ -860,7 +860,7 @@ func applyStatus(db *enterprisev4.PostgresDatabase, conditionType conditionTypes
 // provisioning starts at creation. Later cycles start for a new generation or a
 // real readiness blocker. Routine successful Provisioning updates are written
 // on every reconcile and do not start a cycle.
-func beginReadinessCycle(db *enterprisev4.PostgresDatabase, before *enterprisev4.PostgresDatabaseStatus, wasReadyAtReconcileStart bool, conditionStatus metav1.ConditionStatus, phase reconcileDBPhases) {
+func beginReadinessCycle(db *platformv1alpha1.PostgresDatabase, before *platformv1alpha1.PostgresDatabaseStatus, wasReadyAtReconcileStart bool, conditionStatus metav1.ConditionStatus, phase reconcileDBPhases) {
 	if phase == readyDBPhase || db.Status.LastTransitionTime != nil {
 		return
 	}
@@ -880,7 +880,7 @@ func beginReadinessCycle(db *enterprisev4.PostgresDatabase, before *enterprisev4
 	}
 }
 
-func buildDeletionPlan(databases []enterprisev4.DatabaseDefinition) deletionPlan {
+func buildDeletionPlan(databases []platformv1alpha1.DatabaseDefinition) deletionPlan {
 	var plan deletionPlan
 	for _, db := range databases {
 		if db.DeletionPolicy == deletionPolicyRetain {
@@ -892,7 +892,7 @@ func buildDeletionPlan(databases []enterprisev4.DatabaseDefinition) deletionPlan
 	return plan
 }
 
-func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *enterprisev4.PostgresDatabase) error {
+func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *platformv1alpha1.PostgresDatabase) error {
 	logger := logging.FromContext(ctx)
 	c := rc.Client
 	plan := buildDeletionPlan(postgresDB.Spec.Databases)
@@ -917,7 +917,7 @@ func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *enter
 	return nil
 }
 
-func orphanRetainedResources(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, retained []enterprisev4.DatabaseDefinition) error {
+func orphanRetainedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, retained []platformv1alpha1.DatabaseDefinition) error {
 	if err := orphanCNPGDatabases(ctx, c, postgresDB, retained); err != nil {
 		return err
 	}
@@ -927,7 +927,7 @@ func orphanRetainedResources(ctx context.Context, c client.Client, postgresDB *e
 	return orphanSecrets(ctx, c, postgresDB, retained)
 }
 
-func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, deleted []enterprisev4.DatabaseDefinition) error {
+func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, deleted []platformv1alpha1.DatabaseDefinition) error {
 	if err := deleteCNPGDatabases(ctx, c, postgresDB, deleted); err != nil {
 		return err
 	}
@@ -938,7 +938,7 @@ func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *en
 }
 
 // cleanupManagedRoles publishes drop intent and retains the finalizer until the cluster stops owning deleted roles.
-func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *enterprisev4.PostgresDatabase, plan deletionPlan) error {
+func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *platformv1alpha1.PostgresDatabase, plan deletionPlan) error {
 	c := rc.Client
 	logger := logging.FromContext(ctx)
 	if len(plan.deleted) == 0 {
@@ -946,7 +946,7 @@ func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *
 		postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 		return c.Status().Update(ctx, postgresDB)
 	}
-	cluster := &enterprisev4.PostgresCluster{}
+	cluster := &platformv1alpha1.PostgresCluster{}
 	if err := c.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("getting PostgresCluster for role cleanup: %w", err)
@@ -994,7 +994,7 @@ func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *
 	return nil
 }
 
-func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
+func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
 		name := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
@@ -1021,7 +1021,7 @@ func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *enter
 	return nil
 }
 
-func orphanConfigMaps(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
+func orphanConfigMaps(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
 		name := configMapName(postgresDB.Name, dbSpec.Name)
@@ -1048,7 +1048,7 @@ func orphanConfigMaps(ctx context.Context, c client.Client, postgresDB *enterpri
 	return nil
 }
 
-func orphanSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
+func orphanSecrets(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
 		// if external secret is configured, skip
@@ -1081,7 +1081,7 @@ func orphanSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev
 	return nil
 }
 
-func deleteCNPGDatabases(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
+func deleteCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
 		name := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
@@ -1097,7 +1097,7 @@ func deleteCNPGDatabases(ctx context.Context, c client.Client, postgresDB *enter
 	return nil
 }
 
-func deleteConfigMaps(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
+func deleteConfigMaps(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
 		name := configMapName(postgresDB.Name, dbSpec.Name)
@@ -1113,7 +1113,7 @@ func deleteConfigMaps(ctx context.Context, c client.Client, postgresDB *enterpri
 	return nil
 }
 
-func deleteSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, databases []enterprisev4.DatabaseDefinition) error {
+func deleteSecrets(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
 		// Do not delete externally managed Secrets; they may have other consumers.
@@ -1135,15 +1135,15 @@ func deleteSecrets(ctx context.Context, c client.Client, postgresDB *enterprisev
 	return nil
 }
 
-func roleCleanupTimedOut(postgresDB *enterprisev4.PostgresDatabase) bool {
+func roleCleanupTimedOut(postgresDB *platformv1alpha1.PostgresDatabase) bool {
 	return postgresDB.DeletionTimestamp != nil && time.Since(postgresDB.DeletionTimestamp.Time) > roleCleanupTimeout
 }
 
-func rolesStillOwnedBySelf(postgresDB *enterprisev4.PostgresDatabase, status *enterprisev4.ManagedRolesStatus, databases []enterprisev4.DatabaseDefinition) bool {
+func rolesStillOwnedBySelf(postgresDB *platformv1alpha1.PostgresDatabase, status *platformv1alpha1.ManagedRolesStatus, databases []platformv1alpha1.DatabaseDefinition) bool {
 	if status == nil {
 		return true
 	}
-	self := enterprisev4.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
+	self := platformv1alpha1.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
 	for _, dbSpec := range databases {
 		for _, role := range []string{adminRoleName(dbSpec.Name), rwRoleName(dbSpec.Name)} {
 			if owner, ok := status.RoleOwners[role]; ok && sameRoleOwner(owner, self) {
@@ -1154,7 +1154,7 @@ func rolesStillOwnedBySelf(postgresDB *enterprisev4.PostgresDatabase, status *en
 	return false
 }
 
-func resolveSecretNames(postgresDBName string, dbSpec enterprisev4.DatabaseDefinition) (adminSecretName string, rwSecretName string) {
+func resolveSecretNames(postgresDBName string, dbSpec platformv1alpha1.DatabaseDefinition) (adminSecretName string, rwSecretName string) {
 	rwSecretName = ""
 	adminSecretName = ""
 
@@ -1179,7 +1179,7 @@ func stripOwnerReference(obj metav1.Object, ownerUID types.UID) {
 	obj.SetOwnerReferences(filtered)
 }
 
-func adoptResource(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, obj client.Object) error {
+func adoptResource(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, obj client.Object) error {
 	if annotations := obj.GetAnnotations(); annotations != nil {
 		delete(annotations, annotationRetainedFrom)
 		obj.SetAnnotations(annotations)
@@ -1197,7 +1197,7 @@ func secretMissingPolicyForDB(dbName string, existingDBs map[string]struct{}) se
 	return createSecretIfMissing
 }
 
-func reconcileRoleSecrets(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, existingDatabases map[string]struct{}) error {
+func reconcileRoleSecrets(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, existingDatabases map[string]struct{}) error {
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		missingPolicy := secretMissingPolicyForDB(dbSpec.Name, existingDatabases)
 		adminSecretName, rwSecretName := resolveSecretNames(postgresDB.Name, dbSpec)
@@ -1217,7 +1217,7 @@ func reconcileRoleSecrets(ctx context.Context, c client.Client, scheme *runtime.
 	return nil
 }
 
-func reconcileRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, roleName, secretName string, missingPolicy secretMissingPolicy, dbSpec enterprisev4.DatabaseDefinition) error {
+func reconcileRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, roleName, secretName string, missingPolicy secretMissingPolicy, dbSpec platformv1alpha1.DatabaseDefinition) error {
 	if dbSpec.PasswordConfig != nil {
 		return ensureExternalSecret(ctx, c, postgresDB, secretName)
 	} else {
@@ -1228,7 +1228,7 @@ func reconcileRoleSecret(ctx context.Context, c client.Client, scheme *runtime.S
 	}
 }
 
-func ensureExternalSecret(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, secretName string) error {
+func ensureExternalSecret(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, secretName string) error {
 	// generic safety for this codeblock, as strict safety + verbose information
 	// is meant to be provided by kubebuilder validation (which cant be tested here)
 	if secretName == "" {
@@ -1280,7 +1280,7 @@ func ValidateExternalDatabaseSecret(secret *corev1.Secret, secretName string) er
 	return nil
 }
 
-func ensureSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, roleName, secretName string) error {
+func ensureSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, roleName, secretName string) error {
 	secret, err := getSecret(ctx, c, postgresDB.Namespace, secretName)
 	if err != nil {
 		return err
@@ -1291,7 +1291,7 @@ func ensureSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, 
 	return reconcileExistingSecret(ctx, c, scheme, postgresDB, secretName, secret)
 }
 
-func ensureProvisionedSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, roleName, secretName string) error {
+func ensureProvisionedSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, roleName, secretName string) error {
 	secret, err := getSecret(ctx, c, postgresDB.Namespace, secretName)
 	if err != nil {
 		return err
@@ -1307,7 +1307,7 @@ func ensureProvisionedSecret(ctx context.Context, c client.Client, scheme *runti
 
 // reconcileExistingSecret only reconciles ownership — it never rewrites secret data.
 // Passwords must not be regenerated for existing credentials; CNPG and consumers hold live references.
-func reconcileExistingSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, secretName string, secret *corev1.Secret) error {
+func reconcileExistingSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, secretName string, secret *corev1.Secret) error {
 	logger := logging.FromContext(ctx)
 	switch {
 	case secret.Annotations[annotationRetainedFrom] == postgresDB.Name:
@@ -1345,7 +1345,7 @@ func getSecret(ctx context.Context, c client.Client, namespace, name string) (*c
 	return secret, nil
 }
 
-func createRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, roleName, secretName string) error {
+func createRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, roleName, secretName string) error {
 	pw, err := generatePassword()
 	if err != nil {
 		return err
@@ -1364,7 +1364,7 @@ func createRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Sche
 	return nil
 }
 
-func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, roleName, pw string) *corev1.Secret {
+func buildPasswordSecret(postgresDB *platformv1alpha1.PostgresDatabase, secretName, roleName, pw string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
@@ -1375,7 +1375,7 @@ func buildPasswordSecret(postgresDB *enterprisev4.PostgresDatabase, secretName, 
 	}
 }
 
-func buildCNPGDatabaseSpec(clusterName string, dbSpec enterprisev4.DatabaseDefinition, extensions []cnpgv1.ExtensionSpec) cnpgv1.DatabaseSpec {
+func buildCNPGDatabaseSpec(clusterName string, dbSpec platformv1alpha1.DatabaseDefinition, extensions []cnpgv1.ExtensionSpec) cnpgv1.DatabaseSpec {
 	reclaimPolicy := cnpgv1.DatabaseReclaimDelete
 	if dbSpec.DeletionPolicy == deletionPolicyRetain {
 		reclaimPolicy = cnpgv1.DatabaseReclaimRetain
@@ -1414,7 +1414,7 @@ func reconcileExtensions(desired []string, existing []cnpgv1.ExtensionSpec) []cn
 	return result
 }
 
-func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *enterprisev4.PostgresDatabase, endpoints clusterEndpoints) error {
+func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, endpoints clusterEndpoints) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		cmName := configMapName(postgresDB.Name, dbSpec.Name)
@@ -1451,7 +1451,7 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 	return nil
 }
 
-func persistDatabaseInfos(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, ready bool, exists bool) error {
+func persistDatabaseInfos(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, ready bool, exists bool) error {
 	before := postgresDB.Status.DeepCopy()
 	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB, ready, exists)
 	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
@@ -1465,7 +1465,7 @@ func persistDatabaseInfos(ctx context.Context, c client.Client, postgresDB *ente
 // database is ready exactly when the reasons map holds no failure for it, and carries that
 // reason as its message otherwise. Roles and the DatabaseRef provisioning marker hasNewDatabases
 // relies on are never touched, so reporting a failure here cannot re-run the privileges phase.
-func persistDatabaseMessages(ctx context.Context, c client.Client, postgresDB *enterprisev4.PostgresDatabase, reasons map[string]string) error {
+func persistDatabaseMessages(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, reasons map[string]string) error {
 	before := postgresDB.Status.DeepCopy()
 	for i := range postgresDB.Status.Databases {
 		reason, hasReason := reasons[postgresDB.Status.Databases[i].Name]
@@ -1479,7 +1479,7 @@ func persistDatabaseMessages(ctx context.Context, c client.Client, postgresDB *e
 	return c.Status().Update(ctx, postgresDB)
 }
 
-func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase, flags ...bool) []enterprisev4.DatabaseInfo {
+func populateDatabaseStatus(postgresDB *platformv1alpha1.PostgresDatabase, flags ...bool) []platformv1alpha1.DatabaseInfo {
 	ready := true
 	exists := true
 	includeRoles := false
@@ -1504,12 +1504,12 @@ func populateDatabaseStatus(postgresDB *enterprisev4.PostgresDatabase, flags ...
 // computeDesiredRoles (pkg/postgresql/cluster/core/managed_roles_model.go) has no explicit
 // drop to observe, so it keeps treating the role as still owned forever. This mirrors the
 // tombstoning cleanupManagedRoles performs for a full CR deletion.
-func removedDatabaseTombstones(postgresDB *enterprisev4.PostgresDatabase) []enterprisev4.DatabaseInfo {
+func removedDatabaseTombstones(postgresDB *platformv1alpha1.PostgresDatabase) []platformv1alpha1.DatabaseInfo {
 	inSpec := make(map[string]struct{}, len(postgresDB.Spec.Databases))
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		inSpec[dbSpec.Name] = struct{}{}
 	}
-	var tombstones []enterprisev4.DatabaseInfo
+	var tombstones []platformv1alpha1.DatabaseInfo
 	for _, existing := range postgresDB.Status.Databases {
 		if _, ok := inSpec[existing.Name]; ok {
 			continue
@@ -1517,9 +1517,9 @@ func removedDatabaseTombstones(postgresDB *enterprisev4.PostgresDatabase) []ente
 		if len(existing.Roles) == 0 {
 			continue
 		}
-		tombstone := enterprisev4.DatabaseInfo{Name: existing.Name}
+		tombstone := platformv1alpha1.DatabaseInfo{Name: existing.Name}
 		for _, role := range existing.Roles {
-			tombstone.Roles = append(tombstone.Roles, enterprisev4.DatabaseRoleInfo{
+			tombstone.Roles = append(tombstone.Roles, platformv1alpha1.DatabaseRoleInfo{
 				Name:      role.Name,
 				SecretRef: role.SecretRef,
 				Exists:    false,
@@ -1530,7 +1530,7 @@ func removedDatabaseTombstones(postgresDB *enterprisev4.PostgresDatabase) []ente
 	return tombstones
 }
 
-func populateDatabaseStatusForDefinitions(postgresDB *enterprisev4.PostgresDatabase, definitions []enterprisev4.DatabaseDefinition, ready bool, exists bool, includeRoles ...bool) []enterprisev4.DatabaseInfo {
+func populateDatabaseStatusForDefinitions(postgresDB *platformv1alpha1.PostgresDatabase, definitions []platformv1alpha1.DatabaseDefinition, ready bool, exists bool, includeRoles ...bool) []platformv1alpha1.DatabaseInfo {
 	publishRoles := true
 	if len(includeRoles) > 0 {
 		publishRoles = includeRoles[0]
@@ -1543,10 +1543,10 @@ func populateDatabaseStatusForDefinitions(postgresDB *enterprisev4.PostgresDatab
 		}
 		existingMessage[existing.Name] = existing.Message
 	}
-	databases := make([]enterprisev4.DatabaseInfo, 0, len(definitions))
+	databases := make([]platformv1alpha1.DatabaseInfo, 0, len(definitions))
 	for _, dbSpec := range definitions {
 		adminSecretName, rwSecretName := resolveSecretNames(postgresDB.Name, dbSpec)
-		info := enterprisev4.DatabaseInfo{
+		info := platformv1alpha1.DatabaseInfo{
 			Name:               dbSpec.Name,
 			Ready:              ready,
 			AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: adminSecretName}, Key: secretKeyPassword},
@@ -1564,7 +1564,7 @@ func populateDatabaseStatusForDefinitions(postgresDB *enterprisev4.PostgresDatab
 			info.Message = existingMessage[dbSpec.Name]
 		}
 		if publishRoles {
-			info.Roles = []enterprisev4.DatabaseRoleInfo{
+			info.Roles = []platformv1alpha1.DatabaseRoleInfo{
 				{Name: adminRoleName(dbSpec.Name), SecretRef: &corev1.LocalObjectReference{Name: adminSecretName}, Exists: exists},
 				{Name: rwRoleName(dbSpec.Name), SecretRef: &corev1.LocalObjectReference{Name: rwSecretName}, Exists: exists},
 			}
@@ -1578,11 +1578,11 @@ func populateDatabaseStatusForDefinitions(postgresDB *enterprisev4.PostgresDatab
 // database. DatabaseRef is stamped once a database reaches ready and stays put, so this
 // stays true across a later not-ready blip — unlike Ready, which the message overlay clears.
 // Entries with no role status are legacy credential-only rows and count as provisioned.
-func databaseProvisioned(dbInfo enterprisev4.DatabaseInfo) bool {
+func databaseProvisioned(dbInfo platformv1alpha1.DatabaseInfo) bool {
 	return dbInfo.DatabaseRef != nil || len(dbInfo.Roles) == 0
 }
 
-func hasNewDatabases(postgresDB *enterprisev4.PostgresDatabase) bool {
+func hasNewDatabases(postgresDB *platformv1alpha1.PostgresDatabase) bool {
 	existing := make(map[string]bool, len(postgresDB.Status.Databases))
 	for _, dbInfo := range postgresDB.Status.Databases {
 		if databaseProvisioned(dbInfo) {
@@ -1600,7 +1600,7 @@ func hasNewDatabases(postgresDB *enterprisev4.PostgresDatabase) bool {
 // roleGateReasons maps each spec database to a not-ready message for a role-gate
 // failure. The database owning the offending role gets the specific gate message;
 // the rest are reported as blocked by it, since the gate fails the CR as a whole.
-func roleGateReasons(postgresDB *enterprisev4.PostgresDatabase, gate roleGateDecision) map[string]string {
+func roleGateReasons(postgresDB *platformv1alpha1.PostgresDatabase, gate roleGateDecision) map[string]string {
 	blamed := databaseForRole(postgresDB, gate.Role)
 	reasons := make(map[string]string, len(postgresDB.Spec.Databases))
 	for _, dbSpec := range postgresDB.Spec.Databases {
@@ -1616,7 +1616,7 @@ func roleGateReasons(postgresDB *enterprisev4.PostgresDatabase, gate roleGateDec
 }
 
 // databaseForRole resolves a managed role name back to its spec database, or "" if none matches.
-func databaseForRole(postgresDB *enterprisev4.PostgresDatabase, role string) string {
+func databaseForRole(postgresDB *platformv1alpha1.PostgresDatabase, role string) string {
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		if role == adminRoleName(dbSpec.Name) || role == rwRoleName(dbSpec.Name) {
 			return dbSpec.Name
@@ -1644,7 +1644,7 @@ func generatePassword() (string, error) {
 	return password.Generate(passwordLength, passwordDigits, passwordSymbols, false, true)
 }
 
-func upsertFailureState(db *enterprisev4.PostgresDatabase, failureType string) {
+func upsertFailureState(db *platformv1alpha1.PostgresDatabase, failureType string) {
 	db.Status.ReconcileFailureType = failureType
 }
 
@@ -1655,7 +1655,7 @@ func terminalFailureType(err error) (string, bool) {
 	return "", false
 }
 
-func hasCurrentReconcileFailure(db *enterprisev4.PostgresDatabase) bool {
+func hasCurrentReconcileFailure(db *platformv1alpha1.PostgresDatabase) bool {
 	if db.Status.Phase == nil || *db.Status.Phase != string(failedDBPhase) {
 		return false
 	}

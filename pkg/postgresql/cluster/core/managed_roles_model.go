@@ -25,7 +25,7 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
@@ -42,15 +42,15 @@ type managedRolesModel struct {
 	events         eventEmitter
 	updateStatus   healthStatusUpdater
 	contracts      *reconcileContracts
-	cluster        *enterprisev4.PostgresCluster
+	cluster        *platformv1alpha1.PostgresCluster
 	newRoleSweeper ports.NewRoleSweeperFunc
 
 	desiredRoles []managedRole
-	roleOwners   map[string]enterprisev4.RoleOwnerReference
-	conflicts    []enterprisev4.RoleConflict
+	roleOwners   map[string]platformv1alpha1.RoleOwnerReference
+	conflicts    []platformv1alpha1.RoleConflict
 }
 
-func newManagedRolesModel(c client.Client, _ *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, contracts *reconcileContracts, newRoleSweeper ports.NewRoleSweeperFunc) *managedRolesModel {
+func newManagedRolesModel(c client.Client, _ *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, contracts *reconcileContracts, newRoleSweeper ports.NewRoleSweeperFunc) *managedRolesModel {
 	return &managedRolesModel{client: c, events: events, updateStatus: updateStatus, contracts: contracts, cluster: cluster, newRoleSweeper: newRoleSweeper}
 }
 
@@ -78,7 +78,7 @@ func (m *managedRolesModel) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	currentOwners := map[string]enterprisev4.RoleOwnerReference{}
+	currentOwners := map[string]platformv1alpha1.RoleOwnerReference{}
 	if m.cluster.Status.ManagedRolesStatus != nil {
 		for role, owner := range m.cluster.Status.ManagedRolesStatus.RoleOwners {
 			currentOwners[role] = owner
@@ -253,9 +253,9 @@ func (m *managedRolesModel) computeHealth(reconcileErr error) (componentHealth, 
 // requeues so the next pass re-enables managed roles. The status write is what flips
 // needsCredentialSweep to false, so the sweep runs exactly once.
 func (m *managedRolesModel) observeCredentialSweepDone() componentHealth {
-	m.cluster.Status.Restore = &enterprisev4.RestoreStatus{
+	m.cluster.Status.Restore = &platformv1alpha1.RestoreStatus{
 		Source:          restoreSourceStatus(m.cluster.Spec.BootstrapFrom),
-		CredentialSweep: enterprisev4.RestoreCredentialSweepStatus{Completed: true},
+		CredentialSweep: platformv1alpha1.RestoreCredentialSweepStatus{Completed: true},
 	}
 	m.events.emitNormal(m.cluster, EventUnmanagedRolesSweepDone, fmt.Sprintf("unmanaged login roles disabled for PostgresCluster %s", m.cluster.Name))
 	return newProvisioningHealth(managedRolesReady, reasonManagedRolesPending, "Credential sweep completed, waiting for managed roles to be re-enabled")
@@ -263,8 +263,8 @@ func (m *managedRolesModel) observeCredentialSweepDone() componentHealth {
 
 // restoreSourceStatus builds the observed restore source from the (source-agnostic) bootstrapFrom
 // intent, echoing whichever source was used and the PITR target if any. Safe for either source type.
-func restoreSourceStatus(b *enterprisev4.BootstrapFrom) enterprisev4.RestoreSourceStatus {
-	source := enterprisev4.RestoreSourceStatus{}
+func restoreSourceStatus(b *platformv1alpha1.BootstrapFrom) platformv1alpha1.RestoreSourceStatus {
+	source := platformv1alpha1.RestoreSourceStatus{}
 	if b == nil {
 		return source
 	}
@@ -284,11 +284,11 @@ func restoreSourceStatus(b *enterprisev4.BootstrapFrom) enterprisev4.RestoreSour
 // mirroring the spec RecoveryTarget shape so consumers need not parse a formatted string. It reflects
 // what the restore was asked to recover to, derived from the desired spec (not observed from the
 // provider). Returns nil when no target is set (recovery to latest available WAL).
-func recoveryTargetStatus(rt *enterprisev4.RecoveryTarget) *enterprisev4.RecoveryTargetStatus {
+func recoveryTargetStatus(rt *platformv1alpha1.RecoveryTarget) *platformv1alpha1.RecoveryTargetStatus {
 	if rt == nil {
 		return nil
 	}
-	status := &enterprisev4.RecoveryTargetStatus{
+	status := &platformv1alpha1.RecoveryTargetStatus{
 		Type:  rt.Type,
 		Value: rt.Value,
 	}
@@ -319,20 +319,20 @@ func (m *managedRolesModel) isManagedRolesConditionState(status metav1.Condition
 
 var errDatabaseListUnavailable = errors.New("unable to list PostgresDatabases for managed-role computation")
 
-func listPostgresDatabasesForCluster(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster) ([]enterprisev4.PostgresDatabase, error) {
-	var list enterprisev4.PostgresDatabaseList
+func listPostgresDatabasesForCluster(ctx context.Context, c client.Client, cluster *platformv1alpha1.PostgresCluster) ([]platformv1alpha1.PostgresDatabase, error) {
+	var list platformv1alpha1.PostgresDatabaseList
 	if err := c.List(ctx, &list,
 		client.InNamespace(cluster.Namespace),
-		client.MatchingFields{enterprisev4.PostgresDatabaseClusterRefNameField: cluster.Name},
+		client.MatchingFields{platformv1alpha1.PostgresDatabaseClusterRefNameField: cluster.Name},
 	); err != nil {
 		logging.FromContext(ctx).WarnContext(ctx,
 			"indexed PostgresDatabase list failed, falling back to namespace list",
-			"index", enterprisev4.PostgresDatabaseClusterRefNameField, "error", err)
+			"index", platformv1alpha1.PostgresDatabaseClusterRefNameField, "error", err)
 		if fallbackErr := c.List(ctx, &list, client.InNamespace(cluster.Namespace)); fallbackErr != nil {
 			return nil, fmt.Errorf("%w (%s/%s): indexed=%v fallback=%v", errDatabaseListUnavailable, cluster.Namespace, cluster.Name, err, fallbackErr)
 		}
 	}
-	items := make([]enterprisev4.PostgresDatabase, 0, len(list.Items))
+	items := make([]platformv1alpha1.PostgresDatabase, 0, len(list.Items))
 	for _, db := range list.Items {
 		if db.Spec.ClusterRef.Name == cluster.Name {
 			items = append(items, db)
@@ -343,22 +343,22 @@ func listPostgresDatabasesForCluster(ctx context.Context, c client.Client, clust
 
 type desiredRolesDecision struct {
 	Roles      []managedRole
-	Conflicts  []enterprisev4.RoleConflict
-	RoleOwners map[string]enterprisev4.RoleOwnerReference
+	Conflicts  []platformv1alpha1.RoleConflict
+	RoleOwners map[string]platformv1alpha1.RoleOwnerReference
 }
 
 type roleClaim struct {
-	Owner enterprisev4.RoleOwnerReference
-	Role  enterprisev4.DatabaseRoleInfo
+	Owner platformv1alpha1.RoleOwnerReference
+	Role  platformv1alpha1.DatabaseRoleInfo
 }
 
-func computeDesiredRoles(databases []enterprisev4.PostgresDatabase, ownerMap map[string]enterprisev4.RoleOwnerReference, currentRoles map[string]managedRole, absentReconciled map[string]struct{}) desiredRolesDecision {
-	dbByOwner := make(map[enterprisev4.RoleOwnerReference]enterprisev4.PostgresDatabase, len(databases))
+func computeDesiredRoles(databases []platformv1alpha1.PostgresDatabase, ownerMap map[string]platformv1alpha1.RoleOwnerReference, currentRoles map[string]managedRole, absentReconciled map[string]struct{}) desiredRolesDecision {
+	dbByOwner := make(map[platformv1alpha1.RoleOwnerReference]platformv1alpha1.PostgresDatabase, len(databases))
 	claims := map[string][]roleClaim{}
-	explicitDrops := map[string]map[enterprisev4.RoleOwnerReference]struct{}{}
+	explicitDrops := map[string]map[platformv1alpha1.RoleOwnerReference]struct{}{}
 
 	for _, db := range databases {
-		owner := enterprisev4.RoleOwnerReference{Name: db.Name, UID: string(db.UID)}
+		owner := platformv1alpha1.RoleOwnerReference{Name: db.Name, UID: string(db.UID)}
 		dbByOwner[owner] = db
 		for _, info := range db.Status.Databases {
 			for _, role := range info.Roles {
@@ -367,7 +367,7 @@ func computeDesiredRoles(databases []enterprisev4.PostgresDatabase, ownerMap map
 				}
 				if !role.Exists {
 					if explicitDrops[role.Name] == nil {
-						explicitDrops[role.Name] = map[enterprisev4.RoleOwnerReference]struct{}{}
+						explicitDrops[role.Name] = map[platformv1alpha1.RoleOwnerReference]struct{}{}
 					}
 					explicitDrops[role.Name][owner] = struct{}{}
 					continue
@@ -380,9 +380,9 @@ func computeDesiredRoles(databases []enterprisev4.PostgresDatabase, ownerMap map
 		}
 	}
 
-	newOwners := make(map[string]enterprisev4.RoleOwnerReference, len(ownerMap)+len(claims))
+	newOwners := make(map[string]platformv1alpha1.RoleOwnerReference, len(ownerMap)+len(claims))
 	rolesByName := map[string]managedRole{}
-	var conflicts []enterprisev4.RoleConflict
+	var conflicts []platformv1alpha1.RoleConflict
 
 	for roleName, owner := range ownerMap {
 		if _, exists := dbByOwner[owner]; !exists {
@@ -414,7 +414,7 @@ func computeDesiredRoles(databases []enterprisev4.PostgresDatabase, ownerMap map
 					continue
 				}
 				claimedBy := incumbent
-				conflicts = append(conflicts, enterprisev4.RoleConflict{Role: roleName, ClaimedBy: &claimedBy, AttemptedBy: claim.Owner})
+				conflicts = append(conflicts, platformv1alpha1.RoleConflict{Role: roleName, ClaimedBy: &claimedBy, AttemptedBy: claim.Owner})
 			}
 			if incumbentClaim != nil {
 				rolesByName[roleName] = managedRoleFromClaim(*incumbentClaim)
@@ -430,7 +430,7 @@ func computeDesiredRoles(databases []enterprisev4.PostgresDatabase, ownerMap map
 			continue
 		}
 		for _, claim := range uniqueClaims {
-			conflicts = append(conflicts, enterprisev4.RoleConflict{Role: roleName, AttemptedBy: claim.Owner})
+			conflicts = append(conflicts, platformv1alpha1.RoleConflict{Role: roleName, AttemptedBy: claim.Owner})
 		}
 	}
 
@@ -452,7 +452,7 @@ func computeDesiredRoles(databases []enterprisev4.PostgresDatabase, ownerMap map
 }
 
 func collapseClaims(claims []roleClaim) []roleClaim {
-	seen := map[enterprisev4.RoleOwnerReference]struct{}{}
+	seen := map[platformv1alpha1.RoleOwnerReference]struct{}{}
 	out := make([]roleClaim, 0, len(claims))
 	for _, claim := range claims {
 		if _, ok := seen[claim.Owner]; ok {
@@ -475,11 +475,11 @@ func managedRoleFromClaim(claim roleClaim) managedRole {
 	}
 }
 
-func sameOwner(a, b enterprisev4.RoleOwnerReference) bool {
+func sameOwner(a, b platformv1alpha1.RoleOwnerReference) bool {
 	return a.Name == b.Name && a.UID == b.UID
 }
 
-func hasLegacyDatabaseStatus(databases []enterprisev4.PostgresDatabase) bool {
+func hasLegacyDatabaseStatus(databases []platformv1alpha1.PostgresDatabase) bool {
 	for _, db := range databases {
 		for _, info := range db.Status.Databases {
 			if len(info.Roles) == 0 {
@@ -490,7 +490,7 @@ func hasLegacyDatabaseStatus(databases []enterprisev4.PostgresDatabase) bool {
 	return false
 }
 
-func retainCurrentOwnedRoles(owners map[string]enterprisev4.RoleOwnerReference, currentRoles map[string]managedRole) []managedRole {
+func retainCurrentOwnedRoles(owners map[string]platformv1alpha1.RoleOwnerReference, currentRoles map[string]managedRole) []managedRole {
 	roles := make([]managedRole, 0, len(owners))
 	for roleName := range owners {
 		if role, ok := currentRoles[roleName]; ok {
@@ -541,7 +541,7 @@ func currentManagedRolesFromCNPG(cnpgCluster *cnpgv1.Cluster) map[string]managed
 	return roles
 }
 
-func syncManagedRolesStatusFromCNPG(cluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, expected []managedRole, owners map[string]enterprisev4.RoleOwnerReference, conflicts []enterprisev4.RoleConflict) {
+func syncManagedRolesStatusFromCNPG(cluster *platformv1alpha1.PostgresCluster, cnpgCluster *cnpgv1.Cluster, expected []managedRole, owners map[string]platformv1alpha1.RoleOwnerReference, conflicts []platformv1alpha1.RoleConflict) {
 	if cluster == nil || cnpgCluster == nil {
 		return
 	}
@@ -607,7 +607,7 @@ func syncManagedRolesStatusFromCNPG(cluster *enterprisev4.PostgresCluster, cnpgC
 		owners = nil
 	}
 
-	cluster.Status.ManagedRolesStatus = &enterprisev4.ManagedRolesStatus{
+	cluster.Status.ManagedRolesStatus = &platformv1alpha1.ManagedRolesStatus{
 		Reconciled: reconciled,
 		Pending:    pending,
 		Failed:     failed,

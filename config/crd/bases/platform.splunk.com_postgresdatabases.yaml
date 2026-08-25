@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: postgresdatabases.enterprise.splunk.com
+  name: postgresdatabases.platform.splunk.com
 spec:
-  group: enterprise.splunk.com
+  group: platform.splunk.com
   names:
     kind: PostgresDatabase
     listKind: PostgresDatabaseList
@@ -24,7 +24,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v4
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: PostgresDatabase is the Schema for the postgresdatabases API.

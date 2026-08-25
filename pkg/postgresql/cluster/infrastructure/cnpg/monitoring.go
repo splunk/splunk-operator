@@ -40,9 +40,9 @@ const (
 	MonitoringCMKey = "queries.yaml"
 
 	// Avoids writes and exporter reloads for unchanged content.
-	MonitoringCMHashAnnotation     = "enterprise.splunk.com/monitoring-config-hash"
-	MonitoringQueryCountAnnotation = "enterprise.splunk.com/monitoring-query-count"
-	MonitoringEnabledAnnotation    = "enterprise.splunk.com/monitoring-enabled"
+	MonitoringCMHashAnnotation     = "platform.splunk.com/monitoring-config-hash"
+	MonitoringQueryCountAnnotation = "platform.splunk.com/monitoring-query-count"
+	MonitoringEnabledAnnotation    = "platform.splunk.com/monitoring-enabled"
 )
 
 type MonitoringConfig struct {

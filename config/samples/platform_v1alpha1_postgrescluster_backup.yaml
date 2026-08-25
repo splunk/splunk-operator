@@ -1,6 +1,6 @@
 # PostgresCluster with backup schedule override
 # Inherits backup enabled from class, overrides schedule to run at 3:30am
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   labels:

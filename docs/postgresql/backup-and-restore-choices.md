@@ -83,7 +83,7 @@ For Barman object storage:
 The following class enables both backup methods. Remove the provider block that is not required.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: production
@@ -137,7 +137,7 @@ The schedule is standard five-field cron. The operator translates it for CNPG. W
 The cluster inherits `enabled` and `schedule` from its class when `spec.backup` is omitted:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: my-app-db
@@ -173,7 +173,7 @@ Restore behavior is selected when creating a new `PostgresCluster` through `spec
 Use this when recovery to the snapshot point is sufficient:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: mydb-restored

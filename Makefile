@@ -526,7 +526,7 @@ test-integration: manifests generate fmt vet setup-envtest ## Run all controller
 	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-integration_test.xml}"; \
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" \
 	  ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going \
-	  --timeout=$${TEST_TIMEOUT:-30m} ./internal/controller/enterprise
+	  --timeout=$${TEST_TIMEOUT:-30m} ./internal/controller/enterprise ./internal/controller/platform
 
 .PHONY: test-smoke
 test-smoke: ## Run in-cluster smoke tests (label=tier:e2e-pr && feature:basic). Requires deployed operator.

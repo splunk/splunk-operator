@@ -61,7 +61,7 @@ Choose a snapshot with `READYTOUSE = true`. Snapshot names follow the pattern `<
 Create a new `PostgresCluster` with `spec.bootstrapFrom.volumeSnapshot.storage` set to the snapshot name:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: mydb-restored
@@ -139,7 +139,7 @@ This means: after a restore, no application role can authenticate until you expl
 Create a `PostgresDatabase` resource pointing at the restored cluster for each database your application uses:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: myapp-db-restored
@@ -216,7 +216,7 @@ PITR recovers the cluster to an arbitrary point **between** backups — a timest
 Combine a volume snapshot (the base backup) with a `walArchive` (the WAL source) and a `recoveryTarget`:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: mydb-restored
@@ -298,7 +298,7 @@ For a snapshot-based restore of a large database with `instances > 1`, only the 
 When a base backup exists in object storage (not just WAL), you can restore entirely from the object store with no volume snapshot. Use the top-level `objectStorage` source:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: mydb-restored

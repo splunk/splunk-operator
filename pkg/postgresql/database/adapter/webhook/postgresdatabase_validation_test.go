@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/webhook"
 	"github.com/stretchr/testify/assert"
@@ -37,15 +37,15 @@ import (
 func TestValidatePostgresDatabaseCreate(t *testing.T) {
 	tests := []struct {
 		name         string
-		obj          *enterpriseApi.PostgresDatabase
+		obj          *platformApi.PostgresDatabase
 		wantErrCount int
 	}{
 		{
 			name: "valid - minimal spec",
-			obj: &enterpriseApi.PostgresDatabase{
-				Spec: enterpriseApi.PostgresDatabaseSpec{
+			obj: &platformApi.PostgresDatabase{
+				Spec: platformApi.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: "my-cluster"},
-					Databases:  []enterpriseApi.DatabaseDefinition{{Name: "mydb"}},
+					Databases:  []platformApi.DatabaseDefinition{{Name: "mydb"}},
 				},
 			},
 			wantErrCount: 0,
@@ -66,10 +66,10 @@ func TestValidatePostgresDatabaseCreateFeatureGateDisabled(t *testing.T) {
 		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): true})
 	})
 
-	obj := &enterpriseApi.PostgresDatabase{
-		Spec: enterpriseApi.PostgresDatabaseSpec{
+	obj := &platformApi.PostgresDatabase{
+		Spec: platformApi.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "my-cluster"},
-			Databases:  []enterpriseApi.DatabaseDefinition{{Name: "mydb"}},
+			Databases:  []platformApi.DatabaseDefinition{{Name: "mydb"}},
 		},
 	}
 
@@ -85,10 +85,10 @@ func TestValidatePostgresDatabaseUpdateFeatureGateDisabled(t *testing.T) {
 		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): true})
 	})
 
-	obj := &enterpriseApi.PostgresDatabase{
-		Spec: enterpriseApi.PostgresDatabaseSpec{
+	obj := &platformApi.PostgresDatabase{
+		Spec: platformApi.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "my-cluster"},
-			Databases:  []enterpriseApi.DatabaseDefinition{{Name: "mydb"}},
+			Databases:  []platformApi.DatabaseDefinition{{Name: "mydb"}},
 		},
 	}
 	oldObj := obj.DeepCopy()
@@ -100,10 +100,10 @@ func TestValidatePostgresDatabaseUpdateFeatureGateDisabled(t *testing.T) {
 }
 
 func TestValidatePostgresDatabaseUpdate(t *testing.T) {
-	obj := &enterpriseApi.PostgresDatabase{
-		Spec: enterpriseApi.PostgresDatabaseSpec{
+	obj := &platformApi.PostgresDatabase{
+		Spec: platformApi.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "my-cluster"},
-			Databases:  []enterpriseApi.DatabaseDefinition{{Name: "mydb"}},
+			Databases:  []platformApi.DatabaseDefinition{{Name: "mydb"}},
 		},
 	}
 	errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), obj, obj, nil)
@@ -120,14 +120,14 @@ func TestValidatePostgresDatabaseExternalSecret(t *testing.T) {
 		rwPath    = "spec.databases[0].passwordConfig.externalRWSecretRef.name"
 	)
 
-	dbWithRefs := func() *enterpriseApi.PostgresDatabase {
-		return &enterpriseApi.PostgresDatabase{
+	dbWithRefs := func() *platformApi.PostgresDatabase {
+		return &platformApi.PostgresDatabase{
 			ObjectMeta: metav1.ObjectMeta{Name: "pgdb", Namespace: ns},
-			Spec: enterpriseApi.PostgresDatabaseSpec{
+			Spec: platformApi.PostgresDatabaseSpec{
 				ClusterRef: corev1.LocalObjectReference{Name: "my-cluster"},
-				Databases: []enterpriseApi.DatabaseDefinition{{
+				Databases: []platformApi.DatabaseDefinition{{
 					Name: "mydb",
-					PasswordConfig: &enterpriseApi.PasswordConfig{
+					PasswordConfig: &platformApi.PasswordConfig{
 						ExternalAdminSecretRef: corev1.LocalObjectReference{Name: adminRef},
 						ExternalRWSecretRef:    corev1.LocalObjectReference{Name: rwRef},
 					},
@@ -223,12 +223,12 @@ func TestValidatePostgresDatabaseExternalSecret(t *testing.T) {
 func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	const ns = "default"
 
-	dbWith := func(mon *enterpriseApi.DatabaseMonitoring) *enterpriseApi.PostgresDatabase {
-		return &enterpriseApi.PostgresDatabase{
+	dbWith := func(mon *platformApi.DatabaseMonitoring) *platformApi.PostgresDatabase {
+		return &platformApi.PostgresDatabase{
 			ObjectMeta: metav1.ObjectMeta{Name: "pgdb", Namespace: ns},
-			Spec: enterpriseApi.PostgresDatabaseSpec{
+			Spec: platformApi.PostgresDatabaseSpec{
 				ClusterRef: corev1.LocalObjectReference{Name: "my-cluster"},
-				Databases: []enterpriseApi.DatabaseDefinition{
+				Databases: []platformApi.DatabaseDefinition{
 					{Name: "mydb", Monitoring: mon},
 				},
 			},
@@ -256,7 +256,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	})
 
 	t.Run("existing source ConfigMap - admitted", func(t *testing.T) {
-		obj := dbWith(&enterpriseApi.DatabaseMonitoring{
+		obj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"}},
 		})
 		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, buildReader(sourceCM))
@@ -264,7 +264,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	})
 
 	t.Run("missing source ConfigMap - rejected", func(t *testing.T) {
-		obj := dbWith(&enterpriseApi.DatabaseMonitoring{
+		obj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{LocalObjectReference: corev1.LocalObjectReference{Name: "absent"}, Key: "queries.yaml"}},
 		})
 		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, buildReader())
@@ -274,7 +274,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	})
 
 	t.Run("deleting object skips missing live references", func(t *testing.T) {
-		oldObj := dbWith(&enterpriseApi.DatabaseMonitoring{
+		oldObj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{LocalObjectReference: corev1.LocalObjectReference{Name: "removed"}, Key: "queries.yaml"}},
 		})
 		obj := oldObj.DeepCopy()
@@ -287,7 +287,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	})
 
 	t.Run("every explicit optional field is rejected", func(t *testing.T) {
-		obj := dbWith(&enterpriseApi.DatabaseMonitoring{
+		obj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{
 				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: ptr.To(true)},
 				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"},
@@ -305,7 +305,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	})
 
 	t.Run("optional policy does not depend on API reader", func(t *testing.T) {
-		obj := dbWith(&enterpriseApi.DatabaseMonitoring{
+		obj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 				LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"},
 				Key:                  "queries.yaml",
@@ -320,7 +320,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	})
 
 	t.Run("unchanged missing source does not block an unrelated update", func(t *testing.T) {
-		oldObj := dbWith(&enterpriseApi.DatabaseMonitoring{
+		oldObj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 				LocalObjectReference: corev1.LocalObjectReference{Name: "removed"},
 				Key:                  "queries.yaml",
@@ -335,13 +335,13 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	})
 
 	t.Run("changed selector list validates every resulting reference", func(t *testing.T) {
-		oldObj := dbWith(&enterpriseApi.DatabaseMonitoring{
+		oldObj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 				LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"},
 				Key:                  "queries.yaml",
 			}},
 		})
-		obj := dbWith(&enterpriseApi.DatabaseMonitoring{
+		obj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{
 				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"},
 				{LocalObjectReference: corev1.LocalObjectReference{Name: "absent"}, Key: "queries.yaml"},
@@ -360,7 +360,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 			Key:                  "queries.yaml",
 			Optional:             ptr.To(false),
 		}
-		oldObj := dbWith(&enterpriseApi.DatabaseMonitoring{CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{ref}})
+		oldObj := dbWith(&platformApi.DatabaseMonitoring{CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{ref}})
 		obj := oldObj.DeepCopy()
 
 		errs := webhook.ValidatePostgresDatabaseUpdate(t.Context(), obj, oldObj, buildReader())
@@ -371,20 +371,20 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 }
 
 func TestGetPostgresDatabaseWarningsOnCreate(t *testing.T) {
-	obj := &enterpriseApi.PostgresDatabase{
-		Spec: enterpriseApi.PostgresDatabaseSpec{
+	obj := &platformApi.PostgresDatabase{
+		Spec: platformApi.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "my-cluster"},
-			Databases:  []enterpriseApi.DatabaseDefinition{{Name: "mydb"}},
+			Databases:  []platformApi.DatabaseDefinition{{Name: "mydb"}},
 		},
 	}
 	assert.Empty(t, webhook.GetPostgresDatabaseWarningsOnCreate(obj))
 }
 
 func TestGetPostgresDatabaseWarningsOnUpdate(t *testing.T) {
-	obj := &enterpriseApi.PostgresDatabase{
-		Spec: enterpriseApi.PostgresDatabaseSpec{
+	obj := &platformApi.PostgresDatabase{
+		Spec: platformApi.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "my-cluster"},
-			Databases:  []enterpriseApi.DatabaseDefinition{{Name: "mydb"}},
+			Databases:  []platformApi.DatabaseDefinition{{Name: "mydb"}},
 		},
 	}
 	assert.Empty(t, webhook.GetPostgresDatabaseWarningsOnUpdate(obj, obj))

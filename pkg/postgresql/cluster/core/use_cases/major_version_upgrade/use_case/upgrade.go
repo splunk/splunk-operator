@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
@@ -261,7 +261,7 @@ func (h *MajorUpgradeUseCase) strategyFor(intent mvutypes.Intent) upgradeFlow {
 	}
 }
 
-func phaseForIntent(entries []enterprisev4.PostgresMajorUpgradeStatus, intent mvutypes.Intent) mvutypes.Status {
+func phaseForIntent(entries []platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent) mvutypes.Status {
 	for i := len(entries) - 1; i >= 0; i-- {
 		entry := entries[i]
 		if !mvutypes.MatchesIntent(entry, intent) || entry.Phase == nil {

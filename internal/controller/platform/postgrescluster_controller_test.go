@@ -44,7 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
@@ -195,7 +195,7 @@ func markCNPGClusterBackupReady(cnpg *cnpgv1.Cluster, clusterName, caSecretName 
 
 func currentMajorUpgradePhase(ctx context.Context, key types.NamespacedName) string {
 	GinkgoHelper()
-	pc := &enterprisev4.PostgresCluster{}
+	pc := &platformv1alpha1.PostgresCluster{}
 	Expect(k8sClient.Get(ctx, key, pc)).To(Succeed())
 	Expect(pc.Status.PostgresMajorUpgradeStatus).NotTo(BeEmpty())
 	current := pc.Status.PostgresMajorUpgradeStatus[len(pc.Status.PostgresMajorUpgradeStatus)-1]
@@ -205,19 +205,19 @@ func currentMajorUpgradePhase(ctx context.Context, key types.NamespacedName) str
 
 func seedClusterScopedDatabaseRoles(ctx context.Context, namespace, name, clusterName string, roleNames ...string) {
 	GinkgoHelper()
-	db := &enterprisev4.PostgresDatabase{
+	db := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: v1.LocalObjectReference{Name: clusterName},
-			Databases:  []enterprisev4.DatabaseDefinition{{Name: "app"}},
+			Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "app"}},
 		},
 	}
 	Expect(k8sClient.Create(ctx, db)).To(Succeed())
-	roles := make([]enterprisev4.DatabaseRoleInfo, 0, len(roleNames))
+	roles := make([]platformv1alpha1.DatabaseRoleInfo, 0, len(roleNames))
 	for _, r := range roleNames {
-		roles = append(roles, enterprisev4.DatabaseRoleInfo{Name: r, SecretRef: &v1.LocalObjectReference{Name: name + "-" + r}, Exists: true})
+		roles = append(roles, platformv1alpha1.DatabaseRoleInfo{Name: r, SecretRef: &v1.LocalObjectReference{Name: name + "-" + r}, Exists: true})
 	}
-	db.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "app", Roles: roles}}
+	db.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: "app", Roles: roles}}
 	Expect(k8sClient.Status().Update(ctx, db)).To(Succeed())
 }
 
@@ -265,8 +265,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		classNameMetrics  string
 		classNamePooler   string
 		classNameBackup   string
-		pgCluster         *enterprisev4.PostgresCluster
-		pgClusterClass    *enterprisev4.PostgresClusterClass
+		pgCluster         *platformv1alpha1.PostgresCluster
+		pgClusterClass    *platformv1alpha1.PostgresClusterClass
 		pgClusterKey      types.NamespacedName
 		pgClusterClassKey types.NamespacedName
 		reconciler        *PostgresClusterReconciler
@@ -326,79 +326,79 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		pgClusterKey = types.NamespacedName{Name: clusterName, Namespace: namespace}
 		pgClusterClassKey = types.NamespacedName{Name: className, Namespace: namespace}
 
-		pgClusterClass = &enterprisev4.PostgresClusterClass{
+		pgClusterClass = &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: className},
-			Spec: enterprisev4.PostgresClusterClassSpec{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: provisioner,
-				Config: &enterprisev4.PostgresClusterClassConfig{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       ptr.To(clusterMemberCount),
 					Storage:         ptr.To(resource.MustParse(storageAmount)),
 					PostgresVersion: ptr.To(postgresVersion),
-					ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{
+					ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{
 						Enabled: ptr.To(poolerEnabled),
 					},
 				},
-				CNPG: &enterprisev4.CNPGConfig{},
+				CNPG: &platformv1alpha1.CNPGConfig{},
 			},
 		}
 
-		pgClassPostgresMetrics := &enterprisev4.PostgresClusterClass{
+		pgClassPostgresMetrics := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: classNameMetrics},
-			Spec: enterprisev4.PostgresClusterClassSpec{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: provisioner,
-				Config: &enterprisev4.PostgresClusterClassConfig{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       ptr.To(clusterMemberCount),
 					Storage:         ptr.To(resource.MustParse(storageAmount)),
 					PostgresVersion: ptr.To(postgresVersion),
-					Monitoring: &enterprisev4.PostgresMonitoringClassConfig{
-						PostgreSQLMetrics: &enterprisev4.MetricsClassConfig{Enabled: ptr.To(true)},
+					Monitoring: &platformv1alpha1.PostgresMonitoringClassConfig{
+						PostgreSQLMetrics: &platformv1alpha1.MetricsClassConfig{Enabled: ptr.To(true)},
 					},
 				},
-				CNPG: &enterprisev4.CNPGConfig{},
+				CNPG: &platformv1alpha1.CNPGConfig{},
 			},
 		}
 
-		pgClassPoolerMetrics := &enterprisev4.PostgresClusterClass{
+		pgClassPoolerMetrics := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: classNamePooler},
-			Spec: enterprisev4.PostgresClusterClassSpec{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: provisioner,
-				Config: &enterprisev4.PostgresClusterClassConfig{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       ptr.To(clusterMemberCount),
 					Storage:         ptr.To(resource.MustParse(storageAmount)),
 					PostgresVersion: ptr.To(postgresVersion),
-					ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{
+					ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{
 						Enabled: ptr.To(true),
 					},
-					Monitoring: &enterprisev4.PostgresMonitoringClassConfig{
-						ConnectionPoolerMetrics: &enterprisev4.MetricsClassConfig{Enabled: ptr.To(true)},
+					Monitoring: &platformv1alpha1.PostgresMonitoringClassConfig{
+						ConnectionPoolerMetrics: &platformv1alpha1.MetricsClassConfig{Enabled: ptr.To(true)},
 					},
 				},
-				CNPG: &enterprisev4.CNPGConfig{
-					ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+				CNPG: &platformv1alpha1.CNPGConfig{
+					ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
 						Instances: ptr.To(int32(2)),
-						Mode:      ptr.To(enterprisev4.ConnectionPoolerModeTransaction),
+						Mode:      ptr.To(platformv1alpha1.ConnectionPoolerModeTransaction),
 					},
 				},
 			},
 		}
 
-		pgClassBackup := &enterprisev4.PostgresClusterClass{
+		pgClassBackup := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: classNameBackup},
-			Spec: enterprisev4.PostgresClusterClassSpec{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: provisioner,
-				Config: &enterprisev4.PostgresClusterClassConfig{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       ptr.To(clusterMemberCount),
 					Storage:         ptr.To(resource.MustParse(storageAmount)),
 					PostgresVersion: ptr.To(postgresVersion),
-					Backup: &enterprisev4.BackupConfig{
+					Backup: &platformv1alpha1.BackupConfig{
 						Enabled:  ptr.To(true),
 						Schedule: ptr.To("0 2 * * *"),
 					},
 				},
-				CNPG: &enterprisev4.CNPGConfig{
-					Backup: &enterprisev4.CNPGBackupConfig{
+				CNPG: &platformv1alpha1.CNPGConfig{
+					Backup: &platformv1alpha1.CNPGBackupConfig{
 						Target: ptr.To("prefer-standby"),
-						VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{
+						VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
 							ClassName: ptr.To("csi-snapclass"),
 							Online:    ptr.To(true),
 						},
@@ -412,9 +412,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		Expect(k8sClient.Create(ctx, pgClassPoolerMetrics)).To(Succeed())
 		Expect(k8sClient.Create(ctx, pgClassBackup)).To(Succeed())
 
-		pgCluster = &enterprisev4.PostgresCluster{
+		pgCluster = &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
-			Spec: enterprisev4.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{
 				Class:                 className,
 				ClusterDeletionPolicy: ptr.To(deletePolicy),
 			},
@@ -448,7 +448,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				// Some envtest runs may not have CNPG CRDs installed in the API server.
 				// In that case, remove finalizer directly so fixture teardown remains deterministic.
 				if meta.IsNoMatchError(recErr) {
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					getErr := k8sClient.Get(ctx, pgClusterKey, current)
 					if apierrors.IsNotFound(getErr) {
 						return true
@@ -467,7 +467,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					return false
 				}
 			}
-			getErr := k8sClient.Get(ctx, pgClusterKey, &enterprisev4.PostgresCluster{})
+			getErr := k8sClient.Get(ctx, pgClusterKey, &platformv1alpha1.PostgresCluster{})
 			return apierrors.IsNotFound(getErr)
 		}, "10s", "500ms").Should(BeTrue())
 
@@ -478,7 +478,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			{Name: classNamePooler},
 			{Name: classNameBackup},
 		} {
-			existing := &enterprisev4.PostgresClusterClass{}
+			existing := &platformv1alpha1.PostgresClusterClass{}
 			err = k8sClient.Get(ctx, key, existing)
 			if err == nil {
 				Expect(k8sClient.Delete(ctx, existing)).To(Succeed())
@@ -495,7 +495,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(1)
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				Expect(controllerutil.ContainsFinalizer(pc, core.PostgresClusterFinalizerName)).To(BeTrue())
 			})
@@ -509,7 +509,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				// pass 1: add finalizer; pass 2: create CNPG cluster/secret/status.
 				reconcileNTimes(2)
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				cond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
 				Expect(cond).NotTo(BeNil())
@@ -630,7 +630,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileAfterCNPGHealthyOrPatch()
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				Expect(pc.Status.Phase).NotTo(BeNil())
 				Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -640,7 +640,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				completedPhase := string(mvutypes.Completed)
 				strategy := mvutypes.MajorUpgradeFlowPgUpgrade
 				sourceVersion := "14"
-				pc.Status.PostgresMajorUpgradeStatus = []enterprisev4.PostgresMajorUpgradeStatus{{
+				pc.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{
 					Phase:           &completedPhase,
 					Strategy:        &strategy,
 					SourcePgVersion: &sourceVersion,
@@ -650,7 +650,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				pc.Spec.PostgresVersion = ptr.To(targetVersion)
-				pc.Spec.PostgresMajorUpgradeConfig = &enterprisev4.PostgresMajorUpgradeConfig{
+				pc.Spec.PostgresMajorUpgradeConfig = &platformv1alpha1.PostgresMajorUpgradeConfig{
 					Allow:    ptr.To(true),
 					Strategy: &[]string{mvutypes.MajorUpgradeFlowPgUpgrade}[0],
 				}
@@ -769,7 +769,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			It("reconciles external superuser secret and creates managed resources w/ status refs", func() {
 				received := make([]string, 0, 16)
 
-				pgCluster.Spec.PasswordConfig = &enterprisev4.SuperuserPasswordConfig{
+				pgCluster.Spec.PasswordConfig = &platformv1alpha1.SuperuserPasswordConfig{
 					SuperuserExternalSecretRef: v1.LocalObjectReference{
 						Name: "external-superuser-secret",
 					},
@@ -794,7 +794,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				// pass 1: add finalizer; pass 2: create CNPG cluster/secret/status.
 				reconcileNTimes(2)
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				cond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
 				Expect(cond).NotTo(BeNil())
@@ -916,7 +916,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			It("sets secret missing condition when appropriate", func() {
 				received := make([]string, 0, 16)
 
-				pgCluster.Spec.PasswordConfig = &enterprisev4.SuperuserPasswordConfig{
+				pgCluster.Spec.PasswordConfig = &platformv1alpha1.SuperuserPasswordConfig{
 					SuperuserExternalSecretRef: v1.LocalObjectReference{
 						Name: "missing-superuser-secret-status-failed",
 					},
@@ -931,7 +931,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				_, err := reconciler.Reconcile(ctx, req)
 				Expect(err).To(HaveOccurred())
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 
 				secretCond := meta.FindStatusCondition(pc.Status.Conditions, "SecretsReady")
@@ -968,7 +968,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				Expect(cnpg.Spec.Instances).To(Equal(int(clusterMemberCount)))
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				cond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
 				Expect(cond).NotTo(BeNil())
@@ -992,7 +992,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileAfterCNPGHealthyOrPatch()
 
-				current := &enterprisev4.PostgresCluster{}
+				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 				current.Spec.PostgresVersion = ptr.To(upgradedPostgresVersion)
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
@@ -1108,9 +1108,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(cnpg.Spec.InheritedMetadata).NotTo(BeNil())
 				Expect(cnpg.Spec.InheritedMetadata.Annotations).To(HaveKeyWithValue(portAnnotationKey, postgresPort))
 
-				current := &enterprisev4.PostgresCluster{}
+				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
-				current.Spec.Monitoring = &enterprisev4.PostgresClusterMonitoring{
+				current.Spec.Monitoring = &platformv1alpha1.PostgresClusterMonitoring{
 					PostgreSQLMetrics: ptr.To(false),
 				}
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
@@ -1142,7 +1142,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, rwKey, &cnpgv1.Pooler{}))).To(BeTrue())
 				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, roKey, &cnpgv1.Pooler{}))).To(BeTrue())
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				poolerCond := meta.FindStatusCondition(pc.Status.Conditions, "PoolerReady")
 				// Pooler component is gated behind provisioner readiness, so before CNPG
@@ -1191,7 +1191,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					_, err := reconciler.Reconcile(ctx, req)
 					g.Expect(err).NotTo(HaveOccurred())
 
-					updated := &enterprisev4.PostgresCluster{}
+					updated := &platformv1alpha1.PostgresCluster{}
 					g.Expect(k8sClient.Get(ctx, pgClusterKey, updated)).To(Succeed())
 					poolerReadyCond := meta.FindStatusCondition(updated.Status.Conditions, "PoolerReady")
 					g.Expect(poolerReadyCond).NotTo(BeNil())
@@ -1232,7 +1232,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					}
 				}, "20s", "250ms").Should(Succeed())
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Eventually(func(g Gomega) {
 					_, err := reconciler.Reconcile(ctx, req)
 					g.Expect(err).NotTo(HaveOccurred())
@@ -1283,7 +1283,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					}
 				}, "20s", "250ms").Should(Succeed())
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				pc.Spec.Instances = ptr.To(int32(1))
 				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
@@ -1302,7 +1302,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 			It("respects readOnly=false at instances=2", func() {
 				pgCluster.Spec.Instances = ptr.To(int32(2))
-				pgCluster.Spec.ConnectionPooler = &enterprisev4.ConnectionPoolerEnableConfig{
+				pgCluster.Spec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{
 					Enabled:  ptr.To(true),
 					ReadOnly: ptr.To(false),
 				}
@@ -1336,7 +1336,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					}
 				}, "20s", "250ms").Should(Succeed())
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Eventually(func(g Gomega) {
 					_, err := reconciler.Reconcile(ctx, req)
 					g.Expect(err).NotTo(HaveOccurred())
@@ -1385,7 +1385,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					}
 				}, "20s", "250ms").Should(Succeed())
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				pc.Spec.Instances = ptr.To(int32(2))
 				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
@@ -1412,7 +1412,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					}
 				}, "20s", "250ms").Should(Succeed())
 
-				pcAfter := &enterprisev4.PostgresCluster{}
+				pcAfter := &platformv1alpha1.PostgresCluster{}
 				Eventually(func(g Gomega) {
 					_, err := reconciler.Reconcile(ctx, req)
 					g.Expect(err).NotTo(HaveOccurred())
@@ -1441,7 +1441,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				reconcileNTimes(2)
 
 				// Before CNPG is healthy, provisioner blocks and backup component is not reached.
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				backupCond := meta.FindStatusCondition(pc.Status.Conditions, "BackupReady")
 				Expect(backupCond).To(BeNil())
@@ -1510,9 +1510,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Get(ctx, sbKey, sb)).To(Succeed())
 
 				// Now disable backup on the cluster.
-				current := &enterprisev4.PostgresCluster{}
+				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
-				current.Spec.Backup = &enterprisev4.BackupConfig{Enabled: ptr.To(false)}
+				current.Spec.Backup = &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)}
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1520,7 +1520,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, sbKey, sb))).To(BeTrue())
 
 				// BackupReady condition should indicate disabled.
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				backupCond := meta.FindStatusCondition(pc.Status.Conditions, "BackupReady")
 				Expect(backupCond).NotTo(BeNil())
@@ -1550,7 +1550,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				sb := &cnpgv1.ScheduledBackup{}
 				Expect(apierrors.IsNotFound(k8sClient.Get(ctx, sbKey, sb))).To(BeTrue())
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				backupCond := meta.FindStatusCondition(pc.Status.Conditions, "BackupReady")
 				Expect(backupCond).NotTo(BeNil())
@@ -1585,27 +1585,27 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					CurrentSpecReport().LeafNodeLocation.LineNumber,
 				)
 
-				pgClassObjectStore := &enterprisev4.PostgresClusterClass{
+				pgClassObjectStore := &platformv1alpha1.PostgresClusterClass{
 					ObjectMeta: metav1.ObjectMeta{Name: classNameObjectStore},
-					Spec: enterprisev4.PostgresClusterClassSpec{
+					Spec: platformv1alpha1.PostgresClusterClassSpec{
 						Provisioner: provisioner,
-						Config: &enterprisev4.PostgresClusterClassConfig{
+						Config: &platformv1alpha1.PostgresClusterClassConfig{
 							Instances:       ptr.To(clusterMemberCount),
 							Storage:         ptr.To(resource.MustParse(storageAmount)),
 							PostgresVersion: ptr.To(postgresVersion),
-							Backup: &enterprisev4.BackupConfig{
+							Backup: &platformv1alpha1.BackupConfig{
 								Enabled:  ptr.To(true),
 								Schedule: ptr.To("0 2 * * *"),
 							},
 						},
-						CNPG: &enterprisev4.CNPGConfig{
-							Backup: &enterprisev4.CNPGBackupConfig{
+						CNPG: &platformv1alpha1.CNPGConfig{
+							Backup: &platformv1alpha1.CNPGBackupConfig{
 								Target: ptr.To("prefer-standby"),
-								BarmanObjectStore: &enterprisev4.CNPGBarmanObjectStoreConfig{
+								BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{
 									DestinationPath: "s3://test-bucket/clusters/",
 									EndpointURL:     ptr.To("https://s3.us-east-1.amazonaws.com"),
 									RetentionPolicy: ptr.To("30d"),
-									S3Credentials: enterprisev4.CNPGBarmanS3Credentials{
+									S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
 										AccessKeyId: v1.SecretKeySelector{
 											LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
 											Key:                  "accessKeyId",
@@ -1615,7 +1615,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 											Key:                  "secretAccessKey",
 										},
 									},
-									WAL: &enterprisev4.CNPGBarmanWALConfig{Compression: ptr.To("gzip")},
+									WAL: &platformv1alpha1.CNPGBarmanWALConfig{Compression: ptr.To("gzip")},
 								},
 							},
 						},
@@ -1627,7 +1627,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			AfterEach(func() {
-				existing := &enterprisev4.PostgresClusterClass{}
+				existing := &platformv1alpha1.PostgresClusterClass{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: classNameObjectStore}, existing)
 				if err == nil {
 					Expect(k8sClient.Delete(ctx, existing)).To(Succeed())
@@ -1668,7 +1668,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(barmanPlugin.Parameters).To(HaveKeyWithValue("barmanObjectName", clusterName+"-object-store"))
 
 				By("publishing the ObjectStoreReady condition")
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				objStoreCond := meta.FindStatusCondition(pc.Status.Conditions, "ObjectStoreReady")
 				Expect(objStoreCond).NotTo(BeNil())
@@ -1700,9 +1700,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(pc.Status.BackupStatus.ObjectStore.Enabled).To(BeTrue())
 
 				By("garbage-collecting the ObjectStore when the cluster disables backup")
-				current := &enterprisev4.PostgresCluster{}
+				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
-				current.Spec.Backup = &enterprisev4.BackupConfig{Enabled: ptr.To(false)}
+				current.Spec.Backup = &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)}
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1720,7 +1720,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				Expect(k8sClient.Delete(ctx, pc)).To(Succeed())
 
@@ -1729,7 +1729,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					if err != nil {
 						return false
 					}
-					getErr := k8sClient.Get(ctx, pgClusterKey, &enterprisev4.PostgresCluster{})
+					getErr := k8sClient.Get(ctx, pgClusterKey, &platformv1alpha1.PostgresCluster{})
 					return apierrors.IsNotFound(getErr)
 				}, "30s", "250ms").Should(BeTrue())
 			})
@@ -1742,7 +1742,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				Expect(k8sClient.Delete(ctx, pc)).To(Succeed())
 
@@ -1751,7 +1751,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					if err != nil {
 						return false
 					}
-					getErr := k8sClient.Get(ctx, pgClusterKey, &enterprisev4.PostgresCluster{})
+					getErr := k8sClient.Get(ctx, pgClusterKey, &platformv1alpha1.PostgresCluster{})
 					return apierrors.IsNotFound(getErr)
 				}, "30s", "250ms").Should(BeTrue())
 
@@ -1769,9 +1769,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				badName := "bad-" + clusterName
 				badKey := types.NamespacedName{Name: badName, Namespace: namespace}
 
-				bad := &enterprisev4.PostgresCluster{
+				bad := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: badName, Namespace: namespace},
-					Spec:       enterprisev4.PostgresClusterSpec{Class: "missing-class"},
+					Spec:       platformv1alpha1.PostgresClusterSpec{Class: "missing-class"},
 				}
 				Expect(k8sClient.Create(ctx, bad)).To(Succeed())
 				DeferCleanup(func() { _ = k8sClient.Delete(ctx, bad) })
@@ -1783,7 +1783,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(err).To(HaveOccurred())
 
 				Eventually(func() bool {
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					if err := k8sClient.Get(ctx, badKey, current); err != nil {
 						return false
 					}
@@ -1833,7 +1833,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					"application_name": "keep-me",
 				})
 
-				current := &enterprisev4.PostgresCluster{}
+				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 				current.Spec.PostgreSQLConfig = map[string]string{
 					"shared_buffers": "256MB",
@@ -1873,13 +1873,13 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					_, err := reconciler.Reconcile(ctx, req)
 					g.Expect(err).NotTo(HaveOccurred())
 
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 					g.Expect(current.Status.Phase).NotTo(BeNil())
-					g.Expect(*current.Status.Phase).To(Equal(string(enterprisev4.PhaseReady)))
+					g.Expect(*current.Status.Phase).To(Equal("Ready"))
 				}, "20s", "250ms").Should(Succeed())
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				pc.Spec.Instances = ptr.To(int32(3))
 				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
@@ -1907,7 +1907,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					_, err := reconciler.Reconcile(ctx, req)
 					g.Expect(err).NotTo(HaveOccurred())
 
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 					g.Expect(current.Status.Phase).NotTo(BeNil())
 					g.Expect(*current.Status.Phase).To(Equal("Provisioning"))
@@ -1930,10 +1930,10 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					_, err := reconciler.Reconcile(ctx, req)
 					g.Expect(err).NotTo(HaveOccurred())
 
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 					g.Expect(current.Status.Phase).NotTo(BeNil())
-					g.Expect(*current.Status.Phase).To(Equal(string(enterprisev4.PhaseReady)))
+					g.Expect(*current.Status.Phase).To(Equal("Ready"))
 				}, "20s", "250ms").Should(Succeed())
 
 				// Simulate a storage resize: CNPG has applied the new size but
@@ -1947,7 +1947,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					_, err := reconciler.Reconcile(ctx, req)
 					g.Expect(err).NotTo(HaveOccurred())
 
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 					g.Expect(current.Status.Phase).NotTo(BeNil())
 					g.Expect(*current.Status.Phase).To(Equal("Provisioning"))
@@ -1968,10 +1968,10 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					_, err := reconciler.Reconcile(ctx, req)
 					g.Expect(err).NotTo(HaveOccurred())
 
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 					g.Expect(current.Status.Phase).NotTo(BeNil())
-					g.Expect(*current.Status.Phase).To(Equal(string(enterprisev4.PhaseReady)))
+					g.Expect(*current.Status.Phase).To(Equal("Ready"))
 				}, "20s", "250ms").Should(Succeed())
 			})
 
@@ -1988,7 +1988,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileNTimes(2)
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Eventually(func() bool {
 					if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
 						return false
@@ -2018,7 +2018,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				reconcileNTimes(2)
 
 				// Confirm RO endpoint is suppressed before scaling out.
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Eventually(func() bool {
 					if err := k8sClient.Get(ctx, pgClusterKey, pc); err != nil {
 						return false
@@ -2048,7 +2048,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				pgCluster.Spec.Instances = ptr.To(clusterMemberCount)
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				pc.Spec.Instances = nil
 				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
@@ -2100,13 +2100,13 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileAfterCNPGHealthyOrPatch()
 
-				unrelatedDatabase := &enterprisev4.PostgresDatabase{
+				unrelatedDatabase := &platformv1alpha1.PostgresDatabase{
 					ObjectMeta: metav1.ObjectMeta{Name: databaseResourceName, Namespace: namespace},
-					Spec: enterprisev4.PostgresDatabaseSpec{
+					Spec: platformv1alpha1.PostgresDatabaseSpec{
 						ClusterRef: v1.LocalObjectReference{Name: clusterName},
-						Databases: []enterprisev4.DatabaseDefinition{{
+						Databases: []platformv1alpha1.DatabaseDefinition{{
 							Name: "unrelated",
-							PasswordConfig: &enterprisev4.PasswordConfig{
+							PasswordConfig: &platformv1alpha1.PasswordConfig{
 								ExternalAdminSecretRef: v1.LocalObjectReference{Name: databaseResourceName + "-missing-admin"},
 								ExternalRWSecretRef:    v1.LocalObjectReference{Name: databaseResourceName + "-missing-rw"},
 							},
@@ -2116,7 +2116,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Create(ctx, unrelatedDatabase)).To(Succeed())
 				unrelatedDatabaseKey := types.NamespacedName{Name: databaseResourceName, Namespace: namespace}
 				DeferCleanup(func() {
-					current := &enterprisev4.PostgresDatabase{}
+					current := &platformv1alpha1.PostgresDatabase{}
 					if err := k8sClient.Get(context.Background(), unrelatedDatabaseKey, current); err != nil {
 						Expect(apierrors.IsNotFound(err)).To(BeTrue())
 						return
@@ -2130,7 +2130,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				By("driving the database into an unrelated provisioning failure")
 				Eventually(func(g Gomega) {
 					_, _ = reconcilePostgresDatabase(ctx, unrelatedDatabaseKey)
-					current := &enterprisev4.PostgresDatabase{}
+					current := &platformv1alpha1.PostgresDatabase{}
 					g.Expect(k8sClient.Get(ctx, unrelatedDatabaseKey, current)).To(Succeed())
 					condition := meta.FindStatusCondition(current.Status.Conditions, "SecretsReady")
 					g.Expect(condition).NotTo(BeNil())
@@ -2138,9 +2138,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					g.Expect(condition.Reason).To(Equal("ExternalSecretMissing"))
 				}, "5s", "100ms").Should(Succeed())
 
-				currentCluster := &enterprisev4.PostgresCluster{}
+				currentCluster := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, currentCluster)).To(Succeed())
-				currentCluster.Spec.Monitoring = &enterprisev4.PostgresClusterMonitoring{
+				currentCluster.Spec.Monitoring = &platformv1alpha1.PostgresClusterMonitoring{
 					CustomQueriesConfigMap: []v1.ConfigMapKeySelector{{
 						LocalObjectReference: v1.LocalObjectReference{Name: sourceName},
 						Key:                  queryKey,
@@ -2151,7 +2151,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				acknowledgeCNPGMetricsConfigMap(true)
 				reconcileNTimes(1)
 
-				currentCluster = &enterprisev4.PostgresCluster{}
+				currentCluster = &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, currentCluster)).To(Succeed())
 				condition := meta.FindStatusCondition(currentCluster.Status.Conditions, "CustomMetricsReady")
 				Expect(condition).NotTo(BeNil())
@@ -2182,13 +2182,13 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 `, queryName)},
 				}
 				Expect(k8sClient.Create(ctx, source)).To(Succeed())
-				postgresDatabase := &enterprisev4.PostgresDatabase{
+				postgresDatabase := &platformv1alpha1.PostgresDatabase{
 					ObjectMeta: metav1.ObjectMeta{Name: databaseResourceName, Namespace: namespace},
-					Spec: enterprisev4.PostgresDatabaseSpec{
+					Spec: platformv1alpha1.PostgresDatabaseSpec{
 						ClusterRef: v1.LocalObjectReference{Name: clusterName},
-						Databases: []enterprisev4.DatabaseDefinition{{
+						Databases: []platformv1alpha1.DatabaseDefinition{{
 							Name: database,
-							Monitoring: &enterprisev4.DatabaseMonitoring{
+							Monitoring: &platformv1alpha1.DatabaseMonitoring{
 								CustomQueriesConfigMap: []v1.ConfigMapKeySelector{{
 									LocalObjectReference: v1.LocalObjectReference{Name: sourceName},
 									Key:                  queryKey,
@@ -2208,7 +2208,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileAfterCNPGHealthyOrPatch()
 
-				currentCluster := &enterprisev4.PostgresCluster{}
+				currentCluster := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, currentCluster)).To(Succeed())
 				condition := meta.FindStatusCondition(currentCluster.Status.Conditions, "CustomMetricsReady")
 				Expect(condition).NotTo(BeNil())
@@ -2223,9 +2223,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					ConfigMapName: sourceName,
 					ConfigMapKey:  queryKey,
 				}})
-				postgresDatabase.Status.CustomMetricsPublication = &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+				postgresDatabase.Status.CustomMetricsPublication = &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 					ObservedGeneration: postgresDatabase.Generation,
-					Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+					Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 						DatabaseName: database,
 						Revision:     revision,
 						Exists:       true,
@@ -2279,7 +2279,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				By("applying an explicit disabled contribution")
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: databaseResourceName, Namespace: namespace}, postgresDatabase)).To(Succeed())
 				disabledRevision := mtypes.ContributionRevision(database, false, nil)
-				postgresDatabase.Status.CustomMetricsPublication.Contributions[0] = enterprisev4.DatabaseCustomMetricsContribution{
+				postgresDatabase.Status.CustomMetricsPublication.Contributions[0] = platformv1alpha1.DatabaseCustomMetricsContribution{
 					DatabaseName: database,
 					Revision:     disabledRevision,
 					Exists:       false,
@@ -2299,7 +2299,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 			It("reconciles custom metrics through invalid sources and ownership collisions", func() {
 				const (
-					generatedHashAnnotation = "enterprise.splunk.com/monitoring-config-hash"
+					generatedHashAnnotation = "platform.splunk.com/monitoring-config-hash"
 					queryKey                = "queries.yaml"
 					queryName               = "controller_database_count"
 					uniqueLosingQuery       = "controller_losing_package_marker"
@@ -2338,7 +2338,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				monitoringCondition := func(status metav1.ConditionStatus, reason string, messageParts ...string) *metav1.Condition {
 					GinkgoHelper()
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 					condition := meta.FindStatusCondition(current.Status.Conditions, "CustomMetricsReady")
 					Expect(condition).NotTo(BeNil())
@@ -2390,7 +2390,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					Data:       map[string]string{queryKey: validQuery},
 				}
 				Expect(k8sClient.Create(ctx, source)).To(Succeed())
-				pgCluster.Spec.Monitoring = &enterprisev4.PostgresClusterMonitoring{
+				pgCluster.Spec.Monitoring = &platformv1alpha1.PostgresClusterMonitoring{
 					CustomQueriesConfigMap: []v1.ConfigMapKeySelector{{
 						LocalObjectReference: v1.LocalObjectReference{Name: sourceName},
 						Key:                  queryKey,
@@ -2423,7 +2423,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Get(ctx, safetyKey, safety)).To(Succeed())
 				safetyOwner := metav1.GetControllerOf(safety)
 				Expect(safetyOwner).NotTo(BeNil())
-				Expect(safetyOwner.APIVersion).To(Equal(enterprisev4.GroupVersion.String()))
+				Expect(safetyOwner.APIVersion).To(Equal(platformv1alpha1.GroupVersion.String()))
 				Expect(safetyOwner.Kind).To(Equal("PostgresCluster"))
 				Expect(safetyOwner.Name).To(Equal(clusterName))
 				Expect(safetyOwner.UID).To(Equal(pgCluster.UID))
@@ -2520,7 +2520,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 `, queryName, uniqueLosingQuery)},
 				}
 				Expect(k8sClient.Create(ctx, collisionSource)).To(Succeed())
-				current := &enterprisev4.PostgresCluster{}
+				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 				current.Spec.Monitoring.CustomQueriesConfigMap = append(
 					current.Spec.Monitoring.CustomQueriesConfigMap,
@@ -2635,7 +2635,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				received = received[:0]
 
 				// Drift the managed ConfigMap.
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				Eventually(func() bool {
 					if _, err := reconciler.Reconcile(ctx, req); err != nil {
 						return false
@@ -2682,7 +2682,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		})
 		Context("when applying postgrescluster resource", func() {
 			It("should catch password config being empty", func() {
-				pgCluster.Spec.PasswordConfig = &enterprisev4.SuperuserPasswordConfig{
+				pgCluster.Spec.PasswordConfig = &platformv1alpha1.SuperuserPasswordConfig{
 					SuperuserExternalSecretRef: v1.LocalObjectReference{
 						Name: "",
 					},
@@ -2695,8 +2695,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 	When("restoring a cluster from a volume snapshot", func() {
 		// PC-10: while CNPG not yet healthy, ClusterReady stays False (provisioning)
 		It("keeps ClusterReady=False/Provisioning while CNPG is not yet healthy", func() {
-			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+			pgCluster.Spec.BootstrapFrom = &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{
 					Storage: "source-pg-backup-20260501120000",
 				},
 			}
@@ -2704,7 +2704,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			// pass 1: finalizer; pass 2: CNPG cluster created, provisioner returns pending
 			reconcileNTimes(2)
 
-			pc := &enterprisev4.PostgresCluster{}
+			pc := &platformv1alpha1.PostgresCluster{}
 			Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 
 			clusterReadyCond := meta.FindStatusCondition(pc.Status.Conditions, "ClusterReady")
@@ -2715,8 +2715,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 		// PC-11: sweep blocks Phase=Ready while CNPG is healthy but sweep has not run
 		It("keeps Phase out of Ready while sweep is incomplete, even after CNPG is healthy", func() {
-			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+			pgCluster.Spec.BootstrapFrom = &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{
 					Storage: "source-pg-backup-20260501120000",
 				},
 			}
@@ -2734,7 +2734,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 			reconcileNTimes(1)
 
-			pc := &enterprisev4.PostgresCluster{}
+			pc := &platformv1alpha1.PostgresCluster{}
 			Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 
 			// Primary assertion: ManagedRolesReady is False — envtest has no real DB, so the
@@ -2757,8 +2757,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		// PC-12: once sweep is marked complete (simulated via status patch), cluster proceeds to Ready
 		It("proceeds to Ready once status.restore.credentialSweep.completed is true", func() {
 			snapName := "source-pg-backup-20260501120000"
-			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+			pgCluster.Spec.BootstrapFrom = &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{
 					Storage: snapName,
 				},
 			}
@@ -2773,11 +2773,11 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			markCNPGClusterHealthy(cnpg, clusterName, caSecretName)
 			Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 
-			pc := &enterprisev4.PostgresCluster{}
+			pc := &platformv1alpha1.PostgresCluster{}
 			Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
-			pc.Status.Restore = &enterprisev4.RestoreStatus{
-				Source:          enterprisev4.RestoreSourceStatus{VolumeSnapshot: &snapName},
-				CredentialSweep: enterprisev4.RestoreCredentialSweepStatus{Completed: true},
+			pc.Status.Restore = &platformv1alpha1.RestoreStatus{
+				Source:          platformv1alpha1.RestoreSourceStatus{VolumeSnapshot: &snapName},
+				CredentialSweep: platformv1alpha1.RestoreCredentialSweepStatus{Completed: true},
 			}
 			Expect(k8sClient.Status().Update(ctx, pc)).To(Succeed())
 
@@ -2824,21 +2824,21 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 			// Object store defined but backup writing left disabled: the restore only
 			// reads the archive, exercising the recovery-only ObjectStore path.
-			pgClassRestore := &enterprisev4.PostgresClusterClass{
+			pgClassRestore := &platformv1alpha1.PostgresClusterClass{
 				ObjectMeta: metav1.ObjectMeta{Name: classNameRestore},
-				Spec: enterprisev4.PostgresClusterClassSpec{
+				Spec: platformv1alpha1.PostgresClusterClassSpec{
 					Provisioner: provisioner,
-					Config: &enterprisev4.PostgresClusterClassConfig{
+					Config: &platformv1alpha1.PostgresClusterClassConfig{
 						Instances:       ptr.To(clusterMemberCount),
 						Storage:         ptr.To(resource.MustParse(storageAmount)),
 						PostgresVersion: ptr.To(postgresVersion),
 					},
-					CNPG: &enterprisev4.CNPGConfig{
-						Backup: &enterprisev4.CNPGBackupConfig{
-							BarmanObjectStore: &enterprisev4.CNPGBarmanObjectStoreConfig{
+					CNPG: &platformv1alpha1.CNPGConfig{
+						Backup: &platformv1alpha1.CNPGBackupConfig{
+							BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{
 								DestinationPath: "s3://test-bucket/clusters/",
 								EndpointURL:     ptr.To("https://s3.us-east-1.amazonaws.com"),
-								S3Credentials: enterprisev4.CNPGBarmanS3Credentials{
+								S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
 									AccessKeyId: v1.SecretKeySelector{
 										LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
 										Key:                  "accessKeyId",
@@ -2859,7 +2859,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		})
 
 		AfterEach(func() {
-			existing := &enterprisev4.PostgresClusterClass{}
+			existing := &platformv1alpha1.PostgresClusterClass{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: classNameRestore}, existing)
 			if err == nil {
 				Expect(k8sClient.Delete(ctx, existing)).To(Succeed())
@@ -2870,10 +2870,10 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 		// PITR-01
 		It("wires objectStorage + type=time target into the CNPG recovery spec, normalizing the timestamp", func() {
-			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
-				ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "pitr-src"},
-				RecoveryTarget: &enterprisev4.RecoveryTarget{
-					Type:  enterprisev4.RecoveryTargetTime,
+			pgCluster.Spec.BootstrapFrom = &platformv1alpha1.BootstrapFrom{
+				ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "pitr-src"},
+				RecoveryTarget: &platformv1alpha1.RecoveryTarget{
+					Type:  platformv1alpha1.RecoveryTargetTime,
 					Value: "2026-05-01T13:30:00Z",
 				},
 			}
@@ -2912,13 +2912,13 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 		// PITR-02
 		It("sets recovery.source and externalClusters for a volumeSnapshot base with a WAL archive", func() {
-			pgCluster.Spec.BootstrapFrom = &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+			pgCluster.Spec.BootstrapFrom = &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{
 					Storage:    "source-pg-backup-20260501120000",
-					WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "pitr-src"},
+					WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "pitr-src"},
 				},
-				RecoveryTarget: &enterprisev4.RecoveryTarget{
-					Type:  enterprisev4.RecoveryTargetLSN,
+				RecoveryTarget: &platformv1alpha1.RecoveryTarget{
+					Type:  platformv1alpha1.RecoveryTargetLSN,
 					Value: "0/16D68D0",
 				},
 			}

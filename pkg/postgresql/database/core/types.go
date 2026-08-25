@@ -17,7 +17,7 @@ package core
 
 import (
 	"errors"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
@@ -33,7 +33,7 @@ type ReconcileContext struct {
 	Scheme                              *runtime.Scheme
 	Recorder                            record.EventRecorder
 	Metrics                             ports.Recorder
-	NewCustomMetricsAcknowledgementRepo func(*enterprisev4.PostgresCluster) dbmetrics.AcknowledgementRepository
+	NewCustomMetricsAcknowledgementRepo func(*platformv1alpha1.PostgresCluster) dbmetrics.AcknowledgementRepository
 }
 
 type reconcileDBPhases string
@@ -52,8 +52,8 @@ const (
 
 	deletionPolicyRetain string = "Retain"
 
-	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
-	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
+	postgresDatabaseFinalizerName string = "postgresdatabases.platform.splunk.com/finalizer"
+	annotationRetainedFrom        string = "platform.splunk.com/retained-from"
 
 	secretRoleAdmin   string = "admin"
 	secretRoleRW      string = "rw"
@@ -160,8 +160,8 @@ type clusterEndpoints = pgconninfo.Endpoints
 
 // deletionPlan separates databases by their DeletionPolicy for the cleanup workflow.
 type deletionPlan struct {
-	retained []enterprisev4.DatabaseDefinition
-	deleted  []enterprisev4.DatabaseDefinition
+	retained []platformv1alpha1.DatabaseDefinition
+	deleted  []platformv1alpha1.DatabaseDefinition
 }
 
 // ErrTerminal marks user-actionable errors where retrying the same spec is not expected to succeed.

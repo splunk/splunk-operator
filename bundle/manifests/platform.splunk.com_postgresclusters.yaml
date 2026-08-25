@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: postgresclusters.enterprise.splunk.com
+  name: postgresclusters.platform.splunk.com
 spec:
-  group: enterprise.splunk.com
+  group: platform.splunk.com
   names:
     kind: PostgresCluster
     listKind: PostgresClusterList
@@ -33,7 +33,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v4
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: PostgresCluster is the Schema for the postgresclusters API.

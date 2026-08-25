@@ -19,13 +19,13 @@ package webhook
 import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	hba "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 )
 
 // ValidatePostgresClusterClassCreate validates a PostgresClusterClass on CREATE.
-func ValidatePostgresClusterClassCreate(obj *enterpriseApi.PostgresClusterClass) field.ErrorList {
+func ValidatePostgresClusterClassCreate(obj *platformApi.PostgresClusterClass) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
@@ -50,16 +50,16 @@ func ValidatePostgresClusterClassCreate(obj *enterpriseApi.PostgresClusterClass)
 }
 
 // ValidatePostgresClusterClassUpdate validates a PostgresClusterClass on UPDATE.
-func ValidatePostgresClusterClassUpdate(obj, oldObj *enterpriseApi.PostgresClusterClass) field.ErrorList {
+func ValidatePostgresClusterClassUpdate(obj, oldObj *platformApi.PostgresClusterClass) field.ErrorList {
 	return ValidatePostgresClusterClassCreate(obj)
 }
 
 // GetPostgresClusterClassWarningsOnCreate returns warnings for PostgresClusterClass CREATE.
-func GetPostgresClusterClassWarningsOnCreate(obj *enterpriseApi.PostgresClusterClass) []string {
+func GetPostgresClusterClassWarningsOnCreate(obj *platformApi.PostgresClusterClass) []string {
 	return nil
 }
 
 // GetPostgresClusterClassWarningsOnUpdate returns warnings for PostgresClusterClass UPDATE.
-func GetPostgresClusterClassWarningsOnUpdate(obj, oldObj *enterpriseApi.PostgresClusterClass) []string {
+func GetPostgresClusterClassWarningsOnUpdate(obj, oldObj *platformApi.PostgresClusterClass) []string {
 	return nil
 }

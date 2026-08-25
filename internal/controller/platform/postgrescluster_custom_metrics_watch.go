@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	cnpginfra "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	corev1 "k8s.io/api/core/v1"
@@ -40,7 +40,7 @@ const (
 )
 
 func extractClusterCustomQueryConfigMapNames(obj client.Object) []string {
-	pc, ok := obj.(*enterprisev4.PostgresCluster)
+	pc, ok := obj.(*platformv1alpha1.PostgresCluster)
 	if !ok || pc.Spec.Monitoring == nil {
 		return nil
 	}
@@ -48,7 +48,7 @@ func extractClusterCustomQueryConfigMapNames(obj client.Object) []string {
 }
 
 func extractDatabaseCustomQueryConfigMapNames(obj client.Object) []string {
-	db, ok := obj.(*enterprisev4.PostgresDatabase)
+	db, ok := obj.(*platformv1alpha1.PostgresDatabase)
 	if !ok || db.Status.CustomMetricsPublication == nil ||
 		db.Status.CustomMetricsPublication.ObservedGeneration != db.Generation {
 		return nil
@@ -88,7 +88,7 @@ func customMetricsConfigMapPredicate() predicate.Predicate {
 	skipOwned := func(obj client.Object) bool {
 		owner := metav1.GetControllerOf(obj)
 		if owner == nil ||
-			owner.APIVersion != enterprisev4.GroupVersion.String() ||
+			owner.APIVersion != platformv1alpha1.GroupVersion.String() ||
 			owner.Kind != "PostgresCluster" {
 			return false
 		}
@@ -147,7 +147,7 @@ func (r *PostgresClusterReconciler) enqueueClustersForCustomMetricsConfigMap(ctx
 	if owner := metav1.GetControllerOf(cm); owner != nil && !isGeneratedName {
 		// For non-generated CM names, seed from the owner so clusters that own
 		// CMs without the generated-name convention are still enqueued.
-		if owner.APIVersion == enterprisev4.GroupVersion.String() && owner.Kind == "PostgresCluster" {
+		if owner.APIVersion == platformv1alpha1.GroupVersion.String() && owner.Kind == "PostgresCluster" {
 			enqueue(owner.Name)
 		}
 		if owner.APIVersion == cnpgv1.SchemeGroupVersion.String() && owner.Kind == "Cluster" {
@@ -161,13 +161,13 @@ func (r *PostgresClusterReconciler) enqueueClustersForCustomMetricsConfigMap(ctx
 		return requests
 	}
 
-	var clusters enterprisev4.PostgresClusterList
+	var clusters platformv1alpha1.PostgresClusterList
 	if err := r.Client.List(ctx, &clusters,
 		client.InNamespace(cm.Namespace),
 		client.MatchingFields{indexClusterCustomQueryConfigMaps: cm.Name},
 	); err != nil {
 		logger.ErrorContext(ctx, "failed to list PostgresClusters for custom-metrics ConfigMap", "error", err)
-		clusters = enterprisev4.PostgresClusterList{}
+		clusters = platformv1alpha1.PostgresClusterList{}
 		if fallbackErr := r.Client.List(ctx, &clusters, client.InNamespace(cm.Namespace)); fallbackErr != nil {
 			logger.ErrorContext(ctx, "failed fallback list of PostgresClusters for custom-metrics ConfigMap", "error", fallbackErr)
 		} else {
@@ -184,13 +184,13 @@ func (r *PostgresClusterReconciler) enqueueClustersForCustomMetricsConfigMap(ctx
 		enqueue(clusters.Items[i].Name)
 	}
 
-	var databases enterprisev4.PostgresDatabaseList
+	var databases platformv1alpha1.PostgresDatabaseList
 	if err := r.Client.List(ctx, &databases,
 		client.InNamespace(cm.Namespace),
 		client.MatchingFields{indexDatabaseCustomQueryConfigMaps: cm.Name},
 	); err != nil {
 		logger.ErrorContext(ctx, "failed to list PostgresDatabases for custom-metrics ConfigMap", "error", err)
-		databases = enterprisev4.PostgresDatabaseList{}
+		databases = platformv1alpha1.PostgresDatabaseList{}
 		if fallbackErr := r.Client.List(ctx, &databases, client.InNamespace(cm.Namespace)); fallbackErr != nil {
 			logger.ErrorContext(ctx, "failed fallback list of PostgresDatabases for custom-metrics ConfigMap", "error", fallbackErr)
 		} else {

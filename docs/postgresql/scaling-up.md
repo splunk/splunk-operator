@@ -65,7 +65,7 @@ Storage expansion requires the `StorageClass` to have `allowVolumeExpansion: tru
 Example — increase CPU and memory:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
@@ -83,7 +83,7 @@ spec:
 Example — expand storage:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod

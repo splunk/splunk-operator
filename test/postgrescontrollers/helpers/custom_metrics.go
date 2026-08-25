@@ -20,7 +20,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	cnpginfra "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -51,7 +51,7 @@ func CustomMetricsFailureDump(
 	clusterKey, databaseKey types.NamespacedName,
 ) func(ginkgo.SpecContext) {
 	return func(ctx ginkgo.SpecContext) {
-		cluster := &enterprisev4.PostgresCluster{}
+		cluster := &platformv1alpha1.PostgresCluster{}
 		if err := kubeClient.Get(ctx, clusterKey, cluster); err != nil {
 			fmt.Fprintf(ginkgo.GinkgoWriter, "custom metrics diagnostics: getting PostgresCluster: %v\n", err)
 		} else {
@@ -69,7 +69,7 @@ func CustomMetricsFailureDump(
 			}
 		}
 
-		database := &enterprisev4.PostgresDatabase{}
+		database := &platformv1alpha1.PostgresDatabase{}
 		if err := kubeClient.Get(ctx, databaseKey, database); err != nil {
 			fmt.Fprintf(ginkgo.GinkgoWriter, "custom metrics diagnostics: getting PostgresDatabase: %v\n", err)
 		} else {

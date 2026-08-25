@@ -33,7 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/splunk/validation"
 	"github.com/stretchr/testify/assert"
@@ -53,7 +53,7 @@ func mustMarshal(t *testing.T, obj interface{}) []byte {
 	return data
 }
 
-func newPostgresClusterAdmissionReview(t *testing.T, uid string, op admissionv1.Operation, obj *enterpriseApi.PostgresCluster, oldObj *enterpriseApi.PostgresCluster) *admissionv1.AdmissionReview {
+func newPostgresClusterAdmissionReview(t *testing.T, uid string, op admissionv1.Operation, obj *platformApi.PostgresCluster, oldObj *platformApi.PostgresCluster) *admissionv1.AdmissionReview {
 	t.Helper()
 	ar := &admissionv1.AdmissionReview{
 		TypeMeta: metav1.TypeMeta{
@@ -63,13 +63,13 @@ func newPostgresClusterAdmissionReview(t *testing.T, uid string, op admissionv1.
 		Request: &admissionv1.AdmissionRequest{
 			UID: types.UID(uid),
 			Kind: metav1.GroupVersionKind{
-				Group:   "enterprise.splunk.com",
-				Version: "v4",
+				Group:   platformApi.GroupVersion.Group,
+				Version: platformApi.GroupVersion.Version,
 				Kind:    "PostgresCluster",
 			},
 			Resource: metav1.GroupVersionResource{
-				Group:    "enterprise.splunk.com",
-				Version:  "v4",
+				Group:    platformApi.GroupVersion.Group,
+				Version:  platformApi.GroupVersion.Version,
 				Resource: "postgresclusters",
 			},
 			Name:      obj.Name,
@@ -89,7 +89,7 @@ func newPostgresClusterAdmissionReview(t *testing.T, uid string, op admissionv1.
 	return ar
 }
 
-func newPostgresClusterClassAdmissionReview(t *testing.T, uid string, op admissionv1.Operation, obj *enterpriseApi.PostgresClusterClass, oldObj *enterpriseApi.PostgresClusterClass) *admissionv1.AdmissionReview {
+func newPostgresClusterClassAdmissionReview(t *testing.T, uid string, op admissionv1.Operation, obj *platformApi.PostgresClusterClass, oldObj *platformApi.PostgresClusterClass) *admissionv1.AdmissionReview {
 	t.Helper()
 	ar := &admissionv1.AdmissionReview{
 		TypeMeta: metav1.TypeMeta{
@@ -99,13 +99,13 @@ func newPostgresClusterClassAdmissionReview(t *testing.T, uid string, op admissi
 		Request: &admissionv1.AdmissionRequest{
 			UID: types.UID(uid),
 			Kind: metav1.GroupVersionKind{
-				Group:   "enterprise.splunk.com",
-				Version: "v4",
+				Group:   platformApi.GroupVersion.Group,
+				Version: platformApi.GroupVersion.Version,
 				Kind:    "PostgresClusterClass",
 			},
 			Resource: metav1.GroupVersionResource{
-				Group:    "enterprise.splunk.com",
-				Version:  "v4",
+				Group:    platformApi.GroupVersion.Group,
+				Version:  platformApi.GroupVersion.Version,
 				Resource: "postgresclusterclasses",
 			},
 			Name:      obj.Name,
@@ -150,23 +150,23 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		obj          *enterpriseApi.PostgresCluster
+		obj          *platformApi.PostgresCluster
 		wantAllowed  bool
 		wantMessage  string
 		wantMessages []string
 	}{
 		{
 			name: "valid - no pgHBA rules",
-			obj: &enterpriseApi.PostgresCluster{
+			obj: &platformApi.PostgresCluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresCluster",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "dev",
 				},
 			},
@@ -174,16 +174,16 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "valid - correct pgHBA rules",
-			obj: &enterpriseApi.PostgresCluster{
+			obj: &platformApi.PostgresCluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresCluster",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "dev",
 					PgHBA: []string{
 						"hostnossl all all 0.0.0.0/0 reject",
@@ -196,16 +196,16 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - bad connection type",
-			obj: &enterpriseApi.PostgresCluster{
+			obj: &platformApi.PostgresCluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresCluster",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "dev",
 					PgHBA: []string{
 						"hostx all all 0.0.0.0/0 md5",
@@ -217,16 +217,16 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - bad CIDR",
-			obj: &enterpriseApi.PostgresCluster{
+			obj: &platformApi.PostgresCluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresCluster",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "dev",
 					PgHBA: []string{
 						"host all all 192.168.0.0/33 md5",
@@ -238,16 +238,16 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - unknown auth method",
-			obj: &enterpriseApi.PostgresCluster{
+			obj: &platformApi.PostgresCluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresCluster",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "dev",
 					PgHBA: []string{
 						"host all all 0.0.0.0/0 bogus",
@@ -259,16 +259,16 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - too few fields",
-			obj: &enterpriseApi.PostgresCluster{
+			obj: &platformApi.PostgresCluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresCluster",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "dev",
 					PgHBA: []string{
 						"host all all",
@@ -280,16 +280,16 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - multiple bad rules reports all errors",
-			obj: &enterpriseApi.PostgresCluster{
+			obj: &platformApi.PostgresCluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresCluster",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "dev",
 					PgHBA: []string{
 						"hostssl all all 0.0.0.0/0 scram-sha-256",
@@ -303,16 +303,16 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "valid - rules with auth options and comments",
-			obj: &enterpriseApi.PostgresCluster{
+			obj: &platformApi.PostgresCluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresCluster",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "dev",
 					PgHBA: []string{
 						"host all all 0.0.0.0/0 ldap ldapserver=ldap.example.com ldapport=389",
@@ -353,16 +353,16 @@ func TestPostgresClusterPgHBAUpdateIntegration(t *testing.T) {
 		Validators: validation.DefaultValidators,
 	})
 
-	oldObj := &enterpriseApi.PostgresCluster{
+	oldObj := &platformApi.PostgresCluster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "enterprise.splunk.com/v4",
+			APIVersion: "platform.splunk.com/v1alpha1",
 			Kind:       "PostgresCluster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.PostgresClusterSpec{
+		Spec: platformApi.PostgresClusterSpec{
 			Class: "dev",
 			PgHBA: []string{
 				"host all all 0.0.0.0/0 scram-sha-256",
@@ -403,21 +403,21 @@ func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		obj         *enterpriseApi.PostgresClusterClass
+		obj         *platformApi.PostgresClusterClass
 		wantAllowed bool
 		wantMessage string
 	}{
 		{
 			name: "valid - no pgHBA rules",
-			obj: &enterpriseApi.PostgresClusterClass{
+			obj: &platformApi.PostgresClusterClass{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresClusterClass",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "dev",
 				},
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 				},
 			},
@@ -425,17 +425,17 @@ func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "valid - correct pgHBA rules",
-			obj: &enterpriseApi.PostgresClusterClass{
+			obj: &platformApi.PostgresClusterClass{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresClusterClass",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "dev",
 				},
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{
 							"hostnossl all all 0.0.0.0/0 reject",
 							"hostssl all all 0.0.0.0/0 scram-sha-256",
@@ -447,17 +447,17 @@ func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - bad connection type",
-			obj: &enterpriseApi.PostgresClusterClass{
+			obj: &platformApi.PostgresClusterClass{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresClusterClass",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "dev",
 				},
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{
 							"hostx all all 0.0.0.0/0 md5",
 						},
@@ -469,17 +469,17 @@ func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - invalid CIDR in class",
-			obj: &enterpriseApi.PostgresClusterClass{
+			obj: &platformApi.PostgresClusterClass{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresClusterClass",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "dev",
 				},
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{
 							"host all all 256.1.1.1/24 md5",
 						},
@@ -491,17 +491,17 @@ func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - unknown auth method in class",
-			obj: &enterpriseApi.PostgresClusterClass{
+			obj: &platformApi.PostgresClusterClass{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "enterprise.splunk.com/v4",
+					APIVersion: "platform.splunk.com/v1alpha1",
 					Kind:       "PostgresClusterClass",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "dev",
 				},
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{
 							"host all all 0.0.0.0/0 fake-method",
 						},
@@ -538,17 +538,17 @@ func TestPostgresClusterClassPgHBAUpdateIntegration(t *testing.T) {
 		Validators: validation.DefaultValidators,
 	})
 
-	oldObj := &enterpriseApi.PostgresClusterClass{
+	oldObj := &platformApi.PostgresClusterClass{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "enterprise.splunk.com/v4",
+			APIVersion: "platform.splunk.com/v1alpha1",
 			Kind:       "PostgresClusterClass",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "dev",
 		},
-		Spec: enterpriseApi.PostgresClusterClassSpec{
+		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
-			Config: &enterpriseApi.PostgresClusterClassConfig{
+			Config: &platformApi.PostgresClusterClassConfig{
 				PgHBA: []string{
 					"host all all 0.0.0.0/0 scram-sha-256",
 				},
@@ -583,7 +583,7 @@ func TestPostgresClusterClassPgHBAUpdateIntegration(t *testing.T) {
 
 func newFakeReader(objects ...runtime.Object) *fake.ClientBuilder {
 	s := runtime.NewScheme()
-	enterpriseApi.AddToScheme(s)
+	platformApi.AddToScheme(s)
 	corev1.AddToScheme(s)
 	b := fake.NewClientBuilder().WithScheme(s)
 	for _, obj := range objects {
@@ -593,15 +593,15 @@ func newFakeReader(objects ...runtime.Object) *fake.ClientBuilder {
 }
 
 func TestCrossResourceValidationIntegration(t *testing.T) {
-	prodClass := &enterpriseApi.PostgresClusterClass{
+	prodClass := &platformApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "prod"},
-		Spec: enterpriseApi.PostgresClusterClassSpec{
+		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
-			Config: &enterpriseApi.PostgresClusterClassConfig{
+			Config: &platformApi.PostgresClusterClassConfig{
 				Instances:       ptr.To(int32(3)),
 				Storage:         ptr.To(resource.MustParse("50Gi")),
 				PostgresVersion: ptr.To("17"),
-				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 					Enabled: ptr.To(false),
 				},
 			},
@@ -618,35 +618,35 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		obj         *enterpriseApi.PostgresCluster
+		obj         *platformApi.PostgresCluster
 		wantAllowed bool
 		wantMessage string
 	}{
 		{
 			name: "allowed - inherits all from class",
-			obj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			obj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec:       enterpriseApi.PostgresClusterSpec{Class: "prod"},
+				Spec:       platformApi.PostgresClusterSpec{Class: "prod"},
 			},
 			wantAllowed: true,
 		},
 		{
 			name: "rejected - class not found",
-			obj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			obj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec:       enterpriseApi.PostgresClusterSpec{Class: "nonexistent"},
+				Spec:       platformApi.PostgresClusterSpec{Class: "nonexistent"},
 			},
 			wantAllowed: false,
 			wantMessage: "PostgresClusterClass not found",
 		},
 		{
 			name: "rejected - version below class floor",
-			obj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			obj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
 					PostgresVersion: ptr.To("16"),
 				},
@@ -656,12 +656,12 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - pooler enabled but class has no cnpg.connectionPooler",
-			obj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			obj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "prod",
-					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled: ptr.To(true),
 					},
 				},
@@ -671,10 +671,10 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 		},
 		{
 			name: "allowed - higher version",
-			obj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			obj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
 					PostgresVersion: ptr.To("18"),
 				},
@@ -698,15 +698,15 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 }
 
 func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
-	prodClass := &enterpriseApi.PostgresClusterClass{
+	prodClass := &platformApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "prod"},
-		Spec: enterpriseApi.PostgresClusterClassSpec{
+		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
-			Config: &enterpriseApi.PostgresClusterClassConfig{
+			Config: &platformApi.PostgresClusterClassConfig{
 				Instances:       ptr.To(int32(3)),
 				Storage:         ptr.To(resource.MustParse("50Gi")),
 				PostgresVersion: ptr.To("17"),
-				ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 					Enabled: ptr.To(false),
 				},
 			},
@@ -721,10 +721,10 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 		Client:     fakeClient,
 	})
 
-	oldObj := &enterpriseApi.PostgresCluster{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+	oldObj := &platformApi.PostgresCluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec: enterpriseApi.PostgresClusterSpec{
+		Spec: platformApi.PostgresClusterSpec{
 			Class:           "prod",
 			PostgresVersion: ptr.To("17"),
 		},
@@ -732,16 +732,16 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		newObj      *enterpriseApi.PostgresCluster
+		newObj      *platformApi.PostgresCluster
 		wantAllowed bool
 		wantMessage string
 	}{
 		{
 			name: "allowed - upgrade version",
-			newObj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			newObj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
 					PostgresVersion: ptr.To("18"),
 				},
@@ -750,10 +750,10 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - downgrade version below class floor",
-			newObj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			newObj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
 					PostgresVersion: ptr.To("16"),
 				},
@@ -763,12 +763,12 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - enable pooler without cnpg config",
-			newObj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			newObj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "prod",
-					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled: ptr.To(true),
 					},
 				},
@@ -778,10 +778,10 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 		},
 		{
 			name: "allowed - no changes",
-			newObj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			newObj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
 					PostgresVersion: ptr.To("17"),
 				},
@@ -807,33 +807,33 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 // TestPoolerEndpointAdmissionIntegration covers the readOnly + instances<2
 // rejection end-to-end through the admission webhook server.
 func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
-	classOne := &enterpriseApi.PostgresClusterClass{
+	classOne := &platformApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "single"},
-		Spec: enterpriseApi.PostgresClusterClassSpec{
+		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
-			Config: &enterpriseApi.PostgresClusterClassConfig{
+			Config: &platformApi.PostgresClusterClassConfig{
 				Instances:       ptr.To(int32(1)),
 				Storage:         ptr.To(resource.MustParse("10Gi")),
 				PostgresVersion: ptr.To("17"),
 			},
-			CNPG: &enterpriseApi.CNPGConfig{
+			CNPG: &platformApi.CNPGConfig{
 				PrimaryUpdateMethod: ptr.To("restart"),
-				ConnectionPooler:    &enterpriseApi.ConnectionPoolerConfig{},
+				ConnectionPooler:    &platformApi.ConnectionPoolerConfig{},
 			},
 		},
 	}
-	classHA := &enterpriseApi.PostgresClusterClass{
+	classHA := &platformApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "ha"},
-		Spec: enterpriseApi.PostgresClusterClassSpec{
+		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
-			Config: &enterpriseApi.PostgresClusterClassConfig{
+			Config: &platformApi.PostgresClusterClassConfig{
 				Instances:       ptr.To(int32(2)),
 				Storage:         ptr.To(resource.MustParse("10Gi")),
 				PostgresVersion: ptr.To("17"),
 			},
-			CNPG: &enterpriseApi.CNPGConfig{
+			CNPG: &platformApi.CNPGConfig{
 				PrimaryUpdateMethod: ptr.To("switchover"),
-				ConnectionPooler:    &enterpriseApi.ConnectionPoolerConfig{},
+				ConnectionPooler:    &platformApi.ConnectionPoolerConfig{},
 			},
 		},
 	}
@@ -848,20 +848,20 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 	tests := []struct {
 		name        string
 		op          admissionv1.Operation
-		obj         *enterpriseApi.PostgresCluster
-		oldObj      *enterpriseApi.PostgresCluster
+		obj         *platformApi.PostgresCluster
+		oldObj      *platformApi.PostgresCluster
 		wantAllowed bool
 		wantMessage string
 	}{
 		{
 			name: "create rejected - readOnly=true at instances=1",
 			op:   admissionv1.Create,
-			obj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			obj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "single",
-					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  ptr.To(true),
 						ReadOnly: ptr.To(true),
 					},
@@ -873,12 +873,12 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 		{
 			name: "create allowed - readOnly=false at instances=1",
 			op:   admissionv1.Create,
-			obj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			obj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "single",
-					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  ptr.To(true),
 						ReadOnly: ptr.To(false),
 					},
@@ -889,12 +889,12 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 		{
 			name: "create allowed - readOnly=true at instances=2",
 			op:   admissionv1.Create,
-			obj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			obj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "ha",
-					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  ptr.To(true),
 						ReadOnly: ptr.To(true),
 					},
@@ -905,23 +905,23 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 		{
 			name: "update rejected - flipping readOnly true at instances=1",
 			op:   admissionv1.Update,
-			oldObj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			oldObj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "single",
-					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  ptr.To(true),
 						ReadOnly: ptr.To(false),
 					},
 				},
 			},
-			obj: &enterpriseApi.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+			obj: &platformApi.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: enterpriseApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{
 					Class: "single",
-					ConnectionPooler: &enterpriseApi.ConnectionPoolerEnableConfig{
+					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  ptr.To(true),
 						ReadOnly: ptr.To(true),
 					},
@@ -949,8 +949,8 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 // end-to-end through the admission webhook: exactly-one-source, walArchive-required-for-PITR, and
 // the class-must-define-barmanObjectStore coupling for object-store recovery sources.
 func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
-	baseConfig := func() *enterpriseApi.PostgresClusterClassConfig {
-		return &enterpriseApi.PostgresClusterClassConfig{
+	baseConfig := func() *platformApi.PostgresClusterClassConfig {
+		return &platformApi.PostgresClusterClassConfig{
 			Instances:       ptr.To(int32(1)),
 			Storage:         ptr.To(resource.MustParse("10Gi")),
 			PostgresVersion: ptr.To("17"),
@@ -958,14 +958,14 @@ func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
 	}
 
 	// Class with a barman object store — supports object-store and WAL-archive recovery sources.
-	classWithStore := &enterpriseApi.PostgresClusterClass{
+	classWithStore := &platformApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "with-store"},
-		Spec: enterpriseApi.PostgresClusterClassSpec{
+		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config:      baseConfig(),
-			CNPG: &enterpriseApi.CNPGConfig{
-				Backup: &enterpriseApi.CNPGBackupConfig{
-					BarmanObjectStore: &enterpriseApi.CNPGBarmanObjectStoreConfig{
+			CNPG: &platformApi.CNPGConfig{
+				Backup: &platformApi.CNPGBackupConfig{
+					BarmanObjectStore: &platformApi.CNPGBarmanObjectStoreConfig{
 						DestinationPath: "s3://bucket/pg",
 					},
 				},
@@ -973,9 +973,9 @@ func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
 		},
 	}
 	// Class without a barman object store — only plain snapshot restore is valid.
-	classNoStore := &enterpriseApi.PostgresClusterClass{
+	classNoStore := &platformApi.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "no-store"},
-		Spec: enterpriseApi.PostgresClusterClassSpec{
+		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config:      baseConfig(),
 		},
@@ -988,68 +988,68 @@ func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
 		Client:     fakeClient,
 	})
 
-	cluster := func(class string, b *enterpriseApi.BootstrapFrom) *enterpriseApi.PostgresCluster {
-		return &enterpriseApi.PostgresCluster{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+	cluster := func(class string, b *platformApi.BootstrapFrom) *platformApi.PostgresCluster {
+		return &platformApi.PostgresCluster{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-			Spec:       enterpriseApi.PostgresClusterSpec{Class: class, BootstrapFrom: b},
+			Spec:       platformApi.PostgresClusterSpec{Class: class, BootstrapFrom: b},
 		}
 	}
 
 	tests := []struct {
 		name        string
-		obj         *enterpriseApi.PostgresCluster
+		obj         *platformApi.PostgresCluster
 		wantAllowed bool
 		wantMessage string
 	}{
 		{
 			name: "allowed - plain snapshot restore without object store",
-			obj: cluster("no-store", &enterpriseApi.BootstrapFrom{
-				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{Storage: "snap-1"},
+			obj: cluster("no-store", &platformApi.BootstrapFrom{
+				VolumeSnapshot: &platformApi.VolumeSnapshotSource{Storage: "snap-1"},
 			}),
 			wantAllowed: true,
 		},
 		{
 			name: "rejected - both sources set",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{Storage: "snap-1"},
-				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				VolumeSnapshot: &platformApi.VolumeSnapshotSource{Storage: "snap-1"},
+				ObjectStorage:  &platformApi.ObjectStorageSource{ServerName: "src"},
 			}),
 			wantAllowed: false,
 			wantMessage: "exactly one of volumeSnapshot or objectStorage must be set",
 		},
 		{
 			name:        "rejected - neither source set",
-			obj:         cluster("with-store", &enterpriseApi.BootstrapFrom{}),
+			obj:         cluster("with-store", &platformApi.BootstrapFrom{}),
 			wantAllowed: false,
 			wantMessage: "exactly one of volumeSnapshot or objectStorage must be set",
 		},
 		{
 			name: "rejected - snapshot PITR without walArchive",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{Storage: "snap-1"},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				VolumeSnapshot: &platformApi.VolumeSnapshotSource{Storage: "snap-1"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
 			}),
 			wantAllowed: false,
 			wantMessage: "walArchive is required when recoveryTarget is set",
 		},
 		{
 			name: "allowed - snapshot PITR with walArchive",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				VolumeSnapshot: &platformApi.VolumeSnapshotSource{
 					Storage:    "snap-1",
-					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+					WalArchive: &platformApi.ObjectStorageSource{ServerName: "src"},
 				},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
 			}),
 			wantAllowed: true,
 		},
 		{
 			name: "rejected - walArchive but class has no barmanObjectStore",
-			obj: cluster("no-store", &enterpriseApi.BootstrapFrom{
-				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+			obj: cluster("no-store", &platformApi.BootstrapFrom{
+				VolumeSnapshot: &platformApi.VolumeSnapshotSource{
 					Storage:    "snap-1",
-					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+					WalArchive: &platformApi.ObjectStorageSource{ServerName: "src"},
 				},
 			}),
 			wantAllowed: false,
@@ -1057,55 +1057,55 @@ func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
 		},
 		{
 			name: "rejected - objectStorage source but class has no barmanObjectStore",
-			obj: cluster("no-store", &enterpriseApi.BootstrapFrom{
-				ObjectStorage: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+			obj: cluster("no-store", &platformApi.BootstrapFrom{
+				ObjectStorage: &platformApi.ObjectStorageSource{ServerName: "src"},
 			}),
 			wantAllowed: false,
 			wantMessage: "requires cnpg.backup.barmanObjectStore to be configured",
 		},
 		{
 			name: "allowed - objectStorage source with class barmanObjectStore",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				ObjectStorage:  &platformApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
 			}),
 			wantAllowed: true,
 		},
 		{
 			name: "rejected - objectStorage source with type xid (no backupID selection)",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetXID, Value: "1234567"},
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				ObjectStorage:  &platformApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetXID, Value: "1234567"},
 			}),
 			wantAllowed: false,
 			wantMessage: "not supported for an objectStorage source",
 		},
 		{
 			name: "rejected - malformed type time value",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: "May 1 2026"},
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				ObjectStorage:  &platformApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetTime, Value: "May 1 2026"},
 			}),
 			wantAllowed: false,
 			wantMessage: "value for target type time must be an RFC 3339 timestamp",
 		},
 		{
 			name: "rejected - malformed type lsn value",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetLSN, Value: "nope"},
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				ObjectStorage:  &platformApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetLSN, Value: "nope"},
 			}),
 			wantAllowed: false,
 			wantMessage: "value for target type lsn must be a WAL log sequence number",
 		},
 		{
 			name: "rejected - non-numeric type xid value on snapshot base",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				VolumeSnapshot: &platformApi.VolumeSnapshotSource{
 					Storage:    "snap-1",
-					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+					WalArchive: &platformApi.ObjectStorageSource{ServerName: "src"},
 				},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetXID, Value: "12ab"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetXID, Value: "12ab"},
 			}),
 			wantAllowed: false,
 			wantMessage: "value for target type xid must be a numeric transaction ID",
@@ -1115,45 +1115,45 @@ func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
 			// value-format validators are the last line of defense if that rule is ever weakened, so
 			// assert an empty value is still rejected here on the webhook path.
 			name: "rejected - empty type time value",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				ObjectStorage:  &enterpriseApi.ObjectStorageSource{ServerName: "src"},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetTime, Value: ""},
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				ObjectStorage:  &platformApi.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetTime, Value: ""},
 			}),
 			wantAllowed: false,
 			wantMessage: "value for target type time must be an RFC 3339 timestamp",
 		},
 		{
 			name: "rejected - empty type name value on snapshot base",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				VolumeSnapshot: &platformApi.VolumeSnapshotSource{
 					Storage:    "snap-1",
-					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+					WalArchive: &platformApi.ObjectStorageSource{ServerName: "src"},
 				},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetName, Value: ""},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetName, Value: ""},
 			}),
 			wantAllowed: false,
 			wantMessage: "value for target type name must be a restore-point name",
 		},
 		{
 			name: "rejected - control character in type name value",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				VolumeSnapshot: &platformApi.VolumeSnapshotSource{
 					Storage:    "snap-1",
-					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+					WalArchive: &platformApi.ObjectStorageSource{ServerName: "src"},
 				},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetName, Value: "bad\tname"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetName, Value: "bad\tname"},
 			}),
 			wantAllowed: false,
 			wantMessage: "value for target type name must be a restore-point name",
 		},
 		{
 			name: "allowed - valid type name value on snapshot base",
-			obj: cluster("with-store", &enterpriseApi.BootstrapFrom{
-				VolumeSnapshot: &enterpriseApi.VolumeSnapshotSource{
+			obj: cluster("with-store", &platformApi.BootstrapFrom{
+				VolumeSnapshot: &platformApi.VolumeSnapshotSource{
 					Storage:    "snap-1",
-					WalArchive: &enterpriseApi.ObjectStorageSource{ServerName: "src"},
+					WalArchive: &platformApi.ObjectStorageSource{ServerName: "src"},
 				},
-				RecoveryTarget: &enterpriseApi.RecoveryTarget{Type: enterpriseApi.RecoveryTargetName, Value: "before-upgrade"},
+				RecoveryTarget: &platformApi.RecoveryTarget{Type: platformApi.RecoveryTargetName, Value: "before-upgrade"},
 			}),
 			wantAllowed: true,
 		},
@@ -1184,10 +1184,10 @@ func TestCrossResourceValidationDisabledWithoutClient(t *testing.T) {
 		Validators: validation.DefaultValidators,
 	})
 
-	obj := &enterpriseApi.PostgresCluster{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "PostgresCluster"},
+	obj := &platformApi.PostgresCluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec:       enterpriseApi.PostgresClusterSpec{Class: "nonexistent"},
+		Spec:       platformApi.PostgresClusterSpec{Class: "nonexistent"},
 	}
 
 	ar := newPostgresClusterAdmissionReview(t, "uid-no-client", admissionv1.Create, obj, nil)

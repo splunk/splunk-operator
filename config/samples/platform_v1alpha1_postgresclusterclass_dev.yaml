@@ -1,7 +1,7 @@
 ---
 # Development PostgresClusterClass
 # Minimal configuration for local development and testing
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-dev

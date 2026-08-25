@@ -38,7 +38,9 @@ spec:
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
       version: v3
-    - description: IngestorCluster is the Schema for the ingestorclusters API
+    - description: 'IngestorCluster is the Schema for the ingestorclusters API. NOTE:
+        IngestorCluster is part of the index and ingestion separation feature, which
+        is currently in Preview and not recommended for production use.'
       displayName: Ingestor Cluster
       kind: IngestorCluster
       name: ingestorclusters.enterprise.splunk.com
@@ -63,7 +65,9 @@ spec:
       kind: MonitoringConsole
       name: monitoringconsoles.enterprise.splunk.com
       version: v3
-    - description: ObjectStorage is the Schema for the objectstorages API
+    - description: 'ObjectStorage is the Schema for the objectstorages API. NOTE:
+        ObjectStorage is part of the index and ingestion separation feature, which
+        is currently in Preview and not recommended for production use.'
       displayName: Object Storage
       kind: ObjectStorage
       name: objectstorages.enterprise.splunk.com
@@ -73,19 +77,21 @@ spec:
         PostgresClusterClass defines a reusable template and policy for postgres cluster provisioning.
       displayName: Postgres Cluster Class
       kind: PostgresClusterClass
-      name: postgresclusterclasses.enterprise.splunk.com
-      version: v4
+      name: postgresclusterclasses.platform.splunk.com
+      version: v1alpha1
     - description: PostgresCluster is the Schema for the postgresclusters API.
       displayName: Postgres Cluster
       kind: PostgresCluster
-      name: postgresclusters.enterprise.splunk.com
-      version: v4
+      name: postgresclusters.platform.splunk.com
+      version: v1alpha1
     - description: PostgresDatabase is the Schema for the postgresdatabases API.
       displayName: Postgres Database
       kind: PostgresDatabase
-      name: postgresdatabases.enterprise.splunk.com
-      version: v4
-    - description: Queue is the Schema for the queues API
+      name: postgresdatabases.platform.splunk.com
+      version: v1alpha1
+    - description: 'Queue is the Schema for the queues API. NOTE: Queue is part of
+        the index and ingestion separation feature, which is currently in Preview
+        and not recommended for production use.'
       displayName: Queue
       kind: Queue
       name: queues.enterprise.splunk.com

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -62,15 +62,15 @@ func TestObjectStorePredicator(t *testing.T) {
 	})
 }
 
-func dbWithStatusRoles(name, cluster string, roleNames ...string) *enterprisev4.PostgresDatabase {
-	roles := make([]enterprisev4.DatabaseRoleInfo, 0, len(roleNames))
+func dbWithStatusRoles(name, cluster string, roleNames ...string) *platformv1alpha1.PostgresDatabase {
+	roles := make([]platformv1alpha1.DatabaseRoleInfo, 0, len(roleNames))
 	for _, r := range roleNames {
-		roles = append(roles, enterprisev4.DatabaseRoleInfo{Name: r, Exists: true})
+		roles = append(roles, platformv1alpha1.DatabaseRoleInfo{Name: r, Exists: true})
 	}
-	return &enterprisev4.PostgresDatabase{
+	return &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns", Generation: 1},
-		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: cluster}},
-		Status:     enterprisev4.PostgresDatabaseStatus{Databases: []enterprisev4.DatabaseInfo{{Name: "app", Roles: roles}}},
+		Spec:       platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: cluster}},
+		Status:     platformv1alpha1.PostgresDatabaseStatus{Databases: []platformv1alpha1.DatabaseInfo{{Name: "app", Roles: roles}}},
 	}
 }
 
@@ -96,12 +96,12 @@ func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
 	pred := postgresDatabaseForClusterPredicator()
 
 	assert.True(t, pred.Create(event.CreateEvent{Object: dbWithStatusRoles("db", "pg", "app_admin")}))
-	assert.False(t, pred.Create(event.CreateEvent{Object: &enterprisev4.PostgresDatabase{
+	assert.False(t, pred.Create(event.CreateEvent{Object: &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"},
-		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}},
+		Spec:       platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}},
 	}}))
 	published := dbWithStatusRoles("db", "pg")
-	published.Status.CustomMetricsPublication = &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+	published.Status.CustomMetricsPublication = &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 		ObservedGeneration: 1,
 	}
 	assert.True(t, pred.Create(event.CreateEvent{Object: published}))
@@ -120,9 +120,9 @@ func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
 		"raw database spec changes must be interpreted by the database controller first")
 
 	statusUpdated := dbWithStatusRoles("db", "pg", "app_admin")
-	statusUpdated.Status.CustomMetricsPublication = &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+	statusUpdated.Status.CustomMetricsPublication = &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 		ObservedGeneration: 1,
-		Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+		Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 			DatabaseName: "app",
 			Revision:     "revision",
 			Exists:       true,
@@ -141,17 +141,17 @@ func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
 
 func TestExtractDatabaseCustomQueryConfigMapNamesUsesCommittedStatus(t *testing.T) {
 	db := dbWithStatusRoles("db", "pg")
-	db.Spec.Databases = []enterprisev4.DatabaseDefinition{{
+	db.Spec.Databases = []platformv1alpha1.DatabaseDefinition{{
 		Name: "app",
-		Monitoring: &enterprisev4.DatabaseMonitoring{
+		Monitoring: &platformv1alpha1.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selectorForTest("spec-only")},
 		},
 	}}
 	assert.Nil(t, extractDatabaseCustomQueryConfigMapNames(db))
 
-	db.Status.CustomMetricsPublication = &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+	db.Status.CustomMetricsPublication = &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 		ObservedGeneration: db.Generation,
-		Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+		Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 			DatabaseName: "app",
 			Revision:     "revision",
 			Exists:       true,
@@ -211,7 +211,7 @@ func TestGeneratedMetricsConfigMapMapsToPostgresCluster(t *testing.T) {
 
 	hashDrift := cm.DeepCopy()
 	hashDrift.Annotations = map[string]string{
-		"enterprise.splunk.com/monitoring-config-hash": "drifted",
+		"platform.splunk.com/monitoring-config-hash": "drifted",
 	}
 	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: cm, ObjectNew: hashDrift}))
 }
@@ -236,7 +236,7 @@ func TestGeneratedMetricsConfigMapOwnedByAnotherPostgresClusterMapsToIntendedClu
 		Name:      "intended-metrics",
 		Namespace: "ns",
 		OwnerReferences: []metav1.OwnerReference{{
-			APIVersion: enterprisev4.GroupVersion.String(),
+			APIVersion: platformv1alpha1.GroupVersion.String(),
 			Kind:       "PostgresCluster",
 			Name:       "other",
 			Controller: &controller,
@@ -258,7 +258,7 @@ func TestCustomMetricsConfigMapCreatePredicateSeparatesSourcesFromOwnedResources
 	owned := source.DeepCopy()
 	owned.Name = "owned"
 	owned.OwnerReferences = []metav1.OwnerReference{{
-		APIVersion: enterprisev4.GroupVersion.String(),
+		APIVersion: platformv1alpha1.GroupVersion.String(),
 		Kind:       "PostgresCluster",
 		Name:       "pg",
 		Controller: &controller,
@@ -270,24 +270,24 @@ func TestCustomMetricsConfigMapCreatePredicateSeparatesSourcesFromOwnedResources
 
 func TestCustomMetricsConfigMapMapperFansOutBeyondControllerOwner(t *testing.T) {
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
-	consumer := &enterprisev4.PostgresCluster{
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	consumer := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "ns"},
-		Spec: enterprisev4.PostgresClusterSpec{Monitoring: &enterprisev4.PostgresClusterMonitoring{
+		Spec: platformv1alpha1.PostgresClusterSpec{Monitoring: &platformv1alpha1.PostgresClusterMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selectorForTest("shared-source")},
 		}},
 	}
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(consumer).
-		WithIndex(&enterprisev4.PostgresCluster{}, indexClusterCustomQueryConfigMaps, extractClusterCustomQueryConfigMapNames).
+		WithIndex(&platformv1alpha1.PostgresCluster{}, indexClusterCustomQueryConfigMaps, extractClusterCustomQueryConfigMapNames).
 		Build()
 	controller := true
 	source := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 		Name:      "shared-source",
 		Namespace: "ns",
 		OwnerReferences: []metav1.OwnerReference{{
-			APIVersion: enterprisev4.GroupVersion.String(),
+			APIVersion: platformv1alpha1.GroupVersion.String(),
 			Kind:       "PostgresCluster",
 			Name:       "producer",
 			Controller: &controller,
@@ -302,14 +302,14 @@ func TestCustomMetricsConfigMapMapperFansOutBeyondControllerOwner(t *testing.T) 
 
 func TestCustomMetricsConfigMapMapperFansOutCNPGOwnedDatabaseSource(t *testing.T) {
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
-	database := &enterprisev4.PostgresDatabase{
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	database := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "databases", Namespace: "ns", Generation: 2},
-		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "consumer"}},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		Spec:       platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "consumer"}},
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			CustomMetricsPublication: &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 				ObservedGeneration: 2,
-				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+				Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 					DatabaseName: "orders",
 					Revision:     "revision",
 					Exists:       true,
@@ -323,7 +323,7 @@ func TestCustomMetricsConfigMapMapperFansOutCNPGOwnedDatabaseSource(t *testing.T
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(database).
-		WithIndex(&enterprisev4.PostgresDatabase{}, indexDatabaseCustomQueryConfigMaps, extractDatabaseCustomQueryConfigMapNames).
+		WithIndex(&platformv1alpha1.PostgresDatabase{}, indexDatabaseCustomQueryConfigMaps, extractDatabaseCustomQueryConfigMapNames).
 		Build()
 	controller := true
 	source := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
@@ -366,11 +366,11 @@ func TestOwnedConfigMapPredicateObservesSafetyDrift(t *testing.T) {
 	pred := configMapPredicator()
 	base := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 		Name:        "pg-metrics-lkg",
-		Annotations: map[string]string{"enterprise.splunk.com/monitoring-config-hash": "revision"},
+		Annotations: map[string]string{"platform.splunk.com/monitoring-config-hash": "revision"},
 	}}
 
 	metadataDrift := base.DeepCopy()
-	metadataDrift.Annotations["enterprise.splunk.com/monitoring-config-hash"] = "drifted"
+	metadataDrift.Annotations["platform.splunk.com/monitoring-config-hash"] = "drifted"
 	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: metadataDrift}))
 
 	binaryDrift := base.DeepCopy()
@@ -397,24 +397,24 @@ func (c *failIndexedListClient) List(
 
 func TestCustomMetricsConfigMapMapperFallsBackWhenIndexedListsFail(t *testing.T) {
 	scheme := runtime.NewScheme()
-	assert.NoError(t, enterprisev4.AddToScheme(scheme))
-	cluster := &enterprisev4.PostgresCluster{
+	assert.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "cluster-source", Namespace: "ns"},
-		Spec: enterprisev4.PostgresClusterSpec{
-			Monitoring: &enterprisev4.PostgresClusterMonitoring{
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			Monitoring: &platformv1alpha1.PostgresClusterMonitoring{
 				CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selectorForTest("source")},
 			},
 		},
 	}
-	database := &enterprisev4.PostgresDatabase{
+	database := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "databases", Namespace: "ns", Generation: 3},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "database-source"},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			CustomMetricsPublication: &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 				ObservedGeneration: 3,
-				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+				Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 					DatabaseName:           "orders",
 					Revision:               "revision",
 					Exists:                 true,

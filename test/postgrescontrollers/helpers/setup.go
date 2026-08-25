@@ -22,7 +22,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,7 +44,7 @@ func NewDirectPostgresClient() (client.Client, error) {
 	if err := kubescheme.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
-	if err := enterprisev4.AddToScheme(scheme); err != nil {
+	if err := platformv1alpha1.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
 	if err := cnpgv1.AddToScheme(scheme); err != nil {
@@ -59,11 +59,11 @@ func WaitForReadyPostgresCluster(
 	ctx context.Context,
 	kubeClient client.Client,
 	key types.NamespacedName,
-) *enterprisev4.PostgresCluster {
+) *platformv1alpha1.PostgresCluster {
 	GinkgoHelper()
-	var ready *enterprisev4.PostgresCluster
+	var ready *platformv1alpha1.PostgresCluster
 	Eventually(func(g Gomega) {
-		current := &enterprisev4.PostgresCluster{}
+		current := &platformv1alpha1.PostgresCluster{}
 		g.Expect(kubeClient.Get(ctx, key, current)).To(Succeed())
 		StopIfPostgresClusterFailed(current)
 		g.Expect(current.Status.Phase).To(HaveValue(Equal("Ready")))
@@ -75,14 +75,14 @@ func WaitForReadyPostgresCluster(
 
 // StopIfPostgresClusterFailed ends an Eventually poll with the cluster's
 // reported failure details.
-func StopIfPostgresClusterFailed(cluster *enterprisev4.PostgresCluster) {
+func StopIfPostgresClusterFailed(cluster *platformv1alpha1.PostgresCluster) {
 	GinkgoHelper()
 	if cluster.Status.Phase != nil && *cluster.Status.Phase == "Failed" {
 		StopTrying(postgresClusterFailure(cluster)).Now()
 	}
 }
 
-func postgresClusterFailure(cluster *enterprisev4.PostgresCluster) string {
+func postgresClusterFailure(cluster *platformv1alpha1.PostgresCluster) string {
 	failures := make([]string, 0, len(cluster.Status.Conditions))
 	for _, condition := range cluster.Status.Conditions {
 		if condition.Status == metav1.ConditionFalse {
@@ -101,13 +101,13 @@ func CreateReadyPostgresDatabase(
 	ctx context.Context,
 	kubeClient client.Client,
 	namespace, name, clusterName, databaseName string,
-) *enterprisev4.PostgresDatabase {
+) *platformv1alpha1.PostgresDatabase {
 	GinkgoHelper()
-	database := &enterprisev4.PostgresDatabase{
+	database := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: clusterName},
-			Databases: []enterprisev4.DatabaseDefinition{{
+			Databases: []platformv1alpha1.DatabaseDefinition{{
 				Name:           databaseName,
 				DeletionPolicy: "Delete",
 			}},
@@ -116,9 +116,9 @@ func CreateReadyPostgresDatabase(
 	Expect(kubeClient.Create(ctx, database)).To(Succeed())
 
 	key := types.NamespacedName{Name: name, Namespace: namespace}
-	var ready *enterprisev4.PostgresDatabase
+	var ready *platformv1alpha1.PostgresDatabase
 	Eventually(func(g Gomega) {
-		current := &enterprisev4.PostgresDatabase{}
+		current := &platformv1alpha1.PostgresDatabase{}
 		g.Expect(kubeClient.Get(ctx, key, current)).To(Succeed())
 		if current.Status.Phase != nil && *current.Status.Phase == "Failed" {
 			StopTrying(PostgresDatabaseFailure(current)).Now()
@@ -136,7 +136,7 @@ func CreateReadyPostgresDatabase(
 	return ready
 }
 
-func PostgresDatabaseFailure(database *enterprisev4.PostgresDatabase) string {
+func PostgresDatabaseFailure(database *platformv1alpha1.PostgresDatabase) string {
 	failures := make([]string, 0, len(database.Status.Conditions))
 	for _, condition := range database.Status.Conditions {
 		if condition.Status == metav1.ConditionFalse {

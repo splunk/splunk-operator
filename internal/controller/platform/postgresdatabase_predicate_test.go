@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +25,7 @@ func TestPostgresDatabasePredicator(t *testing.T) {
 	t.Parallel()
 	pred := postgresDatabasePredicator()
 
-	base := &enterprisev4.PostgresDatabase{
+	base := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "db1",
 			Namespace:  "default",
@@ -37,15 +37,17 @@ func TestPostgresDatabasePredicator(t *testing.T) {
 	deletionTime := metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	cases := []struct {
 		name   string
-		mutate func(c *enterprisev4.PostgresDatabase)
+		mutate func(c *platformv1alpha1.PostgresDatabase)
 		want   bool
 	}{
-		{name: "no change", mutate: func(c *enterprisev4.PostgresDatabase) {}, want: false},
-		{name: "generation change", mutate: func(c *enterprisev4.PostgresDatabase) { c.Generation = 2 }, want: true},
-		{name: "deletion timestamp change", mutate: func(c *enterprisev4.PostgresDatabase) { c.DeletionTimestamp = &deletionTime }, want: true},
-		{name: "finalizer change", mutate: func(c *enterprisev4.PostgresDatabase) { c.Finalizers = nil }, want: true},
-		{name: "annotation change", mutate: func(c *enterprisev4.PostgresDatabase) { c.Annotations = map[string]string{"some-annotation": "new"} }, want: false},
-		{name: "label change", mutate: func(c *enterprisev4.PostgresDatabase) { c.Labels = map[string]string{"app": "database"} }, want: false},
+		{name: "no change", mutate: func(c *platformv1alpha1.PostgresDatabase) {}, want: false},
+		{name: "generation change", mutate: func(c *platformv1alpha1.PostgresDatabase) { c.Generation = 2 }, want: true},
+		{name: "deletion timestamp change", mutate: func(c *platformv1alpha1.PostgresDatabase) { c.DeletionTimestamp = &deletionTime }, want: true},
+		{name: "finalizer change", mutate: func(c *platformv1alpha1.PostgresDatabase) { c.Finalizers = nil }, want: true},
+		{name: "annotation change", mutate: func(c *platformv1alpha1.PostgresDatabase) {
+			c.Annotations = map[string]string{"some-annotation": "new"}
+		}, want: false},
+		{name: "label change", mutate: func(c *platformv1alpha1.PostgresDatabase) { c.Labels = map[string]string{"app": "database"} }, want: false},
 	}
 
 	for _, tc := range cases {

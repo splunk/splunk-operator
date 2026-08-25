@@ -20,7 +20,7 @@ import (
 	"context"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
 	dbmetricsadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/custom_metrics"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
@@ -70,10 +70,10 @@ const (
 	indexExternalRoleSecrets = "spec.databases.passwordConfig.externalSecretRefs"
 )
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases/finalizers,verbs=update
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch;patch
+//+kubebuilder:rbac:groups=platform.splunk.com,resources=postgresdatabases,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=platform.splunk.com,resources=postgresdatabases/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=platform.splunk.com,resources=postgresdatabases/finalizers,verbs=update
+//+kubebuilder:rbac:groups=platform.splunk.com,resources=postgresclusters,verbs=get;list;watch;patch
 //+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch
 //+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=databases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;delete
@@ -84,7 +84,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	logger := slog.Default().With("controller", "PostgresDatabase", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 
-	postgresDB := &enterprisev4.PostgresDatabase{}
+	postgresDB := &platformv1alpha1.PostgresDatabase{}
 	if err := r.Get(ctx, req.NamespacedName, postgresDB); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.InfoContext(ctx, "PostgresDatabase resource not found, ignoring")
@@ -98,7 +98,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		Scheme:   r.Scheme,
 		Recorder: r.Recorder,
 		Metrics:  r.Metrics,
-		NewCustomMetricsAcknowledgementRepo: func(cluster *enterprisev4.PostgresCluster) dbmetrics.AcknowledgementRepository {
+		NewCustomMetricsAcknowledgementRepo: func(cluster *platformv1alpha1.PostgresCluster) dbmetrics.AcknowledgementRepository {
 			return dbmetricsadapter.NewAcknowledgementRepository(cluster.Status.CustomMetricsStatus)
 		},
 	}
@@ -121,7 +121,7 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			if owner == nil {
 				return nil
 			}
-			if owner.APIVersion != enterprisev4.GroupVersion.String() || owner.Kind != "PostgresDatabase" {
+			if owner.APIVersion != platformv1alpha1.GroupVersion.String() || owner.Kind != "PostgresDatabase" {
 				return nil
 			}
 			return []string{owner.Name}
@@ -132,7 +132,7 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
-		&enterprisev4.PostgresDatabase{},
+		&platformv1alpha1.PostgresDatabase{},
 		indexExternalRoleSecrets,
 		extractExternalRoleSecretNames,
 	); err != nil {
@@ -141,8 +141,8 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
-		&enterprisev4.PostgresDatabase{},
-		enterprisev4.PostgresDatabaseClusterRefNameField,
+		&platformv1alpha1.PostgresDatabase{},
+		platformv1alpha1.PostgresDatabaseClusterRefNameField,
 		extractPostgresDatabaseClusterRefName,
 	); err != nil {
 		return err
@@ -150,11 +150,11 @@ func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithEventFilter(predicate.Funcs{GenericFunc: func(event.GenericEvent) bool { return false }}).
-		For(&enterprisev4.PostgresDatabase{}, builder.WithPredicates(postgresDatabasePredicator())).
+		For(&platformv1alpha1.PostgresDatabase{}, builder.WithPredicates(postgresDatabasePredicator())).
 		Owns(&cnpgv1.Database{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&corev1.Secret{}, builder.WithPredicates(databaseSecretPredicator())).
 		Owns(&corev1.ConfigMap{}, builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
-		Watches(&enterprisev4.PostgresCluster{},
+		Watches(&platformv1alpha1.PostgresCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.enqueuePostgresDatabasesForCluster),
 			builder.WithPredicates(postgresClusterForDatabasePredicator())).
 		Watches(&corev1.Secret{},
@@ -200,8 +200,8 @@ func postgresClusterForDatabasePredicator() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(event.CreateEvent) bool { return true },
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldCluster, oldOK := e.ObjectOld.(*enterprisev4.PostgresCluster)
-			newCluster, newOK := e.ObjectNew.(*enterprisev4.PostgresCluster)
+			oldCluster, oldOK := e.ObjectOld.(*platformv1alpha1.PostgresCluster)
+			newCluster, newOK := e.ObjectNew.(*platformv1alpha1.PostgresCluster)
 			if !oldOK || !newOK {
 				return false
 			}
@@ -222,7 +222,7 @@ func postgresClusterForDatabasePredicator() predicate.Predicate {
 }
 
 func (r *PostgresDatabaseReconciler) enqueuePostgresDatabasesForCluster(ctx context.Context, obj client.Object) []reconcile.Request {
-	cluster, ok := obj.(*enterprisev4.PostgresCluster)
+	cluster, ok := obj.(*platformv1alpha1.PostgresCluster)
 	if !ok {
 		return nil
 	}
@@ -233,10 +233,10 @@ func (r *PostgresDatabaseReconciler) enqueuePostgresDatabasesForCluster(ctx cont
 		"namespace", cluster.Namespace,
 	)
 
-	var list enterprisev4.PostgresDatabaseList
+	var list platformv1alpha1.PostgresDatabaseList
 	if err := r.Client.List(ctx, &list,
 		client.InNamespace(cluster.Namespace),
-		client.MatchingFields{enterprisev4.PostgresDatabaseClusterRefNameField: cluster.Name},
+		client.MatchingFields{platformv1alpha1.PostgresDatabaseClusterRefNameField: cluster.Name},
 	); err != nil {
 		logger.WarnContext(ctx, "indexed PostgresDatabase list failed, falling back to namespace list", "error", err)
 		if fallbackErr := r.Client.List(ctx, &list, client.InNamespace(cluster.Namespace)); fallbackErr != nil {
@@ -258,7 +258,7 @@ func (r *PostgresDatabaseReconciler) enqueuePostgresDatabasesForCluster(ctx cont
 }
 
 func extractPostgresDatabaseClusterRefName(obj client.Object) []string {
-	pd, ok := obj.(*enterprisev4.PostgresDatabase)
+	pd, ok := obj.(*platformv1alpha1.PostgresDatabase)
 	if !ok || pd.Spec.ClusterRef.Name == "" {
 		return nil
 	}
@@ -272,7 +272,7 @@ func extractPostgresDatabaseClusterRefName(obj client.Object) []string {
 //
 // Package-private so unit tests can drive it directly without a fake client.
 func extractExternalRoleSecretNames(obj client.Object) []string {
-	pd, ok := obj.(*enterprisev4.PostgresDatabase)
+	pd, ok := obj.(*platformv1alpha1.PostgresDatabase)
 	if !ok {
 		return nil
 	}
@@ -313,7 +313,7 @@ func (r *PostgresDatabaseReconciler) enqueuePostgresDatabasesForExternalSecret(c
 	}
 
 	if owner := metav1.GetControllerOf(secret); owner != nil &&
-		owner.APIVersion == enterprisev4.GroupVersion.String() &&
+		owner.APIVersion == platformv1alpha1.GroupVersion.String() &&
 		owner.Kind == "PostgresDatabase" {
 		return nil
 	}
@@ -325,7 +325,7 @@ func (r *PostgresDatabaseReconciler) enqueuePostgresDatabasesForExternalSecret(c
 		"namespace", secret.Namespace,
 	)
 
-	var list enterprisev4.PostgresDatabaseList
+	var list platformv1alpha1.PostgresDatabaseList
 	if err := r.Client.List(ctx, &list,
 		client.InNamespace(secret.Namespace),
 		client.MatchingFields{indexExternalRoleSecrets: secret.Name},

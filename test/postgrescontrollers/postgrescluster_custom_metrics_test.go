@@ -21,7 +21,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	cnpginfra "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	pgtesthelpers "github.com/splunk/splunk-operator/test/postgrescontrollers/helpers"
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -83,12 +83,12 @@ var _ = Describe("postgrescontrollers, integration, postgres-metrics",
 				Expect(kubeClient.Create(ctx, clusterSourceB)).To(Succeed())
 
 				pgClass := createPGClass(ctx, kubeClient, namespace)
-				cluster := &enterprisev4.PostgresCluster{
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "metrics-cluster", Namespace: namespace},
-					Spec: enterprisev4.PostgresClusterSpec{
+					Spec: platformv1alpha1.PostgresClusterSpec{
 						Class:                 pgClass.Name,
 						ClusterDeletionPolicy: ptr.To("Delete"),
-						Monitoring: &enterprisev4.PostgresClusterMonitoring{
+						Monitoring: &platformv1alpha1.PostgresClusterMonitoring{
 							PostgreSQLMetrics: ptr.To(true),
 							CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{
 								{LocalObjectReference: corev1.LocalObjectReference{Name: clusterSourceA.Name}, Key: cnpginfra.MonitoringCMKey},
@@ -101,11 +101,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-metrics",
 				clusterKey := types.NamespacedName{Name: cluster.Name, Namespace: namespace}
 				pgtesthelpers.WaitForReadyPostgresCluster(ctx, kubeClient, clusterKey)
 
-				database := &enterprisev4.PostgresDatabase{
+				database := &platformv1alpha1.PostgresDatabase{
 					ObjectMeta: metav1.ObjectMeta{Name: "metrics-databases", Namespace: namespace},
-					Spec: enterprisev4.PostgresDatabaseSpec{
+					Spec: platformv1alpha1.PostgresDatabaseSpec{
 						ClusterRef: corev1.LocalObjectReference{Name: cluster.Name},
-						Databases: []enterprisev4.DatabaseDefinition{
+						Databases: []platformv1alpha1.DatabaseDefinition{
 							{Name: "appdb", DeletionPolicy: "Delete"},
 							{Name: "otherdb", DeletionPolicy: "Delete"},
 						},
@@ -117,7 +117,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-metrics",
 
 				By("waiting for both logical databases before attaching the application query")
 				Eventually(func(g Gomega) {
-					current := &enterprisev4.PostgresDatabase{}
+					current := &platformv1alpha1.PostgresDatabase{}
 					g.Expect(kubeClient.Get(ctx, databaseKey, current)).To(Succeed())
 					if current.Status.Phase != nil && *current.Status.Phase == "Failed" {
 						StopTrying(pgtesthelpers.PostgresDatabaseFailure(current)).Now()
@@ -156,7 +156,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 
 				By("publishing the appdb custom-metrics contribution")
 				Eventually(func() error {
-					current := &enterprisev4.PostgresDatabase{}
+					current := &platformv1alpha1.PostgresDatabase{}
 					if err := kubeClient.Get(ctx, databaseKey, current); err != nil {
 						return err
 					}
@@ -164,7 +164,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 					for i := range current.Spec.Databases {
 						if current.Spec.Databases[i].Name == "appdb" {
 							found = true
-							current.Spec.Databases[i].Monitoring = &enterprisev4.DatabaseMonitoring{
+							current.Spec.Databases[i].Monitoring = &platformv1alpha1.DatabaseMonitoring{
 								CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 									LocalObjectReference: corev1.LocalObjectReference{Name: databaseSource.Name},
 									Key:                  cnpginfra.MonitoringCMKey,
@@ -182,7 +182,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 				var confirmedRevision, confirmedData, confirmedHash string
 				By("proving provider configuration and the database-to-cluster acknowledgement")
 				Eventually(func(g Gomega) {
-					currentCluster := &enterprisev4.PostgresCluster{}
+					currentCluster := &platformv1alpha1.PostgresCluster{}
 					g.Expect(kubeClient.Get(ctx, clusterKey, currentCluster)).To(Succeed())
 					pgtesthelpers.StopIfPostgresClusterFailed(currentCluster)
 					clusterCondition := meta.FindStatusCondition(currentCluster.Status.Conditions, "CustomMetricsReady")
@@ -194,7 +194,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 					g.Expect(clusterCondition.Reason).To(Equal("CustomMetricsReady"))
 					g.Expect(clusterCondition.ObservedGeneration).To(Equal(currentCluster.Generation))
 
-					currentDatabase := &enterprisev4.PostgresDatabase{}
+					currentDatabase := &platformv1alpha1.PostgresDatabase{}
 					g.Expect(kubeClient.Get(ctx, databaseKey, currentDatabase)).To(Succeed())
 					if currentDatabase.Status.Phase != nil && *currentDatabase.Status.Phase == "Failed" {
 						StopTrying(pgtesthelpers.PostgresDatabaseFailure(currentDatabase)).Now()
@@ -312,7 +312,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 				}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 				Eventually(func(g Gomega) {
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(kubeClient.Get(ctx, clusterKey, current)).To(Succeed())
 					condition := meta.FindStatusCondition(current.Status.Conditions, "CustomMetricsReady")
 					g.Expect(condition).NotTo(BeNil())
@@ -331,7 +331,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 					g.Expect(generated.Data[cnpginfra.MonitoringCMKey]).To(Equal(updatedData))
 					g.Expect(generated.Annotations[cnpginfra.MonitoringCMHashAnnotation]).To(Equal(updatedHash))
 
-					currentDatabase := &enterprisev4.PostgresDatabase{}
+					currentDatabase := &platformv1alpha1.PostgresDatabase{}
 					g.Expect(kubeClient.Get(ctx, databaseKey, currentDatabase)).To(Succeed())
 					if currentDatabase.Status.Phase != nil && *currentDatabase.Status.Phase == "Failed" {
 						StopTrying(pgtesthelpers.PostgresDatabaseFailure(currentDatabase)).Now()
@@ -381,7 +381,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 					return kubeClient.Update(ctx, current)
 				}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 				Eventually(func(g Gomega) {
-					current := &enterprisev4.PostgresCluster{}
+					current := &platformv1alpha1.PostgresCluster{}
 					g.Expect(kubeClient.Get(ctx, clusterKey, current)).To(Succeed())
 					condition := meta.FindStatusCondition(current.Status.Conditions, "CustomMetricsReady")
 					g.Expect(condition).NotTo(BeNil())
@@ -399,7 +399,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 
 				By("removing only the database participant")
 				Eventually(func() error {
-					current := &enterprisev4.PostgresDatabase{}
+					current := &platformv1alpha1.PostgresDatabase{}
 					if err := kubeClient.Get(ctx, databaseKey, current); err != nil {
 						return err
 					}
@@ -417,7 +417,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 				}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 				Eventually(func(g Gomega) {
-					currentDatabase := &enterprisev4.PostgresDatabase{}
+					currentDatabase := &platformv1alpha1.PostgresDatabase{}
 					g.Expect(kubeClient.Get(ctx, databaseKey, currentDatabase)).To(Succeed())
 					if currentDatabase.Status.Phase != nil && *currentDatabase.Status.Phase == "Failed" {
 						StopTrying(pgtesthelpers.PostgresDatabaseFailure(currentDatabase)).Now()
@@ -442,7 +442,7 @@ GRANT SELECT ON TABLE public.custom_metrics_fixture TO cnpg_metrics_exporter;
 					g.Expect(contribution.Exists).To(BeFalse())
 					g.Expect(contribution.Revision).NotTo(Equal(confirmedRevision))
 
-					currentCluster := &enterprisev4.PostgresCluster{}
+					currentCluster := &platformv1alpha1.PostgresCluster{}
 					g.Expect(kubeClient.Get(ctx, clusterKey, currentCluster)).To(Succeed())
 					pgtesthelpers.StopIfPostgresClusterFailed(currentCluster)
 					clusterCondition := meta.FindStatusCondition(currentCluster.Status.Conditions, "CustomMetricsReady")
@@ -527,37 +527,37 @@ func invalidClusterMetricA() string {
 `
 }
 
-func databaseInfo(database *enterprisev4.PostgresDatabase, name string) (enterprisev4.DatabaseInfo, bool) {
+func databaseInfo(database *platformv1alpha1.PostgresDatabase, name string) (platformv1alpha1.DatabaseInfo, bool) {
 	for _, info := range database.Status.Databases {
 		if info.Name == name {
 			return info, true
 		}
 	}
-	return enterprisev4.DatabaseInfo{}, false
+	return platformv1alpha1.DatabaseInfo{}, false
 }
 
 func databaseContribution(
-	database *enterprisev4.PostgresDatabase,
+	database *platformv1alpha1.PostgresDatabase,
 	name string,
-) (enterprisev4.DatabaseCustomMetricsContribution, bool) {
+) (platformv1alpha1.DatabaseCustomMetricsContribution, bool) {
 	if database.Status.CustomMetricsPublication == nil {
-		return enterprisev4.DatabaseCustomMetricsContribution{}, false
+		return platformv1alpha1.DatabaseCustomMetricsContribution{}, false
 	}
 	for _, contribution := range database.Status.CustomMetricsPublication.Contributions {
 		if contribution.DatabaseName == name {
 			return contribution, true
 		}
 	}
-	return enterprisev4.DatabaseCustomMetricsContribution{}, false
+	return platformv1alpha1.DatabaseCustomMetricsContribution{}, false
 }
 
 func databaseAcknowledgement(
-	cluster *enterprisev4.PostgresCluster,
-	database *enterprisev4.PostgresDatabase,
+	cluster *platformv1alpha1.PostgresCluster,
+	database *platformv1alpha1.PostgresDatabase,
 	databaseName string,
-) (enterprisev4.DatabaseCustomMetricsStatus, bool) {
+) (platformv1alpha1.DatabaseCustomMetricsStatus, bool) {
 	if cluster.Status.CustomMetricsStatus == nil {
-		return enterprisev4.DatabaseCustomMetricsStatus{}, false
+		return platformv1alpha1.DatabaseCustomMetricsStatus{}, false
 	}
 	for _, acknowledgement := range cluster.Status.CustomMetricsStatus.DatabaseContributions {
 		if acknowledgement.PostgresDatabaseName == database.Name &&
@@ -566,7 +566,7 @@ func databaseAcknowledgement(
 			return acknowledgement, true
 		}
 	}
-	return enterprisev4.DatabaseCustomMetricsStatus{}, false
+	return platformv1alpha1.DatabaseCustomMetricsStatus{}, false
 }
 
 func cnpgMetricSelectorCount(cluster *cnpgv1.Cluster, configMapName string) int {

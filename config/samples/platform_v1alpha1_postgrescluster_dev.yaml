@@ -1,7 +1,7 @@
 # Sample PostgresCluster using Postgres-dev ClusterClass with overriding defaults
 # This sample demonstrates how to override default values from the ClusterClass "postgresql-dev" (see enterprise_v4_clusterclass_dev.yaml) in a PostgresCluster manifest.
 # Overrides include changing storage, changing PostgreSQL version, and modifying resources.
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   labels:

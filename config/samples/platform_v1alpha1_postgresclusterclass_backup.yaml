@@ -1,7 +1,7 @@
 ---
 # PostgresClusterClass with volume snapshot backups enabled
 # Demonstrates automated backup configuration via CSI volume snapshots
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-backup

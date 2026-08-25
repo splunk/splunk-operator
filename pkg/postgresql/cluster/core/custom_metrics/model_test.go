@@ -23,7 +23,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	monadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/custom_metrics"
 	cnpgmonitoring "github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/custom_metrics/cnpg"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
@@ -143,15 +143,15 @@ func selector(name string) corev1.ConfigMapKeySelector {
 	}
 }
 
-func clusterWithSources(names ...string) *enterprisev4.PostgresCluster {
+func clusterWithSources(names ...string) *platformv1alpha1.PostgresCluster {
 	refs := make([]corev1.ConfigMapKeySelector, 0, len(names))
 	for _, name := range names {
 		refs = append(refs, selector(name))
 	}
-	return &enterprisev4.PostgresCluster{
+	return &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "ns"},
-		Spec: enterprisev4.PostgresClusterSpec{
-			Monitoring: &enterprisev4.PostgresClusterMonitoring{CustomQueriesConfigMap: refs},
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			Monitoring: &platformv1alpha1.PostgresClusterMonitoring{CustomQueriesConfigMap: refs},
 		},
 	}
 }

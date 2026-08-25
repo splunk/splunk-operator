@@ -15,7 +15,7 @@ import (
 	"sort"
 	"testing"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -30,24 +30,24 @@ func newDatabaseWatchScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	return scheme
 }
 
-func dbWithRefs(name, ns string, refs ...[2]string) *enterprisev4.PostgresDatabase {
-	dbs := make([]enterprisev4.DatabaseDefinition, 0, len(refs))
+func dbWithRefs(name, ns string, refs ...[2]string) *platformv1alpha1.PostgresDatabase {
+	dbs := make([]platformv1alpha1.DatabaseDefinition, 0, len(refs))
 	for i, pair := range refs {
-		dbs = append(dbs, enterprisev4.DatabaseDefinition{
+		dbs = append(dbs, platformv1alpha1.DatabaseDefinition{
 			Name: name + "-db-" + string(rune('a'+i)),
-			PasswordConfig: &enterprisev4.PasswordConfig{
+			PasswordConfig: &platformv1alpha1.PasswordConfig{
 				ExternalAdminSecretRef: corev1.LocalObjectReference{Name: pair[0]},
 				ExternalRWSecretRef:    corev1.LocalObjectReference{Name: pair[1]},
 			},
 		})
 	}
-	return &enterprisev4.PostgresDatabase{
+	return &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec:       enterprisev4.PostgresDatabaseSpec{Databases: dbs},
+		Spec:       platformv1alpha1.PostgresDatabaseSpec{Databases: dbs},
 	}
 }
 
@@ -66,14 +66,14 @@ func TestExtractExternalRoleSecretNames(t *testing.T) {
 		},
 		{
 			name: "no databases yields nil",
-			obj:  &enterprisev4.PostgresDatabase{},
+			obj:  &platformv1alpha1.PostgresDatabase{},
 			want: nil,
 		},
 		{
 			name: "internal-mode database yields nil",
-			obj: &enterprisev4.PostgresDatabase{
-				Spec: enterprisev4.PostgresDatabaseSpec{
-					Databases: []enterprisev4.DatabaseDefinition{{Name: "db1"}},
+			obj: &platformv1alpha1.PostgresDatabase{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
+					Databases: []platformv1alpha1.DatabaseDefinition{{Name: "db1"}},
 				},
 			},
 			want: nil,
@@ -101,11 +101,11 @@ func TestExtractExternalRoleSecretNames(t *testing.T) {
 		},
 		{
 			name: "mixed internal+external databases only emit external names",
-			obj: &enterprisev4.PostgresDatabase{
-				Spec: enterprisev4.PostgresDatabaseSpec{
-					Databases: []enterprisev4.DatabaseDefinition{
+			obj: &platformv1alpha1.PostgresDatabase{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
+					Databases: []platformv1alpha1.DatabaseDefinition{
 						{Name: "internal-db"}, // PasswordConfig nil
-						{Name: "external-db", PasswordConfig: &enterprisev4.PasswordConfig{
+						{Name: "external-db", PasswordConfig: &platformv1alpha1.PasswordConfig{
 							ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "adm-x"},
 							ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "rw-x"},
 						}},
@@ -140,16 +140,16 @@ func TestEnqueuePostgresDatabasesForExternalSecret(t *testing.T) {
 	pd1 := dbWithRefs("pd-one", ns, [2]string{admSecret, rwSecret})
 	pd2 := dbWithRefs("pd-two", ns, [2]string{admSecret, "rw-two"})
 	pdOther := dbWithRefs("pd-elsewhere", otherNS, [2]string{admSecret, rwSecret})
-	pdInternal := &enterprisev4.PostgresDatabase{
+	pdInternal := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "pd-internal", Namespace: ns},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{{Name: "x"}},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{{Name: "x"}},
 		},
 	}
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithIndex(&enterprisev4.PostgresDatabase{}, indexExternalRoleSecrets, extractExternalRoleSecretNames).
+		WithIndex(&platformv1alpha1.PostgresDatabase{}, indexExternalRoleSecrets, extractExternalRoleSecretNames).
 		WithObjects(pd1, pd2, pdOther, pdInternal).
 		Build()
 
@@ -188,7 +188,7 @@ func TestEnqueuePostgresDatabasesForExternalSecret(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: admSecret, Namespace: ns,
 				OwnerReferences: []metav1.OwnerReference{{
-					APIVersion: enterprisev4.GroupVersion.String(),
+					APIVersion: platformv1alpha1.GroupVersion.String(),
 					Kind:       "PostgresDatabase",
 					Name:       "pd-one",
 					Controller: ptr.To(true),

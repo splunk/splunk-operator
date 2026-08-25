@@ -67,7 +67,7 @@ kubectl create secret generic s3-credentials -n <namespace> \
 The full S3 configuration lives in the class. The operator automatically creates a `barmancloud.cnpg.io/v1 ObjectStore` resource in each cluster's namespace — users do not create it manually.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: production
@@ -110,7 +110,7 @@ spec:
 ### Step 3 — Create the PostgresCluster (user / application team)
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: my-app-db

@@ -3,7 +3,7 @@
 # <database>_admin and <database>_rw. Role intent is published on
 # PostgresDatabase.status.databases[].roles and reconciled by the referenced
 # PostgresCluster.
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: splunk-databases

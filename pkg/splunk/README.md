@@ -51,7 +51,7 @@ sub-packages) must never import each other.
    common/                        Types, interfaces, constants
 ```
 
-All packages may also import `api/enterprise/v4` (CRD types).
+Packages may also import the CRD types they operate on from `api/<group>/<version>`.
 
 | Package | Purpose | Allowed imports from `pkg/splunk/` |
 |---|---|---|

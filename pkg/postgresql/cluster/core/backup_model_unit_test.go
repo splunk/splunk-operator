@@ -21,7 +21,7 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	"github.com/stretchr/testify/assert"
@@ -63,14 +63,14 @@ func (c *captureBackupEmitter) emitBackupReadyTransition(_ client.Object, _ []me
 
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	enterprisev4.AddToScheme(scheme)
+	platformv1alpha1.AddToScheme(scheme)
 	cnpgv1.AddToScheme(scheme)
 	corev1.AddToScheme(scheme)
 	return scheme
 }
 
-func newTestCluster(name, ns string) *enterprisev4.PostgresCluster {
-	return &enterprisev4.PostgresCluster{
+func newTestCluster(name, ns string) *platformv1alpha1.PostgresCluster {
+	return &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
@@ -84,7 +84,7 @@ func newTestMergedConfig(backupEnabled bool, schedule string) *MergedConfig {
 	version := "18"
 	storage := resource.MustParse("50Gi")
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storage,
@@ -92,10 +92,10 @@ func newTestMergedConfig(backupEnabled bool, schedule string) *MergedConfig {
 			PgHBA:            []string{},
 			Resources:        &corev1.ResourceRequirements{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{
+		CNPG: &platformv1alpha1.CNPGConfig{
 			PrimaryUpdateMethod: ptr.To("restart"),
-			Backup: &enterprisev4.CNPGBackupConfig{
-				VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{
+			Backup: &platformv1alpha1.CNPGBackupConfig{
+				VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
 					ClassName: ptr.To("csi-snapclass"),
 					Online:    ptr.To(true),
 				},
@@ -104,7 +104,7 @@ func newTestMergedConfig(backupEnabled bool, schedule string) *MergedConfig {
 		},
 	}
 	if backupEnabled {
-		cfg.Spec.Backup = &enterprisev4.BackupConfig{
+		cfg.Spec.Backup = &platformv1alpha1.BackupConfig{
 			Enabled:  ptr.To(true),
 			Schedule: ptr.To(schedule),
 		}
@@ -112,10 +112,12 @@ func newTestMergedConfig(backupEnabled bool, schedule string) *MergedConfig {
 	return cfg
 }
 
-func noopHealthUpdater(_ *enterprisev4.PostgresClusterStatus, _ componentHealth) error { return nil }
+func noopHealthUpdater(_ *platformv1alpha1.PostgresClusterStatus, _ componentHealth) error {
+	return nil
+}
 
 // newTestBackupModel creates a backupModel with contracts.CNPGCluster set to cnpg (may be nil to test contracts-not-ready path).
-func newTestBackupModel(c client.Client, scheme *runtime.Scheme, events backupEmitter, updater healthStatusUpdater, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpg ...*cnpgv1.Cluster) *backupModel {
+func newTestBackupModel(c client.Client, scheme *runtime.Scheme, events backupEmitter, updater healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, cnpg ...*cnpgv1.Cluster) *backupModel {
 	return newTestBackupModelWithBackend(noopBackupBackend{}, events, updater, cluster, cfg, cnpg...)
 }
 
@@ -124,7 +126,7 @@ func newTestBackupModel(c client.Client, scheme *runtime.Scheme, events backupEm
 // ownership guards live in the infrastructure/cnpg adapter and are tested there; here we
 // verify that the model drives the port with the correct engine-agnostic spec/requests and
 // maps the observed ScheduleResult back into cluster status.
-func newTestBackupModelWithBackend(backend BackupBackend, events backupEmitter, updater healthStatusUpdater, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, cnpg ...*cnpgv1.Cluster) *backupModel {
+func newTestBackupModelWithBackend(backend BackupBackend, events backupEmitter, updater healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, cnpg ...*cnpgv1.Cluster) *backupModel {
 	contracts := &reconcileContracts{}
 	if len(cnpg) > 0 {
 		contracts.CNPGCluster = cnpg[0]
@@ -219,8 +221,8 @@ func TestBackupModel_Reconcile_Disabled(t *testing.T) {
 	t.Run("clears BackupStatus when previously set and backup is disabled", func(t *testing.T) {
 		// Arrange
 		cluster := newTestCluster("c1", "ns1")
-		cluster.Status.BackupStatus = &enterprisev4.BackupStatus{
-			VolumeSnapshot: &enterprisev4.VolumeSnapshotBackupStatus{Enabled: true},
+		cluster.Status.BackupStatus = &platformv1alpha1.BackupStatus{
+			VolumeSnapshot: &platformv1alpha1.VolumeSnapshotBackupStatus{Enabled: true},
 		}
 		cfg := newTestMergedConfig(false, "")
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -501,8 +503,8 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 			Status: metav1.ConditionTrue,
 			Reason: string(reasonBackupConfigured),
 		}}
-		cluster.Status.BackupStatus = &enterprisev4.BackupStatus{
-			VolumeSnapshot: &enterprisev4.VolumeSnapshotBackupStatus{
+		cluster.Status.BackupStatus = &platformv1alpha1.BackupStatus{
+			VolumeSnapshot: &platformv1alpha1.VolumeSnapshotBackupStatus{
 				Enabled: true, LastScheduleTime: &now1, NextScheduleTime: &next1,
 			},
 		}
@@ -517,7 +519,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 			"c1-backup": {Exists: true, LastScheduleTime: &now2, NextScheduleTime: &next2},
 		}}
 
-		updater := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+		updater := func(before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 			return setStatusFromHealth(ctx, c, nil, cluster, before, health)
 		}
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, updater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
@@ -527,7 +529,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		// Assert — schedule times are copied into in-memory cluster status; writeComponentStatus persists them
 		require.NoError(t, err)
 		assert.Equal(t, pgcConstants.Ready, health.State)
-		persisted := &enterprisev4.PostgresCluster{}
+		persisted := &platformv1alpha1.PostgresCluster{}
 		require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "c1", Namespace: "ns1"}, persisted))
 		require.NotNil(t, persisted.Status.BackupStatus)
 		require.NotNil(t, persisted.Status.BackupStatus.VolumeSnapshot)
@@ -550,7 +552,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 			"c1-backup": {Exists: true, LastScheduleTime: &now, NextScheduleTime: &next},
 		}}
 
-		updater := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+		updater := func(before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 			return setStatusFromHealth(ctx, c, nil, cluster, before, health)
 		}
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, updater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
@@ -561,7 +563,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		// Assert — BackupStatus must be readable from the API server after Observe
 		require.NoError(t, err)
 		assert.Equal(t, pgcConstants.Ready, health.State)
-		persisted := &enterprisev4.PostgresCluster{}
+		persisted := &platformv1alpha1.PostgresCluster{}
 		require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "c1", Namespace: "ns1"}, persisted))
 		require.NotNil(t, persisted.Status.BackupStatus)
 		require.NotNil(t, persisted.Status.BackupStatus.VolumeSnapshot)
@@ -580,21 +582,21 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 
 	t.Run("cluster inherits class backup when cluster has no backup", func(t *testing.T) {
 		// Arrange
-		class := &enterprisev4.PostgresClusterClass{
+		class := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "standard"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: &enterprisev4.PostgresClusterClassConfig{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       &classInstances,
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
-					Backup: &enterprisev4.BackupConfig{
+					Backup: &platformv1alpha1.BackupConfig{
 						Enabled:  ptr.To(true),
 						Schedule: ptr.To("0 2 * * *"),
 					},
 				},
 			},
 		}
-		cluster := &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{}}
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{}}
 
 		// Act
 		cfg := GetMergedConfig(class, cluster)
@@ -608,23 +610,23 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 
 	t.Run("cluster overrides schedule but inherits enabled from class", func(t *testing.T) {
 		// Arrange
-		class := &enterprisev4.PostgresClusterClass{
+		class := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "standard"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: &enterprisev4.PostgresClusterClassConfig{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       &classInstances,
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
-					Backup: &enterprisev4.BackupConfig{
+					Backup: &platformv1alpha1.BackupConfig{
 						Enabled:  ptr.To(true),
 						Schedule: ptr.To("0 2 * * *"),
 					},
 				},
 			},
 		}
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{
-				Backup: &enterprisev4.BackupConfig{Schedule: ptr.To("30 3 * * *")},
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
+				Backup: &platformv1alpha1.BackupConfig{Schedule: ptr.To("30 3 * * *")},
 			},
 		}
 
@@ -640,23 +642,23 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 
 	t.Run("cluster overrides enabled but inherits schedule from class", func(t *testing.T) {
 		// Arrange
-		class := &enterprisev4.PostgresClusterClass{
+		class := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "standard"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: &enterprisev4.PostgresClusterClassConfig{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       &classInstances,
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
-					Backup: &enterprisev4.BackupConfig{
+					Backup: &platformv1alpha1.BackupConfig{
 						Enabled:  ptr.To(true),
 						Schedule: ptr.To("0 2 * * *"),
 					},
 				},
 			},
 		}
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{
-				Backup: &enterprisev4.BackupConfig{Enabled: ptr.To(false)},
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
+				Backup: &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)},
 			},
 		}
 
@@ -672,19 +674,19 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 
 	t.Run("error when enabled true but no schedule after merge", func(t *testing.T) {
 		// Arrange
-		class := &enterprisev4.PostgresClusterClass{
+		class := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "standard"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: &enterprisev4.PostgresClusterClassConfig{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       &classInstances,
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
 				},
 			},
 		}
-		cluster := &enterprisev4.PostgresCluster{
-			Spec: enterprisev4.PostgresClusterSpec{
-				Backup: &enterprisev4.BackupConfig{Enabled: ptr.To(true)},
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
+				Backup: &platformv1alpha1.BackupConfig{Enabled: ptr.To(true)},
 			},
 		}
 
@@ -699,17 +701,17 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 
 	t.Run("no error when backup nil on both", func(t *testing.T) {
 		// Arrange
-		class := &enterprisev4.PostgresClusterClass{
+		class := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "standard"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
-				Config: &enterprisev4.PostgresClusterClassConfig{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
+				Config: &platformv1alpha1.PostgresClusterClassConfig{
 					Instances:       &classInstances,
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
 				},
 			},
 		}
-		cluster := &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{}}
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{}}
 
 		// Act
 		cfg := GetMergedConfig(class, cluster)
@@ -790,10 +792,10 @@ func TestBuildCNPGBackupConfiguration(t *testing.T) {
 	t.Run("builds complete config", func(t *testing.T) {
 		// Arrange
 		cfg := &MergedConfig{
-			CNPG: &enterprisev4.CNPGConfig{
-				Backup: &enterprisev4.CNPGBackupConfig{
+			CNPG: &platformv1alpha1.CNPGConfig{
+				Backup: &platformv1alpha1.CNPGBackupConfig{
 					Target: ptr.To("prefer-standby"),
-					VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{
+					VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
 						ClassName:              ptr.To("csi-snap"),
 						WalClassName:           ptr.To("csi-wal"),
 						SnapshotOwnerReference: ptr.To("cluster"),
@@ -823,9 +825,9 @@ func TestBuildCNPGBackupConfiguration(t *testing.T) {
 	t.Run("nil target omits target", func(t *testing.T) {
 		// Arrange
 		cfg := &MergedConfig{
-			CNPG: &enterprisev4.CNPGConfig{
-				Backup: &enterprisev4.CNPGBackupConfig{
-					VolumeSnapshot: &enterprisev4.CNPGVolumeSnapshotConfig{ClassName: ptr.To("snap")},
+			CNPG: &platformv1alpha1.CNPGConfig{
+				Backup: &platformv1alpha1.CNPGBackupConfig{
+					VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{ClassName: ptr.To("snap")},
 				},
 			},
 		}
@@ -973,10 +975,10 @@ func newTestMergedConfigBarman(schedule string) *MergedConfig {
 	return cfg
 }
 
-func newTestBarmanObjectStoreConfig() *enterprisev4.CNPGBarmanObjectStoreConfig {
-	return &enterprisev4.CNPGBarmanObjectStoreConfig{
+func newTestBarmanObjectStoreConfig() *platformv1alpha1.CNPGBarmanObjectStoreConfig {
+	return &platformv1alpha1.CNPGBarmanObjectStoreConfig{
 		DestinationPath: "s3://test-bucket/clusters/",
-		S3Credentials: enterprisev4.CNPGBarmanS3Credentials{
+		S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
 			AccessKeyId:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "s3-creds"}, Key: "accessKeyId"},
 			SecretAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "s3-creds"}, Key: "secretAccessKey"},
 		},

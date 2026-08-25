@@ -24,8 +24,8 @@ When changing this guide, read [`AGENTS.maintenance.md`](AGENTS.maintenance.md).
 
 ### Where code lives
 
-- **CRD API types**: `api/enterprise/<version>/` (current stable: `v4`)
-- **Controller / reconcile logic**: `internal/controller/`
+- **CRD API types**: `api/<group>/<version>/` (stable Enterprise: `enterprise/v4`; PostgreSQL: `platform/v1alpha1`)
+- **Controller / reconcile logic**: `internal/controller/<api-group>/` (Enterprise: `enterprise/`; PostgreSQL: `platform/`)
 - **Business logic**: `pkg/splunk/` (see `pkg/splunk/README.md`)
 - **Entry point**: `cmd/main.go`
 - **Manifests / RBAC / samples**: `config/`

@@ -146,26 +146,26 @@ resources:
     namespaced: true
   controller: true
   domain: splunk.com
-  group: enterprise
+  group: platform
   kind: PostgresCluster
-  path: github.com/splunk/splunk-operator/api/enterprise/v4
-  version: v4
+  path: github.com/splunk/splunk-operator/api/platform/v1alpha1
+  version: v1alpha1
 - api:
     crdVersion: v1
-    namespaced: true
+    namespaced: false
   controller: true
   domain: splunk.com
-  group: enterprise
+  group: platform
   kind: PostgresClusterClass
-  path: github.com/splunk/splunk-operator/api/enterprise/v4
-  version: v4
+  path: github.com/splunk/splunk-operator/api/platform/v1alpha1
+  version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
   domain: splunk.com
-  group: enterprise
+  group: platform
   kind: PostgresDatabase
-  path: github.com/splunk/splunk-operator/api/enterprise/v4
-  version: v4
+  path: github.com/splunk/splunk-operator/api/platform/v1alpha1
+  version: v1alpha1
 version: "3"

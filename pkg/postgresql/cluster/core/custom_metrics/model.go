@@ -23,7 +23,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 )
 
@@ -68,7 +68,7 @@ type run struct {
 // Desired-state failures return an Outcome; infrastructure failures return an error.
 func (m *Model) Reconcile(
 	ctx context.Context,
-	cluster *enterprisev4.PostgresCluster,
+	cluster *platformv1alpha1.PostgresCluster,
 	previous []mtypes.DatabaseAcknowledgement,
 ) (Outcome, error) {
 	r := &run{m: m, invalidContributors: map[string]acknowledgementFailure{}}

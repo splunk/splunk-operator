@@ -107,7 +107,7 @@ roles model and [ADR-0003](0003-cnpg-integration-and-drift-reconciliation.md)).
 
 ## References
 
-- Code: `api/enterprise/v4/postgresclusterclass_types.go`
+- Code: `api/platform/v1alpha1/postgresclusterclass_types.go`
   (`PostgresClusterClassSpec`, `PostgresClusterClassConfig`, `CNPGConfig`,
   immutability + cross-field CEL rules), `pkg/postgresql/cluster/core/cluster_model.go`
   (`GetMergedConfig`, `ValidateMergedConfig`, `ValidateCrossResource`)

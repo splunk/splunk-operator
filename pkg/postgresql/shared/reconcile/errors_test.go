@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-var conflictErr = apierrors.NewConflict(schema.GroupResource{Group: "enterprise.splunk.com", Resource: "postgresclusters"}, "my-cluster", fmt.Errorf("rv mismatch"))
+var conflictErr = apierrors.NewConflict(schema.GroupResource{Group: "platform.splunk.com", Resource: "postgresclusters"}, "my-cluster", fmt.Errorf("rv mismatch"))
 var errBusiness = fmt.Errorf("failed to fetch ClusterClass")
 
 func TestIsPureConflict(t *testing.T) {
