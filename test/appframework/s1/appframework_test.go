@@ -107,6 +107,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -235,6 +236,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -361,6 +363,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -506,6 +509,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -636,6 +640,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -750,6 +755,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -830,6 +836,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -987,6 +994,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1002,6 +1010,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1080,6 +1089,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1158,6 +1168,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1254,6 +1265,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1331,6 +1343,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1450,6 +1463,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1577,6 +1591,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1681,6 +1696,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1747,6 +1763,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1818,6 +1835,7 @@ var _ = Describe("s1appfw test", func() {
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 						Image:           testcaseEnvInst.GetSplunkImage(),
+						Resources:       testenv.AppFrameworkResources(),
 					},
 					Volumes: []corev1.Volume{},
 				},
