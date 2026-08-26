@@ -35,6 +35,7 @@ const (
 	SearchHeadClusterPausedAnnotation = "searchheadcluster.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="!has(self.noahClusterRef) || ((!has(self.clusterManagerRef) || !has(self.clusterManagerRef.name) || self.clusterManagerRef.name == \"\") && (!has(self.clusterMasterRef) || !has(self.clusterMasterRef.name) || self.clusterMasterRef.name == \"\"))",message="noahClusterRef is mutually exclusive with clusterManagerRef and clusterMasterRef"
 // SearchHeadClusterSpec defines the desired state of a Splunk Enterprise search head cluster
 type SearchHeadClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
@@ -43,6 +44,12 @@ type SearchHeadClusterSpec struct {
 	// +optional
 	// +kubebuilder:default=3
 	Replicas int32 `json:"replicas,omitempty"`
+
+	// NoahClusterRef selects the Noah configuration used by this SearchHeadCluster.
+	// The referenced NoahCluster must be in the same namespace.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="has(self.name) && self.name != ''",message="noahClusterRef.name must not be empty"
+	NoahClusterRef *corev1.LocalObjectReference `json:"noahClusterRef,omitempty"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
@@ -58,6 +65,11 @@ type SearchHeadClusterSpec struct {
 	// immediately against the already-running timer. Defaults to 3600 (1 hour).
 	// +optional
 	DetentionTimeoutSeconds int32 `json:"detentionTimeoutSeconds,omitempty"`
+}
+
+// NoahEnabled reports whether this spec contains a usable NoahCluster reference.
+func (s *SearchHeadClusterSpec) NoahEnabled() bool {
+	return s != nil && s.NoahClusterRef != nil && s.NoahClusterRef.Name != ""
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member

@@ -73,6 +73,7 @@ tools/cleanup-gcp-test-resources.sh
 tools/k8s_collectors/k8s-splunk-collector.sh
 api/enterprise/v4/clustermanager_types.go
 api/enterprise/v4/indexercluster_types.go
+api/enterprise/v4/searchheadcluster_types.go
 api/enterprise/v4/zz_generated.deepcopy.go
 api/enterprise/v4/common_types.go
 gitlab-ci/includes/release.yml

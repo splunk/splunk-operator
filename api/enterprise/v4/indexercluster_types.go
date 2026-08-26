@@ -35,6 +35,7 @@ const (
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.queueRef) == has(self.objectStorageRef)",message="queueRef and objectStorageRef must both be set or both be empty"
+// +kubebuilder:validation:XValidation:rule="!has(self.noahClusterRef) || ((!has(self.clusterManagerRef) || !has(self.clusterManagerRef.name) || self.clusterManagerRef.name == \"\") && (!has(self.clusterMasterRef) || !has(self.clusterMasterRef.name) || self.clusterMasterRef.name == \"\"))",message="noahClusterRef is mutually exclusive with clusterManagerRef and clusterMasterRef"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
@@ -49,6 +50,17 @@ type IndexerClusterSpec struct {
 
 	// Number of indexer cluster peers
 	Replicas int32 `json:"replicas"`
+
+	// NoahClusterRef selects the Noah configuration used by this IndexerCluster.
+	// The referenced NoahCluster must be in the same namespace.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="has(self.name) && self.name != ''",message="noahClusterRef.name must not be empty"
+	NoahClusterRef *corev1.LocalObjectReference `json:"noahClusterRef,omitempty"`
+}
+
+// NoahEnabled reports whether this spec contains a usable NoahCluster reference.
+func (s *IndexerClusterSpec) NoahEnabled() bool {
+	return s != nil && s.NoahClusterRef != nil && s.NoahClusterRef.Name != ""
 }
 
 // IndexerClusterMemberStatus is used to track the status of each indexer cluster peer.

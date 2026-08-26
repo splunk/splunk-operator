@@ -46,6 +46,16 @@ func TestValidateIndexerClusterCreate(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
+			name: "valid indexer cluster - Noah reference without cluster manager",
+			obj: &enterpriseApi.IndexerCluster{
+				Spec: enterpriseApi.IndexerClusterSpec{
+					NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+					Replicas:       3,
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
 			name: "invalid indexer cluster - zero replicas",
 			obj: &enterpriseApi.IndexerCluster{
 				Spec: enterpriseApi.IndexerClusterSpec{

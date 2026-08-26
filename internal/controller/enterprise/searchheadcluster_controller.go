@@ -166,6 +166,14 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 // ApplySearchHeadCluster adding to handle unit test case
 var ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+	if instance.Spec.NoahEnabled() {
+		return reconcile.Result{}, splcommon.NewTerminalError(
+			"NoahModeNotImplemented",
+			"Noah mode is selected, but Noah SearchHeadCluster reconciliation is not implemented",
+			nil,
+		)
+	}
+
 	return enterprise.ApplySearchHeadCluster(ctx, client, instance)
 }
 

@@ -262,6 +262,26 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 | Key      | Type    | Description                                                  |
 | -------- | ------- | ------------------------------------------------------------ |
 | replicas | integer | The number of search heads cluster members (minimum of 3, which is the default) |
+| noahClusterRef | [LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#localobjectreference-v1-core) | Selects Noah coordination by name. The referenced `NoahCluster` must be in the same namespace. This field is mutually exclusive with `clusterManagerRef` and the deprecated `clusterMasterRef`. |
+
+To select Noah coordination instead of the classic architecture:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: example
+spec:
+  replicas: 3
+  noahClusterRef:
+    name: noah
+```
+
+The presence of `noahClusterRef` selects Noah mode. An empty reference or a
+configuration that also names a Cluster Manager is rejected. The API contract
+is available before runtime Noah reconciliation; until that work is complete,
+the controller fails closed with `NoahModeNotImplemented` rather than falling
+back to the classic architecture.
 
 ### Search Head Deployer Resource
 
@@ -392,10 +412,29 @@ metadata:
   name: example
 spec:
   replicas: 3
-  clusterManagerRef: 
+  clusterManagerRef:
     name: example-cm
 ```
-Note:  `clusterManagerRef` is required field in case of IndexerCluster resource since it will be used to connect the IndexerCluster to ClusterManager resource.
+
+`clusterManagerRef` is required for a classic IndexerCluster. To select Noah
+coordination instead, omit the classic reference and set `noahClusterRef`:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+spec:
+  replicas: 3
+  noahClusterRef:
+    name: noah
+```
+
+`noahClusterRef` is a same-namespace reference and cannot be combined with
+`clusterManagerRef` or the deprecated `clusterMasterRef`. An empty reference is
+also rejected. The API contract is available before runtime Noah
+reconciliation; until that work is complete, the controller fails closed with
+`NoahModeNotImplemented` rather than falling back to the classic architecture.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
@@ -404,6 +443,7 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | Key        | Type    | Description                                           |
 | ---------- | ------- | ----------------------------------------------------- |
 | replicas   | integer | The number of indexer cluster members (minimum of 3, which is the default) |
+| noahClusterRef | [LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#localobjectreference-v1-core) | Selects Noah coordination by name. The referenced `NoahCluster` must be in the same namespace. |
 
 ## IngestorCluster Resource Spec Parameters
 
