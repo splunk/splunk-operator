@@ -765,6 +765,12 @@ For an empty ClusterManager reference (IndexerCluster):
 #### Pause Annotations
 The Splunk Operator controller reconciles every Splunk Enterprise CR. However, there might be circumstances wherein the influence of the Splunk Operator is not desired and needs to be paused. Every Splunk Enterprise CR has its own pause annotation associated with it, which when configured ensures that the Splunk Operator controller reconcile is paused for it. Below is a table listing the pause annotations:
 
+**What pausing affects:**
+When a CR is paused, the Splunk Operator returns before normal reconcile work after updating the `Paused` condition — no spec changes are applied, no scaling operations are performed, no app installs or upgrades are triggered, and no rolling restarts are initiated. The CR is requeued periodically, but only the pause/status check runs until the annotation is removed.
+
+**What pausing does not affect:**
+Pausing only suspends the Splunk Operator's reconcile loop for that CR. Standard Kubernetes components continue operating normally: the kubelet still enforces liveness, readiness, and startup probes and will restart containers that fail them; the StatefulSet controller still manages pod replacement if pods are deleted; and any other controllers (e.g. cert-manager, ingress) continue their own reconciliation. Pausing does not stop or freeze the running Splunk pods themselves.
+
 | Customer Resource Definition | Annotation |
 | ----------- | --------- |
 | queue.enterprise.splunk.com | "queue.enterprise.splunk.com/paused" |
@@ -780,7 +786,7 @@ The Splunk Operator controller reconciles every Splunk Enterprise CR. However, t
 
 `Note: Removal of the annotation resets the default behavior`
 
-Here is an example of a standalone with the pause annotation set. In this state, the Splunk Operator requeues the reconcillation without performing any reconcile operations unless the annotatation is removed.
+Here is an example of a standalone with the pause annotation set. In this state, the Splunk Operator requeues the reconciliation without performing any reconcile operations unless the annotation is removed.
 
 ```
 apiVersion: enterprise.splunk.com/v4
