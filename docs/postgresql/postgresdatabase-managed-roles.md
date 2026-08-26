@@ -81,9 +81,28 @@ status:
     - appdb_rw
     roleOwners:
       appdb_admin:
-        name: <postgresdatabase-name>
-        uid: <postgresdatabase-uid>
+	        name: <postgresdatabase-name>
+	        uid: <postgresdatabase-uid>
 ```
+
+## Managed Secret drift
+
+For operator-generated role Secrets, the operator creates credential data only
+for new databases. After a database has been provisioned, the operator does not
+regenerate or rewrite Secret data because the live PostgreSQL role and
+applications already depend on the existing password.
+
+If a previously provisioned generated Secret is deleted,
+`PostgresDatabase.status.conditions` reports `SecretsReady=False` with reason
+`ManagedSecretMissing`. Restore the Secret with the original credential data and
+the expected name from `status.databases[].adminUserSecretRef` or
+`status.databases[].rwUserSecretRef`.
+
+If the expected generated Secret exists but is controlled by another Kubernetes
+controller, `SecretsReady=False` reports reason
+`ManagedSecretOwnershipConflict`. Remove the conflicting controller owner or
+restore operator ownership so the `PostgresDatabase` can reconcile the Secret
+metadata without changing its data.
 
 ## Role ownership conflicts
 

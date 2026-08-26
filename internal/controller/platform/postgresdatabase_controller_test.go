@@ -49,6 +49,7 @@ import (
 // envtest can stay decoupled from the core package import.
 const (
 	dbEventRoleSecretsFailed     = "RoleSecretsFailed"
+	dbEventRolesSecretsDrift     = "RolesSecretsDriftDetected"
 	dbEventPostgresDatabaseReady = "PostgresDatabaseReady"
 )
 
@@ -71,6 +72,8 @@ const (
 	reasonClusterAvailable      = "ClusterAvailable"
 	reasonClusterProvisioning   = "ClusterProvisioning"
 	reasonExternalSecretMissing = "ExternalSecretMissing"
+	reasonManagedSecretMissing  = "ManagedSecretMissing"
+	reasonManagedSecretConflict = "ManagedSecretOwnershipConflict"
 	reasonSecretsCreated        = "SecretsCreated"
 	reasonConfigMapsCreated     = "ConfigMapsCreated"
 	reasonRolesAvailable        = "RolesAvailable"
@@ -1328,25 +1331,74 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterRWEndpoint, "tenant-rw."+scenario.namespace+".svc.cluster.local"))
 		})
 
-		It("does not recreate a deleted managed user secret", func() {
+		It("reports a deleted managed user secret distinctly without repeated warnings", func() {
 			scenario := newReadyClusterScenario(namespace, "secret-delete", "tenant-cluster", "tenant-cnpg", "appdb")
 			reconcilePostgresDatabaseToReady(ctx, scenario, false)
+			recorder := record.NewFakeRecorder(100)
 
 			secretName := fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName)
 			Expect(k8sClient.Delete(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: scenario.namespace},
 			})).To(Succeed())
 
-			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			result, err := reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
 			expectReconcileResult(result, err, 15*time.Second)
 
 			current := fetchPostgresDatabase(ctx, scenario.requestName)
 			expectStatusPhase(current, "Provisioning")
-			expectStatusCondition(current, "SecretsReady", metav1.ConditionFalse, "SecretsDriftDetected")
+			expectStatusCondition(current, "SecretsReady", metav1.ConditionFalse, reasonManagedSecretMissing)
+
+			received := make([]string, 0, 16)
+			collectEvents(&received, recorder)
+			Expect(containsEvent(received, corev1.EventTypeWarning, dbEventRolesSecretsDrift)).To(BeTrue(),
+				"missing managed Secret should emit one drift warning; events seen: %v", received)
+
+			result, err = reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+			expectReconcileResult(result, err, 15*time.Second)
+			received = received[:0]
+			collectEvents(&received, recorder)
+			Expect(containsEvent(received, corev1.EventTypeWarning, dbEventRolesSecretsDrift)).To(BeFalse(),
+				"same missing managed Secret reason must not emit duplicate warnings; events seen: %v", received)
 
 			missing := &corev1.Secret{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: scenario.namespace}, missing)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("reports a foreign-owned managed user secret distinctly without repeated warnings", func() {
+			scenario := newReadyClusterScenario(namespace, "secret-foreign-owner", "tenant-cluster", "tenant-cnpg", "appdb")
+			reconcilePostgresDatabaseToReady(ctx, scenario, false)
+			recorder := record.NewFakeRecorder(100)
+
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, secret)).To(Succeed())
+			secret.OwnerReferences = []metav1.OwnerReference{{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       "foreign-secret-controller",
+				UID:        types.UID("foreign-secret-controller"),
+				Controller: ptr.To(true),
+			}}
+			Expect(k8sClient.Update(ctx, secret)).To(Succeed())
+
+			result, err := reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+			expectReconcileResult(result, err, 15*time.Second)
+
+			current := fetchPostgresDatabase(ctx, scenario.requestName)
+			expectStatusPhase(current, "Provisioning")
+			expectStatusCondition(current, "SecretsReady", metav1.ConditionFalse, reasonManagedSecretConflict)
+
+			received := make([]string, 0, 16)
+			collectEvents(&received, recorder)
+			Expect(containsEvent(received, corev1.EventTypeWarning, dbEventRolesSecretsDrift)).To(BeTrue(),
+				"foreign-owned managed Secret should emit one drift warning; events seen: %v", received)
+
+			result, err = reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
+			expectReconcileResult(result, err, 15*time.Second)
+			received = received[:0]
+			collectEvents(&received, recorder)
+			Expect(containsEvent(received, corev1.EventTypeWarning, dbEventRolesSecretsDrift)).To(BeFalse(),
+				"same foreign-owner reason must not emit duplicate warnings; events seen: %v", received)
 		})
 
 		It("re-attaches ownership when a managed user secret loses its owner reference", func() {

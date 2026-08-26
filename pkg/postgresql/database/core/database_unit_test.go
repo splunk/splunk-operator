@@ -585,6 +585,56 @@ func TestSecretMissingPolicyForDB(t *testing.T) {
 	}
 }
 
+func TestChooseSecretErrorPrioritizesMissingSecrets(t *testing.T) {
+	externalMissingErr := secretReconcileError{
+		message: "external secret missing",
+		reason:  reasonExternalSecretMissing,
+	}
+	managedMissingErr := secretReconcileError{
+		message: "managed secret missing",
+		reason:  reasonManagedSecretMissing,
+	}
+	managedConflictErr := secretReconcileError{
+		message: "managed secret ownership conflict",
+		reason:  reasonManagedSecretOwnershipConflict,
+	}
+	externalInvalidErr := secretReconcileError{
+		message: "external secret invalid",
+		reason:  reasonExternalSecretMissingLabel,
+	}
+
+	tests := []struct {
+		name       string
+		err        error
+		wantReason conditionReasons
+	}{
+		{
+			name:       "external missing wins over managed missing",
+			err:        errors.Join(managedMissingErr, externalMissingErr),
+			wantReason: reasonExternalSecretMissing,
+		},
+		{
+			name:       "managed missing wins over earlier managed conflict",
+			err:        errors.Join(managedConflictErr, managedMissingErr),
+			wantReason: reasonManagedSecretMissing,
+		},
+		{
+			name:       "first non-missing secret error wins",
+			err:        errors.Join(managedConflictErr, externalInvalidErr),
+			wantReason: reasonManagedSecretOwnershipConflict,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := chooseSecretError(tt.err)
+
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantReason, got.reason)
+		})
+	}
+}
+
 func TestExistingDatabaseStatusDoesNotDependOnCurrentPhase(t *testing.T) {
 	for _, phase := range []string{
 		string(provisioningDBPhase),
@@ -1322,7 +1372,7 @@ func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpda
 
 	require.NoError(t, persistStatus(
 		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
-		secretsReady, metav1.ConditionFalse, reasonSecretsDriftDetected,
+		secretsReady, metav1.ConditionFalse, reasonManagedSecretMissing,
 		"managed role secret drift detected", provisioningDBPhase,
 	))
 	require.NotNil(t, db.Status.LastTransitionTime)
@@ -1880,7 +1930,7 @@ func TestEnsureSecret(t *testing.T) {
 		assert.Equal(t, wantOwnerUID, got.OwnerReferences[0].UID)
 	})
 
-	t.Run("returns drift error when a previously provisioned secret is missing", func(t *testing.T) {
+	t.Run("returns managed-secret-missing error when a previously provisioned secret is missing", func(t *testing.T) {
 		roleName := "payments_admin"
 		secretName := "primary-payments-admin"
 		c := testClient(t, scheme)
@@ -1890,8 +1940,9 @@ func TestEnsureSecret(t *testing.T) {
 		require.Error(t, err)
 		var driftErr secretReconcileError
 		require.ErrorAs(t, err, &driftErr)
-		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.Equal(t, reasonManagedSecretMissing, driftErr.reason)
 		assert.ErrorContains(t, err, secretName)
+		assert.ErrorContains(t, err, "restore the Secret with the original credential data")
 	})
 
 	t.Run("re-attaches owner reference when ownership was manually stripped", func(t *testing.T) {
@@ -1954,7 +2005,7 @@ func TestEnsureSecret(t *testing.T) {
 		assert.Equal(t, "existing-password", string(got.Data[secretKeyPassword]))
 	})
 
-	t.Run("returns drift error when secret is owned by a different controller", func(t *testing.T) {
+	t.Run("returns managed-secret-ownership-conflict error when secret is owned by a different controller", func(t *testing.T) {
 		roleName := "payments_admin"
 		secretName := "primary-payments-admin"
 		otherOwnerUID := types.UID("other-owner-uid")
@@ -1985,8 +2036,9 @@ func TestEnsureSecret(t *testing.T) {
 		require.Error(t, err)
 		var driftErr secretReconcileError
 		require.ErrorAs(t, err, &driftErr)
-		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.Equal(t, reasonManagedSecretOwnershipConflict, driftErr.reason)
 		assert.ErrorContains(t, err, secretName)
+		assert.ErrorContains(t, err, "remove the conflicting owner or restore operator ownership")
 	})
 }
 
@@ -2114,7 +2166,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 			require.Error(t, err)
 			var driftErr secretReconcileError
 			require.ErrorAs(t, err, &driftErr)
-			assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+			assert.Equal(t, reasonManagedSecretMissing, driftErr.reason)
 			assert.Error(t, c.Get(t.Context(), types.NamespacedName{
 				Name:      "primary-payments-admin",
 				Namespace: existing.Namespace,
@@ -3788,10 +3840,11 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantRepoCalls:       0,
 			wantConditionType:   secretsReady,
 			wantConditionStatus: metav1.ConditionFalse,
-			wantConditionReason: reasonSecretsDriftDetected,
+			wantConditionReason: reasonManagedSecretMissing,
 			wantConditionMessageContains: []string{
 				"Managed Secret primary-payments-rw is missing",
 				"previously provisioned role payments_rw",
+				"restore the Secret with the original credential data",
 			},
 		},
 		{
