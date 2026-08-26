@@ -58,7 +58,8 @@ func (e secretReconcileError) Error() string {
 	return e.message
 }
 
-// Unwraps and searches for reasonExternalSecretMissing in the err chain
+// chooseSecretError unwraps joined role-secret errors and returns the most
+// actionable typed error for condition/event handling.
 func chooseSecretError(err error) *secretReconcileError {
 	leaves := []error{err}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
@@ -66,6 +67,7 @@ func chooseSecretError(err error) *secretReconcileError {
 	}
 
 	var first *secretReconcileError
+	var managedMissing *secretReconcileError
 	for _, leaf := range leaves {
 		var se secretReconcileError
 		if !stderrors.As(leaf, &se) {
@@ -74,9 +76,15 @@ func chooseSecretError(err error) *secretReconcileError {
 		if se.reason == reasonExternalSecretMissing {
 			return &se
 		}
+		if se.reason == reasonManagedSecretMissing && managedMissing == nil {
+			managedMissing = &se
+		}
 		if first == nil {
 			first = &se
 		}
+	}
+	if managedMissing != nil {
+		return managedMissing
 	}
 	return first
 }
@@ -270,7 +278,18 @@ func PostgresDatabaseService(
 
 			// Use err.Error() (not secretErr.message) so a combined admin+RW
 			// failure surfaces both causes rather than just the first match.
-			rc.emitWarning(postgresDB, EventRolesSecretsDriftDetected, err.Error())
+			if isManagedSecretDriftReason(secretErr.reason) {
+				rc.emitWarnOnConditionReasonTransition(
+					postgresDB,
+					postgresDB.Status.Conditions,
+					secretsReady,
+					secretErr.reason,
+					EventRolesSecretsDriftDetected,
+					err.Error(),
+				)
+			} else {
+				rc.emitWarning(postgresDB, EventRolesSecretsDriftDetected, err.Error())
+			}
 			if statusErr := updateStatus(secretsReady, metav1.ConditionFalse, secretErr.reason,
 				err.Error(), provisioningDBPhase); statusErr != nil {
 				if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictSecretsStatus, "persisting secret drift status"); ok {
@@ -1298,11 +1317,15 @@ func ensureProvisionedSecret(ctx context.Context, c client.Client, scheme *runti
 	}
 	if secret == nil {
 		return secretReconcileError{
-			message: fmt.Sprintf("Managed Secret %s is missing for previously provisioned role %s", secretName, roleName),
-			reason:  reasonSecretsDriftDetected,
+			message: fmt.Sprintf("Managed Secret %s is missing for previously provisioned role %s; restore the Secret with the original credential data", secretName, roleName),
+			reason:  reasonManagedSecretMissing,
 		}
 	}
 	return reconcileExistingSecret(ctx, c, scheme, postgresDB, secretName, secret)
+}
+
+func isManagedSecretDriftReason(reason conditionReasons) bool {
+	return reason == reasonManagedSecretMissing || reason == reasonManagedSecretOwnershipConflict
 }
 
 // reconcileExistingSecret only reconciles ownership — it never rewrites secret data.
@@ -1327,8 +1350,8 @@ func reconcileExistingSecret(ctx context.Context, c client.Client, scheme *runti
 	default:
 		owner := metav1.GetControllerOf(secret)
 		return secretReconcileError{
-			message: fmt.Sprintf("Managed Secret %s is controlled by %s %s", secretName, owner.Kind, owner.Name),
-			reason:  reasonSecretsDriftDetected,
+			message: fmt.Sprintf("Managed Secret %s is controlled by %s %s; remove the conflicting owner or restore operator ownership", secretName, owner.Kind, owner.Name),
+			reason:  reasonManagedSecretOwnershipConflict,
 		}
 	}
 }
