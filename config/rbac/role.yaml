@@ -93,6 +93,7 @@ rules:
   - licensemanagers
   - licensemasters
   - monitoringconsoles
+  - noahclusters
   - objectstorages
   - postgresclusters
   - postgresdatabases
@@ -117,6 +118,7 @@ rules:
   - licensemanagers/finalizers
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
+  - noahclusters/finalizers
   - objectstorages/finalizers
   - postgresclusters/finalizers
   - postgresdatabases/finalizers
@@ -135,6 +137,7 @@ rules:
   - licensemanagers/status
   - licensemasters/status
   - monitoringconsoles/status
+  - noahclusters/status
   - objectstorages/status
   - postgresclusters/status
   - queues/status

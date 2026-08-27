@@ -19,4 +19,5 @@ resources:
 - enterprise_v4_postgresdatabase.yaml
 - enterprise_v4_postgresclusterclass_dev.yaml
 - enterprise_v4_postgrescluster_dev.yaml
+- enterprise_v4_noahcluster.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

@@ -312,6 +312,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "IngestorCluster")
 		os.Exit(1)
 	}
+	if err := (&enterpriseController.NoahClusterReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("noahcluster-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NoahCluster")
+		os.Exit(1)
+	}
 	if err = (&enterpriseController.TelemetryReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

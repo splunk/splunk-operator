@@ -1,0 +1,11 @@
+apiVersion: enterprise.splunk.com/v4
+kind: NoahCluster
+metadata:
+  name: noahcluster-sample
+spec:
+  authSecretRef:
+    name: noah-auth
+  endpoint: https://noah.noah.svc.cluster.local:8080
+  tenant: axolotl
+  cacheWarmScaleOutEnabled: true
+  cacheWarmScaleOutTimeoutSeconds: 3600
