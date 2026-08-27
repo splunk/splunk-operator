@@ -2,13 +2,41 @@ apiVersion: v1
 entries:
   splunk-enterprise:
   - apiVersion: v2
-    appVersion: 3.1.0
-    created: "2026-03-02T17:02:33.792511208Z"
+    appVersion: 3.1.1
+    created: "2026-08-27T11:12:50.981271291Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
       repository: file://splunk-operator/helm-chart/splunk-operator
-      version: 3.1.0
+      version: 3.1.1
+    description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
+    digest: 6c6133e646ae2c77d41ca7c4dcfdaee9cd2d8fb54a641f5363a7f36576615b7d
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: rlieberman@splunk.com
+      name: Raizel Lieberman
+    - email: patrykw@splunk.com
+      name: Patryk Wasielewski
+    - email: igorg@splunk.com
+      name: Igor Grzankowski
+    - email: kkoziol@splunk.com
+      name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
+    name: splunk-enterprise
+    type: application
+    urls:
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.1.1.tgz
+    version: 3.1.1
+  - apiVersion: v2
+    appVersion: 3.1.1
+    created: "2026-08-27T11:12:50.979674819Z"
+    dependencies:
+    - condition: splunk-operator.enabled
+      name: splunk-operator
+      repository: file://splunk-operator/helm-chart/splunk-operator
+      version: 3.1.1
     description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
     digest: 0d46b934f78a270b2c9bbacb9f442855f125069800d0a1373eb5f21c54e7fc71
     maintainers:
@@ -27,16 +55,16 @@ entries:
     name: splunk-enterprise
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.1.0.tgz
-    version: 3.1.0
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.1.1.tgz
+    version: 3.1.1
   - apiVersion: v2
-    appVersion: 3.1.0
-    created: "2026-03-02T17:02:33.790868581Z"
+    appVersion: 3.0.0
+    created: "2026-08-27T11:12:50.978072097Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
       repository: file://splunk-operator/helm-chart/splunk-operator
-      version: 3.1.0
+      version: 3.0.0
     description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
     digest: ae82f6c8edee4d827817fe6c9c6447c422a03c59595a0f6e779cef847a83b611
     maintainers:
@@ -53,11 +81,11 @@ entries:
     name: splunk-enterprise
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.1.0.tgz
-    version: 3.1.0
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-3.0.0.tgz
+    version: 3.0.0
   - apiVersion: v2
     appVersion: 2.8.1
-    created: "2026-03-02T17:02:33.789329656Z"
+    created: "2026-08-27T11:12:50.976546472Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -83,7 +111,7 @@ entries:
     version: 2.8.1
   - apiVersion: v2
     appVersion: 2.8.0
-    created: "2026-03-02T17:02:33.662536676Z"
+    created: "2026-08-27T11:12:50.85464094Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -109,7 +137,7 @@ entries:
     version: 2.8.0
   - apiVersion: v2
     appVersion: 2.7.1
-    created: "2026-03-02T17:02:33.545630663Z"
+    created: "2026-08-27T11:12:50.743727322Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -129,7 +157,7 @@ entries:
     version: 2.7.1
   - apiVersion: v2
     appVersion: 2.7.0
-    created: "2026-03-02T17:02:33.445887993Z"
+    created: "2026-08-27T11:12:50.635345463Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -149,7 +177,7 @@ entries:
     version: 2.7.0
   - apiVersion: v2
     appVersion: 2.6.1
-    created: "2026-03-02T17:02:33.3512571Z"
+    created: "2026-08-27T11:12:50.541272769Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -169,7 +197,7 @@ entries:
     version: 2.6.1
   - apiVersion: v2
     appVersion: 2.6.0
-    created: "2026-03-02T17:02:33.269317261Z"
+    created: "2026-08-27T11:12:50.461917234Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -189,7 +217,7 @@ entries:
     version: 2.6.0
   - apiVersion: v2
     appVersion: 2.5.2
-    created: "2026-03-02T17:02:33.194397443Z"
+    created: "2026-08-27T11:12:50.390945107Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -209,7 +237,7 @@ entries:
     version: 2.5.2
   - apiVersion: v2
     appVersion: 2.5.1
-    created: "2026-03-02T17:02:33.134609444Z"
+    created: "2026-08-27T11:12:50.334463083Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -229,7 +257,7 @@ entries:
     version: 2.5.1
   - apiVersion: v2
     appVersion: 2.5.0
-    created: "2026-03-02T17:02:33.086146067Z"
+    created: "2026-08-27T11:12:50.288887064Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -249,7 +277,7 @@ entries:
     version: 2.5.0
   - apiVersion: v2
     appVersion: 2.4.0
-    created: "2026-03-02T17:02:33.051149616Z"
+    created: "2026-08-27T11:12:50.254358541Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -271,7 +299,7 @@ entries:
     version: 2.4.0
   - apiVersion: v2
     appVersion: 2.3.0
-    created: "2026-03-02T17:02:33.025752831Z"
+    created: "2026-08-27T11:12:50.23056476Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -293,7 +321,7 @@ entries:
     version: 2.3.0
   - apiVersion: v2
     appVersion: 2.2.1
-    created: "2026-03-02T17:02:33.007581506Z"
+    created: "2026-08-27T11:12:50.216720375Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -308,7 +336,7 @@ entries:
     version: 2.2.1
   - apiVersion: v2
     appVersion: 2.2.0
-    created: "2026-03-02T17:02:32.995121764Z"
+    created: "2026-08-27T11:12:50.204608431Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -323,7 +351,7 @@ entries:
     version: 2.2.0
   - apiVersion: v2
     appVersion: 2.1.0
-    created: "2026-03-02T17:02:32.973107102Z"
+    created: "2026-08-27T11:12:50.183733883Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -338,8 +366,31 @@ entries:
     version: 1.0.0
   splunk-operator:
   - apiVersion: v2
-    appVersion: 3.1.0
-    created: "2026-03-02T17:02:33.969044304Z"
+    appVersion: 3.1.1
+    created: "2026-08-27T11:12:51.159981487Z"
+    description: A Helm chart for the Splunk Operator for Kubernetes
+    digest: 092ca37f30693d5f78d61810fd34d65f26b376dd371ad3370f7b760f0eceec2c
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: rlieberman@splunk.com
+      name: Raizel Lieberman
+    - email: patrykw@splunk.com
+      name: Patryk Wasielewski
+    - email: igorg@splunk.com
+      name: Igor Grzankowski
+    - email: kkoziol@splunk.com
+      name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
+    name: splunk-operator
+    type: application
+    urls:
+    - https://splunk.github.io/splunk-operator/splunk-operator-3.1.1.tgz
+    version: 3.1.1
+  - apiVersion: v2
+    appVersion: 3.1.1
+    created: "2026-08-27T11:12:51.159337859Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: c71c1a7fe495c1122c1b0b1b689a366f759107950130c6fcf1f0c453e5d57efd
     maintainers:
@@ -358,11 +409,11 @@ entries:
     name: splunk-operator
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-operator-3.1.0.tgz
-    version: 3.1.0
+    - https://splunk.github.io/splunk-operator/splunk-operator-3.1.1.tgz
+    version: 3.1.1
   - apiVersion: v2
-    appVersion: 3.1.0
-    created: "2026-03-02T17:02:33.968391479Z"
+    appVersion: 3.0.0
+    created: "2026-08-27T11:12:51.15804922Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: bd318b1f4022421a3fd429b186ca344c61d04a3c2bbdd5cc535d960773558e44
     maintainers:
@@ -379,11 +430,11 @@ entries:
     name: splunk-operator
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-operator-3.1.0.tgz
-    version: 3.1.0
+    - https://splunk.github.io/splunk-operator/splunk-operator-3.0.0.tgz
+    version: 3.0.0
   - apiVersion: v2
     appVersion: 2.8.1
-    created: "2026-03-02T17:02:33.967789812Z"
+    created: "2026-08-27T11:12:51.157266983Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 4284102253d08121c3f2680c2aa4c47bfb61145f6ac3014e2a1b65d31af29d9f
     maintainers:
@@ -404,7 +455,7 @@ entries:
     version: 2.8.1
   - apiVersion: v2
     appVersion: 2.8.0
-    created: "2026-03-02T17:02:33.954221181Z"
+    created: "2026-08-27T11:12:51.143437821Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 3d8d66a7324be4c6dc232e52ea4c7bd68964a5d785d9b4a6cc0e2b2440dab75b
     maintainers:
@@ -425,7 +476,7 @@ entries:
     version: 2.8.0
   - apiVersion: v2
     appVersion: 2.7.1
-    created: "2026-03-02T17:02:33.941495057Z"
+    created: "2026-08-27T11:12:51.130229206Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 5b94b043cb3e458384ced226aef0392cec03beef37ad8a752b21dec95ce20fd3
     maintainers:
@@ -440,7 +491,7 @@ entries:
     version: 2.7.1
   - apiVersion: v2
     appVersion: 2.7.0
-    created: "2026-03-02T17:02:33.929484177Z"
+    created: "2026-08-27T11:12:51.11659685Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: e0862798c88960774bcdcd62f05aa54f43eef0d6d6bcb09737e2e59b137f7cb5
     maintainers:
@@ -455,7 +506,7 @@ entries:
     version: 2.7.0
   - apiVersion: v2
     appVersion: 2.6.1
-    created: "2026-03-02T17:02:33.917905507Z"
+    created: "2026-08-27T11:12:51.103477385Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 05e12835582cd201dafe3e9db06854f31115235e030efbc627c571dd25f87c8d
     maintainers:
@@ -470,7 +521,7 @@ entries:
     version: 2.6.1
   - apiVersion: v2
     appVersion: 2.6.0
-    created: "2026-03-02T17:02:33.903831521Z"
+    created: "2026-08-27T11:12:51.090296988Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: b6dcfa4ed9de85817d7a84fa83aeb573b80c64136b80f9c6089a88d4f6efafff
     maintainers:
@@ -485,7 +536,7 @@ entries:
     version: 2.6.0
   - apiVersion: v2
     appVersion: 2.5.2
-    created: "2026-03-02T17:02:33.892044738Z"
+    created: "2026-08-27T11:12:51.078187378Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 7ab3e92f9f9f0a964294b95bf32066edb1b6d5375cd59099c9525f3ca733327a
     maintainers:
@@ -500,7 +551,7 @@ entries:
     version: 2.5.2
   - apiVersion: v2
     appVersion: 2.5.1
-    created: "2026-03-02T17:02:33.87798084Z"
+    created: "2026-08-27T11:12:51.065013246Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 5c90889e175bbfc79cbb7f83bf213de43a46c4d688574d04ff82aa16dcd8681a
     maintainers:
@@ -515,7 +566,7 @@ entries:
     version: 2.5.1
   - apiVersion: v2
     appVersion: 2.5.0
-    created: "2026-03-02T17:02:33.864313549Z"
+    created: "2026-08-27T11:12:51.053157808Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: ed93f8fac421f92cfdbfd043ec27911a07ec7db2c05b4efc3137cef4f2bfca4a
     maintainers:
@@ -530,7 +581,7 @@ entries:
     version: 2.5.0
   - apiVersion: v2
     appVersion: 2.4.0
-    created: "2026-03-02T17:02:33.850420374Z"
+    created: "2026-08-27T11:12:51.040292866Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 9d0377747e46df4bf4b9dbd447c9ff46c926bfe2c66fd07d6d27a61abb31cb42
     maintainers:
@@ -547,7 +598,7 @@ entries:
     version: 2.4.0
   - apiVersion: v2
     appVersion: 2.3.0
-    created: "2026-03-02T17:02:33.838462207Z"
+    created: "2026-08-27T11:12:51.028769277Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 23e70ec4059bc92920d7d3adce3bff6b8aba0d5eb5d4c0efe225bf3b88d5b274
     maintainers:
@@ -564,7 +615,7 @@ entries:
     version: 2.3.0
   - apiVersion: v2
     appVersion: 2.2.1
-    created: "2026-03-02T17:02:33.825570552Z"
+    created: "2026-08-27T11:12:51.017242354Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 8868b9ae2ebde0c667b13c97d71d904a31b5a9f2c803b199bc77324f1727e1fd
     name: splunk-operator
@@ -574,7 +625,7 @@ entries:
     version: 2.2.1
   - apiVersion: v2
     appVersion: 2.2.0
-    created: "2026-03-02T17:02:33.813952086Z"
+    created: "2026-08-27T11:12:51.003858266Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 49c72276bd7ff93465b0545d8b0814f684cade7d2cd191b6d73d4c3660bd1fb4
     name: splunk-operator
@@ -584,7 +635,7 @@ entries:
     version: 2.2.0
   - apiVersion: v2
     appVersion: 2.1.0
-    created: "2026-03-02T17:02:33.802785198Z"
+    created: "2026-08-27T11:12:50.991192699Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: 34e5463f8f5442655d05cb616b50391b738a0827b30d8440b4c7fce99a291d9a
     name: splunk-operator
@@ -592,4 +643,4 @@ entries:
     urls:
     - https://splunk.github.io/splunk-operator/splunk-operator-1.0.0.tgz
     version: 1.0.0
-generated: "2026-03-02T17:02:32.96108692Z"
+generated: "2026-08-27T11:12:50.172000584Z"
