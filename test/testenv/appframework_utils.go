@@ -11,7 +11,6 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	wait "k8s.io/apimachinery/pkg/util/wait"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
@@ -417,25 +416,32 @@ func (testenvInstance *TestCaseEnv) GetAppDeploymentInfo(ctx context.Context, de
 
 }
 
-// AppFrameworkResources returns pod resource requirements sized for app-framework
-// installs. Installing an app forces a splunkd restart; while splunkd is
-// restarting its management port is down and the exec liveness probe (curl to
-// :8089, timeout 30s, failureThreshold 3) has only ~90s of tolerance. With the
-// operator's default 100m CPU request, a large-app restart on a CPU-contended
-// node (observed on the graviton lane) outlasts that window, so kubelet SIGKILLs
-// the container mid-install, the install rolls back, and the CR never reaches
-// Ready. A larger guaranteed CPU request keeps the restart inside the liveness
-// window; limits are left at the operator defaults.
-func AppFrameworkResources() corev1.ResourceRequirements {
-	return corev1.ResourceRequirements{
-		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("1"),
-			corev1.ResourceMemory: resource.MustParse("2Gi"),
-		},
-		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("4"),
-			corev1.ResourceMemory: resource.MustParse("8Gi"),
-		},
+// AppFrameworkLivenessProbe returns a liveness probe tolerant of the splunkd
+// restart that installing an app forces. During that restart splunkd's
+// management port is down and the exec liveness probe (curl to :8089) fails; the
+// operator default (timeout 30s, period 30s, failureThreshold 3) allows only
+// ~90s before kubelet SIGKILLs the container. A large app such as Enterprise
+// Security restarts for several minutes on slower (graviton) nodes, so the
+// default kills it mid-install, the install rolls back, and the CR never reaches
+// Ready. A higher failureThreshold (~10 min) keeps the container alive through
+// the restart while staying under the test node timeout.
+func AppFrameworkLivenessProbe() *enterpriseApi.Probe {
+	return &enterpriseApi.Probe{
+		InitialDelaySeconds: 30,
+		TimeoutSeconds:      30,
+		PeriodSeconds:       30,
+		FailureThreshold:    20,
+	}
+}
+
+// AppFrameworkStartupProbe returns a startup probe tolerant of a slow initial
+// splunkd boot on slower (graviton) nodes, matching AppFrameworkLivenessProbe.
+func AppFrameworkStartupProbe() *enterpriseApi.Probe {
+	return &enterpriseApi.Probe{
+		InitialDelaySeconds: 40,
+		TimeoutSeconds:      30,
+		PeriodSeconds:       30,
+		FailureThreshold:    20,
 	}
 }
 
