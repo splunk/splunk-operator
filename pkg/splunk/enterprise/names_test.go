@@ -18,6 +18,7 @@ package enterprise
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -101,6 +102,33 @@ func TestGetSplunkStatefulsetUrls(t *testing.T) {
 		"splunktest", SplunkSearchHead, "t1", 3, true)
 	test("splunk-t2-indexer-0.splunk-t2-indexer-headless.splunktest.svc.cluster.local,splunk-t2-indexer-1.splunk-t2-indexer-headless.splunktest.svc.cluster.local,splunk-t2-indexer-2.splunk-t2-indexer-headless.splunktest.svc.cluster.local,splunk-t2-indexer-3.splunk-t2-indexer-headless.splunktest.svc.cluster.local",
 		"splunktest", SplunkIndexer, "t2", 4, false)
+}
+
+func TestRedactSplunkAuthRedactsRawAndShellQuotedPassword(t *testing.T) {
+	adminPwd := "a'b"
+	cmd := "raw=" + adminPwd + " quoted=" + shellQuote(adminPwd)
+
+	redacted := redactSplunkAuth(cmd, adminPwd)
+
+	if strings.Contains(redacted, adminPwd) {
+		t.Errorf("redacted command contains raw password: %s", redacted)
+	}
+	if strings.Contains(redacted, shellQuote(adminPwd)) {
+		t.Errorf("redacted command contains shell-quoted password: %s", redacted)
+	}
+	if strings.Count(redacted, "****") != 2 {
+		t.Errorf("redacted command = %s; want both password forms redacted", redacted)
+	}
+}
+
+func TestRedactSplunkAuthPreservesCommandWithEmptyPassword(t *testing.T) {
+	cmd := "splunk list app"
+
+	redacted := redactSplunkAuth(cmd, "")
+
+	if redacted != cmd {
+		t.Errorf("redactSplunkAuth() = %s; want %s", redacted, cmd)
+	}
 }
 
 func TestGetSplunkImage(t *testing.T) {

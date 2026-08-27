@@ -35,6 +35,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 )
 
 // ApplyLicenseMaster reconciles the state for the Splunk Enterprise license manager.
@@ -166,7 +167,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
-			err := addTelApp(ctx, podExecClient, numberOfLicenseMasterReplicas, cr)
+			err := telapp.AddTelApp(ctx, podExecClient, numberOfLicenseMasterReplicas, cr)
 			if err != nil {
 				return result, err
 			}
