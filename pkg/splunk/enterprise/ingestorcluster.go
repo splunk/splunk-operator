@@ -31,6 +31,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -295,7 +296,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
-			err = addTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
+			err = telapp.AddTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err

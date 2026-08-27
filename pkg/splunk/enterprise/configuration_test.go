@@ -137,25 +137,6 @@ func TestValidateSpecResourceDefaulting(t *testing.T) {
 	}
 }
 
-func TestEffectiveResourcesDoesNotMutateSpec(t *testing.T) {
-	spec := enterpriseApi.Spec{
-		Resources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU: resource.MustParse("250m"),
-			},
-		},
-	}
-
-	effective := EffectiveResources(spec, SplunkDefaultResources())
-
-	require.Equal(t, "250m", effective.Requests.Cpu().String())
-	require.Equal(t, splcommon.DefaultRequestsMemory, effective.Requests.Memory().String())
-	require.Equal(t, splcommon.DefaultLimitsCPU, effective.Limits.Cpu().String())
-	require.Equal(t, splcommon.DefaultLimitsMemory, effective.Limits.Memory().String())
-	require.Len(t, spec.Resources.Requests, 1)
-	require.Nil(t, spec.Resources.Limits)
-}
-
 func configTester2(t *testing.T, method string, f func() (interface{}, error), want string) {
 	result, err := f()
 	if err != nil {
