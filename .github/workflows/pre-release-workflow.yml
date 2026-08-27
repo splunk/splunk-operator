@@ -15,12 +15,6 @@ on:
       new_operator_version:
         description: 'NEW OPERATOR VERSION'
         required: true
-      old_operator_image_version:
-        description: 'OLD OPERATOR IMAGE VERSION'
-        required: true
-      new_operator_image_version:
-        description: 'NEW OPERATOR IMAGE VERSION'
-        required: true
       old_enterprise_version:
         description: 'OLD ENTERPRISE IMAGE VERSION'
         required: true
@@ -35,10 +29,6 @@ jobs:
       contents: write
       pull-requests: write
     runs-on: ubuntu-latest
-    if:
-      contains('
-        refs/heads/develop
-        ', github.ref)
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
@@ -243,7 +233,7 @@ jobs:
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v3.10.1
       with:
-        branch: "release/${{ github.event.inputs.release_version }}"
+        branch: "release/${{ github.event.inputs.release_version }}-ver-update"
         title: "Splunk Operator ${{ github.event.inputs.release_version }} release"
         reviewers: "${{ steps.dotenv.outputs.REVIEWERS }}"
         body: |
