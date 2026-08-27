@@ -16,8 +16,8 @@ if [[ -z "${ECR_REPOSITORY}" ]]; then
 fi
 
 if [[ -z "${EKS_CLUSTER_K8_VERSION}" ]]; then
-  echo "EKS_CLUSTER_K8_VERSION not set. Changing to 1.26"
-  export EKS_CLUSTER_K8_VERSION="1.26"
+  echo "EKS_CLUSTER_K8_VERSION not set. Changing to 1.36"
+  export EKS_CLUSTER_K8_VERSION="1.36"
 fi
 
 # Wait for the aws-ebs-csi-driver addon to leave CREATING/UPDATING state before
