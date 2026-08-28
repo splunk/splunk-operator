@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,8 +30,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
 
 func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) {
@@ -80,6 +80,21 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 		Name:      statefulSet.Name,
 		Namespace: statefulSet.Namespace,
 	}, created))
+	for key, value := range created.Spec.Selector.MatchLabels {
+		assert.Equal(t, value, created.Spec.Template.Labels[key])
+	}
+	for _, headless := range []bool{true, false} {
+		service := &corev1.Service{}
+		require.NoError(t, client.Get(ctx, types.NamespacedName{
+			Name:      splcommon.GetSplunkServiceName(SplunkIndexer, cr.Name, headless),
+			Namespace: cr.Namespace,
+		}, service))
+		assert.Equal(t, created.Spec.Selector.MatchLabels, service.Spec.Selector)
+		assert.Equal(t, headless, service.Spec.PublishNotReadyAddresses)
+		if headless {
+			assert.Equal(t, created.Spec.ServiceName, service.Name)
+		}
+	}
 
 	var defaultsConfigMapName string
 	for _, volume := range created.Spec.Template.Spec.Volumes {

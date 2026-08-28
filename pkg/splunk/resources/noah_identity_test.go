@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
@@ -89,6 +90,7 @@ func TestWithNoahPodIdentity_PreservesAdvertisedHostAcrossPodReplacement(t *test
 		identity := noahAdvertisedHost(t, statefulSet, original)
 		assert.Equal(t, identity, noahAdvertisedHost(t, statefulSet, replacement))
 		assert.Equal(t, fmt.Sprintf("%s.%s.%s.svc.corp.example", podName, statefulSet.Spec.ServiceName, namespace), identity)
+		assert.Empty(t, validation.IsDNS1123Subdomain(identity))
 		identities = append(identities, identity)
 	}
 
