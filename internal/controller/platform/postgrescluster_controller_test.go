@@ -612,7 +612,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			It("drives the pg_upgrade major-version workflow and observes one readiness duration", func() {
 				targetVersion := "16"
 				initialImage := fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", postgresVersion)
-				targetImage := fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", targetVersion)
+				targetImage := "registry.example.com/team/postgresql:16-bookworm@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 				// Use the backup-enabled class so the upgrade gate creates a CNPG
 				// Backup that matches the target Cluster's VolumeSnapshot config.
@@ -650,6 +650,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				pc.Spec.PostgresVersion = ptr.To(targetVersion)
+				pc.Spec.PostgresImage = ptr.To(targetImage)
+				pc.Spec.ImagePullSecrets = []v1.LocalObjectReference{{Name: "target-registry-creds"}}
 				pc.Spec.PostgresMajorUpgradeConfig = &platformv1alpha1.PostgresMajorUpgradeConfig{
 					Allow:    ptr.To(true),
 					Strategy: &[]string{mvutypes.MajorUpgradeFlowPgUpgrade}[0],
@@ -696,6 +698,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				Expect(cnpg.Spec.ImageName).To(Equal(targetImage))
+				Expect(cnpg.Spec.ImagePullSecrets).To(Equal([]cnpgv1.LocalObjectReference{{Name: "target-registry-creds"}}))
 				Expect(currentMajorUpgradePhase(ctx, pgClusterKey)).To(Equal(string(mvutypes.Upgrading)))
 
 				cnpg.Status.Phase = cnpgv1.PhaseMajorUpgrade

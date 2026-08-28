@@ -321,6 +321,31 @@ spec:
                           When omitted it is treated as true (see poolerReadWriteWanted).
                         type: boolean
                     type: object
+                  imagePullSecrets:
+                    description: |-
+                      ImagePullSecrets references Secrets in the same namespace used by CNPG to
+                      pull the PostgreSQL image. A PostgresCluster.spec.imagePullSecrets override
+                      takes precedence.
+                    items:
+                      description: |-
+                        LocalObjectReference contains enough information to let you locate the
+                        referenced object inside the same namespace.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type: array
+                    x-kubernetes-validations:
+                    - message: imagePullSecrets.name must not be empty
+                      rule: self.all(x, has(x.name) && x.name.size() > 0)
                   instances:
                     default: 1
                     description: |-
@@ -360,6 +385,33 @@ spec:
                     items:
                       type: string
                     type: array
+                  postgresImage:
+                    description: |-
+                      PostgresImage sets the default CNPG PostgreSQL image for clusters using
+                      this class. A PostgresCluster.spec.postgresImage override takes
+                      precedence. The image must include a tag whose leading PostgreSQL major
+                      version matches the effective postgresVersion. The "latest" tag and
+                      digest-only references are rejected; tag-plus-digest references are
+                      supported.
+                    type: string
+                    x-kubernetes-validations:
+                    - message: postgresImage must be an image reference, not a URL
+                      rule: '!self.contains(''://'')'
+                    - message: postgresImage must not contain whitespace
+                      rule: '!self.matches(''.*[ \t\r\n].*'')'
+                    - message: postgresImage must include a tag; digest-only references
+                        are not supported
+                      rule: self.split('@')[0].split('/')[self.split('@')[0].split('/').size()
+                        - 1].contains(':')
+                    - message: postgresImage must not use the latest tag
+                      rule: self.split('@')[0].split(':')[self.split('@')[0].split(':').size()
+                        - 1] != 'latest'
+                    - message: postgresImage tag is not a valid image tag
+                      rule: self.split('@')[0].split(':')[self.split('@')[0].split(':').size()
+                        - 1].matches('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
+                    - message: postgresImage digest is not a valid OCI digest
+                      rule: self.split('@').size() <= 2 && (!self.contains('@') ||
+                        self.split('@')[1].matches('^[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[0-9A-Fa-f]{32,}$'))
                   postgresVersion:
                     default: "18"
                     description: |-

@@ -490,6 +490,33 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 		"held provisioner must still publish CurrentPgVersion as an observability projection")
 }
 
+func TestClusterModelHoldsMajorVersionUpgradeForImageTagVariants(t *testing.T) {
+	t.Parallel()
+
+	requestedVersion := "18"
+	targetImage := "registry.example.com/team/postgresql:18-bookworm"
+	cluster := &platformv1alpha1.PostgresCluster{
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: ptr.To(true)},
+		},
+	}
+	model := &clusterModel{
+		cluster: cluster,
+		mergedConfig: &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{
+			PostgresVersion: &requestedVersion,
+			PostgresImage:   &targetImage,
+		}},
+	}
+
+	health, blocked := model.majorVersionDriftBlock(&cnpgv1.Cluster{
+		Spec: cnpgv1.ClusterSpec{ImageName: "registry.example.com/team/postgresql:17-bookworm"},
+	})
+
+	require.True(t, blocked)
+	assert.Equal(t, reasonMajorUpgradePending, health.Reason)
+	assert.Equal(t, "Major version upgrade from 17-bookworm to 18 is allowed; holding the CNPG image until the major upgrade workflow takes ownership.", health.Message)
+}
+
 func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 	t.Parallel()
 
@@ -669,11 +696,15 @@ func TestGetMergedConfig(t *testing.T) {
 	t.Run("cluster spec overrides class defaults", func(t *testing.T) {
 		overrideInstances := int32(5)
 		overrideVersion := "18"
+		overrideImage := "registry.example.com/team/postgresql:18.2"
+		overridePullSecrets := []corev1.LocalObjectReference{{Name: "cluster-registry-creds"}}
 		overrideStorage := resource.MustParse("100Gi")
 		cluster := &platformv1alpha1.PostgresCluster{
 			Spec: platformv1alpha1.PostgresClusterSpec{
 				Instances:        &overrideInstances,
 				PostgresVersion:  &overrideVersion,
+				PostgresImage:    &overrideImage,
+				ImagePullSecrets: overridePullSecrets,
 				Storage:          &overrideStorage,
 				PostgreSQLConfig: map[string]string{"max_connections": "200"},
 				PgHBA:            []string{"hostssl all all 0.0.0.0/0 scram-sha-256"},
@@ -685,12 +716,22 @@ func TestGetMergedConfig(t *testing.T) {
 		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
 		assert.Equal(t, int32(5), *cfg.Spec.Instances)
 		assert.Equal(t, "18", *cfg.Spec.PostgresVersion)
+		assert.Equal(t, overrideImage, *cfg.Spec.PostgresImage)
+		assert.Equal(t, overridePullSecrets, cfg.Spec.ImagePullSecrets)
 		assert.Equal(t, "100Gi", cfg.Spec.Storage.String())
 		assert.Equal(t, "200", cfg.Spec.PostgreSQLConfig["max_connections"])
 		assert.Equal(t, "hostssl all all 0.0.0.0/0 scram-sha-256", cfg.Spec.PgHBA[0])
 	})
 
 	t.Run("class defaults fill in nil cluster fields", func(t *testing.T) {
+		classImage := "registry.example.com/platform/postgresql:17.4"
+		classPullSecrets := []corev1.LocalObjectReference{{Name: "class-registry-creds"}}
+		baseClass.Spec.Config.PostgresImage = &classImage
+		baseClass.Spec.Config.ImagePullSecrets = classPullSecrets
+		t.Cleanup(func() {
+			baseClass.Spec.Config.PostgresImage = nil
+			baseClass.Spec.Config.ImagePullSecrets = nil
+		})
 		cluster := &platformv1alpha1.PostgresCluster{
 			Spec: platformv1alpha1.PostgresClusterSpec{},
 		}
@@ -700,8 +741,54 @@ func TestGetMergedConfig(t *testing.T) {
 		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
 		assert.Equal(t, int32(1), *cfg.Spec.Instances)
 		assert.Equal(t, "17", *cfg.Spec.PostgresVersion)
+		assert.Equal(t, classImage, *cfg.Spec.PostgresImage)
+		assert.Equal(t, classPullSecrets, cfg.Spec.ImagePullSecrets)
 		assert.Equal(t, "50Gi", cfg.Spec.Storage.String())
 		assert.Equal(t, "128MB", cfg.Spec.PostgreSQLConfig["shared_buffers"])
+	})
+
+	t.Run("explicit empty cluster image pull secrets clear class default", func(t *testing.T) {
+		classPullSecrets := []corev1.LocalObjectReference{{Name: "class-registry-creds"}}
+		baseClass.Spec.Config.ImagePullSecrets = classPullSecrets
+		t.Cleanup(func() { baseClass.Spec.Config.ImagePullSecrets = nil })
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
+				ImagePullSecrets: []corev1.LocalObjectReference{},
+			},
+		}
+
+		cfg := GetMergedConfig(baseClass, cluster)
+
+		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
+		assert.NotNil(t, cfg.Spec.ImagePullSecrets)
+		assert.Empty(t, cfg.Spec.ImagePullSecrets)
+	})
+
+	t.Run("empty cluster postgres image inherits class default", func(t *testing.T) {
+		classImage := "registry.example.com/platform/postgresql:17.4"
+		emptyImage := "  "
+		baseClass.Spec.Config.PostgresImage = &classImage
+		t.Cleanup(func() { baseClass.Spec.Config.PostgresImage = nil })
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{PostgresImage: &emptyImage},
+		}
+
+		cfg := GetMergedConfig(baseClass, cluster)
+
+		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
+		assert.Equal(t, classImage, *cfg.Spec.PostgresImage)
+	})
+
+	t.Run("merged postgres image does not alias cluster spec pointer", func(t *testing.T) {
+		image := "registry.example.com/team/postgresql:17.4"
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{PostgresImage: &image},
+		}
+
+		cfg := GetMergedConfig(baseClass, cluster)
+		*cfg.Spec.PostgresImage = "registry.example.com/team/postgresql:17.5"
+
+		assert.Equal(t, image, *cluster.Spec.PostgresImage)
 	})
 
 	t.Run("returns error when required fields missing from both", func(t *testing.T) {
@@ -829,6 +916,65 @@ func TestGetMergedConfig(t *testing.T) {
 
 		require.Empty(t, errs)
 	})
+
+	t.Run("rejects invalid postgres image references", func(t *testing.T) {
+		tests := []struct {
+			name  string
+			image string
+			want  string
+		}{
+			{name: "url", image: "https://registry.example.com/team/postgresql:17.5", want: "not a URL"},
+			{name: "empty name", image: ":17.5", want: "valid image reference"},
+			{name: "double slash", image: "registry.example.com//postgresql:17.5", want: "valid image reference"},
+			{name: "empty digest", image: "registry.example.com/team/postgresql:17.5@", want: "digest suffix must not be empty"},
+			{name: "invalid digest", image: "registry.example.com/team/postgresql:17.5@sha256:nothex", want: "valid image reference"},
+			{name: "invalid sha512 digest length", image: "registry.example.com/team/postgresql:17.5@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", want: "valid image reference"},
+			{name: "uppercase repository", image: "registry.example.com/team/PostgreSQL:17.5", want: "valid image reference"},
+			{name: "invalid tag", image: "registry.example.com/team/postgresql:17+5", want: "valid image reference"},
+			{name: "missing tag", image: "registry.example.com/team/postgresql", want: "must include a tag"},
+			{name: "digest only", image: "registry.example.com/team/postgresql@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", want: "must include a tag"},
+			{name: "latest", image: "registry.example.com/team/postgresql:latest", want: "latest"},
+			{name: "tag does not start with major", image: "registry.example.com/team/postgresql:v17", want: "must start with the PostgreSQL major"},
+			{name: "major mismatch", image: "registry.example.com/team/postgresql:16.8", want: "must match postgresVersion major version 17"},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{PostgresImage: &tt.image}}
+				cfg := GetMergedConfig(baseClass, cluster)
+
+				errs := ValidateMergedConfig(cfg, baseClass.Name)
+
+				require.NotEmpty(t, errs)
+				assert.Equal(t, "spec.postgresImage", errs[0].Field)
+				assert.Contains(t, errs[0].Error(), tt.want)
+			})
+		}
+	})
+
+	t.Run("accepts tag plus digest postgres image", func(t *testing.T) {
+		image := "registry.example.com/team/postgresql:17.5@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{PostgresImage: &image}}
+
+		cfg := GetMergedConfig(baseClass, cluster)
+
+		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
+		assert.Equal(t, image, *cfg.Spec.PostgresImage)
+	})
+
+	t.Run("rejects image pull secret without name", func(t *testing.T) {
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
+				ImagePullSecrets: []corev1.LocalObjectReference{{}},
+			},
+		}
+
+		cfg := GetMergedConfig(baseClass, cluster)
+		errs := ValidateMergedConfig(cfg, baseClass.Name)
+
+		require.NotEmpty(t, errs)
+		assert.Equal(t, "spec.imagePullSecrets[0].name", errs[0].Field)
+		assert.Contains(t, errs[0].Error(), "must not be empty")
+	})
 }
 
 func TestBuildCNPGClusterSpec(t *testing.T) {
@@ -876,6 +1022,27 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 	assert.Equal(t, "host replication all 10.0.0.0/8 md5", spec.PostgresConfiguration.PgHBA[1])
 	require.NotNil(t, spec.InheritedMetadata)
 	assert.Empty(t, spec.InheritedMetadata.Annotations)
+
+	t.Run("uses explicit postgres image when configured", func(t *testing.T) {
+		image := "registry.example.com/team/postgresql:18.1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		specCopy := *cfg.Spec
+		specCopy.PostgresImage = &image
+		imageCfg := MergedConfig{Spec: &specCopy, CNPG: cfg.CNPG}
+
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, &imageCfg, "c1", "my-secret", false)
+
+		assert.Equal(t, image, spec.ImageName)
+	})
+
+	t.Run("passes image pull secrets through to CNPG", func(t *testing.T) {
+		specCopy := *cfg.Spec
+		specCopy.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "registry-creds"}}
+		pullCfg := MergedConfig{Spec: &specCopy, CNPG: cfg.CNPG}
+
+		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, &pullCfg, "c1", "my-secret", false)
+
+		assert.Equal(t, []cnpgv1.LocalObjectReference{{Name: "registry-creds"}}, spec.ImagePullSecrets)
+	})
 
 	t.Run("adds postgres scrape annotations when enabled", func(t *testing.T) {
 		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "my-secret", true)
@@ -1147,17 +1314,32 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 			},
 		},
 		{
-			name: "image digest suffix stripped for drift detection",
+			name: "image digest suffix is preserved during normalization",
 			spec: cnpgv1.ClusterSpec{
 				ImageName:            "ghcr.io/cloudnative-pg/postgresql:18@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				Instances:            1,
 				StorageConfiguration: cnpgv1.StorageConfiguration{Size: "10Gi"},
 			},
 			expected: normalizedCNPGClusterSpec{
-				ImageName:           "ghcr.io/cloudnative-pg/postgresql:18",
+				ImageName:           "ghcr.io/cloudnative-pg/postgresql:18@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				Instances:           1,
 				PrimaryUpdateMethod: "",
 				StorageSize:         "10Gi",
+			},
+		},
+		{
+			name: "image pull secrets are copied",
+			spec: cnpgv1.ClusterSpec{
+				ImageName:           "ghcr.io/cloudnative-pg/postgresql:18",
+				ImagePullSecrets:    []cnpgv1.LocalObjectReference{{Name: "registry-creds"}},
+				Instances:           1,
+				PrimaryUpdateMethod: cnpgv1.PrimaryUpdateMethodRestart,
+			},
+			expected: normalizedCNPGClusterSpec{
+				ImageName:           "ghcr.io/cloudnative-pg/postgresql:18",
+				ImagePullSecrets:    []corev1.LocalObjectReference{{Name: "registry-creds"}},
+				Instances:           1,
+				PrimaryUpdateMethod: string(cnpgv1.PrimaryUpdateMethodRestart),
 			},
 		},
 		{
@@ -1904,6 +2086,20 @@ func TestIsClusterDrift(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "image pull secret change IS material",
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "registry-creds"}}
+			},
+			want: true,
+		},
+		{
+			name: "digest-qualified current image for tag-only desired image IS material",
+			mutate: func(s *normalizedCNPGClusterSpec) {
+				s.ImageName = "ghcr.io/cloudnative-pg/postgresql:17@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			},
+			want: true,
+		},
+		{
 			name: "instance scale IS material",
 			mutate: func(s *normalizedCNPGClusterSpec) {
 				s.Instances = 5
@@ -1950,6 +2146,32 @@ func TestIsClusterDrift(t *testing.T) {
 				"isClusterDrift result mismatch; every normalized field is material EXCEPT InheritedAnnotations")
 		})
 	}
+
+	t.Run("pinned-to-unpinned desired spec image is material drift", func(t *testing.T) {
+		desired := clone(base)
+		current := clone(base)
+		current.ImageName = "ghcr.io/cloudnative-pg/postgresql:17@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+		assert.True(t, isAnyClusterSpecDrift(desired, current))
+	})
+
+	t.Run("override deletion falling back to same tag is material drift when current spec is digest pinned", func(t *testing.T) {
+		desired := clone(base)
+		current := clone(base)
+		desired.ImageName = "registry.example.com/team/postgresql:17"
+		current.ImageName = "registry.example.com/team/postgresql:17@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+		assert.True(t, isClusterDrift(desired, current))
+	})
+
+	t.Run("different digest on explicit tag-plus-digest desired image IS material", func(t *testing.T) {
+		a := clone(base)
+		b := clone(base)
+		a.ImageName = "ghcr.io/cloudnative-pg/postgresql:17@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		b.ImageName = "ghcr.io/cloudnative-pg/postgresql:17@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+		assert.True(t, isClusterDrift(a, b))
+	})
 
 	t.Run("does not mutate caller's specs", func(t *testing.T) {
 		a := clone(base)
@@ -2674,6 +2896,16 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 			pgDataImage:   "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			expectedState: pgcConstants.Ready,
 			expectRequeue: false,
+		},
+		{
+			name:          "explicit digest mismatch + Healthy holds at Provisioning",
+			patchKind:     cnpgPatchNone,
+			cnpgPhase:     cnpgv1.PhaseHealthy,
+			specImage:     "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			statusImage:   "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			pgDataImage:   "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			expectedState: pgcConstants.Provisioning,
+			expectRequeue: true,
 		},
 	}
 

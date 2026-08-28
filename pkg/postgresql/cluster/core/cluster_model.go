@@ -33,6 +33,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	cnpgpostgres "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
+	"github.com/distribution/reference"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
@@ -174,16 +175,16 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		return nil
 	}
 
-	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec)
 	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec)
-	specDrift := !equality.Semantic.DeepEqual(currentNormalized, desiredNormalized)
+	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec)
+	specDrift := isAnyClusterSpecDrift(desiredNormalized, currentNormalized)
 	updateMessage := fmt.Sprintf("CNPG cluster spec updated for PostgresCluster %s, waiting for healthy state", p.cluster.Name)
 	needsUpdateEvent := false
 
 	if specDrift {
 		originalCluster := p.cnpgCluster.DeepCopy()
 		patchKind := cnpgPatchMetadata
-		if isClusterDrift(currentNormalized, desiredNormalized) {
+		if isClusterDrift(desiredNormalized, currentNormalized) {
 			patchKind = cnpgPatchBody
 		}
 		p.cnpgCluster.Spec = desiredSpec
@@ -335,7 +336,7 @@ func (p *clusterModel) majorVersionDriftBlock(existingCNPG *cnpgv1.Cluster) (com
 		return componentHealth{}, false
 	}
 
-	currentMajor, _ := parseVersion(currentVersion)
+	currentMajor := leadingMajor(currentVersion)
 	requestedMajor, _ := parseVersion(*p.mergedConfig.Spec.PostgresVersion)
 	if currentMajor <= 0 || requestedMajor <= 0 || currentMajor == requestedMajor {
 		return componentHealth{}, false
@@ -414,6 +415,9 @@ func (p *clusterModel) storageResizeInProgress() (pending, total int, resizing b
 // Returns the merged config without validation — call ValidateMergedConfig separately.
 func GetMergedConfig(class *platformv1alpha1.PostgresClusterClass, cluster *platformv1alpha1.PostgresCluster) *MergedConfig {
 	result := cluster.Spec.DeepCopy()
+	if result.PostgresImage != nil && strings.TrimSpace(*result.PostgresImage) == "" {
+		result.PostgresImage = nil
+	}
 
 	// Config is optional on the class — apply defaults only when provided.
 	if defaults := class.Spec.Config; defaults != nil {
@@ -422,6 +426,12 @@ func GetMergedConfig(class *platformv1alpha1.PostgresClusterClass, cluster *plat
 		}
 		if result.PostgresVersion == nil {
 			result.PostgresVersion = defaults.PostgresVersion
+		}
+		if result.PostgresImage == nil {
+			result.PostgresImage = defaults.PostgresImage
+		}
+		if cluster.Spec.ImagePullSecrets == nil {
+			result.ImagePullSecrets = defaults.ImagePullSecrets
 		}
 		if result.Resources == nil {
 			result.Resources = defaults.Resources
@@ -694,8 +704,113 @@ func ValidateMergedConfig(merged *MergedConfig, className string) []ConfigValida
 	if err := validatePostgreSQLConfigNoCNPGFixedKeys(merged.Spec.PostgreSQLConfig); err != nil {
 		errs = append(errs, ConfigValidationError{Field: "spec.postgresqlConfig", Message: err.Error()})
 	}
+	errs = append(errs, ValidatePostgresImage(merged.Spec.PostgresImage, merged.Spec.PostgresVersion, "spec.postgresImage")...)
+	errs = append(errs, validateImagePullSecrets(merged.Spec.ImagePullSecrets, "spec.imagePullSecrets")...)
 
 	return errs
+}
+
+func validateImagePullSecrets(refs []corev1.LocalObjectReference, fieldName string) []ConfigValidationError {
+	var errs []ConfigValidationError
+	for i, ref := range refs {
+		if ref.Name == "" {
+			errs = append(errs, ConfigValidationError{
+				Field:   fmt.Sprintf("%s[%d].name", fieldName, i),
+				Message: "imagePullSecrets.name must not be empty",
+			})
+		}
+	}
+	return errs
+}
+
+// ValidatePostgresImage enforces the image policy shared by admission and
+// reconcile fallback: explicit images must be tagged, cannot use latest or a
+// digest-only reference, and the tag's leading major version must match the
+// effective postgresVersion.
+func ValidatePostgresImage(postgresImage, postgresVersion *string, fieldName string) []ConfigValidationError {
+	if postgresImage == nil || *postgresImage == "" {
+		return nil
+	}
+	image := strings.TrimSpace(*postgresImage)
+	if image != *postgresImage || strings.ContainsAny(image, " \t\r\n") {
+		return []ConfigValidationError{{
+			Field:   fieldName,
+			Value:   *postgresImage,
+			Message: "postgresImage must be a valid image reference without whitespace",
+		}}
+	}
+	ref, err := parsePostgresImageReference(image)
+	if err != nil {
+		return []ConfigValidationError{{
+			Field:   fieldName,
+			Value:   *postgresImage,
+			Message: err.Error(),
+		}}
+	}
+	if ref.tag == "latest" {
+		return []ConfigValidationError{{
+			Field:   fieldName,
+			Value:   *postgresImage,
+			Message: "postgresImage must not use the latest tag",
+		}}
+	}
+	if postgresVersion == nil {
+		return nil
+	}
+	imageMajor := leadingMajor(ref.tag)
+	versionMajor, _ := parseVersion(*postgresVersion)
+	if imageMajor <= 0 {
+		return []ConfigValidationError{{
+			Field:   fieldName,
+			Value:   *postgresImage,
+			Message: "postgresImage tag must start with the PostgreSQL major version",
+		}}
+	}
+	if versionMajor > 0 && imageMajor != versionMajor {
+		return []ConfigValidationError{{
+			Field:   fieldName,
+			Value:   *postgresImage,
+			Message: fmt.Sprintf("postgresImage tag major version %d must match postgresVersion major version %d", imageMajor, versionMajor),
+		}}
+	}
+	return nil
+}
+
+type postgresImageReference struct {
+	tag string
+}
+
+func parsePostgresImageReference(image string) (postgresImageReference, error) {
+	if strings.Contains(image, "://") {
+		return postgresImageReference{}, fmt.Errorf("postgresImage must be an image reference, not a URL")
+	}
+	if strings.Contains(image, "@") {
+		_, digest, _ := strings.Cut(image, "@")
+		if digest == "" {
+			return postgresImageReference{}, fmt.Errorf("postgresImage digest suffix must not be empty")
+		}
+	}
+	named, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return postgresImageReference{}, fmt.Errorf("postgresImage must be a valid image reference: %w", err)
+	}
+	tagged, ok := named.(reference.NamedTagged)
+	if !ok {
+		return postgresImageReference{}, fmt.Errorf("postgresImage must include a tag; digest-only references are not supported")
+	}
+	return postgresImageReference{tag: tagged.Tag()}, nil
+}
+
+func leadingMajor(tag string) int {
+	end := 0
+	for end < len(tag) && tag[end] >= '0' && tag[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0
+	}
+	major, _ := strconv.Atoi(tag[:end])
+	return major
 }
 
 // validatePostgreSQLConfigNoCNPGFixedKeys rejects postgresqlConfig keys that CloudNativePG
@@ -725,7 +840,8 @@ func validatePostgreSQLConfigNoCNPGFixedKeys(params map[string]string) error {
 // Operator-controlled invariants (e.g. SuperuserSecret, EnableSuperuserAccess) are exempt — they
 // are always the same value and are never exposed in the PostgresCluster CRD.
 func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, clusterName, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
-	live.ImageName = clusterCnpg.PostgresImageName(*specCfg.Spec.PostgresVersion)
+	live.ImageName = EffectivePostgresImage(specCfg)
+	live.ImagePullSecrets = EffectiveCNPGImagePullSecrets(specCfg)
 	live.Instances = int(*specCfg.Spec.Instances)
 	live.PostgresConfiguration = cnpgv1.PostgresConfiguration{
 		Parameters: maps.Clone(specCfg.Spec.PostgreSQLConfig),
@@ -776,6 +892,24 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, cluste
 	}
 	live.ExternalClusters = append(filteredExt, buildRecoveryExternalClusters(specCfg, clusterName)...)
 	return live
+}
+
+func EffectivePostgresImage(cfg *MergedConfig) string {
+	if cfg != nil && cfg.Spec != nil && cfg.Spec.PostgresImage != nil && strings.TrimSpace(*cfg.Spec.PostgresImage) != "" {
+		return *cfg.Spec.PostgresImage
+	}
+	return clusterCnpg.PostgresImageName(*cfg.Spec.PostgresVersion)
+}
+
+func EffectiveCNPGImagePullSecrets(cfg *MergedConfig) []cnpgv1.LocalObjectReference {
+	if cfg == nil || cfg.Spec == nil || len(cfg.Spec.ImagePullSecrets) == 0 {
+		return nil
+	}
+	out := make([]cnpgv1.LocalObjectReference, 0, len(cfg.Spec.ImagePullSecrets))
+	for _, ref := range cfg.Spec.ImagePullSecrets {
+		out = append(out, cnpgv1.LocalObjectReference{Name: ref.Name})
+	}
+	return out
 }
 
 func buildCNPGPlugins(cfg *MergedConfig, clusterName string) []cnpgv1.PluginConfiguration {
@@ -1010,7 +1144,8 @@ func buildCNPGCluster(scheme *runtime.Scheme, cluster *platformv1alpha1.Postgres
 
 func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec {
 	normalized := normalizedCNPGClusterSpec{
-		ImageName:           stripImageRefForDrift(spec.ImageName),
+		ImageName:           strings.TrimSpace(spec.ImageName),
+		ImagePullSecrets:    coreImagePullSecrets(spec.ImagePullSecrets),
 		Instances:           spec.Instances,
 		PrimaryUpdateMethod: string(spec.PrimaryUpdateMethod),
 		StorageSize:         spec.StorageConfiguration.Size,
@@ -1065,6 +1200,17 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec
 	return normalized
 }
 
+func coreImagePullSecrets(refs []cnpgv1.LocalObjectReference) []corev1.LocalObjectReference {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]corev1.LocalObjectReference, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, corev1.LocalObjectReference{Name: ref.Name})
+	}
+	return out
+}
+
 // normalizeRecovery captures the operator-owned recovery wiring so it participates in drift
 // detection while bootstrap is in progress. It records recovery.source, the synthesized "origin"
 // externalCluster (matched by recoveryExternalClusterName), and the recovery target. CNPG consumes
@@ -1101,8 +1247,8 @@ func normalizeRecovery(rec *cnpgv1.BootstrapRecovery, externalClusters []cnpgv1.
 	return nr
 }
 
-// stripImageRefForDrift trims whitespace and strips an OCI digest suffix (@sha256:… / @…)
-// so drift detection matches tag-only desired images against apiserver materialized refs.
+// stripImageRefForDrift trims whitespace and strips an OCI digest suffix (@sha256:... / @...)
+// so tag-only desired images match registry-resolved refs with an appended digest.
 func stripImageRefForDrift(name string) string {
 	name = strings.TrimSpace(name)
 	if i := strings.Index(name, "@"); i >= 0 {
@@ -1129,27 +1275,43 @@ func (k cnpgPatchKind) requiresPhaseGate() bool { return k == cnpgPatchBody }
 // imageUpdateInProgress reports whether CNPG has applied the requested image
 // to both the running pods and the data directory.
 func imageUpdateInProgress(cluster *cnpgv1.Cluster) bool {
-	specImage := stripImageRefForDrift(cluster.Spec.ImageName)
+	specImage := strings.TrimSpace(cluster.Spec.ImageName)
 	if specImage == "" {
 		return false
 	}
-	statusImage := stripImageRefForDrift(cluster.Status.Image)
-	if statusImage != "" && specImage != statusImage {
+	statusImage := strings.TrimSpace(cluster.Status.Image)
+	if statusImage != "" && !imageRefsEquivalentForDrift(specImage, statusImage) {
 		return true
 	}
 	if cluster.Status.PGDataImageInfo == nil {
 		return false
 	}
-	dataImage := stripImageRefForDrift(cluster.Status.PGDataImageInfo.Image)
-	return dataImage != "" && specImage != dataImage
+	dataImage := strings.TrimSpace(cluster.Status.PGDataImageInfo.Image)
+	return dataImage != "" && !imageRefsEquivalentForDrift(specImage, dataImage)
+}
+
+func isAnyClusterSpecDrift(desired, current normalizedCNPGClusterSpec) bool {
+	return !equality.Semantic.DeepEqual(desired, current)
 }
 
 // isClusterDrift reports whether two normalized specs differ in any field CNPG
 // must observably reconcile against. InheritedAnnotations is excluded (metadata-only).
-func isClusterDrift(a, b normalizedCNPGClusterSpec) bool {
-	a.InheritedAnnotations = nil
-	b.InheritedAnnotations = nil
-	return !equality.Semantic.DeepEqual(a, b)
+func isClusterDrift(desired, current normalizedCNPGClusterSpec) bool {
+	desired.InheritedAnnotations = nil
+	current.InheritedAnnotations = nil
+	return isAnyClusterSpecDrift(desired, current)
+}
+
+func imageRefsEquivalentForDrift(desired, current string) bool {
+	desired = strings.TrimSpace(desired)
+	current = strings.TrimSpace(current)
+	if desired == current {
+		return true
+	}
+	if strings.Contains(desired, "@") {
+		return false
+	}
+	return desired == stripImageRefForDrift(current)
 }
 
 func getServerAltDNSNames(cnpg *cnpgv1.Cluster) []string {

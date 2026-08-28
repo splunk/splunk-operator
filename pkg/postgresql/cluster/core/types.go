@@ -67,6 +67,7 @@ type UseCaseRegistryProvider func(types.NamespacedName, *platformv1alpha1.Postgr
 // to avoid false-positive drift on every reconcile.
 type normalizedCNPGClusterSpec struct {
 	ImageName            string
+	ImagePullSecrets     []corev1.LocalObjectReference
 	Instances            int
 	PrimaryUpdateMethod  string
 	PgHBA                []string

@@ -78,6 +78,28 @@ type PostgresClusterClassConfig struct {
 	// +optional
 	PostgresVersion *string `json:"postgresVersion,omitempty"`
 
+	// PostgresImage sets the default CNPG PostgreSQL image for clusters using
+	// this class. A PostgresCluster.spec.postgresImage override takes
+	// precedence. The image must include a tag whose leading PostgreSQL major
+	// version matches the effective postgresVersion. The "latest" tag and
+	// digest-only references are rejected; tag-plus-digest references are
+	// supported.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!self.contains('://')",message="postgresImage must be an image reference, not a URL"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('.*[ \\t\\r\\n].*')",message="postgresImage must not contain whitespace"
+	// +kubebuilder:validation:XValidation:rule="self.split('@')[0].split('/')[self.split('@')[0].split('/').size() - 1].contains(':')",message="postgresImage must include a tag; digest-only references are not supported"
+	// +kubebuilder:validation:XValidation:rule="self.split('@')[0].split(':')[self.split('@')[0].split(':').size() - 1] != 'latest'",message="postgresImage must not use the latest tag"
+	// +kubebuilder:validation:XValidation:rule="self.split('@')[0].split(':')[self.split('@')[0].split(':').size() - 1].matches('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')",message="postgresImage tag is not a valid image tag"
+	// +kubebuilder:validation:XValidation:rule="self.split('@').size() <= 2 && (!self.contains('@') || self.split('@')[1].matches('^[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[0-9A-Fa-f]{32,}$'))",message="postgresImage digest is not a valid OCI digest"
+	PostgresImage *string `json:"postgresImage,omitempty"`
+
+	// ImagePullSecrets references Secrets in the same namespace used by CNPG to
+	// pull the PostgreSQL image. A PostgresCluster.spec.imagePullSecrets override
+	// takes precedence.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self.all(x, has(x.name) && x.name.size() > 0)",message="imagePullSecrets.name must not be empty"
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
 	// Resources defines CPU and memory requests/limits per instance.
 	// All instances in the cluster have the same resources.
 	// +optional

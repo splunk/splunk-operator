@@ -21,7 +21,7 @@ import (
 
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
-	hba "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	core "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 )
 
 // ValidatePostgresClusterClassCreate validates a PostgresClusterClass on CREATE.
@@ -38,12 +38,19 @@ func ValidatePostgresClusterClassCreate(obj *platformApi.PostgresClusterClass) f
 
 	if obj.Spec.Config != nil && len(obj.Spec.Config.PgHBA) > 0 {
 		pgHBAPath := field.NewPath("spec").Child("config").Child("pgHBA")
-		for _, re := range hba.ValidateRules(obj.Spec.Config.PgHBA) {
+		for _, re := range core.ValidateRules(obj.Spec.Config.PgHBA) {
 			allErrs = append(allErrs, field.Invalid(
 				pgHBAPath.Index(re.Index),
 				obj.Spec.Config.PgHBA[re.Index],
 				re.Message))
 		}
+	}
+	if obj.Spec.Config != nil {
+		allErrs = append(allErrs, toFieldErrors(core.ValidatePostgresImage(
+			obj.Spec.Config.PostgresImage,
+			obj.Spec.Config.PostgresVersion,
+			"spec.config.postgresImage",
+		))...)
 	}
 
 	return allErrs

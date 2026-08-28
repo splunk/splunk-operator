@@ -28,6 +28,9 @@ metadata:
 spec:
   class: postgresql-prod
   postgresVersion: "16"
+  # If postgresImage is set on this cluster or inherited from the class, update
+  # it in the same change so it points at the target PostgreSQL major version.
+  # postgresImage: registry.example.com/team/postgresql:16
   postgresMajorUpgradeConfig:
     allow: true
 ```
@@ -92,6 +95,9 @@ metadata:
 spec:
   class: postgresql-prod
   postgresVersion: "16"
+  # If postgresImage is set on this cluster or inherited from the class, update
+  # it in the same change so it points at the target PostgreSQL major version.
+  # postgresImage: registry.example.com/team/postgresql:16
   postgresMajorUpgradeConfig:
     allow: true
 ```

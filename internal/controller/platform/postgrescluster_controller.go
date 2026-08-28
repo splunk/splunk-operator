@@ -135,7 +135,15 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 
 		stateStore := clusterk8s.NewClusterStateStore(r.Client, key)
 		infoStore := majorupgradeadapter.NewMajorUpgradeStateStoreWithTarget(stateStore, targetVersion)
-		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion)
+		targetImage := ""
+		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.PostgresVersion != nil {
+			targetImage = clustercore.EffectivePostgresImage(mergedConfig)
+		}
+		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion).
+			WithImageForVersion(func(string) (string, error) {
+				return targetImage, nil
+			}).
+			WithImagePullSecrets(clustercore.EffectiveCNPGImagePullSecrets(mergedConfig))
 
 		var notifier *majorupgradeadapter.UpgradeNotifier
 		if cluster != nil {

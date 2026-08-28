@@ -1,5 +1,5 @@
 # Sample PostgresCluster using Postgres-dev ClusterClass with overriding defaults
-# This sample demonstrates how to override default values from the ClusterClass "postgresql-dev" (see enterprise_v4_clusterclass_dev.yaml) in a PostgresCluster manifest.
+# This sample demonstrates how to override default values from the ClusterClass "postgresql-dev" (see platform_v1alpha1_postgresclusterclass_dev.yaml) in a PostgresCluster manifest.
 # Overrides include changing storage, changing PostgreSQL version, and modifying resources.
 apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
@@ -17,6 +17,11 @@ spec:
   # Storage and PostgreSQL version are overridden from the ClusterClass defaults. Validation rules on the PostgresCluster resource will prevent removing these fields or setting them to lower values than the original overrides.
   storage: 20Gi
   postgresVersion: "18.0"
+  # To use a CNPG-compatible image from a private registry, set postgresImage and
+  # reference any required pull secret in the same namespace.
+  # postgresImage: registry.example.com/team/postgresql:18.0
+  # imagePullSecrets:
+  #   - name: registry-creds
   resources:
     requests:
       cpu: "250m"

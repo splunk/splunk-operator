@@ -22,11 +22,27 @@ That version can be defined in either field:
 - `PostgresCluster.spec.postgresVersion`
 
 If both are set, the `PostgresCluster` value is the effective override used for that cluster.
+The CNPG image defaults to `ghcr.io/cloudnative-pg/postgresql:<effective postgresVersion>`. To use
+a private registry, custom CNPG-compatible build, or pinned digest, set
+`PostgresClusterClass.spec.config.postgresImage` or `PostgresCluster.spec.postgresImage`; the
+cluster-level value takes precedence. Explicit images must include a non-`latest` tag whose leading
+PostgreSQL major version matches the effective `postgresVersion`. Digest-only references are
+rejected, while tag-plus-digest references are supported. For private registries, set
+`PostgresClusterClass.spec.config.imagePullSecrets` or `PostgresCluster.spec.imagePullSecrets`;
+the cluster-level value takes precedence and is passed through to CNPG.
 
 In practice:
 
 - use `PostgresClusterClass.spec.config.postgresVersion` to define the default version for new clusters created from that class
 - use `PostgresCluster.spec.postgresVersion` to change the version of an existing cluster through its manifest
+- use `postgresImage` only when you need to override the generated CNPG PostgreSQL image while
+  keeping `postgresVersion` as the lifecycle-policy source of truth
+- use `imagePullSecrets` with `postgresImage` when the target registry requires pull credentials
+
+If `postgresImage` is set on the cluster or inherited from the class, changing
+only `postgresVersion` does not change the desired CNPG image. Update
+`postgresImage` in the same manifest change so it points at the image for the
+target PostgreSQL version.
 
 When that field changes:
 

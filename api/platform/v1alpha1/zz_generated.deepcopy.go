@@ -729,6 +729,16 @@ func (in *PostgresClusterClassConfig) DeepCopyInto(out *PostgresClusterClassConf
 		*out = new(string)
 		**out = **in
 	}
+	if in.PostgresImage != nil {
+		in, out := &in.PostgresImage, &out.PostgresImage
+		*out = new(string)
+		**out = **in
+	}
+	if in.ImagePullSecrets != nil {
+		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
+		*out = make([]v1.LocalObjectReference, len(*in))
+		copy(*out, *in)
+	}
 	if in.Resources != nil {
 		in, out := &in.Resources, &out.Resources
 		*out = new(v1.ResourceRequirements)
@@ -963,6 +973,16 @@ func (in *PostgresClusterSpec) DeepCopyInto(out *PostgresClusterSpec) {
 		in, out := &in.PostgresVersion, &out.PostgresVersion
 		*out = new(string)
 		**out = **in
+	}
+	if in.PostgresImage != nil {
+		in, out := &in.PostgresImage, &out.PostgresImage
+		*out = new(string)
+		**out = **in
+	}
+	if in.ImagePullSecrets != nil {
+		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
+		*out = make([]v1.LocalObjectReference, len(*in))
+		copy(*out, *in)
 	}
 	if in.Resources != nil {
 		in, out := &in.Resources, &out.Resources
