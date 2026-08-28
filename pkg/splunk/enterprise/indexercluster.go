@@ -1252,18 +1252,26 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	return nil
 }
 
-// ensureIndexerDefaults resolves the IndexerCluster's SmartBus queue/object-storage
-// configuration once and ensures both SOK defaults resources exist:
-//   - a content-addressed ConfigMap holding the structural SmartBus config, and
+// ensureIndexerDefaults combines additional operator-managed configuration with
+// the IndexerCluster's resolved SmartBus queue/object-storage configuration and
+// ensures both SOK defaults resources exist:
+//   - a content-addressed ConfigMap holding the non-sensitive generated config, and
 //   - a content-addressed Secret holding only the credentials (access_key/secret_key).
 //
 // Both are immutable and mounted into every container via SPLUNK_DEFAULTS_URL.
-// Returns a zero-value DefaultsConfigMap when smartbus is not configured, and a zero-value
-// DefaultsSecret when no static credentials were resolved (e.g. IRSA / workload identity,
-// where the Queue VolList is empty). Resolving once guarantees
+// Returns a zero-value DefaultsConfigMap when neither additional nor SmartBus config is
+// present, and a zero-value DefaultsSecret when no static credentials were resolved
+// (e.g. IRSA / workload identity, where the Queue VolList is empty). Resolving once guarantees
 // the ConfigMap and Secret are derived from a single consistent read of the source
 // queue/storage/secret.
-func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
+func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, additionalEntries ...splcommon.ConfFileEntry) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
+	entries := append([]splcommon.ConfFileEntry(nil), additionalEntries...)
+	var configMapOptions []resources.DefaultsConfigMapOption
+	if cr.Spec.NoahEnabled() {
+		// TODO: Revert Noah defaults to the standard array format once splunk-ansible
+		// accepts array-form splunk.conf in its Noah pre-auth path.
+		configMapOptions = append(configMapOptions, resources.WithDictionaryConf())
+	}
 	queueRefName := ""
 	if cr.Spec.QueueRef != nil {
 		queueRefName = cr.Spec.QueueRef.Name
@@ -1273,7 +1281,13 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 		osRefName = cr.Spec.ObjectStorageRef.Name
 	}
 	if queueRefName == "" && osRefName == "" {
-		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, nil
+		if len(entries) == 0 {
+			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, nil
+		}
+
+		owner := splcommon.AsOwner(cr, true)
+		configMap, err := configworkflow.EnsureConfigMap(ctx, c, cr, entries, &owner, configMapOptions...)
+		return configMap, resources.DefaultsSecret{}, err
 	}
 	var queueRef, osRef corev1.ObjectReference
 	if cr.Spec.QueueRef != nil {
@@ -1293,9 +1307,10 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 
 	owner := splcommon.AsOwner(cr, true)
 
+	entries = append(entries, splunkconfig.IndexerConf(builder)...)
 	var configMap resources.DefaultsConfigMap
-	if entries := splunkconfig.IndexerConf(builder); len(entries) > 0 {
-		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, entries, &owner)
+	if len(entries) > 0 {
+		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, entries, &owner, configMapOptions...)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}

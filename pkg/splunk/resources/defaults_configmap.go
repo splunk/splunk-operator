@@ -63,22 +63,41 @@ type DefaultsConfigMap struct {
 	corev1.ConfigMap
 }
 
+// DefaultsConfigMapOption customizes defaults.yml serialization.
+type DefaultsConfigMapOption func(*defaultsConfigMapOptions)
+
+type defaultsConfigMapOptions struct {
+	dictionaryConf bool
+}
+
+// WithDictionaryConf serializes splunk.conf using the legacy dictionary form.
+func WithDictionaryConf() DefaultsConfigMapOption {
+	return func(options *defaultsConfigMapOptions) {
+		options.dictionaryConf = true
+	}
+}
+
+type dictionaryDefaultYML struct {
+	Splunk dictionarySplunkDefault `yaml:"splunk"`
+}
+
+type dictionarySplunkDefault struct {
+	Conf map[string]common.ConfFileValue `yaml:"conf"`
+}
+
 // NewDefaultsConfigMap builds a DefaultsConfigMap for the given CR, computing its
 // content-addressed name from entries. owner, when non-nil, is set as an owner
 // reference on the ConfigMap; pass splcommon.AsOwner(cr, true) from the reconciler.
-func NewDefaultsConfigMap(cr CRObject, entries []common.ConfFileEntry, owner *metav1.OwnerReference) (DefaultsConfigMap, error) {
+func NewDefaultsConfigMap(cr CRObject, entries []common.ConfFileEntry, owner *metav1.OwnerReference, opts ...DefaultsConfigMapOption) (DefaultsConfigMap, error) {
 	namespace := cr.GetNamespace()
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	crName := cr.GetName()
 
-	name, err := DefaultsConfigMapName(crKind, crName, entries)
-	if err != nil {
-		return DefaultsConfigMap{}, err
-	}
-	data, err := marshalDefaultYML(entries)
+	data, err := marshalDefaultYML(entries, opts...)
 	if err != nil {
 		return DefaultsConfigMap{}, fmt.Errorf("marshal defaults for %s/%s: %w", crKind, crName, err)
 	}
+	name := defaultsConfigMapName(crKind, crName, data)
 	immutable := true
 	meta := metav1.ObjectMeta{
 		Name:      name,
@@ -121,18 +140,39 @@ func (cm DefaultsConfigMap) AsStatefulSetOption() StatefulSetOption {
 // DefaultsConfigMapName returns the content-addressed name for a defaults ConfigMap.
 // The name embeds the first 6 hex characters of the SHA-256 of the serialized entries,
 // giving a stable, change-sensitive identifier.
-func DefaultsConfigMapName(crKind, crName string, entries []common.ConfFileEntry) (string, error) {
-	data, err := marshalDefaultYML(entries)
+func DefaultsConfigMapName(crKind, crName string, entries []common.ConfFileEntry, opts ...DefaultsConfigMapOption) (string, error) {
+	data, err := marshalDefaultYML(entries, opts...)
 	if err != nil {
 		return "", fmt.Errorf("marshal defaults for %s/%s: %w", crKind, crName, err)
 	}
+	return defaultsConfigMapName(crKind, crName, data), nil
+}
+
+func defaultsConfigMapName(crKind, crName string, data []byte) string {
 	sum := sha256.Sum256(append([]byte(crKind+crName+"\x00"), data...))
 	hash := fmt.Sprintf("%x", sum[:3]) // 3 bytes → 6 hex chars
-	return fmt.Sprintf("sok-%s-defaults-%s", strings.ToLower(crKind), hash), nil
+	return fmt.Sprintf("sok-%s-defaults-%s", strings.ToLower(crKind), hash)
 }
 
 // marshalDefaultYML serializes entries into the splunk-ansible defaults.yml YAML bytes.
-func marshalDefaultYML(entries []common.ConfFileEntry) ([]byte, error) {
+func marshalDefaultYML(entries []common.ConfFileEntry, opts ...DefaultsConfigMapOption) ([]byte, error) {
+	options := defaultsConfigMapOptions{}
+	for _, opt := range opts {
+		opt(&options)
+	}
+	if options.dictionaryConf {
+		conf := make(map[string]common.ConfFileValue, len(entries))
+		for _, entry := range entries {
+			if _, exists := conf[entry.ConfFileName]; exists {
+				return nil, fmt.Errorf("dictionary splunk.conf cannot contain duplicate file %q", entry.ConfFileName)
+			}
+			conf[entry.ConfFileName] = entry.Value
+		}
+		return yaml.Marshal(dictionaryDefaultYML{
+			Splunk: dictionarySplunkDefault{Conf: conf},
+		})
+	}
+
 	d := common.DefaultYML{
 		Splunk: common.SplunkDefault{Conf: entries},
 	}

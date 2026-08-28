@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -47,13 +48,28 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 			UID:       types.UID("indexer-cluster-uid"),
 		},
 		Spec: enterpriseApi.IndexerClusterSpec{
-			Replicas: 1,
+			Replicas:       1,
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
 			},
 		},
 	}
 	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	require.NoError(t, client.Create(ctx, &enterpriseApi.NoahCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: cr.Namespace},
+		Spec: enterpriseApi.NoahClusterSpec{
+			Endpoint: "https://noah.test.svc:8080",
+			Tenant:   "axolotl",
+			AuthSecretRef: corev1.LocalObjectReference{
+				Name: "noah-auth",
+			},
+		},
+	}))
+	require.NoError(t, client.Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
+		Data:       map[string][]byte{noahAuthSecretKey: []byte("unit-test-noah-key")},
+	}))
 
 	statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr)
 	require.NoError(t, err)
@@ -65,6 +81,22 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 		Namespace: statefulSet.Namespace,
 	}, created))
 
+	var defaultsConfigMapName string
+	for _, volume := range created.Spec.Template.Spec.Volumes {
+		if volume.ConfigMap != nil && strings.HasPrefix(volume.ConfigMap.Name, "sok-indexercluster-defaults-") {
+			defaultsConfigMapName = volume.ConfigMap.Name
+			break
+		}
+	}
+	require.NotEmpty(t, defaultsConfigMapName)
+	defaultsConfigMap := &corev1.ConfigMap{}
+	require.NoError(t, client.Get(ctx, types.NamespacedName{
+		Name:      defaultsConfigMapName,
+		Namespace: created.Namespace,
+	}, defaultsConfigMap))
+	assert.Contains(t, defaultsConfigMap.Data["conf-defaults.yml"], "https://noah.test.svc:8080")
+	assert.Contains(t, defaultsConfigMap.Data["conf-defaults.yml"], "tenant: axolotl")
+
 	env := make(map[string]corev1.EnvVar)
 	for _, item := range created.Spec.Template.Spec.Containers[0].Env {
 		env[item.Name] = item
@@ -74,6 +106,98 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
 	require.NotNil(t, env[resources.PodNameEnvName].ValueFrom)
 	require.NotNil(t, env[resources.PodNamespaceEnvName].ValueFrom)
+
+	var initEtc *corev1.Container
+	for i := range created.Spec.Template.Spec.InitContainers {
+		if created.Spec.Template.Spec.InitContainers[i].Name == "init-etc" {
+			initEtc = &created.Spec.Template.Spec.InitContainers[i]
+			break
+		}
+	}
+	require.NotNil(t, initEtc)
+	require.Len(t, initEtc.Command, 3)
+	assert.Contains(t, initEtc.Command[2], `print "[noahService]"`)
+	assert.Contains(t, initEtc.Command[2], `print "disabled = true"`)
+	assert.Contains(t, initEtc.Command[2], noahAuthMountPath+"/"+noahAuthSecretKey)
+	assert.NotContains(t, initEtc.Command[2], "unit-test-noah-key")
+
+	var authVolume *corev1.Volume
+	for i := range created.Spec.Template.Spec.Volumes {
+		if created.Spec.Template.Spec.Volumes[i].Name == noahAuthVolumeName {
+			authVolume = &created.Spec.Template.Spec.Volumes[i]
+			break
+		}
+	}
+	require.NotNil(t, authVolume)
+	require.NotNil(t, authVolume.Secret)
+	assert.Equal(t, "noah-auth", authVolume.Secret.SecretName)
+	assert.Contains(t, initEtc.VolumeMounts, corev1.VolumeMount{
+		Name:      noahAuthVolumeName,
+		MountPath: noahAuthMountPath,
+		ReadOnly:  true,
+	})
+	for _, mount := range created.Spec.Template.Spec.Containers[0].VolumeMounts {
+		assert.NotEqual(t, noahAuthVolumeName, mount.Name, "the main container must not mount the plaintext Noah credential")
+	}
+}
+
+func TestApplyNoahIndexerResourcesRequiresReferencedNoahCluster(t *testing.T) {
+	client := spltest.NewMockClient()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "main", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "missing"},
+		},
+	}
+
+	statefulSet, phase, err := applyNoahIndexerResources(context.Background(), client, cr)
+	require.Error(t, err)
+	assert.Nil(t, statefulSet)
+	assert.Equal(t, enterpriseApi.PhaseError, phase)
+	assert.Contains(t, err.Error(), "get referenced NoahCluster test/missing")
+}
+
+func TestResolveNoahAuthSecretRejectsInvalidSecret(t *testing.T) {
+	ctx := context.Background()
+	client := spltest.NewMockClient()
+	require.NoError(t, client.Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test"},
+		Data:       map[string][]byte{noahAuthSecretKey: []byte("valid-value\nsecond-line")},
+	}))
+
+	secret, err := resolveNoahAuthSecret(ctx, client, "test", corev1.LocalObjectReference{Name: "noah-auth"})
+	require.ErrorContains(t, err, "must be a single line")
+	assert.Nil(t, secret)
+}
+
+func TestNoahInitEtcUsesRenderedEtcVolume(t *testing.T) {
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name: "splunk",
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      "rendered-etc",
+							MountPath: "/opt/splunk/etc",
+						}},
+					}},
+				},
+			},
+		},
+	}
+
+	noahInitEtcOption(&enterpriseApi.CommonSplunkSpec{})(statefulSet)
+	require.Len(t, statefulSet.Spec.Template.Spec.InitContainers, 1)
+	initEtc := statefulSet.Spec.Template.Spec.InitContainers[0]
+	assert.Equal(t, "rendered-etc", initEtc.VolumeMounts[0].Name)
+	require.NotNil(t, initEtc.SecurityContext)
+	require.NotNil(t, initEtc.SecurityContext.AllowPrivilegeEscalation)
+	assert.False(t, *initEtc.SecurityContext.AllowPrivilegeEscalation)
+	require.NotNil(t, initEtc.SecurityContext.Capabilities)
+	assert.Equal(t, []corev1.Capability{"ALL"}, initEtc.SecurityContext.Capabilities.Drop)
+	require.NotNil(t, initEtc.SecurityContext.SeccompProfile)
+	assert.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, initEtc.SecurityContext.SeccompProfile.Type)
 }
 
 func TestNoahIndexerStatefulSetOptionsAppliesStableIdentityLast(t *testing.T) {
