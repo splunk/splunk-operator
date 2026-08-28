@@ -268,6 +268,80 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 	})
 }
 
+func TestValidatePostgresClusterPostgresImage(t *testing.T) {
+	const ns = "default"
+
+	validClass := &platformApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "dev"},
+		Spec: platformApi.PostgresClusterClassSpec{
+			Provisioner: "postgresql.cnpg.io",
+			Config: &platformApi.PostgresClusterClassConfig{
+				Instances:       ptr.To(int32(3)),
+				Storage:         ptr.To(resource.MustParse("50Gi")),
+				PostgresVersion: ptr.To("17"),
+			},
+		},
+	}
+
+	clusterWithImage := func(image string) *platformApi.PostgresCluster {
+		return &platformApi.PostgresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
+			Spec: platformApi.PostgresClusterSpec{
+				Class:         "dev",
+				PostgresImage: ptr.To(image),
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		image      string
+		wantErr    bool
+		wantDetail string
+	}{
+		{
+			name:  "tagged image admitted",
+			image: "registry.example.com/team/postgresql:17.5",
+		},
+		{
+			name:  "tag plus digest admitted",
+			image: "registry.example.com/team/postgresql:17.5@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+		{
+			name:       "digest-only image rejected",
+			image:      "registry.example.com/team/postgresql@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			wantErr:    true,
+			wantDetail: "must include a tag",
+		},
+		{
+			name:       "latest image rejected",
+			image:      "registry.example.com/team/postgresql:latest",
+			wantErr:    true,
+			wantDetail: "latest",
+		},
+		{
+			name:       "major mismatch rejected",
+			image:      "registry.example.com/team/postgresql:16.10",
+			wantErr:    true,
+			wantDetail: "must match postgresVersion major version 17",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := webhook.ValidatePostgresClusterCreate(context.Background(), clusterWithImage(tt.image), newFakeReader(validClass).Build())
+
+			if !tt.wantErr {
+				assert.Empty(t, errs)
+				return
+			}
+			require.Len(t, errs, 1)
+			assert.Equal(t, "spec.postgresImage", errs[0].Field)
+			assert.Contains(t, errs[0].Detail, tt.wantDetail)
+		})
+	}
+}
+
 // TestValidatePostgresClusterExternalSecret pins the admission-time policy for
 func TestValidatePostgresClusterExternalSecret(t *testing.T) {
 	const (

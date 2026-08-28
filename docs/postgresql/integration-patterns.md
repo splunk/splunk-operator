@@ -103,6 +103,8 @@ overridable by any `PostgresCluster` that uses the class):
 | `spec.config.instances` | overridable | Instance count (1 = no HA; 3+ recommended for production). |
 | `spec.config.storage` | overridable | Per-instance PVC size. Can only be *increased* later, never decreased. |
 | `spec.config.postgresVersion` | overridable | Major/minor version. Major version can only go up once set. |
+| `spec.config.postgresImage` | overridable | Optional CNPG-compatible PostgreSQL image. Must include a non-`latest` tag whose leading major version matches the effective `postgresVersion`; tag-plus-digest references are supported. |
+| `spec.config.imagePullSecrets` | overridable | Optional same-namespace image pull Secrets passed to CNPG for private/custom PostgreSQL image registries. |
 | `spec.config.resources` | overridable | CPU/memory requests and limits, shared by all instances. |
 | `spec.config.postgresqlConfig` | overridable | `postgresql.conf` parameters, cluster-wide. |
 | `spec.config.pgHBA` | overridable | `pg_hba.conf` rules, cluster-wide. |
@@ -213,6 +215,12 @@ Most `spec.config` fields from the class can be overridden per-cluster, with gua
 - `storage` — can only be increased, never decreased, relative to the class default or a prior
   value.
 - `postgresVersion` — major version can only go up, never down, once set.
+- `postgresImage` — cluster value overrides the class default, which overrides the generated
+  `ghcr.io/cloudnative-pg/postgresql:<postgresVersion>` image. Explicit images must include a
+  non-`latest` tag that starts with the effective PostgreSQL major version. Digest-only references
+  are rejected; tag-plus-digest references are accepted and compared exactly for drift.
+- `imagePullSecrets` — cluster value overrides the class default and is passed to CNPG as
+  same-namespace pull credentials for private/custom PostgreSQL image registries.
 - `instances`, `resources`, `postgresqlConfig`, `pgHBA`, `backup` (generic fields), `monitoring`,
   `connectionPooler` — freely overridable within the class's platform-policy constraints.
 - `clusterDeletionPolicy` (`Delete` or `Retain`, default `Retain`) — what happens to the underlying
@@ -223,7 +231,7 @@ Reference samples (do not need to be modified to use as a starting point):
 
 - [`config/samples/platform_v1alpha1_postgrescluster_dev.yaml`](../../config/samples/platform_v1alpha1_postgrescluster_dev.yaml) —
   built on `postgresql-dev`, overrides `storage`, `postgresVersion`, and `resources` above the
-  class defaults.
+  class defaults, with a commented example for a cluster-level `postgresImage`.
 - [`config/samples/platform_v1alpha1_postgrescluster_prod.yaml`](../../config/samples/platform_v1alpha1_postgrescluster_prod.yaml) —
   built on `postgresql-prod`. Note that this sample currently overrides `instances: 1`, while the
   `postgresql-prod` class uses `primaryUpdateMethod: switchover` and enables a read-only pooler by

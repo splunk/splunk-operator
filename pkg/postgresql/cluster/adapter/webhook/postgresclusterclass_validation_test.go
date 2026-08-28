@@ -23,6 +23,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/webhook"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/utils/ptr"
 )
 
 func TestValidatePostgresClusterClassCreate(t *testing.T) {
@@ -65,6 +66,60 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 0,
+		},
+		{
+			name: "valid - tagged postgresImage",
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &platformApi.PostgresClusterClassConfig{
+						PostgresVersion: ptr.To("18"),
+						PostgresImage:   ptr.To("registry.example.com/team/postgresql:18.1"),
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "valid - tag plus digest postgresImage",
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &platformApi.PostgresClusterClassConfig{
+						PostgresVersion: ptr.To("18"),
+						PostgresImage:   ptr.To("registry.example.com/team/postgresql:18.1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "invalid - latest postgresImage",
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &platformApi.PostgresClusterClassConfig{
+						PostgresVersion: ptr.To("18"),
+						PostgresImage:   ptr.To("registry.example.com/team/postgresql:latest"),
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.config.postgresImage",
+		},
+		{
+			name: "invalid - postgresImage major mismatch",
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &platformApi.PostgresClusterClassConfig{
+						PostgresVersion: ptr.To("18"),
+						PostgresImage:   ptr.To("registry.example.com/team/postgresql:17.5"),
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.config.postgresImage",
 		},
 		{
 			name: "invalid - bad connection type",

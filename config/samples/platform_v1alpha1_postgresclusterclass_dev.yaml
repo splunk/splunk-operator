@@ -16,6 +16,11 @@ spec:
 
     # Latest PostgreSQL 18
     postgresVersion: "18"
+    # Optional default CNPG-compatible PostgreSQL image and pull secret for
+    # clusters using this class. Cluster-level values take precedence.
+    # postgresImage: registry.example.com/team/postgresql:18
+    # imagePullSecrets:
+    #   - name: registry-creds
 
     # Minimal resources
     resources:
