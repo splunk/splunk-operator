@@ -1061,6 +1061,22 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		env = append(env, corev1.EnvVar{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal})
 	}
 
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_CERT_PREFIX",
+			Value: "http",
+		})
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNKD_SSL_ENABLE",
+			Value: "false",
+		})
+	}
+	if os.Getenv("SPLUNK_HEC_SSL") == "false" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_HEC_SSL",
+			Value: "false",
+		})
+	}
 	// update variables for licensing, if configured
 	if spec.LicenseURL != "" {
 		env = append(env, corev1.EnvVar{
