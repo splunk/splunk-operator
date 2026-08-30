@@ -177,6 +177,83 @@ var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instan
 	return enterprise.ApplyIndexerCluster(ctx, client, instance)
 }
 
+// mapNoahClusterToIndexerClusters maps a NoahCluster event to the
+// same-namespace IndexerClusters that reference it.
+func (r *IndexerClusterReconciler) mapNoahClusterToIndexerClusters(ctx context.Context, obj client.Object) []reconcile.Request {
+	noahCluster, ok := obj.(*enterpriseApi.NoahCluster)
+	if !ok {
+		return nil
+	}
+
+	var indexerClusters enterpriseApi.IndexerClusterList
+	if err := r.Client.List(ctx, &indexerClusters, client.InNamespace(noahCluster.Namespace)); err != nil {
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0)
+	for i := range indexerClusters.Items {
+		indexerCluster := &indexerClusters.Items[i]
+		if indexerCluster.Spec.NoahClusterRef == nil || indexerCluster.Spec.NoahClusterRef.Name != noahCluster.Name {
+			continue
+		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      indexerCluster.Name,
+				Namespace: indexerCluster.Namespace,
+			},
+		})
+	}
+	return requests
+}
+
+// mapNoahAuthSecretToIndexerClusters follows Secret -> NoahCluster ->
+// IndexerCluster references within one namespace.
+func (r *IndexerClusterReconciler) mapNoahAuthSecretToIndexerClusters(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+
+	var noahClusters enterpriseApi.NoahClusterList
+	if err := r.Client.List(ctx, &noahClusters, client.InNamespace(secret.Namespace)); err != nil {
+		return nil
+	}
+
+	matchingNoahClusters := make(map[string]struct{})
+	for i := range noahClusters.Items {
+		noahCluster := &noahClusters.Items[i]
+		if noahCluster.Spec.AuthSecretRef.Name == secret.Name {
+			matchingNoahClusters[noahCluster.Name] = struct{}{}
+		}
+	}
+	if len(matchingNoahClusters) == 0 {
+		return nil
+	}
+
+	var indexerClusters enterpriseApi.IndexerClusterList
+	if err := r.Client.List(ctx, &indexerClusters, client.InNamespace(secret.Namespace)); err != nil {
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0)
+	for i := range indexerClusters.Items {
+		indexerCluster := &indexerClusters.Items[i]
+		if indexerCluster.Spec.NoahClusterRef == nil {
+			continue
+		}
+		if _, found := matchingNoahClusters[indexerCluster.Spec.NoahClusterRef.Name]; !found {
+			continue
+		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      indexerCluster.Name,
+				Namespace: indexerCluster.Namespace,
+			},
+		})
+	}
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	bldr := ctrl.NewControllerManagedBy(mgr).
@@ -204,6 +281,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IndexerCluster{},
 			)).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.mapNoahAuthSecretToIndexerClusters),
+		).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				secret, ok := obj.(*corev1.Secret)
@@ -299,6 +379,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IndexerCluster{},
 			)).
+		Watches(&enterpriseApi.NoahCluster{},
+			handler.EnqueueRequestsFromMapFunc(r.mapNoahClusterToIndexerClusters),
+		).
 		Watches(&enterpriseApiV3.ClusterMaster{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),

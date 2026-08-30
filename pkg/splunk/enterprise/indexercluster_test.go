@@ -51,8 +51,10 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"gopkg.in/yaml.v3"
 )
 
 func init() {
@@ -3056,6 +3058,62 @@ func TestEnsureIndexerCredentialsSecret_NoQueueRef(t *testing.T) {
 	_, credsSecret, err := ensureIndexerDefaults(ctx, c, cr)
 	require.NoError(t, err)
 	assert.Empty(t, credsSecret.Name, "no queueRef → no credentials Secret")
+}
+
+func TestEnsureIndexerDefaultsCombinesNoahAndSmartBusConfig(t *testing.T) {
+	ctx := context.TODO()
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	c := newFakeClientBuilder(sch).Build()
+
+	queue, objectStorage := newQueueOSFixture(t, ctx, c, "queue", "queue-secrets")
+	cr := &enterpriseApi.IndexerCluster{
+		TypeMeta:   metav1.TypeMeta{Kind: "IndexerCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas:         1,
+			NoahClusterRef:   &corev1.LocalObjectReference{Name: "noah"},
+			QueueRef:         &corev1.ObjectReference{Name: queue.Name},
+			ObjectStorageRef: &corev1.ObjectReference{Name: objectStorage.Name},
+		},
+	}
+
+	noahEntries := splunkconfig.NoahIndexerConf("https://noah.example.invalid:8080", "placeholder")
+	defaultsConfigMap, _, err := ensureIndexerDefaults(ctx, c, cr, noahEntries...)
+	require.NoError(t, err)
+	require.NotEmpty(t, defaultsConfigMap.Name)
+
+	stored := &corev1.ConfigMap{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: defaultsConfigMap.Name}, stored))
+	var defaults struct {
+		Splunk struct {
+			Conf map[string]splcommon.ConfFileValue `yaml:"conf"`
+		} `yaml:"splunk"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(stored.Data["conf-defaults.yml"]), &defaults))
+
+	confFiles := make(map[string]bool, len(defaults.Splunk.Conf))
+	for name := range defaults.Splunk.Conf {
+		confFiles[name] = true
+	}
+	assert.Equal(t, map[string]bool{
+		"server":       true,
+		"inputs":       true,
+		"outputs":      true,
+		"default-mode": true,
+	}, confFiles)
+	server := defaults.Splunk.Conf["server"]
+	assert.Empty(t, server.Directory)
+	assert.Equal(t, "false", server.Stanzas["noahService"]["disabled"])
+	assert.Equal(t, "https://noah.example.invalid:8080", server.Stanzas["noahService"]["uri"])
+	assert.Equal(t, "placeholder", server.Stanzas["noahService"]["tenant"])
+	assert.Equal(t, "30", server.Stanzas["noahService"]["heartbeatPeriod"])
+	assert.Equal(t, "false", server.Stanzas["noahService"]["usePeers"])
+	assert.NotContains(t, server.Stanzas, "teleport_supervisor")
+	assert.NotContains(t, stored.Data["conf-defaults.yml"], "- key: server")
 }
 
 // TestEnsureIndexerCredentialsSecret_IRSAProducesNoStaticCreds verifies that when the Queue

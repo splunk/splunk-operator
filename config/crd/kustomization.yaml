@@ -16,6 +16,7 @@ resources:
 - bases/enterprise.splunk.com_postgresdatabases.yaml
 - bases/enterprise.splunk.com_postgresclusterclasses.yaml
 - bases/enterprise.splunk.com_postgresclusters.yaml
+- bases/enterprise.splunk.com_noahclusters.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 

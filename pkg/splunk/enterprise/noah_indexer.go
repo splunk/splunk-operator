@@ -19,22 +19,34 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+const (
+	noahAuthSecretKey          = "pass4SymmKey"
+	noahAuthVolumeName         = "mnt-noah-auth"
+	noahAuthMountPath          = "/mnt/noah-auth"
+	noahAuthRevisionAnnotation = "enterprise.splunk.com/noah-auth-secret-revision"
 )
 
 // ApplyNoahIndexerCluster reconciles the Kubernetes resources required to
 // start a Noah-selected IndexerCluster. It intentionally does not implement
-// Noah bootstrap, membership, readiness, rollout, or safe scale-down.
+// Noah membership, readiness, rollout, or safe scale-down.
 func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (result reconcile.Result, err error) {
-	result = reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}
+	result = reconcile.Result{RequeueAfter: 5 * time.Second}
 
 	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
@@ -88,7 +100,6 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 		if terminating && deletionErr != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource deletion is in progress")
 		} else {
-			result.Requeue = false
 			result.RequeueAfter = 0
 		}
 		return result, deletionErr
@@ -103,13 +114,25 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	setPhaseAndConditions(phase, "")
 	if phase == enterpriseApi.PhaseReady {
-		result.Requeue = false
 		result.RequeueAfter = 0
 	}
 	return result, nil
 }
 
 func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (*appsv1.StatefulSet, enterpriseApi.Phase, error) {
+	noahCluster := &enterpriseApi.NoahCluster{}
+	noahClusterKey := types.NamespacedName{
+		Name:      cr.Spec.NoahClusterRef.Name,
+		Namespace: cr.Namespace,
+	}
+	if err := client.Get(ctx, noahClusterKey, noahCluster); err != nil {
+		return nil, enterpriseApi.PhaseError, fmt.Errorf("get referenced NoahCluster %s: %w", noahClusterKey, err)
+	}
+	noahAuthSecret, err := resolveNoahAuthSecret(ctx, client, cr.Namespace, noahCluster.Spec.AuthSecretRef)
+	if err != nil {
+		return nil, enterpriseApi.PhaseError, err
+	}
+
 	if _, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer); err != nil {
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("apply Splunk config: %w", err)
 	}
@@ -127,17 +150,16 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 		}
 	}
 
-	defaultsConfigMap, defaultsSecret, err := ensureIndexerDefaults(ctx, client, cr)
+	noahConf := splunkconfig.NoahIndexerConf(noahCluster.Spec.Endpoint, noahCluster.Spec.Tenant)
+	defaultsConfigMap, defaultsSecret, err := ensureIndexerDefaults(ctx, client, cr, noahConf...)
 	if err != nil {
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("ensure indexer defaults: %w", err)
 	}
 
-	statefulSet, err := getNoahIndexerStatefulSet(
-		ctx,
-		client,
-		cr,
+	statefulSet, err := getNoahIndexerStatefulSet(ctx, client, cr,
 		defaultsConfigMap.AsStatefulSetOption(),
 		defaultsSecret.AsStatefulSetOption(),
+		noahAuthSecretOption(noahAuthSecret),
 	)
 	if err != nil {
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("build Noah indexer StatefulSet: %w", err)
@@ -173,16 +195,156 @@ func noahIndexerStatefulSetConverged(statefulSet *appsv1.StatefulSet, desiredRep
 		statefulSet.Status.ReadyReplicas == desiredReplicas
 }
 
-// getNoahIndexerStatefulSet constructs an indexer StatefulSet with the stable
-// pod identity inputs expected by a Noah-aware Splunk image. The partial Noah
-// reconcile path calls it before the remaining bootstrap configuration and
-// lifecycle orchestration are available.
+// getNoahIndexerStatefulSet constructs an indexer StatefulSet with the startup
+// staging and stable pod identity required by a Noah-aware Splunk image.
 func getNoahIndexerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
-	return getIndexerStatefulSet(ctx, client, cr, noahIndexerStatefulSetOptions(os.Getenv(resources.ClusterDomainEnvName), opts...)...)
+	bootstrapOptions := make([]resources.StatefulSetOption, 0, len(opts)+1)
+	bootstrapOptions = append(bootstrapOptions, noahInitEtcOption(&cr.Spec.CommonSplunkSpec))
+	bootstrapOptions = append(bootstrapOptions, opts...)
+	return getIndexerStatefulSet(ctx, client, cr, noahIndexerStatefulSetOptions(os.Getenv(resources.ClusterDomainEnvName), bootstrapOptions...)...)
 }
 
 func noahIndexerStatefulSetOptions(clusterDomain string, opts ...resources.StatefulSetOption) []resources.StatefulSetOption {
 	result := make([]resources.StatefulSetOption, 0, len(opts)+1)
 	result = append(result, opts...)
 	return append(result, resources.WithNoahPodIdentity(clusterDomain))
+}
+
+// resolveNoahAuthSecret returns the same-namespace credential that must be
+// staged before splunk-provision runs its Noah pre-start hook.
+func resolveNoahAuthSecret(ctx context.Context, client splcommon.ControllerClient, namespace string, ref corev1.LocalObjectReference) (*corev1.Secret, error) {
+	secret := &corev1.Secret{}
+	key := types.NamespacedName{Namespace: namespace, Name: ref.Name}
+	if err := client.Get(ctx, key, secret); err != nil {
+		return nil, fmt.Errorf("get Noah auth Secret %s: %w", key, err)
+	}
+	value, found := secret.Data[noahAuthSecretKey]
+	if !found {
+		return nil, fmt.Errorf("Noah auth Secret %s is missing data.%s", key, noahAuthSecretKey)
+	}
+	if err := splutil.ValidateSecret(value); err != nil {
+		return nil, fmt.Errorf("Noah auth Secret %s has invalid data.%s: %w", key, noahAuthSecretKey, err)
+	}
+	if strings.ContainsAny(string(value), "\r\n") {
+		return nil, fmt.Errorf("Noah auth Secret %s data.%s must be a single line", key, noahAuthSecretKey)
+	}
+	return secret, nil
+}
+
+// noahAuthSecretOption exposes the plaintext credential only to init-etc. The
+// main Splunk container receives it through the staged server.conf on its etc
+// volume, not through an environment variable or Secret mount.
+func noahAuthSecretOption(secret *corev1.Secret) resources.StatefulSetOption {
+	return func(statefulSet *appsv1.StatefulSet) {
+		mode := int32(0444)
+		statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: noahAuthVolumeName,
+			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+				SecretName:  secret.Name,
+				Items:       []corev1.KeyToPath{{Key: noahAuthSecretKey, Path: noahAuthSecretKey}},
+				DefaultMode: &mode,
+			}},
+		})
+		if statefulSet.Spec.Template.Annotations == nil {
+			statefulSet.Spec.Template.Annotations = make(map[string]string)
+		}
+		statefulSet.Spec.Template.Annotations[noahAuthRevisionAnnotation] = secret.ResourceVersion
+		for i := range statefulSet.Spec.Template.Spec.InitContainers {
+			initContainer := &statefulSet.Spec.Template.Spec.InitContainers[i]
+			if initContainer.Name != "init-etc" {
+				continue
+			}
+			initContainer.VolumeMounts = append(initContainer.VolumeMounts, corev1.VolumeMount{
+				Name:      noahAuthVolumeName,
+				MountPath: noahAuthMountPath,
+				ReadOnly:  true,
+			})
+		}
+	}
+}
+
+// noahInitEtcOption stages the minimum safe Noah configuration required by
+// splunk-provision before it applies SPLUNK_DEFAULTS_URL. Noah remains disabled
+// during the provisioner's temporary startup and is enabled from the generated
+// defaults before the first full splunkd start.
+func noahInitEtcOption(spec *enterpriseApi.CommonSplunkSpec) resources.StatefulSetOption {
+	// TODO: Remove this operator-owned etc mutation once splunk-provision can
+	// stage its Noah pre-start configuration from the resolved defaults. Writing
+	// application configuration into the image-owned etc tree belongs in the
+	// provisioner, not the operator's StatefulSet construction.
+	return func(statefulSet *appsv1.StatefulSet) {
+		etcVolumeName := "pvc-etc"
+		if len(statefulSet.Spec.Template.Spec.Containers) > 0 {
+			for _, mount := range statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts {
+				if mount.MountPath == "/opt/splunk/etc" {
+					etcVolumeName = mount.Name
+					break
+				}
+			}
+		}
+
+		initRunAsUser := int64(41812)
+		initRunAsNonRoot := true
+		initAllowPrivilegeEscalation := false
+		statefulSet.Spec.Template.Spec.InitContainers = append(statefulSet.Spec.Template.Spec.InitContainers, corev1.Container{
+			Name:            "init-etc",
+			Image:           spec.Image,
+			ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+			Command: []string{
+				"sh", "-c",
+				`set -eu
+if [ ! -f /mnt/splunk-etc/log.cfg ]; then
+  cp --remove-destination -R /opt/splunk/etc/. /mnt/splunk-etc/
+  printf '[default]\nSPLUNK_HOME=/opt/splunk\nSPLUNK_DB=/opt/splunk/var/lib/splunk\nPYTHONUTF8=1\n' \
+    > /mnt/splunk-etc/splunk-launch.conf
+fi
+server_conf=/mnt/splunk-etc/system/local/server.conf
+mkdir -p "$(dirname "$server_conf")"
+touch "$server_conf"
+awk -v key_file=/mnt/noah-auth/pass4SymmKey '
+  function print_key( key) {
+    if ((getline key < key_file) <= 0) exit 42
+    close(key_file)
+    printf "pass4SymmKey = %s\n", key
+  }
+  /^\[noahService\][[:space:]]*$/ {
+    in_noah=1
+    saw_noah=1
+    print
+    print_key()
+    print "disabled = true"
+    next
+  }
+  in_noah && /^[[:space:]]*pass4SymmKey[[:space:]]*=/ { next }
+  in_noah && /^[[:space:]]*disabled[[:space:]]*=/ { next }
+  /^\[/ { in_noah=0 }
+  { print }
+  END {
+    if (!saw_noah) {
+      print ""
+      print "[noahService]"
+      print "disabled = true"
+      print_key()
+    }
+  }
+' "$server_conf" > /tmp/server_clean.conf
+mv /tmp/server_clean.conf "$server_conf"`,
+			},
+			SecurityContext: &corev1.SecurityContext{
+				RunAsUser:                &initRunAsUser,
+				RunAsNonRoot:             &initRunAsNonRoot,
+				AllowPrivilegeEscalation: &initAllowPrivilegeEscalation,
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+			},
+			VolumeMounts: []corev1.VolumeMount{{
+				Name:      etcVolumeName,
+				MountPath: "/mnt/splunk-etc",
+			}},
+		})
+	}
 }

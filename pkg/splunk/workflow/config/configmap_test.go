@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -145,6 +146,32 @@ func TestEnsureConfigMap_CreatesOnFirstCall(t *testing.T) {
 	var cm corev1.ConfigMap
 	err = c.Get(ctx, client.ObjectKey{Namespace: "ns", Name: ref.Name}, &cm)
 	require.NoError(t, err, "ConfigMap must exist after EnsureConfigMap")
+}
+
+func TestEnsureConfigMap_ForwardsDictionaryFormat(t *testing.T) {
+	c := fakeClient()
+	ctx := context.Background()
+
+	ref, err := configworkflow.EnsureConfigMap(
+		ctx,
+		c,
+		fakeCR("ns", "IndexerCluster", "my-indexer"),
+		someEntries(),
+		nil,
+		resources.WithDictionaryConf(),
+	)
+	require.NoError(t, err)
+
+	var cm corev1.ConfigMap
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "ns", Name: ref.Name}, &cm))
+	var defaults struct {
+		Splunk struct {
+			Conf map[string]common.ConfFileValue `yaml:"conf"`
+		} `yaml:"splunk"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(cm.Data["conf-defaults.yml"]), &defaults))
+	assert.Contains(t, defaults.Splunk.Conf, "outputs")
+	assert.NotContains(t, cm.Data["conf-defaults.yml"], "- key: outputs")
 }
 
 func TestEnsureConfigMap_SecondCallWithSameEntriesIsNoop(t *testing.T) {
