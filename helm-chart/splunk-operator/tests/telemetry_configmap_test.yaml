@@ -39,7 +39,7 @@ tests:
     asserts:
       - matchRegex:
           path: data.status
-          pattern: '"sokVersion":\s*"3\.1\.0"'
+          pattern: '"sokVersion":\s*"3\.2\.0"'
 
   - it: should default test to true
     asserts:
