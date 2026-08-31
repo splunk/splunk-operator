@@ -19,10 +19,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/splunk/client/noah"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -31,6 +33,7 @@ import (
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -43,8 +46,8 @@ const (
 )
 
 // ApplyNoahIndexerCluster reconciles the Kubernetes resources required to
-// start a Noah-selected IndexerCluster. It intentionally does not implement
-// Noah membership, readiness, rollout, or safe scale-down.
+// start a Noah-selected IndexerCluster and verifies its expected Noah peers.
+// It intentionally does not implement rollout or safe scale-down.
 func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (result reconcile.Result, err error) {
 	result = reconcile.Result{RequeueAfter: 5 * time.Second}
 
@@ -53,16 +56,8 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	cr.Kind = "IndexerCluster"
 
 	isPaused := cr.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true"
-	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
-		status := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase:      phase,
-			IsPaused:   isPaused,
-			Message:    message,
-			Generation: cr.GetGeneration(),
-		})
-		cr.Status.Phase = status.Phase
-		cr.Status.Conditions = status.Conditions
-		cr.Status.ObservedGeneration = cr.GetGeneration()
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string, additionalConditions ...metav1.Condition) {
+		setNoahIndexerPhaseAndConditions(cr, isPaused, phase, message, additionalConditions...)
 	}
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -112,10 +107,32 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	}
 
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
-	setPhaseAndConditions(phase, "")
+	conditionStatus := metav1.ConditionFalse
+	conditionReason := enterpriseApi.ReasonNoahPeersNotReady
+	conditionMessage := "Waiting for the indexer workload before observing Noah peers"
+	phaseMessage := ""
 	if phase == enterpriseApi.PhaseReady {
-		result.RequeueAfter = 0
+		peersReady, observationErr := observeNoahIndexerPeers(ctx, client, cr, statefulSet)
+		switch {
+		case observationErr != nil:
+			phase = enterpriseApi.PhasePending
+			phaseMessage = "Unable to observe Noah peers"
+			conditionStatus = metav1.ConditionUnknown
+			conditionReason = enterpriseApi.ReasonNoahPeerObservationFailed
+			conditionMessage = fmt.Sprintf("Unable to observe Noah peers: %v", observationErr)
+		case !peersReady:
+			phase = enterpriseApi.PhasePending
+			phaseMessage = "Waiting for expected Noah peers"
+			conditionMessage = "Not all expected Noah peers are up"
+		default:
+			result.RequeueAfter = 0
+			conditionStatus = metav1.ConditionTrue
+			conditionReason = enterpriseApi.ReasonNoahPeersReady
+			conditionMessage = "All expected Noah peers are up"
+		}
 	}
+
+	setPhaseAndConditions(phase, phaseMessage, newNoahPeersReadyCondition(conditionStatus, conditionReason, conditionMessage))
 	return result, nil
 }
 
@@ -193,6 +210,142 @@ func noahIndexerStatefulSetConverged(statefulSet *appsv1.StatefulSet, desiredRep
 		statefulSet.Status.CurrentRevision == statefulSet.Status.UpdateRevision &&
 		statefulSet.Status.UpdatedReplicas == desiredReplicas &&
 		statefulSet.Status.ReadyReplicas == desiredReplicas
+}
+
+func newNoahPeersReadyCondition(status metav1.ConditionStatus, reason enterpriseApi.ConditionReason, message string) metav1.Condition {
+	return metav1.Condition{
+		Type:    string(enterpriseApi.ConditionNoahPeersReady),
+		Status:  status,
+		Reason:  string(reason),
+		Message: message,
+	}
+}
+
+func setNoahIndexerPhaseAndConditions(cr *enterpriseApi.IndexerCluster, isPaused bool, phase enterpriseApi.Phase, message string, conditions ...metav1.Condition) {
+	status := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
+		Phase:      phase,
+		IsPaused:   isPaused,
+		Message:    message,
+		Generation: cr.GetGeneration(),
+	})
+	for _, condition := range conditions {
+		condition.ObservedGeneration = cr.GetGeneration()
+		status.Conditions = splcommon.UpsertCondition(status.Conditions, condition)
+	}
+	cr.Status.Phase = status.Phase
+	cr.Status.Conditions = status.Conditions
+	cr.Status.ObservedGeneration = cr.GetGeneration()
+}
+
+func observeNoahIndexerPeers(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, statefulSet *appsv1.StatefulSet) (bool, error) {
+	expectedPeers, err := currentNoahIndexerPeerIncarnations(ctx, client, cr.Spec.Replicas, statefulSet)
+	if err != nil {
+		return false, err
+	}
+	if len(expectedPeers) != int(cr.Spec.Replicas) {
+		return false, nil
+	}
+
+	noahCluster := &enterpriseApi.NoahCluster{}
+	key := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.NoahClusterRef.Name}
+	if err := client.Get(ctx, key, noahCluster); err != nil {
+		return false, fmt.Errorf("get referenced NoahCluster %s: %w", key, err)
+	}
+	authSecret, err := resolveNoahAuthSecret(ctx, client, cr.GetNamespace(), noahCluster.Spec.AuthSecretRef)
+	if err != nil {
+		return false, err
+	}
+	authenticator, err := noah.NewHMACV2Authenticator(authSecret.Data[noahAuthSecretKey])
+	if err != nil {
+		return false, fmt.Errorf("configure Noah authentication: %w", err)
+	}
+	noahClient, err := noah.NewClient(noahCluster.Spec.Endpoint, noahCluster.Spec.Tenant, authenticator)
+	if err != nil {
+		return false, fmt.Errorf("configure Noah client: %w", err)
+	}
+	peers, err := noahClient.ListPeers(ctx)
+	if err != nil {
+		return false, fmt.Errorf("list Noah peers: %w", err)
+	}
+	return expectedNoahIndexerPeersReady(peers, expectedPeers), nil
+}
+
+func currentNoahIndexerPeerIncarnations(ctx context.Context, client splcommon.ControllerClient, replicas int32, statefulSet *appsv1.StatefulSet) (map[string]int64, error) {
+	clusterDomain, err := noahIndexerClusterDomain(statefulSet)
+	if err != nil {
+		return nil, err
+	}
+
+	expectedPeers := make(map[string]int64, replicas)
+	for ordinal := range replicas {
+		podName := fmt.Sprintf("%s-%d", statefulSet.Name, ordinal)
+		pod := &corev1.Pod{}
+		key := types.NamespacedName{Namespace: statefulSet.Namespace, Name: podName}
+		if err := client.Get(ctx, key, pod); err != nil {
+			return nil, fmt.Errorf("get expected Noah indexer Pod %s: %w", key, err)
+		}
+
+		statusIndex := slices.IndexFunc(pod.Status.ContainerStatuses, func(status corev1.ContainerStatus) bool {
+			return status.Name == "splunk"
+		})
+		if statusIndex < 0 {
+			continue
+		}
+		status := pod.Status.ContainerStatuses[statusIndex]
+		if !status.Ready || status.State.Running == nil || status.State.Running.StartedAt.IsZero() {
+			continue
+		}
+
+		peerID := fmt.Sprintf("%s.%s.%s.svc.%s", podName, statefulSet.Spec.ServiceName, statefulSet.Namespace, clusterDomain)
+		expectedPeers[peerID] = status.State.Running.StartedAt.Unix()
+	}
+	return expectedPeers, nil
+}
+
+func noahIndexerClusterDomain(statefulSet *appsv1.StatefulSet) (string, error) {
+	if statefulSet == nil {
+		return "", fmt.Errorf("Noah indexer StatefulSet is nil")
+	}
+	containerIndex := slices.IndexFunc(statefulSet.Spec.Template.Spec.Containers, func(container corev1.Container) bool {
+		return container.Name == "splunk"
+	})
+	if containerIndex < 0 {
+		return "", fmt.Errorf("Noah indexer StatefulSet %s/%s is missing the splunk container", statefulSet.Namespace, statefulSet.Name)
+	}
+	container := statefulSet.Spec.Template.Spec.Containers[containerIndex]
+	envIndex := slices.IndexFunc(container.Env, func(env corev1.EnvVar) bool {
+		return env.Name == resources.ClusterDomainEnvName
+	})
+	if envIndex < 0 || container.Env[envIndex].Value == "" || container.Env[envIndex].ValueFrom != nil {
+		return "", fmt.Errorf("Noah indexer StatefulSet %s/%s has no literal %s value", statefulSet.Namespace, statefulSet.Name, resources.ClusterDomainEnvName)
+	}
+	return container.Env[envIndex].Value, nil
+}
+
+func expectedNoahIndexerPeersReady(peers []noah.Peer, expectedPeers map[string]int64) bool {
+	activePeers := make(map[string]int, len(expectedPeers))
+	readyPeers := make(map[string]int, len(expectedPeers))
+
+	for _, peer := range peers {
+		incarnationStart, expected := expectedPeers[peer.ID]
+		if !expected || peer.Data.StartTime < incarnationStart {
+			continue
+		}
+		if peer.Status == noah.PeerStatusDown || peer.Status == noah.PeerStatusDecommissioned {
+			continue
+		}
+		activePeers[peer.ID]++
+		if peer.Status == noah.PeerStatusUp {
+			readyPeers[peer.ID]++
+		}
+	}
+
+	for peerID := range expectedPeers {
+		if activePeers[peerID] != 1 || readyPeers[peerID] != 1 {
+			return false
+		}
+	}
+	return len(expectedPeers) > 0
 }
 
 // getNoahIndexerStatefulSet constructs an indexer StatefulSet with the startup

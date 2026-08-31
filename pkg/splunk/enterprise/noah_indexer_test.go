@@ -16,11 +16,15 @@
 package enterprise
 
 import (
-	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/splunk/client/noah"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -35,7 +39,7 @@ import (
 func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) {
 	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
 
-	ctx := context.Background()
+	ctx := t.Context()
 	client := spltest.NewMockClient()
 	cr := &enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -165,7 +169,7 @@ func TestApplyNoahIndexerResourcesRequiresReferencedNoahCluster(t *testing.T) {
 		},
 	}
 
-	statefulSet, phase, err := applyNoahIndexerResources(context.Background(), client, cr)
+	statefulSet, phase, err := applyNoahIndexerResources(t.Context(), client, cr)
 	require.Error(t, err)
 	assert.Nil(t, statefulSet)
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
@@ -173,7 +177,7 @@ func TestApplyNoahIndexerResourcesRequiresReferencedNoahCluster(t *testing.T) {
 }
 
 func TestResolveNoahAuthSecretRejectsInvalidSecret(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	client := spltest.NewMockClient()
 	require.NoError(t, client.Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test"},
@@ -335,4 +339,199 @@ func TestNoahIndexerStatefulSetConverged(t *testing.T) {
 			assert.Equal(t, tt.want, noahIndexerStatefulSetConverged(tt.statefulSet, desiredReplicas))
 		})
 	}
+}
+
+func TestExpectedNoahIndexerPeersReady(t *testing.T) {
+	const currentStart int64 = 1_700_000_000
+	peer0 := "splunk-main-indexer-0.splunk-main-indexer-headless.test.svc.corp.example"
+	peer1 := "splunk-main-indexer-1.splunk-main-indexer-headless.test.svc.corp.example"
+	expectedPeers := map[string]int64{
+		peer0: currentStart,
+		peer1: currentStart,
+	}
+	currentPeer := func(id string, status noah.PeerStatus) noah.Peer {
+		return noah.Peer{ID: id, Status: status, Data: noah.PeerData{StartTime: currentStart}}
+	}
+
+	tests := []struct {
+		name  string
+		peers []noah.Peer
+		want  bool
+	}{
+		{
+			name: "all expected peers are up",
+			peers: []noah.Peer{
+				currentPeer(peer0, noah.PeerStatusUp),
+				currentPeer(peer1, noah.PeerStatusUp),
+			},
+			want: true,
+		},
+		{
+			name: "missing expected peer",
+			peers: []noah.Peer{
+				currentPeer(peer0, noah.PeerStatusUp),
+			},
+		},
+		{
+			name: "expected peer is down",
+			peers: []noah.Peer{
+				currentPeer(peer0, noah.PeerStatusUp),
+				currentPeer(peer1, noah.PeerStatusDown),
+			},
+		},
+		{
+			name: "bare pod name does not satisfy exact advertised identity",
+			peers: []noah.Peer{
+				currentPeer(peer0, noah.PeerStatusUp),
+				currentPeer("splunk-main-indexer-1", noah.PeerStatusUp),
+			},
+		},
+		{
+			name: "foreign cluster domain does not satisfy exact advertised identity",
+			peers: []noah.Peer{
+				currentPeer(peer0, noah.PeerStatusUp),
+				currentPeer("splunk-main-indexer-1.splunk-main-indexer-headless.test.svc.foreign.example", noah.PeerStatusUp),
+			},
+		},
+		{
+			name: "unrelated peer does not prevent expected peers becoming ready",
+			peers: []noah.Peer{
+				currentPeer(peer0, noah.PeerStatusUp),
+				currentPeer(peer1, noah.PeerStatusUp),
+				currentPeer("splunk-other-indexer-4", noah.PeerStatusUp),
+			},
+			want: true,
+		},
+		{
+			name: "duplicate active identity is not ready",
+			peers: []noah.Peer{
+				currentPeer(peer0, noah.PeerStatusUp),
+				currentPeer(peer1, noah.PeerStatusUp),
+				currentPeer(peer1, noah.PeerStatusWarming),
+			},
+		},
+		{
+			name: "stale up incarnation does not satisfy expected peer",
+			peers: []noah.Peer{
+				currentPeer(peer0, noah.PeerStatusUp),
+				{ID: peer1, Status: noah.PeerStatusUp, Data: noah.PeerData{StartTime: currentStart - 1}},
+			},
+		},
+		{
+			name: "historical down incarnation is ignored",
+			peers: []noah.Peer{
+				currentPeer(peer0, noah.PeerStatusUp),
+				currentPeer(peer1, noah.PeerStatusUp),
+				{ID: peer1, Status: noah.PeerStatusDown, Data: noah.PeerData{StartTime: currentStart - 1}},
+			},
+			want: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, expectedNoahIndexerPeersReady(test.peers, expectedPeers))
+		})
+	}
+}
+
+func TestObserveNoahIndexerPeersUsesReferencedAuthentication(t *testing.T) {
+	const peerStart int64 = 1_700_000_010
+	peerID := "splunk-main-indexer-0.splunk-main-indexer-headless.test.svc.corp.example"
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		assert.NotEmpty(t, request.Header.Get("x-splunk-lm-nonce"))
+		assert.NotEmpty(t, request.Header.Get("x-splunk-lm-timestamp"))
+		assert.True(t, strings.HasPrefix(request.Header.Get("x-splunk-digest"), "v2,"))
+		require.NoError(t, json.NewEncoder(response).Encode([]noah.Peer{{
+			ID:     peerID,
+			Status: noah.PeerStatusUp,
+			Data:   noah.PeerData{StartTime: peerStart},
+		}}))
+	}))
+	defer server.Close()
+
+	ctx := t.Context()
+	client := spltest.NewMockClient()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "main", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas:       1,
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+		},
+	}
+	require.NoError(t, client.Create(ctx, &enterpriseApi.NoahCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: cr.Namespace},
+		Spec: enterpriseApi.NoahClusterSpec{
+			Endpoint:      server.URL,
+			Tenant:        "tenant",
+			AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+		},
+	}))
+	require.NoError(t, client.Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
+		Data:       map[string][]byte{noahAuthSecretKey: []byte("unit-test-noah-key")},
+	}))
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-main-indexer", Namespace: cr.Namespace},
+		Spec: appsv1.StatefulSetSpec{
+			ServiceName: "splunk-main-indexer-headless",
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name: "splunk",
+				Env:  []corev1.EnvVar{{Name: resources.ClusterDomainEnvName, Value: "corp.example"}},
+			}}}},
+		},
+	}
+	require.NoError(t, client.Create(ctx, &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-main-indexer-0", Namespace: cr.Namespace},
+		Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{
+			Name:  "splunk",
+			Ready: true,
+			State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{
+				StartedAt: metav1.NewTime(time.Unix(peerStart-1, 0)),
+			}},
+		}}},
+	}))
+
+	ready, err := observeNoahIndexerPeers(ctx, client, cr, statefulSet)
+	require.NoError(t, err)
+	assert.True(t, ready)
+}
+
+func TestSetNoahIndexerPhaseAndConditions(t *testing.T) {
+	cr := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Generation: 7}}
+	setNoahIndexerPhaseAndConditions(cr, false, enterpriseApi.PhaseReady, "", newNoahPeersReadyCondition(
+		metav1.ConditionTrue,
+		enterpriseApi.ReasonNoahPeersReady,
+		"All expected Noah peers are up",
+	))
+
+	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
+	assert.Equal(t, int64(7), cr.Status.ObservedGeneration)
+	assert.True(t, splcommon.IsReady(cr.Status.Conditions))
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahPeersReady)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahPeersReady), condition.Reason)
+	assert.Equal(t, int64(7), condition.ObservedGeneration)
+}
+
+func TestSetNoahIndexerPhaseAndConditionsPreservesUnspecifiedConditions(t *testing.T) {
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Generation: 7},
+		Status: enterpriseApi.IndexerClusterStatus{Conditions: []metav1.Condition{
+			{
+				Type:               string(enterpriseApi.ConditionNoahPeersReady),
+				Status:             metav1.ConditionTrue,
+				Reason:             string(enterpriseApi.ReasonNoahPeersReady),
+				ObservedGeneration: 6,
+			},
+		}},
+	}
+
+	setNoahIndexerPhaseAndConditions(cr, false, enterpriseApi.PhaseError, "resource application failed")
+
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahPeersReady)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
+	assert.Equal(t, int64(6), condition.ObservedGeneration)
 }

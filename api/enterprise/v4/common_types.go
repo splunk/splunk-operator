@@ -176,6 +176,9 @@ const (
 
 	// ConditionRestarting indicates a rolling restart of pods is in progress, gated by PDB
 	ConditionRestarting ConditionType = "Restarting"
+
+	// ConditionNoahPeersReady indicates that every expected peer for a workload is up in Noah.
+	ConditionNoahPeersReady ConditionType = "NoahPeersReady"
 )
 
 // ConditionReason represents the reason for a condition's status
@@ -213,6 +216,11 @@ const (
 	ReasonRollingRestartComplete   ConditionReason = "RollingRestartComplete"
 	ReasonRestartBlockedByPDB      ConditionReason = "RestartBlockedByPDB"
 	ReasonRestartCheckIncomplete   ConditionReason = "RestartCheckIncomplete"
+
+	// NoahPeersReady reasons
+	ReasonNoahPeersReady            ConditionReason = "NoahPeersReady"
+	ReasonNoahPeersNotReady         ConditionReason = "NoahPeersNotReady"
+	ReasonNoahPeerObservationFailed ConditionReason = "NoahPeerObservationFailed"
 )
 
 // Probe defines set of configurable values for Startup, Readiness, and Liveness probes
