@@ -68,6 +68,13 @@ spec:
                 description: Databases to provision on the target cluster.
                 items:
                   properties:
+                    adminRoleName:
+                      description: |-
+                        AdminRoleName is the PostgreSQL role used as the database owner. When
+                        omitted, it defaults to <name>_admin.
+                      maxLength: 63
+                      pattern: ^[A-Za-z_][A-Za-z0-9_$]{0,62}$
+                      type: string
                     deletionPolicy:
                       default: Delete
                       description: |-
@@ -179,6 +186,13 @@ spec:
                       - message: externalAdminSecretRef and externalRWSecretRef must
                           reference different Secrets
                         rule: self.externalAdminSecretRef.name != self.externalRWSecretRef.name
+                    rwRoleName:
+                      description: |-
+                        RWRoleName is the PostgreSQL role used by applications. When omitted, it
+                        defaults to <name>_rw.
+                      maxLength: 63
+                      pattern: ^[A-Za-z_][A-Za-z0-9_$]{0,62}$
+                      type: string
                   required:
                   - name
                   type: object

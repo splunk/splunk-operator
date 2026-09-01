@@ -29,6 +29,7 @@ import (
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -294,18 +295,23 @@ func newReadyClusterScenario(namespace, resourceName, clusterName, cnpgClusterNa
 }
 
 func seedReadyClusterScenario(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool) {
-	seedReadyClusterScenarioWithInstances(ctx, scenario, poolerEnabled, 2)
+	seedReadyClusterScenarioWithDatabase(ctx, scenario, poolerEnabled, platformv1alpha1.DatabaseDefinition{Name: scenario.dbName}, 2)
 }
 
 func seedReadyClusterScenarioWithInstances(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool, instances int) {
-	createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{{Name: scenario.dbName}})
+	seedReadyClusterScenarioWithDatabase(ctx, scenario, poolerEnabled, platformv1alpha1.DatabaseDefinition{Name: scenario.dbName}, instances)
+}
+
+func seedReadyClusterScenarioWithDatabase(ctx context.Context, scenario readyClusterScenario, poolerEnabled bool, database platformv1alpha1.DatabaseDefinition, instances int) {
+	createPostgresDatabaseResource(ctx, scenario.namespace, scenario.resourceName, scenario.clusterName, []platformv1alpha1.DatabaseDefinition{database})
 	postgresCluster := createPostgresClusterResource(ctx, scenario.namespace, scenario.clusterName)
 	// Mirror the cluster controller's roPoolerWanted gate so the seeded fixture matches what
 	// real reconciliation would publish: RO is suppressed below 2 declared instances.
 	roEnabled := poolerEnabled && instances >= 2
 	markPostgresClusterReadyWithPooler(ctx, postgresCluster, scenario.cnpgClusterName, scenario.namespace, poolerEnabled, poolerEnabled, roEnabled)
 	cnpgCluster := createCNPGClusterResourceWithInstances(ctx, scenario.namespace, scenario.cnpgClusterName, instances)
-	markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
+	roles := dbcore.EffectiveRoleNames(database)
+	markCNPGClusterReady(ctx, cnpgCluster, []string{roles.Admin, roles.RW}, "tenant-rw", "tenant-ro")
 }
 
 func expectReconcileResult(result ctrl.Result, err error, requeueAfter time.Duration) {
@@ -335,9 +341,10 @@ func seedExistingDatabaseStatus(ctx context.Context, current *platformv1alpha1.P
 		if database.Name != dbName || database.PasswordConfig != nil {
 			continue
 		}
+		roles := dbcore.EffectiveRoleNames(database)
 		for secretName, username := range map[string]string{
-			adminSecretNameForTest(current.Name, dbName): adminRoleNameForTest(dbName),
-			rwSecretNameForTest(current.Name, dbName):    rwRoleNameForTest(dbName),
+			adminSecretNameForTest(current.Name, dbName): roles.Admin,
+			rwSecretNameForTest(current.Name, dbName):    roles.RW,
 		} {
 			secret := &corev1.Secret{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: current.Namespace}, secret)
@@ -364,6 +371,7 @@ func seedExistingDatabaseStatus(ctx context.Context, current *platformv1alpha1.P
 }
 
 func expectProvisionedArtifacts(ctx context.Context, scenario readyClusterScenario, owner *platformv1alpha1.PostgresDatabase) {
+	roles := roleNamesForTest(owner, scenario.dbName)
 	adminSecret := &corev1.Secret{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: adminSecretNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, adminSecret)).To(Succeed())
 	Expect(adminSecret.Data).To(HaveKey("password"))
@@ -381,16 +389,26 @@ func expectProvisionedArtifacts(ctx context.Context, scenario readyClusterScenar
 	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterRWEndpoint, "tenant-rw."+scenario.namespace+".svc.cluster.local"))
 	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterROEndpoint, "tenant-ro."+scenario.namespace+".svc.cluster.local"))
 	Expect(configMap.Data).To(HaveKeyWithValue(pgconninfo.KeyClusterREndpoint, scenario.cnpgClusterName+"-r."+scenario.namespace+".svc.cluster.local"))
-	Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyAdminUser, adminRoleNameForTest(scenario.dbName)))
-	Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyRWUser, rwRoleNameForTest(scenario.dbName)))
+	Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyAdminUser, roles.Admin))
+	Expect(configMap.Data).To(HaveKeyWithValue(dbcore.ConfigMapKeyRWUser, roles.RW))
 	Expect(metav1.IsControlledBy(configMap, owner)).To(BeTrue())
 }
 
 func expectManagedRolesPatched(ctx context.Context, scenario readyClusterScenario) {
 	current := fetchPostgresDatabase(ctx, scenario.requestName)
-	Expect(publishedRoleNames(current)).To(ConsistOf(adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)))
+	roles := roleNamesForTest(current, scenario.dbName)
+	Expect(publishedRoleNames(current)).To(ConsistOf(roles.Admin, roles.RW))
 	simulateClusterRoleOwnership(ctx, scenario.clusterName, scenario.namespace, current,
-		adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName))
+		roles.Admin, roles.RW)
+}
+
+func roleNamesForTest(postgresDB *platformv1alpha1.PostgresDatabase, dbName string) ports.DatabaseRoleNames {
+	for _, db := range postgresDB.Spec.Databases {
+		if db.Name == dbName {
+			return dbcore.EffectiveRoleNames(db)
+		}
+	}
+	return ports.DatabaseRoleNames{Admin: adminRoleNameForTest(dbName), RW: rwRoleNameForTest(dbName)}
 }
 
 func simulateClusterRoleOwnership(ctx context.Context, clusterName, namespace string, owner *platformv1alpha1.PostgresDatabase, roleNames ...string) {
@@ -408,7 +426,7 @@ func expectCNPGDatabaseCreated(ctx context.Context, scenario readyClusterScenari
 	cnpgDatabase := &cnpgv1.Database{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 	Expect(cnpgDatabase.Spec.Name).To(Equal(scenario.dbName))
-	Expect(cnpgDatabase.Spec.Owner).To(Equal(adminRoleNameForTest(scenario.dbName)))
+	Expect(cnpgDatabase.Spec.Owner).To(Equal(roleNamesForTest(owner, scenario.dbName).Admin))
 	Expect(cnpgDatabase.Spec.ClusterRef.Name).To(Equal(scenario.cnpgClusterName))
 	Expect(metav1.IsControlledBy(cnpgDatabase, owner)).To(BeTrue())
 	return cnpgDatabase
@@ -648,6 +666,41 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectStatusCondition(current, condPrivilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted)
 			})
 
+			It("propagates overridden role names through reconciliation", func() {
+				scenario := newReadyClusterScenario(namespace, "custom-role-names", "custom-role-cluster", "custom-role-cnpg", dbAppdb)
+				database := platformv1alpha1.DatabaseDefinition{
+					Name:          scenario.dbName,
+					AdminRoleName: "tenant_owner",
+					RWRoleName:    "tenant_rw",
+				}
+				seedReadyClusterScenarioWithDatabase(ctx, scenario, false, database, 2)
+
+				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+				current := expectFinalizerAdded(ctx, scenario.requestName)
+				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectProvisionedArtifacts(ctx, scenario, current)
+				expectManagedRolesPatched(ctx, scenario)
+				Expect(publishedRoleNames(current)).To(ConsistOf("tenant_owner", "tenant_rw"))
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
+				markCNPGDatabaseApplied(ctx, cnpgDatabase)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				Expect(current.Status.Databases[0].Roles).To(ConsistOf(
+					platformv1alpha1.DatabaseRoleInfo{Name: "tenant_owner", SecretRef: &corev1.LocalObjectReference{Name: adminSecretNameForTest(scenario.resourceName, scenario.dbName)}, Exists: true},
+					platformv1alpha1.DatabaseRoleInfo{Name: "tenant_rw", SecretRef: &corev1.LocalObjectReference{Name: rwSecretNameForTest(scenario.resourceName, scenario.dbName)}, Exists: true},
+				))
+			})
+
 			It("gates readiness on the current custom-metrics acknowledgement", func() {
 				const (
 					sourceName = "database-handshake-metrics"
@@ -822,7 +875,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 						Labels: map[string]string{"cnpg.io/reload": "true"},
 					},
 					Data: map[string][]byte{
-						"username": []byte("password"),
+						"username": []byte(adminRoleNameForTest(scenario.dbName)),
 						"password": []byte("username"),
 					},
 				})).To(Succeed())
@@ -834,7 +887,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 						Labels: map[string]string{"cnpg.io/reload": "true"},
 					},
 					Data: map[string][]byte{
-						"username": []byte("password"),
+						"username": []byte(rwRoleNameForTest(scenario.dbName)),
 						"password": []byte("username"),
 					},
 				})).To(Succeed())
@@ -991,7 +1044,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 						Labels:    map[string]string{"cnpg.io/reload": "true"},
 					},
 					Data: map[string][]byte{
-						"username": []byte("admin-user"),
+						"username": []byte(adminRoleNameForTest(scenario.dbName)),
 						"password": []byte("admin-pw"),
 					},
 				})).To(Succeed())
@@ -1002,7 +1055,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 						Labels:    map[string]string{"cnpg.io/reload": "true"},
 					},
 					Data: map[string][]byte{
-						"username": []byte("rw-user"),
+						"username": []byte(rwRoleNameForTest(scenario.dbName)),
 						"password": []byte("rw-pw"),
 					},
 				})).To(Succeed())
@@ -1053,7 +1106,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 						Labels:    map[string]string{"cnpg.io/reload": "true"},
 					},
 					Data: map[string][]byte{
-						"username": []byte("admin-user"),
+						"username": []byte(adminRoleNameForTest(scenario.dbName)),
 						"password": []byte("admin-pw"),
 					},
 				})).To(Succeed())
@@ -1064,7 +1117,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 						Labels:    map[string]string{"cnpg.io/reload": "true"},
 					},
 					Data: map[string][]byte{
-						"username": []byte("rw-user"),
+						"username": []byte(rwRoleNameForTest(scenario.dbName)),
 						"password": []byte("rw-pw"),
 					},
 				})).To(Succeed())
@@ -1136,7 +1189,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 						Labels: map[string]string{"cnpg.io/reload": "true"},
 					},
 					Data: map[string][]byte{
-						"username": []byte("password"),
+						"username": []byte(adminRoleNameForTest(scenario.dbName)),
 						"password": []byte("username"),
 					},
 				})).To(Succeed())
@@ -1148,7 +1201,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 						Labels: map[string]string{"cnpg.io/reload": "true"},
 					},
 					Data: map[string][]byte{
-						"username": []byte("password"),
+						"username": []byte(rwRoleNameForTest(scenario.dbName)),
 						"password": []byte("username"),
 					},
 				})).To(Succeed())

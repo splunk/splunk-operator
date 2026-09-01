@@ -10,7 +10,7 @@ This guide explains how to recover a `PostgresDatabase` when the operator stops 
 
 ## When this applies
 
-During `PostgresDatabase` reconciliation, the operator creates or validates role Secrets, publishes role intent for the `PostgresCluster` controller to reconcile, creates databases and ConfigMaps, and then grants privileges for each `<database>_rw` role. See [PostgresDatabase Managed Roles](postgresdatabase-managed-roles.md) for the role handoff between controllers.
+During `PostgresDatabase` reconciliation, the operator creates or validates role Secrets, publishes role intent for the `PostgresCluster` controller to reconcile, creates databases and ConfigMaps, and then grants privileges for each configured read-write role (the default is `<database>_rw`). See [PostgresDatabase Managed Roles](postgresdatabase-managed-roles.md) for the role handoff between controllers.
 
 Most reconciliation errors are treated as retryable and reconciliation continues automatically. Some known user-actionable errors are terminal because retrying the same spec is not expected to succeed without user intervention. When a terminal failure is detected, the operator marks the `PostgresDatabase` as `Failed`, records a failure type in status, and stops retrying that same spec generation.
 
@@ -31,7 +31,7 @@ Current terminal failure types:
 
 | `status.reconcileFailureType` | Condition | Reconciliation phase | Meaning |
 | --- | --- | --- | --- |
-| `Privileges` | `PrivilegesReady` | RW role privilege grants | The operator could not complete live grants for one or more `<database>_rw` roles because of a user-actionable PostgreSQL failure. |
+| `Privileges` | `PrivilegesReady` | RW role privilege grants | The operator could not complete live grants for one or more configured read-write roles because of a user-actionable PostgreSQL failure. |
 
 The mechanism is generic, but `Privileges` is currently the only recorded terminal failure type for `PostgresDatabase`.
 

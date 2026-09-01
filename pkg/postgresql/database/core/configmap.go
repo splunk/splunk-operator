@@ -19,6 +19,7 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 )
@@ -30,15 +31,26 @@ const (
 )
 
 func withDatabaseIdentity(dbName string) pgconninfo.Option {
+	return withDatabaseIdentityAndRoles(dbName, ports.DatabaseRoleNames{
+		Admin: adminRoleName(dbName),
+		RW:    rwRoleName(dbName),
+	})
+}
+
+func withDatabaseIdentityAndRoles(dbName string, roles ports.DatabaseRoleNames) pgconninfo.Option {
 	return func(builder *pgconninfo.Builder) {
 		builder.SetRequired(ConfigMapKeyDatabaseName, dbName)
-		builder.SetRequired(ConfigMapKeyAdminUser, adminRoleName(dbName))
-		builder.SetRequired(ConfigMapKeyRWUser, rwRoleName(dbName))
+		builder.SetRequired(ConfigMapKeyAdminUser, roles.Admin)
+		builder.SetRequired(ConfigMapKeyRWUser, roles.RW)
 	}
 }
 
 func buildDatabaseConfigMapData(dbName string, endpoints clusterEndpoints) (map[string]string, []string, error) {
 	return pgconninfo.BuildConfigMapData(endpoints, withDatabaseIdentity(dbName))
+}
+
+func buildDatabaseConfigMapDataForDatabase(dbSpec platformv1alpha1.DatabaseDefinition, endpoints clusterEndpoints) (map[string]string, []string, error) {
+	return pgconninfo.BuildConfigMapData(endpoints, withDatabaseIdentityAndRoles(dbSpec.Name, EffectiveRoleNames(dbSpec)))
 }
 
 // resolveClusterEndpoints derives the database access endpoints from the cluster

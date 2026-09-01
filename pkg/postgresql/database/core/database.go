@@ -40,10 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// NewDBRepoFunc constructs a DBRepo adapter for the given host and database.
-// Injected by the controller so the core never imports the pgx adapter directly.
-type NewDBRepoFunc func(ctx context.Context, host, dbName, password string) (DBRepo, error)
-
 // secretReconcileError is the single typed, terminal failure raised while
 // reconciling externally managed or provisioned role secrets — covering both
 // "absent" (reasonExternalSecretMissing) and "present but invalid"/"drift". It
@@ -116,7 +112,7 @@ func PostgresDatabaseService(
 	ctx context.Context,
 	rc *ReconcileContext,
 	postgresDB *platformv1alpha1.PostgresDatabase,
-	newDBRepo NewDBRepoFunc,
+	newDBRepo ports.NewDBRepoFunc,
 ) (ctrl.Result, error) {
 	c := rc.Client
 	logger := logging.FromContext(ctx).With("func", "PostgresDatabaseService", "postgresDatabase", postgresDB.Name)
@@ -508,12 +504,15 @@ func PostgresDatabaseService(
 			return ctrl.Result{}, fmt.Errorf("superuser secret %s missing %q key", superSecretRef.Name, superSecretRef.Key)
 		}
 
-		dbNames := make([]string, 0, len(postgresDB.Spec.Databases))
+		privilegeTargets := make([]databasePrivilegeTarget, 0, len(postgresDB.Spec.Databases))
 		for _, dbSpec := range postgresDB.Spec.Databases {
-			dbNames = append(dbNames, dbSpec.Name)
+			privilegeTargets = append(privilegeTargets, databasePrivilegeTarget{
+				Database: dbSpec.Name,
+				Roles:    EffectiveRoleNames(dbSpec),
+			})
 		}
 
-		if err := reconcileRWRolePrivileges(ctx, endpoints.RWHost, string(pw), dbNames, newDBRepo); err != nil {
+		if err := reconcileRWRolePrivileges(ctx, endpoints.RWHost, string(pw), privilegeTargets, newDBRepo); err != nil {
 			if failureType, ok := terminalFailureType(err); ok {
 				upsertFailureState(postgresDB, failureType)
 				logger.ErrorContext(ctx, "RW role privileges grant failed terminally", "error_category", "terminal")
@@ -618,12 +617,13 @@ func PostgresDatabaseService(
 func reconcileRWRolePrivileges(
 	ctx context.Context,
 	rwHost, superPassword string,
-	dbNames []string,
-	newDBRepo NewDBRepoFunc,
+	privilegeTargets []databasePrivilegeTarget,
+	newDBRepo ports.NewDBRepoFunc,
 ) error {
 	var errs []error
 	logger := logging.FromContext(ctx)
-	for _, dbName := range dbNames {
+	for _, privilegeTarget := range privilegeTargets {
+		dbName := privilegeTarget.Database
 		started := time.Now()
 		repo, err := newDBRepo(ctx, rwHost, dbName, superPassword)
 		if err != nil {
@@ -642,7 +642,7 @@ func reconcileRWRolePrivileges(
 			errs = append(errs, safePrivilegeOperationError("connecting", dbName, err))
 			continue
 		}
-		if err := repo.ExecGrants(ctx, dbName); err != nil {
+		if err := repo.AssignRequiredPermissionsToRole(ctx, dbName, privilegeTarget.Roles); err != nil {
 			errorCategory := privilegeLogRetryable
 			if stderrors.Is(err, ErrTerminal) {
 				errorCategory = privilegeLogTerminal
@@ -706,7 +706,8 @@ func getClusterReadyStatus(cluster *platformv1alpha1.PostgresCluster) clusterRea
 func getDesiredRoles(postgresDB *platformv1alpha1.PostgresDatabase) []string {
 	users := make([]string, 0, len(postgresDB.Spec.Databases)*2)
 	for _, dbSpec := range postgresDB.Spec.Databases {
-		users = append(users, adminRoleName(dbSpec.Name), rwRoleName(dbSpec.Name))
+		roles := EffectiveRoleNames(dbSpec)
+		users = append(users, roles.Admin, roles.RW)
 	}
 	return users
 }
@@ -1164,7 +1165,8 @@ func rolesStillOwnedBySelf(postgresDB *platformv1alpha1.PostgresDatabase, status
 	}
 	self := platformv1alpha1.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
 	for _, dbSpec := range databases {
-		for _, role := range []string{adminRoleName(dbSpec.Name), rwRoleName(dbSpec.Name)} {
+		roles := EffectiveRoleNames(dbSpec)
+		for _, role := range []string{roles.Admin, roles.RW} {
 			if owner, ok := status.RoleOwners[role]; ok && sameRoleOwner(owner, self) {
 				return true
 			}
@@ -1173,7 +1175,9 @@ func rolesStillOwnedBySelf(postgresDB *platformv1alpha1.PostgresDatabase, status
 	return false
 }
 
-func resolveSecretNames(postgresDBName string, dbSpec platformv1alpha1.DatabaseDefinition) (adminSecretName string, rwSecretName string) {
+// ResolveSecretNames returns the credential Secret names for a database. Names are stable
+// regardless of adminRoleName/rwRoleName overrides.
+func ResolveSecretNames(postgresDBName string, dbSpec platformv1alpha1.DatabaseDefinition) (adminSecretName string, rwSecretName string) {
 	rwSecretName = ""
 	adminSecretName = ""
 
@@ -1219,14 +1223,15 @@ func secretMissingPolicyForDB(dbName string, existingDBs map[string]struct{}) se
 func reconcileRoleSecrets(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, existingDatabases map[string]struct{}) error {
 	for _, dbSpec := range postgresDB.Spec.Databases {
 		missingPolicy := secretMissingPolicyForDB(dbSpec.Name, existingDatabases)
-		adminSecretName, rwSecretName := resolveSecretNames(postgresDB.Name, dbSpec)
+		adminSecretName, rwSecretName := ResolveSecretNames(postgresDB.Name, dbSpec)
+		roles := EffectiveRoleNames(dbSpec)
 
 		adminErr := reconcileRoleSecret(ctx, c,
-			scheme, postgresDB, adminRoleName(dbSpec.Name),
+			scheme, postgresDB, roles.Admin,
 			adminSecretName,
 			missingPolicy, dbSpec)
 		rwErr := reconcileRoleSecret(ctx, c,
-			scheme, postgresDB, rwRoleName(dbSpec.Name),
+			scheme, postgresDB, roles.RW,
 			rwSecretName,
 			missingPolicy, dbSpec)
 		if err := stderrors.Join(adminErr, rwErr); err != nil {
@@ -1238,7 +1243,7 @@ func reconcileRoleSecrets(ctx context.Context, c client.Client, scheme *runtime.
 
 func reconcileRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, roleName, secretName string, missingPolicy secretMissingPolicy, dbSpec platformv1alpha1.DatabaseDefinition) error {
 	if dbSpec.PasswordConfig != nil {
-		return ensureExternalSecret(ctx, c, postgresDB, secretName)
+		return ensureExternalSecret(ctx, c, postgresDB, secretName, roleName)
 	} else {
 		if missingPolicy == reportSecretDriftIfMissing {
 			return ensureProvisionedSecret(ctx, c, scheme, postgresDB, roleName, secretName)
@@ -1247,7 +1252,7 @@ func reconcileRoleSecret(ctx context.Context, c client.Client, scheme *runtime.S
 	}
 }
 
-func ensureExternalSecret(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, secretName string) error {
+func ensureExternalSecret(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, secretName, roleName string) error {
 	// generic safety for this codeblock, as strict safety + verbose information
 	// is meant to be provided by kubebuilder validation (which cant be tested here)
 	if secretName == "" {
@@ -1268,10 +1273,10 @@ func ensureExternalSecret(ctx context.Context, c client.Client, postgresDB *plat
 		return err
 	}
 
-	return ValidateExternalDatabaseSecret(secret, secretName)
+	return ValidateExternalDatabaseSecret(secret, secretName, roleName)
 }
 
-func ValidateExternalDatabaseSecret(secret *corev1.Secret, secretName string) error {
+func ValidateExternalDatabaseSecret(secret *corev1.Secret, secretName, expectedRoleName string) error {
 	if secret.Data == nil {
 		return secretReconcileError{
 			message: fmt.Sprintf("external secret \"%s\" is missing data", secretName),
@@ -1286,6 +1291,13 @@ func ValidateExternalDatabaseSecret(secret *corev1.Secret, secretName string) er
 		return secretReconcileError{
 			message: fmt.Sprintf("external secret \"%s\" is missing required keys", secretName),
 			reason:  reasonExternalSecretMissingKeys,
+		}
+	}
+
+	if string(secret.Data[secretKeyUsername]) != expectedRoleName {
+		return secretReconcileError{
+			message: fmt.Sprintf("external secret %q username does not match PostgreSQL role %q", secretName, expectedRoleName),
+			reason:  reasonExternalSecretInvalid,
 		}
 	}
 
@@ -1405,7 +1417,7 @@ func buildCNPGDatabaseSpec(clusterName string, dbSpec platformv1alpha1.DatabaseD
 	}
 	return cnpgv1.DatabaseSpec{
 		Name:          dbSpec.Name,
-		Owner:         adminRoleName(dbSpec.Name),
+		Owner:         EffectiveRoleNames(dbSpec).Admin,
 		ClusterRef:    corev1.LocalObjectReference{Name: clusterName},
 		ReclaimPolicy: reclaimPolicy,
 		Extensions:    extensions,
@@ -1450,7 +1462,7 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 			},
 		}
 		_, err := controllerutil.CreateOrUpdate(ctx, c, cm, func() error {
-			data, _, err := buildDatabaseConfigMapData(dbSpec.Name, endpoints)
+			data, _, err := buildDatabaseConfigMapDataForDatabase(dbSpec, endpoints)
 			if err != nil {
 				return fmt.Errorf("building ConfigMap data for database %s: %w", dbSpec.Name, err)
 			}
@@ -1568,7 +1580,8 @@ func populateDatabaseStatusForDefinitions(postgresDB *platformv1alpha1.PostgresD
 	}
 	databases := make([]platformv1alpha1.DatabaseInfo, 0, len(definitions))
 	for _, dbSpec := range definitions {
-		adminSecretName, rwSecretName := resolveSecretNames(postgresDB.Name, dbSpec)
+		adminSecretName, rwSecretName := ResolveSecretNames(postgresDB.Name, dbSpec)
+		roles := EffectiveRoleNames(dbSpec)
 		info := platformv1alpha1.DatabaseInfo{
 			Name:               dbSpec.Name,
 			Ready:              ready,
@@ -1588,8 +1601,8 @@ func populateDatabaseStatusForDefinitions(postgresDB *platformv1alpha1.PostgresD
 		}
 		if publishRoles {
 			info.Roles = []platformv1alpha1.DatabaseRoleInfo{
-				{Name: adminRoleName(dbSpec.Name), SecretRef: &corev1.LocalObjectReference{Name: adminSecretName}, Exists: exists},
-				{Name: rwRoleName(dbSpec.Name), SecretRef: &corev1.LocalObjectReference{Name: rwSecretName}, Exists: exists},
+				{Name: roles.Admin, SecretRef: &corev1.LocalObjectReference{Name: adminSecretName}, Exists: exists},
+				{Name: roles.RW, SecretRef: &corev1.LocalObjectReference{Name: rwSecretName}, Exists: exists},
 			}
 		}
 		databases = append(databases, info)
@@ -1641,7 +1654,8 @@ func roleGateReasons(postgresDB *platformv1alpha1.PostgresDatabase, gate roleGat
 // databaseForRole resolves a managed role name back to its spec database, or "" if none matches.
 func databaseForRole(postgresDB *platformv1alpha1.PostgresDatabase, role string) string {
 	for _, dbSpec := range postgresDB.Spec.Databases {
-		if role == adminRoleName(dbSpec.Name) || role == rwRoleName(dbSpec.Name) {
+		roles := EffectiveRoleNames(dbSpec)
+		if role == roles.Admin || role == roles.RW {
 			return dbSpec.Name
 		}
 	}

@@ -370,7 +370,8 @@ Required fields and impact:
 A `PostgresDatabase` declares one or more application databases on an existing `PostgresCluster`
 via `spec.clusterRef.name` — a same-namespace reference (see
 [No cross-namespace access](#no-cross-namespace-access)) that is **immutable** after creation. Each
-entry in `spec.databases[]` (1–10 per resource) produces a `<name>_admin` and `<name>_rw`
+entry in `spec.databases[]` (1–10 per resource) produces `<name>_admin` and `<name>_rw` roles by
+default. `adminRoleName` and `rwRoleName` can override those names. Provisioning also creates the
 PostgreSQL role, generated credential Secrets, and a connection ConfigMap. See
 [PostgresDatabase Managed Roles](postgresdatabase-managed-roles.md) for the full role-reconciliation
 and deletion-policy behavior.
@@ -478,7 +479,7 @@ Required fields and impact:
 - `PostgresCluster.spec.class` selects the shared sizing, PostgreSQL version, backup, TLS, and pooler
   policy for every database on the cluster.
 - Each `PostgresDatabase.spec.clusterRef.name` must match a `PostgresCluster` in the same namespace.
-- Each `databases[].name` gets its own PostgreSQL database plus `<name>_admin` and `<name>_rw` roles.
+- Each `databases[].name` gets its own PostgreSQL database plus configured admin and read-write roles (defaulting to `<name>_admin` and `<name>_rw`).
 - `deletionPolicy` is per database entry, so one team's retention choice does not change another
   team's entry when deleting a `PostgresDatabase`; cluster-level deletion is controlled by
   `PostgresCluster.spec.clusterDeletionPolicy`.

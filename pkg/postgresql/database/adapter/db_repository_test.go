@@ -1,25 +1,44 @@
+/*
+Copyright 2026.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 package adapter
 
 import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
+	"github.com/splunk/splunk-operator/pkg/postgresql/database/infrastructure/postgres"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type fakeDBConn struct {
-	tx               *fakeGrantTx
+var (
+	_ postgres.Conn = (*fakeConn)(nil)
+	_ postgres.Tx   = (*fakeTx)(nil)
+	_ postgres.Rows = (*fakeRows)(nil)
+)
+
+type fakeConn struct {
+	tx               *fakeTx
 	rows             *fakeRows
 	queryErr         error
 	beginErr         error
@@ -32,7 +51,7 @@ type fakeDBConn struct {
 	closeHasDeadline bool
 }
 
-func (c *fakeDBConn) begin(ctx context.Context) (grantTx, error) {
+func (c *fakeConn) Begin(_ context.Context) (postgres.Tx, error) {
 	c.beginCall++
 	if c.beginErr != nil {
 		return nil, c.beginErr
@@ -40,7 +59,7 @@ func (c *fakeDBConn) begin(ctx context.Context) (grantTx, error) {
 	return c.tx, nil
 }
 
-func (c *fakeDBConn) close(ctx context.Context) error {
+func (c *fakeConn) Close(ctx context.Context) error {
 	c.closed = true
 	c.closeCtx = ctx
 	c.closeCtxErr = ctx.Err()
@@ -48,7 +67,7 @@ func (c *fakeDBConn) close(ctx context.Context) error {
 	return c.closeErr
 }
 
-func (c *fakeDBConn) query(_ context.Context, _ string, _ ...any) (pgRows, error) {
+func (c *fakeConn) Query(_ context.Context, _ string, _ ...any) (postgres.Rows, error) {
 	if c.queryErr != nil {
 		return nil, c.queryErr
 	}
@@ -56,6 +75,10 @@ func (c *fakeDBConn) query(_ context.Context, _ string, _ ...any) (pgRows, error
 		return &fakeRows{}, nil
 	}
 	return c.rows, nil
+}
+
+func (c *fakeConn) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
 }
 
 type fakeRows struct {
@@ -85,11 +108,7 @@ func (r *fakeRows) Scan(dest ...any) error {
 func (r *fakeRows) Close()     { r.closed = true }
 func (r *fakeRows) Err() error { return r.errErr }
 
-func (c *fakeDBConn) exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, nil
-}
-
-type fakeGrantTx struct {
+type fakeTx struct {
 	execErrAt           int
 	execErr             error
 	commitErr           error
@@ -105,7 +124,7 @@ type fakeGrantTx struct {
 	rollbackHasDeadline bool
 }
 
-func (tx *fakeGrantTx) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
+func (tx *fakeTx) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
 	tx.stmts = append(tx.stmts, sql)
 	if tx.onExec != nil {
 		tx.onExec()
@@ -116,12 +135,12 @@ func (tx *fakeGrantTx) Exec(ctx context.Context, sql string, arguments ...any) (
 	return pgconn.CommandTag{}, nil
 }
 
-func (tx *fakeGrantTx) Commit(ctx context.Context) error {
+func (tx *fakeTx) Commit(_ context.Context) error {
 	tx.committed = true
 	return tx.commitErr
 }
 
-func (tx *fakeGrantTx) Rollback(ctx context.Context) error {
+func (tx *fakeTx) Rollback(ctx context.Context) error {
 	tx.rollbackCalls++
 	tx.rollbackCtx = ctx
 	tx.rollbackCtxErr = ctx.Err()
@@ -130,18 +149,18 @@ func (tx *fakeGrantTx) Rollback(ctx context.Context) error {
 		return tx.rollbackErr
 	}
 	if tx.committed {
-		return pgx.ErrTxClosed
+		return postgres.ErrTxAlreadyClosed
 	}
 	tx.rolledBack = true
 	return nil
 }
 
-func TestPGDBRepositoryExecGrantsSuccess(t *testing.T) {
-	tx := &fakeGrantTx{}
-	conn := &fakeDBConn{tx: tx}
+func TestPGDBRepositoryAssignRequiredPermissionsToRoleSuccess(t *testing.T) {
+	tx := &fakeTx{}
+	conn := &fakeConn{tx: tx}
 	repo := &pgDBRepository{conn: conn}
 
-	err := repo.ExecGrants(context.Background(), "appdb")
+	err := repo.AssignRequiredPermissionsToRole(context.Background(), "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
 
 	require.NoError(t, err)
 	assert.True(t, conn.closed)
@@ -150,67 +169,77 @@ func TestPGDBRepositoryExecGrantsSuccess(t *testing.T) {
 	assert.Equal(t, 1, tx.rollbackCalls, "the post-commit rollback must safely close the transaction")
 	assert.False(t, tx.rolledBack)
 	assert.Equal(t, []string{
-		`GRANT CONNECT ON DATABASE "appdb" TO appdb_rw`,
-		`GRANT USAGE ON SCHEMA public TO appdb_rw`,
-		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO appdb_rw`,
-		`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO appdb_rw`,
-		`ALTER DEFAULT PRIVILEGES FOR ROLE appdb_admin IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO appdb_rw`,
-		`ALTER DEFAULT PRIVILEGES FOR ROLE appdb_admin IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO appdb_rw`,
+		`GRANT CONNECT ON DATABASE "appdb" TO "appdb_rw"`,
+		`GRANT USAGE ON SCHEMA public TO "appdb_rw"`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "appdb_rw"`,
+		`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "appdb_rw"`,
+		`ALTER DEFAULT PRIVILEGES FOR ROLE "appdb_admin" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "appdb_rw"`,
+		`ALTER DEFAULT PRIVILEGES FOR ROLE "appdb_admin" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "appdb_rw"`,
 	}, tx.stmts)
 }
 
-func TestPGDBRepositoryExecGrantsEscapesDatabaseName(t *testing.T) {
-	tx := &fakeGrantTx{}
-	conn := &fakeDBConn{tx: tx}
+func TestPGDBRepositoryAssignRequiredPermissionsToRoleUsesConfiguredRoleNames(t *testing.T) {
+	tx := &fakeTx{}
+	repo := &pgDBRepository{conn: &fakeConn{tx: tx}}
+
+	require.NoError(t, repo.AssignRequiredPermissionsToRole(context.Background(), "appdb", ports.DatabaseRoleNames{Admin: "Tenant_Owner", RW: "Tenant_RW"}))
+
+	assert.Equal(t, `GRANT CONNECT ON DATABASE "appdb" TO "Tenant_RW"`, tx.stmts[0])
+	assert.Equal(t, `ALTER DEFAULT PRIVILEGES FOR ROLE "Tenant_Owner" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "Tenant_RW"`, tx.stmts[4])
+}
+
+func TestPGDBRepositoryAssignRequiredPermissionsToRoleEscapesDatabaseName(t *testing.T) {
+	tx := &fakeTx{}
+	conn := &fakeConn{tx: tx}
 	repo := &pgDBRepository{conn: conn}
 
-	err := repo.ExecGrants(context.Background(), `app"db`)
+	err := repo.AssignRequiredPermissionsToRole(context.Background(), `app"db`, ports.DatabaseRoleNames{Admin: `app"db_admin`, RW: `app"db_rw`})
 
 	require.NoError(t, err)
 	require.NotEmpty(t, tx.stmts)
-	assert.Equal(t, `GRANT CONNECT ON DATABASE "app""db" TO app"db_rw`, tx.stmts[0])
+	assert.Equal(t, `GRANT CONNECT ON DATABASE "app""db" TO "app""db_rw"`, tx.stmts[0])
 }
 
-func TestPGDBRepositoryExecGrantsErrors(t *testing.T) {
+func TestPGDBRepositoryAssignRequiredPermissionsToRoleErrors(t *testing.T) {
 	tests := []struct {
 		name         string
-		conn         *fakeDBConn
+		conn         *fakeConn
 		wantTerminal bool
 		wantContains string
 	}{
 		{
 			name:         "terminal begin error",
-			conn:         &fakeDBConn{beginErr: &pgconn.PgError{Code: "28P01", Message: "password authentication failed"}},
+			conn:         &fakeConn{beginErr: &pgconn.PgError{Code: "28P01", Message: "password authentication failed"}},
 			wantTerminal: true,
 			wantContains: "PostgreSQL grant transaction begin failed",
 		},
 		{
 			name:         "retryable begin error",
-			conn:         &fakeDBConn{beginErr: &pgconn.PgError{Code: "08006", Message: "connection failure"}},
+			conn:         &fakeConn{beginErr: &pgconn.PgError{Code: "08006", Message: "connection failure"}},
 			wantTerminal: false,
 			wantContains: "PostgreSQL grant transaction begin failed",
 		},
 		{
 			name:         "terminal exec error",
-			conn:         &fakeDBConn{tx: &fakeGrantTx{execErrAt: 1, execErr: &pgconn.PgError{Code: "42501", Message: "permission denied"}}},
+			conn:         &fakeConn{tx: &fakeTx{execErrAt: 1, execErr: &pgconn.PgError{Code: "42501", Message: "permission denied"}}},
 			wantTerminal: true,
 			wantContains: "PostgreSQL grant execution failed",
 		},
 		{
 			name:         "retryable exec error",
-			conn:         &fakeDBConn{tx: &fakeGrantTx{execErrAt: 1, execErr: &pgconn.PgError{Code: "42601", Message: "syntax error"}}},
+			conn:         &fakeConn{tx: &fakeTx{execErrAt: 1, execErr: &pgconn.PgError{Code: "42601", Message: "syntax error"}}},
 			wantTerminal: false,
 			wantContains: "PostgreSQL grant execution failed",
 		},
 		{
 			name:         "terminal commit error",
-			conn:         &fakeDBConn{tx: &fakeGrantTx{commitErr: &pgconn.PgError{Code: "28000", Message: "invalid authorization specification"}}},
+			conn:         &fakeConn{tx: &fakeTx{commitErr: &pgconn.PgError{Code: "28000", Message: "invalid authorization specification"}}},
 			wantTerminal: true,
 			wantContains: "PostgreSQL grant transaction commit failed",
 		},
 		{
 			name:         "retryable commit error",
-			conn:         &fakeDBConn{tx: &fakeGrantTx{commitErr: errors.New("connection reset")}},
+			conn:         &fakeConn{tx: &fakeTx{commitErr: errors.New("connection reset")}},
 			wantTerminal: false,
 			wantContains: "PostgreSQL grant transaction commit failed",
 		},
@@ -220,10 +249,10 @@ func TestPGDBRepositoryExecGrantsErrors(t *testing.T) {
 		t.Run(tst.name, func(t *testing.T) {
 			repo := &pgDBRepository{conn: tst.conn}
 
-			err := repo.ExecGrants(context.Background(), "appdb")
+			err := repo.AssignRequiredPermissionsToRole(context.Background(), "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
 
 			require.Error(t, err)
-			assert.Equal(t, tst.wantTerminal, errors.Is(err, dbcore.ErrTerminal))
+			assert.Equal(t, tst.wantTerminal, errors.Is(err, ports.ErrDBRepoTerminal))
 			assert.Contains(t, err.Error(), tst.wantContains)
 			assert.NotContains(t, err.Error(), "password authentication failed")
 			assert.True(t, tst.conn.closed)
@@ -234,12 +263,12 @@ func TestPGDBRepositoryExecGrantsErrors(t *testing.T) {
 	}
 }
 
-func TestPGDBRepositoryExecGrantsExecFailureRollsBack(t *testing.T) {
-	tx := &fakeGrantTx{execErrAt: 2, execErr: errors.New("grant failed")}
-	conn := &fakeDBConn{tx: tx}
+func TestPGDBRepositoryAssignRequiredPermissionsToRoleExecFailureRollsBack(t *testing.T) {
+	tx := &fakeTx{execErrAt: 2, execErr: errors.New("grant failed")}
+	conn := &fakeConn{tx: tx}
 	repo := &pgDBRepository{conn: conn}
 
-	err := repo.ExecGrants(context.Background(), "appdb")
+	err := repo.AssignRequiredPermissionsToRole(context.Background(), "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
 
 	require.Error(t, err)
 	assert.False(t, tx.committed)
@@ -248,13 +277,13 @@ func TestPGDBRepositoryExecGrantsExecFailureRollsBack(t *testing.T) {
 	assert.True(t, conn.closed)
 }
 
-func TestPGDBRepositoryExecGrantsRollsBackWithFreshBoundedContextAfterCancellation(t *testing.T) {
+func TestPGDBRepositoryAssignRequiredPermissionsToRoleRollsBackWithFreshBoundedContextAfterCancellation(t *testing.T) {
 	operationCtx, cancel := context.WithCancel(context.Background())
-	tx := &fakeGrantTx{execErrAt: 1, execErr: errors.New("grant failed")}
+	tx := &fakeTx{execErrAt: 1, execErr: errors.New("grant failed")}
 	tx.onExec = cancel
-	conn := &fakeDBConn{tx: tx}
+	conn := &fakeConn{tx: tx}
 
-	err := (&pgDBRepository{conn: conn}).ExecGrants(operationCtx, "appdb")
+	err := (&pgDBRepository{conn: conn}).AssignRequiredPermissionsToRole(operationCtx, "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
 
 	require.ErrorContains(t, err, "PostgreSQL grant execution failed")
 	require.ErrorIs(t, operationCtx.Err(), context.Canceled)
@@ -269,18 +298,18 @@ func TestPGDBRepositoryClosesWithFreshBoundedContext(t *testing.T) {
 	tests := []struct {
 		name string
 		run  func(*pgDBRepository, context.Context) error
-		conn *fakeDBConn
+		conn *fakeConn
 	}{
 		{
 			name: "grant execution",
-			conn: &fakeDBConn{tx: &fakeGrantTx{}},
+			conn: &fakeConn{tx: &fakeTx{}},
 			run: func(repo *pgDBRepository, ctx context.Context) error {
-				return repo.ExecGrants(ctx, "appdb")
+				return repo.AssignRequiredPermissionsToRole(ctx, "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
 			},
 		},
 		{
 			name: "post restore role sweeping",
-			conn: &fakeDBConn{tx: &fakeGrantTx{}, rows: &fakeRows{}},
+			conn: &fakeConn{tx: &fakeTx{}, rows: &fakeRows{}},
 			run: func(repo *pgDBRepository, ctx context.Context) error {
 				_, err := repo.SweepUnmanagedRolesAfterRestore(ctx)
 				return err
@@ -309,12 +338,12 @@ func TestPGDBRepositoryClosesWithFreshBoundedContext(t *testing.T) {
 func TestPGDBRepositoryCloseFailureIsLoggedWithoutMaskingPrimaryError(t *testing.T) {
 	var logs bytes.Buffer
 	ctx := logging.WithLogger(context.Background(), slog.New(slog.NewTextHandler(&logs, nil)))
-	conn := &fakeDBConn{
+	conn := &fakeConn{
 		beginErr: errors.New("primary operation failure"),
 		closeErr: errors.New("close failure must not escape"),
 	}
 
-	err := (&pgDBRepository{conn: conn}).ExecGrants(ctx, "appdb")
+	err := (&pgDBRepository{conn: conn}).AssignRequiredPermissionsToRole(ctx, "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
 
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "PostgreSQL grant transaction begin failed")
@@ -327,8 +356,8 @@ func TestPGDBRepositoryCloseFailureIsLoggedWithoutMaskingPrimaryError(t *testing
 func TestPGDBRepositorySweepCloseFailureIsLoggedWithoutMaskingSuccess(t *testing.T) {
 	var logs bytes.Buffer
 	ctx := logging.WithLogger(context.Background(), slog.New(slog.NewTextHandler(&logs, nil)))
-	conn := &fakeDBConn{
-		tx:       &fakeGrantTx{},
+	conn := &fakeConn{
+		tx:       &fakeTx{},
 		rows:     &fakeRows{},
 		closeErr: errors.New("sweep close failure must not escape"),
 	}
@@ -344,33 +373,26 @@ func TestPGDBRepositorySweepCloseFailureIsLoggedWithoutMaskingSuccess(t *testing
 }
 
 func TestNewDBRepository(t *testing.T) {
-	originalConnectConfig := pgxConnectConfig
-	t.Cleanup(func() {
-		pgxConnectConfig = originalConnectConfig
-	})
+	original := connectToPostgres
+	t.Cleanup(func() { connectToPostgres = original })
 
-	t.Run("returns repository with parsed config", func(t *testing.T) {
-		var gotConfig *pgx.ConnConfig
-		pgxConnectConfig = func(ctx context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
-			gotConfig = cfg
-			return nil, nil
+	t.Run("returns repository on success", func(t *testing.T) {
+		connectToPostgres = func(_ context.Context, host, dbName, password string) (postgres.Conn, error) {
+			assert.Equal(t, "postgres.example.com", host)
+			assert.Equal(t, "appdb", dbName)
+			assert.Equal(t, "secret", password)
+			return &fakeConn{}, nil
 		}
 
 		repo, err := NewDBRepository(context.Background(), "postgres.example.com", "appdb", "secret")
 
 		require.NoError(t, err)
 		require.NotNil(t, repo)
-		require.NotNil(t, gotConfig)
-		assert.Equal(t, superUsername, gotConfig.User)
-		assert.Equal(t, "postgres.example.com", gotConfig.Host)
-		assert.Equal(t, uint16(5432), gotConfig.Port)
-		assert.Equal(t, "appdb", gotConfig.Database)
-		assert.Equal(t, "secret", gotConfig.Password)
 	})
 
 	t.Run("wraps terminal connect error", func(t *testing.T) {
 		connectErr := &pgconn.PgError{Code: "28P01", Message: "password authentication failed: supersecret"}
-		pgxConnectConfig = func(ctx context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
+		connectToPostgres = func(_ context.Context, _, _, _ string) (postgres.Conn, error) {
 			return nil, connectErr
 		}
 
@@ -378,7 +400,7 @@ func TestNewDBRepository(t *testing.T) {
 
 		require.Error(t, err)
 		assert.Nil(t, repo)
-		assert.ErrorIs(t, err, dbcore.ErrTerminal)
+		assert.ErrorIs(t, err, ports.ErrDBRepoTerminal)
 		assert.NotErrorIs(t, err, connectErr)
 		assert.Contains(t, err.Error(), "PostgreSQL connection failed")
 		assert.NotContains(t, err.Error(), "supersecret")
@@ -386,7 +408,7 @@ func TestNewDBRepository(t *testing.T) {
 
 	t.Run("returns retryable connect error", func(t *testing.T) {
 		connectErr := errors.New("connection reset: supersecret")
-		pgxConnectConfig = func(ctx context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
+		connectToPostgres = func(_ context.Context, _, _, _ string) (postgres.Conn, error) {
 			return nil, connectErr
 		}
 
@@ -394,7 +416,7 @@ func TestNewDBRepository(t *testing.T) {
 
 		require.Error(t, err)
 		assert.Nil(t, repo)
-		assert.NotErrorIs(t, err, dbcore.ErrTerminal)
+		assert.NotErrorIs(t, err, ports.ErrDBRepoTerminal)
 		assert.NotErrorIs(t, err, connectErr)
 		assert.Contains(t, err.Error(), "PostgreSQL connection failed")
 		assert.NotContains(t, err.Error(), "supersecret")
@@ -402,14 +424,12 @@ func TestNewDBRepository(t *testing.T) {
 }
 
 func TestNewRoleSweeper(t *testing.T) {
-	originalConnectConfig := pgxConnectConfig
-	t.Cleanup(func() {
-		pgxConnectConfig = originalConnectConfig
-	})
+	original := connectToPostgres
+	t.Cleanup(func() { connectToPostgres = original })
 
 	t.Run("returns sweeper", func(t *testing.T) {
-		pgxConnectConfig = func(ctx context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
-			return nil, nil
+		connectToPostgres = func(_ context.Context, _, _, _ string) (postgres.Conn, error) {
+			return &fakeConn{}, nil
 		}
 
 		sweeper, err := NewRoleSweeper(context.Background(), "postgres.example.com", "appdb", "secret")
@@ -420,7 +440,7 @@ func TestNewRoleSweeper(t *testing.T) {
 
 	t.Run("wraps terminal connect error as port sentinel", func(t *testing.T) {
 		connectErr := &pgconn.PgError{Code: "28P01", Message: "password authentication failed: supersecret"}
-		pgxConnectConfig = func(ctx context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
+		connectToPostgres = func(_ context.Context, _, _, _ string) (postgres.Conn, error) {
 			return nil, connectErr
 		}
 
@@ -435,7 +455,7 @@ func TestNewRoleSweeper(t *testing.T) {
 
 	t.Run("returns retryable connect error unwrapped", func(t *testing.T) {
 		connectErr := errors.New("connection reset: supersecret")
-		pgxConnectConfig = func(ctx context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
+		connectToPostgres = func(_ context.Context, _, _, _ string) (postgres.Conn, error) {
 			return nil, connectErr
 		}
 
@@ -450,8 +470,8 @@ func TestNewRoleSweeper(t *testing.T) {
 }
 
 func TestSweepUnmanagedRolesAfterRestoreSuccess(t *testing.T) {
-	tx := &fakeGrantTx{}
-	conn := &fakeDBConn{
+	tx := &fakeTx{}
+	conn := &fakeConn{
 		tx:   tx,
 		rows: &fakeRows{names: []string{"app_user", "reporting"}},
 	}
@@ -472,8 +492,8 @@ func TestSweepUnmanagedRolesAfterRestoreSuccess(t *testing.T) {
 }
 
 func TestSweepUnmanagedRolesAfterRestoreNoRoles(t *testing.T) {
-	tx := &fakeGrantTx{}
-	conn := &fakeDBConn{tx: tx, rows: &fakeRows{}}
+	tx := &fakeTx{}
+	conn := &fakeConn{tx: tx, rows: &fakeRows{}}
 	repo := &pgDBRepository{conn: conn}
 
 	rolesSwept, err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
@@ -486,7 +506,7 @@ func TestSweepUnmanagedRolesAfterRestoreNoRoles(t *testing.T) {
 
 func TestSweepUnmanagedRolesAfterRestoreErrors(t *testing.T) {
 	t.Run("query error", func(t *testing.T) {
-		conn := &fakeDBConn{queryErr: errors.New("boom")}
+		conn := &fakeConn{queryErr: errors.New("boom")}
 		repo := &pgDBRepository{conn: conn}
 
 		_, err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
@@ -498,8 +518,8 @@ func TestSweepUnmanagedRolesAfterRestoreErrors(t *testing.T) {
 	})
 
 	t.Run("exec error aborts the batch", func(t *testing.T) {
-		tx := &fakeGrantTx{execErrAt: 1, execErr: errors.New("permission denied")}
-		conn := &fakeDBConn{tx: tx, rows: &fakeRows{names: []string{"app_user", "reporting"}}}
+		tx := &fakeTx{execErrAt: 1, execErr: errors.New("permission denied")}
+		conn := &fakeConn{tx: tx, rows: &fakeRows{names: []string{"app_user", "reporting"}}}
 		repo := &pgDBRepository{conn: conn}
 
 		_, err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
@@ -512,8 +532,8 @@ func TestSweepUnmanagedRolesAfterRestoreErrors(t *testing.T) {
 	})
 
 	t.Run("commit error", func(t *testing.T) {
-		tx := &fakeGrantTx{commitErr: errors.New("connection reset")}
-		conn := &fakeDBConn{tx: tx, rows: &fakeRows{names: []string{"app_user"}}}
+		tx := &fakeTx{commitErr: errors.New("connection reset")}
+		conn := &fakeConn{tx: tx, rows: &fakeRows{names: []string{"app_user"}}}
 		repo := &pgDBRepository{conn: conn}
 
 		_, err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
@@ -522,74 +542,4 @@ func TestSweepUnmanagedRolesAfterRestoreErrors(t *testing.T) {
 		assert.Contains(t, err.Error(), "PostgreSQL role sweep transaction commit failed")
 		assert.True(t, conn.closed)
 	})
-}
-
-func TestIsTerminalPostgresError(t *testing.T) {
-	tests := []struct {
-		name         string
-		err          error
-		wantTerminal bool
-	}{
-		{
-			name:         "nil",
-			err:          nil,
-			wantTerminal: false,
-		},
-		{
-			name:         "postgres auth failure",
-			err:          &pgconn.PgError{Code: "28P01", Message: "password authentication failed"},
-			wantTerminal: true,
-		},
-		{
-			name:         "postgres invalid authorization",
-			err:          &pgconn.PgError{Code: "28000", Message: "invalid authorization specification"},
-			wantTerminal: true,
-		},
-		{
-			name:         "postgres auth class error",
-			err:          &pgconn.PgError{Code: "28XYZ", Message: "authorization failure"},
-			wantTerminal: true,
-		},
-		{
-			name:         "postgres insufficient privilege",
-			err:          &pgconn.PgError{Code: "42501", Message: "permission denied"},
-			wantTerminal: true,
-		},
-		{
-			name:         "wrapped terminal postgres error",
-			err:          fmt.Errorf("executing grant: %w", &pgconn.PgError{Code: "42501", Message: "permission denied"}),
-			wantTerminal: true,
-		},
-		{
-			name:         "postgres connection exception is retryable",
-			err:          &pgconn.PgError{Code: "08006", Message: "connection failure"},
-			wantTerminal: false,
-		},
-		{
-			name:         "postgres syntax/access class error other than insufficient privilege is retryable",
-			err:          &pgconn.PgError{Code: "42601", Message: "syntax error"},
-			wantTerminal: false,
-		},
-		{
-			name:         "postgres cannot connect now is retryable",
-			err:          &pgconn.PgError{Code: "57P03", Message: "cannot connect now"},
-			wantTerminal: false,
-		},
-		{
-			name:         "plain auth text is retryable",
-			err:          errors.New("password authentication failed"),
-			wantTerminal: false,
-		},
-		{
-			name:         "some other error is retryable",
-			err:          errors.New("some other error"),
-			wantTerminal: false,
-		},
-	}
-
-	for _, tst := range tests {
-		t.Run(tst.name, func(t *testing.T) {
-			assert.Equal(t, tst.wantTerminal, isTerminalPostgresError(tst.err))
-		})
-	}
 }
