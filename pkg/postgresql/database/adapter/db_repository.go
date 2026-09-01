@@ -14,85 +14,38 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 // Package adapter contains driven adapters for the PostgresDatabase domain.
-// Each adapter implements a port defined in core/ports.go.
+// Each adapter implements a port defined in pkg/postgresql/shared/ports,
+// built on top of the pgx-backed primitives in
+// pkg/postgresql/database/infrastructure/postgres.
 package adapter
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/splunk/splunk-operator/pkg/logging"
-	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
+	"github.com/splunk/splunk-operator/pkg/postgresql/database/infrastructure/postgres"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var (
-	_ dbcore.DBRepo     = (*pgDBRepository)(nil)
+	_ ports.DBRepo      = (*pgDBRepository)(nil)
 	_ ports.RoleSweeper = (*pgDBRepository)(nil)
 )
 
 const (
-	superUsername    = "postgres"
-	postgresPort     = "5432"
-	dbConnectTimeout = 10 * time.Second
-	dbCloseTimeout   = 10 * time.Second
-
-	pgCodeClassInvalidAuthorizationSpecification = "28"
-	pgCodeInsufficientPrivilege                  = "42501"
+	dbCloseTimeout = 10 * time.Second
 )
 
-var pgxConnectConfig = pgx.ConnectConfig
+// connectToPostgres is a seam for tests to stub the infra connection dial.
+var connectToPostgres = postgres.Connect
 
-type dbConn interface {
-	begin(ctx context.Context) (grantTx, error)
-	close(ctx context.Context) error
-	query(ctx context.Context, sql string, args ...any) (pgRows, error)
-	exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type pgRows interface {
-	Next() bool
-	Scan(dest ...any) error
-	Close()
-	Err() error
-}
-
-type grantTx interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-	Commit(ctx context.Context) error
-	Rollback(ctx context.Context) error
-}
-
-type pgxDBConn struct {
-	conn *pgx.Conn
-}
-
-func (c pgxDBConn) begin(ctx context.Context) (grantTx, error) {
-	return c.conn.Begin(ctx)
-}
-
-func (c pgxDBConn) close(ctx context.Context) error {
-	return c.conn.Close(ctx)
-}
-
-func (c pgxDBConn) query(ctx context.Context, sql string, args ...any) (pgRows, error) {
-	return c.conn.Query(ctx, sql, args...)
-}
-
-func (c pgxDBConn) exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	return c.conn.Exec(ctx, sql, args...)
-}
-
-// pgDBRepository is the pgx-backed adapter for the core.DBRepo port.
-// It owns the full connection lifecycle: open on construction, close on ExecGrants return.
+// pgDBRepository is the DBRepo/RoleSweeper adapter. It owns the full connection
+// lifecycle: open on construction, close on return from the calling method.
 type pgDBRepository struct {
-	conn dbConn
+	conn postgres.Conn
 }
 
 // closeConnection closes a repository-owned connection with a fresh bounded context.
@@ -101,7 +54,7 @@ func (r *pgDBRepository) closeConnection(logCtx context.Context) {
 	closeCtx, cancel := context.WithTimeout(context.Background(), dbCloseTimeout)
 	defer cancel()
 
-	if err := r.conn.close(closeCtx); err != nil {
+	if err := r.conn.Close(closeCtx); err != nil {
 		logging.FromContext(logCtx).WarnContext(logCtx,
 			"PostgreSQL connection close failed",
 			"error_category", "connection_close_failed",
@@ -110,14 +63,14 @@ func (r *pgDBRepository) closeConnection(logCtx context.Context) {
 }
 
 // rollbackTransaction explicitly aborts a transaction after Begin with a fresh,
-// bounded context. pgx.ErrTxClosed is the expected result when Commit already
+// bounded context. ErrTxAlreadyClosed is the expected result when Commit already
 // succeeded; other cleanup failures are logged without masking the primary
 // operation result.
-func rollbackTransaction(logCtx context.Context, tx grantTx) {
+func rollbackTransaction(logCtx context.Context, tx postgres.Tx) {
 	rollbackCtx, cancel := context.WithTimeout(context.Background(), dbCloseTimeout)
 	defer cancel()
 
-	if err := tx.Rollback(rollbackCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+	if err := tx.Rollback(rollbackCtx); err != nil && !errors.Is(err, postgres.ErrTxAlreadyClosed) {
 		logging.FromContext(logCtx).WarnContext(logCtx,
 			"PostgreSQL transaction rollback failed",
 			"error_category", "transaction_rollback_failed",
@@ -129,37 +82,36 @@ func rollbackTransaction(logCtx context.Context, tx grantTx) {
 // connection details, so callers receive only a safe operation message while terminal failures
 // retain the existing sentinel used for reconciliation classification.
 func safePostgresOperationError(operation string, err error) error {
-	if isTerminalPostgresError(err) {
-		return fmt.Errorf("%w: PostgreSQL %s failed", dbcore.ErrTerminal, operation)
+	if postgres.IsTerminalError(err) {
+		return fmt.Errorf("%w: PostgreSQL %s failed", ports.ErrDBRepoTerminal, operation)
 	}
 	return fmt.Errorf("PostgreSQL %s failed", operation)
 }
 
-// ExecGrants applies all privilege grants needed for the RW role on a single database.
-// GRANT ON ALL TABLES/SEQUENCES covers existing objects; ALTER DEFAULT PRIVILEGES covers
-// future ones created by the admin role (e.g. via migrations).
-func (r *pgDBRepository) ExecGrants(ctx context.Context, dbName string) error {
+// AssignRequiredPermissionsToRole applies all privilege grants needed for the RW role on a
+// single database. GRANT ON ALL TABLES/SEQUENCES covers existing objects; ALTER DEFAULT
+// PRIVILEGES covers future ones created by the admin role (e.g. via migrations).
+func (r *pgDBRepository) AssignRequiredPermissionsToRole(ctx context.Context, dbName string, roles ports.DatabaseRoleNames) error {
 	defer r.closeConnection(ctx)
 
-	adminRole := dbName + "_admin"
-	rwRole := dbName + "_rw"
-
-	tx, err := r.conn.begin(ctx)
+	tx, err := r.conn.Begin(ctx)
 	if err != nil {
 		return safePostgresOperationError("grant transaction begin", err)
 	}
 	defer rollbackTransaction(ctx, tx)
 
-	// SQL identifiers cannot be parameterised; dbName is quoted and escaped defensively.
-	// Role names are derived from dbName so carry the same safety guarantee.
-	quotedDB := `"` + strings.ReplaceAll(dbName, `"`, `""`) + `"`
+	// SQL identifiers cannot be parameterised. Quote every caller-supplied
+	// identifier defensively, including custom role names.
+	quotedDB := postgres.QuoteIdentifier(dbName)
+	quotedAdminRole := postgres.QuoteIdentifier(roles.Admin)
+	quotedRWRole := postgres.QuoteIdentifier(roles.RW)
 	stmts := []string{
-		fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", quotedDB, rwRole),
-		fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", rwRole),
-		fmt.Sprintf("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %s", rwRole),
-		fmt.Sprintf("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %s", rwRole),
-		fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s", adminRole, rwRole),
-		fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %s", adminRole, rwRole),
+		fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", quotedDB, quotedRWRole),
+		fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", quotedRWRole),
+		fmt.Sprintf("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %s", quotedRWRole),
+		fmt.Sprintf("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %s", quotedRWRole),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s", quotedAdminRole, quotedRWRole),
+		fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %s", quotedAdminRole, quotedRWRole),
 	}
 
 	for _, stmt := range stmts {
@@ -196,7 +148,7 @@ WHERE rolcanlogin = true
 func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) (int, error) {
 	defer r.closeConnection(ctx)
 
-	rows, err := r.conn.query(ctx, sweepRolesQuery)
+	rows, err := r.conn.Query(ctx, sweepRolesQuery)
 	if err != nil {
 		return 0, safePostgresOperationError("role sweep query", err)
 	}
@@ -221,7 +173,7 @@ func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) (i
 	// Disabling the roles in a single transaction keeps the sweep atomic: a failure on any
 	// role rolls back the whole batch rather than leaving the cluster half-swept (some roles
 	// disabled, some still carrying restored credentials).
-	tx, err := r.conn.begin(ctx)
+	tx, err := r.conn.Begin(ctx)
 	if err != nil {
 		return 0, safePostgresOperationError("role sweep transaction begin", err)
 	}
@@ -233,7 +185,7 @@ func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) (i
 		// re-enabled with LOGIN. NOLOGIN alone would leave that hash in pg_authid. The operator
 		// re-provisions managed roles with fresh secrets immediately after.
 		// Identifiers cannot be parameterised — name comes from pg_roles, not user input.
-		if _, err := tx.Exec(ctx, fmt.Sprintf("ALTER ROLE %s NOLOGIN PASSWORD NULL", pgx.Identifier{name}.Sanitize())); err != nil {
+		if _, err := tx.Exec(ctx, fmt.Sprintf("ALTER ROLE %s NOLOGIN PASSWORD NULL", postgres.QuoteIdentifier(name))); err != nil {
 			return 0, safePostgresOperationError("role sweep execution", err)
 		}
 	}
@@ -246,27 +198,17 @@ func (r *pgDBRepository) SweepUnmanagedRolesAfterRestore(ctx context.Context) (i
 
 // openRepository opens a direct superuser connection and wraps it in the pgx adapter.
 // Terminal connect failures (bad credentials, insufficient privilege) are wrapped with
-// dbcore.ErrTerminal so callers can stop retrying.
+// ports.ErrDBRepoTerminal so callers can stop retrying.
 func openRepository(ctx context.Context, host, dbName, password string) (*pgDBRepository, error) {
-	cfg, err := pgx.ParseConfig(fmt.Sprintf(
-		"postgres://%s@%s:%s/%s?sslmode=require&connect_timeout=%d",
-		superUsername, host, postgresPort, dbName,
-		int(dbConnectTimeout.Seconds()),
-	))
-	if err != nil {
-		return nil, fmt.Errorf("parsing connection config for %s/%s: %w", host, dbName, err)
-	}
-	cfg.Password = password
-
-	conn, err := pgxConnectConfig(ctx, cfg)
+	conn, err := connectToPostgres(ctx, host, dbName, password)
 	if err != nil {
 		return nil, safePostgresOperationError("connection", err)
 	}
-	return &pgDBRepository{conn: pgxDBConn{conn: conn}}, nil
+	return &pgDBRepository{conn: conn}, nil
 }
 
 // NewDBRepository opens a direct superuser connection for database grant reconciliation.
-func NewDBRepository(ctx context.Context, host, dbName, password string) (dbcore.DBRepo, error) {
+func NewDBRepository(ctx context.Context, host, dbName, password string) (ports.DBRepo, error) {
 	return openRepository(ctx, host, dbName, password)
 }
 
@@ -276,28 +218,10 @@ func NewDBRepository(ctx context.Context, host, dbName, password string) (dbcore
 func NewRoleSweeper(ctx context.Context, host, dbName, password string) (ports.RoleSweeper, error) {
 	repo, err := openRepository(ctx, host, dbName, password)
 	if err != nil {
-		if errors.Is(err, dbcore.ErrTerminal) {
+		if errors.Is(err, ports.ErrDBRepoTerminal) {
 			return nil, fmt.Errorf("%w: %w", ports.ErrSweeperConnectTerminal, err)
 		}
 		return nil, err
 	}
 	return repo, nil
-}
-
-func isTerminalPostgresError(err error) bool {
-	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
-		return isTerminalPGCode(pgErr.Code)
-	}
-	return false
-}
-
-func isTerminalPGCode(code string) bool {
-	switch {
-	case strings.HasPrefix(code, pgCodeClassInvalidAuthorizationSpecification):
-		return true
-	case code == pgCodeInsufficientPrivilege:
-		return true
-	default:
-		return false
-	}
 }

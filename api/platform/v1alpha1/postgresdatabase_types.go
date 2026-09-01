@@ -62,6 +62,18 @@ type DatabaseDefinition struct {
 	// +kubebuilder:validation:MaxLength=30
 	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9]*$`
 	Name string `json:"name"`
+	// AdminRoleName is the PostgreSQL role used as the database owner. When
+	// omitted, it defaults to <name>_admin.
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_$]{0,62}$`
+	AdminRoleName string `json:"adminRoleName,omitempty"`
+	// RWRoleName is the PostgreSQL role used by applications. When omitted, it
+	// defaults to <name>_rw.
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_$]{0,62}$`
+	RWRoleName string `json:"rwRoleName,omitempty"`
 	// PostgreSQL extensions to install in this database (e.g. "pg_trgm", "uuid-ossp").
 	Extensions []string `json:"extensions,omitempty"`
 	// DeletionPolicy controls what happens to the PostgreSQL database when this resource is deleted.

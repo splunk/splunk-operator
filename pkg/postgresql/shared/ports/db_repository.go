@@ -13,13 +13,28 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package core
+package ports
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// DatabaseRoleNames contains the effective PostgreSQL roles for one database.
+type DatabaseRoleNames struct {
+	Admin string
+	RW    string
+}
 
 // DBRepo is the port for direct database grant operations that require a
 // superuser connection, bypassing any connection pooler.
-// Adapters implementing this port live in adapter/.
 type DBRepo interface {
-	ExecGrants(ctx context.Context, dbName string) error
+	AssignRequiredPermissionsToRole(ctx context.Context, dbName string, roles DatabaseRoleNames) error
 }
+
+// NewDBRepoFunc constructs a DBRepo adapter for the given host and database.
+type NewDBRepoFunc func(ctx context.Context, host, dbName, password string) (DBRepo, error)
+
+// ErrDBRepoTerminal marks user-actionable database repository errors where retrying
+// the same spec is not expected to succeed.
+var ErrDBRepoTerminal = errors.New("terminal reconciliation error")

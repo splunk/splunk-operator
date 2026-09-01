@@ -17,6 +17,7 @@ package core
 
 import (
 	"errors"
+
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
@@ -166,6 +167,6 @@ type deletionPlan struct {
 }
 
 // ErrTerminal marks user-actionable errors where retrying the same spec is not expected to succeed.
-var ErrTerminal = errors.New("terminal reconciliation error")
+var ErrTerminal = ports.ErrDBRepoTerminal
 
 var errRoleCleanupPending = errors.New("waiting for managed role cleanup")

@@ -349,7 +349,7 @@ backend and CNPG initializes the data volume. If the wait times out, see
 ## 4. Create an application database
 
 Apply a `PostgresDatabase` to ask the Postgres Operator to create the `appdb` database,
-`appdb_admin` and `appdb_rw` PostgreSQL roles, their credential Secrets, and a database connection
+`appdb_admin` and `appdb_rw` PostgreSQL roles (the default names), their credential Secrets, and a database connection
 ConfigMap.
 
 ```bash

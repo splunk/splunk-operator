@@ -60,6 +60,115 @@ func TestValidatePostgresDatabaseCreate(t *testing.T) {
 	}
 }
 
+func TestValidatePostgresDatabaseRoleNames(t *testing.T) {
+	base := func(databases ...platformApi.DatabaseDefinition) *platformApi.PostgresDatabase {
+		return &platformApi.PostgresDatabase{Spec: platformApi.PostgresDatabaseSpec{Databases: databases}}
+	}
+
+	t.Run("accepts defaults and partial overrides", func(t *testing.T) {
+		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), base(
+			platformApi.DatabaseDefinition{Name: "defaultdb"},
+			platformApi.DatabaseDefinition{Name: "customdb", RWRoleName: "tenant_rw"},
+		), nil)
+		assert.Empty(t, errs)
+	})
+
+	tests := []struct {
+		name string
+		db   platformApi.DatabaseDefinition
+		want string
+	}{
+		{name: "reserved postgres role", db: platformApi.DatabaseDefinition{Name: "mydb", AdminRoleName: "postgres"}, want: "reserved"},
+		{name: "reserved cnpg role prefix", db: platformApi.DatabaseDefinition{Name: "mydb", RWRoleName: "cnpg_internal"}, want: "reserved"},
+		{name: "same admin and rw role", db: platformApi.DatabaseDefinition{Name: "mydb", AdminRoleName: "same_role", RWRoleName: "same_role"}, want: "must be different"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), base(tt.db), nil)
+			require.NotEmpty(t, errs)
+			assert.Contains(t, errs[0].Detail, tt.want)
+		})
+	}
+
+	t.Run("rejects duplicate effective role names across databases", func(t *testing.T) {
+		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), base(
+			platformApi.DatabaseDefinition{Name: "first", AdminRoleName: "shared_owner"},
+			platformApi.DatabaseDefinition{Name: "second", RWRoleName: "shared_owner"},
+		), nil)
+		require.NotEmpty(t, errs)
+		assert.Contains(t, errs[len(errs)-1].Detail, "duplicates role name")
+	})
+
+	t.Run("rejects role changes after status has published the database", func(t *testing.T) {
+		oldObj := base(platformApi.DatabaseDefinition{Name: "mydb", AdminRoleName: "old_owner"})
+		oldObj.Status.Databases = []platformApi.DatabaseInfo{{Name: "mydb"}}
+		newObj := oldObj.DeepCopy()
+		newObj.Spec.Databases[0].AdminRoleName = "new_owner"
+
+		errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), newObj, oldObj, nil)
+		require.NotEmpty(t, errs)
+		assert.Contains(t, errs[len(errs)-1].Detail, "immutable")
+	})
+
+	t.Run("rejects role changes when the generated secret already exists even without published status", func(t *testing.T) {
+		oldObj := base(platformApi.DatabaseDefinition{Name: "mydb", AdminRoleName: "old_owner"})
+		oldObj.ObjectMeta = metav1.ObjectMeta{Name: "pgdb", Namespace: "default"}
+		// No status.Databases entry — simulates a conflict before status.databases publishes.
+		newObj := oldObj.DeepCopy()
+		newObj.Spec.Databases[0].AdminRoleName = "new_owner"
+
+		s := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(s))
+		reader := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pgdb-mydb-admin", Namespace: "default"}},
+		).Build()
+
+		errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), newObj, oldObj, reader)
+		require.NotEmpty(t, errs)
+		assert.Contains(t, errs[len(errs)-1].Detail, "immutable")
+	})
+
+	t.Run("allows role changes when neither status nor a generated secret exist yet", func(t *testing.T) {
+		oldObj := base(platformApi.DatabaseDefinition{Name: "mydb", AdminRoleName: "old_owner"})
+		oldObj.ObjectMeta = metav1.ObjectMeta{Name: "pgdb", Namespace: "default"}
+		newObj := oldObj.DeepCopy()
+		newObj.Spec.Databases[0].AdminRoleName = "new_owner"
+
+		s := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(s))
+		reader := fake.NewClientBuilder().WithScheme(s).Build()
+
+		errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), newObj, oldObj, reader)
+		assert.Empty(t, errs)
+	})
+
+	t.Run("does not apply the live secret check to externally managed databases", func(t *testing.T) {
+		oldObj := base(platformApi.DatabaseDefinition{
+			Name:          "mydb",
+			AdminRoleName: "old_owner",
+			PasswordConfig: &platformApi.PasswordConfig{
+				ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "ext-admin"},
+				ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "ext-rw"},
+			},
+		})
+		oldObj.ObjectMeta = metav1.ObjectMeta{Name: "pgdb", Namespace: "default"}
+		newObj := oldObj.DeepCopy()
+		newObj.Spec.Databases[0].AdminRoleName = "new_owner"
+
+		// PasswordConfig != nil must skip the live check even if a same-named Secret exists.
+		s := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(s))
+		reader := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pgdb-mydb-admin", Namespace: "default"}},
+		).Build()
+
+		errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), newObj, oldObj, reader)
+		for _, e := range errs {
+			assert.NotContains(t, e.Detail, "immutable")
+		}
+	})
+}
+
 func TestValidatePostgresDatabaseCreateFeatureGateDisabled(t *testing.T) {
 	config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): false})
 	t.Cleanup(func() {
@@ -143,7 +252,8 @@ func TestValidatePostgresDatabaseExternalSecret(t *testing.T) {
 		}
 	}
 
-	validData := map[string][]byte{"username": []byte("mydb_admin"), "password": []byte("s3cr3t")}
+	validAdminData := map[string][]byte{"username": []byte("mydb_admin"), "password": []byte("s3cr3t")}
+	validRWData := map[string][]byte{"username": []byte("mydb_rw"), "password": []byte("s3cr3t")}
 	reloadLabel := map[string]string{"cnpg.io/reload": "true"}
 
 	tests := []struct {
@@ -163,15 +273,15 @@ func TestValidatePostgresDatabaseExternalSecret(t *testing.T) {
 		{
 			name: "both secrets valid pass",
 			secrets: []*corev1.Secret{
-				secretWith(adminRef, validData, reloadLabel),
-				secretWith(rwRef, validData, reloadLabel),
+				secretWith(adminRef, validAdminData, reloadLabel),
+				secretWith(rwRef, validRWData, reloadLabel),
 			},
 			wantErrs: 0,
 		},
 		{
 			name: "admin present but missing label, rw missing — both rejected",
 			secrets: []*corev1.Secret{
-				secretWith(adminRef, validData, nil),
+				secretWith(adminRef, validAdminData, nil),
 			},
 			wantErrs:   2,
 			wantFields: []string{adminPath, rwPath},
@@ -180,7 +290,7 @@ func TestValidatePostgresDatabaseExternalSecret(t *testing.T) {
 		{
 			name: "rw present but missing keys rejected, admin valid",
 			secrets: []*corev1.Secret{
-				secretWith(adminRef, validData, reloadLabel),
+				secretWith(adminRef, validAdminData, reloadLabel),
 				secretWith(rwRef, map[string][]byte{"username": []byte("mydb_rw")}, reloadLabel),
 			},
 			wantErrs:   1,
@@ -188,10 +298,20 @@ func TestValidatePostgresDatabaseExternalSecret(t *testing.T) {
 			wantDetail: "missing required keys",
 		},
 		{
+			name: "rw username must match configured role",
+			secrets: []*corev1.Secret{
+				secretWith(adminRef, validAdminData, reloadLabel),
+				secretWith(rwRef, validAdminData, reloadLabel),
+			},
+			wantErrs:   1,
+			wantFields: []string{rwPath},
+			wantDetail: "username does not match PostgreSQL role",
+		},
+		{
 			name: "both present and invalid rejected",
 			secrets: []*corev1.Secret{
 				secretWith(adminRef, nil, reloadLabel),
-				secretWith(rwRef, validData, nil),
+				secretWith(rwRef, validRWData, nil),
 			},
 			wantErrs:   2,
 			wantFields: []string{adminPath, rwPath},
@@ -218,6 +338,22 @@ func TestValidatePostgresDatabaseExternalSecret(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("uses overridden roles when validating external secret usernames", func(t *testing.T) {
+		obj := dbWithRefs()
+		obj.Spec.Databases[0].AdminRoleName = "tenant_owner"
+		obj.Spec.Databases[0].RWRoleName = "tenant_rw"
+		reader := func() client.Reader {
+			s := runtime.NewScheme()
+			require.NoError(t, corev1.AddToScheme(s))
+			return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(
+				secretWith(adminRef, map[string][]byte{"username": []byte("tenant_owner"), "password": []byte("p")}, reloadLabel),
+				secretWith(rwRef, map[string][]byte{"username": []byte("tenant_rw"), "password": []byte("p")}, reloadLabel),
+			).Build()
+		}()
+
+		assert.Empty(t, webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, reader))
+	})
 }
 
 func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {

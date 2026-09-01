@@ -1,8 +1,9 @@
 # Sample PostgresDatabase for application databases on a PostgresCluster.
 # For each database entry, the operator manages two PostgreSQL login roles:
-# <database>_admin and <database>_rw. Role intent is published on
-# PostgresDatabase.status.databases[].roles and reconciled by the referenced
-# PostgresCluster.
+# <database>_admin and <database>_rw by default. Set adminRoleName and/or
+# rwRoleName per entry when a consumer requires different PostgreSQL role names.
+# Role intent is published on PostgresDatabase.status.databases[].roles and
+# reconciled by the referenced PostgresCluster.
 apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:

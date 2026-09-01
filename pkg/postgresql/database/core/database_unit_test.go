@@ -64,8 +64,9 @@ import (
 )
 
 type stubDBRepo struct {
-	execErr error
-	calls   []string
+	execErr   error
+	calls     []string
+	roleCalls map[string]ports.DatabaseRoleNames
 }
 
 type stubAcknowledgementRepository struct {
@@ -103,9 +104,13 @@ func (r *captureMetricsRecorder) SetManagedUsers(string, map[string]float64) {}
 
 var _ ports.Recorder = (*captureMetricsRecorder)(nil)
 
-// ExecGrants is a stub implementation of the DBRepo interface that records calls and returns a predefined error.
-func (r *stubDBRepo) ExecGrants(_ context.Context, dbName string) error {
+// AssignRequiredPermissionsToRole is a stub implementation of the ports.DBRepo interface that records calls and returns a predefined error.
+func (r *stubDBRepo) AssignRequiredPermissionsToRole(_ context.Context, dbName string, roles ports.DatabaseRoleNames) error {
 	r.calls = append(r.calls, dbName)
+	if r.roleCalls == nil {
+		r.roleCalls = make(map[string]ports.DatabaseRoleNames)
+	}
+	r.roleCalls[dbName] = roles
 	return r.execErr
 }
 
@@ -675,6 +680,72 @@ func TestGetDesiredRoles(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
+func TestRoleNameOverridesPropagateToDatabaseModels(t *testing.T) {
+	db := platformv1alpha1.DatabaseDefinition{
+		Name:          "payments",
+		AdminRoleName: "tenant_owner",
+		RWRoleName:    "tenant_rw",
+	}
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary"},
+		Spec:       platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{db}},
+	}
+
+	assert.Equal(t, ports.DatabaseRoleNames{Admin: "tenant_owner", RW: "tenant_rw"}, EffectiveRoleNames(db))
+	assert.Equal(t, []string{"tenant_owner", "tenant_rw"}, getDesiredRoles(postgresDB))
+	assert.Equal(t, "payments", databaseForRole(postgresDB, "tenant_owner"))
+	assert.Equal(t, "payments", databaseForRole(postgresDB, "tenant_rw"))
+	assert.Equal(t, cnpgv1.DatabaseSpec{
+		Name:          "payments",
+		Owner:         "tenant_owner",
+		ClusterRef:    corev1.LocalObjectReference{Name: "cnpg-primary"},
+		ReclaimPolicy: cnpgv1.DatabaseReclaimDelete,
+	}, buildCNPGDatabaseSpec("cnpg-primary", db, nil))
+
+	status := populateDatabaseStatus(postgresDB, true)
+	require.Len(t, status, 1)
+	require.Len(t, status[0].Roles, 2)
+	assert.Equal(t, "tenant_owner", status[0].Roles[0].Name)
+	assert.Equal(t, "tenant_rw", status[0].Roles[1].Name)
+}
+
+func TestReconcileRWRolePrivilegesUsesConfiguredRoleNames(t *testing.T) {
+	repo := &stubDBRepo{}
+	newDBRepo := func(_ context.Context, _, _, _ string) (ports.DBRepo, error) { return repo, nil }
+	targets := []databasePrivilegeTarget{{
+		Database: "payments",
+		Roles:    ports.DatabaseRoleNames{Admin: "tenant_owner", RW: "tenant_rw"},
+	}}
+
+	require.NoError(t, reconcileRWRolePrivileges(context.Background(), "rw.example.internal", "supersecret", targets, newDBRepo))
+	assert.Equal(t, ports.DatabaseRoleNames{Admin: "tenant_owner", RW: "tenant_rw"}, repo.roleCalls["payments"])
+}
+
+func TestRoleCleanupUsesConfiguredRoleNames(t *testing.T) {
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", UID: types.UID("postgresdb-uid")},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{{
+			Name:          "payments",
+			AdminRoleName: "tenant_owner",
+			RWRoleName:    "tenant_rw",
+		}}},
+	}
+	owner := platformv1alpha1.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
+
+	assert.True(t, rolesStillOwnedBySelf(postgresDB, &platformv1alpha1.ManagedRolesStatus{
+		RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
+			"tenant_owner": owner,
+			"tenant_rw":    owner,
+		},
+	}, postgresDB.Spec.Databases))
+	assert.False(t, rolesStillOwnedBySelf(postgresDB, &platformv1alpha1.ManagedRolesStatus{
+		RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
+			"payments_admin": owner,
+			"payments_rw":    owner,
+		},
+	}, postgresDB.Spec.Databases))
+}
+
 func TestReconcileRWRolePrivileges(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -720,7 +791,7 @@ func TestReconcileRWRolePrivileges(t *testing.T) {
 				repos[dbName] = &stubDBRepo{execErr: tst.execErrs[dbName]}
 			}
 
-			newDBRepo := func(_ context.Context, host, dbName, password string) (DBRepo, error) {
+			newDBRepo := func(_ context.Context, host, dbName, password string) (ports.DBRepo, error) {
 				repoCalls = append(repoCalls, dbName)
 				if err := tst.newRepoErrs[dbName]; err != nil {
 					return nil, err
@@ -729,7 +800,11 @@ func TestReconcileRWRolePrivileges(t *testing.T) {
 				return repos[dbName], nil
 			}
 
-			err := reconcileRWRolePrivileges(context.Background(), "rw.example.internal", "supersecret", tst.dbNames, newDBRepo)
+			targets := make([]databasePrivilegeTarget, 0, len(tst.dbNames))
+			for _, dbName := range tst.dbNames {
+				targets = append(targets, databasePrivilegeTarget{Database: dbName, Roles: ports.DatabaseRoleNames{Admin: adminRoleName(dbName), RW: rwRoleName(dbName)}})
+			}
+			err := reconcileRWRolePrivileges(context.Background(), "rw.example.internal", "supersecret", targets, newDBRepo)
 
 			assert.Equal(t, tst.wantRepoCalls, repoCalls)
 			for dbName, wantCalls := range tst.wantExecCalls {
@@ -754,7 +829,7 @@ func TestReconcileRWRolePrivilegesLogsCompleteOperationWithoutCredentials(t *tes
 	ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(&logOutput, nil)))
 	terminalErr := fmt.Errorf("%w: authentication error containing supersecret", ErrTerminal)
 	retryableGrantErr := errors.New("grant failure containing supersecret")
-	newDBRepo := func(_ context.Context, _, dbName, _ string) (DBRepo, error) {
+	newDBRepo := func(_ context.Context, _, dbName, _ string) (ports.DBRepo, error) {
 		if dbName == "analytics" {
 			return nil, terminalErr
 		}
@@ -764,7 +839,11 @@ func TestReconcileRWRolePrivilegesLogsCompleteOperationWithoutCredentials(t *tes
 		return &stubDBRepo{}, nil
 	}
 
-	err := reconcileRWRolePrivileges(ctx, "rw.example.internal", "supersecret", []string{"payments", "analytics", "audit"}, newDBRepo)
+	err := reconcileRWRolePrivileges(ctx, "rw.example.internal", "supersecret", []databasePrivilegeTarget{
+		{Database: "payments", Roles: ports.DatabaseRoleNames{Admin: "payments_admin", RW: "payments_rw"}},
+		{Database: "analytics", Roles: ports.DatabaseRoleNames{Admin: "analytics_admin", RW: "analytics_rw"}},
+		{Database: "audit", Roles: ports.DatabaseRoleNames{Admin: "audit_admin", RW: "audit_rw"}},
+	}, newDBRepo)
 
 	require.ErrorIs(t, err, ErrTerminal)
 	assert.NotErrorIs(t, err, terminalErr)
@@ -2100,10 +2179,6 @@ func TestReconcileRoleSecrets(t *testing.T) {
 						ExternalAdminSecretRef: corev1.LocalObjectReference{Name: ""},
 						ExternalRWSecretRef:    corev1.LocalObjectReference{Name: ""},
 					}},
-					{Name: "analytics", PasswordConfig: &platformv1alpha1.PasswordConfig{
-						ExternalAdminSecretRef: corev1.LocalObjectReference{Name: ""},
-						ExternalRWSecretRef:    corev1.LocalObjectReference{Name: ""},
-					}},
 				},
 			},
 		}
@@ -2132,6 +2207,25 @@ func TestReconcileRoleSecrets(t *testing.T) {
 			require.Len(t, got.OwnerReferences, 1)
 			assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
 		}
+	})
+
+	t.Run("uses overridden role names in generated secret usernames", func(t *testing.T) {
+		custom := postgresDB.DeepCopy()
+		custom.Spec.Databases = []platformv1alpha1.DatabaseDefinition{{
+			Name:          "payments",
+			AdminRoleName: "tenant_owner",
+			RWRoleName:    "tenant_rw",
+		}}
+		c := testClient(t, scheme)
+
+		require.NoError(t, reconcileRoleSecrets(context.Background(), c, scheme, custom, nil))
+
+		admin := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-admin", Namespace: custom.Namespace}, admin))
+		assert.Equal(t, "tenant_owner", string(admin.Data[secretKeyUsername]))
+		rw := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-rw", Namespace: custom.Namespace}, rw))
+		assert.Equal(t, "tenant_rw", string(rw.Data[secretKeyUsername]))
 	})
 
 	t.Run("is idempotent when secrets already exist", func(t *testing.T) {
@@ -2201,8 +2295,6 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		}
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
 
 		c := testClient(t, scheme)
 
@@ -2238,18 +2330,16 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		exampleDataValue := "kwas"
 		exampleData := []map[string][]byte{
 			{
-				secretKeyUsername: []byte(exampleDataValue),
+				secretKeyUsername: []byte("payments_admin"),
 				secretKeyPassword: []byte(exampleDataValue),
 			},
 			{
 				secretKeyPassword: []byte(exampleDataValue),
-				secretKeyUsername: []byte(exampleDataValue),
+				secretKeyUsername: []byte("payments_rw"),
 			},
 		}
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
 
 		c := testClient(t, scheme)
 		createExternalSecrets(t, c, externalSecretNames, externalSecretsPostgresDB.Namespace, exampleLabels, exampleData)
@@ -2260,7 +2350,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		for _, secretName := range externalSecretNames {
 			got := &corev1.Secret{}
 			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
-			assert.Equal(t, exampleDataValue, string(got.Data[secretKeyUsername]))
+			assert.Contains(t, []string{"payments_admin", "payments_rw"}, string(got.Data[secretKeyUsername]))
 			assert.Equal(t, exampleDataValue, string(got.Data[secretKeyPassword]))
 			assert.Equal(t, "true", got.Labels["cnpg.io/reload"])
 			assert.Equal(t, value, got.Labels[key])
@@ -2277,13 +2367,11 @@ func TestReconcileRoleSecrets(t *testing.T) {
 			"external-rw-nolabel",
 		}
 		validData := []map[string][]byte{
-			{secretKeyUsername: []byte("u"), secretKeyPassword: []byte("p")},
-			{secretKeyUsername: []byte("u"), secretKeyPassword: []byte("p")},
+			{secretKeyUsername: []byte("payments_admin"), secretKeyPassword: []byte("p")},
+			{secretKeyUsername: []byte("payments_rw"), secretKeyPassword: []byte("p")},
 		}
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
 
 		c := testClient(t, scheme)
 		// Valid data but no cnpg.io/reload label.
@@ -2316,8 +2404,6 @@ func TestReconcileRoleSecrets(t *testing.T) {
 
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretsNoDataMap[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretsNoDataMap[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretsNoDataMap[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretsNoDataMap[1]
 
 		c := testClient(t, scheme)
 		createExternalSecrets(t, c, externalSecretsNoDataMap, externalSecretsPostgresDB.Namespace, nil, nil)
@@ -2347,8 +2433,6 @@ func TestReconcileRoleSecrets(t *testing.T) {
 
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretDataMapMissingKey[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretDataMapMissingKey[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretDataMapMissingKey[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretDataMapMissingKey[1]
 
 		createExternalSecrets(t, c, externalSecretDataMapMissingKey, externalSecretsPostgresDB.Namespace, nil, exampleData)
 
@@ -2476,6 +2560,24 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 			Controller:         boolPtr(true),
 			BlockOwnerDeletion: boolPtr(true),
 		})
+	})
+
+	t.Run("uses overridden role names in the connection configmap", func(t *testing.T) {
+		postgresDB := &platformv1alpha1.PostgresDatabase{
+			ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", UID: types.UID("postgresdb-uid")},
+			Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{{
+				Name:          "payments",
+				AdminRoleName: "tenant_owner",
+				RWRoleName:    "tenant_rw",
+			}}},
+		}
+		c := testClient(t, scheme)
+
+		require.NoError(t, reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints))
+		got := &corev1.ConfigMap{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-config", Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, "tenant_owner", got.Data[ConfigMapKeyAdminUser])
+		assert.Equal(t, "tenant_rw", got.Data[ConfigMapKeyRWUser])
 	})
 
 	t.Run("re-attaches owner reference when configmap ownership was manually stripped", func(t *testing.T) {
@@ -3244,7 +3346,7 @@ func TestReconcileClearsRecoveredMessageWhenLaterPhaseFails(t *testing.T) {
 	c := testClient(t, scheme, postgresDB, postgresCluster, cnpgCluster, superSecret, cnpgDB, adminSecret, rwSecret)
 
 	// Privilege grant fails terminally, so reconcile returns before the final status write.
-	newDBRepo := func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	newDBRepo := func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 		return nil, fmt.Errorf("%w: password authentication failed", ErrTerminal)
 	}
 	_, err := PostgresDatabaseService(ctx, &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}}, postgresDB.DeepCopy(), newDBRepo)
@@ -3360,7 +3462,7 @@ func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.
 	}
 	c := testClient(t, scheme, postgresDB)
 	repoCalls := 0
-	newDBRepo := func(_ context.Context, _, _, _ string) (DBRepo, error) {
+	newDBRepo := func(_ context.Context, _, _, _ string) (ports.DBRepo, error) {
 		repoCalls++
 		return &stubDBRepo{}, nil
 	}
@@ -3395,15 +3497,15 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 	ctx := context.Background()
 	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
 
-	failingGrantRepoFunc := func(dbName string) NewDBRepoFunc {
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	failingGrantRepoFunc := func(dbName string) ports.NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			return &stubDBRepo{execErr: fmt.Errorf("grant failed for %s", dbName)}, nil
 		}
 	}
 
-	failingGrantThenSuccessfulRepoFunc := func(dbName string) NewDBRepoFunc {
+	failingGrantThenSuccessfulRepoFunc := func(dbName string) ports.NewDBRepoFunc {
 		attempts := 0
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			attempts++
 			if attempts == 1 {
 				return &stubDBRepo{execErr: fmt.Errorf("grant failed for %s", dbName)}, nil
@@ -3412,21 +3514,21 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		}
 	}
 
-	failingConnectionRepoFunc := func(calls *int, err error) NewDBRepoFunc {
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	failingConnectionRepoFunc := func(calls *int, err error) ports.NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			(*calls)++
 			return nil, err
 		}
 	}
 
-	failingTerminalRepoFunc := func(errMsg string) NewDBRepoFunc {
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	failingTerminalRepoFunc := func(errMsg string) ports.NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			return nil, fmt.Errorf("%w: %s", ErrTerminal, errMsg)
 		}
 	}
 
-	successfulRepoFunc := func() NewDBRepoFunc {
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	successfulRepoFunc := func() ports.NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			return &stubDBRepo{}, nil
 		}
 	}
@@ -3607,7 +3709,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		return objects
 	}
 
-	runService := func(t *testing.T, c client.Client, newDBRepo NewDBRepoFunc, metrics ports.Recorder) (ctrl.Result, *platformv1alpha1.PostgresDatabase, error) {
+	runService := func(t *testing.T, c client.Client, newDBRepo ports.NewDBRepoFunc, metrics ports.Recorder) (ctrl.Result, *platformv1alpha1.PostgresDatabase, error) {
 		t.Helper()
 
 		before := &platformv1alpha1.PostgresDatabase{}
@@ -3642,7 +3744,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		conditions                   []metav1.Condition
 		databaseApplied              *bool
 		omittedSecrets               []string
-		newDBRepo                    NewDBRepoFunc
+		newDBRepo                    ports.NewDBRepoFunc
 		reconcileCount               int
 		wantRepoCalls                int
 		wantErr                      bool
@@ -3667,7 +3769,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			generation:  7,
 			databases:   []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase: strPtr(string(readyDBPhase)),
-			newDBRepo: func(_ context.Context, _, _, _ string) (DBRepo, error) {
+			newDBRepo: func(_ context.Context, _, _, _ string) (ports.DBRepo, error) {
 				return &stubDBRepo{execErr: errors.New("grant failure containing supersecret")}, nil
 			},
 			wantErr:                  true,
