@@ -82,14 +82,17 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               cacheWarmScaleOutEnabled:
-                default: false
-                description: CacheWarmScaleOutEnabled enables cache-warm coordination
-                  when adding indexers.
+                default: true
+                description: |-
+                  CacheWarmScaleOutEnabled controls whether scale-out waits for each new peer to become up
+                  before adding the next ordinal. When false, scale-out advances after peer registration.
+                  Final readiness always requires every peer to be up.
                 type: boolean
               cacheWarmScaleOutTimeoutSeconds:
                 default: 3600
-                description: CacheWarmScaleOutTimeoutSeconds is the timeout in seconds
-                  for cache-warm scale-out operations.
+                description: |-
+                  CacheWarmScaleOutTimeoutSeconds is the maximum time to wait for a peer to become up when
+                  cache-warm coordination is enabled. Zero disables the timeout.
                 format: int32
                 minimum: 0
                 type: integer

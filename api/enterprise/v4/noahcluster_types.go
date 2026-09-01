@@ -43,15 +43,18 @@ type NoahClusterSpec struct {
 	Tenant string `json:"tenant"`
 
 	// +optional
-	// +kubebuilder:default=false
-	// CacheWarmScaleOutEnabled enables cache-warm coordination when adding indexers.
-	CacheWarmScaleOutEnabled bool `json:"cacheWarmScaleOutEnabled,omitempty"`
+	// +kubebuilder:default=true
+	// CacheWarmScaleOutEnabled controls whether scale-out waits for each new peer to become up
+	// before adding the next ordinal. When false, scale-out advances after peer registration.
+	// Final readiness always requires every peer to be up.
+	CacheWarmScaleOutEnabled *bool `json:"cacheWarmScaleOutEnabled,omitempty"`
 
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:default=3600
-	// CacheWarmScaleOutTimeoutSeconds is the timeout in seconds for cache-warm scale-out operations.
-	CacheWarmScaleOutTimeoutSeconds int32 `json:"cacheWarmScaleOutTimeoutSeconds,omitempty"`
+	// CacheWarmScaleOutTimeoutSeconds is the maximum time to wait for a peer to become up when
+	// cache-warm coordination is enabled. Zero disables the timeout.
+	CacheWarmScaleOutTimeoutSeconds *int32 `json:"cacheWarmScaleOutTimeoutSeconds,omitempty"`
 }
 
 // NoahClusterStatus defines the observed state of NoahCluster

@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -31,6 +32,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
+	indexerworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/indexercluster"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,17 +41,21 @@ import (
 )
 
 const (
-	noahAuthSecretKey          = "pass4SymmKey"
-	noahAuthVolumeName         = "mnt-noah-auth"
-	noahAuthMountPath          = "/mnt/noah-auth"
-	noahAuthRevisionAnnotation = "enterprise.splunk.com/noah-auth-secret-revision"
+	noahAuthSecretKey                          = "pass4SymmKey"
+	noahAuthVolumeName                         = "mnt-noah-auth"
+	noahAuthMountPath                          = "/mnt/noah-auth"
+	noahAuthRevisionAnnotation                 = "enterprise.splunk.com/noah-auth-secret-revision"
+	noahIndexerPollInterval                    = 5 * time.Second
+	defaultNoahCacheWarmScaleOutTimeoutSeconds = int32(3600)
 )
 
 // ApplyNoahIndexerCluster reconciles the Kubernetes resources required to
 // start a Noah-selected IndexerCluster and verifies its expected Noah peers.
 // It intentionally does not implement rollout or safe scale-down.
 func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (result reconcile.Result, err error) {
-	result = reconcile.Result{RequeueAfter: 5 * time.Second}
+	result = reconcile.Result{RequeueAfter: noahIndexerPollInterval}
+	previousPhase := cr.Status.Phase
+	previousReplicas := cr.Status.Replicas
 
 	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
@@ -83,7 +89,6 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 		)
 	}
 
-	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 
 	if cr.GetDeletionTimestamp() != nil {
@@ -106,34 +111,42 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 		return result, applyErr
 	}
 
+	appliedReplicas, replicaErr := noahIndexerStatefulSetReplicas(statefulSet)
+	if replicaErr != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Unable to determine applied Noah IndexerCluster replicas")
+		return result, replicaErr
+	}
+	cr.Status.Replicas = appliedReplicas
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
-	conditionStatus := metav1.ConditionFalse
-	conditionReason := enterpriseApi.ReasonNoahPeersNotReady
-	conditionMessage := "Waiting for the indexer workload before observing Noah peers"
-	phaseMessage := ""
-	if phase == enterpriseApi.PhaseReady {
-		peersReady, observationErr := observeNoahIndexerPeers(ctx, client, cr, statefulSet)
-		switch {
-		case observationErr != nil:
-			phase = enterpriseApi.PhasePending
-			phaseMessage = "Unable to observe Noah peers"
-			conditionStatus = metav1.ConditionUnknown
-			conditionReason = enterpriseApi.ReasonNoahPeerObservationFailed
-			conditionMessage = fmt.Sprintf("Unable to observe Noah peers: %v", observationErr)
-		case !peersReady:
-			phase = enterpriseApi.PhasePending
-			phaseMessage = "Waiting for expected Noah peers"
-			conditionMessage = "Not all expected Noah peers are up"
-		default:
-			result.RequeueAfter = 0
-			conditionStatus = metav1.ConditionTrue
-			conditionReason = enterpriseApi.ReasonNoahPeersReady
-			conditionMessage = "All expected Noah peers are up"
+	if appliedReplicas > cr.Spec.Replicas {
+		setPhaseAndConditions(
+			enterpriseApi.PhasePending,
+			"Waiting for safe Noah indexer scale-in support",
+			newNoahPeersReadyCondition(
+				metav1.ConditionFalse,
+				enterpriseApi.ReasonNoahPeersNotReady,
+				fmt.Sprintf("StatefulSet has %d replicas but %d are requested; safe scale-in is not implemented", appliedReplicas, cr.Spec.Replicas),
+			),
+		)
+		return result, nil
+	}
+	var outcome noahIndexerOutcome
+	switch phase {
+	case enterpriseApi.PhaseReady:
+		outcome, err = reconcileReadyNoahIndexer(ctx, client, cr, statefulSet, appliedReplicas, previousPhase, previousReplicas)
+		if err != nil {
+			if _, terminal := splcommon.TerminalMessage(err); !terminal {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to scale Noah IndexerCluster")
+				return result, err
+			}
 		}
+	default:
+		outcome = waitForNoahIndexerWorkload(phase, previousPhase, appliedReplicas)
 	}
 
-	setPhaseAndConditions(phase, phaseMessage, newNoahPeersReadyCondition(conditionStatus, conditionReason, conditionMessage))
-	return result, nil
+	result.RequeueAfter = outcome.requeueAfter
+	setPhaseAndConditions(outcome.phase, outcome.phaseMessage, outcome.condition)
+	return result, err
 }
 
 func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (*appsv1.StatefulSet, enterpriseApi.Phase, error) {
@@ -191,13 +204,45 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 	// before Noah lifecycle safety exists. A StatefulSet using OnDelete may have
 	// ready pods from its previous revision, so replica readiness alone cannot
 	// prove that the desired pod template is running.
-	if phase == enterpriseApi.PhaseReady && !noahIndexerStatefulSetConverged(statefulSet, cr.Spec.Replicas) {
-		phase = enterpriseApi.PhaseUpdating
+	appliedReplicas, replicaErr := noahIndexerStatefulSetReplicas(statefulSet)
+	if replicaErr != nil {
+		return statefulSet, enterpriseApi.PhaseError, replicaErr
 	}
+	phase = noahIndexerWorkloadPhase(phase, statefulSet, appliedReplicas)
 
 	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, statefulSet.Spec.Selector)
 	configworkflow.GarbageCollectSecrets(ctx, client, cr, defaultsSecret.Name, statefulSet.Spec.Selector)
 	return statefulSet, phase, nil
+}
+
+func noahIndexerStatefulSetReplicas(statefulSet *appsv1.StatefulSet) (int32, error) {
+	if statefulSet == nil {
+		return 0, fmt.Errorf("Noah indexer StatefulSet is nil")
+	}
+	if statefulSet.Spec.Replicas == nil {
+		return 0, fmt.Errorf("Noah indexer StatefulSet %s/%s has no replica count", statefulSet.Namespace, statefulSet.Name)
+	}
+	return *statefulSet.Spec.Replicas, nil
+}
+
+// applyNoahIndexerReplicaTarget applies a scale-out plan to the StatefulSet.
+// Initial creation is handled by ApplyStatefulSet at the full requested size.
+func applyNoahIndexerReplicaTarget(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, targetReplicas int32) error {
+	appliedReplicas, err := noahIndexerStatefulSetReplicas(statefulSet)
+	if err != nil {
+		return err
+	}
+	if targetReplicas <= appliedReplicas {
+		return fmt.Errorf("Noah indexer replica target must increase from %d, got %d", appliedReplicas, targetReplicas)
+	}
+
+	revised := statefulSet.DeepCopy()
+	revised.Spec.Replicas = &targetReplicas
+	if err := splutil.UpdateResource(ctx, client, revised); err != nil {
+		return fmt.Errorf("scale Noah indexer StatefulSet %s/%s from %d to %d replicas: %w", statefulSet.Namespace, statefulSet.Name, appliedReplicas, targetReplicas, err)
+	}
+	*statefulSet = *revised
+	return nil
 }
 
 // noahIndexerStatefulSetConverged reports whether the StatefulSet controller
@@ -210,6 +255,22 @@ func noahIndexerStatefulSetConverged(statefulSet *appsv1.StatefulSet, desiredRep
 		statefulSet.Status.CurrentRevision == statefulSet.Status.UpdateRevision &&
 		statefulSet.Status.UpdatedReplicas == desiredReplicas &&
 		statefulSet.Status.ReadyReplicas == desiredReplicas
+}
+
+// noahIndexerWorkloadPhase distinguishes a pending pod-template revision from
+// ordinary replica readiness. Both block peer observation, but only revision
+// drift is an update; a same-revision replica wait is classified by the caller
+// as pending or scaling up.
+func noahIndexerWorkloadPhase(phase enterpriseApi.Phase, statefulSet *appsv1.StatefulSet, desiredReplicas int32) enterpriseApi.Phase {
+	if phase != enterpriseApi.PhaseReady || noahIndexerStatefulSetConverged(statefulSet, desiredReplicas) {
+		return phase
+	}
+	if statefulSet != nil &&
+		statefulSet.Status.UpdateRevision != "" &&
+		statefulSet.Status.CurrentRevision != statefulSet.Status.UpdateRevision {
+		return enterpriseApi.PhaseUpdating
+	}
+	return enterpriseApi.PhasePending
 }
 
 func newNoahPeersReadyCondition(status metav1.ConditionStatus, reason enterpriseApi.ConditionReason, message string) metav1.Condition {
@@ -237,37 +298,215 @@ func setNoahIndexerPhaseAndConditions(cr *enterpriseApi.IndexerCluster, isPaused
 	cr.Status.ObservedGeneration = cr.GetGeneration()
 }
 
-func observeNoahIndexerPeers(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, statefulSet *appsv1.StatefulSet) (bool, error) {
-	expectedPeers, err := currentNoahIndexerPeerIncarnations(ctx, client, cr.Spec.Replicas, statefulSet)
-	if err != nil {
-		return false, err
+type noahIndexerOutcome struct {
+	phase        enterpriseApi.Phase
+	phaseMessage string
+	condition    metav1.Condition
+	requeueAfter time.Duration
+}
+
+func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, appliedReplicas int32) noahIndexerOutcome {
+	phaseMessage := ""
+	switch {
+	case phase == enterpriseApi.PhaseUpdating || previousPhase == enterpriseApi.PhaseUpdating:
+		phase = enterpriseApi.PhaseUpdating
+		phaseMessage = "Waiting for the StatefulSet pod-template revision to be applied"
+	case previousPhase == enterpriseApi.PhaseScalingUp:
+		phase = enterpriseApi.PhaseScalingUp
+		phaseMessage = fmt.Sprintf("Waiting for %d applied replicas to become ready before continuing scale-out", appliedReplicas)
 	}
-	if len(expectedPeers) != int(cr.Spec.Replicas) {
-		return false, nil
+
+	return noahIndexerOutcome{
+		phase:        phase,
+		phaseMessage: phaseMessage,
+		condition: newNoahPeersReadyCondition(
+			metav1.ConditionFalse,
+			enterpriseApi.ReasonNoahPeersNotReady,
+			"Waiting for the indexer workload before observing Noah peers",
+		),
+		requeueAfter: noahIndexerPollInterval,
+	}
+}
+
+func reconcileReadyNoahIndexer(
+	ctx context.Context,
+	client splcommon.ControllerClient,
+	cr *enterpriseApi.IndexerCluster,
+	statefulSet *appsv1.StatefulSet,
+	appliedReplicas int32,
+	previousPhase enterpriseApi.Phase,
+	previousReplicas int32,
+) (noahIndexerOutcome, error) {
+	strategy := noahIndexerScaleOutStrategy{client: client, cr: cr, statefulSet: statefulSet}
+	plan, err := indexerworkflow.PlanScaleOut(ctx, &strategy, appliedReplicas, cr.Spec.Replicas)
+	var cacheWarmTimeoutErr *noahIndexerCacheWarmTimeoutError
+	if errors.As(err, &cacheWarmTimeoutErr) {
+		message := cacheWarmTimeoutErr.Error()
+		return noahIndexerOutcome{
+			phase:        enterpriseApi.PhaseError,
+			phaseMessage: message,
+			condition: newNoahPeersReadyCondition(
+				metav1.ConditionFalse,
+				enterpriseApi.ReasonNoahCacheWarmTimeout,
+				message,
+			),
+		}, splcommon.NewTerminalError(EventReasonNoahCacheWarmTimeout, message, cacheWarmTimeoutErr)
+	}
+	if err != nil {
+		return noahIndexerOutcome{
+			phase:        enterpriseApi.PhasePending,
+			phaseMessage: "Unable to observe Noah peers",
+			condition: newNoahPeersReadyCondition(
+				metav1.ConditionUnknown,
+				enterpriseApi.ReasonNoahPeerObservationFailed,
+				fmt.Sprintf("Unable to observe Noah peers: %v", err),
+			),
+			requeueAfter: noahIndexerPollInterval,
+		}, nil
+	}
+	if plan.TargetReplicas > appliedReplicas {
+		if err := applyNoahIndexerReplicaTarget(ctx, client, statefulSet, plan.TargetReplicas); err != nil {
+			return noahIndexerOutcome{}, err
+		}
+		cr.Status.Replicas = plan.TargetReplicas
+		return noahIndexerOutcome{
+			phase:        enterpriseApi.PhaseScalingUp,
+			phaseMessage: fmt.Sprintf("Scaling Noah IndexerCluster from %d to %d replicas", appliedReplicas, plan.TargetReplicas),
+			condition: newNoahPeersReadyCondition(
+				metav1.ConditionFalse,
+				enterpriseApi.ReasonNoahPeersNotReady,
+				fmt.Sprintf("Waiting for Noah peer ordinal %d before continuing toward %d replicas", plan.TargetReplicas-1, cr.Spec.Replicas),
+			),
+			requeueAfter: noahIndexerPollInterval,
+		}, nil
+	}
+	if !plan.Complete {
+		phase := enterpriseApi.PhasePending
+		phaseMessage := "Waiting for expected Noah peers"
+		if previousPhase == enterpriseApi.PhaseScalingUp || previousReplicas < appliedReplicas || appliedReplicas < cr.Spec.Replicas {
+			phase = enterpriseApi.PhaseScalingUp
+			phaseMessage = fmt.Sprintf("Waiting for %d applied replicas to become ready before continuing scale-out", appliedReplicas)
+		}
+		return noahIndexerOutcome{
+			phase:        phase,
+			phaseMessage: phaseMessage,
+			condition: newNoahPeersReadyCondition(
+				metav1.ConditionFalse,
+				enterpriseApi.ReasonNoahPeersNotReady,
+				fmt.Sprintf("Not all %d applied Noah peers are up", appliedReplicas),
+			),
+			requeueAfter: noahIndexerPollInterval,
+		}, nil
+	}
+
+	return noahIndexerOutcome{
+		phase: enterpriseApi.PhaseReady,
+		condition: newNoahPeersReadyCondition(
+			metav1.ConditionTrue,
+			enterpriseApi.ReasonNoahPeersReady,
+			"All expected Noah peers are up",
+		),
+	}, nil
+}
+
+type noahIndexerPeerObservation struct {
+	allRegistered  bool
+	allReady       bool
+	timedOutPeerID string
+}
+
+type noahIndexerScaleOutStrategy struct {
+	client      splcommon.ControllerClient
+	cr          *enterpriseApi.IndexerCluster
+	statefulSet *appsv1.StatefulSet
+}
+
+func (strategy *noahIndexerScaleOutStrategy) NextReplicas(ctx context.Context, appliedReplicas, requestedReplicas int32) (indexerworkflow.ScaleOutPlan, error) {
+	plan := indexerworkflow.ScaleOutPlan{TargetReplicas: appliedReplicas}
+	observation, cacheWarmEnabled, err := observeNoahIndexerPeers(ctx, strategy.client, strategy.cr, appliedReplicas, strategy.statefulSet)
+	if err != nil {
+		return plan, err
+	}
+	if observation.timedOutPeerID != "" {
+		return plan, &noahIndexerCacheWarmTimeoutError{peerID: observation.timedOutPeerID}
+	}
+	plan.Complete = observation.allReady && appliedReplicas == requestedReplicas
+	canAdvance := observation.allReady
+	if !cacheWarmEnabled {
+		canAdvance = observation.allRegistered
+	}
+	if canAdvance && appliedReplicas < requestedReplicas {
+		plan.TargetReplicas++
+	}
+	return plan, nil
+}
+
+type noahIndexerCacheWarmTimeoutError struct {
+	peerID string
+}
+
+func (err *noahIndexerCacheWarmTimeoutError) Error() string {
+	return fmt.Sprintf("Cache warming timed out for Noah peer %s", err.peerID)
+}
+
+func observeNoahIndexerPeers(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, replicas int32, statefulSet *appsv1.StatefulSet) (noahIndexerPeerObservation, bool, error) {
+	expectedPeers, err := currentNoahIndexerPeerIncarnations(ctx, client, replicas, statefulSet)
+	if err != nil {
+		return noahIndexerPeerObservation{}, false, err
+	}
+	if len(expectedPeers) != int(replicas) {
+		return noahIndexerPeerObservation{}, false, nil
 	}
 
 	noahCluster := &enterpriseApi.NoahCluster{}
 	key := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.NoahClusterRef.Name}
 	if err := client.Get(ctx, key, noahCluster); err != nil {
-		return false, fmt.Errorf("get referenced NoahCluster %s: %w", key, err)
+		return noahIndexerPeerObservation{}, false, fmt.Errorf("get referenced NoahCluster %s: %w", key, err)
 	}
+	cacheWarmEnabled := noahCacheWarmScaleOutEnabled(noahCluster.Spec)
 	authSecret, err := resolveNoahAuthSecret(ctx, client, cr.GetNamespace(), noahCluster.Spec.AuthSecretRef)
 	if err != nil {
-		return false, err
+		return noahIndexerPeerObservation{}, cacheWarmEnabled, err
 	}
 	authenticator, err := noah.NewHMACV2Authenticator(authSecret.Data[noahAuthSecretKey])
 	if err != nil {
-		return false, fmt.Errorf("configure Noah authentication: %w", err)
+		return noahIndexerPeerObservation{}, cacheWarmEnabled, fmt.Errorf("configure Noah authentication: %w", err)
 	}
 	noahClient, err := noah.NewClient(noahCluster.Spec.Endpoint, noahCluster.Spec.Tenant, authenticator)
 	if err != nil {
-		return false, fmt.Errorf("configure Noah client: %w", err)
+		return noahIndexerPeerObservation{}, cacheWarmEnabled, fmt.Errorf("configure Noah client: %w", err)
 	}
 	peers, err := noahClient.ListPeers(ctx)
 	if err != nil {
-		return false, fmt.Errorf("list Noah peers: %w", err)
+		return noahIndexerPeerObservation{}, cacheWarmEnabled, fmt.Errorf("list Noah peers: %w", err)
 	}
-	return expectedNoahIndexerPeersReady(peers, expectedPeers), nil
+
+	observation := noahIndexerPeerObservation{
+		allRegistered: expectedNoahIndexerPeersRegistered(peers, expectedPeers),
+		allReady:      expectedNoahIndexerPeersReady(peers, expectedPeers),
+	}
+	timeout := noahCacheWarmScaleOutTimeout(noahCluster.Spec)
+	if cacheWarmEnabled && timeout > 0 {
+		observation.timedOutPeerID = timedOutNoahIndexerCacheWarmPeer(
+			peers,
+			expectedPeers,
+			timeout,
+			time.Now(),
+		)
+	}
+	return observation, cacheWarmEnabled, nil
+}
+
+func noahCacheWarmScaleOutEnabled(spec enterpriseApi.NoahClusterSpec) bool {
+	return spec.CacheWarmScaleOutEnabled == nil || *spec.CacheWarmScaleOutEnabled
+}
+
+func noahCacheWarmScaleOutTimeout(spec enterpriseApi.NoahClusterSpec) time.Duration {
+	timeoutSeconds := defaultNoahCacheWarmScaleOutTimeoutSeconds
+	if spec.CacheWarmScaleOutTimeoutSeconds != nil {
+		timeoutSeconds = *spec.CacheWarmScaleOutTimeoutSeconds
+	}
+	return time.Duration(timeoutSeconds) * time.Second
 }
 
 func currentNoahIndexerPeerIncarnations(ctx context.Context, client splcommon.ControllerClient, replicas int32, statefulSet *appsv1.StatefulSet) (map[string]int64, error) {
@@ -322,6 +561,27 @@ func noahIndexerClusterDomain(statefulSet *appsv1.StatefulSet) (string, error) {
 	return container.Env[envIndex].Value, nil
 }
 
+func expectedNoahIndexerPeersRegistered(peers []noah.Peer, expectedPeers map[string]int64) bool {
+	registeredPeers := make(map[string]int, len(expectedPeers))
+	for _, peer := range peers {
+		incarnationStart, expected := expectedPeers[peer.ID]
+		if !expected || peer.Data.StartTime < incarnationStart {
+			continue
+		}
+		switch peer.Status {
+		case noah.PeerStatusStarted, noah.PeerStatusWarming, noah.PeerStatusWarmed, noah.PeerStatusUp:
+			registeredPeers[peer.ID]++
+		}
+	}
+
+	for peerID := range expectedPeers {
+		if registeredPeers[peerID] != 1 {
+			return false
+		}
+	}
+	return len(expectedPeers) > 0
+}
+
 func expectedNoahIndexerPeersReady(peers []noah.Peer, expectedPeers map[string]int64) bool {
 	activePeers := make(map[string]int, len(expectedPeers))
 	readyPeers := make(map[string]int, len(expectedPeers))
@@ -346,6 +606,41 @@ func expectedNoahIndexerPeersReady(peers []noah.Peer, expectedPeers map[string]i
 		}
 	}
 	return len(expectedPeers) > 0
+}
+
+func timedOutNoahIndexerCacheWarmPeer(peers []noah.Peer, expectedPeers map[string]int64, timeout time.Duration, now time.Time) string {
+	if timeout <= 0 {
+		return ""
+	}
+
+	observedPeers := make(map[string]struct{}, len(expectedPeers))
+	for _, peer := range peers {
+		incarnationStart, expected := expectedPeers[peer.ID]
+		if !expected || peer.Data.StartTime < incarnationStart {
+			continue
+		}
+		observedPeers[peer.ID] = struct{}{}
+		if peer.Status != noah.PeerStatusUp && !now.Before(time.Unix(peer.Data.StartTime, 0).Add(timeout)) {
+			return peer.ID
+		}
+	}
+
+	// A new pod may never register with Noah, so its Kubernetes incarnation
+	// start time provides the fallback deadline when no current peer exists.
+	missingPeers := make([]string, 0, len(expectedPeers)-len(observedPeers))
+	for peerID, incarnationStart := range expectedPeers {
+		if _, observed := observedPeers[peerID]; observed {
+			continue
+		}
+		if !now.Before(time.Unix(incarnationStart, 0).Add(timeout)) {
+			missingPeers = append(missingPeers, peerID)
+		}
+	}
+	if len(missingPeers) > 0 {
+		slices.Sort(missingPeers)
+		return missingPeers[0]
+	}
+	return ""
 }
 
 // getNoahIndexerStatefulSet constructs an indexer StatefulSet with the startup
