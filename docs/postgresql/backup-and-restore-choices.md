@@ -306,3 +306,4 @@ The restored cluster can have its own backup schedule and provider behavior afte
 - [Automated Backups via Volume Snapshots](backup-volume-snapshots.md)
 - [Automated Backups via Object Storage](backup-object-storage.md)
 - [Restoring a PostgresCluster](restore-from-volume-snapshot.md)
+- [Disaster Recovery Runbook](disaster-recovery.md)
