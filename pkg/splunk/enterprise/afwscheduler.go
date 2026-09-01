@@ -416,6 +416,17 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 	appDeployInfo := downloadWorker.appDeployInfo
 	appName := appDeployInfo.AppName
 
+	// Stop before starting the remote read when the context is already
+	// cancelled (e.g. namespace delete during test teardown), so download
+	// workers do not hold pod connections open past shutdown.
+	select {
+	case <-ctx.Done():
+		scopedLog.InfoContext(ctx, "context cancelled, skipping app download", "appName", appName)
+		updatePplnWorkerPhaseInfo(ctx, appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadPending)
+		return
+	default:
+	}
+
 	localFile := getLocalAppFileName(ctx, localPath, appName, appDeployInfo.ObjectHash)
 	remoteFile, err := getRemoteObjectKey(ctx, splunkCR, downloadWorker.afwConfig, appSrcName, appName)
 	if err != nil {
