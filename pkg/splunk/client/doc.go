@@ -24,4 +24,5 @@
 //	storage/gcp/     Google Cloud Storage remote storage client
 //	storage/minio/   Minio/S3-compatible remote storage client
 //	certmanager/     cert-manager Certificate/Issuer client library
+//	noah/            Noah membership API client
 package client

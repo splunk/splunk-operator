@@ -113,6 +113,7 @@ parsed result. No scheduling, no multi-step logic, no K8s client I/O.
 | Sub-package | Scope |
 |---|---|
 | `splunk/` | Splunk REST API (cluster, searchhead, indexer, license) |
+| `noah/` | Noah membership, bucket-map, and lifecycle API |
 | `storage/{aws,azure,gcp,minio}/` | Object storage SDKs |
 | `queue/` | Queue / pub-sub (future) |
 
