@@ -67,6 +67,12 @@ exact authorized context, namespace, and scope. Never infer acceptance of the
 Splunk General Terms or populate `SPLUNK_GENERAL_TERMS`; use only a value
 supplied by the user after they follow `docs/README.md`.
 
+The sole exception is the checked-in `SOK_PIPELINE_MODE=scs_deploy` CI lane:
+it may set `SPLUNK_GENERAL_TERMS` for an in-house SCS Helm deployment run by
+Splunk employees. This exception does not apply to local commands, customer
+deployments, or any other pipeline, and does not change the customer legal
+acceptance guidance in `docs/README.md`.
+
 ## Build, Test & Validate
 
 Primary loop, run before every MR:
