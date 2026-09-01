@@ -221,6 +221,7 @@ const (
 	ReasonNoahPeersReady            ConditionReason = "NoahPeersReady"
 	ReasonNoahPeersNotReady         ConditionReason = "NoahPeersNotReady"
 	ReasonNoahPeerObservationFailed ConditionReason = "NoahPeerObservationFailed"
+	ReasonNoahCacheWarmTimeout      ConditionReason = "NoahCacheWarmTimeout"
 )
 
 // Probe defines set of configurable values for Startup, Readiness, and Liveness probes

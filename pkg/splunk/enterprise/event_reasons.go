@@ -73,6 +73,7 @@ const (
 	EventReasonBundlePushFailed                splcommon.EventReason = "BundlePushFailed"
 	EventReasonPodExecFailed                   splcommon.EventReason = "PodExecFailed"
 	EventReasonScalingBlockedRF                splcommon.EventReason = "ScalingBlockedRF"
+	EventReasonNoahCacheWarmTimeout            splcommon.EventReason = "NoahCacheWarmTimeout"
 	EventReasonLicenseExpired                  splcommon.EventReason = "LicenseExpired"
 
 	// Warning event reasons — upgrade
