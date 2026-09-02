@@ -1,0 +1,20 @@
+---
+features:
+  smartbus:
+    infrastructure:
+      # Provisions the SmartBus S3 bucket, SQS queue and DLQ. Uses the existing
+      # runtime IAM role and creates the annotated splunk-runtime ServiceAccount.
+      enabled: true
+helmValues:
+  vcluster:
+    sync:
+      fromHost:
+        # Syncs all host StorageClasses, including gp3-automode when present,
+        # into the vCluster so workload PVCs can request host-backed storage.
+        storageClasses:
+          enabled: true
+      toHost:
+        # Syncs PVCs created in the vCluster to the host, where the storage
+        # provisioner can create and bind backing volumes. Enabled by default.
+        persistentVolumeClaims:
+          enabled: true

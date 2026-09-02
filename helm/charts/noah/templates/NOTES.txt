@@ -1,0 +1,12 @@
+Noah is available inside the vCluster at:
+
+  http://{{ include "noah.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+
+Check the private-development stack:
+
+  kubectl --context kraken -n {{ .Release.Namespace }} get pods
+  kubectl --context kraken -n {{ .Release.Namespace }} logs deployment/{{ include "noah.fullname" . }}
+
+The Kraken SmartBus SQS and S3 resources are intentionally not consumed by
+Noah. They remain available to the Splunk workloads through their runtime
+ServiceAccount.

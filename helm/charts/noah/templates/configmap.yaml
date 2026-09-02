@@ -1,0 +1,38 @@
+{{- $env := dict
+  "HOST" "0.0.0.0"
+  "PORT" (toString .Values.service.port)
+  "LOGGER_LEVEL" "info"
+  "NOAH_LOCAL_MODE" "true"
+  "NOAH_AUTH_MOCK" (toString .Values.noah.authMock)
+  "NOAH_PREFETCH_KEYS" "false"
+  "NOAH_CLOUD_PROVIDER" "aws"
+  "NOAH_CLOUD_CLUSTER_TYPE" "eks"
+  "NOAH_AWS_REGION" (toString .Values.noah.awsRegion)
+  "NOAH_DB_CONNECTION_TYPE" "postgres"
+  "NOAH_DB_HOST" (include "noah.postgresqlName" .)
+  "NOAH_DB_PORT" (toString .Values.postgresql.service.port)
+  "NOAH_DB_MAX_OPEN_CONNECTIONS" (toString .Values.noah.maxOpenConnections)
+  "NOAH_DB_MAX_IDLE_CONNECTIONS" (toString .Values.noah.maxIdleConnections)
+  "NOAH_DB_PREWARM_CONNECTION_PERCENT" "0"
+  "NOAH_CACHE_HOST" (include "noah.redisName" .)
+  "NOAH_CACHE_PORT" (toString .Values.redis.service.port)
+  "NOAH_CACHE_AUTH_MODE" "none"
+  "NOAH_CACHE_ENABLE_REDIS_TRACING" "false"
+  "NOAH_METRICS_PORT" (toString .Values.service.metricsPort)
+  "ENABLE_OTEL_TRACING" "false"
+  "ENABLE_OPENTRACING_BRIDGE" "false"
+}}
+{{- range $name, $value := .Values.noah.extraEnv }}
+{{- $_ := set $env $name (toString $value) }}
+{{- end }}
+{{- $_ := set $env "NOAH_AUTO_CREATE_TENANTS" (toString .Values.noah.autoCreateTenants) }}
+{{- $_ := set $env "NOAH_CACHE_WARM_SCALE_IN_TIMEOUT" (toString .Values.noah.cacheWarmScaleInTimeout) }}
+{{- $_ := set $env "NOAH_EXPECTED_NUMBER_OF_PODS" (toString .Values.noah.expectedPods) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "noah.envConfigMapName" . }}
+  labels:
+    {{- include "noah.labels" . | nindent 4 }}
+data:
+  {{- toYaml $env | nindent 2 }}
