@@ -111,7 +111,7 @@ func GetSecretFromServerConf(ctx context.Context, deployment *Deployment, podNam
 
 // DecryptSplunkEncodedSecret Decrypt Splunk Secret like pass4SymmKey On Given Pod
 func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, podName string, secretValue string) string {
-	stdin := fmt.Sprintf("/opt/splunk/bin/splunk show-decrypted --value '%s' -auth admin:$(cat /mnt/splunk-secrets/password)", secretValue)
+	stdin := fmt.Sprintf("/opt/splunk/bin/splunk show-decrypted --value '%s'", secretValue)
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
