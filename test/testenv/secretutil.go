@@ -111,11 +111,11 @@ func GetSecretFromServerConf(ctx context.Context, deployment *Deployment, podNam
 
 // DecryptSplunkEncodedSecret Decrypt Splunk Secret like pass4SymmKey On Given Pod
 func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, podName string, secretValue string) string {
-	stdin := fmt.Sprintf("/opt/splunk/bin/splunk show-decrypted --value '%s'", secretValue)
+	stdin := fmt.Sprintf("/opt/splunk/bin/splunk show-decrypted --value '%s' -auth admin:$(cat /mnt/splunk-secrets/password)", secretValue)
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 		return "Failed"
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
