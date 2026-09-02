@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "noah.redisName" . }}
+  labels:
+    {{- include "noah.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "noah.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "noah.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      serviceAccountName: {{ include "noah.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          args: ["redis-server", "--port", "{{ .Values.redis.service.port }}", "--save", "", "--appendonly", "no"]
+          ports:
+            - name: redis
+              containerPort: {{ .Values.redis.service.port }}
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "-p", "{{ .Values.redis.service.port }}", "ping"]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "-p", "{{ .Values.redis.service.port }}", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}

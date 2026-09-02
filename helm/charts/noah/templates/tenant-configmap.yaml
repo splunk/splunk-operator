@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "noah.tenantConfigMapName" . }}
+  labels:
+    {{- include "noah.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+{{- toYaml .Values.noah.tenantConfig | nindent 4 }}

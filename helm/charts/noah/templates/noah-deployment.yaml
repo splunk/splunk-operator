@@ -1,0 +1,105 @@
+{{- if ne (int .Values.replicaCount) 1 }}
+{{- fail "replicaCount must remain 1 because this development chart runs database migrations in an init container" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "noah.fullname" . }}
+  labels:
+    {{- include "noah.labels" . | nindent 4 }}
+    app.kubernetes.io/component: noah
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "noah.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: noah
+  template:
+    metadata:
+      labels:
+        {{- include "noah.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: noah
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/database-secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        checksum/tenant-config: {{ include (print $.Template.BasePath "/tenant-configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "noah.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 510
+        runAsGroup: 510
+        fsGroup: 510
+      initContainers:
+        - name: migrate
+          image: "{{ .Values.migrationImage.repository }}:{{ .Values.migrationImage.tag }}"
+          imagePullPolicy: {{ .Values.migrationImage.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "noah.envConfigMapName" . }}
+            - secretRef:
+                name: {{ include "noah.databaseSecretName" . }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: noah
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "noah.envConfigMapName" . }}
+            - secretRef:
+                name: {{ include "noah.databaseSecretName" . }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+          startupProbe:
+            httpGet:
+              path: /service/status
+              port: http
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /service/status
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /service/status
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tenant-config
+              mountPath: /home/splunk/data
+              readOnly: true
+      volumes:
+        - name: tenant-config
+          configMap:
+            name: {{ include "noah.tenantConfigMapName" . }}
+      terminationGracePeriodSeconds: 30
