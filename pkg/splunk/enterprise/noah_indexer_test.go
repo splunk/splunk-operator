@@ -16,7 +16,9 @@
 package enterprise
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -117,8 +119,10 @@ func newNoahIndexerScaleOutTestFixture(t *testing.T, options noahIndexerScaleOut
 	return fixture
 }
 
-func (fixture *noahIndexerScaleOutTestFixture) strategy() *noahIndexerScaleOutStrategy {
-	return &noahIndexerScaleOutStrategy{client: fixture.client, cr: fixture.cr, statefulSet: fixture.statefulSet}
+func (fixture *noahIndexerScaleOutTestFixture) podManager() *noahIndexerPodManager {
+	mgr := newNoahIndexerPodManager(fixture.client, fixture.cr)
+	mgr.statefulSet = fixture.statefulSet
+	return mgr
 }
 
 func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) {
@@ -160,7 +164,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 		Data:       map[string][]byte{noahAuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
-	statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr)
+	statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhasePending, phase)
 
@@ -247,46 +251,6 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	}
 }
 
-func TestApplyNoahIndexerReplicaTarget(t *testing.T) {
-	tests := []struct {
-		name      string
-		applied   int32
-		target    int32
-		want      int32
-		wantError string
-	}{
-		{name: "one to two", applied: 1, target: 2, want: 2},
-		{name: "two to three", applied: 2, target: 3, want: 3},
-		{name: "accepts strategy-selected batch", applied: 1, target: 3, want: 3},
-		{name: "cannot keep the same count", applied: 3, target: 3, want: 3, wantError: "must increase"},
-		{name: "cannot scale in", applied: 3, target: 2, want: 3, wantError: "must increase"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ctx := t.Context()
-			client := spltest.NewMockClient()
-			statefulSet := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{Name: "splunk-main-indexer", Namespace: "test"},
-				Spec:       appsv1.StatefulSetSpec{Replicas: &test.applied},
-			}
-			require.NoError(t, client.Create(ctx, statefulSet))
-
-			err := applyNoahIndexerReplicaTarget(ctx, client, statefulSet, test.target)
-			if test.wantError == "" {
-				require.NoError(t, err)
-			} else {
-				require.ErrorContains(t, err, test.wantError)
-			}
-
-			stored := &appsv1.StatefulSet{}
-			require.NoError(t, client.Get(ctx, types.NamespacedName{Name: statefulSet.Name, Namespace: statefulSet.Namespace}, stored))
-			require.NotNil(t, stored.Spec.Replicas)
-			assert.Equal(t, test.want, *stored.Spec.Replicas)
-		})
-	}
-}
-
 func TestApplyNoahIndexerResourcesRequiresReferencedNoahCluster(t *testing.T) {
 	client := spltest.NewMockClient()
 	cr := &enterpriseApi.IndexerCluster{
@@ -296,11 +260,32 @@ func TestApplyNoahIndexerResourcesRequiresReferencedNoahCluster(t *testing.T) {
 		},
 	}
 
-	statefulSet, phase, err := applyNoahIndexerResources(t.Context(), client, cr)
+	statefulSet, phase, err := applyNoahIndexerResources(t.Context(), client, cr, newNoahIndexerPodManager(client, cr))
 	require.Error(t, err)
 	assert.Nil(t, statefulSet)
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
 	assert.Contains(t, err.Error(), "get referenced NoahCluster test/missing")
+}
+
+func TestNoahIndexerPodManagerBlocksUnimplementedLifecycleOperations(t *testing.T) {
+	mgr := newNoahIndexerPodManager(spltest.NewMockClient(), &enterpriseApi.IndexerCluster{})
+	tests := []struct {
+		name      string
+		operation func(context.Context, int32) (bool, error)
+		wantError string
+	}{
+		{name: "scale down", operation: mgr.PrepareScaleDown, wantError: "scale-down is not implemented"},
+		{name: "prepare recycle", operation: mgr.PrepareRecycle, wantError: "rollout is not implemented"},
+		{name: "finish recycle", operation: mgr.FinishRecycle, wantError: "rollout is not implemented"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ready, err := test.operation(t.Context(), 0)
+			assert.False(t, ready)
+			require.ErrorContains(t, err, test.wantError)
+		})
+	}
 }
 
 func TestResolveNoahAuthSecretRejectsInvalidSecret(t *testing.T) {
@@ -737,8 +722,7 @@ func TestTimedOutNoahIndexerCacheWarmPeer(t *testing.T) {
 
 func TestNoahIndexerScaleOutUsesReferencedAuthentication(t *testing.T) {
 	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{peerStatus: noah.PeerStatusUp})
-	strategy := fixture.strategy()
-	plan, err := strategy.NextReplicas(t.Context(), 1, fixture.cr.Spec.Replicas)
+	plan, err := fixture.podManager().NextReplicas(t.Context(), 1, fixture.cr.Spec.Replicas)
 	require.NoError(t, err)
 	assert.Equal(t, int32(2), plan.TargetReplicas)
 	assert.NotEmpty(t, fixture.requestHeaders.Get("x-splunk-lm-nonce"))
@@ -768,7 +752,7 @@ func TestNoahIndexerScaleOutPolicy(t *testing.T) {
 				peerStatus:       test.peerStatus,
 				cacheWarmEnabled: test.cacheWarmEnabled,
 			})
-			plan, err := fixture.strategy().NextReplicas(t.Context(), 1, test.requested)
+			plan, err := fixture.podManager().NextReplicas(t.Context(), 1, test.requested)
 			require.NoError(t, err)
 			assert.Equal(t, test.wantTarget, plan.TargetReplicas)
 			assert.Equal(t, test.wantComplete, plan.Complete)
@@ -783,7 +767,7 @@ func TestReconcileReadyNoahIndexerAppliesScaleOutTarget(t *testing.T) {
 		cacheWarmEnabled: &disabled,
 	})
 
-	outcome, err := reconcileReadyNoahIndexer(t.Context(), fixture.client, fixture.cr, fixture.statefulSet, 1, enterpriseApi.PhaseReady, 1)
+	outcome, err := fixture.podManager().reconcileReady(t.Context(), 1, enterpriseApi.PhaseReady, 1)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingUp, outcome.phase)
 	assert.Equal(t, metav1.ConditionFalse, outcome.condition.Status)
@@ -796,6 +780,17 @@ func TestReconcileReadyNoahIndexerAppliesScaleOutTarget(t *testing.T) {
 	assert.Equal(t, int32(2), *stored.Spec.Replicas)
 }
 
+func TestNoahIndexerPodManagerPropagatesScaleOutUpdateError(t *testing.T) {
+	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{peerStatus: noah.PeerStatusUp})
+	wantErr := errors.New("StatefulSet update failed")
+	fixture.client.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = wantErr
+
+	outcome, err := fixture.podManager().reconcileReady(t.Context(), 1, enterpriseApi.PhaseReady, 1)
+
+	require.ErrorIs(t, err, wantErr)
+	assert.Equal(t, noahIndexerOutcome{}, outcome)
+}
+
 func TestNoahIndexerCacheWarmTimeoutStopsRequeueAndAllowsReevaluation(t *testing.T) {
 	timeoutSeconds := int32(60)
 	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{
@@ -804,7 +799,7 @@ func TestNoahIndexerCacheWarmTimeoutStopsRequeueAndAllowsReevaluation(t *testing
 		timeoutSeconds: &timeoutSeconds,
 	})
 
-	outcome, err := reconcileReadyNoahIndexer(t.Context(), fixture.client, fixture.cr, fixture.statefulSet, 1, enterpriseApi.PhaseScalingUp, 1)
+	outcome, err := fixture.podManager().reconcileReady(t.Context(), 1, enterpriseApi.PhaseScalingUp, 1)
 	require.Error(t, err)
 	message, terminal := splcommon.TerminalMessage(err)
 	require.True(t, terminal)
@@ -821,7 +816,7 @@ func TestNoahIndexerCacheWarmTimeoutStopsRequeueAndAllowsReevaluation(t *testing
 	noahCluster.Spec.CacheWarmScaleOutEnabled = &cacheWarmDisabled
 	require.NoError(t, fixture.client.Update(t.Context(), noahCluster))
 
-	outcome, err = reconcileReadyNoahIndexer(t.Context(), fixture.client, fixture.cr, fixture.statefulSet, 1, enterpriseApi.PhaseError, 1)
+	outcome, err = fixture.podManager().reconcileReady(t.Context(), 1, enterpriseApi.PhaseError, 1)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingUp, outcome.phase)
 	assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)

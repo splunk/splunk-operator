@@ -216,12 +216,25 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 
 	// readyReplicas == replicas
 
-	// check for scaling up
-	if readyReplicas < desiredReplicas {
-		// scale up StatefulSet to match desiredReplicas
-		scopedLog.InfoContext(ctx, "scaling replicas up", "replicas", desiredReplicas)
-		*statefulSet.Spec.Replicas = desiredReplicas
-		return enterpriseApi.PhaseScalingUp, splutil.UpdateResource(ctx, c, statefulSet)
+	// Check for scaling up. Managers may optionally restrict the next replica
+	// target; managers without a planner retain the existing unrestricted
+	// behavior.
+	if replicas < desiredReplicas {
+		var planner splcommon.StatefulSetScaleOutPlanner
+		if candidate, ok := mgr.(splcommon.StatefulSetScaleOutPlanner); ok {
+			planner = candidate
+		}
+		plan, err := ScaleOutStatefulSet(ctx, c, statefulSet, planner, desiredReplicas)
+		if err != nil {
+			return enterpriseApi.PhaseError, err
+		}
+		if plan.TargetReplicas > replicas {
+			scopedLog.InfoContext(ctx, "scaling replicas up", "replicas", plan.TargetReplicas)
+			return enterpriseApi.PhaseScalingUp, nil
+		}
+		if !plan.Complete {
+			return enterpriseApi.PhaseScalingUp, nil
+		}
 	}
 
 	// check for scaling down
@@ -354,6 +367,85 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	scopedLog.InfoContext(ctx, "statefulset - Phase Ready")
 
 	return enterpriseApi.PhaseReady, nil
+}
+
+// ScaleOutStatefulSet applies the next safe scale-out target selected by
+// planner. A nil planner preserves the classic behavior of scaling directly to
+// the requested replica count.
+func ScaleOutStatefulSet(
+	ctx context.Context,
+	c splcommon.ControllerClient,
+	statefulSet *appsv1.StatefulSet,
+	planner splcommon.StatefulSetScaleOutPlanner,
+	requestedReplicas int32,
+) (splcommon.ScaleOutPlan, error) {
+	if statefulSet == nil {
+		return splcommon.ScaleOutPlan{}, fmt.Errorf("StatefulSet is nil")
+	}
+	if statefulSet.Spec.Replicas == nil {
+		return splcommon.ScaleOutPlan{}, fmt.Errorf("StatefulSet %s/%s has no replica count", statefulSet.Namespace, statefulSet.Name)
+	}
+
+	appliedReplicas := *statefulSet.Spec.Replicas
+	plan := splcommon.ScaleOutPlan{
+		Complete:       appliedReplicas == requestedReplicas,
+		TargetReplicas: requestedReplicas,
+	}
+	if planner != nil {
+		var err error
+		plan, err = planner.NextReplicas(ctx, appliedReplicas, requestedReplicas)
+		if err != nil {
+			return splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}, err
+		}
+	}
+	if err := validateStatefulSetScaleOutPlan(plan, appliedReplicas, requestedReplicas); err != nil {
+		return splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}, err
+	}
+	if plan.TargetReplicas == appliedReplicas {
+		return plan, nil
+	}
+
+	revised := statefulSet.DeepCopy()
+	revised.Spec.Replicas = &plan.TargetReplicas
+	if err := splutil.UpdateResource(ctx, c, revised); err != nil {
+		return splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}, fmt.Errorf(
+			"scale StatefulSet %s/%s from %d to %d replicas: %w",
+			statefulSet.Namespace,
+			statefulSet.Name,
+			appliedReplicas,
+			plan.TargetReplicas,
+			err,
+		)
+	}
+	*statefulSet = *revised
+	return plan, nil
+}
+
+func validateStatefulSetScaleOutPlan(plan splcommon.ScaleOutPlan, appliedReplicas, requestedReplicas int32) error {
+	if appliedReplicas < 0 {
+		return fmt.Errorf("applied replicas must not be negative: %d", appliedReplicas)
+	}
+	if requestedReplicas < 0 {
+		return fmt.Errorf("requested replicas must not be negative: %d", requestedReplicas)
+	}
+	if appliedReplicas > requestedReplicas {
+		return fmt.Errorf("scale-out cannot reduce replicas from %d to %d", appliedReplicas, requestedReplicas)
+	}
+	if plan.TargetReplicas < appliedReplicas {
+		return fmt.Errorf("scale-out planner cannot reduce replicas from %d to %d", appliedReplicas, plan.TargetReplicas)
+	}
+	if plan.TargetReplicas > requestedReplicas {
+		return fmt.Errorf("scale-out planner target %d exceeds requested replicas %d", plan.TargetReplicas, requestedReplicas)
+	}
+	if plan.Complete && (appliedReplicas != requestedReplicas || plan.TargetReplicas != appliedReplicas) {
+		return fmt.Errorf(
+			"scale-out planner cannot report completion at %d applied replicas with target %d when %d are requested",
+			appliedReplicas,
+			plan.TargetReplicas,
+			requestedReplicas,
+		)
+	}
+	return nil
 }
 
 // SetStatefulSetOwnerRef sets owner references for statefulset

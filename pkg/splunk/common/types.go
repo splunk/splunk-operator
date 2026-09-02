@@ -57,3 +57,17 @@ type StatefulSetPodManager interface {
 	// FinishUpgrade finishes rolling upgrade process; it returns an error if upgrade process can't be finished
 	FinishUpgrade(context.Context, int32) error
 }
+
+// StatefulSetScaleOutPlanner optionally controls the next replica target for a
+// StatefulSet scale-out. Managers that do not implement this interface scale
+// directly to the requested replica count.
+type StatefulSetScaleOutPlanner interface {
+	NextReplicas(context.Context, int32, int32) (ScaleOutPlan, error)
+}
+
+// ScaleOutPlan describes the next safe replica target and whether the requested
+// scale-out has converged.
+type ScaleOutPlan struct {
+	Complete       bool
+	TargetReplicas int32
+}

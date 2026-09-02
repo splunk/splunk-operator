@@ -32,7 +32,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
-	indexerworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/indexercluster"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -105,7 +104,8 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 		return result, deletionErr
 	}
 
-	statefulSet, phase, applyErr := applyNoahIndexerResources(ctx, client, cr)
+	podManager := newNoahIndexerPodManager(client, cr)
+	statefulSet, phase, applyErr := applyNoahIndexerResources(ctx, client, cr, podManager)
 	if applyErr != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply Noah IndexerCluster resources")
 		return result, applyErr
@@ -133,7 +133,7 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	var outcome noahIndexerOutcome
 	switch phase {
 	case enterpriseApi.PhaseReady:
-		outcome, err = reconcileReadyNoahIndexer(ctx, client, cr, statefulSet, appliedReplicas, previousPhase, previousReplicas)
+		outcome, err = podManager.reconcileReady(ctx, appliedReplicas, previousPhase, previousReplicas)
 		if err != nil {
 			if _, terminal := splcommon.TerminalMessage(err); !terminal {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to scale Noah IndexerCluster")
@@ -149,7 +149,7 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	return result, err
 }
 
-func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (*appsv1.StatefulSet, enterpriseApi.Phase, error) {
+func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, podManager *noahIndexerPodManager) (*appsv1.StatefulSet, enterpriseApi.Phase, error) {
 	noahCluster := &enterpriseApi.NoahCluster{}
 	noahClusterKey := types.NamespacedName{
 		Name:      cr.Spec.NoahClusterRef.Name,
@@ -195,20 +195,10 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("build Noah indexer StatefulSet: %w", err)
 	}
 
-	phase, err := k8sops.ApplyStatefulSet(ctx, client, statefulSet)
+	phase, err := podManager.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return statefulSet, enterpriseApi.PhaseError, fmt.Errorf("apply Noah indexer StatefulSet: %w", err)
 	}
-	// Applying the object is enough for this scaffold. Do not invoke the generic
-	// pod manager: it would also authorize rollout and destructive scale-down
-	// before Noah lifecycle safety exists. A StatefulSet using OnDelete may have
-	// ready pods from its previous revision, so replica readiness alone cannot
-	// prove that the desired pod template is running.
-	appliedReplicas, replicaErr := noahIndexerStatefulSetReplicas(statefulSet)
-	if replicaErr != nil {
-		return statefulSet, enterpriseApi.PhaseError, replicaErr
-	}
-	phase = noahIndexerWorkloadPhase(phase, statefulSet, appliedReplicas)
 
 	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, statefulSet.Spec.Selector)
 	configworkflow.GarbageCollectSecrets(ctx, client, cr, defaultsSecret.Name, statefulSet.Spec.Selector)
@@ -223,26 +213,6 @@ func noahIndexerStatefulSetReplicas(statefulSet *appsv1.StatefulSet) (int32, err
 		return 0, fmt.Errorf("Noah indexer StatefulSet %s/%s has no replica count", statefulSet.Namespace, statefulSet.Name)
 	}
 	return *statefulSet.Spec.Replicas, nil
-}
-
-// applyNoahIndexerReplicaTarget applies a scale-out plan to the StatefulSet.
-// Initial creation is handled by ApplyStatefulSet at the full requested size.
-func applyNoahIndexerReplicaTarget(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, targetReplicas int32) error {
-	appliedReplicas, err := noahIndexerStatefulSetReplicas(statefulSet)
-	if err != nil {
-		return err
-	}
-	if targetReplicas <= appliedReplicas {
-		return fmt.Errorf("Noah indexer replica target must increase from %d, got %d", appliedReplicas, targetReplicas)
-	}
-
-	revised := statefulSet.DeepCopy()
-	revised.Spec.Replicas = &targetReplicas
-	if err := splutil.UpdateResource(ctx, client, revised); err != nil {
-		return fmt.Errorf("scale Noah indexer StatefulSet %s/%s from %d to %d replicas: %w", statefulSet.Namespace, statefulSet.Name, appliedReplicas, targetReplicas, err)
-	}
-	*statefulSet = *revised
-	return nil
 }
 
 // noahIndexerStatefulSetConverged reports whether the StatefulSet controller
@@ -298,6 +268,42 @@ func setNoahIndexerPhaseAndConditions(cr *enterpriseApi.IndexerCluster, isPaused
 	cr.Status.ObservedGeneration = cr.GetGeneration()
 }
 
+type noahIndexerPodManager struct {
+	client      splcommon.ControllerClient
+	cr          *enterpriseApi.IndexerCluster
+	statefulSet *appsv1.StatefulSet
+}
+
+var _ splcommon.StatefulSetPodManager = (*noahIndexerPodManager)(nil)
+var _ splcommon.StatefulSetScaleOutPlanner = (*noahIndexerPodManager)(nil)
+
+func newNoahIndexerPodManager(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) *noahIndexerPodManager {
+	return &noahIndexerPodManager{client: client, cr: cr}
+}
+
+// Update applies the desired StatefulSet without authorizing rollout or
+// scale-down. Initial creation retains the full requested replica count.
+func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, _ int32) (enterpriseApi.Phase, error) {
+	if mgr.client == nil {
+		mgr.client = client
+	}
+	mgr.statefulSet = statefulSet
+
+	phase, err := k8sops.ApplyStatefulSet(ctx, mgr.client, statefulSet)
+	if err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+
+	// A StatefulSet using OnDelete may have ready pods from its previous
+	// revision, so replica readiness alone cannot prove that the desired pod
+	// template is running.
+	appliedReplicas, err := noahIndexerStatefulSetReplicas(statefulSet)
+	if err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+	return noahIndexerWorkloadPhase(phase, statefulSet, appliedReplicas), nil
+}
+
 type noahIndexerOutcome struct {
 	phase        enterpriseApi.Phase
 	phaseMessage string
@@ -328,17 +334,8 @@ func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, applie
 	}
 }
 
-func reconcileReadyNoahIndexer(
-	ctx context.Context,
-	client splcommon.ControllerClient,
-	cr *enterpriseApi.IndexerCluster,
-	statefulSet *appsv1.StatefulSet,
-	appliedReplicas int32,
-	previousPhase enterpriseApi.Phase,
-	previousReplicas int32,
-) (noahIndexerOutcome, error) {
-	strategy := noahIndexerScaleOutStrategy{client: client, cr: cr, statefulSet: statefulSet}
-	plan, err := indexerworkflow.PlanScaleOut(ctx, &strategy, appliedReplicas, cr.Spec.Replicas)
+func (mgr *noahIndexerPodManager) reconcileReady(ctx context.Context, appliedReplicas int32, previousPhase enterpriseApi.Phase, previousReplicas int32) (noahIndexerOutcome, error) {
+	plan, err := k8sops.ScaleOutStatefulSet(ctx, mgr.client, mgr.statefulSet, mgr, mgr.cr.Spec.Replicas)
 	var cacheWarmTimeoutErr *noahIndexerCacheWarmTimeoutError
 	if errors.As(err, &cacheWarmTimeoutErr) {
 		message := cacheWarmTimeoutErr.Error()
@@ -352,30 +349,31 @@ func reconcileReadyNoahIndexer(
 			),
 		}, splcommon.NewTerminalError(EventReasonNoahCacheWarmTimeout, message, cacheWarmTimeoutErr)
 	}
-	if err != nil {
+	var observationErr *noahIndexerPeerObservationError
+	if errors.As(err, &observationErr) {
 		return noahIndexerOutcome{
 			phase:        enterpriseApi.PhasePending,
 			phaseMessage: "Unable to observe Noah peers",
 			condition: newNoahPeersReadyCondition(
 				metav1.ConditionUnknown,
 				enterpriseApi.ReasonNoahPeerObservationFailed,
-				fmt.Sprintf("Unable to observe Noah peers: %v", err),
+				fmt.Sprintf("Unable to observe Noah peers: %v", observationErr),
 			),
 			requeueAfter: noahIndexerPollInterval,
 		}, nil
 	}
+	if err != nil {
+		return noahIndexerOutcome{}, err
+	}
 	if plan.TargetReplicas > appliedReplicas {
-		if err := applyNoahIndexerReplicaTarget(ctx, client, statefulSet, plan.TargetReplicas); err != nil {
-			return noahIndexerOutcome{}, err
-		}
-		cr.Status.Replicas = plan.TargetReplicas
+		mgr.cr.Status.Replicas = plan.TargetReplicas
 		return noahIndexerOutcome{
 			phase:        enterpriseApi.PhaseScalingUp,
 			phaseMessage: fmt.Sprintf("Scaling Noah IndexerCluster from %d to %d replicas", appliedReplicas, plan.TargetReplicas),
 			condition: newNoahPeersReadyCondition(
 				metav1.ConditionFalse,
 				enterpriseApi.ReasonNoahPeersNotReady,
-				fmt.Sprintf("Waiting for Noah peer ordinal %d before continuing toward %d replicas", plan.TargetReplicas-1, cr.Spec.Replicas),
+				fmt.Sprintf("Waiting for Noah peer ordinal %d before continuing toward %d replicas", plan.TargetReplicas-1, mgr.cr.Spec.Replicas),
 			),
 			requeueAfter: noahIndexerPollInterval,
 		}, nil
@@ -383,7 +381,7 @@ func reconcileReadyNoahIndexer(
 	if !plan.Complete {
 		phase := enterpriseApi.PhasePending
 		phaseMessage := "Waiting for expected Noah peers"
-		if previousPhase == enterpriseApi.PhaseScalingUp || previousReplicas < appliedReplicas || appliedReplicas < cr.Spec.Replicas {
+		if previousPhase == enterpriseApi.PhaseScalingUp || previousReplicas < appliedReplicas || appliedReplicas < mgr.cr.Spec.Replicas {
 			phase = enterpriseApi.PhaseScalingUp
 			phaseMessage = fmt.Sprintf("Waiting for %d applied replicas to become ready before continuing scale-out", appliedReplicas)
 		}
@@ -415,17 +413,11 @@ type noahIndexerPeerObservation struct {
 	timedOutPeerID string
 }
 
-type noahIndexerScaleOutStrategy struct {
-	client      splcommon.ControllerClient
-	cr          *enterpriseApi.IndexerCluster
-	statefulSet *appsv1.StatefulSet
-}
-
-func (strategy *noahIndexerScaleOutStrategy) NextReplicas(ctx context.Context, appliedReplicas, requestedReplicas int32) (indexerworkflow.ScaleOutPlan, error) {
-	plan := indexerworkflow.ScaleOutPlan{TargetReplicas: appliedReplicas}
-	observation, cacheWarmEnabled, err := observeNoahIndexerPeers(ctx, strategy.client, strategy.cr, appliedReplicas, strategy.statefulSet)
+func (mgr *noahIndexerPodManager) NextReplicas(ctx context.Context, appliedReplicas, requestedReplicas int32) (splcommon.ScaleOutPlan, error) {
+	plan := splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}
+	observation, cacheWarmEnabled, err := observeNoahIndexerPeers(ctx, mgr.client, mgr.cr, appliedReplicas, mgr.statefulSet)
 	if err != nil {
-		return plan, err
+		return plan, &noahIndexerPeerObservationError{err: err}
 	}
 	if observation.timedOutPeerID != "" {
 		return plan, &noahIndexerCacheWarmTimeoutError{peerID: observation.timedOutPeerID}
@@ -441,12 +433,40 @@ func (strategy *noahIndexerScaleOutStrategy) NextReplicas(ctx context.Context, a
 	return plan, nil
 }
 
+func (mgr *noahIndexerPodManager) PrepareScaleDown(context.Context, int32) (bool, error) {
+	return false, errors.New("Noah indexer scale-down is not implemented")
+}
+
+func (mgr *noahIndexerPodManager) PrepareRecycle(context.Context, int32) (bool, error) {
+	return false, errors.New("Noah indexer rollout is not implemented")
+}
+
+func (mgr *noahIndexerPodManager) FinishRecycle(context.Context, int32) (bool, error) {
+	return false, errors.New("Noah indexer rollout is not implemented")
+}
+
+func (mgr *noahIndexerPodManager) FinishUpgrade(context.Context, int32) error {
+	return nil
+}
+
 type noahIndexerCacheWarmTimeoutError struct {
 	peerID string
 }
 
 func (err *noahIndexerCacheWarmTimeoutError) Error() string {
 	return fmt.Sprintf("Cache warming timed out for Noah peer %s", err.peerID)
+}
+
+type noahIndexerPeerObservationError struct {
+	err error
+}
+
+func (err *noahIndexerPeerObservationError) Error() string {
+	return err.err.Error()
+}
+
+func (err *noahIndexerPeerObservationError) Unwrap() error {
+	return err.err
 }
 
 func observeNoahIndexerPeers(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, replicas int32, statefulSet *appsv1.StatefulSet) (noahIndexerPeerObservation, bool, error) {

@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,6 +41,23 @@ import (
 // errTestPodManager is used for UT negative testing
 type errTestPodManager struct {
 	c splcommon.ControllerClient
+}
+
+type scaleOutPlannerFunc func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error)
+
+func (planner scaleOutPlannerFunc) NextReplicas(ctx context.Context, appliedReplicas, requestedReplicas int32) (splcommon.ScaleOutPlan, error) {
+	return planner(ctx, appliedReplicas, requestedReplicas)
+}
+
+type scaleOutPlanningPodManager struct {
+	DefaultStatefulSetPodManager
+	plan  splcommon.ScaleOutPlan
+	calls int
+}
+
+func (mgr *scaleOutPlanningPodManager) NextReplicas(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+	mgr.calls++
+	return mgr.plan, nil
 }
 
 // Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
@@ -143,6 +162,126 @@ func updateStatefulSetPodsTester(t *testing.T, mgr splcommon.StatefulSetPodManag
 	c.AddObjects(initObjects)
 	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
 	return phase, err
+}
+
+func TestScaleOutStatefulSet(t *testing.T) {
+	tests := []struct {
+		name      string
+		applied   int32
+		requested int32
+		planner   splcommon.StatefulSetScaleOutPlanner
+		want      splcommon.ScaleOutPlan
+	}{
+		{
+			name:      "defaults to unrestricted scale-out",
+			applied:   1,
+			requested: 3,
+			want:      splcommon.ScaleOutPlan{TargetReplicas: 3},
+		},
+		{
+			name:      "uses planner-selected next replica",
+			applied:   1,
+			requested: 3,
+			planner: scaleOutPlannerFunc(func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+				return splcommon.ScaleOutPlan{TargetReplicas: 2}, nil
+			}),
+			want: splcommon.ScaleOutPlan{TargetReplicas: 2},
+		},
+		{
+			name:      "allows planner to wait",
+			applied:   1,
+			requested: 3,
+			planner: scaleOutPlannerFunc(func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+				return splcommon.ScaleOutPlan{TargetReplicas: 1}, nil
+			}),
+			want: splcommon.ScaleOutPlan{TargetReplicas: 1},
+		},
+		{
+			name:      "reports completion at the requested count",
+			applied:   3,
+			requested: 3,
+			planner: scaleOutPlannerFunc(func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+				return splcommon.ScaleOutPlan{Complete: true, TargetReplicas: 3}, nil
+			}),
+			want: splcommon.ScaleOutPlan{Complete: true, TargetReplicas: 3},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			statefulSet := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+				Spec:       appsv1.StatefulSetSpec{Replicas: &test.applied},
+			}
+			client := spltest.NewMockClient()
+			require.NoError(t, client.Create(t.Context(), statefulSet))
+
+			plan, err := ScaleOutStatefulSet(t.Context(), client, statefulSet, test.planner, test.requested)
+			require.NoError(t, err)
+			assert.Equal(t, test.want, plan)
+
+			stored := &appsv1.StatefulSet{}
+			require.NoError(t, client.Get(t.Context(), types.NamespacedName{Name: statefulSet.Name, Namespace: statefulSet.Namespace}, stored))
+			require.NotNil(t, stored.Spec.Replicas)
+			assert.Equal(t, test.want.TargetReplicas, *stored.Spec.Replicas)
+		})
+	}
+}
+
+func TestScaleOutStatefulSetRejectsUnsafePlan(t *testing.T) {
+	applied := int32(2)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &applied},
+	}
+	client := spltest.NewMockClient()
+	require.NoError(t, client.Create(t.Context(), statefulSet))
+	planner := scaleOutPlannerFunc(func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+		return splcommon.ScaleOutPlan{TargetReplicas: 4}, nil
+	})
+
+	_, err := ScaleOutStatefulSet(t.Context(), client, statefulSet, planner, 3)
+	require.ErrorContains(t, err, "exceeds requested replicas")
+}
+
+func TestUpdateStatefulSetPodsUsesOptionalScaleOutPlanner(t *testing.T) {
+	applied := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &applied},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: applied},
+	}
+	mgr := &scaleOutPlanningPodManager{plan: splcommon.ScaleOutPlan{TargetReplicas: 2}}
+
+	phase, err := updateStatefulSetPodsTester(t, mgr, statefulSet, 3, statefulSet)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingUp, phase)
+	assert.Equal(t, 1, mgr.calls)
+	assert.Equal(t, int32(2), *statefulSet.Spec.Replicas)
+}
+
+func TestUpdateStatefulSetPodsSkipsScaleOutPlannerAtDesiredReplicas(t *testing.T) {
+	replicas := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: replicas},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1-0", Namespace: "test"},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Ready: true,
+			}},
+		},
+	}
+	mgr := &scaleOutPlanningPodManager{plan: splcommon.ScaleOutPlan{TargetReplicas: replicas}}
+
+	phase, err := updateStatefulSetPodsTester(t, mgr, statefulSet, replicas, statefulSet, pod)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseReady, phase)
+	assert.Zero(t, mgr.calls)
 }
 
 func TestUpdateStatefulSetPods(t *testing.T) {

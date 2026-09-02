@@ -15,7 +15,6 @@
 
 /*
 Package indexercluster implements multi-step indexer cluster workflows: peer
-readiness gating, one-at-a-time scale-out, decommission, rebalance wait, and
-scale-down sequencing.
+decommission, rebalance wait, and scale-down sequencing.
 */
 package indexercluster
