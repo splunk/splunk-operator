@@ -103,7 +103,7 @@ func GetSecretFromServerConf(ctx context.Context, deployment *Deployment, podNam
 		return "", "", err
 	}
 
-	secretList := strings.Split(confline, "=")
+	secretList := strings.SplitN(confline, "=", 2)
 	key := strings.TrimSpace(secretList[0])
 	value := DecryptSplunkEncodedSecret(ctx, deployment, podName, strings.TrimSpace(secretList[1]))
 	return key, value, nil
@@ -203,7 +203,7 @@ func GetSecretFromInputsConf(ctx context.Context, deployment *Deployment, podNam
 		logf.Log.Error(err, "Failed to get secret from pod", "podName", podName, "secretName", configName)
 		return "", "", err
 	}
-	secretList := strings.Split(confline, "=")
+	secretList := strings.SplitN(confline, "=", 2)
 	key := strings.TrimSpace(secretList[0])
 	value := strings.TrimSpace(secretList[1])
 	return key, value, nil

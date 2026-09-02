@@ -423,29 +423,13 @@ func (testenvInstance *TestCaseEnv) GetAppDeploymentInfo(ctx context.Context, de
 // ~90s before kubelet SIGKILLs the container. A large app such as Enterprise
 // Security restarts for several minutes on slower (graviton) nodes, so the
 // default kills it mid-install, the install rolls back, and the CR never reaches
-// Ready. A higher failureThreshold (~20 min) keeps the container alive through
+// Ready. A higher failureThreshold (~10 min) keeps the container alive through
 // the restart while staying under the test node timeout.
 func AppFrameworkLivenessProbe() *enterpriseApi.Probe {
 	return &enterpriseApi.Probe{
 		InitialDelaySeconds: 30,
 		TimeoutSeconds:      30,
 		PeriodSeconds:       30,
-		FailureThreshold:    40,
-	}
-}
-
-// AppFrameworkReadinessProbe returns a readiness probe tolerant of a slow
-// splunkd management port during app install on slower (graviton) nodes. The
-// operator default (timeout 5s, failureThreshold 3) marks the pod NotReady
-// whenever the exec curl to :8089 takes longer than 5s, which happens
-// repeatedly while splunkd is busy installing a large app on arm64 and keeps
-// the CR from ever reaching Ready. A longer timeout and higher failureThreshold
-// let the pod go Ready once splunkd responds instead of flapping.
-func AppFrameworkReadinessProbe() *enterpriseApi.Probe {
-	return &enterpriseApi.Probe{
-		InitialDelaySeconds: 10,
-		TimeoutSeconds:      30,
-		PeriodSeconds:       10,
 		FailureThreshold:    20,
 	}
 }
