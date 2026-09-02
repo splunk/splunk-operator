@@ -85,7 +85,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	if err != nil {
 		eventPublisher.Warning(ctx, "ValidateIngestorClusterSpecFailed", "Validate Ingestor Cluster spec failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Ingestor Cluster spec validation failed")
-		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Ingestor Cluster spec validation failed", err)
+		return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, "Ingestor Cluster spec validation failed", err)
 	}
 
 	// Track previous ready replicas for scaling events
@@ -224,7 +224,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
 		if apierrors.IsNotFound(err) {
-			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
+			return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
 		}
 		return result, fmt.Errorf("ensure defaults: %w", err)
 	}
@@ -278,7 +278,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = k8sops.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning(ctx, EventReasonMonitoringConsoleCleanupFailed, fmt.Sprintf("Failed to clean up automated monitoring console for %s — check operator logs", cr.GetName()))
+			eventPublisher.Warning(ctx, splcommon.EventReasonMonitoringConsoleCleanupFailed, fmt.Sprintf("Failed to clean up automated monitoring console for %s — check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "delete of reference to automated MC failed", "error", err.Error())
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
@@ -404,7 +404,7 @@ func ensureIngestorDefaults(ctx context.Context, c splcommon.ControllerClient, c
 
 // getIngestorStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise ingestors
 func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNames(SplunkIngestor, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(SplunkIngestor, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}

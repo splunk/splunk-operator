@@ -1,62 +1,67 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// 	http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-package enterprise
+package standalone
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"testing"
 	"time"
 
-	"errors"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	pkgruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	pkgruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	clienttesting "k8s.io/client-go/testing"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+const (
+	s3AccessKey = "s3_access_key"
+	s3SecretKey = "s3_secret_key"
 )
 
 func init() {
-	// Re-Assigning GetReadinessScriptLocation, GetLivenessScriptLocation, GetStartupScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation
-	GetReadinessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
+	// The standalone tests run from a different package directory than the
+	// legacy enterprise tests, so keep the probe fixture locations equivalent.
+	splutil.GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/readinessProbe.sh")
 		return fileLocation
 	}
-	GetLivenessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
+	splutil.GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/livenessProbe.sh")
 		return fileLocation
 	}
-	GetStartupScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
+	splutil.GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/startupProbe.sh")
 		return fileLocation
 	}
 }
@@ -200,6 +205,49 @@ func TestApplyStandalone(t *testing.T) {
 		},
 	}
 	ApplyStandalone(ctx, c, &current)
+}
+
+func TestApplyPaused(t *testing.T) {
+	ctx := context.Background()
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+
+	c := newFakeClientBuilder(scheme).
+		WithStatusSubresource(&enterpriseApi.Standalone{}).
+		Build()
+	cr := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+			Annotations: map[string]string{
+				enterpriseApi.StandalonePausedAnnotation: "true",
+			},
+		},
+	}
+	if err := c.Create(ctx, cr); err != nil {
+		t.Fatalf("failed to create Standalone: %v", err)
+	}
+
+	result, err := Apply(ctx, c, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, nil)
+	if err != nil {
+		t.Fatalf("Apply() returned error: %v", err)
+	}
+	if !result.Requeue || result.RequeueAfter != pauseRetryDelay {
+		t.Fatalf("Apply() result = %+v; want requeue after %s", result, pauseRetryDelay)
+	}
+
+	updated := &enterpriseApi.Standalone{}
+	if err := c.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, updated); err != nil {
+		t.Fatalf("failed to get updated Standalone: %v", err)
+	}
+	paused := meta.FindStatusCondition(updated.Status.Conditions, string(enterpriseApi.ConditionPaused))
+	if paused == nil {
+		t.Fatal("expected Paused condition")
+	}
+	if paused.Status != metav1.ConditionTrue {
+		t.Fatalf("Paused condition status = %s; want %s", paused.Status, metav1.ConditionTrue)
+	}
 }
 
 func TestApplyStandaloneWithSmartstore(t *testing.T) {
@@ -347,12 +395,12 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
-				t.Errorf("validateStandaloneSpec() returned error: %v", err)
+			if err := ValidateStandaloneSpec(ctx, c, &cr); err != nil {
+				t.Errorf("ValidateStandaloneSpec() returned error: %v", err)
 			}
-			return getStandaloneStatefulSet(ctx, c, &cr)
+			return GetStandaloneStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getStandaloneStatefulSet()", f, want)
+		configTester(t, "GetStandaloneStatefulSet()", f, want)
 	}
 	test(loadFixture(t, "statefulset_stack1_standalone_base.json"))
 
@@ -433,13 +481,13 @@ func TestGetStandaloneStatefulSetPodAnnotationsOverrideIstioDefaults(t *testing.
 	if err != nil {
 		t.Fatalf("Failed to create namespace scoped object: %v", err)
 	}
-	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
-		t.Fatalf("validateStandaloneSpec() returned error: %v", err)
+	if err := ValidateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("ValidateStandaloneSpec() returned error: %v", err)
 	}
 
-	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	ss, err := GetStandaloneStatefulSet(ctx, c, &cr)
 	if err != nil {
-		t.Fatalf("getStandaloneStatefulSet() returned error: %v", err)
+		t.Fatalf("GetStandaloneStatefulSet() returned error: %v", err)
 	}
 
 	annotations := ss.Spec.Template.GetAnnotations()
@@ -474,13 +522,13 @@ func TestGetStandaloneStatefulSetPodAnnotationsPreserveIstioDefaults(t *testing.
 	if err != nil {
 		t.Fatalf("Failed to create namespace scoped object: %v", err)
 	}
-	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
-		t.Fatalf("validateStandaloneSpec() returned error: %v", err)
+	if err := ValidateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("ValidateStandaloneSpec() returned error: %v", err)
 	}
 
-	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	ss, err := GetStandaloneStatefulSet(ctx, c, &cr)
 	if err != nil {
-		t.Fatalf("getStandaloneStatefulSet() returned error: %v", err)
+		t.Fatalf("GetStandaloneStatefulSet() returned error: %v", err)
 	}
 
 	annotations := ss.Spec.Template.GetAnnotations()
@@ -579,7 +627,7 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	changed := AreRemoteVolumeKeysChanged(ctx, client, &current, SplunkStandalone, &current.Spec.SmartStore, current.Status.ResourceRevMap, &err)
+	changed := k8sops.AreRemoteVolumeKeysChanged(ctx, client, &current, splcommon.SplunkStandalone, &current.Spec.SmartStore, current.Status.ResourceRevMap, &err)
 
 	if !changed {
 		t.Errorf("Key change was not detected %v", err)
@@ -588,7 +636,6 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 
 func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	initGlobalResourceTracker()
 
 	ctx := context.TODO()
 	cr := enterpriseApi.Standalone{
@@ -737,336 +784,6 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 	}
 }
 
-func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	ctx := context.TODO()
-	cr := enterpriseApi.Standalone{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "standalone",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.StandaloneSpec{
-			Replicas: 1,
-			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				Defaults: enterpriseApi.AppSourceDefaultSpec{
-					VolName: "msos_s2s3_vol2",
-					Scope:   enterpriseApi.ScopeLocal,
-				},
-				VolList: []enterpriseApi.VolumeSpec{
-					{
-						Name:      "msos_s2s3_vol",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws",
-					},
-					{
-						Name:      "msos_s2s3_vol2",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london2",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws",
-					},
-				},
-				AppSources: []enterpriseApi.AppSourceSpec{
-					{Name: "adminApps",
-						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-					{Name: "securityApps",
-						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-					{Name: "authenticationApps",
-						Location: "authenticationAppsRepo",
-					},
-				},
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	// Create S3 secret
-	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
-	client.AddObject(&s3Secret)
-
-	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	splstorage.RegisterRemoteDataClient(ctx, "aws")
-
-	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
-	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
-	Sizes := []int64{10, 20, 30}
-	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
-	mockAwsHandler := spltest.MockAWSS3Handler{}
-
-	mockAwsObjects := []spltest.MockAWSS3Client{
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[0],
-					Key:          &Keys[0],
-					LastModified: &randomTime,
-					Size:         &Sizes[0],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[1],
-					Key:          &Keys[1],
-					LastModified: &randomTime,
-					Size:         &Sizes[1],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[2],
-					Key:          &Keys[2],
-					LastModified: &randomTime,
-					Size:         &Sizes[2],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-	}
-
-	appFrameworkRef := cr.Spec.AppFrameworkConfig
-
-	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
-
-	var vol enterpriseApi.VolumeSpec
-	var allSuccess bool = true
-	for index, appSource := range appFrameworkRef.AppSources {
-
-		vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
-
-		remoteDataClientMgr := &RemoteDataClientManager{client: client,
-			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
-			vol:      &vol,
-			location: appSource.Location,
-			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-				cl := spltest.MockAWSS3Client{}
-				cl.Objects = mockAwsObjects[index].Objects
-				return cl
-			},
-			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
-				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
-				return c, err
-			},
-		}
-
-		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		var mockResponse spltest.MockRemoteDataClient
-		mockResponse, err = splstorage.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		if mockAwsHandler.GotSourceAppListResponseMap == nil {
-			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
-		}
-
-		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAWSS3Client(mockResponse)
-	}
-
-	if allSuccess == false {
-		t.Errorf("Unable to get apps list for all the app sources")
-	}
-	method := "GetAppsList"
-	mockAwsHandler.CheckAWSRemoteDataListResponse(t, method)
-}
-
-func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	ctx := context.TODO()
-	cr := enterpriseApi.Standalone{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.StandaloneSpec{
-			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				VolList: []enterpriseApi.VolumeSpec{
-					{Name: "msos_s2s3_vol",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws"},
-				},
-				AppSources: []enterpriseApi.AppSourceSpec{
-					{Name: "adminApps",
-						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-				},
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	splstorage.RegisterRemoteDataClient(ctx, "aws")
-
-	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
-	Keys := []string{"admin_app.tgz"}
-	Sizes := []int64{10}
-	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
-	mockAwsHandler := spltest.MockAWSS3Handler{}
-
-	mockAwsObjects := []spltest.MockAWSS3Client{
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[0],
-					Key:          &Keys[0],
-					LastModified: &randomTime,
-					Size:         &Sizes[0],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-	}
-
-	appFrameworkRef := cr.Spec.AppFrameworkConfig
-
-	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
-
-	var vol enterpriseApi.VolumeSpec
-
-	appSource := appFrameworkRef.AppSources[0]
-	vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
-	if err != nil {
-		t.Errorf("Unable to get Volume due to error=%s", err)
-	}
-
-	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
-
-	remoteDataClientMgr := &RemoteDataClientManager{
-		client:          client,
-		cr:              &cr,
-		appFrameworkRef: &cr.Spec.AppFrameworkConfig,
-		vol:             &vol,
-		location:        appSource.Location,
-		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-			// Purposefully return nil here so that we test the error scenario
-			return nil
-		},
-		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
-			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
-			// Get the mock client
-			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
-			return c, err
-		},
-	}
-
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
-	}
-
-	// Create empty S3 secret
-	s3Secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "s3-secret",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{},
-	}
-
-	client.AddObject(&s3Secret)
-
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
-	}
-
-	s3AccessKey := []byte{'1'}
-	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
-	}
-
-	s3SecretKey := []byte{'2'}
-	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
-	}
-
-	// Create S3 secret
-	s3Secret = spltest.GetMockS3SecretKeys("s3-secret")
-
-	// This should return an error as we have initialized initFn for remoteDataClientMgr
-	// to return a nil client.
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
-	}
-
-	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-		// To test the error scenario, do no set the Objects member yet
-		cl := spltest.MockAWSS3Client{}
-		return cl
-	}
-
-	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
-	if err != nil {
-		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed")
-	}
-	if len(remoteDataClientResponse.Objects) != 0 {
-		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
-	}
-}
-
 func TestApplyStandaloneDeletion(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
@@ -1208,7 +925,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
+	enterprise.GetAppsList = func(ctx context.Context, remoteDataClientMgr enterprise.RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splcommon.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
@@ -1330,7 +1047,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	// Initialize the global resource tracker to allow app framework to run
-	initGlobalResourceTracker()
+	enterprise.InitGlobalResourceTracker()
 
 	// Create temporary directory for app framework operations
 	newpath := filepath.Join("/tmp", "appframework")
@@ -1344,13 +1061,13 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	}
 	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
-	// Mock GetAppsList to return empty list (no apps to download)
-	savedGetAppsList := GetAppsList
-	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
+	// Mock enterprise.GetAppsList to return empty list (no apps to download)
+	savedGetAppsList := enterprise.GetAppsList
+	enterprise.GetAppsList = func(ctx context.Context, remoteDataClientMgr enterprise.RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splcommon.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
-	defer func() { GetAppsList = savedGetAppsList }()
+	defer func() { enterprise.GetAppsList = savedGetAppsList }()
 
 	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
 	savedGetPodExecClient := splutil.GetPodExecClient
@@ -1642,4 +1359,756 @@ func TestStandaloneWithReadyState(t *testing.T) {
 		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
 		debug.PrintStack()
 	}
+}
+
+func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			SmartStore: enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
+				},
+				IndexList: []enterpriseApi.IndexSpec{
+					{Name: "salesdata1",
+						IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+							VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata2", RemotePath: "salesdata2"},
+					{Name: "salesdata3", RemotePath: ""},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	_, err := ApplyStandalone(context.Background(), client, &cr)
+	// validateSmartstoreSpec is called inside ValidateStandaloneSpec — stalled, returns terminal error
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+}
+
+func TestConfigMapVolAnnotationStamped(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "my-defaults",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "my-defaults-cm",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	// Pre-create the ConfigMap so GetConfigMapDataHash can find it.
+	cmData := map[string]string{"default.yml": "splunk:\n  conf: value1"}
+	cm := k8sops.PrepareConfigMap("my-defaults-cm", "test", cmData)
+	err = splutil.CreateResource(ctx, c, cm)
+	require.NoError(t, err)
+
+	// Build the StatefulSet — this calls updateSplunkPodTemplateWithConfig internally
+	if err := ValidateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("ValidateStandaloneSpec() error: %v", err)
+	}
+	ss, err := GetStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	annotations := ss.Spec.Template.ObjectMeta.Annotations
+	annotationKey := splcommon.ConfigMapRevAnnotationPrefix + "my-defaults"
+	hash, ok := annotations[annotationKey]
+	if !ok {
+		t.Errorf("expected annotation %q to be present on pod template, got annotations: %v", annotationKey, annotations)
+	}
+	if hash == "" {
+		t.Errorf("expected annotation %q to be non-empty, got empty string", annotationKey)
+	}
+	// Verify the hash is stable: same data must produce the same hash.
+	hash2, err := k8sops.GetConfigMapDataHash(ctx, c, types.NamespacedName{Namespace: "test", Name: "my-defaults-cm"}, nil)
+	require.NoError(t, err)
+	if hash != hash2 {
+		t.Errorf("annotation hash %q does not match expected data hash %q", hash, hash2)
+	}
+}
+
+func TestConfigMapVolAnnotationAbsentWhenNoVolumes(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	if err := ValidateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("ValidateStandaloneSpec() error: %v", err)
+	}
+	ss, err := GetStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	for k := range ss.Spec.Template.ObjectMeta.Annotations {
+		if strings.HasPrefix(k, splcommon.ConfigMapRevAnnotationPrefix) {
+			t.Errorf("unexpected configmaprev annotation %q on pod template with no ConfigMap volumes", k)
+		}
+	}
+}
+
+func TestConfigMapVolAnnotationMultipleVolumes(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "cm-vol-a",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "cm-a"},
+							},
+						},
+					},
+					{
+						Name: "cm-vol-b",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "cm-b"},
+							},
+						},
+					},
+					{
+						// Secret volume — should not produce a ConfigMapRevAnnotationPrefix annotation
+						Name: "secret-vol",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{SecretName: "my-secret"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	for _, name := range []string{"cm-a", "cm-b"} {
+		cm := k8sops.PrepareConfigMap(name, "test", map[string]string{"default.yml": "val"})
+		require.NoError(t, splutil.CreateResource(ctx, c, cm))
+	}
+
+	if err := ValidateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("ValidateStandaloneSpec() error: %v", err)
+	}
+	ss, err := GetStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	annotations := ss.Spec.Template.ObjectMeta.Annotations
+	// Annotation key uses volume name (not ConfigMap name) as suffix.
+	for _, volName := range []string{"cm-vol-a", "cm-vol-b"} {
+		key := splcommon.ConfigMapRevAnnotationPrefix + volName
+		if _, ok := annotations[key]; !ok {
+			t.Errorf("expected annotation %q missing from pod template annotations: %v", key, annotations)
+		}
+	}
+	if _, ok := annotations[splcommon.ConfigMapRevAnnotationPrefix+"secret-vol"]; ok {
+		t.Error("unexpected configmaprev annotation for secret volume")
+	}
+}
+
+func TestProjectedConfigMapAnnotationLongVolName(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	// 63-char volume name: appending ".0" would produce 65 chars — triggers the hash path.
+	longVolName := strings.Repeat("a", 63)
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: longVolName,
+						VolumeSource: corev1.VolumeSource{
+							Projected: &corev1.ProjectedVolumeSource{
+								Sources: []corev1.VolumeProjection{
+									{
+										ConfigMap: &corev1.ConfigMapProjection{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "proj-cm"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	cm := k8sops.PrepareConfigMap("proj-cm", "test", map[string]string{"key": "val"})
+	require.NoError(t, splutil.CreateResource(ctx, c, cm))
+
+	if err := ValidateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("ValidateStandaloneSpec() error: %v", err)
+	}
+	ss, err := GetStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	annotations := ss.Spec.Template.ObjectMeta.Annotations
+
+	// The annotation key must use the "p.<hash>.0" form, not the raw long name.
+	sum := sha256.Sum256([]byte(longVolName))
+	expectedKey := splcommon.ConfigMapRevAnnotationPrefix + "p." + hex.EncodeToString(sum[:])[:8] + ".0"
+	if _, ok := annotations[expectedKey]; !ok {
+		t.Errorf("expected annotation %q for long projected vol name, got annotations: %v", expectedKey, annotations)
+	}
+
+	// Ensure the raw long name does NOT appear as an annotation suffix (collision guard).
+	rawKey := splcommon.ConfigMapRevAnnotationPrefix + longVolName + ".0"
+	if _, ok := annotations[rawKey]; ok {
+		t.Errorf("raw long-name annotation %q must not be present (would exceed 63-char limit)", rawKey)
+	}
+}
+
+func TestConfigMapVolAnnotationOptOut(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "app-config",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "app-config-cm",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	// ConfigMap opts out of operator-triggered restarts.
+	cm := k8sops.PrepareConfigMap("app-config-cm", "test", map[string]string{"config.json": `{"key":"value"}`})
+	cm.Annotations = map[string]string{
+		splcommon.ConfigMapRestartOptOutAnnotation: "false",
+	}
+	require.NoError(t, splutil.CreateResource(ctx, c, cm))
+
+	if err := ValidateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("ValidateStandaloneSpec() error: %v", err)
+	}
+	ss, err := GetStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	annotationKey := splcommon.ConfigMapRevAnnotationPrefix + "app-config"
+	if _, ok := ss.Spec.Template.ObjectMeta.Annotations[annotationKey]; ok {
+		t.Errorf("annotation %q must not be present when ConfigMap opts out of restart", annotationKey)
+	}
+}
+
+func TestConfigMapVolAnnotationOptOutProjected(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "proj-vol",
+						VolumeSource: corev1.VolumeSource{
+							Projected: &corev1.ProjectedVolumeSource{
+								Sources: []corev1.VolumeProjection{
+									{
+										ConfigMap: &corev1.ConfigMapProjection{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "proj-cm-opt-out"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	cm := k8sops.PrepareConfigMap("proj-cm-opt-out", "test", map[string]string{"sidecar.conf": "reload=true"})
+	cm.Annotations = map[string]string{
+		splcommon.ConfigMapRestartOptOutAnnotation: "false",
+	}
+	require.NoError(t, splutil.CreateResource(ctx, c, cm))
+
+	if err := ValidateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("ValidateStandaloneSpec() error: %v", err)
+	}
+	ss, err := GetStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	for k := range ss.Spec.Template.ObjectMeta.Annotations {
+		if strings.HasPrefix(k, splcommon.ConfigMapRevAnnotationPrefix) {
+			t.Errorf("unexpected restart annotation %q present when projected ConfigMap opted out", k)
+		}
+	}
+}
+
+func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(splcommon.MetaObject, splcommon.ControllerClient) (bool, error)) {
+	var component string
+	switch cr.GetObjectKind().GroupVersionKind().Kind {
+	case "Standalone":
+		component = "standalone"
+	case "LicenseManager":
+		component = "license-manager"
+	case "LicenseMaster":
+		component = "license-master"
+	case "SearchHeadCluster":
+		component = "search-head"
+	case "IndexerCluster":
+		component = "indexer"
+	case "ClusterManager":
+		component = "cluster-manager"
+	case "ClusterMaster":
+		component = "cluster-master"
+	case "MonitoringConsole":
+		component = "monitoring-console"
+	case "IngestorCluster":
+		component = "ingestor"
+	}
+
+	labelsB := map[string]string{
+		"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component),
+	}
+
+	listOptsB := []client.ListOption{
+		client.InNamespace(cr.GetNamespace()),
+		client.MatchingLabels(labelsB),
+	}
+
+	pvclist := corev1.PersistentVolumeClaimList{
+		Items: []corev1.PersistentVolumeClaim{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-pvc-stack1-var",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+	mockCalls := make(map[string][]spltest.MockFuncCall)
+	wantDeleted := false
+	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
+		wantDeleted = true
+		apiVersion, _ := schema.ParseGroupVersion(enterpriseApi.APIVersion)
+		if component == "cluster-master" || component == "license-master" {
+			apiVersion, _ = schema.ParseGroupVersion("enterprise.splunk.com/v3")
+		}
+		mockCalls["Update"] = []spltest.MockFuncCall{
+			{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
+		}
+		if cr.GetObjectKind().GroupVersionKind().Kind != "IndexerCluster" {
+			mockCalls["Update"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
+			}
+			mockCalls["Delete"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
+			}
+			mockCalls["List"] = []spltest.MockFuncCall{
+				{ListOpts: listOptsB},
+			}
+			// account for extra calls in the shc case due to the deployer
+			if component == "search-head" {
+				labelsC := map[string]string{
+					"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), "deployer"),
+				}
+				listOptsC := []client.ListOption{
+					client.InNamespace(cr.GetNamespace()),
+					client.MatchingLabels(labelsC),
+				}
+				mockCalls["Delete"] = append(mockCalls["Delete"], spltest.MockFuncCall{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"})
+				mockCalls["List"] = append(mockCalls["List"], spltest.MockFuncCall{ListOpts: listOptsC})
+			}
+			mockCalls["Get"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+			}
+			mockCalls["Create"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+			}
+			if component == "monitoring-console" {
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				}
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				}
+				mockCalls["Update"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
+				}
+				mockCalls["Delete"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
+				}
+			}
+
+			switch cr.GetObjectKind().GroupVersionKind().Kind {
+			case "Standalone":
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
+					{MetaName: "*v4.Standalone-test-stack1"},
+					{MetaName: "*v4.Standalone-test-stack1"},
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
+				}
+
+			case "LicenseMaster":
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-license-master-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
+					{MetaName: "*v3.LicenseMaster-test-stack1"},
+					{MetaName: "*v3.LicenseMaster-test-stack1"},
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-license-master-stack1-configmap"},
+				}
+
+			case "LicenseManager":
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-license-manager-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
+					{MetaName: "*v4.LicenseManager-test-stack1"},
+					{MetaName: "*v4.LicenseManager-test-stack1"},
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-license-manager-stack1-configmap"},
+				}
+
+			case "SearchHeadCluster":
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
+					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
+				}
+
+			case "ClusterMaster":
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+					{MetaName: "*v3.ClusterMaster-test-stack1"},
+					{MetaName: "*v3.ClusterMaster-test-stack1"},
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
+				}
+			case "IndexerCluster":
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-indexer-stack1-configmap"},
+				}
+
+			case "ClusterManager":
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-cluster-manager-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
+					{MetaName: "*v4.ClusterManager-test-stack1"},
+					{MetaName: "*v4.ClusterManager-test-stack1"},
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-cluster-manager-stack1-configmap"},
+				}
+
+				listOptsTest := []client.ListOption{
+					client.InNamespace(cr.GetNamespace()),
+				}
+
+				mockCalls["List"] = append(mockCalls["List"], []spltest.MockFuncCall{
+					{ListOpts: listOptsTest},
+					{ListOpts: listOptsTest},
+					{ListOpts: listOptsTest},
+					{ListOpts: listOptsTest},
+				}...)
+				mockCalls["List"][0], mockCalls["List"][len(mockCalls["List"])-1] = mockCalls["List"][len(mockCalls["List"])-1], mockCalls["List"][0]
+			case "MonitoringConsole":
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-monitoring-console-stack1-configmap"},
+					{MetaName: "*v4.MonitoringConsole-test-stack1"},
+					{MetaName: "*v4.MonitoringConsole-test-stack1"},
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-monitoring-console-stack1-configmap"},
+				}
+			}
+		} else {
+			mockCalls["Update"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
+			}
+			mockCalls["Delete"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
+			}
+			mockCalls["List"] = []spltest.MockFuncCall{
+				{ListOpts: listOptsB},
+			}
+			mockCalls["Create"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+			}
+			mockCalls["Get"] = []spltest.MockFuncCall{
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v4.ClusterManager-test-manager1"},
+				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
+				{MetaName: "*v4.IndexerCluster-test-stack1"},
+				{MetaName: "*v4.IndexerCluster-test-stack1"},
+			}
+			switch cr.GetObjectKind().GroupVersionKind().Kind {
+			case "IndexerCluster":
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-indexer-stack1-configmap"},
+				}
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-indexer-stack1-configmap"},
+					{MetaName: "*v4.ClusterManager-test-manager1"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
+					{MetaName: "*v4.IndexerCluster-test-stack1"},
+					{MetaName: "*v4.IndexerCluster-test-stack1"},
+				}
+			case "IngestorCluster":
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-ingestor-stack1-configmap"},
+				}
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-ingestor-stack1-configmap"},
+					{MetaName: "*v4.IngestorCluster-test-stack1"},
+					{MetaName: "*v4.IngestorCluster-test-stack1"},
+				}
+			}
+		}
+	}
+
+	c := spltest.NewMockClient()
+	c.ListObj = &pvclist
+	var err error
+	deleted, err := delete(cr, c)
+	if deleted != wantDeleted || err != nil {
+		t.Errorf("k8sops.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)
+	}
+	c.CheckCalls(t, "Testk8sops.CheckForDeletion", mockCalls)
+}
+
+func configTester(t *testing.T, method string, f func() (interface{}, error), want string) {
+	result, err := f()
+	if err != nil {
+		t.Errorf("%s returned error: %v", method, err)
+	}
+
+	// Marshall the result and compare
+	marshalAndCompare(t, result, method, want)
+}
+
+func marshalAndCompare(t *testing.T, compare interface{}, method string, want string) {
+	t.Helper()
+	got, err := json.Marshal(compare)
+	if err != nil {
+		t.Errorf("%s failed to marshall", err)
+	}
+
+	require.JSONEq(t, normalizeGeneratedConfigJSON(t, want), normalizeGeneratedConfigJSON(t, string(got)))
+}
+
+func normalizeGeneratedConfigJSON(t *testing.T, data string) string {
+	t.Helper()
+
+	var value interface{}
+	require.NoError(t, json.Unmarshal([]byte(data), &value))
+	dropNilCreationTimestamp(value)
+
+	normalized, err := json.Marshal(value)
+	require.NoError(t, err)
+
+	return string(normalized)
+}
+
+func dropNilCreationTimestamp(value interface{}) {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		if creationTimestamp, ok := typed["creationTimestamp"]; ok && creationTimestamp == nil {
+			delete(typed, "creationTimestamp")
+		}
+		for _, child := range typed {
+			dropNilCreationTimestamp(child)
+		}
+	case []interface{}:
+		for _, child := range typed {
+			dropNilCreationTimestamp(child)
+		}
+	}
+}
+
+func loadFixture(t *testing.T, filename string) string {
+	t.Helper()
+	path := filepath.Join("testdata", "fixtures", filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to load fixture %s: %v", filename, err)
+	}
+
+	var compactJSON bytes.Buffer
+	if err := json.Compact(&compactJSON, data); err != nil {
+		t.Fatalf("Failed to compact JSON from fixture %s: %v", filename, err)
+	}
+	return compactJSON.String()
+}
+
+func newFakeClientBuilder(scheme *runtime.Scheme) *fake.ClientBuilder {
+	// The controller-runtime v0.24 fake client defaults to a managed-fields
+	// tracker, which rejects the uint64 fields used by Splunk CR specs.
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjectTracker(clienttesting.NewObjectTracker(
+			scheme,
+			serializer.NewCodecFactory(scheme).UniversalDecoder(),
+		)).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				err := c.Get(ctx, key, obj, opts...)
+				if err != nil {
+					return err
+				}
+				gvk, err := apiutil.GVKForObject(obj, scheme)
+				if err == nil {
+					obj.GetObjectKind().SetGroupVersionKind(gvk)
+				}
+				return nil
+			},
+			Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+				gvk := obj.GetObjectKind().GroupVersionKind()
+				err := c.Create(ctx, obj, opts...)
+				obj.GetObjectKind().SetGroupVersionKind(gvk)
+				return err
+			},
+		})
 }

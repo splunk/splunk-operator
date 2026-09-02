@@ -73,9 +73,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// validate and updates defaults for CR
 	err = validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
+		eventPublisher.Warning(ctx, splcommon.EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Search Head Cluster spec validation failed")
-		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Search Head Cluster spec validation failed", err)
+		return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, "Search Head Cluster spec validation failed", err)
 	}
 
 	// If needed, Migrate the app framework status
@@ -88,7 +88,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
 	if err != nil {
-		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
+		eventPublisher.Warning(ctx, splcommon.EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
 		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
@@ -99,7 +99,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
+			eventPublisher.Warning(ctx, splcommon.EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			setPhaseAndConditions(enterpriseApi.PhaseError, "App framework initialization failed")
 			return result, err
@@ -154,7 +154,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()))
+			eventPublisher.Warning(ctx, splcommon.EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()))
 		}
 		return result, err
 	}
@@ -363,7 +363,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 				if err != nil {
 					// Emit event for password sync failure
 					if eventPublisher != nil {
-						eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
+						eventPublisher.Warning(ctx, splcommon.EventReasonPasswordSyncFailed,
 							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
 					}
 					return err
@@ -378,7 +378,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 				if err != nil {
 					// Emit event for password sync failure
 					if eventPublisher != nil {
-						eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
+						eventPublisher.Warning(ctx, splcommon.EventReasonPasswordSyncFailed,
 							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
 					}
 					return err
@@ -465,7 +465,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 
 	// Emit event for password sync completed
 	if eventPublisher != nil {
-		eventPublisher.Normal(ctx, EventReasonPasswordSyncCompleted,
+		eventPublisher.Normal(ctx, splcommon.EventReasonPasswordSyncCompleted,
 			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
 	}
 
@@ -475,7 +475,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
 func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, ToCertEntries(cr.Spec.Certs, certs.AutoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
@@ -530,7 +530,7 @@ func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	// autoDNSNamesDeployer alone: this runs first, and EnsureCertificate is
 	// create-only, so whichever call creates the cert first fixes its SANs
 	// for the shared secret's lifetime.
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, ToCertEntries(cr.Spec.Certs, certs.AutoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}

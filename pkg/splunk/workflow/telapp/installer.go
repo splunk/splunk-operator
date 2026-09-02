@@ -59,7 +59,7 @@ access = read : [ * ], write : [ admin ]
 
 // AddTelApp adds a telemetry app.
 var AddTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
-	logger := logging.FromContext(ctx).With("func", "AddTelApp",
+	logger := logging.FromContext(ctx).With("func", "addTelApp",
 		"name", cr.GetObjectMeta().GetName(),
 		"namespace", cr.GetObjectMeta().GetNamespace())
 

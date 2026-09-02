@@ -84,7 +84,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if err != nil {
 		eventPublisher.Warning(ctx, "IndexerClusterSpecValidationFailed", "Validation of Indexer Cluster spec failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Indexer Cluster spec validation failed")
-		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Indexer Cluster spec validation failed", err)
+		return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, "Indexer Cluster spec validation failed", err)
 	}
 
 	// updates status after function completes
@@ -181,7 +181,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
 		if apierrors.IsNotFound(err) {
-			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
+			return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
 		}
 		return result, fmt.Errorf("ensure defaults: %w", err)
 	}
@@ -316,7 +316,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				managerIdxcName = cr.Spec.ClusterManagerRef.Name
 			} else {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Empty Cluster Manager reference")
-				return reconcile.Result{}, splcommon.NewTerminalError(EventReasonEmptyClusterManagerRef, "empty Cluster Manager reference", nil)
+				return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonEmptyClusterManagerRef, "empty Cluster Manager reference", nil)
 			}
 			cmPodName := fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
 			podExecClient := splutil.GetPodExecClient(client, cr, cmPodName)
@@ -389,7 +389,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if err != nil {
 		eventPublisher.Warning(ctx, "ValidateIndexerClusterSpecFailed", "Validate Indexer Cluster spec failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Indexer Cluster spec validation failed")
-		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Indexer Cluster spec validation failed", err)
+		return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, "Indexer Cluster spec validation failed", err)
 	}
 
 	// updates status after function completes
@@ -483,7 +483,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
 		if apierrors.IsNotFound(err) {
-			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
+			return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
 		}
 		return result, fmt.Errorf("ensure defaults: %w", err)
 	}
@@ -1314,7 +1314,7 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 
 // getIndexerStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise indexers.
 func getIndexerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNames(SplunkIndexer, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(SplunkIndexer, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
