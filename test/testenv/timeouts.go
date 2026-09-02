@@ -13,34 +13,49 @@
 // limitations under the License.
 package testenv
 
-import "time"
+import (
+	"os"
+	"time"
+)
+
+// archTimeoutScale multiplies the amd64-calibrated per-spec NodeTimeout tiers on
+// arm64/graviton runs, where image pulls, splunkd boot, and app installs run
+// materially slower and the amd64 p95-derived budgets are too tight. Gated on the
+// graviton CI env vars so amd64 runs are unaffected.
+var archTimeoutScale = func() time.Duration {
+	if os.Getenv("JOB_GRAVITON_TESTING") == "true" || os.Getenv("JOB_USE_ARM64_CLUSTER") == "true" {
+		return 2
+	}
+	return 1
+}()
 
 // Per-test-case NodeTimeout tiers derived from observed JUnit durations.
-// Each value is ≈1.5× the observed p95 maximum for that tier.
+// Each value is ≈1.5× the observed p95 maximum for that tier (measured on amd64;
+// scaled by archTimeoutScale on arm64/graviton).
 //
 // Usage in test specs:
 //
 //	It("test name", NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) { ... })
-const (
+var (
 	// ShortTimeout for quick tests:
 	// smartstore, indingsep, s1 appfw, deletecr s1,
 	// crcrud s1, lmanager s1, smoke s1.
-	ShortTimeout = 15 * time.Minute
+	ShortTimeout = archTimeoutScale * 15 * time.Minute
 
 	// MediumTimeout for moderate tests:
 	// mc s1/m4, crcrud shc/PVC, lmanager c3,
 	// secret s1, deletecr c3, most c3/m4 appfw, smoke m4,
 	// indingsep resource-default opt-out (setup + 3-pod rolling restart).
-	MediumTimeout = 45 * time.Minute
+	MediumTimeout = archTimeoutScale * 45 * time.Minute
 
 	// MediumLongTimeout for heavier tests:
 	// m4appfw scale-up, crcrud c3, mc c3,
 	// m4appfw install-local, crcrud m4, lmanager m4, smoke c3.
-	MediumLongTimeout = 70 * time.Minute
+	MediumLongTimeout = archTimeoutScale * 70 * time.Minute
 
 	// LongTimeout for heavy tests:
 	// secret m4, c3appfw image-upgrade variants.
-	LongTimeout = 100 * time.Minute
+	LongTimeout = archTimeoutScale * 100 * time.Minute
 )
 
 // defaultTestTimeout is the max timeout in seconds before async test failed.
@@ -106,7 +121,7 @@ const DetentionTimeoutEventBudget = 5 * time.Minute
 // to return to Ready after a namespace-scoped secret change. The cascading
 // rolling restart (CM bundle push -> IDXC roll -> SHC roll) can exceed the
 // generic 15m DefaultTimeout on busy CI workers, so allow a larger budget.
-const SecretUpdateClusterReadyTimeout = MediumTimeout
+var SecretUpdateClusterReadyTimeout = MediumTimeout
 
 // SetupTeardownTimeout limits BeforeEach setup and AfterEach teardown nodes.
 // Sized to cover observed namespace Terminating durations of 16-18 minutes on

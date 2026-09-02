@@ -357,7 +357,7 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 		Stderr: stderr,
 	})
 	if err != nil {
-		return "", "", err
+		return stdout.String(), stderr.String(), err
 	}
 	return stdout.String(), stderr.String(), nil
 }
