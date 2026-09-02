@@ -2611,70 +2611,6 @@ func TestUpdateReconcileRequeueTime(t *testing.T) {
 	updateReconcileRequeueTime(ctx, result, rqTime, true)
 }
 
-func TestUpdateCRStatus(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
-	sch := pkgruntime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(sch))
-	utilruntime.Must(corev1.AddToScheme(sch))
-	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-
-	builder := newFakeClientBuilder(sch).
-		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
-		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
-		WithStatusSubresource(&enterpriseApi.Standalone{}).
-		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
-		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
-		WithStatusSubresource(&enterpriseApi.Queue{}).
-		WithStatusSubresource(&enterpriseApi.ObjectStorage{}).
-		WithStatusSubresource(&enterpriseApi.IngestorCluster{}).
-		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
-	c := builder.Build()
-	ctx := context.TODO()
-
-	// create standalone custom resource
-	standalone := &enterpriseApi.Standalone{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Standalone",
-			APIVersion: "enterprise.splunk.com/v3",
-		},
-
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "default",
-		},
-		Spec: enterpriseApi.StandaloneSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-				},
-				Volumes: []corev1.Volume{},
-			},
-		},
-		Status: enterpriseApi.StandaloneStatus{
-			ReadyReplicas: 2,
-		},
-	}
-
-	// When the CR is not even existing, error handling will keep retrying to update the CR, but fails at the end.
-	updateCRStatus(ctx, c, standalone, nil)
-
-	// Creating a standalone, and updating the CR will cover the happy path
-	// simulate create standalone instance before reconciliation
-	err := c.Create(ctx, standalone)
-	if err != nil {
-		t.Errorf("standalone CR creation failed.")
-	}
-
-	// call reconciliation
-	_, err = ApplyStandalone(ctx, c, standalone)
-	if err != nil {
-		t.Errorf("Apply standalone failed.")
-	}
-	standalone.Status.ReadyReplicas = 3
-	updateCRStatus(ctx, c, standalone, &err)
-}
-
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
@@ -3740,4 +3676,334 @@ func TestClearAppContextIfSourcesRemoved(t *testing.T) {
 			t.Error("expected false (no-op), got true")
 		}
 	})
+}
+
+func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol2",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:      "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws",
+					},
+					{
+						Name:      "msos_s2s3_vol2",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london2",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// Create S3 secret
+	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
+
+	client.AddObject(&s3Secret)
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
+
+	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
+	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
+	Sizes := []int64{10, 20, 30}
+	StorageClass := "STANDARD"
+	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
+
+	mockAwsHandler := spltest.MockAWSS3Handler{}
+
+	mockAwsObjects := []spltest.MockAWSS3Client{
+		{
+			Objects: []*spltest.MockRemoteDataObject{
+				{
+					Etag:         &Etags[0],
+					Key:          &Keys[0],
+					LastModified: &randomTime,
+					Size:         &Sizes[0],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+		{
+			Objects: []*spltest.MockRemoteDataObject{
+				{
+					Etag:         &Etags[1],
+					Key:          &Keys[1],
+					LastModified: &randomTime,
+					Size:         &Sizes[1],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+		{
+			Objects: []*spltest.MockRemoteDataObject{
+				{
+					Etag:         &Etags[2],
+					Key:          &Keys[2],
+					LastModified: &randomTime,
+					Size:         &Sizes[2],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+	}
+
+	appFrameworkRef := cr.Spec.AppFrameworkConfig
+
+	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
+
+	var vol enterpriseApi.VolumeSpec
+	var allSuccess bool = true
+	for index, appSource := range appFrameworkRef.AppSources {
+
+		vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+		if err != nil {
+			allSuccess = false
+			continue
+		}
+
+		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
+
+		remoteDataClientMgr := &RemoteDataClientManager{client: client,
+			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
+			vol:      &vol,
+			location: appSource.Location,
+			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+				cl := spltest.MockAWSS3Client{}
+				cl.Objects = mockAwsObjects[index].Objects
+				return cl
+			},
+			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
+				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
+				return c, err
+			},
+		}
+
+		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
+		if err != nil {
+			allSuccess = false
+			continue
+		}
+
+		var mockResponse spltest.MockRemoteDataClient
+		mockResponse, err = splstorage.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
+		if err != nil {
+			allSuccess = false
+			continue
+		}
+
+		if mockAwsHandler.GotSourceAppListResponseMap == nil {
+			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
+		}
+
+		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAWSS3Client(mockResponse)
+	}
+
+	if allSuccess == false {
+		t.Errorf("Unable to get apps list for all the app sources")
+	}
+	method := "GetAppsList"
+	mockAwsHandler.CheckAWSRemoteDataListResponse(t, method)
+}
+
+func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
+
+	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
+	Keys := []string{"admin_app.tgz"}
+	Sizes := []int64{10}
+	StorageClass := "STANDARD"
+	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
+
+	mockAwsHandler := spltest.MockAWSS3Handler{}
+
+	mockAwsObjects := []spltest.MockAWSS3Client{
+		{
+			Objects: []*spltest.MockRemoteDataObject{
+				{
+					Etag:         &Etags[0],
+					Key:          &Keys[0],
+					LastModified: &randomTime,
+					Size:         &Sizes[0],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+	}
+
+	appFrameworkRef := cr.Spec.AppFrameworkConfig
+
+	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
+
+	var vol enterpriseApi.VolumeSpec
+
+	appSource := appFrameworkRef.AppSources[0]
+	vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get Volume due to error=%s", err)
+	}
+
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
+
+	remoteDataClientMgr := &RemoteDataClientManager{
+		client:          client,
+		cr:              &cr,
+		appFrameworkRef: &cr.Spec.AppFrameworkConfig,
+		vol:             &vol,
+		location:        appSource.Location,
+		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+			// Purposefully return nil here so that we test the error scenario
+			return nil
+		},
+		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
+			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
+			// Get the mock client
+			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
+			return c, err
+		},
+	}
+
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
+	}
+
+	// Create empty S3 secret
+	s3Secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "s3-secret",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{},
+	}
+
+	client.AddObject(&s3Secret)
+
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
+	}
+
+	s3AccessKey := []byte{'1'}
+	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
+	}
+
+	s3SecretKey := []byte{'2'}
+	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
+	}
+
+	// Create S3 secret
+	s3Secret = spltest.GetMockS3SecretKeys("s3-secret")
+
+	// This should return an error as we have initialized initFn for remoteDataClientMgr
+	// to return a nil client.
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
+	}
+
+	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		// To test the error scenario, do no set the Objects member yet
+		cl := spltest.MockAWSS3Client{}
+		return cl
+	}
+
+	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
+	if err != nil {
+		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed")
+	}
+	if len(remoteDataClientResponse.Objects) != 0 {
+		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
+	}
 }

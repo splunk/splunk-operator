@@ -17,13 +17,21 @@ package k8sops
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strconv"
+	"strings"
 
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -467,4 +475,642 @@ func IsStatefulSetScalingUpOrDown(ctx context.Context, client splcommon.Controll
 	}
 
 	return enterpriseApi.StatefulSetNotScaling, nil
+}
+
+// addStorageVolumes adds storage volumes to the StatefulSet
+func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
+
+	logger := logging.FromContext(ctx).With("func", "addStorageVolumes")
+
+	// configure storage for mount path /opt/splunk/etc
+	if spec.EtcVolumeStorageConfig.EphemeralStorage {
+		// add ephemeral volumes
+		_ = resources.AddEphemeralVolumes(statefulSet, splcommon.EtcVolumeStorage)
+	} else {
+		// add PVC volumes
+		err := resources.AddPVCVolumes(cr, spec, statefulSet, labels, splcommon.EtcVolumeStorage)
+		if err != nil {
+			return err
+		}
+	}
+
+	// configure storage for mount path /opt/splunk/var
+	if spec.VarVolumeStorageConfig.EphemeralStorage {
+		// add ephemeral volumes
+		_ = resources.AddEphemeralVolumes(statefulSet, splcommon.VarVolumeStorage)
+	} else {
+		// add PVC volumes
+		err := resources.AddPVCVolumes(cr, spec, statefulSet, labels, splcommon.VarVolumeStorage)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Add Splunk Probe config map
+	probeConfigMap, err := getProbeConfigMap(ctx, client, cr)
+	if err != nil {
+		logger.ErrorContext(ctx, "unable to get probeConfigMap", "error", err)
+		return err
+	}
+	resources.AddProbeConfigMapVolume(probeConfigMap, statefulSet)
+	return nil
+}
+
+func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
+
+	logger := logging.FromContext(ctx).With("func", "getProbeConfigMap")
+
+	configMapName := splutil.GetProbeConfigMapName(cr.GetNamespace())
+	configMapNamespace := cr.GetNamespace()
+	namespacedName := types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}
+
+	// Check if the config map already exists
+	logger.DebugContext(ctx, "checking for existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	var configMap corev1.ConfigMap
+	err := client.Get(ctx, namespacedName, &configMap)
+
+	if err == nil {
+		logger.DebugContext(ctx, "retrieved existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+		return &configMap, nil
+	} else if !k8serrors.IsNotFound(err) {
+		logger.ErrorContext(ctx, "error retrieving config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace, "error", err)
+		return nil, err
+	}
+
+	// Existing config map not found, create one for the probes
+	logger.InfoContext(ctx, "creating new config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	configMap = corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: configMapNamespace,
+		},
+	}
+
+	// Add readiness script to config map
+	data, err := splutil.ReadFile(ctx, splutil.GetReadinessScriptLocation())
+	if err != nil {
+		return &configMap, err
+	}
+	configMap.Data = map[string]string{splutil.GetReadinessScriptName(): data}
+	// Add liveness script to config map
+	livenessScriptLocation, _ := filepath.Abs(splutil.GetLivenessScriptLocation())
+	data, err = splutil.ReadFile(ctx, livenessScriptLocation)
+	if err != nil {
+		return &configMap, err
+	}
+	configMap.Data[splutil.GetLivenessScriptName()] = data
+	// Add startup script to config map
+	startupScriptLocation, _ := filepath.Abs(splutil.GetStartupScriptLocation())
+	data, err = splutil.ReadFile(ctx, startupScriptLocation)
+	if err != nil {
+		return &configMap, err
+	}
+	configMap.Data[splutil.GetStartupScriptName()] = data
+
+	// Apply the configured config map
+	_, err = ApplyConfigMap(ctx, client, &configMap)
+	if err != nil {
+		return &configMap, err
+	}
+	return &configMap, nil
+}
+
+// getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
+func GetSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
+
+	// prepare misc values
+	ports := splcommon.SortContainerPorts(resources.GetSplunkContainerPorts(instanceType)) // note that port order is important for tests
+	annotations := splcommon.GetIstioAnnotations(ports)
+	selectLabels := resources.GetSplunkLabels(cr.GetName(), instanceType, spec.ClusterMasterRef.Name)
+	if len(spec.ClusterManagerRef.Name) > 0 && len(spec.ClusterMasterRef.Name) == 0 {
+		selectLabels = resources.GetSplunkLabels(cr.GetName(), instanceType, spec.ClusterManagerRef.Name)
+	}
+	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
+
+	// start with same labels as selector; note that this object gets modified by splcommon.AppendParentMeta()
+	labels := make(map[string]string)
+	for k, v := range selectLabels {
+		labels[k] = v
+	}
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      splutil.GetSplunkStatefulsetName(instanceType, cr.GetName()),
+	}
+	statefulSet := &appsv1.StatefulSet{}
+	err := client.Get(ctx, namespacedName, statefulSet)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	if k8serrors.IsNotFound(err) {
+		// create statefulset configuration
+		statefulSet = &appsv1.StatefulSet{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "StatefulSet",
+				APIVersion: "apps/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      splutil.GetSplunkStatefulsetName(instanceType, cr.GetName()),
+				Namespace: cr.GetNamespace(),
+				Labels:    labels,
+			},
+		}
+	}
+
+	statefulSet.Spec = appsv1.StatefulSetSpec{
+		Selector: &metav1.LabelSelector{
+			MatchLabels: selectLabels,
+		},
+		ServiceName:         splcommon.GetSplunkServiceName(instanceType, cr.GetName(), true),
+		Replicas:            &replicas,
+		PodManagementPolicy: appsv1.ParallelPodManagement,
+		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.OnDeleteStatefulSetStrategyType,
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:      labels,
+				Annotations: annotations,
+			},
+			Spec: corev1.PodSpec{
+				Affinity:                  affinity,
+				Tolerations:               spec.Tolerations,
+				TopologySpreadConstraints: spec.TopologySpreadConstraints,
+				SchedulerName:             spec.SchedulerName,
+				ImagePullSecrets:          spec.ImagePullSecrets,
+				Containers: []corev1.Container{
+					{
+						Image:           spec.Image,
+						ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+						Name:            "splunk",
+						Ports:           ports,
+					},
+				},
+			},
+		},
+	}
+
+	// Add storage volumes
+	err = addStorageVolumes(ctx, cr, client, spec, statefulSet, labels)
+	if err != nil {
+		return statefulSet, err
+	}
+
+	// add serviceaccount if configured
+	if spec.ServiceAccount != "" {
+		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: spec.ServiceAccount}
+		_, err := GetServiceAccount(ctx, client, namespacedName)
+		if err == nil {
+			// serviceAccount exists
+			statefulSet.Spec.Template.Spec.ServiceAccountName = spec.ServiceAccount
+		}
+	}
+
+	// append labels and annotations from parent
+	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
+	if len(spec.PodAnnotations) > 0 {
+		if statefulSet.Spec.Template.Annotations == nil {
+			statefulSet.Spec.Template.Annotations = make(map[string]string)
+		}
+		for k, v := range spec.PodAnnotations {
+			statefulSet.Spec.Template.Annotations[k] = v
+		}
+	}
+
+	// retrieve the secret to upload to the statefulSet pod
+	statefulSetSecret, err := splutil.GetLatestVersionedSecret(ctx, client, cr, cr.GetNamespace(), statefulSet.GetName())
+	if err != nil || statefulSetSecret == nil {
+		return statefulSet, err
+	}
+
+	// update statefulset's pod template with common splunk pod config
+	if err = updateSplunkPodTemplateWithConfig(ctx, client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName()); err != nil {
+		return statefulSet, err
+	}
+
+	// make Splunk Enterprise object the owner
+	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+
+	resources.ApplyStatefulSetOptions(statefulSet, opts...)
+
+	return statefulSet, nil
+}
+
+// updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
+func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) error {
+
+	logger := logging.FromContext(ctx).With("func", "updateSplunkPodTemplateWithConfig")
+	// Add custom ports to splunk containers
+	if spec.ServiceTemplate.Spec.Ports != nil {
+		for idx := range podTemplateSpec.Spec.Containers {
+			for _, p := range spec.ServiceTemplate.Spec.Ports {
+
+				podTemplateSpec.Spec.Containers[idx].Ports = append(podTemplateSpec.Spec.Containers[idx].Ports, corev1.ContainerPort{
+					Name:          p.Name,
+					ContainerPort: int32(p.TargetPort.IntValue()),
+					Protocol:      p.Protocol,
+				})
+			}
+		}
+	}
+
+	// Add custom volumes to splunk containers other than MC(where CR spec volumes are not needed)
+	if spec.Volumes != nil {
+		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, spec.Volumes...)
+		for idx := range podTemplateSpec.Spec.Containers {
+			for v := range spec.Volumes {
+				podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, corev1.VolumeMount{
+					Name:      spec.Volumes[v].Name,
+					MountPath: "/mnt/" + spec.Volumes[v].Name,
+				})
+			}
+		}
+	}
+
+	// TODO(SPL-306631): remove once the `splunk-provision` is available in the Splunk docker image
+	// TODO(SPL-306655): and once the `entrypoint.sh` has been modified in the Splunk docker image
+	crAnnotations := cr.GetAnnotations()
+	if strings.ToLower(crAnnotations[enterpriseApi.SplunkProvisionAnnotation]) == "true" &&
+		resources.SplunkProvisionSupportsRole(instanceType) {
+		splunkProvisionImage := os.Getenv("SPLUNK_PROVISION_IMAGE")
+		if splunkProvisionImage == "" || splunkProvisionImage == "SPLUNK_PROVISION_IMAGE_VALUE" {
+			logger.WarnContext(ctx, "skipping splunk-provision injection", "reason", "SPLUNK_PROVISION_IMAGE not set or unresolved placeholder")
+		} else {
+			logger.Info("injecting splunk-provision as volume via init-container")
+			resources.InjectSplunkProvision(splunkProvisionImage, podTemplateSpec, &extraEnv)
+		}
+	}
+
+	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
+	secretVolDefaultMode := corev1.SecretVolumeSourceDefaultMode
+	resources.AddSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
+		Secret: &corev1.SecretVolumeSource{
+			SecretName:  secretToMount,
+			DefaultMode: &secretVolDefaultMode,
+		},
+	})
+
+	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
+	configMapVolDefaultMode := corev1.ConfigMapVolumeSourceDefaultMode
+
+	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
+	if spec.Defaults != "" {
+		configMapName := splutil.GetSplunkDefaultsName(cr.GetName(), instanceType)
+		resources.AddSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-defaults", "/mnt/splunk-defaults", corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: configMapName,
+				},
+				DefaultMode: &configMapVolDefaultMode,
+			},
+		})
+
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+		// We stamp a content hash of configMap.Data (not ResourceVersion) so that
+		// owner-reference-only writes during bootstrap do not trigger pod restarts.
+		configMapObj, err := GetConfigMap(ctx, client, namespacedName)
+		if err == nil {
+			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = splutil.ConfigDataHash(configMapObj.Data)
+		} else {
+			logger.ErrorContext(ctx, "updation of default configMap annotation failed", "error", err)
+		}
+	}
+
+	// Stamp splcommon.ConfigMapRevAnnotationPrefix+<vol-name> annotation for each user-supplied
+	// ConfigMap volume using a content hash rather than ResourceVersion. ResourceVersion changes
+	// on any metadata update (labels, annotations) and would cause spurious pod rolls; the hash
+	// only changes when the mounted data itself changes.
+	// The annotation key uses the volume name (a valid DNS label, ≤63 chars) as the suffix,
+	// not the ConfigMap name, which can exceed Kubernetes' 63-char annotation-suffix limit.
+	// Projected volumes that reference ConfigMaps are handled via the Sources loop.
+	for _, vol := range spec.Volumes {
+		switch {
+		case vol.ConfigMap != nil:
+			cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: vol.ConfigMap.Name}
+			cm, err := GetConfigMap(ctx, client, cmNS)
+			if err != nil {
+				logger.ErrorContext(ctx, "Failed to fetch ConfigMap for restart annotation", "volume", vol.Name, "error", err)
+				break
+			}
+			if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
+				// Consumer handles dynamic reload; skip the restart-triggering annotation.
+				break
+			}
+			hash, err := GetConfigMapDataHash(ctx, client, cmNS, vol.ConfigMap.Items)
+			if err == nil {
+				podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+vol.Name] = hash
+			} else {
+				logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for annotation", "volume", vol.Name, "error", err)
+			}
+		case vol.Projected != nil:
+			for i, src := range vol.Projected.Sources {
+				if src.ConfigMap == nil {
+					continue
+				}
+				cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: src.ConfigMap.Name}
+				cm, err := GetConfigMap(ctx, client, cmNS)
+				if err != nil {
+					logger.ErrorContext(ctx, "Failed to fetch projected ConfigMap for restart annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
+					continue
+				}
+				if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
+					continue
+				}
+				hash, err := GetConfigMapDataHash(ctx, client, cmNS, src.ConfigMap.Items)
+				if err == nil {
+					// Build a collision-free annotation key suffix ≤63 chars.
+					// vol.Name is a DNS label (≤63 chars); appending ".<n>" can push past the
+					// Kubernetes annotation name-segment limit. When the combined length exceeds
+					// 63, replace vol.Name with "p.<8-hex-digest>" — the "p." prefix contains a
+					// dot, which is legal in annotation name segments but cannot appear in a
+					// Kubernetes DNS-label volume name, making hashed keys structurally distinct
+					// from any real short volume name and preventing false collisions.
+					idxStr := strconv.Itoa(i)
+					volNamePart := vol.Name
+					if len(volNamePart)+1+len(idxStr) > 63 {
+						sum := sha256.Sum256([]byte(vol.Name))
+						volNamePart = "p." + hex.EncodeToString(sum[:])[:8]
+					}
+					podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+volNamePart+"."+idxStr] = hash
+				} else {
+					logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for projected annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
+				}
+			}
+		}
+	}
+
+	smartstoreConfigMap := GetSmartstoreConfigMap(ctx, client, cr, instanceType)
+	if smartstoreConfigMap != nil {
+		resources.AddSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-operator", "/mnt/splunk-operator/local/", corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: smartstoreConfigMap.GetName(),
+				},
+				DefaultMode: &configMapVolDefaultMode,
+				Items: []corev1.KeyToPath{
+					{Key: "indexes.conf", Path: "indexes.conf", Mode: &configMapVolDefaultMode},
+					{Key: "server.conf", Path: "server.conf", Mode: &configMapVolDefaultMode},
+					{Key: configToken, Path: configToken, Mode: &configMapVolDefaultMode},
+				},
+			},
+		})
+
+		// 1. For Indexer cluster case, do not set the annotation on CM pod. smartstore config is
+		// propagated through the CM manager apps bundle push
+		// 2. In case of Standalone, reset the Pod by updating the content hash of the
+		// smartstore config map so that only real data changes trigger a pod restart.
+		if instanceType == SplunkStandalone {
+			podTemplateSpec.ObjectMeta.Annotations[smartStoreConfigRev] = splutil.ConfigDataHash(smartstoreConfigMap.Data)
+		}
+	}
+
+	// update security context
+	runAsUser := int64(41812)
+	fsGroup := int64(41812)
+	runAsNonRoot := true
+	fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
+	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
+		RunAsUser:           &runAsUser,
+		FSGroup:             &fsGroup,
+		RunAsNonRoot:        &runAsNonRoot,
+		FSGroupChangePolicy: &fsGroupChangePolicy,
+	}
+
+	livenessProbe := resources.GetLivenessProbe(spec.LivenessProbe, spec.LivenessInitialDelaySeconds)
+	readinessProbe := resources.GetReadinessProbe(spec.ReadinessProbe, spec.ReadinessInitialDelaySeconds)
+	startupProbe := resources.GetStartupProbe(spec.StartupProbe)
+	probeLogger := logging.FromContext(ctx)
+	probeLogger.DebugContext(ctx, "livenessProbe", "Configured", livenessProbe)
+	probeLogger.DebugContext(ctx, "readinessProbe", "Configured", readinessProbe)
+	probeLogger.DebugContext(ctx, "startupProbe", "Configured", startupProbe)
+
+	// prepare defaults variable
+	splunkDefaults := "/mnt/splunk-secrets/default.yml"
+	// Check for apps defaults and add it to only the standalone or deployer/cm/mc instances
+	if spec.DefaultsURLApps != "" && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
+		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURLApps, splunkDefaults)
+	}
+	if spec.DefaultsURL != "" {
+		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURL, splunkDefaults)
+	}
+	if spec.Defaults != "" {
+		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
+	}
+
+	// prepare container env variables
+	role := instanceType.ToRole()
+	if instanceType == SplunkStandalone && (len(spec.ClusterMasterRef.Name) > 0 || len(spec.ClusterManagerRef.Name) > 0) {
+		role = SplunkSearchHead.ToRole()
+	}
+	domainName := os.Getenv("CLUSTER_DOMAIN")
+	if domainName == "" {
+		domainName = "cluster.local"
+	}
+	env := []corev1.EnvVar{
+		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
+		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
+		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
+		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
+		{Name: "SPLUNK_ROLE", Value: role},
+		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
+		{Name: livenessProbeDriverPathEnv, Value: splutil.GetLivenessDriverFilePath()},
+		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
+		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+		{Name: "SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED", Value: "true"},
+	}
+	if instanceType != SplunkIngestor {
+		env = append(env, corev1.EnvVar{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal})
+	}
+
+	// update variables for licensing, if configured
+	if spec.LicenseURL != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_LICENSE_URI",
+			Value: spec.LicenseURL,
+		})
+	}
+	if instanceType != SplunkLicenseManager && spec.LicenseManagerRef.Name != "" {
+		licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		if spec.LicenseManagerRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  splcommon.LicenseManagerURL,
+			Value: licenseManagerURL,
+		})
+	} else if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
+		licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  splcommon.LicenseManagerURL,
+			Value: licenseMasterURL,
+		})
+	}
+
+	// append URL for cluster manager, if configured
+	var clusterManagerURL string
+	if isCMDeployed(instanceType) {
+		// This makes splunk-ansible configure indexer-discovery on cluster-manager
+		clusterManagerURL = "localhost"
+	} else if spec.ClusterManagerRef.Name != "" {
+		clusterManagerURL = splcommon.GetSplunkServiceName(SplunkClusterManager, spec.ClusterManagerRef.Name, false)
+		if spec.ClusterManagerRef.Namespace != "" {
+			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterManagerRef.Namespace, clusterManagerURL)
+		}
+		if spec.LicenseManagerRef.Name == "" && spec.LicenseMasterRef.Name == "" {
+			//Check if CM is connected to a LicenseManager
+			cmNamespace := cr.GetNamespace()
+			if spec.ClusterManagerRef.Namespace != "" {
+				cmNamespace = spec.ClusterManagerRef.Namespace
+			}
+			namespacedName := types.NamespacedName{
+				Namespace: cmNamespace,
+				Name:      spec.ClusterManagerRef.Name,
+			}
+			managerIdxCluster := &enterpriseApi.ClusterManager{}
+			err := client.Get(ctx, namespacedName, managerIdxCluster)
+			if err != nil {
+				// Return the error so the reconcile loop requeues rather than continuing
+				// with a zero-value CR (which would produce an incomplete env and cause a
+				// spurious pod restart on the next reconcile when the real value is found).
+				logger.ErrorContext(ctx, "unable to get ClusterManager; requeueing", "error", err)
+				return err
+			}
+
+			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
+				licenseManagerNamespace := managerIdxCluster.Spec.LicenseManagerRef.Namespace
+				if licenseManagerNamespace == "" {
+					licenseManagerNamespace = managerIdxCluster.GetNamespace()
+				}
+				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				licenseManagerURL = splcommon.GetServiceFQDN(licenseManagerNamespace, licenseManagerURL)
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseManagerURL,
+				})
+			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+				licenseMasterNamespace := managerIdxCluster.Spec.LicenseMasterRef.Namespace
+				if licenseMasterNamespace == "" {
+					licenseMasterNamespace = managerIdxCluster.GetNamespace()
+				}
+				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				licenseMasterURL = splcommon.GetServiceFQDN(licenseMasterNamespace, licenseMasterURL)
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseMasterURL,
+				})
+			}
+		}
+	} else if spec.ClusterMasterRef.Name != "" {
+		clusterManagerURL = splcommon.GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		if spec.ClusterMasterRef.Namespace != "" {
+			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
+		}
+		if spec.LicenseManagerRef.Name == "" && spec.LicenseMasterRef.Name == "" {
+			//Check if CM is connected to a LicenseManager
+			cmNamespace := cr.GetNamespace()
+			if spec.ClusterMasterRef.Namespace != "" {
+				cmNamespace = spec.ClusterMasterRef.Namespace
+			}
+			namespacedName := types.NamespacedName{
+				Namespace: cmNamespace,
+				Name:      spec.ClusterMasterRef.Name,
+			}
+			managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
+			err := client.Get(ctx, namespacedName, managerIdxCluster)
+			if err != nil {
+				// Return the error so the reconcile loop requeues rather than continuing
+				// with a zero-value CR (which would produce an incomplete env and cause a
+				// spurious pod restart on the next reconcile when the real value is found).
+				logger.ErrorContext(ctx, "unable to get ClusterMaster; requeueing", "error", err)
+				return err
+			}
+
+			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
+				licenseManagerNamespace := managerIdxCluster.Spec.LicenseManagerRef.Namespace
+				if licenseManagerNamespace == "" {
+					licenseManagerNamespace = managerIdxCluster.GetNamespace()
+				}
+				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				licenseManagerURL = splcommon.GetServiceFQDN(licenseManagerNamespace, licenseManagerURL)
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseManagerURL,
+				})
+			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+				licenseMasterNamespace := managerIdxCluster.Spec.LicenseMasterRef.Namespace
+				if licenseMasterNamespace == "" {
+					licenseMasterNamespace = managerIdxCluster.GetNamespace()
+				}
+				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				licenseMasterURL = splcommon.GetServiceFQDN(licenseMasterNamespace, licenseMasterURL)
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseMasterURL,
+				})
+			}
+		}
+	}
+
+	if clusterManagerURL != "" {
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  splcommon.ClusterManagerURL,
+			Value: clusterManagerURL,
+		})
+	}
+
+	// append REF for monitoring console if configured
+	if spec.MonitoringConsoleRef.Name != "" {
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name:  "SPLUNK_MONITORING_CONSOLE_REF",
+			Value: spec.MonitoringConsoleRef.Name,
+		})
+	}
+
+	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
+	extraEnv = append(spec.ExtraEnv, extraEnv...)
+
+	// append any extra variables adding environment variable from extraEnv in the first
+	// so when duplicates are removed the last ones are removed from the list
+	env = append(extraEnv, env...)
+	//env = append(env, extraEnv...)
+
+	// check if there are any duplicate entries
+	// we use orderedmap so the test case can pass as json marshal
+	// expects order
+	if len(env) > 0 {
+		env = resources.RemoveDuplicateEnvVars(env)
+	}
+
+	privileged := false
+	// update each container in pod
+	for idx := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
+		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
+		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
+		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
+		podTemplateSpec.Spec.Containers[idx].Env = env
+		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &[]bool{false}[0],
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{
+					"ALL",
+				},
+				Add: []corev1.Capability{
+					"NET_BIND_SERVICE",
+				},
+			},
+			Privileged: &privileged,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		}
+	}
+	return nil
 }

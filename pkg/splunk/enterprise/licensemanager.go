@@ -76,7 +76,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateLicenseManagerSpec", fmt.Sprintf("validate license manager spec failed %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "License Manager spec validation failed")
-		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "License Manager spec validation failed", err)
+		return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, "License Manager spec validation failed", err)
 	}
 
 	// If needed, Migrate the app framework status
@@ -228,7 +228,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 
 // getLicenseManagerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getLicenseManagerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (*appsv1.StatefulSet, error) {
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNames(SplunkLicenseManager, cr.GetName(), cr.GetNamespace(), 1)))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(SplunkLicenseManager, cr.GetName(), cr.GetNamespace(), 1)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}

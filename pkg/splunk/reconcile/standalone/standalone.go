@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package standalone
 
 import (
 	"context"
@@ -25,19 +25,111 @@ import (
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	// TODO: Remove this legacy dependency once all CRs have migrated from enterprise.
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+const pauseRetryDelay = time.Second * 30
+
+// apply owns the Standalone reconcile loop for one controller-runtime request.
+func apply(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
+	logger := logging.FromContext(ctx).With("controller", "Standalone", "name", namespacedName.Name, "namespace", namespacedName.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
+	ctx = logging.WithLogger(ctx, logger)
+
+	instance := &enterpriseApi.Standalone{}
+	err := client.Get(ctx, namespacedName, instance)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, fmt.Errorf("could not load standalone data: %w", err)
+	}
+
+	if instance.GetAnnotations()[enterpriseApi.StandalonePausedAnnotation] == "true" {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
+		})
+		instance.Status.Conditions = result.Conditions
+		if err := client.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
+		})
+		instance.Status.Conditions = result.Conditions
+		if err := client.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
+			return reconcile.Result{}, err
+		}
+	}
+
+	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
+	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, recorder)
+
+	result, err := ApplyStandalone(ctx, client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
+	}
+
+	fresh := &enterpriseApi.Standalone{}
+	if fetchErr := client.Get(ctx, namespacedName, fresh); fetchErr != nil {
+		if k8serrors.IsNotFound(fetchErr) {
+			return result, nil
+		}
+		logger.WarnContext(ctx, "failed to refetch CR for stalled condition update", "error", fetchErr)
+		return result, fetchErr
+	}
+	oldConditions := append([]metav1.Condition(nil), fresh.Status.Conditions...)
+	if msg, ok := splcommon.TerminalMessage(err); ok {
+		reason, _ := splcommon.TerminalReason(err)
+		fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, msg, fresh.GetGeneration())
+	} else {
+		fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
+	}
+	ep, epErr := k8sops.NewK8EventPublisherWithRecorder(recorder, fresh)
+	if epErr != nil {
+		logger.WarnContext(ctx, "failed to create event publisher", "error", epErr)
+		return result, epErr
+	}
+	k8sops.EmitStalledTransitionEvents(ctx, ep, fresh.GetName(), oldConditions, fresh.Status.Conditions)
+	if updateErr := client.Status().Update(ctx, fresh); updateErr != nil {
+		logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
+		return result, updateErr
+	}
+	if _, ok := splcommon.TerminalMessage(err); ok {
+		return reconcile.Result{}, err
+	}
+	return result, err
+}
+
+// Apply is the request-level entry point used by the controller.
+// It is a variable so controller tests can replace the reconcile boundary.
+var Apply = apply
+
 // ApplyStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
-func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (reconcile.Result, error) {
+// It is a variable so request-level reconciliation tests can replace the
+// operation while retaining status and event handling in apply.
+var ApplyStandalone = applyStandalone
+
+func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -50,7 +142,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "Standalone"
 
@@ -71,25 +163,25 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	defer updateCRStatus(ctx, client, cr, &err)
 
 	// validate and updates defaults for CR
-	err = validateStandaloneSpec(ctx, client, cr)
+	err = ValidateStandaloneSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Standalone spec validation failed")
-		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Standalone spec validation failed", err)
+		return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, "Standalone spec validation failed", err)
 	}
 
 	// updates status after function completes
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	// If needed, Migrate the app framework status
-	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	err = enterprise.CheckAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
 	}
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
-		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkStandalone, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
+		k8sops.AreRemoteVolumeKeysChanged(ctx, client, cr, splcommon.SplunkStandalone, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
 		if err != nil {
 			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
@@ -97,7 +189,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			return result, err
 		}
 
-		_, _, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
+		_, _, err := k8sops.ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply SmartStore ConfigMap")
 			return result, err
@@ -110,7 +202,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := enterprise.InitAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -122,7 +214,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
 
 	// create or update general config resources
-	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
+	_, err = k8sops.ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkStandalone)
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
@@ -131,13 +223,13 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 	// Smart Store secrets get created manually and should not be managed by the Operator
 	if &cr.Spec.SmartStore != nil {
-		_ = DeleteOwnerReferencesForS3SecretObjects(ctx, client, cr, &cr.Spec.SmartStore)
+		_ = k8sops.DeleteOwnerReferencesForS3SecretObjects(ctx, client, cr, &cr.Spec.SmartStore)
 	}
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), false)
+			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, monitoringConsoleEnv(cr, cr.Spec.Replicas), false)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
@@ -149,14 +241,14 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkStandalone)
+			err = enterprise.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, splcommon.SplunkStandalone)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkStandalone)
+		_ = k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkStandalone)
 
 		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 
@@ -169,7 +261,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	// create or update a headless service
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, true))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkStandalone, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service failed %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
@@ -177,7 +269,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	// create or update a regular service
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, false))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkStandalone, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update regular service failed %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
@@ -191,7 +283,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// If, we are scaling down, just update the auxPhaseInfo list
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Status.ReadyReplicas > 0 {
 
-		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
+		statefulsetName := splutil.GetSplunkStatefulsetName(splcommon.SplunkStandalone, cr.GetName())
 
 		isStatefulSetScaling, err := k8sops.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
@@ -206,14 +298,14 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			cr.Status.AppContext.IsDeploymentInProgress = true
 
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
-				changeAppSrcDeployInfoStatus(ctx, appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
-				changePhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
+				enterprise.ChangeAppSrcDeployInfoStatus(ctx, appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
+				enterprise.ChangePhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
 
 		// if we are scaling down, just delete the state auxPhaseInfo entries
 		case enterpriseApi.StatefulSetScalingDown:
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
-				removeStaleEntriesFromAuxPhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
+				enterprise.RemoveStaleEntriesFromAuxPhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
 		default:
 			// nothing to be done
@@ -221,15 +313,15 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	// create or update statefulset
-	statefulSet, err := getStandaloneStatefulSet(ctx, client, cr)
+	statefulSet, err := GetStandaloneStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, EventReasonStatefulSetFailed, fmt.Sprintf("get standalone status set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, splcommon.EventReasonStatefulSetFailed, fmt.Sprintf("get standalone status set failed %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
+	err = k8sops.ValidateMonitoringConsoleRef(ctx, client, statefulSet, monitoringConsoleEnv(cr, cr.Spec.Replicas))
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
@@ -268,7 +360,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
-		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
+		_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, monitoringConsoleEnv(cr, cr.Spec.Replicas), true)
 		if err != nil {
 			eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
@@ -279,14 +371,14 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkMonitoringConsole, cr.GetNamespace())}
 		err = k8sops.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning(ctx, EventReasonMonitoringConsoleCleanupFailed, fmt.Sprintf("Failed to clean up automated monitoring console for %s — check operator logs", cr.GetName()))
+			eventPublisher.Warning(ctx, splcommon.EventReasonMonitoringConsoleCleanupFailed, fmt.Sprintf("Failed to clean up automated monitoring console for %s — check operator logs", cr.GetName()))
 			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
 
-		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		finalResult := enterprise.HandleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 
 		// Add a splunk operator telemetry app
@@ -312,31 +404,32 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 }
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
-func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNames(SplunkStandalone, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
+func GetStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, enterprise.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkStandalone, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{}, certMounts)
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
 	if err != nil {
 		return nil, err
 	}
+	certs.InjectCertMounts(&ss.Spec.Template, certMounts)
 
-	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkStandalone)
+	smartStoreConfigMap := k8sops.GetSmartstoreConfigMap(ctx, client, cr, splcommon.SplunkStandalone)
 
 	if smartStoreConfigMap != nil {
-		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
+		resources.SetupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf", cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
 
 	// Setup App framework staging volume for apps
-	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	enterprise.SetupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, nil
 }
 
 // validateStandaloneSpec checks validity and makes default updates to a StandaloneSpec, and returns error if something is wrong.
-func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.Standalone) error {
+func ValidateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.Standalone) error {
 	if cr.Spec.Replicas < 0 {
 		return fmt.Errorf("replicas must be >= 0")
 	}
@@ -345,20 +438,24 @@ func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 	}
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
-		err := ValidateSplunkSmartstoreSpec(ctx, &cr.Spec.SmartStore)
+		err := validateSmartstoreSpec(&cr.Spec.SmartStore)
 		if err != nil {
 			return err
 		}
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true, cr.GetObjectKind().GroupVersionKind().Kind)
+		err := enterprise.ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}
 	}
 
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+}
+
+func monitoringConsoleEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
+	return []corev1.EnvVar{{Name: "SPLUNK_STANDALONE_URL", Value: splutil.GetSplunkStatefulsetUrls(cr.GetNamespace(), splcommon.SplunkStandalone, cr.GetName(), replicas, false)}}
 }
 
 // helper function to get the list of Standalone types in the current namespace

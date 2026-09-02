@@ -18,39 +18,30 @@ package controller
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
-	"github.com/splunk/splunk-operator/pkg/logging"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/pkg/errors"
 	"github.com/splunk/splunk-operator/pkg/config"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	standalone "github.com/splunk/splunk-operator/pkg/splunk/reconcile/standalone"
 	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
-const (
-	pauseRetryDelay = time.Second * 30
-)
+const pauseRetryDelay = time.Second * 30
 
 // StandaloneReconciler reconciles a Standalone object
 type StandaloneReconciler struct {
@@ -75,102 +66,12 @@ type StandaloneReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Standalone object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
+// Reconcile delegates request-level reconciliation to the standalone workflow.
 func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "Standalone")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "Standalone")
 
-	logger := slog.Default().With("controller", "Standalone", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
-	ctx = logging.WithLogger(ctx, logger)
-
-	// Fetch the Standalone
-	instance := &enterpriseApi.Standalone{}
-	err := r.Get(ctx, req.NamespacedName, instance)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			// Request object not found, could have been deleted after
-			// reconcile request.  Owned objects are automatically
-			// garbage collected. For additional cleanup logic use
-			// finalizers.  Return and don't requeue
-			return ctrl.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load standalone data")
-	}
-
-	// If the reconciliation is paused, set the Paused condition and requeue
-	if instance.GetAnnotations()[enterpriseApi.StandalonePausedAnnotation] == "true" {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
-		})
-		instance.Status.Conditions = result.Conditions
-		if err := r.Status().Update(ctx, instance); err != nil {
-			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
-	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
-		})
-		instance.Status.Conditions = result.Conditions
-		if err := r.Status().Update(ctx, instance); err != nil {
-			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
-			return ctrl.Result{}, err
-		}
-	}
-
-	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
-
-	// Pass event recorder through context
-	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
-
-	result, err := ApplyStandalone(ctx, r.Client, instance)
-	if result.Requeue && result.RequeueAfter != 0 {
-		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
-	}
-	fresh := &enterpriseApi.Standalone{}
-	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr != nil {
-		if k8serrors.IsNotFound(fetchErr) {
-			return result, nil
-		}
-		logger.WarnContext(ctx, "failed to refetch CR for stalled condition update", "error", fetchErr)
-		return result, fetchErr
-	}
-	oldConditions := append([]metav1.Condition(nil), fresh.Status.Conditions...)
-	if msg, ok := splcommon.TerminalMessage(err); ok {
-		reason, _ := splcommon.TerminalReason(err)
-		fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, msg, fresh.GetGeneration())
-	} else {
-		fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
-	}
-	ep, epErr := enterprise.NewK8EventPublisherWithRecorder(r.Recorder, fresh)
-	if epErr != nil {
-		logger.WarnContext(ctx, "failed to create event publisher", "error", epErr)
-		return result, epErr
-	}
-	enterprise.EmitStalledTransitionEvents(ctx, ep, fresh.GetName(), oldConditions, fresh.Status.Conditions)
-	if updateErr := r.Status().Update(ctx, fresh); updateErr != nil {
-		logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
-		return result, updateErr
-	}
-	if _, ok := splcommon.TerminalMessage(err); ok {
-		return reconcile.Result{}, err
-	}
-	return result, err
-}
-
-// ApplyStandalone adding to handle unit test case
-var ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
-	return enterprise.ApplyStandalone(ctx, client, instance)
+	return standalone.Apply(ctx, r.Client, req.NamespacedName, r.Recorder)
 }
 
 // SetupWithManager sets up the controller with the Manager.
