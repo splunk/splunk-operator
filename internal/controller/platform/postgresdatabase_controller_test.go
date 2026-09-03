@@ -324,6 +324,11 @@ func expectEmptyReconcileResult(result ctrl.Result, err error) {
 	Expect(result).To(Equal(ctrl.Result{}))
 }
 
+func expectImmediateReconcileResult(result ctrl.Result, err error) {
+	Expect(err).NotTo(HaveOccurred())
+	Expect(result).To(Equal(ctrl.Result{Requeue: true}))
+}
+
 func fetchPostgresDatabase(ctx context.Context, requestName types.NamespacedName) *platformv1alpha1.PostgresDatabase {
 	current := &platformv1alpha1.PostgresDatabase{}
 	Expect(k8sClient.Get(ctx, requestName, current)).To(Succeed())
@@ -560,7 +565,7 @@ func reconcilePostgresDatabaseToReady(ctx context.Context, scenario readyCluster
 	seedReadyClusterScenario(ctx, scenario, poolerEnabled)
 
 	result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-	expectEmptyReconcileResult(result, err)
+	expectImmediateReconcileResult(result, err)
 
 	current := expectFinalizerAdded(ctx, scenario.requestName)
 	seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -604,14 +609,18 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 	When("the referenced PostgresCluster is missing", func() {
 		Context("on the first reconcile", func() {
-			It("adds the finalizer", func() {
+			It("adds the finalizer and initializes Pending", func() {
 				requestName := seedMissingClusterScenario(ctx, namespace, "missing-cluster")
 
 				result, err := reconcilePostgresDatabase(ctx, requestName)
-				expectEmptyReconcileResult(result, err)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(Equal(ctrl.Result{Requeue: true}))
 
 				current := fetchPostgresDatabase(ctx, requestName)
 				Expect(current.Finalizers).To(ContainElement(postgresDatabaseFinalizer))
+				expectStatusPhase(current, phasePending)
+				Expect(current.Status.Conditions).To(BeEmpty())
+				Expect(current.Status.ObservedGeneration).To(BeNil())
 			})
 		})
 
@@ -620,6 +629,9 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				requestName := seedMissingClusterScenario(ctx, namespace, "missing-cluster-with-finalizer", postgresDatabaseFinalizer)
 
 				result, err := reconcilePostgresDatabase(ctx, requestName)
+				expectImmediateReconcileResult(result, err)
+
+				result, err = reconcilePostgresDatabase(ctx, requestName)
 				expectReconcileResult(result, err, 30*time.Second)
 
 				current := fetchPostgresDatabase(ctx, requestName)
@@ -638,7 +650,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				seedReadyClusterScenario(ctx, scenario, false)
 
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 
 				current := expectFinalizerAdded(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -676,7 +688,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				seedReadyClusterScenarioWithDatabase(ctx, scenario, false, database, 2)
 
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 				current := expectFinalizerAdded(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
 
@@ -733,7 +745,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 					"metrics-rw", "metrics-ro")
 
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 				current := expectFinalizerAdded(ctx, scenario.requestName)
 
 				By("publishing the contribution before provisioning")
@@ -896,7 +908,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
 				markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 
 				current := expectFinalizerAdded(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -963,7 +975,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				// Inject a shared recorder so events survive across reconciles.
 				recorder := record.NewFakeRecorder(100)
 				result, err := reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 
 				current := expectFinalizerAdded(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -1018,9 +1030,9 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 				recorder := record.NewFakeRecorder(100)
 
-				// Pass 1: finalizer.
+				// Pass 1: finalizer and Pending initialization.
 				result, err := reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 				current := expectFinalizerAdded(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
 
@@ -1132,7 +1144,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				// Drive the standard happy-path bring-up so the resource
 				// reaches SecretsReady=True before we induce drift.
 				result, err := reconcilePostgresDatabaseWithRecorder(ctx, scenario.requestName, recorder)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 				current := expectFinalizerAdded(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
 
@@ -1210,7 +1222,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
 				markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 
 				current := expectFinalizerAdded(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -1256,7 +1268,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				seedReadyClusterScenario(ctx, scenario, true)
 
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 
 				current := fetchPostgresDatabase(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -1271,7 +1283,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				seedReadyClusterScenarioWithInstances(ctx, scenario, true, 1)
 
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 
 				current := fetchPostgresDatabase(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -1291,7 +1303,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				seedReadyClusterScenarioWithInstances(ctx, scenario, true, 1)
 
 				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-				expectEmptyReconcileResult(result, err)
+				expectImmediateReconcileResult(result, err)
 
 				current := fetchPostgresDatabase(ctx, scenario.requestName)
 				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -1333,7 +1345,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			// Do NOT call markPostgresClusterReady to leave it in provisioning state
 
 			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-			expectEmptyReconcileResult(result, err)
+			expectImmediateReconcileResult(result, err)
 
 			current := expectFinalizerAdded(ctx, scenario.requestName)
 
@@ -1528,7 +1540,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			seedReadyClusterScenario(ctx, scenario, false)
 
 			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-			expectEmptyReconcileResult(result, err)
+			expectImmediateReconcileResult(result, err)
 
 			current := expectFinalizerAdded(ctx, scenario.requestName)
 			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -1562,7 +1574,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			markCNPGClusterReady(ctx, cnpgCluster, []string{}, "tenant-rw", "tenant-ro")
 
 			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-			expectEmptyReconcileResult(result, err)
+			expectImmediateReconcileResult(result, err)
 
 			current := expectFinalizerAdded(ctx, scenario.requestName)
 			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
@@ -1783,7 +1795,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			markCNPGClusterReady(ctx, cnpgCluster, nil, "tenant-rw", "tenant-ro")
 
 			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
-			expectEmptyReconcileResult(result, err)
+			expectImmediateReconcileResult(result, err)
 			current := expectFinalizerAdded(ctx, scenario.requestName)
 			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
 
@@ -1820,7 +1832,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 			for _, nn := range []types.NamespacedName{{Name: first.Name, Namespace: namespace}, {Name: second.Name, Namespace: namespace}} {
 				result, err := reconcilePostgresDatabase(ctx, nn)
-				expectReconcileResult(result, err, 15*time.Second)
+				expectImmediateReconcileResult(result, err)
 			}
 
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, postgresCluster)).To(Succeed())
@@ -1849,6 +1861,8 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			resourceName := "conflict-cluster"
 			clusterName := "conflict-postgres"
 			requestName := seedConflictScenario(ctx, namespace, resourceName, clusterName)
+			result, err := reconcilePostgresDatabase(ctx, requestName)
+			expectImmediateReconcileResult(result, err)
 
 			current := fetchPostgresDatabase(ctx, requestName)
 			cluster := &platformv1alpha1.PostgresCluster{}
@@ -1863,7 +1877,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			}
 			Expect(k8sClient.Status().Update(ctx, cluster)).To(Succeed())
 
-			result, err := reconcilePostgresDatabase(ctx, requestName)
+			result, err = reconcilePostgresDatabase(ctx, requestName)
 			expectReconcileResult(result, err, 15*time.Second)
 
 			current = fetchPostgresDatabase(ctx, requestName)
@@ -1902,11 +1916,14 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			simulateClusterRoleOwnership(ctx, clusterName, namespace, postgresDB,
 				adminRoleNameForTest(dbKeepdb), rwRoleNameForTest(dbKeepdb),
 				adminRoleNameForTest(dbDropdb), rwRoleNameForTest(dbDropdb))
+			result, err := reconcilePostgresDatabase(ctx, requestName)
+			expectImmediateReconcileResult(result, err)
 
+			postgresDB = fetchPostgresDatabase(ctx, requestName)
 			postgresDB.Spec.Databases = []platformv1alpha1.DatabaseDefinition{{Name: dbKeepdb}}
 			Expect(k8sClient.Update(ctx, postgresDB)).To(Succeed())
 
-			result, err := reconcilePostgresDatabase(ctx, requestName)
+			result, err = reconcilePostgresDatabase(ctx, requestName)
 			expectReconcileResult(result, err, 15*time.Second)
 
 			updatedDB := fetchPostgresDatabase(ctx, requestName)
@@ -1980,10 +1997,13 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			cnpgCluster := createCNPGClusterResource(ctx, scenario.namespace, scenario.cnpgClusterName)
 			markCNPGClusterReady(ctx, cnpgCluster, []string{adminRoleNameForTest(scenario.dbName), rwRoleNameForTest(scenario.dbName)}, "tenant-rw", "tenant-ro")
 
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectImmediateReconcileResult(result, err)
+
 			current := fetchPostgresDatabase(ctx, scenario.requestName)
 			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
 
-			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectReconcileResult(result, err, 15*time.Second)
 
 			simulateClusterRoleOwnership(ctx, scenario.clusterName, scenario.namespace, current,
@@ -2071,11 +2091,14 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			}
 			Expect(k8sClient.Create(ctx, retainedCNPGDb)).To(Succeed())
 
-			// Finalizer already present — first reconcile goes straight to provisioning
+			// Finalizer already present — initialize Pending before provisioning.
+			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			expectImmediateReconcileResult(result, err)
+
 			current := fetchPostgresDatabase(ctx, scenario.requestName)
 			seedExistingDatabaseStatus(ctx, current, scenario.dbName)
 
-			result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectReconcileResult(result, err, 15*time.Second)
 			expectProvisionedArtifacts(ctx, scenario, current)
 			expectManagedRolesPatched(ctx, scenario)

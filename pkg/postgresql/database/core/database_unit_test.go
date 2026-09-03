@@ -60,6 +60,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -299,6 +300,147 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 			assert.Equal(t, ctrl.Result{Requeue: true}, result)
 		})
 	}
+}
+
+func reconcilePostgresDatabaseServiceForTest(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase) (ctrl.Result, error) {
+	return PostgresDatabaseService(ctx, &ReconcileContext{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(1),
+	}, postgresDB, nil)
+}
+
+func TestPostgresDatabaseServiceInitialPhase(t *testing.T) {
+	ready := string(readyDBPhase)
+	tests := []struct {
+		name            string
+		phase           *string
+		finalizers      []string
+		wantPhase       string
+		wantResult      ctrl.Result
+		wantInitialized bool
+		wantFinalizer   bool
+	}{
+		{
+			name:            "initializes Pending while adding the finalizer",
+			wantPhase:       string(pendingDBPhase),
+			wantResult:      ctrl.Result{Requeue: true},
+			wantInitialized: true,
+			wantFinalizer:   true,
+		},
+		{
+			name:            "initializes Pending when the finalizer already exists",
+			finalizers:      []string{postgresDatabaseFinalizerName},
+			wantPhase:       string(pendingDBPhase),
+			wantResult:      ctrl.Result{Requeue: true},
+			wantInitialized: true,
+			wantFinalizer:   true,
+		},
+		{
+			name:          "preserves a nonnil phase while adding the finalizer",
+			phase:         &ready,
+			wantPhase:     ready,
+			wantFinalizer: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			scheme := testScheme(t)
+			postgresDB := &platformv1alpha1.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", Finalizers: tt.finalizers, CreationTimestamp: metav1.Now()},
+				Status:     platformv1alpha1.PostgresDatabaseStatus{Phase: tt.phase},
+			}
+			c := testClient(t, scheme, postgresDB)
+
+			result, err := reconcilePostgresDatabaseServiceForTest(ctx, c, scheme, postgresDB)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantResult, result)
+			stored := &platformv1alpha1.PostgresDatabase{}
+			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(postgresDB), stored))
+			assert.Equal(t, tt.wantFinalizer, controllerutil.ContainsFinalizer(stored, postgresDatabaseFinalizerName))
+			require.NotNil(t, stored.Status.Phase)
+			assert.Equal(t, tt.wantPhase, *stored.Status.Phase)
+			if tt.wantInitialized {
+				assert.Empty(t, stored.Status.Conditions)
+				assert.Nil(t, stored.Status.ObservedGeneration)
+				require.NotNil(t, stored.Status.LastTransitionTime)
+				assert.Equal(t, stored.CreationTimestamp, *stored.Status.LastTransitionTime)
+				applyStatus(stored, privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted, "ready", readyDBPhase)
+				lastTransitionTime, completed := completeReadinessCycle(stored)
+				assert.True(t, completed)
+				assert.Equal(t, stored.CreationTimestamp.Time, lastTransitionTime)
+				assert.Nil(t, stored.Status.LastTransitionTime)
+				assert.Equal(t, string(readyDBPhase), *stored.Status.Phase)
+			}
+		})
+	}
+}
+
+func TestPostgresDatabaseServiceRequeuesOnInitialPhaseConflict(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
+		WithObjects(postgresDB).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(_ context.Context, _ client.Client, subresource string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+				if subresource != "status" {
+					return nil
+				}
+				return postgresDatabaseConflict(obj.GetName())
+			},
+		}).
+		Build()
+
+	result, err := reconcilePostgresDatabaseServiceForTest(ctx, c, scheme, postgresDB)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	stored := &platformv1alpha1.PostgresDatabase{}
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(postgresDB), stored))
+	assert.Contains(t, stored.Finalizers, postgresDatabaseFinalizerName)
+	assert.Nil(t, stored.Status.Phase)
+}
+
+func TestPostgresDatabaseServiceSkipsPendingPhaseDuringDeletion(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	deletionTimestamp := metav1.Now()
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "primary",
+			Namespace:         "dbs",
+			DeletionTimestamp: &deletionTimestamp,
+			Finalizers:        []string{postgresDatabaseFinalizerName},
+		},
+	}
+	var statusPhase *string
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
+		WithObjects(postgresDB).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(ctx context.Context, c client.Client, subresource string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				if subresource == "status" {
+					statusPhase = obj.(*platformv1alpha1.PostgresDatabase).Status.Phase
+				}
+				return c.SubResource(subresource).Update(ctx, obj, opts...)
+			},
+		}).
+		Build()
+
+	result, err := reconcilePostgresDatabaseServiceForTest(ctx, c, scheme, postgresDB)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+	assert.Nil(t, statusPhase)
 }
 
 // TestPostgresDatabaseServiceTerminalOnMissingExternalSecret verifies that a

@@ -491,13 +491,17 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 	When("under typical usage and expecting healthy PostgresCluster state", func() {
 		Context("when reconciling", func() {
 			// PC-02
-			It("adds finalizer on reconcile", func() {
+			It("adds finalizer and initializes Pending on first reconcile", func() {
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(1)
 
 				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				Expect(controllerutil.ContainsFinalizer(pc, core.PostgresClusterFinalizerName)).To(BeTrue())
+				Expect(pc.Status.Phase).NotTo(BeNil())
+				Expect(*pc.Status.Phase).To(Equal("Pending"))
+				Expect(pc.Status.Conditions).To(BeEmpty())
+				Expect(pc.Status.ObservedGeneration).To(BeNil())
 			})
 
 			// PC-01

@@ -17,6 +17,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -25,13 +26,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func TestReconcileErrorPassdownToObserve(t *testing.T) {
@@ -690,6 +696,156 @@ func TestPhaseFailOverEmitsClusterDegraded(t *testing.T) {
 		t.Errorf("unexpected extra event: %s", extra)
 	default:
 	}
+}
+
+func TestPostgresClusterServiceInitialPhase(t *testing.T) {
+	ready := string(readyClusterPhase)
+	tests := []struct {
+		name            string
+		phase           *string
+		finalizers      []string
+		wantPhase       string
+		wantResult      ctrl.Result
+		wantInitialized bool
+		wantFinalizer   bool
+	}{
+		{
+			name:            "initializes Pending while adding the finalizer",
+			wantPhase:       string(pendingClusterPhase),
+			wantResult:      ctrl.Result{Requeue: true},
+			wantInitialized: true,
+			wantFinalizer:   true,
+		},
+		{
+			name:            "initializes Pending when the finalizer already exists",
+			finalizers:      []string{PostgresClusterFinalizerName},
+			wantPhase:       string(pendingClusterPhase),
+			wantResult:      ctrl.Result{Requeue: true},
+			wantInitialized: true,
+			wantFinalizer:   true,
+		},
+		{
+			name:          "preserves a nonnil phase while adding the finalizer",
+			phase:         &ready,
+			wantPhase:     ready,
+			wantFinalizer: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			scheme := newTestScheme()
+			cluster := newTestCluster("primary", "dbs")
+			cluster.CreationTimestamp = metav1.Now()
+			cluster.Status.Phase = tt.phase
+			cluster.Finalizers = tt.finalizers
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
+				WithObjects(cluster).
+				Build()
+
+			result, err := PostgresClusterService(ctx, &ReconcileContext{
+				Client:   c,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(1),
+			}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil, nil, nil)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantResult, result)
+			stored := &platformv1alpha1.PostgresCluster{}
+			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(cluster), stored))
+			assert.Equal(t, tt.wantFinalizer, controllerutil.ContainsFinalizer(stored, PostgresClusterFinalizerName))
+			require.NotNil(t, stored.Status.Phase)
+			assert.Equal(t, tt.wantPhase, *stored.Status.Phase)
+			if tt.wantInitialized {
+				assert.Empty(t, stored.Status.Conditions)
+				assert.Nil(t, stored.Status.ObservedGeneration)
+				assert.Nil(t, stored.Status.Resources)
+				require.NotNil(t, stored.Status.LastTransitionTime)
+				assert.Equal(t, stored.CreationTimestamp, *stored.Status.LastTransitionTime)
+
+				readinessDuration, completed, err := setPhaseStatus(ctx, c, stored, readyClusterPhase)
+				require.NoError(t, err)
+				assert.True(t, completed)
+				assert.Positive(t, readinessDuration)
+				assert.Nil(t, stored.Status.LastTransitionTime)
+			}
+		})
+	}
+}
+
+func TestPostgresClusterServiceReturnsInitialPhaseConflict(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	cluster := newTestCluster("primary", "dbs")
+	conflict := apierrors.NewConflict(
+		schema.GroupResource{Group: platformv1alpha1.GroupVersion.Group, Resource: "postgresclusters"},
+		cluster.Name,
+		errors.New("resource version conflict"),
+	)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
+		WithObjects(cluster).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(_ context.Context, _ client.Client, subresource string, _ client.Object, _ ...client.SubResourceUpdateOption) error {
+				if subresource == "status" {
+					return conflict
+				}
+				return nil
+			},
+		}).
+		Build()
+
+	result, err := PostgresClusterService(ctx, &ReconcileContext{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(1),
+	}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil, nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	stored := &platformv1alpha1.PostgresCluster{}
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(cluster), stored))
+	assert.True(t, controllerutil.ContainsFinalizer(stored, PostgresClusterFinalizerName))
+	assert.Nil(t, stored.Status.Phase)
+}
+
+func TestPostgresClusterServiceSkipsPendingPhaseDuringDeletion(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	deletionTimestamp := metav1.Now()
+	cluster := newTestCluster("primary", "dbs")
+	cluster.DeletionTimestamp = &deletionTimestamp
+	cluster.Finalizers = []string{PostgresClusterFinalizerName}
+	deletePolicy := clusterDeletionPolicyDelete
+	cluster.Spec.ClusterDeletionPolicy = &deletePolicy
+	statusUpdates := 0
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
+		WithObjects(cluster).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(ctx context.Context, c client.Client, subresource string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				if subresource == "status" {
+					statusUpdates++
+				}
+				return c.SubResource(subresource).Update(ctx, obj, opts...)
+			},
+		}).
+		Build()
+
+	result, err := PostgresClusterService(ctx, &ReconcileContext{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(1),
+	}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil, nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+	assert.Zero(t, statusUpdates)
 }
 
 func TestHandleFinalizerUnknownDeletionPolicy(t *testing.T) {

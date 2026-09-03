@@ -139,6 +139,7 @@ func PostgresDatabaseService(
 		return ctrl.Result{}, nil
 	}
 
+	finalizerAdded := false
 	// Add finalizer if not present.
 	if !controllerutil.ContainsFinalizer(postgresDB, postgresDatabaseFinalizerName) {
 		controllerutil.AddFinalizer(postgresDB, postgresDatabaseFinalizerName)
@@ -149,10 +150,27 @@ func PostgresDatabaseService(
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		logger.InfoContext(ctx, "finalizer added successfully")
+		finalizerAdded = true
+	}
+
+	// A status-only update does not re-enqueue this resource, so initialize the
+	// observable phase and explicitly schedule the normal reconciliation path.
+	initialized, err := initializePendingPhase(ctx, c, postgresDB)
+	if err != nil {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictInitialPhase, "initializing Pending phase"); ok {
+			return result, conflictErr
+		}
+		return ctrl.Result{}, fmt.Errorf("failed to initialize PostgresDatabase phase: %w", err)
+	}
+	if initialized {
+		logger.InfoContext(ctx, "initialized PostgresDatabase phase", "phase", pendingDBPhase)
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if finalizerAdded {
 		return ctrl.Result{}, nil
 	}
 
-	_, err := persistCustomMetricsPublication(ctx, c, postgresDB)
+	_, err = persistCustomMetricsPublication(ctx, c, postgresDB)
 	if err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCustomMetricsStatus, "publishing custom metrics participation"); ok {
 			return result, conflictErr
@@ -555,12 +573,7 @@ func PostgresDatabaseService(
 		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, privilegesReady, EventPrivilegesReady, privilegesMsg)
 	}
 	applyStatus(postgresDB, privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted, privilegesMsg, readyDBPhase)
-	completedReadinessCycle := postgresDB.Status.LastTransitionTime != nil
-	var lastTransitionTime time.Time
-	if completedReadinessCycle {
-		lastTransitionTime = postgresDB.Status.LastTransitionTime.Time
-		postgresDB.Status.LastTransitionTime = nil
-	}
+	lastTransitionTime, completedReadinessCycle := completeReadinessCycle(postgresDB)
 
 	metricsOutcome, err := reconcileCustomMetricsGate(ctx, rc, postgresDB, cluster)
 	if err != nil {
@@ -861,6 +874,31 @@ func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder,
 		metrics.IncStatusTransition(ports.ControllerDatabase, string(conditionType), string(conditionStatus), string(reason))
 	}
 	return c.Status().Update(ctx, db)
+}
+
+// initializePendingPhase records that a newly observed PostgresDatabase has
+// entered reconciliation without claiming that its desired generation is ready.
+func initializePendingPhase(ctx context.Context, c client.Client, db *platformv1alpha1.PostgresDatabase) (bool, error) {
+	if db.Status.Phase != nil {
+		return false, nil
+	}
+	before := db.Status.DeepCopy()
+	pending := string(pendingDBPhase)
+	db.Status.Phase = &pending
+	beginReadinessCycle(db, before, false, metav1.ConditionFalse, pendingDBPhase)
+	if err := c.Status().Update(ctx, db); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func completeReadinessCycle(db *platformv1alpha1.PostgresDatabase) (time.Time, bool) {
+	if db.Status.LastTransitionTime == nil {
+		return time.Time{}, false
+	}
+	lastTransitionTime := db.Status.LastTransitionTime.Time
+	db.Status.LastTransitionTime = nil
+	return lastTransitionTime, true
 }
 
 func applyStatus(db *platformv1alpha1.PostgresDatabase, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases) {
