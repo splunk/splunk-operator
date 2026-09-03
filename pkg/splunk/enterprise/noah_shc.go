@@ -27,8 +27,11 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -38,10 +41,6 @@ import (
 // Cluster Manager path and is not entered for Noah objects. It intentionally
 // does not implement app framework, Monitoring Console, or telemetry app
 // support — those are Cluster-Manager-path concerns Noah does not need.
-//
-// This provides stable deployer/member identity only (CSPL-5267); it does not
-// yet deliver Noah service configuration to Ansible (CSPL-5268) or validate
-// Noah connectivity (CSPL-5269).
 func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (result reconcile.Result, err error) {
 	result = reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}
 	logger := logging.FromContext(ctx).With("func", "ApplySearchHeadClusterNoah", "name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -99,7 +98,13 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 
 	if cr.GetDeletionTimestamp() != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkSearchHead)
+		// A failure here must not fall through to CheckForDeletion below: that
+		// call removes finalizers once its own callbacks succeed, and doing so
+		// before owner references are actually cleared would orphan them with
+		// no finalizer left to retry the cleanup.
+		if err = DeleteOwnerReferencesForResources(ctx, client, cr, SplunkSearchHead); err != nil {
+			return reconcile.Result{}, err
+		}
 		terminating, deletionErr := k8sops.CheckForDeletion(ctx, cr, client)
 		if !terminating || deletionErr == nil {
 			result = reconcile.Result{}
@@ -120,14 +125,20 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 }
 
 // applySearchHeadClusterNoah creates the services, deployer, and search-head
-// StatefulSets required for Noah bootstrap, with stable pod identity
-// (SPLUNK_NOAH_ENABLED, headless service name, pod name/namespace, cluster
-// domain) via resources.WithNoahPodIdentity.
+// StatefulSets required for Noah bootstrap. Each StatefulSet gets stable pod
+// identity (resources.WithNoahPodIdentity) plus the same Noah server.conf
+// settings, matching the proven-working reference (vivek-spike), which
+// applies identical noahService/teleport_supervisor content to both roles.
+// All Noah config — structural (uri/tenant) and credential (pass4SymmKey)
+// alike — is delivered declaratively via SPLUNK_DEFAULTS_URL, the same
+// channel splunk-ansible's Noah role already reads; no operator-owned init
+// container or custom volume mount is involved.
 func applySearchHeadClusterNoah(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (enterpriseApi.Phase, enterpriseApi.Phase, *appsv1.StatefulSet, error) {
 	logger := logging.FromContext(ctx).With("func", "applySearchHeadClusterNoah", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
+	noahCluster := &enterpriseApi.NoahCluster{}
 	ncKey := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.NoahClusterRef.Name}
-	if err := client.Get(ctx, ncKey, &enterpriseApi.NoahCluster{}); err != nil {
+	if err := client.Get(ctx, ncKey, noahCluster); err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.WarnContext(ctx, "referenced NoahCluster is not available; requeueing", "noahClusterRef", cr.Spec.NoahClusterRef.Name)
 			return enterpriseApi.PhasePending, enterpriseApi.PhasePending, nil, nil
@@ -154,9 +165,35 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("apply Noah SearchHeadCluster Splunk config: %w", err)
 	}
 
-	identityOption := resources.WithNoahPodIdentity(os.Getenv(resources.ClusterDomainEnvName))
+	// resolveNoahAuthSecret is shared with the Noah indexer path (noah_indexer.go).
+	noahAuthSecret, err := resolveNoahAuthSecret(ctx, client, cr.GetNamespace(), noahCluster.Spec.AuthSecretRef)
+	if err != nil {
+		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, err
+	}
+	pass4SymmKey := string(noahAuthSecret.Data[noahAuthSecretKey])
 
-	deployerStatefulSet, err := getDeployerStatefulSet(ctx, client, cr, identityOption)
+	owner := splcommon.AsOwner(cr, true)
+	// Dictionary format matches the Noah indexer path (noah_indexer.go) and
+	// splunk-ansible's Noah pre-auth role, which reads splunk.conf.server.
+	// content.noahService as a mapping. The credential entry below targets the
+	// same path; splunk-ansible's own defaults loader deep-merges the two
+	// files' nested maps, so the structural and credential fields union into
+	// one [noahService] stanza before Ansible ever runs.
+	credentialsSecret, err := configworkflow.EnsureSecret(ctx, client, cr, splunkconfig.NoahSHCCredentialsConf(pass4SymmKey), &owner, resources.WithDictionaryConf())
+	if err != nil {
+		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("ensure Noah SearchHeadCluster credentials: %w", err)
+	}
+
+	deployerConfigMap, err := ensureNoahDeployerDefaults(ctx, client, cr, noahCluster, &owner)
+	if err != nil {
+		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("ensure Noah deployer defaults: %w", err)
+	}
+	identityOption := resources.WithNoahPodIdentity(os.Getenv(resources.ClusterDomainEnvName))
+	deployerStatefulSet, err := getDeployerStatefulSet(ctx, client, cr,
+		identityOption,
+		deployerConfigMap.AsStatefulSetOption(),
+		credentialsSecret.AsStatefulSetOption(),
+	)
 	if err != nil {
 		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("build Noah deployer StatefulSet: %w", err)
 	}
@@ -175,7 +212,15 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("apply Noah deployer StatefulSet: %w", err)
 	}
 
-	searchHeadStatefulSet, err := getSearchHeadStatefulSet(ctx, client, cr, identityOption)
+	searchHeadConfigMap, err := ensureNoahSearchHeadDefaults(ctx, client, cr, noahCluster, &owner)
+	if err != nil {
+		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("ensure Noah search-head defaults: %w", err)
+	}
+	searchHeadStatefulSet, err := getSearchHeadStatefulSet(ctx, client, cr,
+		identityOption,
+		searchHeadConfigMap.AsStatefulSetOption(),
+		credentialsSecret.AsStatefulSetOption(),
+	)
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("build Noah search-head StatefulSet: %w", err)
 	}
@@ -198,5 +243,15 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 	}
 
+	configworkflow.GarbageCollectConfigMapsMulti(ctx, client, cr, nil, deployerConfigMap.Name, searchHeadConfigMap.Name)
+	configworkflow.GarbageCollectSecrets(ctx, client, cr, credentialsSecret.Name, nil)
 	return searchHeadPhase, deployerPhase, searchHeadStatefulSet, nil
+}
+
+func ensureNoahDeployerDefaults(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, noahCluster *enterpriseApi.NoahCluster, owner *metav1.OwnerReference) (resources.DefaultsConfigMap, error) {
+	return configworkflow.EnsureConfigMap(ctx, client, cr, splunkconfig.NoahDeployerConf(noahCluster.Spec.Endpoint, noahCluster.Spec.Tenant), owner, resources.WithDictionaryConf())
+}
+
+func ensureNoahSearchHeadDefaults(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, noahCluster *enterpriseApi.NoahCluster, owner *metav1.OwnerReference) (resources.DefaultsConfigMap, error) {
+	return configworkflow.EnsureConfigMap(ctx, client, cr, splunkconfig.NoahSearchHeadConf(noahCluster.Spec.Endpoint, noahCluster.Spec.Tenant), owner, resources.WithDictionaryConf())
 }
