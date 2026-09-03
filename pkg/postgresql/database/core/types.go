@@ -144,6 +144,7 @@ const (
 
 	conflictDeletion               reconcileConflictCategory = "deletion"
 	conflictFinalizer              reconcileConflictCategory = "finalizer"
+	conflictInitialPhase           reconcileConflictCategory = "initial_phase"
 	conflictClusterStatus          reconcileConflictCategory = "cluster_status"
 	conflictRoleConflictStatus     reconcileConflictCategory = "role_conflict_status"
 	conflictSecretsReconcile       reconcileConflictCategory = "secrets_reconcile"

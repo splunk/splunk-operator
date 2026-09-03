@@ -64,10 +64,6 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to fetch PostgresCluster: %w", err)
 	}
-	if postgresCluster.Status.Resources == nil {
-		postgresCluster.Status.Resources = &platformv1alpha1.PostgresClusterResources{}
-	}
-
 	logger = logger.With("postgresCluster", postgresCluster.Name)
 	ctx = logging.WithLogger(ctx, logger)
 
@@ -109,6 +105,12 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), "", "")
 		return nil
 	}
+	initializePendingPhase := func() (bool, error) {
+		if postgresCluster.Status.Phase != nil {
+			return false, nil
+		}
+		return true, updatePhaseStatus(pendingClusterPhase)
+	}
 
 	// Finalizer handling must come before any other processing.
 	if err := handleFinalizer(ctx, rc, postgresCluster); err != nil {
@@ -126,6 +128,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	finalizerAdded := false
 	// Add finalizer if not present.
 	if !controllerutil.ContainsFinalizer(postgresCluster, PostgresClusterFinalizerName) {
 		controllerutil.AddFinalizer(postgresCluster, PostgresClusterFinalizerName)
@@ -133,7 +136,29 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		logger.InfoContext(ctx, "finalizer added")
+		finalizerAdded = true
+	}
+
+	// A status-only update does not re-enqueue this resource, so initialize the
+	// observable phase and explicitly schedule the normal reconciliation path.
+	initialized, err := initializePendingPhase()
+	if err != nil {
+		if apierrors.IsConflict(err) {
+			logger.WarnContext(ctx, "conflict initializing PostgresCluster phase, will requeue")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("failed to initialize PostgresCluster phase: %w", err)
+	}
+	if initialized {
+		logger.InfoContext(ctx, "initialized PostgresCluster phase", "phase", pendingClusterPhase)
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if finalizerAdded {
 		return ctrl.Result{}, nil
+	}
+
+	if postgresCluster.Status.Resources == nil {
+		postgresCluster.Status.Resources = &platformv1alpha1.PostgresClusterResources{}
 	}
 
 	// Load the referenced PostgresClusterClass.
@@ -540,6 +565,7 @@ func setPhaseStatus(ctx context.Context, c client.Client, cluster *platformv1alp
 	before := cluster.Status.DeepCopy()
 	p := string(phase)
 	cluster.Status.Phase = &p
+	beginReadinessCycle(cluster, before, phase)
 	completedReadinessCycle := phase == readyClusterPhase && cluster.Status.LastTransitionTime != nil
 	var lastTransitionTime time.Time
 	if completedReadinessCycle {
