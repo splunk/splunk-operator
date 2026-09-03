@@ -17,6 +17,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -83,6 +84,21 @@ func EnsureConfigMap(ctx context.Context, c client.Client, cr client.Object, ent
 // orphaned ConfigMaps are harmless and will be collected on the next successful
 // reconcile.
 func GarbageCollectConfigMaps(ctx context.Context, c client.Client, cr client.Object, currentName string, podSelector *metav1.LabelSelector) {
+	garbageCollectConfigMaps(ctx, c, cr, podSelector, func(name string) bool { return name == currentName })
+}
+
+// GarbageCollectConfigMapsMulti is GarbageCollectConfigMaps for a CR that
+// renders more than one defaults ConfigMap at once (e.g. distinct deployer
+// and member ConfigMaps for the same SearchHeadCluster). All currently-valid
+// names must be passed together in one call — calling GarbageCollectConfigMaps
+// once per name would have each call treat the other names' ConfigMaps as
+// stale. See GarbageCollectConfigMaps for the podSelector and reconcile-timing
+// contract, which this shares unchanged.
+func GarbageCollectConfigMapsMulti(ctx context.Context, c client.Client, cr client.Object, podSelector *metav1.LabelSelector, currentNames ...string) {
+	garbageCollectConfigMaps(ctx, c, cr, podSelector, func(name string) bool { return slices.Contains(currentNames, name) })
+}
+
+func garbageCollectConfigMaps(ctx context.Context, c client.Client, cr client.Object, podSelector *metav1.LabelSelector, isCurrent func(name string) bool) {
 	logger := log.FromContext(ctx)
 	namespace := cr.GetNamespace()
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
@@ -99,7 +115,7 @@ func GarbageCollectConfigMaps(ctx context.Context, c client.Client, cr client.Ob
 
 	stale := make([]*corev1.ConfigMap, 0, len(cmList.Items))
 	for i := range cmList.Items {
-		if cmList.Items[i].Name != currentName {
+		if !isCurrent(cmList.Items[i].Name) {
 			stale = append(stale, &cmList.Items[i])
 		}
 	}
