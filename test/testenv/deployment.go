@@ -356,8 +356,17 @@ func newPodExecExecutor(restConfig *rest.Config, execURL *url.URL) (remotecomman
 
 // PodExecCommand execute a shell command in the specified pod
 func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []string, stdin string, tty bool) (string, string, error) {
+	return d.PodExecCommandInNamespace(ctx, podName, d.testenv.namespace, cmd, stdin, tty)
+}
+
+// PodExecCommandInNamespace executes a shell command in the specified pod within the given
+// namespace, rather than the Deployment's own testenv namespace. Needed when attaching to an
+// existing environment (see AttachToExistingEnv) where the target pod (e.g. a tenant
+// IngestorCluster pod) lives in a different namespace than the operator/testenv.
+func (d *Deployment) PodExecCommandInNamespace(ctx context.Context, podName string, namespace string, cmd []string, stdin string, tty bool) (string, string, error) {
 	pod := &corev1.Pod{}
-	if err := d.GetInstance(ctx, podName, pod); err != nil {
+	key := client.ObjectKey{Name: podName, Namespace: namespace}
+	if err := d.testenv.GetKubeClient().Get(ctx, key, pod); err != nil {
 		return "", "", err
 	}
 	gvk, _ := apiutil.GVKForObject(pod, scheme.Scheme)
@@ -370,7 +379,7 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 	if err != nil {
 		return "", "", err
 	}
-	execReq := restClient.Post().Resource("pods").Name(podName).Namespace(d.testenv.namespace).SubResource("exec")
+	execReq := restClient.Post().Resource("pods").Name(podName).Namespace(namespace).SubResource("exec")
 	option := &corev1.PodExecOptions{
 		Command: cmd,
 		Stdin:   true,
