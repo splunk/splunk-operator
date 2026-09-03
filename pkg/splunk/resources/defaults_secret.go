@@ -39,13 +39,16 @@ func SecretMountPath() string {
 }
 
 // DefaultsSecret is an immutable Secret carrying a splunk-ansible defaults.yml that holds
-// only sensitive SmartBus credentials (access_key / secret_key), together with the knowledge
-// of how to mount itself onto a Splunk StatefulSet.
+// only sensitive credentials (e.g. SmartBus access_key/secret_key, or a Noah pass4SymmKey),
+// together with the knowledge of how to mount itself onto a Splunk StatefulSet.
 //
-// It is a credential-only analog of DefaultsConfigMap: the structural SmartBus config lives in
-// a ConfigMap, while credentials live here so they are never written into a ConfigMap. Both are
-// mounted and joined into SPLUNK_DEFAULTS_URL; because each renders its stanza into a distinct
-// app directory, Splunk's btool layering unions the disjoint keys at runtime.
+// It is a credential-only analog of DefaultsConfigMap: structural config lives in a ConfigMap,
+// while credentials live here so they are never written into a ConfigMap. Both are mounted and
+// joined into SPLUNK_DEFAULTS_URL. In the array conf format, each renders its stanza into a
+// distinct app directory and Splunk's btool layering unions the disjoint keys at runtime; in
+// the dictionary conf format (WithDictionaryConf), splunk-ansible's own defaults loader
+// (environ.py's merge_dict) recursively deep-merges the two files' nested splunk.conf.<file>
+// maps instead, so the same union happens one layer up, before Ansible ever runs.
 type DefaultsSecret struct {
 	corev1.Secret
 }
@@ -53,16 +56,16 @@ type DefaultsSecret struct {
 // NewDefaultsSecret builds a DefaultsSecret for the given CR, computing its
 // content-addressed name from entries. owner, when non-nil, is set as an owner
 // reference on the Secret; pass splcommon.AsOwner(cr, true) from the reconciler.
-func NewDefaultsSecret(cr CRObject, entries []common.ConfFileEntry, owner *metav1.OwnerReference) (DefaultsSecret, error) {
+func NewDefaultsSecret(cr CRObject, entries []common.ConfFileEntry, owner *metav1.OwnerReference, opts ...DefaultsConfigMapOption) (DefaultsSecret, error) {
 	namespace := cr.GetNamespace()
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	crName := cr.GetName()
 
-	name, err := DefaultsSecretName(crKind, crName, entries)
+	name, err := DefaultsSecretName(crKind, crName, entries, opts...)
 	if err != nil {
 		return DefaultsSecret{}, err
 	}
-	data, err := marshalDefaultYML(entries)
+	data, err := marshalDefaultYML(entries, opts...)
 	if err != nil {
 		return DefaultsSecret{}, fmt.Errorf("marshal defaults for %s/%s: %w", crKind, crName, err)
 	}
@@ -108,8 +111,8 @@ func (s DefaultsSecret) AsStatefulSetOption() StatefulSetOption {
 // DefaultsSecretName returns the content-addressed name for a credentials Secret.
 // The name embeds the first 6 hex characters of the SHA-256 of the serialized entries,
 // giving a stable, change-sensitive identifier.
-func DefaultsSecretName(crKind, crName string, entries []common.ConfFileEntry) (string, error) {
-	data, err := marshalDefaultYML(entries)
+func DefaultsSecretName(crKind, crName string, entries []common.ConfFileEntry, opts ...DefaultsConfigMapOption) (string, error) {
+	data, err := marshalDefaultYML(entries, opts...)
 	if err != nil {
 		return "", fmt.Errorf("marshal defaults for %s/%s: %w", crKind, crName, err)
 	}
