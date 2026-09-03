@@ -52,6 +52,10 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 	ctx := context.Background()
 	client := spltest.NewMockClient()
 	client.AddObject(noahClusterForSHCTest("test", "noah", "noah-auth"))
+	client.AddObject(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test"},
+		Data:       map[string][]byte{noahAuthSecretKey: []byte(t.Name())},
+	})
 
 	cr := &enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -100,6 +104,43 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 		require.NotNil(t, env[resources.PodNameEnvName].ValueFrom, "%s identity must survive Pod IP changes via the downward API, not a literal IP", ss.Name)
 		require.NotNil(t, env[resources.PodNamespaceEnvName].ValueFrom)
 	}
+}
+
+// A failure while removing owner references during deletion must abort
+// immediately rather than fall through to CheckForDeletion, which removes
+// finalizers once its own callbacks succeed. Swallowing the error here would
+// let the finalizer disappear while owner references are still orphaned,
+// with nothing left to retry the cleanup.
+func TestApplySearchHeadClusterNoah_DeletionAbortsOnOwnerReferenceCleanupError(t *testing.T) {
+	ctx := context.Background()
+	client := spltest.NewMockClient()
+	// The namespace-scoped secret is intentionally not seeded: it is the
+	// first resource DeleteOwnerReferencesForResources touches, so its
+	// absence reproduces a cleanup failure without a bespoke fake client.
+
+	deletionTimestamp := metav1.Now()
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "shc",
+			Namespace:         "test",
+			DeletionTimestamp: &deletionTimestamp,
+			Finalizers:        []string{"enterprise.splunk.com/delete-pvc"},
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			Replicas: 3,
+			NoahClusterRef: &corev1.LocalObjectReference{
+				Name: "noah",
+			},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+			},
+		},
+	}
+	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+
+	_, err := ApplySearchHeadClusterNoah(ctx, client, cr)
+	require.Error(t, err)
+	assert.Contains(t, cr.GetFinalizers(), "enterprise.splunk.com/delete-pvc", "finalizer must survive an owner-reference cleanup failure so deletion can retry")
 }
 
 // When the referenced NoahCluster does not exist yet, the reconcile must

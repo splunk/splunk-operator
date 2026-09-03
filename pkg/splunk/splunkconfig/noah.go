@@ -39,3 +39,83 @@ func NoahIndexerConf(serviceURL, tenant string) []common.ConfFileEntry {
 		},
 	}
 }
+
+// NoahSearchHeadConf returns the non-sensitive server.conf settings for a Noah
+// search-head member. This matches the proven-working reference
+// (vivek-spike's noahDefaultsYAML) exactly: no [decouple_search_indexing] and
+// no usePeers, which that reference never sets either — decoupleSearchIndexing
+// was an unverified addition of ours with no precedent in that spike or in
+// Splunk Cloud's production Noah config, and it forced usePeers=true and
+// heartbeatPeriod=0 as hard splunkd-validation requirements that don't
+// otherwise apply. Credentials and pod-specific identity are delivered
+// separately and must not be included here.
+func NoahSearchHeadConf(serviceURL, tenant string) []common.ConfFileEntry {
+	return []common.ConfFileEntry{
+		{
+			ConfFileName: "server",
+			Value: common.ConfFileValue{
+				Stanzas: common.ConfFileStanzas{
+					"noahService": {
+						"disabled":        "false",
+						"uri":             serviceURL,
+						"tenant":          tenant,
+						"heartbeatPeriod": "30",
+					},
+					"teleport_supervisor": {
+						"disabled": "true",
+					},
+				},
+			},
+		},
+	}
+}
+
+// NoahDeployerConf returns the non-sensitive server.conf settings for a Noah
+// SHC deployer. Content is intentionally identical to NoahSearchHeadConf,
+// matching the proven-working reference (vivek-spike), which applies the same
+// shared defaults to both deployer and search-head with no role-specific
+// server.conf differences. Delivery still goes through separate ConfigMaps
+// per role (deployer vs. search-head), so this stays a distinct function.
+func NoahDeployerConf(serviceURL, tenant string) []common.ConfFileEntry {
+	return []common.ConfFileEntry{
+		{
+			ConfFileName: "server",
+			Value: common.ConfFileValue{
+				Stanzas: common.ConfFileStanzas{
+					"noahService": {
+						"disabled":        "false",
+						"uri":             serviceURL,
+						"tenant":          tenant,
+						"heartbeatPeriod": "30",
+					},
+					"teleport_supervisor": {
+						"disabled": "true",
+					},
+				},
+			},
+		},
+	}
+}
+
+// NoahSHCCredentialsConf returns the credential-only server.conf ConfFileEntry
+// carrying [noahService] pass4SymmKey. It is identical for the deployer and
+// every search-head member, and is delivered via a Secret (WithDictionaryConf),
+// never a ConfigMap. splunk-ansible's own defaults loader (environ.py's
+// merge_dict) recursively deep-merges this into the same splunk.conf.server.
+// content.noahService map produced by NoahSearchHeadConf/NoahDeployerConf, so
+// the structural and credential entries union into one stanza before Ansible
+// ever runs — no operator-owned volume or init container is involved.
+func NoahSHCCredentialsConf(pass4SymmKey string) []common.ConfFileEntry {
+	return []common.ConfFileEntry{
+		{
+			ConfFileName: "server",
+			Value: common.ConfFileValue{
+				Stanzas: common.ConfFileStanzas{
+					"noahService": {
+						"pass4SymmKey": pass4SymmKey,
+					},
+				},
+			},
+		},
+	}
+}

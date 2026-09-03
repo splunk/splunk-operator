@@ -42,8 +42,8 @@ import (
 // If a Secret with the desired name already exists its content is verified
 // against the desired entries. A mismatch indicates a hash collision and is
 // returned as an error — the caller should treat this as a hard failure.
-func EnsureSecret(ctx context.Context, c client.Client, cr client.Object, entries []common.ConfFileEntry, owner *metav1.OwnerReference) (resources.DefaultsSecret, error) {
-	desired, err := resources.NewDefaultsSecret(cr, entries, owner)
+func EnsureSecret(ctx context.Context, c client.Client, cr client.Object, entries []common.ConfFileEntry, owner *metav1.OwnerReference, opts ...resources.DefaultsConfigMapOption) (resources.DefaultsSecret, error) {
+	desired, err := resources.NewDefaultsSecret(cr, entries, owner, opts...)
 	if err != nil {
 		return resources.DefaultsSecret{}, err
 	}
