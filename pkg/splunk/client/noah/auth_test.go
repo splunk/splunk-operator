@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -31,16 +32,10 @@ func TestHMACV2Authenticator(t *testing.T) {
 	pass4SymmKey := []byte("unit-test-noah-key")
 	now := func() time.Time { return time.Unix(1_700_000_000, 0) }
 	authenticator, err := newHMACV2Authenticator(pass4SymmKey, now, bytes.NewReader(make([]byte, 32)))
-	if err != nil {
-		t.Fatalf("newHMACV2Authenticator() error = %v", err)
-	}
+	assert.NoError(t, err)
 	request, err := http.NewRequest(http.MethodGet, "https://noah.test/tenant/noah/v1/peers", nil)
-	if err != nil {
-		t.Fatalf("http.NewRequest() error = %v", err)
-	}
-	if err := authenticator.Authenticate(request, nil); err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
-	}
+	assert.NoError(t, err)
+	assert.NoError(t, authenticator.Authenticate(request, nil))
 
 	nonce := strings.Repeat("a", 32)
 	timestamp := "1700000000"
@@ -55,20 +50,13 @@ func TestHMACV2Authenticator(t *testing.T) {
 	digest := hmac.New(sha512.New, []byte(base64.StdEncoding.EncodeToString(derivedKey)))
 	_, _ = digest.Write([]byte(serialized))
 
-	if got := request.Header.Get(hmacV2NonceHeader); got != nonce {
-		t.Errorf("nonce header = %q, want %q", got, nonce)
-	}
-	if got := request.Header.Get(hmacV2TimestampHeader); got != timestamp {
-		t.Errorf("timestamp header = %q, want %q", got, timestamp)
-	}
+	assert.Equal(t, nonce, request.Header.Get(hmacV2NonceHeader))
+	assert.Equal(t, timestamp, request.Header.Get(hmacV2TimestampHeader))
 	wantDigest := "v2," + base64.StdEncoding.EncodeToString(digest.Sum(nil))
-	if got := request.Header.Get(hmacV2DigestHeader); got != wantDigest {
-		t.Errorf("digest header = %q, want %q", got, wantDigest)
-	}
+	assert.Equal(t, wantDigest, request.Header.Get(hmacV2DigestHeader))
 }
 
 func TestNewHMACV2AuthenticatorRejectsEmptyKey(t *testing.T) {
-	if _, err := NewHMACV2Authenticator(nil); err == nil {
-		t.Fatal("NewHMACV2Authenticator() error = nil, want empty-key error")
-	}
+	_, err := NewHMACV2Authenticator(nil)
+	assert.Error(t, err)
 }
