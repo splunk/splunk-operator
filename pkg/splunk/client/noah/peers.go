@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	operationPeersList         = "noah.peers.list"
-	operationPeersGet          = "noah.peers.get"
-	operationPeersDecommission = "noah.peers.decommission"
+	operationPeersList       = "noah.peers.list"
+	operationPeersGet        = "noah.peers.get"
+	operationPeersUnregister = "noah.peers.unregister"
 )
 
 // Peer is the typed representation of one Noah peer.
@@ -105,23 +105,11 @@ func (client *Client) GetPeer(ctx context.Context, peerID string) (*Peer, error)
 	return peer, nil
 }
 
-// DecommissionAcknowledgement records that Noah accepted a decommission
-// request. It is not evidence that decommission has completed.
-type DecommissionAcknowledgement struct {
-	PeerID string
-}
-
-// DecommissionPeer asks Noah to decommission one exact peer. A successful
-// return means the request was accepted, not that decommission has completed.
-func (client *Client) DecommissionPeer(ctx context.Context, peerID string) (*DecommissionAcknowledgement, error) {
+// UnregisterPeer asks Noah to stop treating one exact peer as active.
+func (client *Client) UnregisterPeer(ctx context.Context, peerID string) error {
 	if peerID == "" || strings.TrimSpace(peerID) != peerID {
-		return nil, &Error{Operation: operationPeersDecommission, Kind: ErrorKindInvalidRequest}
+		return &Error{Operation: operationPeersUnregister, Kind: ErrorKindInvalidRequest}
 	}
 	requestURL := fmt.Sprintf("%s/%s", client.peersURL(), url.PathEscape(peerID))
-	// Until Noah defines an idempotency contract, a timeout or transport error
-	// leaves the result of this mutation unknown and must not be auto-retried.
-	if err := client.do(ctx, operationPeersDecommission, http.MethodDelete, requestURL, http.StatusAccepted, false, nil); err != nil {
-		return nil, err
-	}
-	return &DecommissionAcknowledgement{PeerID: peerID}, nil
+	return client.do(ctx, operationPeersUnregister, http.MethodDelete, requestURL, http.StatusAccepted, true, nil)
 }
