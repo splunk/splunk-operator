@@ -65,6 +65,18 @@ type StatefulSetScaleOutPlanner interface {
 	NextReplicas(context.Context, int32, int32) (ScaleOutPlan, error)
 }
 
+// StatefulSetScaleDownFinisher optionally gates further StatefulSet lifecycle
+// work after Kubernetes has removed the highest ordinal.
+type StatefulSetScaleDownFinisher interface {
+	FinishScaleDown(context.Context, int32) (bool, error)
+}
+
+// StatefulSetScaleDownPVCPolicy optionally retains PVCs during scale-down.
+// Managers that do not implement it preserve the existing delete behavior.
+type StatefulSetScaleDownPVCPolicy interface {
+	RetainPVCsOnScaleDown() bool
+}
+
 // ScaleOutPlan describes the next safe replica target and whether the requested
 // scale-out has converged.
 type ScaleOutPlan struct {

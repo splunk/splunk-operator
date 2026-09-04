@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,13 +46,14 @@ const (
 	noahAuthVolumeName                         = "mnt-noah-auth"
 	noahAuthMountPath                          = "/mnt/noah-auth"
 	noahAuthRevisionAnnotation                 = "enterprise.splunk.com/noah-auth-secret-revision"
+	pendingScaleDownOrdinalAnnotation          = "enterprise.splunk.com/pending-scale-down-ordinal"
 	noahIndexerPollInterval                    = 5 * time.Second
 	defaultNoahCacheWarmScaleOutTimeoutSeconds = int32(3600)
 )
 
 // ApplyNoahIndexerCluster reconciles the Kubernetes resources required to
 // start and roll out a Noah-selected IndexerCluster and verifies its expected
-// Noah peers. Safe scale-down is not yet implemented.
+// Noah peers. Scale-down is development-only and does not decommission peers.
 func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (result reconcile.Result, err error) {
 	result = reconcile.Result{RequeueAfter: noahIndexerPollInterval}
 	previousPhase := cr.Status.Phase
@@ -127,18 +129,6 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	}
 	cr.Status.Replicas = appliedReplicas
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
-	if appliedReplicas > cr.Spec.Replicas {
-		setPhaseAndConditions(
-			enterpriseApi.PhasePending,
-			"Waiting for safe Noah indexer scale-in support",
-			newNoahPeersReadyCondition(
-				metav1.ConditionFalse,
-				enterpriseApi.ReasonNoahPeersNotReady,
-				fmt.Sprintf("StatefulSet has %d replicas but %d are requested; safe scale-in is not implemented", appliedReplicas, cr.Spec.Replicas),
-			),
-		)
-		return result, nil
-	}
 	var outcome noahIndexerOutcome
 	switch phase {
 	case enterpriseApi.PhaseReady:
@@ -310,6 +300,8 @@ type noahIndexerRuntime struct {
 
 var _ splcommon.StatefulSetPodManager = (*noahIndexerPodManager)(nil)
 var _ splcommon.StatefulSetScaleOutPlanner = (*noahIndexerPodManager)(nil)
+var _ splcommon.StatefulSetScaleDownFinisher = (*noahIndexerPodManager)(nil)
+var _ splcommon.StatefulSetScaleDownPVCPolicy = (*noahIndexerPodManager)(nil)
 
 func newNoahIndexerPodManager(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) *noahIndexerPodManager {
 	return &noahIndexerPodManager{client: client, cr: cr}
@@ -317,7 +309,7 @@ func newNoahIndexerPodManager(client splcommon.ControllerClient, cr *enterpriseA
 
 // Update applies the desired StatefulSet and delegates existing-workload
 // scaling and rollout to the shared pod lifecycle engine. Initial creation
-// retains the full requested replica count, while scale-in remains fail-closed.
+// retains the full requested replica count.
 func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	if mgr.client == nil {
 		mgr.client = client
@@ -334,7 +326,7 @@ func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.C
 		return enterpriseApi.PhaseError, err
 	}
 	workloadPhase := noahIndexerWorkloadPhase(phase, statefulSet, appliedReplicas)
-	if phase != enterpriseApi.PhaseReady || appliedReplicas > desiredReplicas {
+	if phase != enterpriseApi.PhaseReady {
 		return workloadPhase, nil
 	}
 
@@ -347,7 +339,11 @@ func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.C
 		}
 		return workloadPhase, nil
 	}
-	if appliedReplicas == desiredReplicas && noahIndexerStatefulSetConverged(statefulSet, appliedReplicas) && mgr.cr.Status.Phase != enterpriseApi.PhaseUpdating {
+	_, scaleDownPending := statefulSet.Annotations[pendingScaleDownOrdinalAnnotation]
+	if appliedReplicas == desiredReplicas &&
+		noahIndexerStatefulSetConverged(statefulSet, appliedReplicas) &&
+		mgr.cr.Status.Phase != enterpriseApi.PhaseUpdating &&
+		!scaleDownPending {
 		return enterpriseApi.PhaseReady, nil
 	}
 	return k8sops.UpdateStatefulSetPods(ctx, mgr.client, statefulSet, mgr, desiredReplicas)
@@ -373,8 +369,91 @@ func (mgr *noahIndexerPodManager) NextReplicas(ctx context.Context, appliedRepli
 	return plan, nil
 }
 
-func (mgr *noahIndexerPodManager) PrepareScaleDown(context.Context, int32) (bool, error) {
-	return false, errors.New("Noah indexer scale-down is not implemented")
+func (mgr *noahIndexerPodManager) PrepareScaleDown(ctx context.Context, ordinal int32) (bool, error) {
+	appliedReplicas, err := noahIndexerStatefulSetReplicas(mgr.statefulSet)
+	if err != nil {
+		return false, err
+	}
+
+	observation, _, err := mgr.observePeers(ctx, appliedReplicas)
+	if err != nil {
+		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
+	}
+	if !observation.allReady {
+		return false, nil
+	}
+
+	if mgr.statefulSet.Annotations == nil {
+		mgr.statefulSet.Annotations = map[string]string{}
+	}
+	mgr.statefulSet.Annotations[pendingScaleDownOrdinalAnnotation] = strconv.FormatInt(int64(ordinal), 10)
+	return true, nil
+}
+
+// FinishScaleDown unregisters the removed peer and waits for Noah's latest
+// bucket map to exclude it before another lifecycle operation can begin.
+func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, _ int32) (bool, error) {
+	value, pending := mgr.statefulSet.Annotations[pendingScaleDownOrdinalAnnotation]
+	if !pending {
+		return true, nil
+	}
+	parsedOrdinal, err := strconv.ParseInt(value, 10, 32)
+	if err != nil || parsedOrdinal < 0 {
+		return false, fmt.Errorf("invalid pending scale-down ordinal %q", value)
+	}
+	ordinal := int32(parsedOrdinal)
+
+	podName := noahIndexerPodName(mgr.statefulSet, ordinal)
+	pod := &corev1.Pod{}
+	err = mgr.client.Get(ctx, types.NamespacedName{Namespace: mgr.statefulSet.Namespace, Name: podName}, pod)
+	if err == nil {
+		return false, nil
+	}
+	if !k8serrors.IsNotFound(err) {
+		return false, &noahIndexerPeerObservationError{
+			err:   fmt.Errorf("get removed Noah indexer Pod %s: %w", podName, err),
+			phase: enterpriseApi.PhaseScalingDown,
+		}
+	}
+
+	peerID, err := noahIndexerPeerID(mgr.statefulSet, ordinal)
+	if err != nil {
+		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
+	}
+	runtime, err := mgr.noahRuntime(ctx)
+	if err != nil {
+		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
+	}
+	noahClient, err := runtime.noahClient()
+	if err != nil {
+		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
+	}
+	if err := noahClient.UnregisterPeer(ctx, peerID); err != nil {
+		var noahErr *noah.Error
+		if !errors.As(err, &noahErr) || noahErr.Kind != noah.ErrorKindNotFound {
+			return false, &noahIndexerPeerObservationError{err: fmt.Errorf("unregister Noah peer %s: %w", peerID, err), phase: enterpriseApi.PhaseScalingDown}
+		}
+	}
+
+	bucketMap, err := noahClient.GetLatestBucketMap(ctx)
+	if err != nil {
+		return false, &noahIndexerPeerObservationError{err: fmt.Errorf("get latest Noah bucket map: %w", err), phase: enterpriseApi.PhaseScalingDown}
+	}
+
+	complete, err := noahBucketMapCompletesScaleDown(bucketMap, mgr.statefulSet, ordinal)
+	if err != nil || !complete {
+		return false, err
+	}
+
+	delete(mgr.statefulSet.Annotations, pendingScaleDownOrdinalAnnotation)
+	if err := splutil.UpdateResource(ctx, mgr.client, mgr.statefulSet); err != nil {
+		return false, fmt.Errorf("clear pending scale-down ordinal: %w", err)
+	}
+	return true, nil
+}
+
+func (*noahIndexerPodManager) RetainPVCsOnScaleDown() bool {
+	return true
 }
 
 func (mgr *noahIndexerPodManager) PrepareRecycle(ctx context.Context, _ int32) (bool, error) {
@@ -505,13 +584,25 @@ type noahIndexerOutcome struct {
 
 func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, appliedReplicas int32) noahIndexerOutcome {
 	phaseMessage := ""
-	switch {
-	case phase == enterpriseApi.PhaseUpdating || previousPhase == enterpriseApi.PhaseUpdating:
-		phase = enterpriseApi.PhaseUpdating
+	switch phase {
+	case enterpriseApi.PhaseScalingDown:
+		phaseMessage = "Scaling down without Noah decommission; development use only"
+	case enterpriseApi.PhaseUpdating:
 		phaseMessage = "Waiting for the StatefulSet pod-template revision to be applied"
-	case previousPhase == enterpriseApi.PhaseScalingUp:
-		phase = enterpriseApi.PhaseScalingUp
+	case enterpriseApi.PhaseScalingUp:
 		phaseMessage = fmt.Sprintf("Waiting for %d applied replicas to become ready before continuing scale-out", appliedReplicas)
+	case enterpriseApi.PhasePending:
+		switch previousPhase {
+		case enterpriseApi.PhaseScalingDown:
+			phase = enterpriseApi.PhaseScalingDown
+			phaseMessage = "Scaling down without Noah decommission; development use only"
+		case enterpriseApi.PhaseUpdating:
+			phase = enterpriseApi.PhaseUpdating
+			phaseMessage = "Waiting for the StatefulSet pod-template revision to be applied"
+		case enterpriseApi.PhaseScalingUp:
+			phase = enterpriseApi.PhaseScalingUp
+			phaseMessage = fmt.Sprintf("Waiting for %d applied replicas to become ready before continuing scale-out", appliedReplicas)
+		}
 	}
 
 	return noahIndexerOutcome{
@@ -543,8 +634,12 @@ func noahIndexerOutcomeFromError(err error) (noahIndexerOutcome, error, bool) {
 
 	var observationErr *noahIndexerPeerObservationError
 	if errors.As(err, &observationErr) {
+		phase := observationErr.phase
+		if phase == "" {
+			phase = enterpriseApi.PhasePending
+		}
 		return noahIndexerOutcome{
-			phase:        enterpriseApi.PhasePending,
+			phase:        phase,
 			phaseMessage: "Unable to observe Noah peers",
 			condition: newNoahPeersReadyCondition(
 				metav1.ConditionUnknown,
@@ -608,7 +703,8 @@ func (err *noahIndexerCacheWarmTimeoutError) Error() string {
 }
 
 type noahIndexerPeerObservationError struct {
-	err error
+	err   error
+	phase enterpriseApi.Phase
 }
 
 func (err *noahIndexerPeerObservationError) Error() string {
@@ -665,14 +761,9 @@ func noahCacheWarmScaleOutTimeout(spec enterpriseApi.NoahClusterSpec) time.Durat
 }
 
 func currentNoahIndexerPeerIncarnations(ctx context.Context, client splcommon.ControllerClient, replicas int32, statefulSet *appsv1.StatefulSet) (map[string]int64, error) {
-	clusterDomain, err := noahIndexerClusterDomain(statefulSet)
-	if err != nil {
-		return nil, err
-	}
-
 	expectedPeers := make(map[string]int64, replicas)
 	for ordinal := range replicas {
-		podName := fmt.Sprintf("%s-%d", statefulSet.Name, ordinal)
+		podName := noahIndexerPodName(statefulSet, ordinal)
 		pod := &corev1.Pod{}
 		key := types.NamespacedName{Namespace: statefulSet.Namespace, Name: podName}
 		if err := client.Get(ctx, key, pod); err != nil {
@@ -690,10 +781,50 @@ func currentNoahIndexerPeerIncarnations(ctx context.Context, client splcommon.Co
 			continue
 		}
 
-		peerID := fmt.Sprintf("%s.%s.%s.svc.%s", podName, statefulSet.Spec.ServiceName, statefulSet.Namespace, clusterDomain)
+		peerID, err := noahIndexerPeerID(statefulSet, ordinal)
+		if err != nil {
+			return nil, err
+		}
 		expectedPeers[peerID] = status.State.Running.StartedAt.Unix()
 	}
 	return expectedPeers, nil
+}
+
+func noahIndexerPeerID(statefulSet *appsv1.StatefulSet, ordinal int32) (string, error) {
+	clusterDomain, err := noahIndexerClusterDomain(statefulSet)
+	if err != nil {
+		return "", err
+	}
+	podName := noahIndexerPodName(statefulSet, ordinal)
+	return fmt.Sprintf("%s.%s.%s.svc.%s", podName, statefulSet.Spec.ServiceName, statefulSet.Namespace, clusterDomain), nil
+}
+
+func noahBucketMapCompletesScaleDown(bucketMap *noah.BucketMap, statefulSet *appsv1.StatefulSet, removedOrdinal int32) (bool, error) {
+	if bucketMap == nil || bucketMap.ID <= 0 || bucketMap.Status != noah.BucketMapStatusActive || bucketMap.PeerIDs == nil {
+		return false, nil
+	}
+
+	removedPeerID, err := noahIndexerPeerID(statefulSet, removedOrdinal)
+	if err != nil {
+		return false, err
+	}
+	if slices.Contains(bucketMap.PeerIDs, removedPeerID) {
+		return false, nil
+	}
+	for ordinal := range removedOrdinal {
+		peerID, err := noahIndexerPeerID(statefulSet, ordinal)
+		if err != nil {
+			return false, err
+		}
+		if !slices.Contains(bucketMap.PeerIDs, peerID) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func noahIndexerPodName(statefulSet *appsv1.StatefulSet, ordinal int32) string {
+	return fmt.Sprintf("%s-%d", statefulSet.Name, ordinal)
 }
 
 func noahIndexerClusterDomain(statefulSet *appsv1.StatefulSet) (string, error) {

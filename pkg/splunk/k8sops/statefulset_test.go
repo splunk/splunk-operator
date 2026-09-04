@@ -60,6 +60,26 @@ func (mgr *scaleOutPlanningPodManager) NextReplicas(context.Context, int32, int3
 	return mgr.plan, nil
 }
 
+type scaleDownFinishingPodManager struct {
+	DefaultStatefulSetPodManager
+	complete bool
+	err      error
+	ordinal  int32
+}
+
+func (mgr *scaleDownFinishingPodManager) FinishScaleDown(_ context.Context, ordinal int32) (bool, error) {
+	mgr.ordinal = ordinal
+	return mgr.complete, mgr.err
+}
+
+type retainingScaleDownPodManager struct {
+	DefaultStatefulSetPodManager
+}
+
+func (*retainingScaleDownPodManager) RetainPVCsOnScaleDown() bool {
+	return true
+}
+
 // Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
 func (mgr *errTestPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	return enterpriseApi.PhaseInstall, nil
@@ -258,6 +278,85 @@ func TestUpdateStatefulSetPodsUsesOptionalScaleOutPlanner(t *testing.T) {
 	assert.Equal(t, enterpriseApi.PhaseScalingUp, phase)
 	assert.Equal(t, 1, mgr.calls)
 	assert.Equal(t, int32(2), *statefulSet.Spec.Replicas)
+}
+
+func TestUpdateStatefulSetPodsUsesOptionalScaleDownFinisher(t *testing.T) {
+	replicas := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: replicas},
+	}
+
+	tests := []struct {
+		name      string
+		complete  bool
+		err       error
+		wantPhase enterpriseApi.Phase
+	}{
+		{name: "waits for completion", wantPhase: enterpriseApi.PhaseScalingDown},
+		{name: "propagates error", err: errors.New("finish failed"), wantPhase: enterpriseApi.PhaseError},
+		{name: "continues after completion", complete: true, wantPhase: enterpriseApi.PhaseScalingUp},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mgr := &scaleDownFinishingPodManager{complete: test.complete, err: test.err}
+			client := spltest.NewMockClient()
+			client.AddObject(statefulSet.DeepCopy())
+
+			phase, err := UpdateStatefulSetPods(t.Context(), client, statefulSet.DeepCopy(), mgr, 2)
+			if test.err != nil {
+				require.ErrorIs(t, err, test.err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, test.wantPhase, phase)
+			assert.Equal(t, int32(1), mgr.ordinal)
+		})
+	}
+}
+
+func TestUpdateStatefulSetPodsHonorsScaleDownPVCPolicy(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		manager    splcommon.StatefulSetPodManager
+		wantRetain bool
+	}{
+		{name: "default deletes PVC", manager: &DefaultStatefulSetPodManager{}},
+		{name: "opt in retains PVC", manager: &retainingScaleDownPodManager{}, wantRetain: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			replicas := int32(2)
+			statefulSet := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: &replicas,
+					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
+						ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"},
+					}},
+				},
+				Status: appsv1.StatefulSetStatus{ReadyReplicas: replicas},
+			}
+			pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
+				Name: "pvc-etc-splunk-stack1-1", Namespace: "test",
+			}}
+			mockClient := spltest.NewMockClient()
+			mockClient.AddObjects([]client.Object{statefulSet, pvc})
+
+			phase, err := UpdateStatefulSetPods(t.Context(), mockClient, statefulSet.DeepCopy(), test.manager, 1)
+			require.NoError(t, err)
+			assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+
+			storedPVC := &corev1.PersistentVolumeClaim{}
+			err = mockClient.Get(t.Context(), types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, storedPVC)
+			if test.wantRetain {
+				require.NoError(t, err)
+			} else {
+				require.True(t, k8serrors.IsNotFound(err), "expected PVC deletion, got %v", err)
+			}
+		})
+	}
 }
 
 func TestUpdateStatefulSetPodsSkipsScaleOutPlannerAtDesiredReplicas(t *testing.T) {
