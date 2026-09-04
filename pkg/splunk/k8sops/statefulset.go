@@ -215,6 +215,16 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	}
 
 	// readyReplicas == replicas
+	if finisher, ok := mgr.(splcommon.StatefulSetScaleDownFinisher); ok {
+		complete, err := finisher.FinishScaleDown(ctx, replicas)
+		if err != nil {
+			scopedLog.ErrorContext(ctx, "unable to finish StatefulSet scale down", "ordinal", replicas, "error", err)
+			return enterpriseApi.PhaseError, err
+		}
+		if !complete {
+			return enterpriseApi.PhaseScalingDown, nil
+		}
+	}
 
 	// Check for scaling up. Managers may optionally restrict the next replica
 	// target; managers without a planner retain the existing unrestricted
@@ -261,23 +271,29 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			return enterpriseApi.PhaseError, err
 		}
 
-		// delete PVCs used by the pod so that a future scale up will have clean state
-		for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
-			namespacedName := types.NamespacedName{
-				Namespace: vol.ObjectMeta.Namespace,
-				Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
-			}
-			var pvc corev1.PersistentVolumeClaim
-			err := c.Get(ctx, namespacedName, &pvc)
-			if err != nil {
-				scopedLog.ErrorContext(ctx, "unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name, "error", err)
-				return enterpriseApi.PhaseError, err
-			}
-			scopedLog.InfoContext(ctx, "deleting PVC", "pvcName", pvc.ObjectMeta.Name)
-			err = c.Delete(ctx, &pvc)
-			if err != nil {
-				scopedLog.ErrorContext(ctx, "unable to delete PVC", "pvcName", pvc.ObjectMeta.Name, "error", err)
-				return enterpriseApi.PhaseError, err
+		retainPVCs := false
+		if policy, ok := mgr.(splcommon.StatefulSetScaleDownPVCPolicy); ok {
+			retainPVCs = policy.RetainPVCsOnScaleDown()
+		}
+		if !retainPVCs {
+			// delete PVCs used by the pod so that a future scale up will have clean state
+			for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
+				namespacedName := types.NamespacedName{
+					Namespace: vol.ObjectMeta.Namespace,
+					Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
+				}
+				var pvc corev1.PersistentVolumeClaim
+				err := c.Get(ctx, namespacedName, &pvc)
+				if err != nil {
+					scopedLog.ErrorContext(ctx, "unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name, "error", err)
+					return enterpriseApi.PhaseError, err
+				}
+				scopedLog.InfoContext(ctx, "deleting PVC", "pvcName", pvc.ObjectMeta.Name)
+				err = c.Delete(ctx, &pvc)
+				if err != nil {
+					scopedLog.ErrorContext(ctx, "unable to delete PVC", "pvcName", pvc.ObjectMeta.Name, "error", err)
+					return enterpriseApi.PhaseError, err
+				}
 			}
 		}
 
