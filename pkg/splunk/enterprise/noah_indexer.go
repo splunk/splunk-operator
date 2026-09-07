@@ -344,29 +344,18 @@ func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.C
 }
 
 func (mgr *noahIndexerPodManager) NextReplicas(ctx context.Context, appliedReplicas, requestedReplicas int32) (splcommon.ScaleOutPlan, error) {
-	plan := splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}
+	blocked := splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}
 
 	observation, err := mgr.observePeers(ctx, appliedReplicas)
 	if err != nil {
-		return plan, &noahIndexerPeerObservationError{err: err}
+		return blocked, &noahIndexerPeerObservationError{err: err}
 	}
 
 	if observation.TimedOutPeerID != "" {
-		return plan, &noahIndexerCacheWarmTimeoutError{peerID: observation.TimedOutPeerID}
+		return blocked, &noahIndexerCacheWarmTimeoutError{peerID: observation.TimedOutPeerID}
 	}
 
-	plan.Complete = observation.AllReady && appliedReplicas == requestedReplicas
-
-	canAdvance := observation.AllReady
-	if !mgr.cacheWarmEnabled {
-		canAdvance = observation.AllRegistered
-	}
-
-	if canAdvance && appliedReplicas < requestedReplicas {
-		plan.TargetReplicas++
-	}
-
-	return plan, nil
+	return indexerworkflow.PlanNoahScaleOut(observation, appliedReplicas, requestedReplicas, mgr.cacheWarmEnabled), nil
 }
 
 func (mgr *noahIndexerPodManager) PrepareScaleDown(ctx context.Context, ordinal int32) (bool, error) {

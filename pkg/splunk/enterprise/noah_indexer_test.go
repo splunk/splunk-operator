@@ -1077,6 +1077,63 @@ func TestNoahIndexerPodManagerResumesScaleDownCleanupFromStatefulSetAnnotation(t
 	assert.Equal(t, 2, fixture.unregisterCount())
 }
 
+func TestNoahIndexerPodManagerFinishesPendingScaleDownBeforeChangedScaleOut(t *testing.T) {
+	fixture := newNoahIndexerScaleDownTestFixture(t)
+	fixture.cr.Spec.Replicas = 2
+
+	phase, err := fixture.update(t)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+	fixture.finishPodRemoval(t, 2, 2)
+
+	fixture.cr.Spec.Replicas = 3
+	phase, err = fixture.update(t)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+	statefulSet := &appsv1.StatefulSet{}
+	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
+	require.NotNil(t, statefulSet.Spec.Replicas)
+	assert.Equal(t, int32(2), *statefulSet.Spec.Replicas)
+	assert.Equal(t, "2", statefulSet.Annotations[pendingScaleDownOrdinalAnnotation])
+
+	fixture.excludeFromBucketMap(2)
+	phase, err = fixture.update(t)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingUp, phase)
+	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
+	require.NotNil(t, statefulSet.Spec.Replicas)
+	assert.Equal(t, int32(3), *statefulSet.Spec.Replicas)
+	assert.NotContains(t, statefulSet.Annotations, pendingScaleDownOrdinalAnnotation)
+}
+
+func TestNoahIndexerPodManagerFinishesPendingScaleDownBeforeRollout(t *testing.T) {
+	fixture := newNoahIndexerScaleDownTestFixture(t)
+	fixture.cr.Spec.Replicas = 2
+
+	phase, err := fixture.update(t)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+	fixture.finishPodRemoval(t, 2, 2)
+
+	statefulSet := &appsv1.StatefulSet{}
+	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
+	statefulSet.Status.UpdateRevision = "revision-2"
+	require.NoError(t, fixture.client.Update(t.Context(), statefulSet))
+
+	phase, err = fixture.update(t)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+	assertPodExists(t, fixture.client, "splunk-main-indexer-1", fixture.cr.Namespace)
+
+	fixture.excludeFromBucketMap(2)
+	phase, err = fixture.update(t)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseUpdating, phase)
+	assertPodNotFound(t, fixture.client, "splunk-main-indexer-1", fixture.cr.Namespace)
+	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
+	assert.NotContains(t, statefulSet.Annotations, pendingScaleDownOrdinalAnnotation)
+}
+
 func TestNoahIndexerPodManagerChecksCleanBucketMapAfterUnregister(t *testing.T) {
 	fixture := newNoahIndexerScaleDownTestFixture(t)
 	fixture.cr.Spec.Replicas = 2
