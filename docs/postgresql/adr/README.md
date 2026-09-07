@@ -25,6 +25,7 @@ status to `Superseded by ADR-NNNN`.
 | [0003](0003-cnpg-integration-and-drift-reconciliation.md) | CNPG integration approach and drift reconciliation | Accepted |
 | [0004](0004-pgbouncer-integration-model.md) | PgBouncer connection-pooler integration model | Accepted |
 | [0005](0005-postgresclusterclass-abstraction.md) | PostgresClusterClass abstraction | Accepted |
+| [0006](0006-postgresdatabase-execution-pipeline.md) | PostgresDatabase execution pipeline | Proposed |
 
 See also the [PostgreSQL architecture overview](../architecture-overview.md)
 (diagrams + state machines) and the [RFC summary](../rfc-summary.md).
