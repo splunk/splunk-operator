@@ -34,6 +34,22 @@
     "docker.io/splunk/universalforwarder",
     "docker.io/splunk/splunk"
   ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^gitlab-ci\\/includes\\/scs-deploy\\.yml$/",
+        "/^gitlab-ci\\/scs-loki-config\\.py$/"
+      ],
+      "matchStrings": [
+        "LOKI_DEPLOY_JOB_IMAGE='docker\\.repo\\.splunkdev\\.net/ci-cd/ci-container/python-3\\.12-bookworm:(?<currentValue>[^@'\\s]+)@sha256:(?<currentDigest>[a-f0-9]+)'",
+        "\"docker\\.repo\\.splunkdev\\.net/ci-cd/ci-container/python-3\\.12-bookworm:(?<currentValue>[^\"\\s]+)\"\\s*\"@sha256:(?<currentDigest>[a-f0-9]+)\""
+      ],
+      "depNameTemplate": "docker.repo.splunkdev.net/ci-cd/ci-container/python-3.12-bookworm",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
   "assignAutomerge": true,
   "reviewers": [
     "gabrielm",
@@ -47,6 +63,14 @@
     "vivekr"
   ],
   "packageRules": [
+    {
+      "description": "Group all SCS Loki deploy image references",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": [
+        "docker.repo.splunkdev.net/ci-cd/ci-container/python-3.12-bookworm"
+      ],
+      "groupName": "SCS Loki deploy Python image"
+    },
     {
         "matchUpdateTypes": ["patch", "minor"],
         "automerge": true,
