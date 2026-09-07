@@ -29,17 +29,33 @@ const (
 // NoahClusterSpec defines the desired state of NoahCluster
 type NoahClusterSpec struct {
 	// +kubebuilder:validation:Required
-	// Reference to the Kubernetes Secret that contains Noah authentication credentials.
+	// +kubebuilder:validation:XValidation:rule="has(self.name) && self.name != ''",message="authSecretRef.name must not be empty"
+	// +kubebuilder:validation:XValidation:rule="!has(self.name) || self.name == '' || self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="authSecretRef.name must be a valid DNS-1123 subdomain"
+	// AuthSecretRef names the Secret holding the Noah pass4SymmKey under the
+	// "pass4SymmKey" key. It is a local reference, so the Secret must be in the
+	// same namespace as this NoahCluster.
 	AuthSecretRef corev1.LocalObjectReference `json:"authSecretRef"`
 
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
-	// Endpoint is the URL of the Noah service.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="isURL(self)",message="endpoint must be a valid URL"
+	// +kubebuilder:validation:XValidation:rule="isURL(self) && (url(self).getScheme() == 'http' || url(self).getScheme() == 'https')",message="endpoint scheme must be http or https"
+	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getHostname() != ''",message="endpoint must include a host"
+	// +kubebuilder:validation:XValidation:rule="!self.contains('@')",message="endpoint must not contain credentials"
+	// +kubebuilder:validation:XValidation:rule="isURL(self) && (url(self).getEscapedPath() == '' || url(self).getEscapedPath() == '/')",message="endpoint must not contain a path"
+	// +kubebuilder:validation:XValidation:rule="!self.contains('?')",message="endpoint must not contain a query"
+	// +kubebuilder:validation:XValidation:rule="!self.contains('#')",message="endpoint must not contain a fragment"
+	// Endpoint is the base URL of the Noah service. It must be an absolute http or https URL naming a host,
+	// with no credentials, path, query, or fragment. A single trailing "/" is accepted and normalised away.
 	Endpoint string `json:"endpoint"`
 
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
-	// Tenant is the Noah tenant identifier.
+	// +kubebuilder:validation:XValidation:rule="self.trim() == self",message="tenant must not have leading or trailing whitespace"
+	// Tenant scopes peer membership and bucket maps to one logical Splunk
+	// deployment, preventing workloads from registering in or reading another
+	// tenant. There is no default: every installation chooses an explicit,
+	// stable value agreed with Noah.
 	Tenant string `json:"tenant"`
 
 	// +optional

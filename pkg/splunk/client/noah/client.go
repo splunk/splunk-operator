@@ -23,7 +23,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -147,18 +146,16 @@ type Client struct {
 	maxResponseBytes int64
 }
 
-// NewClient constructs a Noah membership client.
+// NewClient constructs a Noah membership client. The NoahCluster CRD owns
+// endpoint and tenant policy, so callers are responsible for supplying
+// coordinates that passed schema validation.
 func NewClient(endpoint, tenant string, authenticator Authenticator, options ...Option) (*Client, error) {
-	validatedEndpoint, err := validateClientConfig(endpoint, tenant)
-	if err != nil {
-		return nil, err
-	}
 	if authenticator == nil {
 		return nil, fmt.Errorf("authenticator is nil")
 	}
 
 	client := &Client{
-		endpoint:         validatedEndpoint,
+		endpoint:         normaliseEndpoint(endpoint),
 		tenant:           tenant,
 		authenticator:    authenticator,
 		httpClient:       &http.Client{},
@@ -174,24 +171,6 @@ func NewClient(endpoint, tenant string, authenticator Authenticator, options ...
 		}
 	}
 	return client, nil
-}
-
-// ValidateClientConfig validates Noah connection coordinates without creating
-// an authenticated client or deriving credential material.
-func ValidateClientConfig(endpoint, tenant string) error {
-	_, err := validateClientConfig(endpoint, tenant)
-	return err
-}
-
-func validateClientConfig(endpoint, tenant string) (string, error) {
-	validatedEndpoint, err := validateEndpoint(endpoint)
-	if err != nil {
-		return "", err
-	}
-	if tenant == "" || strings.TrimSpace(tenant) != tenant {
-		return "", fmt.Errorf("tenant must be non-empty and contain no surrounding whitespace")
-	}
-	return validatedEndpoint, nil
 }
 
 func (client *Client) do(ctx context.Context, operation, method, requestURL string, expectedStatus int, retrySafe bool, output any) error {
@@ -308,24 +287,6 @@ func retryableKind(kind ErrorKind) bool {
 	}
 }
 
-func validateEndpoint(endpoint string) (string, error) {
-	parsed, err := url.Parse(endpoint)
-	if err != nil {
-		return "", fmt.Errorf("parse endpoint: %w", err)
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", fmt.Errorf("endpoint scheme must be http or https")
-	}
-	if parsed.Host == "" {
-		return "", fmt.Errorf("endpoint host is empty")
-	}
-	if parsed.User != nil || parsed.ForceQuery || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", fmt.Errorf("endpoint must not contain credentials, a query, or a fragment")
-	}
-	if parsed.Path != "" && parsed.Path != "/" {
-		return "", fmt.Errorf("endpoint must not contain a path")
-	}
-	parsed.Path = ""
-	parsed.RawPath = ""
-	return strings.TrimSuffix(parsed.String(), "/"), nil
+func normaliseEndpoint(endpoint string) string {
+	return strings.TrimSuffix(endpoint, "/")
 }
