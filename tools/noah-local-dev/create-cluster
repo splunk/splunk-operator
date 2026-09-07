@@ -50,7 +50,16 @@ fi
 
 kubeconfig=$HOME/.kube/config
 if test -n "${KUBECONFIG:-}"; then
-    kubeconfig=$KUBECONFIG
+    # KUBECONFIG can be a colon-separated list. kubectl writes to its first
+    # entry and, on a read, lets the first entry win any conflict, so edit that
+    # one: the kraken context we add there shadows any later file's copy.
+    kubeconfig=${KUBECONFIG%%:*}
+    test -n "$kubeconfig" ||
+        fail 'KUBECONFIG is set but its first entry is empty.'
+    case $KUBECONFIG in
+        *:*) printf 'KUBECONFIG lists several files; editing %s.\n' \
+            "$kubeconfig" >&2 ;;
+    esac
 fi
 
 # yq --inplace fails on a missing file, so seed a minimal kubeconfig first.
