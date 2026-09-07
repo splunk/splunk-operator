@@ -220,6 +220,8 @@ const (
 	// NoahPeersReady reasons
 	ReasonNoahPeersReady            ConditionReason = "NoahPeersReady"
 	ReasonNoahPeersNotReady         ConditionReason = "NoahPeersNotReady"
+	ReasonNoahDependencyMissing     ConditionReason = "NoahDependencyMissing"
+	ReasonNoahConfigurationInvalid  ConditionReason = "NoahConfigurationInvalid"
 	ReasonNoahPeerObservationFailed ConditionReason = "NoahPeerObservationFailed"
 	ReasonNoahCacheWarmTimeout      ConditionReason = "NoahCacheWarmTimeout"
 )

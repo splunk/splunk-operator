@@ -67,9 +67,9 @@ type SearchHeadClusterSpec struct {
 	DetentionTimeoutSeconds int32 `json:"detentionTimeoutSeconds,omitempty"`
 }
 
-// NoahEnabled reports whether this spec contains a usable NoahCluster reference.
+// NoahEnabled reports whether this spec selects Noah mode.
 func (s *SearchHeadClusterSpec) NoahEnabled() bool {
-	return s != nil && s.NoahClusterRef != nil && s.NoahClusterRef.Name != ""
+	return s != nil && s.NoahClusterRef != nil
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member

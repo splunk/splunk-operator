@@ -32,6 +32,12 @@ var testAuthenticator = AuthenticatorFunc(func(request *http.Request, _ []byte) 
 	return nil
 })
 
+func TestValidateClientConfig(t *testing.T) {
+	assert.NoError(t, ValidateClientConfig("https://noah.test:8443/", "tenant"))
+	assert.Error(t, ValidateClientConfig("https://noah.test/api", "tenant"))
+	assert.Error(t, ValidateClientConfig("https://noah.test", " tenant "))
+}
+
 func TestNewClientValidatesConfiguration(t *testing.T) {
 	tests := []struct {
 		name          string
