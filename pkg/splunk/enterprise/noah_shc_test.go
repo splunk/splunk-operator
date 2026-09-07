@@ -16,10 +16,11 @@
 package enterprise
 
 import (
-	"context"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/noah"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,12 +50,12 @@ func noahClusterForSHCTest(namespace, name, authSecretName string) *enterpriseAp
 func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T) {
 	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
 
-	ctx := context.Background()
+	ctx := t.Context()
 	client := spltest.NewMockClient()
 	client.AddObject(noahClusterForSHCTest("test", "noah", "noah-auth"))
 	client.AddObject(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test"},
-		Data:       map[string][]byte{noahAuthSecretKey: []byte(t.Name())},
+		Data:       map[string][]byte{noah.AuthSecretKey: []byte(t.Name())},
 	})
 
 	cr := &enterpriseApi.SearchHeadCluster{
@@ -112,7 +113,7 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 // let the finalizer disappear while owner references are still orphaned,
 // with nothing left to retry the cleanup.
 func TestApplySearchHeadClusterNoah_DeletionAbortsOnOwnerReferenceCleanupError(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	client := spltest.NewMockClient()
 	// The namespace-scoped secret is intentionally not seeded: it is the
 	// first resource DeleteOwnerReferencesForResources touches, so its
@@ -147,19 +148,93 @@ func TestApplySearchHeadClusterNoah_DeletionAbortsOnOwnerReferenceCleanupError(t
 // requeue as PhasePending rather than error — the CR may simply not have
 // been created yet.
 func TestApplySearchHeadClusterNoah_PendingWhenNoahClusterMissing(t *testing.T) {
-	ctx := context.Background()
 	client := spltest.NewMockClient()
-
 	cr := &enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test"},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
+			Replicas:       3,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "missing-noah-cluster"},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+			},
 		},
 	}
+	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 
-	searchHeadPhase, deployerPhase, statefulSet, err := applySearchHeadClusterNoah(ctx, client, cr)
+	result, err := ApplySearchHeadClusterNoah(t.Context(), client, cr)
+
 	require.NoError(t, err)
-	assert.Equal(t, enterpriseApi.PhasePending, searchHeadPhase)
-	assert.Equal(t, enterpriseApi.PhasePending, deployerPhase)
+	assert.True(t, result.Requeue)
+	assert.Equal(t, enterpriseApi.PhasePending, cr.Status.Phase)
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionReady)
+	require.NotNil(t, condition)
+	assert.Contains(t, condition.Message, "missing-noah-cluster")
+}
+
+func TestApplySearchHeadClusterNoah_PendingWhenAuthSecretMissing(t *testing.T) {
+	client := spltest.NewMockClient()
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test"},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+		},
+	}
+	require.NoError(t, client.Create(t.Context(), &enterpriseApi.NoahCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: cr.Namespace},
+		Spec: enterpriseApi.NoahClusterSpec{
+			Endpoint:      "https://noah.test.svc",
+			Tenant:        "tenant",
+			AuthSecretRef: corev1.LocalObjectReference{Name: "missing-auth"},
+		},
+	}))
+	client.ResetCalls()
+
+	_, _, statefulSet, err := applySearchHeadClusterNoah(t.Context(), client, cr)
+
+	require.Error(t, err)
+	outcome, handled := noahDependencyOutcome(err)
+	require.True(t, handled)
+	assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
+	assert.NoError(t, outcome.err)
+	assert.Contains(t, outcome.message, "missing-auth")
 	assert.Nil(t, statefulSet)
+	assert.Empty(t, client.Calls["Create"], "missing Noah dependencies must not partially create workload resources")
+}
+
+func TestApplySearchHeadClusterNoah_ValidatesRuntimeBeforeCreatingResources(t *testing.T) {
+	client := spltest.NewMockClient()
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test"},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+		},
+	}
+	require.NoError(t, client.Create(t.Context(), &enterpriseApi.NoahCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: cr.Namespace},
+		Spec: enterpriseApi.NoahClusterSpec{
+			Endpoint:      "https://noah.test.svc/api",
+			Tenant:        "tenant",
+			AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+		},
+	}))
+	require.NoError(t, client.Create(t.Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
+		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
+	}))
+	client.ResetCalls()
+
+	searchHeadPhase, deployerPhase, statefulSet, err := applySearchHeadClusterNoah(t.Context(), client, cr)
+
+	assert.Equal(t, enterpriseApi.PhaseError, searchHeadPhase)
+	assert.Equal(t, enterpriseApi.PhaseError, deployerPhase)
+	assert.Nil(t, statefulSet)
+	require.Error(t, err)
+	outcome, handled := noahDependencyOutcome(err)
+	require.True(t, handled)
+	_, terminal := splcommon.TerminalMessage(outcome.err)
+	assert.True(t, terminal)
+	assert.Equal(t, enterpriseApi.ReasonNoahConfigurationInvalid, outcome.conditionReason)
+	assert.Contains(t, outcome.message, "endpoint must not contain a path")
+	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")
 }

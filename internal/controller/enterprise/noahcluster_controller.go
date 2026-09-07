@@ -16,13 +16,16 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -113,4 +116,31 @@ func (r *NoahClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}).
 		Named("noah-cluster-controller").
 		Complete(r)
+}
+
+func noahClusterNamesForSecret(ctx context.Context, reader client.Reader, secret *corev1.Secret) (map[string]struct{}, error) {
+	var noahClusters enterpriseApi.NoahClusterList
+	if err := reader.List(ctx, &noahClusters, client.InNamespace(secret.Namespace)); err != nil {
+		return nil, fmt.Errorf("list NoahClusters in namespace %s for Secret %s: %w", secret.Namespace, secret.Name, err)
+	}
+
+	names := make(map[string]struct{})
+	for i := range noahClusters.Items {
+		noahCluster := &noahClusters.Items[i]
+		if noahCluster.Spec.AuthSecretRef.Name == secret.Name {
+			names[noahCluster.Name] = struct{}{}
+		}
+	}
+	return names, nil
+}
+
+func noahReferenceRequests[T any](items []T, matchingNames map[string]struct{}, fields func(*T) (types.NamespacedName, string)) []reconcile.Request {
+	requests := make([]reconcile.Request, 0)
+	for i := range items {
+		key, referenceName := fields(&items[i])
+		if _, found := matchingNames[referenceName]; found {
+			requests = append(requests, reconcile.Request{NamespacedName: key})
+		}
+	}
+	return requests
 }

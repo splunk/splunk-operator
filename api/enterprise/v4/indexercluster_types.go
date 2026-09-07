@@ -58,9 +58,9 @@ type IndexerClusterSpec struct {
 	NoahClusterRef *corev1.LocalObjectReference `json:"noahClusterRef,omitempty"`
 }
 
-// NoahEnabled reports whether this spec contains a usable NoahCluster reference.
+// NoahEnabled reports whether this spec selects Noah mode.
 func (s *IndexerClusterSpec) NoahEnabled() bool {
-	return s != nil && s.NoahClusterRef != nil && s.NoahClusterRef.Name != ""
+	return s != nil && s.NoahClusterRef != nil
 }
 
 // IndexerClusterMemberStatus is used to track the status of each indexer cluster peer.
