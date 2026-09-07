@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /*
-Package indexercluster implements multi-step indexer cluster workflows: peer
-decommission, rebalance wait, and scale-down sequencing.
+Package indexercluster implements pure indexer membership and lifecycle policy,
+including peer incarnation, decommission, rebalance, and scaling decisions.
 */
 package indexercluster
