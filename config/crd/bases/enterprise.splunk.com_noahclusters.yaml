@@ -67,8 +67,10 @@ spec:
             description: NoahClusterSpec defines the desired state of NoahCluster
             properties:
               authSecretRef:
-                description: Reference to the Kubernetes Secret that contains Noah
-                  authentication credentials.
+                description: |-
+                  AuthSecretRef names the Secret holding the Noah pass4SymmKey under the
+                  "pass4SymmKey" key. It is a local reference, so the Secret must be in the
+                  same namespace as this NoahCluster.
                 properties:
                   name:
                     default: ""
@@ -81,6 +83,11 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: authSecretRef.name must not be empty
+                  rule: has(self.name) && self.name != ''
+                - message: authSecretRef.name must be a valid DNS-1123 subdomain
+                  rule: '!has(self.name) || self.name == '''' || self.name.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'')'
               cacheWarmScaleOutEnabled:
                 default: true
                 description: |-
@@ -97,13 +104,39 @@ spec:
                 minimum: 0
                 type: integer
               endpoint:
-                description: Endpoint is the URL of the Noah service.
-                pattern: ^https?://[^\s/$.?#].[^\s]*$
-                type: string
-              tenant:
-                description: Tenant is the Noah tenant identifier.
+                description: |-
+                  Endpoint is the base URL of the Noah service. It must be an absolute http or https URL naming a host,
+                  with no credentials, path, query, or fragment. A single trailing "/" is accepted and normalised away.
                 minLength: 1
                 type: string
+                x-kubernetes-validations:
+                - message: endpoint must be a valid URL
+                  rule: isURL(self)
+                - message: endpoint scheme must be http or https
+                  rule: isURL(self) && (url(self).getScheme() == 'http' || url(self).getScheme()
+                    == 'https')
+                - message: endpoint must include a host
+                  rule: isURL(self) && url(self).getHostname() != ''
+                - message: endpoint must not contain credentials
+                  rule: '!self.contains(''@'')'
+                - message: endpoint must not contain a path
+                  rule: isURL(self) && (url(self).getEscapedPath() == '' || url(self).getEscapedPath()
+                    == '/')
+                - message: endpoint must not contain a query
+                  rule: '!self.contains(''?'')'
+                - message: endpoint must not contain a fragment
+                  rule: '!self.contains(''#'')'
+              tenant:
+                description: |-
+                  Tenant scopes peer membership and bucket maps to one logical Splunk
+                  deployment, preventing workloads from registering in or reading another
+                  tenant. There is no default: every installation chooses an explicit,
+                  stable value agreed with Noah.
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: tenant must not have leading or trailing whitespace
+                  rule: self.trim() == self
             required:
             - authSecretRef
             - endpoint

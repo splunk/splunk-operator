@@ -95,20 +95,6 @@ func TestResolveConnectionClassifiesMissingDependencies(t *testing.T) {
 	})
 }
 
-func TestResolveConnectionValidatesCoordinatesBeforeResolvingSecret(t *testing.T) {
-	client := spltest.NewMockClient()
-	cluster := validNoahCluster()
-	cluster.Spec.Endpoint = "https://noah.test.svc/api"
-	cluster.Spec.AuthSecretRef.Name = "missing-auth"
-	require.NoError(t, client.Create(t.Context(), cluster))
-
-	connection, err := ResolveConnection(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
-
-	assert.Nil(t, connection)
-	assertDependencyError(t, err, DependencyInvalid)
-	assert.NotContains(t, err.Error(), "missing-auth")
-}
-
 func TestResolveConnectionPreservesKubernetesReadFailures(t *testing.T) {
 	client := spltest.NewMockClient()
 	readErr := errors.New("API unavailable")
@@ -129,13 +115,6 @@ func TestResolveConnectionRejectsInvalidConfiguration(t *testing.T) {
 		tenant     string
 		secretData map[string][]byte
 	}{
-		{name: "endpoint path", endpoint: "https://noah.test.svc/api", tenant: "tenant", secretData: map[string][]byte{AuthSecretKey: []byte("unit-test-noah-key")}},
-		{name: "endpoint query", endpoint: "https://noah.test.svc?x=y", tenant: "tenant", secretData: map[string][]byte{AuthSecretKey: []byte("unit-test-noah-key")}},
-		{name: "endpoint credentials", endpoint: "https://user:password@noah.test.svc", tenant: "tenant", secretData: map[string][]byte{AuthSecretKey: []byte("unit-test-noah-key")}},
-		{name: "unsupported scheme", endpoint: "ftp://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{AuthSecretKey: []byte("unit-test-noah-key")}},
-		{name: "missing host", endpoint: "https://", tenant: "tenant", secretData: map[string][]byte{AuthSecretKey: []byte("unit-test-noah-key")}},
-		{name: "blank tenant", endpoint: "https://noah.test.svc", secretData: map[string][]byte{AuthSecretKey: []byte("unit-test-noah-key")}},
-		{name: "padded tenant", endpoint: "https://noah.test.svc", tenant: " tenant ", secretData: map[string][]byte{AuthSecretKey: []byte("unit-test-noah-key")}},
 		{name: "missing secret key", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{}},
 		{name: "short secret", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{AuthSecretKey: []byte("short")}},
 		{name: "multiline secret", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{AuthSecretKey: []byte("unit-test-key\nsecond-line")}},

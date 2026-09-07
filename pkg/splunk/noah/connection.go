@@ -98,9 +98,6 @@ func ResolveConnection(ctx context.Context, reader k8sclient.Reader, namespace s
 		return nil, fmt.Errorf("get referenced NoahCluster %s: %w", key, err)
 	}
 
-	if err := noahclient.ValidateClientConfig(cluster.Spec.Endpoint, cluster.Spec.Tenant); err != nil {
-		return nil, dependencyError(DependencyInvalid, fmt.Errorf("validate Noah client configuration: %w", err))
-	}
 	authSecretName, authSecretResourceVersion, credential, err := resolveAuthSecret(ctx, reader, namespace, cluster.Spec.AuthSecretRef)
 	if err != nil {
 		return nil, err
