@@ -40,7 +40,10 @@
           "properties": {
             "database": {"type": "string", "minLength": 1},
             "username": {"type": "string", "minLength": 1},
-            "password": {"type": "string", "minLength": 1}
+            "password": {
+              "type": "string",
+              "description": "Empty means the chart generates one on first install and then reuses the release Secret's value."
+            }
           },
           "required": ["database", "username", "password"]
         }

@@ -33,7 +33,8 @@ make noah-local-down
 ## Targets
 
 `make noah-local-up` chains the first five of these. Each also runs on its own,
-in this order. `make help` lists them under **Noah Local Development**.
+in this order. `make help` lists them under **Noah Local Development**. They are
+defined in [`noah.mk`](noah.mk), which the root `Makefile` includes.
 
 | target                         |                                                                                                                          |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
