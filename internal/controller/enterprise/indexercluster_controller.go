@@ -187,23 +187,10 @@ func (r *IndexerClusterReconciler) mapNoahClusterToIndexerClusters(ctx context.C
 
 	var indexerClusters enterpriseApi.IndexerClusterList
 	if err := r.Client.List(ctx, &indexerClusters, client.InNamespace(noahCluster.Namespace)); err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map NoahCluster to IndexerClusters", "error", err)
 		return nil
 	}
-
-	requests := make([]reconcile.Request, 0)
-	for i := range indexerClusters.Items {
-		indexerCluster := &indexerClusters.Items[i]
-		if indexerCluster.Spec.NoahClusterRef == nil || indexerCluster.Spec.NoahClusterRef.Name != noahCluster.Name {
-			continue
-		}
-		requests = append(requests, reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      indexerCluster.Name,
-				Namespace: indexerCluster.Namespace,
-			},
-		})
-	}
-	return requests
+	return noahReferenceRequests(indexerClusters.Items, map[string]struct{}{noahCluster.Name: {}}, indexerClusterNoahReference)
 }
 
 // mapNoahAuthSecretToIndexerClusters follows Secret -> NoahCluster ->
@@ -214,17 +201,10 @@ func (r *IndexerClusterReconciler) mapNoahAuthSecretToIndexerClusters(ctx contex
 		return nil
 	}
 
-	var noahClusters enterpriseApi.NoahClusterList
-	if err := r.Client.List(ctx, &noahClusters, client.InNamespace(secret.Namespace)); err != nil {
+	matchingNoahClusters, err := noahClusterNamesForSecret(ctx, r.Client, secret)
+	if err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map Noah auth Secret to IndexerClusters", "error", err)
 		return nil
-	}
-
-	matchingNoahClusters := make(map[string]struct{})
-	for i := range noahClusters.Items {
-		noahCluster := &noahClusters.Items[i]
-		if noahCluster.Spec.AuthSecretRef.Name == secret.Name {
-			matchingNoahClusters[noahCluster.Name] = struct{}{}
-		}
 	}
 	if len(matchingNoahClusters) == 0 {
 		return nil
@@ -232,26 +212,18 @@ func (r *IndexerClusterReconciler) mapNoahAuthSecretToIndexerClusters(ctx contex
 
 	var indexerClusters enterpriseApi.IndexerClusterList
 	if err := r.Client.List(ctx, &indexerClusters, client.InNamespace(secret.Namespace)); err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map Noah auth Secret to IndexerClusters", "error", err)
 		return nil
 	}
+	return noahReferenceRequests(indexerClusters.Items, matchingNoahClusters, indexerClusterNoahReference)
+}
 
-	requests := make([]reconcile.Request, 0)
-	for i := range indexerClusters.Items {
-		indexerCluster := &indexerClusters.Items[i]
-		if indexerCluster.Spec.NoahClusterRef == nil {
-			continue
-		}
-		if _, found := matchingNoahClusters[indexerCluster.Spec.NoahClusterRef.Name]; !found {
-			continue
-		}
-		requests = append(requests, reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      indexerCluster.Name,
-				Namespace: indexerCluster.Namespace,
-			},
-		})
+func indexerClusterNoahReference(indexerCluster *enterpriseApi.IndexerCluster) (types.NamespacedName, string) {
+	key := types.NamespacedName{Name: indexerCluster.Name, Namespace: indexerCluster.Namespace}
+	if indexerCluster.Spec.NoahClusterRef == nil {
+		return key, ""
 	}
-	return requests
+	return key, indexerCluster.Spec.NoahClusterRef.Name
 }
 
 // SetupWithManager sets up the controller with the Manager.

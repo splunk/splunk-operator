@@ -28,8 +28,9 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	"github.com/splunk/splunk-operator/pkg/splunk/client/noah"
+	noahclient "github.com/splunk/splunk-operator/pkg/splunk/client/noah"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/noah"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +43,7 @@ import (
 )
 
 type noahIndexerScaleOutTestOptions struct {
-	peerStatus       noah.PeerStatus
+	peerStatus       noahclient.PeerStatus
 	peerStart        int64
 	cacheWarmEnabled *bool
 	timeoutSeconds   *int32
@@ -64,10 +65,10 @@ func newNoahIndexerScaleOutTestFixture(t *testing.T, options noahIndexerScaleOut
 	fixture := &noahIndexerScaleOutTestFixture{client: spltest.NewMockClient()}
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		fixture.requestHeaders = request.Header.Clone()
-		if err := json.NewEncoder(response).Encode([]noah.Peer{{
+		if err := json.NewEncoder(response).Encode([]noahclient.Peer{{
 			ID:            "splunk-main-indexer-0.splunk-main-indexer-headless.test.svc.corp.example",
 			Status:        options.peerStatus,
-			Data:          noah.PeerData{StartTime: options.peerStart},
+			Data:          noahclient.PeerData{StartTime: options.peerStart},
 			LastHeartbeat: options.peerStart + 1,
 		}}); err != nil {
 			t.Errorf("encode Noah peers: %v", err)
@@ -94,7 +95,7 @@ func newNoahIndexerScaleOutTestFixture(t *testing.T, options noahIndexerScaleOut
 	}))
 	require.NoError(t, fixture.client.Create(t.Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: fixture.cr.Namespace},
-		Data:       map[string][]byte{noahAuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	appliedReplicas := int32(1)
@@ -150,7 +151,7 @@ type noahIndexerRolloutTestFixture struct {
 	cr             *enterpriseApi.IndexerCluster
 	statefulSetKey types.NamespacedName
 	mutex          sync.RWMutex
-	peers          []noah.Peer
+	peers          []noahclient.Peer
 	noahRequests   int
 }
 
@@ -159,9 +160,9 @@ type noahIndexerScaleDownTestFixture struct {
 	cr             *enterpriseApi.IndexerCluster
 	statefulSetKey types.NamespacedName
 	mutex          sync.RWMutex
-	peers          []noah.Peer
+	peers          []noahclient.Peer
 	bucketPeerIDs  []string
-	bucketMapState noah.BucketMapStatus
+	bucketMapState noahclient.BucketMapStatus
 	unregistered   []string
 	unregisterCode int
 }
@@ -183,7 +184,7 @@ func newNoahIndexerScaleDownTestFixture(t *testing.T) *noahIndexerScaleDownTestF
 			}
 			response.WriteHeader(status)
 		case request.Method == http.MethodGet && strings.HasSuffix(request.URL.Path, "/bucketMaps/latest"):
-			require.NoError(t, json.NewEncoder(response).Encode(noah.BucketMap{
+			require.NoError(t, json.NewEncoder(response).Encode(noahclient.BucketMap{
 				ID: 7, Status: fixture.bucketMapState, PeerIDs: fixture.bucketPeerIDs,
 			}))
 		default:
@@ -199,7 +200,7 @@ func newNoahIndexerScaleDownTestFixture(t *testing.T) *noahIndexerScaleDownTestF
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
 		},
 	}
-	fixture.bucketMapState = noah.BucketMapStatusActive
+	fixture.bucketMapState = noahclient.BucketMapStatusActive
 	require.NoError(t, fixture.client.Create(t.Context(), &enterpriseApi.NoahCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: fixture.cr.Namespace},
 		Spec: enterpriseApi.NoahClusterSpec{
@@ -210,7 +211,7 @@ func newNoahIndexerScaleDownTestFixture(t *testing.T) *noahIndexerScaleDownTestF
 	}))
 	require.NoError(t, fixture.client.Create(t.Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: fixture.cr.Namespace},
-		Data:       map[string][]byte{noahAuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	replicas := int32(3)
@@ -248,9 +249,9 @@ func newNoahIndexerScaleDownTestFixture(t *testing.T) *noahIndexerScaleDownTestF
 	for ordinal := range replicas {
 		fixture.createPod(t, ordinal, startTime)
 		peerID := fixture.peerID(ordinal)
-		fixture.peers = append(fixture.peers, noah.Peer{
-			ID: peerID, Status: noah.PeerStatusUp,
-			Data: noah.PeerData{StartTime: startTime}, LastHeartbeat: startTime + 1,
+		fixture.peers = append(fixture.peers, noahclient.Peer{
+			ID: peerID, Status: noahclient.PeerStatusUp,
+			Data: noahclient.PeerData{StartTime: startTime}, LastHeartbeat: startTime + 1,
 		})
 		fixture.bucketPeerIDs = append(fixture.bucketPeerIDs, peerID)
 		require.NoError(t, fixture.client.Create(t.Context(), &corev1.PersistentVolumeClaim{
@@ -306,7 +307,7 @@ func (fixture *noahIndexerScaleDownTestFixture) finishPodRemoval(t *testing.T, o
 	require.NoError(t, fixture.client.Update(t.Context(), statefulSet))
 }
 
-func (fixture *noahIndexerScaleDownTestFixture) setPeerStatus(ordinal int32, status noah.PeerStatus) {
+func (fixture *noahIndexerScaleDownTestFixture) setPeerStatus(ordinal int32, status noahclient.PeerStatus) {
 	fixture.mutex.Lock()
 	defer fixture.mutex.Unlock()
 	for index := range fixture.peers {
@@ -324,7 +325,7 @@ func (fixture *noahIndexerScaleDownTestFixture) excludeFromBucketMap(ordinal int
 	})
 }
 
-func (fixture *noahIndexerScaleDownTestFixture) setBucketMap(status noah.BucketMapStatus, peerIDs []string) {
+func (fixture *noahIndexerScaleDownTestFixture) setBucketMap(status noahclient.BucketMapStatus, peerIDs []string) {
 	fixture.mutex.Lock()
 	defer fixture.mutex.Unlock()
 	fixture.bucketMapState = status
@@ -354,7 +355,7 @@ func newNoahIndexerRolloutTestFixture(t *testing.T) *noahIndexerRolloutTestFixtu
 		}
 		fixture.mutex.Lock()
 		fixture.noahRequests++
-		peers := append([]noah.Peer(nil), fixture.peers...)
+		peers := append([]noahclient.Peer(nil), fixture.peers...)
 		fixture.mutex.Unlock()
 		if err := json.NewEncoder(response).Encode(peers); err != nil {
 			t.Errorf("encode Noah peers: %v", err)
@@ -379,7 +380,7 @@ func newNoahIndexerRolloutTestFixture(t *testing.T) *noahIndexerRolloutTestFixtu
 	}))
 	require.NoError(t, fixture.client.Create(t.Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: fixture.cr.Namespace},
-		Data:       map[string][]byte{noahAuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	replicas := int32(2)
@@ -414,8 +415,8 @@ func newNoahIndexerRolloutTestFixture(t *testing.T) *noahIndexerRolloutTestFixtu
 		fixture.createPod(t, ordinal, "revision-1", oldStart, true)
 	}
 	fixture.setPeers(
-		fixture.peer(0, noah.PeerStatusUp, oldStart),
-		fixture.peer(1, noah.PeerStatusUp, oldStart),
+		fixture.peer(0, noahclient.PeerStatusUp, oldStart),
+		fixture.peer(1, noahclient.PeerStatusUp, oldStart),
 	)
 	return fixture
 }
@@ -424,19 +425,19 @@ func (fixture *noahIndexerRolloutTestFixture) peerID(ordinal int32) string {
 	return fmt.Sprintf("splunk-main-indexer-%d.splunk-main-indexer-headless.test.svc.corp.example", ordinal)
 }
 
-func (fixture *noahIndexerRolloutTestFixture) peer(ordinal int32, status noah.PeerStatus, startTime int64) noah.Peer {
-	return noah.Peer{
+func (fixture *noahIndexerRolloutTestFixture) peer(ordinal int32, status noahclient.PeerStatus, startTime int64) noahclient.Peer {
+	return noahclient.Peer{
 		ID:            fixture.peerID(ordinal),
 		Status:        status,
-		Data:          noah.PeerData{StartTime: startTime},
+		Data:          noahclient.PeerData{StartTime: startTime},
 		LastHeartbeat: startTime + 1,
 	}
 }
 
-func (fixture *noahIndexerRolloutTestFixture) setPeers(peers ...noah.Peer) {
+func (fixture *noahIndexerRolloutTestFixture) setPeers(peers ...noahclient.Peer) {
 	fixture.mutex.Lock()
 	defer fixture.mutex.Unlock()
-	fixture.peers = append([]noah.Peer(nil), peers...)
+	fixture.peers = append([]noahclient.Peer(nil), peers...)
 }
 
 func (fixture *noahIndexerRolloutTestFixture) noahRequestCount() int {
@@ -512,10 +513,10 @@ func TestNoahIndexerPodManagerRollsHighestOrdinalAndWaitsForReplacementPeer(t *t
 	const replacementStart int64 = 1_700_000_100
 	fixture.createPod(t, 1, "revision-2", replacementStart, true)
 	fixture.setStatefulSetStatus(t, 2, 1)
-	staleReplacementPeer := fixture.peer(1, noah.PeerStatusUp, replacementStart)
+	staleReplacementPeer := fixture.peer(1, noahclient.PeerStatusUp, replacementStart)
 	staleReplacementPeer.LastHeartbeat = replacementStart
 	fixture.setPeers(
-		fixture.peer(0, noah.PeerStatusUp, 1_700_000_000),
+		fixture.peer(0, noahclient.PeerStatusUp, 1_700_000_000),
 		staleReplacementPeer,
 	)
 
@@ -527,8 +528,8 @@ func TestNoahIndexerPodManagerRollsHighestOrdinalAndWaitsForReplacementPeer(t *t
 	assertPodExists(t, fixture.client, "splunk-main-indexer-0", fixture.cr.Namespace)
 
 	fixture.setPeers(
-		fixture.peer(0, noah.PeerStatusUp, 1_700_000_000),
-		fixture.peer(1, noah.PeerStatusUp, replacementStart),
+		fixture.peer(0, noahclient.PeerStatusUp, 1_700_000_000),
+		fixture.peer(1, noahclient.PeerStatusUp, replacementStart),
 	)
 	requestsBeforeUpdate := fixture.noahRequestCount()
 	phase, err = fixture.update(t)
@@ -710,7 +711,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	}))
 	require.NoError(t, client.Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
-		Data:       map[string][]byte{noahAuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
@@ -777,7 +778,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	require.Len(t, initEtc.Command, 3)
 	assert.Contains(t, initEtc.Command[2], `print "[noahService]"`)
 	assert.Contains(t, initEtc.Command[2], `print "disabled = true"`)
-	assert.Contains(t, initEtc.Command[2], noahAuthMountPath+"/"+noahAuthSecretKey)
+	assert.Contains(t, initEtc.Command[2], noahAuthMountPath+"/"+noah.AuthSecretKey)
 	assert.NotContains(t, initEtc.Command[2], "unit-test-noah-key")
 
 	var authVolume *corev1.Volume
@@ -829,7 +830,7 @@ func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testi
 	}))
 	require.NoError(t, client.Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
-		Data:       map[string][]byte{noahAuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	replicas := int32(1)
@@ -888,6 +889,49 @@ func TestApplyNoahIndexerResourcesRequiresReferencedNoahCluster(t *testing.T) {
 	assert.Nil(t, statefulSet)
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
 	assert.Contains(t, err.Error(), "get referenced NoahCluster test/missing")
+	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err)
+	assert.True(t, handled)
+	assert.NoError(t, outcomeErr)
+	assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
+	assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), outcome.condition.Reason)
+	assert.Contains(t, outcome.condition.Message, "test/missing")
+}
+
+func TestApplyNoahIndexerResourcesValidatesRuntimeBeforeCreatingResources(t *testing.T) {
+	client := spltest.NewMockClient()
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "main", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+		},
+	}
+	require.NoError(t, client.Create(t.Context(), &enterpriseApi.NoahCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: cr.Namespace},
+		Spec: enterpriseApi.NoahClusterSpec{
+			Endpoint:      "https://noah.test.svc/api",
+			Tenant:        "tenant",
+			AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+		},
+	}))
+	require.NoError(t, client.Create(t.Context(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
+		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
+	}))
+	client.ResetCalls()
+
+	statefulSet, phase, err := applyNoahIndexerResources(t.Context(), client, cr, newNoahIndexerPodManager(client, cr))
+
+	assert.Nil(t, statefulSet)
+	assert.Equal(t, enterpriseApi.PhaseError, phase)
+	require.Error(t, err)
+	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err)
+	require.True(t, handled)
+	_, terminal := splcommon.TerminalMessage(outcomeErr)
+	assert.True(t, terminal)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahConfigurationInvalid), outcome.condition.Reason)
+	assert.Contains(t, outcome.condition.Message, "endpoint must not contain a path")
+	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")
 }
 
 func TestNoahIndexerPodManagerScalesDownOneOrdinalAndWaitsForNoahCleanup(t *testing.T) {
@@ -921,7 +965,7 @@ func TestNoahIndexerPodManagerScalesDownOneOrdinalAndWaitsForNoahCleanup(t *test
 		Name: "pvc-etc-splunk-main-indexer-2", Namespace: fixture.cr.Namespace,
 	}, &corev1.PersistentVolumeClaim{}))
 
-	fixture.setPeerStatus(2, noah.PeerStatusDown)
+	fixture.setPeerStatus(2, noahclient.PeerStatusDown)
 	phase, err = fixture.update(t)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
@@ -944,7 +988,7 @@ func TestNoahIndexerPodManagerScalesDownOneOrdinalAndWaitsForNoahCleanup(t *test
 	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
 	assert.Equal(t, 4, fixture.unregisterCount())
 
-	fixture.setPeerStatus(1, noah.PeerStatusDown)
+	fixture.setPeerStatus(1, noahclient.PeerStatusDown)
 	fixture.excludeFromBucketMap(1)
 	phase, err = fixture.update(t)
 	require.NoError(t, err)
@@ -959,7 +1003,7 @@ func TestNoahIndexerPodManagerScalesDownOneOrdinalAndWaitsForNoahCleanup(t *test
 
 func TestNoahIndexerPodManagerBlocksUnsafeScaleDownUntilPeersAreReady(t *testing.T) {
 	fixture := newNoahIndexerScaleDownTestFixture(t)
-	fixture.setPeerStatus(1, noah.PeerStatusWarming)
+	fixture.setPeerStatus(1, noahclient.PeerStatusWarming)
 
 	phase, err := fixture.update(t)
 	require.NoError(t, err)
@@ -983,7 +1027,7 @@ func TestNoahIndexerPodManagerResumesScaleDownCleanupFromStatefulSetAnnotation(t
 	fixture.cr.Status.Phase = enterpriseApi.PhaseError
 	fixture.cr.Status.Replicas = 2
 	fixture.finishPodRemoval(t, 2, 2)
-	fixture.setPeerStatus(2, noah.PeerStatusDown)
+	fixture.setPeerStatus(2, noahclient.PeerStatusDown)
 	phase, err = fixture.update(t)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
@@ -1021,18 +1065,18 @@ func TestNoahIndexerPodManagerChecksCleanBucketMapAfterUnregister(t *testing.T) 
 func TestNoahIndexerPodManagerRejectsIncompleteBucketMapDuringScaleDown(t *testing.T) {
 	tests := []struct {
 		name    string
-		status  noah.BucketMapStatus
+		status  noahclient.BucketMapStatus
 		peerIDs func(*noahIndexerScaleDownTestFixture) []string
 	}{
 		{
-			name: "unknown status", status: noah.BucketMapStatusUnknown,
+			name: "unknown status", status: noahclient.BucketMapStatusUnknown,
 			peerIDs: func(fixture *noahIndexerScaleDownTestFixture) []string {
 				return []string{fixture.peerID(0), fixture.peerID(1)}
 			},
 		},
-		{name: "omitted peers", status: noah.BucketMapStatusActive},
+		{name: "omitted peers", status: noahclient.BucketMapStatusActive},
 		{
-			name: "missing remaining peer", status: noah.BucketMapStatusActive,
+			name: "missing remaining peer", status: noahclient.BucketMapStatusActive,
 			peerIDs: func(fixture *noahIndexerScaleDownTestFixture) []string {
 				return []string{fixture.peerID(0)}
 			},
@@ -1081,19 +1125,6 @@ func TestNoahIndexerPodManagerPropagatesScaleDownCleanupFailure(t *testing.T) {
 	assert.Equal(t, "2", statefulSet.Annotations[pendingScaleDownOrdinalAnnotation])
 }
 
-func TestResolveNoahAuthSecretRejectsInvalidSecret(t *testing.T) {
-	ctx := t.Context()
-	client := spltest.NewMockClient()
-	require.NoError(t, client.Create(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test"},
-		Data:       map[string][]byte{noahAuthSecretKey: []byte("valid-value\nsecond-line")},
-	}))
-
-	secret, err := resolveNoahAuthSecret(ctx, client, "test", corev1.LocalObjectReference{Name: "noah-auth"})
-	require.ErrorContains(t, err, "must be a single line")
-	assert.Nil(t, secret)
-}
-
 func TestNoahInitEtcUsesRenderedEtcVolume(t *testing.T) {
 	statefulSet := &appsv1.StatefulSet{
 		Spec: appsv1.StatefulSetSpec{
@@ -1122,6 +1153,22 @@ func TestNoahInitEtcUsesRenderedEtcVolume(t *testing.T) {
 	assert.Equal(t, []corev1.Capability{"ALL"}, initEtc.SecurityContext.Capabilities.Drop)
 	require.NotNil(t, initEtc.SecurityContext.SeccompProfile)
 	assert.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, initEtc.SecurityContext.SeccompProfile.Type)
+}
+
+func TestNoahAuthSecretOptionUsesSecretResourceVersion(t *testing.T) {
+	statefulSet := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{InitContainers: []corev1.Container{{Name: "init-etc"}}},
+			},
+		},
+	}
+
+	noahAuthSecretOption("noah-auth", "42")(statefulSet)
+
+	assert.Equal(t, "42", statefulSet.Spec.Template.Annotations[noahAuthRevisionAnnotation])
+	require.Len(t, statefulSet.Spec.Template.Spec.Volumes, 1)
+	assert.Equal(t, "noah-auth", statefulSet.Spec.Template.Spec.Volumes[0].Secret.SecretName)
 }
 
 func TestNoahIndexerStatefulSetOptionsAppliesStableIdentityLast(t *testing.T) {
@@ -1279,87 +1326,87 @@ func TestExpectedNoahIndexerPeersReady(t *testing.T) {
 		peer0: currentStart,
 		peer1: currentStart,
 	}
-	currentPeer := func(id string, status noah.PeerStatus) noah.Peer {
-		return noah.Peer{ID: id, Status: status, Data: noah.PeerData{StartTime: currentStart}, LastHeartbeat: currentStart + 1}
+	currentPeer := func(id string, status noahclient.PeerStatus) noahclient.Peer {
+		return noahclient.Peer{ID: id, Status: status, Data: noahclient.PeerData{StartTime: currentStart}, LastHeartbeat: currentStart + 1}
 	}
 
 	tests := []struct {
 		name  string
-		peers []noah.Peer
+		peers []noahclient.Peer
 		want  bool
 	}{
 		{
 			name: "all expected peers are up",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
-				currentPeer(peer1, noah.PeerStatusUp),
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
+				currentPeer(peer1, noahclient.PeerStatusUp),
 			},
 			want: true,
 		},
 		{
 			name: "missing expected peer",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
 			},
 		},
 		{
 			name: "expected peer is down",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
-				currentPeer(peer1, noah.PeerStatusDown),
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
+				currentPeer(peer1, noahclient.PeerStatusDown),
 			},
 		},
 		{
 			name: "bare pod name does not satisfy exact advertised identity",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
-				currentPeer("splunk-main-indexer-1", noah.PeerStatusUp),
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
+				currentPeer("splunk-main-indexer-1", noahclient.PeerStatusUp),
 			},
 		},
 		{
 			name: "foreign cluster domain does not satisfy exact advertised identity",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
-				currentPeer("splunk-main-indexer-1.splunk-main-indexer-headless.test.svc.foreign.example", noah.PeerStatusUp),
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
+				currentPeer("splunk-main-indexer-1.splunk-main-indexer-headless.test.svc.foreign.example", noahclient.PeerStatusUp),
 			},
 		},
 		{
 			name: "unrelated peer does not prevent expected peers becoming ready",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
-				currentPeer(peer1, noah.PeerStatusUp),
-				currentPeer("splunk-other-indexer-4", noah.PeerStatusUp),
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
+				currentPeer(peer1, noahclient.PeerStatusUp),
+				currentPeer("splunk-other-indexer-4", noahclient.PeerStatusUp),
 			},
 			want: true,
 		},
 		{
 			name: "duplicate active identity is not ready",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
-				currentPeer(peer1, noah.PeerStatusUp),
-				currentPeer(peer1, noah.PeerStatusWarming),
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
+				currentPeer(peer1, noahclient.PeerStatusUp),
+				currentPeer(peer1, noahclient.PeerStatusWarming),
 			},
 		},
 		{
 			name: "stale up incarnation does not satisfy expected peer",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
-				{ID: peer1, Status: noah.PeerStatusUp, Data: noah.PeerData{StartTime: currentStart - 1}, LastHeartbeat: currentStart},
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
+				{ID: peer1, Status: noahclient.PeerStatusUp, Data: noahclient.PeerData{StartTime: currentStart - 1}, LastHeartbeat: currentStart},
 			},
 		},
 		{
 			name: "same-second stale heartbeat does not satisfy expected peer",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
-				{ID: peer1, Status: noah.PeerStatusUp, Data: noah.PeerData{StartTime: currentStart}, LastHeartbeat: currentStart},
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
+				{ID: peer1, Status: noahclient.PeerStatusUp, Data: noahclient.PeerData{StartTime: currentStart}, LastHeartbeat: currentStart},
 			},
 		},
 		{
 			name: "historical down incarnation is ignored",
-			peers: []noah.Peer{
-				currentPeer(peer0, noah.PeerStatusUp),
-				currentPeer(peer1, noah.PeerStatusUp),
-				{ID: peer1, Status: noah.PeerStatusDown, Data: noah.PeerData{StartTime: currentStart - 1}, LastHeartbeat: currentStart},
+			peers: []noahclient.Peer{
+				currentPeer(peer0, noahclient.PeerStatusUp),
+				currentPeer(peer1, noahclient.PeerStatusUp),
+				{ID: peer1, Status: noahclient.PeerStatusDown, Data: noahclient.PeerData{StartTime: currentStart - 1}, LastHeartbeat: currentStart},
 			},
 			want: true,
 		},
@@ -1376,29 +1423,29 @@ func TestExpectedNoahIndexerPeersRegistered(t *testing.T) {
 	const currentStart int64 = 1_700_000_000
 	const peerID = "splunk-main-indexer-0.splunk-main-indexer-headless.test.svc.corp.example"
 	expectedPeers := map[string]int64{peerID: currentStart}
-	currentPeer := func(status noah.PeerStatus) noah.Peer {
-		return noah.Peer{ID: peerID, Status: status, Data: noah.PeerData{StartTime: currentStart}, LastHeartbeat: currentStart + 1}
+	currentPeer := func(status noahclient.PeerStatus) noahclient.Peer {
+		return noahclient.Peer{ID: peerID, Status: status, Data: noahclient.PeerData{StartTime: currentStart}, LastHeartbeat: currentStart + 1}
 	}
 
 	tests := []struct {
 		name  string
-		peers []noah.Peer
+		peers []noahclient.Peer
 		want  bool
 	}{
-		{name: "started peer is registered", peers: []noah.Peer{currentPeer(noah.PeerStatusStarted)}, want: true},
-		{name: "warming peer is registered", peers: []noah.Peer{currentPeer(noah.PeerStatusWarming)}, want: true},
-		{name: "warmed peer is registered", peers: []noah.Peer{currentPeer(noah.PeerStatusWarmed)}, want: true},
-		{name: "up peer is registered", peers: []noah.Peer{currentPeer(noah.PeerStatusUp)}, want: true},
+		{name: "started peer is registered", peers: []noahclient.Peer{currentPeer(noahclient.PeerStatusStarted)}, want: true},
+		{name: "warming peer is registered", peers: []noahclient.Peer{currentPeer(noahclient.PeerStatusWarming)}, want: true},
+		{name: "warmed peer is registered", peers: []noahclient.Peer{currentPeer(noahclient.PeerStatusWarmed)}, want: true},
+		{name: "up peer is registered", peers: []noahclient.Peer{currentPeer(noahclient.PeerStatusUp)}, want: true},
 		{name: "missing peer is not registered"},
-		{name: "down peer is not registered", peers: []noah.Peer{currentPeer(noah.PeerStatusDown)}},
-		{name: "decommissioning peer is not registered", peers: []noah.Peer{currentPeer(noah.PeerStatusDecommissioning)}},
+		{name: "down peer is not registered", peers: []noahclient.Peer{currentPeer(noahclient.PeerStatusDown)}},
+		{name: "decommissioning peer is not registered", peers: []noahclient.Peer{currentPeer(noahclient.PeerStatusDecommissioning)}},
 		{
 			name:  "stale incarnation is not registered",
-			peers: []noah.Peer{{ID: peerID, Status: noah.PeerStatusUp, Data: noah.PeerData{StartTime: currentStart - 1}, LastHeartbeat: currentStart}},
+			peers: []noahclient.Peer{{ID: peerID, Status: noahclient.PeerStatusUp, Data: noahclient.PeerData{StartTime: currentStart - 1}, LastHeartbeat: currentStart}},
 		},
 		{
 			name:  "duplicate current incarnation is not registered",
-			peers: []noah.Peer{currentPeer(noah.PeerStatusUp), currentPeer(noah.PeerStatusWarming)},
+			peers: []noahclient.Peer{currentPeer(noahclient.PeerStatusUp), currentPeer(noahclient.PeerStatusWarming)},
 		},
 	}
 
@@ -1450,58 +1497,58 @@ func TestTimedOutNoahIndexerCacheWarmPeer(t *testing.T) {
 	const peerID = "splunk-main-indexer-1.splunk-main-indexer-headless.test.svc.corp.example"
 	expectedPeers := map[string]int64{peerID: currentStart}
 	now := time.Unix(currentStart+60, 0)
-	peer := func(status noah.PeerStatus, startTime int64) noah.Peer {
-		return noah.Peer{
+	peer := func(status noahclient.PeerStatus, startTime int64) noahclient.Peer {
+		return noahclient.Peer{
 			ID:            peerID,
 			Status:        status,
-			Data:          noah.PeerData{StartTime: startTime},
+			Data:          noahclient.PeerData{StartTime: startTime},
 			LastHeartbeat: startTime + 1,
 		}
 	}
 
 	tests := []struct {
 		name    string
-		peers   []noah.Peer
+		peers   []noahclient.Peer
 		timeout time.Duration
 		want    string
 	}{
 		{
 			name:    "warming peer reaches timeout",
-			peers:   []noah.Peer{peer(noah.PeerStatusWarming, currentStart)},
+			peers:   []noahclient.Peer{peer(noahclient.PeerStatusWarming, currentStart)},
 			timeout: time.Minute,
 			want:    peerID,
 		},
 		{
 			name:    "started peer reaches timeout",
-			peers:   []noah.Peer{peer(noah.PeerStatusStarted, currentStart)},
+			peers:   []noahclient.Peer{peer(noahclient.PeerStatusStarted, currentStart)},
 			timeout: time.Minute,
 			want:    peerID,
 		},
 		{
 			name:    "warmed peer must still become up",
-			peers:   []noah.Peer{peer(noah.PeerStatusWarmed, currentStart)},
+			peers:   []noahclient.Peer{peer(noahclient.PeerStatusWarmed, currentStart)},
 			timeout: time.Minute,
 			want:    peerID,
 		},
 		{
 			name:    "down peer reaches timeout",
-			peers:   []noah.Peer{peer(noah.PeerStatusDown, currentStart)},
+			peers:   []noahclient.Peer{peer(noahclient.PeerStatusDown, currentStart)},
 			timeout: time.Minute,
 			want:    peerID,
 		},
 		{
 			name:    "warming remains within timeout",
-			peers:   []noah.Peer{peer(noah.PeerStatusWarming, currentStart)},
+			peers:   []noahclient.Peer{peer(noahclient.PeerStatusWarming, currentStart)},
 			timeout: time.Minute + time.Second,
 		},
 		{
 			name:    "up peer does not time out",
-			peers:   []noah.Peer{peer(noah.PeerStatusUp, currentStart)},
+			peers:   []noahclient.Peer{peer(noahclient.PeerStatusUp, currentStart)},
 			timeout: time.Minute,
 		},
 		{
 			name:    "stale warming incarnation does not mask missing peer timeout",
-			peers:   []noah.Peer{peer(noah.PeerStatusWarming, currentStart-1)},
+			peers:   []noahclient.Peer{peer(noahclient.PeerStatusWarming, currentStart-1)},
 			timeout: time.Minute,
 			want:    peerID,
 		},
@@ -1516,7 +1563,7 @@ func TestTimedOutNoahIndexerCacheWarmPeer(t *testing.T) {
 		},
 		{
 			name:    "zero timeout is disabled",
-			peers:   []noah.Peer{peer(noah.PeerStatusWarming, currentStart)},
+			peers:   []noahclient.Peer{peer(noahclient.PeerStatusWarming, currentStart)},
 			timeout: 0,
 		},
 	}
@@ -1529,7 +1576,7 @@ func TestTimedOutNoahIndexerCacheWarmPeer(t *testing.T) {
 }
 
 func TestNoahIndexerScaleOutUsesReferencedAuthentication(t *testing.T) {
-	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{peerStatus: noah.PeerStatusUp})
+	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{peerStatus: noahclient.PeerStatusUp})
 	plan, err := fixture.podManager().NextReplicas(t.Context(), 1, fixture.cr.Spec.Replicas)
 	require.NoError(t, err)
 	assert.Equal(t, int32(2), plan.TargetReplicas)
@@ -1542,16 +1589,16 @@ func TestNoahIndexerScaleOutPolicy(t *testing.T) {
 	disabled := false
 	tests := []struct {
 		name             string
-		peerStatus       noah.PeerStatus
+		peerStatus       noahclient.PeerStatus
 		cacheWarmEnabled *bool
 		requested        int32
 		wantTarget       int32
 		wantComplete     bool
 	}{
-		{name: "enabled waits for warming peer", peerStatus: noah.PeerStatusWarming, requested: 3, wantTarget: 1},
-		{name: "disabled advances after registration", peerStatus: noah.PeerStatusWarming, cacheWarmEnabled: &disabled, requested: 3, wantTarget: 2},
-		{name: "final warming peer is incomplete", peerStatus: noah.PeerStatusWarming, cacheWarmEnabled: &disabled, requested: 1, wantTarget: 1},
-		{name: "final up peer is complete", peerStatus: noah.PeerStatusUp, requested: 1, wantTarget: 1, wantComplete: true},
+		{name: "enabled waits for warming peer", peerStatus: noahclient.PeerStatusWarming, requested: 3, wantTarget: 1},
+		{name: "disabled advances after registration", peerStatus: noahclient.PeerStatusWarming, cacheWarmEnabled: &disabled, requested: 3, wantTarget: 2},
+		{name: "final warming peer is incomplete", peerStatus: noahclient.PeerStatusWarming, cacheWarmEnabled: &disabled, requested: 1, wantTarget: 1},
+		{name: "final up peer is complete", peerStatus: noahclient.PeerStatusUp, requested: 1, wantTarget: 1, wantComplete: true},
 	}
 
 	for _, test := range tests {
@@ -1571,7 +1618,7 @@ func TestNoahIndexerScaleOutPolicy(t *testing.T) {
 func TestNoahIndexerPodManagerAppliesScaleOutTarget(t *testing.T) {
 	disabled := false
 	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{
-		peerStatus:       noah.PeerStatusWarming,
+		peerStatus:       noahclient.PeerStatusWarming,
 		cacheWarmEnabled: &disabled,
 	})
 
@@ -1586,7 +1633,7 @@ func TestNoahIndexerPodManagerAppliesScaleOutTarget(t *testing.T) {
 }
 
 func TestNoahIndexerPodManagerWaitsForStatefulSetToObserveTemplate(t *testing.T) {
-	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{peerStatus: noah.PeerStatusUp})
+	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{peerStatus: noahclient.PeerStatusUp})
 	statefulSet := &appsv1.StatefulSet{}
 	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{
 		Name: fixture.statefulSet.Name, Namespace: fixture.statefulSet.Namespace,
@@ -1601,7 +1648,7 @@ func TestNoahIndexerPodManagerWaitsForStatefulSetToObserveTemplate(t *testing.T)
 }
 
 func TestNoahIndexerPodManagerPropagatesScaleOutUpdateError(t *testing.T) {
-	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{peerStatus: noah.PeerStatusUp})
+	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{peerStatus: noahclient.PeerStatusUp})
 	wantErr := errors.New("StatefulSet update failed")
 	fixture.client.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = wantErr
 
@@ -1614,7 +1661,7 @@ func TestNoahIndexerPodManagerPropagatesScaleOutUpdateError(t *testing.T) {
 func TestNoahIndexerCacheWarmTimeoutStopsRequeueAndAllowsReevaluation(t *testing.T) {
 	timeoutSeconds := int32(60)
 	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{
-		peerStatus:     noah.PeerStatusWarming,
+		peerStatus:     noahclient.PeerStatusWarming,
 		peerStart:      time.Now().Add(-2 * time.Minute).Unix(),
 		timeoutSeconds: &timeoutSeconds,
 	})
