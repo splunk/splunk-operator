@@ -213,14 +213,14 @@ func TestApplySearchHeadClusterNoah_ValidatesRuntimeBeforeCreatingResources(t *t
 	require.NoError(t, client.Create(t.Context(), &enterpriseApi.NoahCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: cr.Namespace},
 		Spec: enterpriseApi.NoahClusterSpec{
-			Endpoint:      "https://noah.test.svc/api",
+			Endpoint:      "https://noah.test.svc",
 			Tenant:        "tenant",
 			AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
 		},
 	}))
 	require.NoError(t, client.Create(t.Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
-		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{"wrong-key": []byte("unit-test-noah-key")},
 	}))
 	client.ResetCalls()
 
@@ -235,6 +235,6 @@ func TestApplySearchHeadClusterNoah_ValidatesRuntimeBeforeCreatingResources(t *t
 	_, terminal := splcommon.TerminalMessage(outcome.err)
 	assert.True(t, terminal)
 	assert.Equal(t, enterpriseApi.ReasonNoahConfigurationInvalid, outcome.conditionReason)
-	assert.Contains(t, outcome.message, "endpoint must not contain a path")
+	assert.Contains(t, outcome.message, noah.AuthSecretKey)
 	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")
 }

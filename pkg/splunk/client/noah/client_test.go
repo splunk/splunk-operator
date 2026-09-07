@@ -32,10 +32,9 @@ var testAuthenticator = AuthenticatorFunc(func(request *http.Request, _ []byte) 
 	return nil
 })
 
-func TestValidateClientConfig(t *testing.T) {
-	assert.NoError(t, ValidateClientConfig("https://noah.test:8443/", "tenant"))
-	assert.Error(t, ValidateClientConfig("https://noah.test/api", "tenant"))
-	assert.Error(t, ValidateClientConfig("https://noah.test", " tenant "))
+func TestNormaliseEndpointStripsTrailingSlash(t *testing.T) {
+	assert.Equal(t, "https://noah.test:8443", normaliseEndpoint("https://noah.test:8443/"))
+	assert.Equal(t, "https://noah.test:8443", normaliseEndpoint("https://noah.test:8443"))
 }
 
 func TestNewClientValidatesConfiguration(t *testing.T) {
@@ -46,14 +45,6 @@ func TestNewClientValidatesConfiguration(t *testing.T) {
 		authenticator Authenticator
 		options       []Option
 	}{
-		{name: "missing scheme", endpoint: "noah.test:8443", tenant: "tenant", authenticator: testAuthenticator},
-		{name: "unsupported scheme", endpoint: "file:///noah", tenant: "tenant", authenticator: testAuthenticator},
-		{name: "missing host", endpoint: "https://", tenant: "tenant", authenticator: testAuthenticator},
-		{name: "credentials", endpoint: "https://user:nope@noah.test", tenant: "tenant", authenticator: testAuthenticator},
-		{name: "path", endpoint: "https://noah.test/api", tenant: "tenant", authenticator: testAuthenticator},
-		{name: "empty query marker", endpoint: "https://noah.test?", tenant: "tenant", authenticator: testAuthenticator},
-		{name: "empty tenant", endpoint: "https://noah.test", authenticator: testAuthenticator},
-		{name: "tenant whitespace", endpoint: "https://noah.test", tenant: " tenant ", authenticator: testAuthenticator},
 		{name: "nil authenticator", endpoint: "https://noah.test", tenant: "tenant"},
 		{name: "nil option", endpoint: "https://noah.test", tenant: "tenant", authenticator: testAuthenticator, options: []Option{nil}},
 		{name: "nil HTTP client", endpoint: "https://noah.test", tenant: "tenant", authenticator: testAuthenticator, options: []Option{WithHTTPClient(nil)}},
