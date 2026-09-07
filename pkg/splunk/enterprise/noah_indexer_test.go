@@ -33,6 +33,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/noah"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	indexerworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/indexercluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1322,9 +1323,9 @@ func TestExpectedNoahIndexerPeersReady(t *testing.T) {
 	const currentStart int64 = 1_700_000_000
 	peer0 := "splunk-main-indexer-0.splunk-main-indexer-headless.test.svc.corp.example"
 	peer1 := "splunk-main-indexer-1.splunk-main-indexer-headless.test.svc.corp.example"
-	expectedPeers := map[string]int64{
-		peer0: currentStart,
-		peer1: currentStart,
+	expectedPeers := []indexerworkflow.ExpectedNoahPeer{
+		{ID: peer0, StartedAt: time.Unix(currentStart, 0)},
+		{ID: peer1, StartedAt: time.Unix(currentStart, 0)},
 	}
 	currentPeer := func(id string, status noahclient.PeerStatus) noahclient.Peer {
 		return noahclient.Peer{ID: id, Status: status, Data: noahclient.PeerData{StartTime: currentStart}, LastHeartbeat: currentStart + 1}
@@ -1422,7 +1423,7 @@ func TestExpectedNoahIndexerPeersReady(t *testing.T) {
 func TestExpectedNoahIndexerPeersRegistered(t *testing.T) {
 	const currentStart int64 = 1_700_000_000
 	const peerID = "splunk-main-indexer-0.splunk-main-indexer-headless.test.svc.corp.example"
-	expectedPeers := map[string]int64{peerID: currentStart}
+	expectedPeers := []indexerworkflow.ExpectedNoahPeer{{ID: peerID, StartedAt: time.Unix(currentStart, 0)}}
 	currentPeer := func(status noahclient.PeerStatus) noahclient.Peer {
 		return noahclient.Peer{ID: peerID, Status: status, Data: noahclient.PeerData{StartTime: currentStart}, LastHeartbeat: currentStart + 1}
 	}
@@ -1495,7 +1496,7 @@ func TestNoahCacheWarmScaleOutPolicyDefaults(t *testing.T) {
 func TestTimedOutNoahIndexerCacheWarmPeer(t *testing.T) {
 	const currentStart int64 = 1_700_000_000
 	const peerID = "splunk-main-indexer-1.splunk-main-indexer-headless.test.svc.corp.example"
-	expectedPeers := map[string]int64{peerID: currentStart}
+	expectedPeers := []indexerworkflow.ExpectedNoahPeer{{ID: peerID, StartedAt: time.Unix(currentStart, 0)}}
 	now := time.Unix(currentStart+60, 0)
 	peer := func(status noahclient.PeerStatus, startTime int64) noahclient.Peer {
 		return noahclient.Peer{
