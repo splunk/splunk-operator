@@ -33,6 +33,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
+	indexerworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/indexercluster"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -738,8 +739,8 @@ func noahCacheWarmScaleOutTimeout(spec enterpriseApi.NoahClusterSpec) time.Durat
 	return time.Duration(timeoutSeconds) * time.Second
 }
 
-func currentNoahIndexerPeerIncarnations(ctx context.Context, client splcommon.ControllerClient, replicas int32, statefulSet *appsv1.StatefulSet) (map[string]int64, error) {
-	expectedPeers := make(map[string]int64, replicas)
+func currentNoahIndexerPeerIncarnations(ctx context.Context, client splcommon.ControllerClient, replicas int32, statefulSet *appsv1.StatefulSet) ([]indexerworkflow.ExpectedNoahPeer, error) {
+	expectedPeers := make([]indexerworkflow.ExpectedNoahPeer, 0, replicas)
 	for ordinal := range replicas {
 		podName := noahIndexerPodName(statefulSet, ordinal)
 		pod := &corev1.Pod{}
@@ -763,7 +764,10 @@ func currentNoahIndexerPeerIncarnations(ctx context.Context, client splcommon.Co
 		if err != nil {
 			return nil, err
 		}
-		expectedPeers[peerID] = status.State.Running.StartedAt.Unix()
+		expectedPeers = append(expectedPeers, indexerworkflow.ExpectedNoahPeer{
+			ID:        peerID,
+			StartedAt: time.Unix(status.State.Running.StartedAt.Unix(), 0),
+		})
 	}
 	return expectedPeers, nil
 }
@@ -825,22 +829,22 @@ func noahIndexerClusterDomain(statefulSet *appsv1.StatefulSet) (string, error) {
 	return container.Env[envIndex].Value, nil
 }
 
-func expectedNoahIndexerPeersRegistered(peers []noahclient.Peer, expectedPeers map[string]int64) bool {
+func expectedNoahIndexerPeersRegistered(peers []noahclient.Peer, expectedPeers []indexerworkflow.ExpectedNoahPeer) bool {
 	counts := classifyNoahIndexerPeers(peers, expectedPeers)
 
-	for peerID := range expectedPeers {
-		if counts.registered[peerID] != 1 {
+	for _, expectedPeer := range expectedPeers {
+		if counts.registered[expectedPeer.ID] != 1 {
 			return false
 		}
 	}
 	return len(expectedPeers) > 0
 }
 
-func expectedNoahIndexerPeersReady(peers []noahclient.Peer, expectedPeers map[string]int64) bool {
+func expectedNoahIndexerPeersReady(peers []noahclient.Peer, expectedPeers []indexerworkflow.ExpectedNoahPeer) bool {
 	counts := classifyNoahIndexerPeers(peers, expectedPeers)
 
-	for peerID := range expectedPeers {
-		if counts.active[peerID] != 1 || counts.ready[peerID] != 1 {
+	for _, expectedPeer := range expectedPeers {
+		if counts.active[expectedPeer.ID] != 1 || counts.ready[expectedPeer.ID] != 1 {
 			return false
 		}
 	}
@@ -853,15 +857,19 @@ type noahIndexerPeerCounts struct {
 	ready      map[string]int
 }
 
-func classifyNoahIndexerPeers(peers []noahclient.Peer, expectedPeers map[string]int64) noahIndexerPeerCounts {
+func classifyNoahIndexerPeers(peers []noahclient.Peer, expectedPeers []indexerworkflow.ExpectedNoahPeer) noahIndexerPeerCounts {
 	counts := noahIndexerPeerCounts{
 		registered: make(map[string]int, len(expectedPeers)),
 		active:     make(map[string]int, len(expectedPeers)),
 		ready:      make(map[string]int, len(expectedPeers)),
 	}
+	expectedByID := make(map[string]indexerworkflow.ExpectedNoahPeer, len(expectedPeers))
+	for _, expectedPeer := range expectedPeers {
+		expectedByID[expectedPeer.ID] = expectedPeer
+	}
 	for _, peer := range peers {
-		incarnationStart, expected := expectedPeers[peer.ID]
-		if !expected || !noahIndexerPeerMatchesIncarnation(peer, incarnationStart) {
+		expectedPeer, expected := expectedByID[peer.ID]
+		if !expected || !indexerworkflow.MatchesNoahPeerIncarnation(expectedPeer, peer) {
 			continue
 		}
 		switch peer.Status {
@@ -879,22 +887,19 @@ func classifyNoahIndexerPeers(peers []noahclient.Peer, expectedPeers map[string]
 	return counts
 }
 
-// noahIndexerPeerMatchesIncarnation requires evidence produced after the
-// current container started. A stale peer can have the same second-resolution
-// start time, but it cannot heartbeat after its replacement has started.
-func noahIndexerPeerMatchesIncarnation(peer noahclient.Peer, incarnationStart int64) bool {
-	return peer.Data.StartTime >= incarnationStart && peer.LastHeartbeat > incarnationStart
-}
-
-func timedOutNoahIndexerCacheWarmPeer(peers []noahclient.Peer, expectedPeers map[string]int64, timeout time.Duration, now time.Time) string {
+func timedOutNoahIndexerCacheWarmPeer(peers []noahclient.Peer, expectedPeers []indexerworkflow.ExpectedNoahPeer, timeout time.Duration, now time.Time) string {
 	if timeout <= 0 {
 		return ""
 	}
 
+	expectedByID := make(map[string]indexerworkflow.ExpectedNoahPeer, len(expectedPeers))
+	for _, expectedPeer := range expectedPeers {
+		expectedByID[expectedPeer.ID] = expectedPeer
+	}
 	observedPeers := make(map[string]struct{}, len(expectedPeers))
 	for _, peer := range peers {
-		incarnationStart, expected := expectedPeers[peer.ID]
-		if !expected || !noahIndexerPeerMatchesIncarnation(peer, incarnationStart) {
+		expectedPeer, expected := expectedByID[peer.ID]
+		if !expected || !indexerworkflow.MatchesNoahPeerIncarnation(expectedPeer, peer) {
 			continue
 		}
 		observedPeers[peer.ID] = struct{}{}
@@ -906,12 +911,12 @@ func timedOutNoahIndexerCacheWarmPeer(peers []noahclient.Peer, expectedPeers map
 	// A new pod may never register with Noah, so its Kubernetes incarnation
 	// start time provides the fallback deadline when no current peer exists.
 	missingPeers := make([]string, 0, len(expectedPeers)-len(observedPeers))
-	for peerID, incarnationStart := range expectedPeers {
-		if _, observed := observedPeers[peerID]; observed {
+	for _, expectedPeer := range expectedPeers {
+		if _, observed := observedPeers[expectedPeer.ID]; observed {
 			continue
 		}
-		if !now.Before(time.Unix(incarnationStart, 0).Add(timeout)) {
-			missingPeers = append(missingPeers, peerID)
+		if !now.Before(expectedPeer.StartedAt.Add(timeout)) {
+			missingPeers = append(missingPeers, expectedPeer.ID)
 		}
 	}
 	if len(missingPeers) > 0 {
