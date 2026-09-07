@@ -68,7 +68,10 @@ postgresql:
   auth:
     database: noah_db
     username: noah
-    password: noah-dev
+    # Left empty on purpose: no database credential is committed here. The chart
+    # generates one on first install and then reuses whatever the release Secret
+    # already holds. Set this in an untracked values file to pin a known value.
+    password: ""
   service:
     port: 5432
   persistence:
