@@ -58,26 +58,37 @@ The chart also sets `NOAH_CACHE_WARM_SCALE_IN_TIMEOUT=5m` so integrated Splunk
 peers remain searchable and cache-warm scale-in processing is enabled.
 
 PostgreSQL requests the `gp3-automode` StorageClass exposed by
-`tools/noah-local-dev/kraken-request.yaml`. Override storage or the development database password in a
-private values file if required:
+`tools/noah-local-dev/kraken-request.yaml`. Override storage in a private values
+file if required:
 
 ```yaml
 postgresql:
-  auth:
-    password: replace-me
   persistence:
     storageClass: gp3-automode
     size: 20Gi
 ```
 
-Do not commit real credentials. This chart is intentionally single-replica:
-each Noah pod runs the migration init container, so scaling it requires moving
-migrations into a separately coordinated deployment step.
+This chart is intentionally single-replica: each Noah pod runs the migration
+init container, so scaling it requires moving migrations into a separately
+coordinated deployment step.
 
 PostgreSQL database, user and password values are initialization settings. On
 upgrade, the chart reuses the credentials already stored by the release so they
 cannot drift from a retained database volume. Changing them requires an explicit
 database credential migration.
+
+`postgresql.auth.password` is empty in `values.yaml` so that no database
+credential lives in the repository or in Helm release history. On first install
+the chart generates a random 32-character password; every later `helm upgrade`
+reads it back out of the release Secret. Read it with:
+
+```console
+kubectl --context kraken -n splunk-operator get secret noah-database \
+  -o jsonpath='{.data.NOAH_DB_PASSWORD}' | base64 -d
+```
+
+To pin a known value instead, set it in an untracked values file and pass it
+with `--values`. Do not commit real credentials.
 
 Create the Splunk custom resources in the same namespace using Kraken's
 SmartBus-enabled `splunk-runtime` ServiceAccount. A locally run operator can
