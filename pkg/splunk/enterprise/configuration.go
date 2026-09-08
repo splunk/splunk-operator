@@ -228,7 +228,9 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	indexerCluster, isIndexerCluster := cr.(*enterpriseApi.IndexerCluster)
 	isNoahIndexerService := instanceType == SplunkIndexer && isIndexerCluster && indexerCluster.Spec.NoahEnabled()
 	if instanceType == SplunkIndexer {
-		if len(spec.ClusterManagerRef.Name) == 0 && len(spec.ClusterMasterRef.Name) == 0 && !isNoahIndexerService {
+		if isNoahIndexerService {
+			partOfIdentifier = indexerCluster.Spec.NoahClusterRef.Name
+		} else if len(spec.ClusterManagerRef.Name) == 0 && len(spec.ClusterMasterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
 			// of multisite / multipart IndexerCluster can be used to resolve (headless) or load balance traffic to the indexers of all parts
 			partOfIdentifier = instanceIdentifier
@@ -730,6 +732,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.ClusterMasterRef.Name)
 	if len(spec.ClusterManagerRef.Name) > 0 && len(spec.ClusterMasterRef.Name) == 0 {
 		selectLabels = getSplunkLabels(cr.GetName(), instanceType, spec.ClusterManagerRef.Name)
+	}
+	if indexerCluster, ok := cr.(*enterpriseApi.IndexerCluster); instanceType == SplunkIndexer && ok && indexerCluster.Spec.NoahEnabled() {
+		selectLabels = getSplunkLabels(cr.GetName(), instanceType, indexerCluster.Spec.NoahClusterRef.Name)
 	}
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
 
