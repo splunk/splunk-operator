@@ -361,6 +361,16 @@ rules:
   - get
   - patch
   - update
+# NoahCluster is configuration-only: it has no status subresource and no
+# finalizer, so read access is the whole permission set the operator needs.
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - noahclusters
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
     - enterprise.splunk.com
   resources:
