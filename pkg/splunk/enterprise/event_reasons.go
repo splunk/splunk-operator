@@ -73,6 +73,8 @@ const (
 	EventReasonBundlePushFailed                splcommon.EventReason = "BundlePushFailed"
 	EventReasonPodExecFailed                   splcommon.EventReason = "PodExecFailed"
 	EventReasonScalingBlockedRF                splcommon.EventReason = "ScalingBlockedRF"
+	EventReasonNoahConfigurationInvalid        splcommon.EventReason = "NoahConfigurationInvalid"
+	EventReasonNoahOperationFailed             splcommon.EventReason = "NoahOperationFailed"
 	EventReasonNoahCacheWarmTimeout            splcommon.EventReason = "NoahCacheWarmTimeout"
 	EventReasonLicenseExpired                  splcommon.EventReason = "LicenseExpired"
 

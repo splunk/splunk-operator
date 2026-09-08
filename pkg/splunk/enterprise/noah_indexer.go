@@ -114,7 +114,7 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	podManager := newNoahIndexerPodManager(client, cr)
 	statefulSet, phase, applyErr := applyNoahIndexerResources(ctx, client, cr, podManager)
 	if applyErr != nil {
-		if outcome, outcomeErr, handled := noahIndexerOutcomeFromError(applyErr); handled {
+		if outcome, outcomeErr, handled := noahIndexerOutcomeFromError(applyErr, previousPhase); handled {
 			setOutcome(outcome)
 			return result, outcomeErr
 		}
@@ -134,7 +134,7 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	case enterpriseApi.PhaseReady:
 		outcome, err = podManager.observeReady(ctx, appliedReplicas, previousPhase, previousReplicas)
 		if err != nil {
-			mappedOutcome, mappedErr, handled := noahIndexerOutcomeFromError(err)
+			mappedOutcome, mappedErr, handled := noahIndexerOutcomeFromError(err, previousPhase)
 			if handled {
 				outcome = mappedOutcome
 				err = mappedErr
@@ -144,7 +144,8 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 			}
 		}
 	default:
-		outcome = waitForNoahIndexerWorkload(phase, previousPhase, appliedReplicas)
+		_, scaleDownPending := statefulSet.Annotations[pendingScaleDownOrdinalAnnotation]
+		outcome = waitForNoahIndexerWorkload(phase, previousPhase, appliedReplicas, scaleDownPending)
 	}
 
 	setOutcome(outcome)
@@ -345,10 +346,14 @@ func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.C
 
 func (mgr *noahIndexerPodManager) NextReplicas(ctx context.Context, appliedReplicas, requestedReplicas int32) (splcommon.ScaleOutPlan, error) {
 	blocked := splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}
+	phase := enterpriseApi.Phase("")
+	if appliedReplicas < requestedReplicas {
+		phase = enterpriseApi.PhaseScalingUp
+	}
 
 	observation, err := mgr.observePeers(ctx, appliedReplicas)
 	if err != nil {
-		return blocked, &noahIndexerPeerObservationError{err: err}
+		return blocked, newNoahIndexerObservationError(err, phase)
 	}
 
 	if observation.TimedOutPeerID != "" {
@@ -366,7 +371,7 @@ func (mgr *noahIndexerPodManager) PrepareScaleDown(ctx context.Context, ordinal 
 
 	observation, err := mgr.observePeers(ctx, appliedReplicas)
 	if err != nil {
-		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
+		return false, newNoahIndexerObservationError(err, enterpriseApi.PhaseScalingDown)
 	}
 	if !observation.AllReady {
 		return false, nil
@@ -401,37 +406,43 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, _ int32) 
 		return false, nil
 	}
 	if !k8serrors.IsNotFound(err) {
-		return false, &noahIndexerPeerObservationError{
-			err:   fmt.Errorf("get removed Noah indexer Pod %s: %w", podName, err),
-			phase: enterpriseApi.PhaseScalingDown,
-		}
+		return false, newNoahIndexerOperationError(
+			fmt.Errorf("get removed Noah indexer Pod %s: %w", podName, err),
+			enterpriseApi.PhaseScalingDown,
+		)
 	}
 
 	peerID, err := noahIndexerPeerID(mgr.statefulSet, ordinal)
 	if err != nil {
-		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
+		return false, newNoahIndexerOperationError(err, enterpriseApi.PhaseScalingDown)
 	}
 
 	runtime, err := mgr.noahRuntime(ctx)
 	if err != nil {
-		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
+		return false, newNoahIndexerOperationError(err, enterpriseApi.PhaseScalingDown)
 	}
 
 	noahClient, err := runtime.Client()
 	if err != nil {
-		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
+		return false, newNoahIndexerOperationError(err, enterpriseApi.PhaseScalingDown)
 	}
 
 	if err := noahClient.UnregisterPeer(ctx, peerID); err != nil {
-		var noahErr *noahclient.Error
-		if !errors.As(err, &noahErr) || noahErr.Kind != noahclient.ErrorKindNotFound {
-			return false, &noahIndexerPeerObservationError{err: fmt.Errorf("unregister Noah peer %s: %w", peerID, err), phase: enterpriseApi.PhaseScalingDown}
+		noahErr, ok := errors.AsType[*noahclient.Error](err)
+		if !ok || noahErr.Kind != noahclient.ErrorKindNotFound {
+			return false, newNoahIndexerOperationError(
+				fmt.Errorf("unregister Noah peer %s: %w", peerID, err),
+				enterpriseApi.PhaseScalingDown,
+			)
 		}
 	}
 
 	bucketMap, err := noahClient.GetLatestBucketMap(ctx)
 	if err != nil {
-		return false, &noahIndexerPeerObservationError{err: fmt.Errorf("get latest Noah bucket map: %w", err), phase: enterpriseApi.PhaseScalingDown}
+		return false, newNoahIndexerOperationError(
+			fmt.Errorf("get latest Noah bucket map: %w", err),
+			enterpriseApi.PhaseScalingDown,
+		)
 	}
 
 	remainingPeerIDs, err := noahIndexerPeerIDs(mgr.statefulSet, ordinal)
@@ -462,7 +473,7 @@ func (mgr *noahIndexerPodManager) PrepareRecycle(ctx context.Context, _ int32) (
 
 	observation, err := mgr.observePeers(ctx, appliedReplicas)
 	if err != nil {
-		return false, &noahIndexerPeerObservationError{err: err}
+		return false, newNoahIndexerObservationError(err, enterpriseApi.PhaseUpdating)
 	}
 
 	return observation.AllReady, nil
@@ -476,7 +487,7 @@ func (mgr *noahIndexerPodManager) FinishRecycle(ctx context.Context, _ int32) (b
 
 	observation, err := mgr.observePeers(ctx, appliedReplicas)
 	if err != nil {
-		return false, &noahIndexerPeerObservationError{err: err}
+		return false, newNoahIndexerObservationError(err, enterpriseApi.PhaseUpdating)
 	}
 
 	return observation.AllReady, nil
@@ -613,27 +624,26 @@ type noahIndexerOutcome struct {
 	requeueAfter time.Duration
 }
 
-func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, appliedReplicas int32) noahIndexerOutcome {
+func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, appliedReplicas int32, scaleDownPending bool) noahIndexerOutcome {
+	if phase == enterpriseApi.PhasePending {
+		phase = noahIndexerLifecyclePhase(previousPhase)
+	}
+
 	phaseMessage := ""
+	conditionMessage := "Waiting for the indexer workload before observing Noah peers"
 	switch phase {
 	case enterpriseApi.PhaseScalingDown:
 		phaseMessage = "Scaling down without Noah decommission; development use only"
+		if scaleDownPending {
+			phaseMessage = "Waiting for Noah scale-down cleanup; development use only"
+			conditionMessage = "Waiting for removed-peer cleanup and active bucket-map confirmation"
+		}
 	case enterpriseApi.PhaseUpdating:
 		phaseMessage = "Waiting for the StatefulSet pod-template revision to be applied"
+		conditionMessage = "Waiting for the updated indexer workload before observing Noah peers"
 	case enterpriseApi.PhaseScalingUp:
 		phaseMessage = fmt.Sprintf("Waiting for %d applied replicas to become ready before continuing scale-out", appliedReplicas)
-	case enterpriseApi.PhasePending:
-		switch previousPhase {
-		case enterpriseApi.PhaseScalingDown:
-			phase = enterpriseApi.PhaseScalingDown
-			phaseMessage = "Scaling down without Noah decommission; development use only"
-		case enterpriseApi.PhaseUpdating:
-			phase = enterpriseApi.PhaseUpdating
-			phaseMessage = "Waiting for the StatefulSet pod-template revision to be applied"
-		case enterpriseApi.PhaseScalingUp:
-			phase = enterpriseApi.PhaseScalingUp
-			phaseMessage = fmt.Sprintf("Waiting for %d applied replicas to become ready before continuing scale-out", appliedReplicas)
-		}
+		conditionMessage = "Waiting for applied indexer replicas before observing Noah peers"
 	}
 
 	return noahIndexerOutcome{
@@ -642,13 +652,13 @@ func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, applie
 		condition: newNoahPeersReadyCondition(
 			metav1.ConditionFalse,
 			enterpriseApi.ReasonNoahPeersNotReady,
-			"Waiting for the indexer workload before observing Noah peers",
+			conditionMessage,
 		),
 		requeueAfter: noahIndexerPollInterval,
 	}
 }
 
-func noahIndexerOutcomeFromError(err error) (noahIndexerOutcome, error, bool) {
+func noahIndexerOutcomeFromError(err error, fallbackPhase enterpriseApi.Phase) (noahIndexerOutcome, error, bool) {
 	if dependencyOutcome, handled := noahDependencyOutcome(err); handled {
 		requeueAfter := time.Duration(0)
 		if dependencyOutcome.phase == enterpriseApi.PhasePending {
@@ -666,8 +676,7 @@ func noahIndexerOutcomeFromError(err error) (noahIndexerOutcome, error, bool) {
 		}, dependencyOutcome.err, true
 	}
 
-	var cacheWarmTimeoutErr *noahIndexerCacheWarmTimeoutError
-	if errors.As(err, &cacheWarmTimeoutErr) {
+	if cacheWarmTimeoutErr, ok := errors.AsType[*noahIndexerCacheWarmTimeoutError](err); ok {
 		message := cacheWarmTimeoutErr.Error()
 		return noahIndexerOutcome{
 			phase:        enterpriseApi.PhaseError,
@@ -680,25 +689,78 @@ func noahIndexerOutcomeFromError(err error) (noahIndexerOutcome, error, bool) {
 		}, splcommon.NewTerminalError(EventReasonNoahCacheWarmTimeout, message, cacheWarmTimeoutErr), true
 	}
 
-	var observationErr *noahIndexerPeerObservationError
-	if errors.As(err, &observationErr) {
-		phase := observationErr.phase
+	if lifecycleErr, ok := errors.AsType[*noahIndexerLifecycleError](err); ok {
+		phase := lifecycleErr.phase
 		if phase == "" {
-			phase = enterpriseApi.PhasePending
+			phase = fallbackPhase
+		}
+		phase = noahIndexerLifecyclePhase(phase)
+		reason := lifecycleErr.reason
+		if reason == "" {
+			reason = enterpriseApi.ReasonNoahPeerObservationFailed
+		}
+		phaseMessage := "Unable to observe Noah peers"
+		if reason == enterpriseApi.ReasonNoahOperationFailed {
+			phaseMessage = "Unable to complete Noah operation"
+		}
+
+		if noahErr, ok := errors.AsType[*noahclient.Error](lifecycleErr); ok {
+			message := fmt.Sprintf("Noah operation failed: %s", noahErr)
+			if noahErr.Kind == noahclient.ErrorKindCanceled {
+				return noahIndexerOutcome{
+					phase:        phase,
+					phaseMessage: "Noah operation was canceled",
+					condition: newNoahPeersReadyCondition(
+						metav1.ConditionUnknown,
+						reason,
+						message,
+					),
+				}, lifecycleErr, true
+			}
+			if !noahErr.Retryable() {
+				return noahIndexerOutcome{
+					phase:        enterpriseApi.PhaseError,
+					phaseMessage: message,
+					condition: newNoahPeersReadyCondition(
+						metav1.ConditionFalse,
+						enterpriseApi.ReasonNoahOperationFailed,
+						message,
+					),
+				}, splcommon.NewTerminalError(EventReasonNoahOperationFailed, message, lifecycleErr), true
+			}
+			return noahIndexerOutcome{
+				phase:        phase,
+				phaseMessage: phaseMessage,
+				condition: newNoahPeersReadyCondition(
+					metav1.ConditionUnknown,
+					reason,
+					message,
+				),
+				requeueAfter: noahIndexerPollInterval,
+			}, nil, true
 		}
 		return noahIndexerOutcome{
 			phase:        phase,
-			phaseMessage: "Unable to observe Noah peers",
+			phaseMessage: phaseMessage,
 			condition: newNoahPeersReadyCondition(
 				metav1.ConditionUnknown,
-				enterpriseApi.ReasonNoahPeerObservationFailed,
-				fmt.Sprintf("Unable to observe Noah peers: %v", observationErr),
+				reason,
+				fmt.Sprintf("%s: %v", phaseMessage, lifecycleErr),
 			),
 			requeueAfter: noahIndexerPollInterval,
 		}, nil, true
 	}
 
 	return noahIndexerOutcome{}, err, false
+}
+
+func noahIndexerLifecyclePhase(phase enterpriseApi.Phase) enterpriseApi.Phase {
+	switch phase {
+	case enterpriseApi.PhaseScalingUp, enterpriseApi.PhaseScalingDown, enterpriseApi.PhaseUpdating:
+		return phase
+	default:
+		return enterpriseApi.PhasePending
+	}
 }
 
 type noahIndexerCacheWarmTimeoutError struct {
@@ -709,17 +771,34 @@ func (err *noahIndexerCacheWarmTimeoutError) Error() string {
 	return fmt.Sprintf("Cache warming timed out for Noah peer %s", err.peerID)
 }
 
-type noahIndexerPeerObservationError struct {
-	err   error
-	phase enterpriseApi.Phase
+type noahIndexerLifecycleError struct {
+	err    error
+	phase  enterpriseApi.Phase
+	reason enterpriseApi.ConditionReason
 }
 
-func (err *noahIndexerPeerObservationError) Error() string {
-	return err.err.Error()
+func newNoahIndexerObservationError(err error, phase enterpriseApi.Phase) *noahIndexerLifecycleError {
+	return &noahIndexerLifecycleError{
+		err:    err,
+		phase:  phase,
+		reason: enterpriseApi.ReasonNoahPeerObservationFailed,
+	}
 }
 
-func (err *noahIndexerPeerObservationError) Unwrap() error {
-	return err.err
+func newNoahIndexerOperationError(err error, phase enterpriseApi.Phase) *noahIndexerLifecycleError {
+	return &noahIndexerLifecycleError{
+		err:    err,
+		phase:  phase,
+		reason: enterpriseApi.ReasonNoahOperationFailed,
+	}
+}
+
+func (e *noahIndexerLifecycleError) Error() string {
+	return e.err.Error()
+}
+
+func (e *noahIndexerLifecycleError) Unwrap() error {
+	return e.err
 }
 
 func noahCacheWarmScaleOutEnabled(spec enterpriseApi.NoahClusterSpec) bool {

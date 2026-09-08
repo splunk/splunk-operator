@@ -16,6 +16,7 @@
 package enterprise
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,6 +55,30 @@ type noahIndexerScaleOutTestFixture struct {
 	cr             *enterpriseApi.IndexerCluster
 	statefulSet    *appsv1.StatefulSet
 	requestHeaders http.Header
+}
+
+type noahHTTPClientFunc func(*http.Request) (*http.Response, error)
+
+func (fn noahHTTPClientFunc) Do(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
+
+func newNoahResponseClient(t *testing.T, statusCode int, responseBody string) *noahclient.Client {
+	t.Helper()
+	client, err := noahclient.NewClient(
+		"https://noah.test",
+		"tenant",
+		noahclient.AuthenticatorFunc(func(*http.Request, []byte) error { return nil }),
+		noahclient.WithHTTPClient(noahHTTPClientFunc(func(*http.Request) (*http.Response, error) {
+			response := httptest.NewRecorder()
+			response.WriteHeader(statusCode)
+			_, err := response.WriteString(responseBody)
+			require.NoError(t, err)
+			return response.Result(), nil
+		})),
+	)
+	require.NoError(t, err)
+	return client
 }
 
 func newNoahIndexerScaleOutTestFixture(t *testing.T, options noahIndexerScaleOutTestOptions) *noahIndexerScaleOutTestFixture {
@@ -901,7 +926,7 @@ func TestApplyNoahIndexerResourcesRequiresReferencedNoahCluster(t *testing.T) {
 	assert.Nil(t, statefulSet)
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
 	assert.Contains(t, err.Error(), "get referenced NoahCluster test/missing")
-	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err)
+	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err, "")
 	assert.True(t, handled)
 	assert.NoError(t, outcomeErr)
 	assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
@@ -937,10 +962,12 @@ func TestApplyNoahIndexerResourcesValidatesRuntimeBeforeCreatingResources(t *tes
 	assert.Nil(t, statefulSet)
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
 	require.Error(t, err)
-	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err)
+	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err, "")
 	require.True(t, handled)
 	_, terminal := splcommon.TerminalMessage(outcomeErr)
 	assert.True(t, terminal)
+	reason, _ := splcommon.TerminalReason(outcomeErr)
+	assert.Equal(t, EventReasonNoahConfigurationInvalid, reason)
 	assert.Equal(t, string(enterpriseApi.ReasonNoahConfigurationInvalid), outcome.condition.Reason)
 	assert.Contains(t, outcome.condition.Message, noah.AuthSecretKey)
 	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")
@@ -1540,7 +1567,7 @@ func TestNoahIndexerCacheWarmTimeoutStopsRequeueAndAllowsReevaluation(t *testing
 	phase, err := fixture.podManager().Update(t.Context(), fixture.client, fixture.statefulSet, fixture.cr.Spec.Replicas)
 	require.Error(t, err)
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
-	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err)
+	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err, "")
 	require.True(t, handled)
 	err = outcomeErr
 	message, terminal := splcommon.TerminalMessage(err)
@@ -1568,7 +1595,7 @@ func TestNoahIndexerCacheWarmTimeoutStopsRequeueAndAllowsReevaluation(t *testing
 }
 
 func TestWaitForNoahIndexerWorkloadPreservesUpdatingForPendingTemplateRevision(t *testing.T) {
-	outcome := waitForNoahIndexerWorkload(enterpriseApi.PhaseUpdating, enterpriseApi.PhaseScalingUp, 2)
+	outcome := waitForNoahIndexerWorkload(enterpriseApi.PhaseUpdating, enterpriseApi.PhaseScalingUp, 2, false)
 
 	assert.Equal(t, enterpriseApi.PhaseUpdating, outcome.phase)
 	assert.Equal(t, "Waiting for the StatefulSet pod-template revision to be applied", outcome.phaseMessage)
@@ -1589,7 +1616,7 @@ func TestWaitForNoahIndexerWorkloadPrefersCurrentLifecyclePhase(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			outcome := waitForNoahIndexerWorkload(test.phase, test.previousPhase, 2)
+			outcome := waitForNoahIndexerWorkload(test.phase, test.previousPhase, 2, false)
 
 			assert.Equal(t, test.phase, outcome.phase)
 			assert.NotEmpty(t, outcome.phaseMessage)
@@ -1598,7 +1625,7 @@ func TestWaitForNoahIndexerWorkloadPrefersCurrentLifecyclePhase(t *testing.T) {
 }
 
 func TestWaitForNoahIndexerWorkloadPreservesScaleOutForReplicaReadiness(t *testing.T) {
-	outcome := waitForNoahIndexerWorkload(enterpriseApi.PhasePending, enterpriseApi.PhaseScalingUp, 2)
+	outcome := waitForNoahIndexerWorkload(enterpriseApi.PhasePending, enterpriseApi.PhaseScalingUp, 2, false)
 
 	assert.Equal(t, enterpriseApi.PhaseScalingUp, outcome.phase)
 	assert.Equal(t, "Waiting for 2 applied replicas to become ready before continuing scale-out", outcome.phaseMessage)
@@ -1607,7 +1634,7 @@ func TestWaitForNoahIndexerWorkloadPreservesScaleOutForReplicaReadiness(t *testi
 }
 
 func TestWaitForNoahIndexerWorkloadPreservesUnsafeScaleDown(t *testing.T) {
-	outcome := waitForNoahIndexerWorkload(enterpriseApi.PhasePending, enterpriseApi.PhaseScalingDown, 2)
+	outcome := waitForNoahIndexerWorkload(enterpriseApi.PhasePending, enterpriseApi.PhaseScalingDown, 2, false)
 
 	assert.Equal(t, enterpriseApi.PhaseScalingDown, outcome.phase)
 	assert.Equal(t, "Scaling down without Noah decommission; development use only", outcome.phaseMessage)
@@ -1615,15 +1642,120 @@ func TestWaitForNoahIndexerWorkloadPreservesUnsafeScaleDown(t *testing.T) {
 	assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
 }
 
-func TestNoahIndexerScaleDownObservationErrorPreservesPhase(t *testing.T) {
-	outcome, err, handled := noahIndexerOutcomeFromError(&noahIndexerPeerObservationError{
-		err: errors.New("Noah unavailable"), phase: enterpriseApi.PhaseScalingDown,
-	})
+func TestWaitForNoahIndexerWorkloadReportsPendingScaleDownCleanup(t *testing.T) {
+	outcome := waitForNoahIndexerWorkload(enterpriseApi.PhaseScalingDown, enterpriseApi.PhaseScalingDown, 2, true)
+
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, outcome.phase)
+	assert.Equal(t, "Waiting for Noah scale-down cleanup; development use only", outcome.phaseMessage)
+	assert.Equal(t, "Waiting for removed-peer cleanup and active bucket-map confirmation", outcome.condition.Message)
+	assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
+}
+
+func TestNoahIndexerLifecycleErrorPreservesPhase(t *testing.T) {
+	outcome, err, handled := noahIndexerOutcomeFromError(
+		newNoahIndexerObservationError(errors.New("Noah unavailable"), enterpriseApi.PhaseScalingDown),
+		enterpriseApi.PhaseUpdating,
+	)
 
 	require.True(t, handled)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingDown, outcome.phase)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason)
 	assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
+}
+
+func TestNoahIndexerOutcomeUsesFallbackPhaseWithoutMutatingError(t *testing.T) {
+	lifecycleErr := newNoahIndexerObservationError(errors.New("Noah unavailable"), "")
+	outcome, mappedErr, handled := noahIndexerOutcomeFromError(lifecycleErr, enterpriseApi.PhaseScalingUp)
+
+	require.True(t, handled)
+	require.NoError(t, mappedErr)
+	assert.Equal(t, enterpriseApi.PhaseScalingUp, outcome.phase)
+	assert.Empty(t, lifecycleErr.phase)
+}
+
+func TestNoahIndexerOutcomeClassifiesNoahPeerObservationErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		statusCode   int
+		responseBody string
+		kind         noahclient.ErrorKind
+		retryable    bool
+	}{
+		{name: "unavailable", statusCode: http.StatusServiceUnavailable, kind: noahclient.ErrorKindUnavailable, retryable: true},
+		{name: "unauthorized", statusCode: http.StatusUnauthorized, kind: noahclient.ErrorKindUnauthorized},
+		{name: "malformed response", statusCode: http.StatusOK, responseBody: "{", kind: noahclient.ErrorKindInvalidResponse},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := newNoahResponseClient(t, test.statusCode, test.responseBody)
+			_, apiErr := client.ListPeers(t.Context())
+			require.Error(t, apiErr)
+			outcome, mappedErr, handled := noahIndexerOutcomeFromError(
+				newNoahIndexerObservationError(fmt.Errorf("list Noah peers: %w", apiErr), enterpriseApi.PhaseScalingDown),
+				enterpriseApi.PhasePending,
+			)
+
+			require.True(t, handled)
+			assert.Contains(t, outcome.condition.Message, "noah.peers.list")
+			assert.Contains(t, outcome.condition.Message, string(test.kind))
+			if test.retryable {
+				assert.NoError(t, mappedErr)
+				assert.Equal(t, enterpriseApi.PhaseScalingDown, outcome.phase)
+				assert.Equal(t, metav1.ConditionUnknown, outcome.condition.Status)
+				assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason)
+				assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
+				return
+			}
+
+			_, terminal := splcommon.TerminalMessage(mappedErr)
+			assert.True(t, terminal)
+			reason, _ := splcommon.TerminalReason(mappedErr)
+			assert.Equal(t, EventReasonNoahOperationFailed, reason)
+			assert.Equal(t, enterpriseApi.PhaseError, outcome.phase)
+			assert.Equal(t, metav1.ConditionFalse, outcome.condition.Status)
+			assert.Equal(t, string(enterpriseApi.ReasonNoahOperationFailed), outcome.condition.Reason)
+			assert.Zero(t, outcome.requeueAfter)
+		})
+	}
+}
+
+func TestNoahIndexerRetryableLifecycleOperationUsesOperationReason(t *testing.T) {
+	client := newNoahResponseClient(t, http.StatusServiceUnavailable, "")
+	apiErr := client.UnregisterPeer(t.Context(), "peer-0")
+	require.Error(t, apiErr)
+
+	outcome, mappedErr, handled := noahIndexerOutcomeFromError(
+		newNoahIndexerOperationError(fmt.Errorf("unregister Noah peer peer-0: %w", apiErr), enterpriseApi.PhaseScalingDown),
+		enterpriseApi.PhasePending,
+	)
+
+	require.True(t, handled)
+	require.NoError(t, mappedErr)
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, outcome.phase)
+	assert.Equal(t, "Unable to complete Noah operation", outcome.phaseMessage)
+	assert.Equal(t, metav1.ConditionUnknown, outcome.condition.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahOperationFailed), outcome.condition.Reason)
+	assert.Contains(t, outcome.condition.Message, "noah.peers.unregister")
+	assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
+}
+
+func TestNoahIndexerCanceledOperationIsNotTerminal(t *testing.T) {
+	operationErr := &noahclient.Error{Operation: "noah.peers.list", Kind: noahclient.ErrorKindCanceled, Err: context.Canceled}
+	outcome, mappedErr, handled := noahIndexerOutcomeFromError(
+		newNoahIndexerObservationError(operationErr, enterpriseApi.PhaseUpdating),
+		enterpriseApi.PhasePending,
+	)
+
+	require.True(t, handled)
+	assert.ErrorIs(t, mappedErr, context.Canceled)
+	_, terminal := splcommon.TerminalMessage(mappedErr)
+	assert.False(t, terminal)
+	assert.Equal(t, enterpriseApi.PhaseUpdating, outcome.phase)
+	assert.Equal(t, metav1.ConditionUnknown, outcome.condition.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason)
+	assert.Zero(t, outcome.requeueAfter)
 }
 
 func TestSetNoahIndexerPhaseAndConditions(t *testing.T) {
@@ -1663,4 +1795,30 @@ func TestSetNoahIndexerPhaseAndConditionsPreservesUnspecifiedConditions(t *testi
 	require.NotNil(t, condition)
 	assert.Equal(t, metav1.ConditionTrue, condition.Status)
 	assert.Equal(t, int64(6), condition.ObservedGeneration)
+}
+
+func TestSetNoahIndexerPhaseAndConditionsPreservesTransitionTimeForRepeatedObservation(t *testing.T) {
+	transitionTime := metav1.NewTime(time.Unix(1_700_000_000, 0))
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Generation: 7},
+		Status: enterpriseApi.IndexerClusterStatus{Conditions: []metav1.Condition{{
+			Type:               string(enterpriseApi.ConditionNoahPeersReady),
+			Status:             metav1.ConditionUnknown,
+			Reason:             string(enterpriseApi.ReasonNoahPeerObservationFailed),
+			Message:            "Unable to observe Noah peers",
+			ObservedGeneration: 6,
+			LastTransitionTime: transitionTime,
+		}}},
+	}
+
+	setNoahIndexerPhaseAndConditions(cr, false, enterpriseApi.PhaseScalingDown, "Unable to observe Noah peers", newNoahPeersReadyCondition(
+		metav1.ConditionUnknown,
+		enterpriseApi.ReasonNoahPeerObservationFailed,
+		"Unable to observe Noah peers",
+	))
+
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahPeersReady)
+	require.NotNil(t, condition)
+	assert.Equal(t, transitionTime, condition.LastTransitionTime)
+	assert.Equal(t, int64(7), condition.ObservedGeneration)
 }
