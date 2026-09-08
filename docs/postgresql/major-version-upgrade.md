@@ -58,6 +58,18 @@ The operator only supports single-major-version upgrades. A request that skips i
 
 Minor PostgreSQL version changes are different. A same-major change, such as `15.10 -> 15.12`, is handled by normal cluster reconciliation and is documented in [Minor Version Upgrades](minor-version-upgrade.md).
 
+### Blue/green strategy availability
+
+The `blueGreen` value is reserved in the `postgresMajorUpgradeConfig.strategy`
+API so manifests and durable status can use the upcoming contract. Its runtime
+workflow is not available yet: it does not create a candidate environment,
+replicate data, or switch endpoints.
+
+You may declare future intent with `strategy: blueGreen` and `allow: false`.
+Do not set `allow: true`; admission rejects it until the blue/green workflow is
+released. The procedure in this document applies to the shipped in-place
+`pgUpgrade` strategy.
+
 ### Safety model
 
 Before the upgrade starts, the operator must establish rollback capability. This usually means a valid backup or recovery artifact exists for the old PostgreSQL major version.

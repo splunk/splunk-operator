@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,8 +30,14 @@ import (
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	core "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	cnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
+)
+
+const (
+	minimumBlueGreenSwitchoverTimeout = platformApi.MinimumBlueGreenSwitchoverTimeout
+	maximumBlueGreenSwitchoverTimeout = platformApi.MaximumBlueGreenSwitchoverTimeout
 )
 
 // recoveryBackend is the provisioner capability oracle the webhook validates
@@ -70,6 +77,7 @@ func validatePostgresCluster(ctx context.Context, obj, oldObj *platformApi.Postg
 				re.Message))
 		}
 	}
+	allErrs = append(allErrs, validateMajorUpgradeConfig(obj, oldObj, specUnchanged)...)
 	liveReader := reader
 	if obj.GetDeletionTimestamp() != nil {
 		liveReader = nil
@@ -88,6 +96,106 @@ func validatePostgresCluster(ctx context.Context, obj, oldObj *platformApi.Postg
 	}
 
 	return allErrs
+}
+
+func validateMajorUpgradeConfig(obj, oldObj *platformApi.PostgresCluster, specUnchanged bool) field.ErrorList {
+	if obj == nil || specUnchanged || obj.GetDeletionTimestamp() != nil {
+		return nil
+	}
+
+	configPath := field.NewPath("spec", "postgresMajorUpgradeConfig")
+	config := obj.Spec.PostgresMajorUpgradeConfig
+	var allErrs field.ErrorList
+
+	activeBlueGreenAttempt := hasActiveBlueGreenAttempt(oldObj)
+	if activeBlueGreenAttempt {
+		allErrs = append(allErrs, validateActiveBlueGreenConfig(configPath, config, oldObj.Spec.PostgresMajorUpgradeConfig)...)
+	}
+
+	if config == nil {
+		return allErrs
+	}
+
+	strategy := majorUpgradeStrategy(config)
+	if !activeBlueGreenAttempt && strategy == mvutypes.MajorUpgradeFlowBlueGreen && config.Allow != nil && *config.Allow {
+		allErrs = append(allErrs, field.Forbidden(
+			configPath.Child("allow"),
+			"blueGreen is declared by the API but its runtime flow is not implemented; leave allow false until that flow is released",
+		))
+	}
+
+	if config.BlueGreen == nil {
+		return allErrs
+	}
+
+	if strategy != mvutypes.MajorUpgradeFlowBlueGreen {
+		allErrs = append(allErrs, field.Invalid(
+			configPath.Child("blueGreen"),
+			config.BlueGreen,
+			"may be configured only when strategy is blueGreen",
+		))
+		return allErrs
+	}
+
+	if config.BlueGreen.SwitchoverTimeout == nil {
+		return allErrs
+	}
+
+	timeout := config.BlueGreen.SwitchoverTimeout.Duration
+	if timeout < minimumBlueGreenSwitchoverTimeout || timeout > maximumBlueGreenSwitchoverTimeout {
+		allErrs = append(allErrs, field.Invalid(
+			configPath.Child("blueGreen", "switchoverTimeout"),
+			config.BlueGreen.SwitchoverTimeout.String(),
+			"must be between 30s and 3600s",
+		))
+	}
+
+	return allErrs
+}
+
+func majorUpgradeStrategy(config *platformApi.PostgresMajorUpgradeConfig) string {
+	if config != nil && config.Strategy != nil && *config.Strategy != "" {
+		return *config.Strategy
+	}
+	return mvutypes.MajorUpgradeFlowPgUpgrade
+}
+
+func hasActiveBlueGreenAttempt(cluster *platformApi.PostgresCluster) bool {
+	if cluster == nil {
+		return false
+	}
+	for i := len(cluster.Status.PostgresMajorUpgradeStatus) - 1; i >= 0; i-- {
+		if mvutypes.IsBlueGreenAttemptActive(cluster.Status.PostgresMajorUpgradeStatus[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// validateActiveBlueGreenConfig freezes the strategy and preparation policy of
+// a durable attempt. The stage gates remain mutable because they are explicit
+// user permissions consumed by later workflow boundaries.
+func validateActiveBlueGreenConfig(path *field.Path, current, previous *platformApi.PostgresMajorUpgradeConfig) field.ErrorList {
+	if current == nil {
+		return field.ErrorList{field.Forbidden(path, "cannot remove major-upgrade configuration while a blueGreen attempt is active")}
+	}
+	if majorUpgradeStrategy(current) != majorUpgradeStrategy(previous) {
+		return field.ErrorList{field.Forbidden(path.Child("strategy"), "cannot change strategy while a blueGreen attempt is active")}
+	}
+
+	previousTimeout := effectiveSwitchoverTimeout(previous)
+	currentTimeout := effectiveSwitchoverTimeout(current)
+	if previousTimeout != currentTimeout {
+		return field.ErrorList{field.Forbidden(path.Child("blueGreen", "switchoverTimeout"), "cannot change switchoverTimeout while a blueGreen attempt is active")}
+	}
+	return nil
+}
+
+func effectiveSwitchoverTimeout(config *platformApi.PostgresMajorUpgradeConfig) time.Duration {
+	if config == nil {
+		return platformApi.DefaultBlueGreenSwitchoverTimeout
+	}
+	return config.BlueGreen.EffectiveSwitchoverTimeout()
 }
 
 func validateCustomMetrics(ctx context.Context, obj *platformApi.PostgresCluster, reader client.Reader) field.ErrorList {

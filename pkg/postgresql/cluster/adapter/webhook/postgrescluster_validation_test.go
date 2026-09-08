@@ -19,6 +19,7 @@ package webhook_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -29,6 +30,7 @@ import (
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/webhook"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -182,6 +184,216 @@ func TestValidatePostgresClusterUpdate(t *testing.T) {
 			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
+}
+
+func TestValidatePostgresClusterMajorUpgradeConfig(t *testing.T) {
+	blueGreenConfig := func(timeout time.Duration) *platformApi.PostgresBlueGreenUpgradeConfig {
+		return &platformApi.PostgresBlueGreenUpgradeConfig{
+			SwitchoverTimeout: &metav1.Duration{Duration: timeout},
+		}
+	}
+	clusterWith := func(strategy string, blueGreen *platformApi.PostgresBlueGreenUpgradeConfig) *platformApi.PostgresCluster {
+		return &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{
+			Class: "dev",
+			PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
+				Strategy:  ptr.To(strategy),
+				BlueGreen: blueGreen,
+			},
+		}}
+	}
+
+	tests := []struct {
+		name      string
+		obj       *platformApi.PostgresCluster
+		wantField string
+	}{
+		{
+			name: "existing pgUpgrade form remains valid",
+			obj:  clusterWith("pgUpgrade", nil),
+		},
+		{
+			name: "blueGreen allows omitted control block",
+			obj:  clusterWith("blueGreen", nil),
+		},
+		{
+			name: "blueGreen allow is rejected until runtime is implemented",
+			obj: &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{
+				Class: "dev",
+				PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
+					Allow:    ptr.To(true),
+					Strategy: ptr.To("blueGreen"),
+				},
+			}},
+			wantField: "spec.postgresMajorUpgradeConfig.allow",
+		},
+		{
+			name: "blueGreen allows lower timeout boundary",
+			obj:  clusterWith("blueGreen", blueGreenConfig(30*time.Second)),
+		},
+		{
+			name: "blueGreen allows upper timeout boundary",
+			obj:  clusterWith("blueGreen", blueGreenConfig(time.Hour)),
+		},
+		{
+			name:      "blueGreen rejects timeout below lower boundary",
+			obj:       clusterWith("blueGreen", blueGreenConfig(29*time.Second)),
+			wantField: "spec.postgresMajorUpgradeConfig.blueGreen.switchoverTimeout",
+		},
+		{
+			name:      "blueGreen rejects timeout above upper boundary",
+			obj:       clusterWith("blueGreen", blueGreenConfig(time.Hour+time.Second)),
+			wantField: "spec.postgresMajorUpgradeConfig.blueGreen.switchoverTimeout",
+		},
+		{
+			name:      "pgUpgrade rejects blueGreen configuration",
+			obj:       clusterWith("pgUpgrade", blueGreenConfig(time.Minute)),
+			wantField: "spec.postgresMajorUpgradeConfig.blueGreen",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := webhook.ValidatePostgresClusterCreate(t.Context(), tt.obj, nil)
+			if tt.wantField == "" {
+				assert.Empty(t, errs)
+				return
+			}
+			require.Len(t, errs, 1)
+			assert.Equal(t, tt.wantField, errs[0].Field)
+		})
+	}
+}
+
+func TestValidatePostgresClusterUpdateFreezesActiveBlueGreenAttempt(t *testing.T) {
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	allow := true
+	oldObj := &platformApi.PostgresCluster{
+		Spec: platformApi.PostgresClusterSpec{
+			Class: "dev",
+			PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
+				Allow:    &allow,
+				Strategy: &strategy,
+				BlueGreen: &platformApi.PostgresBlueGreenUpgradeConfig{
+					SwitchoverTimeout: &metav1.Duration{Duration: time.Minute},
+				},
+			},
+		},
+		Status: platformApi.PostgresClusterStatus{
+			PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{
+				Strategy: &strategy,
+				BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{
+					AttemptID: "attempt-1",
+					Cleanup:   &platformApi.BlueGreenCleanupStatus{State: platformApi.BlueGreenCleanupStateRetained},
+				},
+			}},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		mutate    func(*platformApi.PostgresCluster)
+		wantField string
+	}{
+		{
+			name: "rejects strategy change",
+			mutate: func(obj *platformApi.PostgresCluster) {
+				obj.Spec.PostgresMajorUpgradeConfig.Strategy = ptr.To(mvutypes.MajorUpgradeFlowPgUpgrade)
+			},
+			wantField: "spec.postgresMajorUpgradeConfig.strategy",
+		},
+		{
+			name: "allows clearing allow",
+			mutate: func(obj *platformApi.PostgresCluster) {
+				obj.Spec.PostgresMajorUpgradeConfig.Allow = ptr.To(false)
+			},
+		},
+		{
+			name: "rejects timeout change",
+			mutate: func(obj *platformApi.PostgresCluster) {
+				obj.Spec.PostgresMajorUpgradeConfig.BlueGreen.SwitchoverTimeout = &metav1.Duration{Duration: 2 * time.Minute}
+			},
+			wantField: "spec.postgresMajorUpgradeConfig.blueGreen.switchoverTimeout",
+		},
+		{
+			name: "allows explicit switchover gate",
+			mutate: func(obj *platformApi.PostgresCluster) {
+				obj.Spec.PostgresMajorUpgradeConfig.BlueGreen.Switchover = ptr.To(true)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj := oldObj.DeepCopy()
+			tt.mutate(obj)
+			errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, nil)
+			if tt.wantField == "" {
+				assert.Empty(t, errs)
+				return
+			}
+			require.NotEmpty(t, errs)
+			assert.Contains(t, errs.ToAggregate().Error(), tt.wantField)
+		})
+	}
+}
+
+func TestValidatePostgresClusterUpdateSkipsActiveBlueGreenFreezeForMetadataAndDeletion(t *testing.T) {
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	oldObj := &platformApi.PostgresCluster{
+		Spec: platformApi.PostgresClusterSpec{Class: "dev"},
+		Status: platformApi.PostgresClusterStatus{
+			PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{
+				Strategy:  &strategy,
+				BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1"},
+			}},
+		},
+	}
+
+	t.Run("metadata-only update", func(t *testing.T) {
+		obj := oldObj.DeepCopy()
+		obj.Labels = map[string]string{"example.com/annotation": "changed"}
+		assert.Empty(t, webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, nil))
+	})
+
+	t.Run("deletion", func(t *testing.T) {
+		obj := oldObj.DeepCopy()
+		now := metav1.Now()
+		obj.DeletionTimestamp = &now
+		assert.Empty(t, webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, nil))
+	})
+}
+
+func TestValidatePostgresClusterUpdateAllowsRecoveryFromUnavailableBlueGreenRuntime(t *testing.T) {
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	allow := true
+	failed := string(mvutypes.Failed)
+	oldObj := &platformApi.PostgresCluster{
+		Spec: platformApi.PostgresClusterSpec{
+			Class: "dev",
+			PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
+				Allow:    &allow,
+				Strategy: &strategy,
+			},
+		},
+		Status: platformApi.PostgresClusterStatus{
+			PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{
+				Phase:     &failed,
+				Strategy:  &strategy,
+				BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1"},
+				Conditions: []metav1.Condition{{
+					Type:   mvutypes.ConditionMajorUpgradeTerminalFailure,
+					Status: metav1.ConditionTrue,
+					Reason: mvutypes.ReasonBlueGreenStrategyUnavailable,
+				}},
+			}},
+		},
+	}
+	obj := oldObj.DeepCopy()
+	obj.Spec.PostgresMajorUpgradeConfig.Allow = ptr.To(false)
+	obj.Spec.PostgresMajorUpgradeConfig.Strategy = ptr.To(mvutypes.MajorUpgradeFlowPgUpgrade)
+
+	errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, nil)
+	assert.Empty(t, errs)
 }
 
 func TestValidatePostgresClusterCreateFeatureGateDisabled(t *testing.T) {

@@ -364,15 +364,55 @@ spec:
                       Allow permits the operator to execute a PostgreSQL major-version
                       upgrade when spec.postgresVersion crosses a major-version boundary.
                     type: boolean
+                  blueGreen:
+                    description: |-
+                      BlueGreen declares the gates for the blue/green major-upgrade strategy.
+                      Omitting this object has the same effective values as its defaults: all
+                      gates are false and switchoverTimeout is 60 seconds.
+                    properties:
+                      cancel:
+                        default: false
+                        description: Cancel requests pre-commit abandonment of the
+                          active attempt.
+                        type: boolean
+                      cleanup:
+                        default: false
+                        description: |-
+                          Cleanup authorizes deletion of the retained non-authoritative environment
+                          after the attempt reaches a safe terminal boundary.
+                        type: boolean
+                      switchover:
+                        default: false
+                        description: |-
+                          Switchover authorizes the production endpoint handoff after the candidate
+                          is ready. Once consumed, a later false value does not reverse the attempt.
+                        type: boolean
+                      switchoverTimeout:
+                        default: 60s
+                        description: |-
+                          SwitchoverTimeout bounds the operator-controlled endpoint handoff. The
+                          workflow latches the effective value when switchover begins, so later spec
+                          changes affect only a later attempt.
+                        type: string
+                        x-kubernetes-validations:
+                        - message: switchoverTimeout must be between 30s and 3600s
+                          rule: duration(self) >= duration('30s') && duration(self)
+                            <= duration('3600s')
+                    type: object
                   strategy:
                     default: pgUpgrade
                     description: |-
                       Strategy selects the major-upgrade implementation.
-                      For now only pgUpgrade is supported.
+                      pgUpgrade is the existing in-place implementation. blueGreen prepares a
+                      replacement environment only when it is explicitly selected.
                     enum:
                     - pgUpgrade
+                    - blueGreen
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: blueGreen may be configured only when strategy is blueGreen
+                  rule: self.strategy == 'blueGreen' || !has(self.blueGreen)
               postgresVersion:
                 description: |-
                   PostgresVersion is the PostgreSQL version (major or major.minor).
@@ -832,6 +872,778 @@ spec:
                               format: date-time
                               type: string
                           type: object
+                      type: object
+                    blueGreen:
+                      description: |-
+                        BlueGreen contains the durable state for an attempt that selected the
+                        blueGreen strategy. It is absent from existing pgUpgrade history entries.
+                      properties:
+                        attemptID:
+                          description: |-
+                            AttemptID identifies one durable blue/green execution for a source and
+                            target PostgreSQL major-version pair.
+                          minLength: 1
+                          type: string
+                        blue:
+                          description: |-
+                            Blue is the source environment that is authoritative before endpoint
+                            commit.
+                          properties:
+                            availableAt:
+                              description: |-
+                                AvailableAt is the time at which the environment's required topology was
+                                last observed healthy.
+                              format: date-time
+                              type: string
+                            ref:
+                              description: Ref identifies the CNPG Cluster for this
+                                environment.
+                              properties:
+                                apiVersion:
+                                  description: API version of the referent.
+                                  type: string
+                                fieldPath:
+                                  description: |-
+                                    If referring to a piece of an object instead of an entire object, this string
+                                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                    the event) or if no container name is specified "spec.containers[2]" (container with
+                                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                    referencing a part of an object.
+                                  type: string
+                                kind:
+                                  description: |-
+                                    Kind of the referent.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                namespace:
+                                  description: |-
+                                    Namespace of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                  type: string
+                                resourceVersion:
+                                  description: |-
+                                    Specific resourceVersion to which this reference is made, if any.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                  type: string
+                                uid:
+                                  description: |-
+                                    UID of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                  type: string
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          required:
+                          - ref
+                          type: object
+                        candidateEndpoints:
+                          description: |-
+                            CandidateEndpoints are the green endpoints exposed for pre-switchover
+                            validation only.
+                          properties:
+                            directService:
+                              description: DirectService identifies the candidate's
+                                direct CNPG Service.
+                              properties:
+                                apiVersion:
+                                  description: API version of the referent.
+                                  type: string
+                                fieldPath:
+                                  description: |-
+                                    If referring to a piece of an object instead of an entire object, this string
+                                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                    the event) or if no container name is specified "spec.containers[2]" (container with
+                                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                    referencing a part of an object.
+                                  type: string
+                                kind:
+                                  description: |-
+                                    Kind of the referent.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                namespace:
+                                  description: |-
+                                    Namespace of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                  type: string
+                                resourceVersion:
+                                  description: |-
+                                    Specific resourceVersion to which this reference is made, if any.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                  type: string
+                                uid:
+                                  description: |-
+                                    UID of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                  type: string
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            poolerService:
+                              description: PoolerService identifies the optional candidate
+                                Pooler Service.
+                              properties:
+                                apiVersion:
+                                  description: API version of the referent.
+                                  type: string
+                                fieldPath:
+                                  description: |-
+                                    If referring to a piece of an object instead of an entire object, this string
+                                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                    the event) or if no container name is specified "spec.containers[2]" (container with
+                                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                    referencing a part of an object.
+                                  type: string
+                                kind:
+                                  description: |-
+                                    Kind of the referent.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                namespace:
+                                  description: |-
+                                    Namespace of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                  type: string
+                                resourceVersion:
+                                  description: |-
+                                    Specific resourceVersion to which this reference is made, if any.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                  type: string
+                                uid:
+                                  description: |-
+                                    UID of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                  type: string
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          type: object
+                        cleanup:
+                          description: |-
+                            Cleanup progresses independently of production completion because a
+                            retained environment is not a lossless rollback target.
+                          properties:
+                            completedAt:
+                              format: date-time
+                              type: string
+                            failure:
+                              type: string
+                            retirementAcknowledgements:
+                              description: |-
+                                RetirementAcknowledgements records one acknowledgement from every
+                                PostgresDatabase controller after it has removed its
+                                environment-specific resources for this generation.
+                              items:
+                                description: |-
+                                  BlueGreenRetirementAcknowledgementStatus records completion of the
+                                  database-controller half of the environment-retirement barrier.
+                                properties:
+                                  acknowledgedAt:
+                                    format: date-time
+                                    type: string
+                                  databaseName:
+                                    minLength: 1
+                                    type: string
+                                  postgresDatabaseName:
+                                    minLength: 1
+                                    type: string
+                                  postgresDatabaseUID:
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - databaseName
+                                - postgresDatabaseName
+                                - postgresDatabaseUID
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - postgresDatabaseName
+                              - postgresDatabaseUID
+                              - databaseName
+                              x-kubernetes-list-type: map
+                            retirementGeneration:
+                              description: |-
+                                RetirementGeneration identifies the database-controller retirement barrier
+                                for this cleanup attempt.
+                              format: int64
+                              type: integer
+                            startedAt:
+                              format: date-time
+                              type: string
+                            state:
+                              description: |-
+                                BlueGreenCleanupState is the independent retained-environment cleanup
+                                lifecycle.
+                              enum:
+                              - Retained
+                              - Cleaning
+                              - Cleaned
+                              - CleanupFailed
+                              type: string
+                          required:
+                          - state
+                          type: object
+                        commitReceipt:
+                          description: |-
+                            CommitReceipt is monotonic evidence that the canonical cluster access
+                            ConfigMap committed the green environment.
+                          properties:
+                            canonicalConfigMap:
+                              description: CanonicalConfigMap identifies the externally
+                                observable commit record.
+                              properties:
+                                apiVersion:
+                                  description: API version of the referent.
+                                  type: string
+                                fieldPath:
+                                  description: |-
+                                    If referring to a piece of an object instead of an entire object, this string
+                                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                    the event) or if no container name is specified "spec.containers[2]" (container with
+                                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                    referencing a part of an object.
+                                  type: string
+                                kind:
+                                  description: |-
+                                    Kind of the referent.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                namespace:
+                                  description: |-
+                                    Namespace of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                  type: string
+                                resourceVersion:
+                                  description: |-
+                                    Specific resourceVersion to which this reference is made, if any.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                  type: string
+                                uid:
+                                  description: |-
+                                    UID of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                  type: string
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            committedAt:
+                              format: date-time
+                              type: string
+                            sequence:
+                              description: Sequence is incremented only when a later
+                                endpoint commit is observed.
+                              format: int64
+                              type: integer
+                            target:
+                              description: Target identifies the environment made
+                                authoritative by the commit.
+                              properties:
+                                apiVersion:
+                                  description: API version of the referent.
+                                  type: string
+                                fieldPath:
+                                  description: |-
+                                    If referring to a piece of an object instead of an entire object, this string
+                                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                    the event) or if no container name is specified "spec.containers[2]" (container with
+                                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                    referencing a part of an object.
+                                  type: string
+                                kind:
+                                  description: |-
+                                    Kind of the referent.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                namespace:
+                                  description: |-
+                                    Namespace of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                  type: string
+                                resourceVersion:
+                                  description: |-
+                                    Specific resourceVersion to which this reference is made, if any.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                  type: string
+                                uid:
+                                  description: |-
+                                    UID of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                  type: string
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          type: object
+                        conditions:
+                          description: |-
+                            Conditions describe whether a stage gate can be consumed. They do not
+                            replace the user's desired gate values.
+                          items:
+                            description: Condition contains details for one aspect
+                              of the current state of this API Resource.
+                            properties:
+                              lastTransitionTime:
+                                description: |-
+                                  lastTransitionTime is the last time the condition transitioned from one status to another.
+                                  This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                                format: date-time
+                                type: string
+                              message:
+                                description: |-
+                                  message is a human readable message indicating details about the transition.
+                                  This may be an empty string.
+                                maxLength: 32768
+                                type: string
+                              observedGeneration:
+                                description: |-
+                                  observedGeneration represents the .metadata.generation that the condition was set based upon.
+                                  For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                                  with respect to the current state of the instance.
+                                format: int64
+                                minimum: 0
+                                type: integer
+                              reason:
+                                description: |-
+                                  reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                                  Producers of specific condition types may define expected values and meanings for this field,
+                                  and whether the values are considered a guaranteed API.
+                                  The value should be a CamelCase string.
+                                  This field may not be empty.
+                                maxLength: 1024
+                                minLength: 1
+                                pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                                type: string
+                              status:
+                                description: status of the condition, one of True,
+                                  False, Unknown.
+                                enum:
+                                - "True"
+                                - "False"
+                                - Unknown
+                                type: string
+                              type:
+                                description: type of condition in CamelCase or in
+                                  foo.example.com/CamelCase.
+                                maxLength: 316
+                                pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                                type: string
+                            required:
+                            - lastTransitionTime
+                            - message
+                            - reason
+                            - status
+                            - type
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - type
+                          x-kubernetes-list-type: map
+                        credentialFingerprints:
+                          description: |-
+                            CredentialFingerprints are content fingerprints for credentials frozen for
+                            this attempt. They never expose Secret contents in status.
+                          items:
+                            description: |-
+                              BlueGreenCredentialFingerprintStatus records an opaque fingerprint for one
+                              credential Secret whose contents are frozen for a blue/green attempt.
+                            properties:
+                              capturedAt:
+                                format: date-time
+                                type: string
+                              fingerprint:
+                                description: |-
+                                  Fingerprint is an opaque, normalized digest. It must not contain Secret
+                                  data or credentials.
+                                minLength: 1
+                                type: string
+                              secretName:
+                                minLength: 1
+                                type: string
+                              secretUID:
+                                minLength: 1
+                                type: string
+                              verifiedAt:
+                                format: date-time
+                                type: string
+                            required:
+                            - fingerprint
+                            - secretName
+                            - secretUID
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - secretName
+                          - secretUID
+                          x-kubernetes-list-type: map
+                        databaseReplication:
+                          description: |-
+                            DatabaseReplication records the schema-import and logical-replication
+                            inventory for each managed database.
+                          items:
+                            description: |-
+                              BlueGreenDatabaseReplicationStatus records the durable replication state of
+                              one PostgresDatabase database during an attempt.
+                            properties:
+                              databaseName:
+                                minLength: 1
+                                type: string
+                              failure:
+                                description: |-
+                                  Failure records the most recent database-specific reason the candidate
+                                  cannot advance.
+                                type: string
+                              initialCopyComplete:
+                                type: boolean
+                              postgresDatabaseName:
+                                minLength: 1
+                                type: string
+                              postgresDatabaseUID:
+                                minLength: 1
+                                type: string
+                              replicaSlots:
+                                description: |-
+                                  ReplicaSlots records the validity of this database subscription's slot on
+                                  every eligible blue replica. A candidate cannot be ready while any entry
+                                  is missing or invalid.
+                                items:
+                                  description: |-
+                                    BlueGreenReplicaSlotStatus records one logical slot's durable health on an
+                                    eligible blue replica for a managed database.
+                                  properties:
+                                    failure:
+                                      type: string
+                                    replicaName:
+                                      minLength: 1
+                                      type: string
+                                    replicaUID:
+                                      minLength: 1
+                                      type: string
+                                    slotName:
+                                      minLength: 1
+                                      type: string
+                                    valid:
+                                      type: boolean
+                                    verifiedAt:
+                                      format: date-time
+                                      type: string
+                                  required:
+                                  - replicaName
+                                  - replicaUID
+                                  - slotName
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - replicaName
+                                - replicaUID
+                                - slotName
+                                x-kubernetes-list-type: map
+                              schemaImported:
+                                type: boolean
+                              slotHealthy:
+                                type: boolean
+                              sourceAccessPolicyFingerprint:
+                                description: |-
+                                  SourceAccessPolicyFingerprint is the normalized source access-policy
+                                  baseline used to detect unsupported drift during the attempt.
+                                type: string
+                              sourceSchemaFingerprint:
+                                description: |-
+                                  SourceSchemaFingerprint is the normalized source schema baseline captured
+                                  before import and rechecked at each immutable workflow boundary.
+                                type: string
+                              subscriptionHealthy:
+                                type: boolean
+                              targetAccessPolicyFingerprint:
+                                description: |-
+                                  TargetAccessPolicyFingerprint is the target's verified access-policy
+                                  fingerprint after declared roles and credentials are reconciled.
+                                type: string
+                              targetSchemaFingerprint:
+                                description: |-
+                                  TargetSchemaFingerprint is the normalized target schema baseline after
+                                  schema import and before the candidate can become ready.
+                                type: string
+                            required:
+                            - databaseName
+                            - postgresDatabaseName
+                            - postgresDatabaseUID
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - postgresDatabaseName
+                          - postgresDatabaseUID
+                          - databaseName
+                          x-kubernetes-list-type: map
+                        endpointPublication:
+                          description: |-
+                            EndpointPublication records the generation-scoped handoff from the parent
+                            controller to database access ConfigMap projections.
+                          properties:
+                            acknowledgements:
+                              description: |-
+                                Acknowledgements records one acknowledgement from every PostgresDatabase
+                                controller after it has updated its own access ConfigMap projection.
+                              items:
+                                description: |-
+                                  BlueGreenEndpointPublicationAcknowledgementStatus records a database-owned
+                                  ConfigMap projection acknowledgement for an endpoint-publication generation.
+                                properties:
+                                  acknowledgedAt:
+                                    format: date-time
+                                    type: string
+                                  databaseName:
+                                    minLength: 1
+                                    type: string
+                                  endpointFingerprint:
+                                    description: |-
+                                      EndpointFingerprint is the opaque normalized endpoint value verified by
+                                      the parent before canonical publication.
+                                    type: string
+                                  postgresDatabaseName:
+                                    minLength: 1
+                                    type: string
+                                  postgresDatabaseUID:
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - databaseName
+                                - postgresDatabaseName
+                                - postgresDatabaseUID
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - postgresDatabaseName
+                              - postgresDatabaseUID
+                              - databaseName
+                              x-kubernetes-list-type: map
+                            generation:
+                              format: int64
+                              type: integer
+                          type: object
+                        gates:
+                          description: |-
+                            Gates records the generation and time at which each user permission was
+                            first consumed.
+                          properties:
+                            allow:
+                              description: BlueGreenGateConsumptionStatus records
+                                one irreversible gate consumption.
+                              properties:
+                                consumedAt:
+                                  description: ConsumedAt is the time at which the
+                                    workflow consumed the gate.
+                                  format: date-time
+                                  type: string
+                                generation:
+                                  description: |-
+                                    Generation is the PostgresCluster generation that first authorized the
+                                    gate.
+                                  format: int64
+                                  type: integer
+                              type: object
+                            cancellation:
+                              description: Cancellation records both the request and
+                                the completed cancellation.
+                              properties:
+                                completedAt:
+                                  format: date-time
+                                  type: string
+                                requestedAt:
+                                  format: date-time
+                                  type: string
+                              type: object
+                            cleanup:
+                              description: BlueGreenGateConsumptionStatus records
+                                one irreversible gate consumption.
+                              properties:
+                                consumedAt:
+                                  description: ConsumedAt is the time at which the
+                                    workflow consumed the gate.
+                                  format: date-time
+                                  type: string
+                                generation:
+                                  description: |-
+                                    Generation is the PostgresCluster generation that first authorized the
+                                    gate.
+                                  format: int64
+                                  type: integer
+                              type: object
+                            switchover:
+                              description: BlueGreenGateConsumptionStatus records
+                                one irreversible gate consumption.
+                              properties:
+                                consumedAt:
+                                  description: ConsumedAt is the time at which the
+                                    workflow consumed the gate.
+                                  format: date-time
+                                  type: string
+                                generation:
+                                  description: |-
+                                    Generation is the PostgresCluster generation that first authorized the
+                                    gate.
+                                  format: int64
+                                  type: integer
+                              type: object
+                          type: object
+                        green:
+                          description: Green is the target-major candidate environment.
+                          properties:
+                            availableAt:
+                              description: |-
+                                AvailableAt is the time at which the environment's required topology was
+                                last observed healthy.
+                              format: date-time
+                              type: string
+                            ref:
+                              description: Ref identifies the CNPG Cluster for this
+                                environment.
+                              properties:
+                                apiVersion:
+                                  description: API version of the referent.
+                                  type: string
+                                fieldPath:
+                                  description: |-
+                                    If referring to a piece of an object instead of an entire object, this string
+                                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                    the event) or if no container name is specified "spec.containers[2]" (container with
+                                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                    referencing a part of an object.
+                                  type: string
+                                kind:
+                                  description: |-
+                                    Kind of the referent.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                namespace:
+                                  description: |-
+                                    Namespace of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                  type: string
+                                resourceVersion:
+                                  description: |-
+                                    Specific resourceVersion to which this reference is made, if any.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                  type: string
+                                uid:
+                                  description: |-
+                                    UID of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                  type: string
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          required:
+                          - ref
+                          type: object
+                        rearmedAt:
+                          description: |-
+                            RearmedAt records that the controller observed allow=false after this
+                            cleaned attempt. A later allow=true may start a new attempt for the same
+                            source, target, and strategy only after this observation.
+                          format: date-time
+                          type: string
+                        recoverability:
+                          description: |-
+                            Recoverability records the verified target-major backup and WAL archive
+                            baseline required before source cleanup.
+                          properties:
+                            backupVerifiedAt:
+                              format: date-time
+                              type: string
+                            targetBackupName:
+                              type: string
+                            walArchiveBaselineVerifiedAt:
+                              format: date-time
+                              type: string
+                          type: object
+                        switchover:
+                          description: Switchover records the latched timeout and
+                            the durable handoff milestones.
+                          properties:
+                            deadlineAt:
+                              format: date-time
+                              type: string
+                            endpointCommittedAt:
+                              description: EndpointCommittedAt records the irreversible
+                                canonical ConfigMap commit.
+                              format: date-time
+                              type: string
+                            failure:
+                              type: string
+                            finalBlueLSN:
+                              description: |-
+                                FinalBlueLSN is the source WAL position captured after blue is fenced.
+                                Every subscription must apply through this value before endpoint commit.
+                              type: string
+                            latchedTimeout:
+                              description: |-
+                                LatchedTimeout is the effective timeout copied from the spec when fencing
+                                begins.
+                              type: string
+                            sequenceSynchronization:
+                              description: |-
+                                SequenceSynchronization records completion and verification of sequence
+                                state, which native logical table replication does not carry.
+                              properties:
+                                completedAt:
+                                  format: date-time
+                                  type: string
+                                failure:
+                                  type: string
+                                verifiedAt:
+                                  format: date-time
+                                  type: string
+                              type: object
+                            startedAt:
+                              format: date-time
+                              type: string
+                            targetAvailableAt:
+                              description: |-
+                                TargetAvailableAt records verified target read/write availability after
+                                the target fence has been removed.
+                              format: date-time
+                              type: string
+                            timedOutAt:
+                              format: date-time
+                              type: string
+                          type: object
+                      required:
+                      - attemptID
                       type: object
                     completedAt:
                       format: date-time

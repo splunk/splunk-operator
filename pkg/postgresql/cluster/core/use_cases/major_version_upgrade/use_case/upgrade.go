@@ -72,6 +72,10 @@ func (h *MajorUpgradeUseCase) Schedule(ctx context.Context) (bool, error) {
 	}
 	h.intent = intent
 	h.active = false
+	if intent.RequiresBlueGreenRearm {
+		h.active = true
+		return true, nil
+	}
 
 	for _, entry := range intent.State {
 		if !mvutypes.MatchesIntent(entry, intent) || entry.Phase == nil {
@@ -94,7 +98,7 @@ func (h *MajorUpgradeUseCase) Schedule(ctx context.Context) (bool, error) {
 }
 
 func (h *MajorUpgradeUseCase) BlocksComponents() []string {
-	if h == nil || !h.active {
+	if h == nil || !h.active || h.intent.RequiresBlueGreenRearm {
 		return nil
 	}
 	return []string{
@@ -120,6 +124,12 @@ func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationTypes.Repo
 		return mvutypes.ReportFromError(mvutypes.ErrUpgradeIntentMissing), nil
 	}
 	h.intent = intent
+	if h.intent.RequiresBlueGreenRearm {
+		if err := h.store.SaveBlueGreenRearm(ctx, h.intent); err != nil {
+			return mvutypes.ReportFromError(err), err
+		}
+		return reconciliationTypes.Report{Name: mvutypes.UseCaseName}, nil
+	}
 
 	if err := h.validateIntent(); err != nil {
 		return h.finish(ctx, mvutypes.ReportFromError(err), nil, err)
@@ -127,7 +137,11 @@ func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationTypes.Repo
 
 	strategy := h.strategyFor(h.intent)
 	if strategy == nil {
-		err := errors.Join(mvutypes.ErrUnsupportedUpgradeStrategy, errors.New(h.intent.Strategy))
+		strategyError := mvutypes.ErrUnsupportedUpgradeStrategy
+		if h.intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen {
+			strategyError = mvutypes.ErrBlueGreenStrategyUnavailable
+		}
+		err := errors.Join(strategyError, errors.New(h.intent.Strategy))
 		return h.finish(ctx, mvutypes.ReportFromError(err), nil, err)
 	}
 
@@ -300,7 +314,7 @@ func (h *MajorUpgradeUseCase) rawPersistedPhase() mvutypes.Status {
 func (h *MajorUpgradeUseCase) finish(ctx context.Context, report reconciliationTypes.Report, baseline *mvutypes.BackupInfo, cause error) (reconciliationTypes.Report, error) {
 	h.emitPhaseEvent(report)
 	if h.store != nil {
-		if err := h.store.SaveMajorUpgradeProgress(ctx, h.intent, report, baseline); err != nil {
+		if err := h.store.SaveMajorUpgradeProgress(ctx, h.intent, mvutypes.Progress{Report: report, Baseline: baseline}); err != nil {
 			return report, err
 		}
 	}

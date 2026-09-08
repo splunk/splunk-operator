@@ -25,9 +25,10 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	pgupgradeflow "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case/pg_upgrade"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -88,6 +89,67 @@ func TestMajorUpgradeUseCaseFailsWhenBackupProviderMissing(t *testing.T) {
 	if report.Phase != string(mvutypes.Failed) || report.Retry {
 		t.Fatalf("report = %#v, want terminal Failed report", report)
 	}
+}
+
+func TestMajorUpgradeUseCaseReportsDeclaredBlueGreenRuntimeAsUnavailable(t *testing.T) {
+	intent := mvutypes.Intent{
+		Strategy:        mvutypes.MajorUpgradeFlowBlueGreen,
+		SourcePgVersion: "17",
+		TargetPgVersion: "18",
+		AttemptID:       "attempt-1",
+	}
+	useCase := NewMajorUpgradeUseCase(
+		fakeInfoStore(intent), nil, nil, pgupgradeflow.NoopNotifier(),
+	)
+
+	report, err := useCase.Act(t.Context())
+	if !errors.Is(err, mvutypes.ErrBlueGreenStrategyUnavailable) {
+		t.Fatalf("Act() error = %v, want ErrBlueGreenStrategyUnavailable", err)
+	}
+	if report.Phase != string(mvutypes.Failed) || report.Reason != mvutypes.ReasonBlueGreenStrategyUnavailable || report.Retry {
+		t.Fatalf("report = %#v, want terminal declared-but-unavailable blueGreen report", report)
+	}
+}
+
+func TestMajorUpgradeUseCaseRearmsBlueGreenOnlyDuringAct(t *testing.T) {
+	source := "17"
+	target := "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	completed := string(mvutypes.Completed)
+	store := &blueGreenRearmStore{intent: mvutypes.Intent{
+		Strategy:               strategy,
+		SourcePgVersion:        source,
+		TargetPgVersion:        target,
+		AttemptID:              "attempt-1",
+		RequiresBlueGreenRearm: true,
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Phase:           &completed,
+			Strategy:        &strategy,
+			SourcePgVersion: &source,
+			TargetPgVersion: &target,
+			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+				AttemptID: "attempt-1",
+				Cleanup:   &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateCleaned},
+			},
+		}},
+	}}
+	useCase := NewMajorUpgradeUseCase(store, nil, nil, pgupgradeflow.NoopNotifier())
+
+	require.NoError(t, useCase.Prerequisites(t.Context()))
+	assert.Zero(t, store.rearmWrites, "Prerequisites must be read-only")
+
+	scheduled, err := useCase.Schedule(t.Context())
+	require.NoError(t, err)
+	assert.True(t, scheduled)
+	assert.Zero(t, store.rearmWrites, "Schedule must be read-only")
+	assert.Empty(t, useCase.BlocksComponents(), "a status-only re-arm must not block components")
+
+	report, err := useCase.Act(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, mvutypes.UseCaseName, report.Name)
+	assert.False(t, report.Retry)
+	assert.Equal(t, 1, store.rearmWrites)
+	assert.Zero(t, store.progressWrites)
 }
 
 func TestMajorUpgradeUseCaseScheduleBlocksCompletedIntent(t *testing.T) {
@@ -602,7 +664,31 @@ func (f majorUpgradeInfoStoreFunc) ReadMajorUpgradeIntent(ctx context.Context) (
 	return f(ctx)
 }
 
-func (f majorUpgradeInfoStoreFunc) SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, reconciliationTypes.Report, *mvutypes.BackupInfo) error {
+func (f majorUpgradeInfoStoreFunc) SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, mvutypes.Progress) error {
+	return nil
+}
+
+func (f majorUpgradeInfoStoreFunc) SaveBlueGreenRearm(context.Context, mvutypes.Intent) error {
+	return nil
+}
+
+type blueGreenRearmStore struct {
+	intent         mvutypes.Intent
+	progressWrites int
+	rearmWrites    int
+}
+
+func (s *blueGreenRearmStore) ReadMajorUpgradeIntent(context.Context) (mvutypes.Intent, bool, error) {
+	return s.intent, true, nil
+}
+
+func (s *blueGreenRearmStore) SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, mvutypes.Progress) error {
+	s.progressWrites++
+	return nil
+}
+
+func (s *blueGreenRearmStore) SaveBlueGreenRearm(context.Context, mvutypes.Intent) error {
+	s.rearmWrites++
 	return nil
 }
 
