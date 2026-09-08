@@ -75,6 +75,30 @@ spec:
                       maxLength: 63
                       pattern: ^[A-Za-z_][A-Za-z0-9_$]{0,62}$
                       type: string
+                    allowConnections:
+                      description: |-
+                        AllowConnections controls whether PostgreSQL accepts connections to this
+                        database. SOK keeps a new database connectable until initial privileges
+                        have been granted, then applies the requested value.
+                      type: boolean
+                    builtinLocale:
+                      description: |-
+                        BuiltinLocale selects the builtin locale. It requires
+                        localeProvider=builtin and is available from PostgreSQL 17.
+                      minLength: 1
+                      type: string
+                    collationVersion:
+                      description: CollationVersion records the collation version
+                        selected at creation.
+                      minLength: 1
+                      type: string
+                    connectionLimit:
+                      description: |-
+                        ConnectionLimit is the maximum number of concurrent connections. -1 means
+                        no limit.
+                      format: int32
+                      minimum: -1
+                      type: integer
                     deletionPolicy:
                       default: Delete
                       description: |-
@@ -84,12 +108,52 @@ spec:
                       - Delete
                       - Retain
                       type: string
+                    encoding:
+                      description: Encoding is the database character-set encoding
+                        selected at creation.
+                      minLength: 1
+                      type: string
                     extensions:
                       description: PostgreSQL extensions to install in this database
                         (e.g. "pg_trgm", "uuid-ossp").
                       items:
                         type: string
                       type: array
+                    icuLocale:
+                      description: |-
+                        ICULocale selects the ICU locale. It requires localeProvider=icu and is
+                        available from PostgreSQL 15.
+                      minLength: 1
+                      type: string
+                    icuRules:
+                      description: |-
+                        ICURules provides additional ICU collation rules. It requires
+                        localeProvider=icu and is available from PostgreSQL 16.
+                      minLength: 1
+                      type: string
+                    isTemplate:
+                      description: IsTemplate controls whether PostgreSQL treats this
+                        database as a template.
+                      type: boolean
+                    locale:
+                      description: Locale sets the default collation order and character
+                        classification.
+                      minLength: 1
+                      type: string
+                    localeCType:
+                      description: LocaleCType maps to PostgreSQL LC_CTYPE.
+                      minLength: 1
+                      type: string
+                    localeCollate:
+                      description: LocaleCollate maps to PostgreSQL LC_COLLATE.
+                      minLength: 1
+                      type: string
+                    localeProvider:
+                      description: |-
+                        LocaleProvider selects the PostgreSQL locale provider. It is available
+                        from PostgreSQL 16.
+                      minLength: 1
+                      type: string
                     monitoring:
                       properties:
                         customQueriesConfigMap:
@@ -99,7 +163,9 @@ spec:
                             description: Selects a key from a ConfigMap.
                             properties:
                               key:
-                                description: The key to select.
+                                description: |-
+                                  The key to select from the ConfigMap's Data field.
+                                  Keys in the BinaryData field are not currently propagated to container env vars.
                                 type: string
                               name:
                                 default: ""
@@ -193,6 +259,15 @@ spec:
                       maxLength: 63
                       pattern: ^[A-Za-z_][A-Za-z0-9_$]{0,62}$
                       type: string
+                    tablespace:
+                      description: Tablespace is the PostgreSQL tablespace associated
+                        with this database.
+                      type: string
+                    template:
+                      description: Template is the PostgreSQL template used to create
+                        the database.
+                      minLength: 1
+                      type: string
                   required:
                   - name
                   type: object
@@ -201,6 +276,50 @@ spec:
                     rule: (has(self.passwordConfig) == has(oldSelf.passwordConfig))
                   - message: passwordConfig is immutable once set
                     rule: '!has(self.passwordConfig) || self.passwordConfig == oldSelf.passwordConfig'
+                  - message: template is immutable
+                    rule: has(self.template) == has(oldSelf.template) && (!has(self.template)
+                      || self.template == oldSelf.template)
+                  - message: encoding is immutable
+                    rule: has(self.encoding) == has(oldSelf.encoding) && (!has(self.encoding)
+                      || self.encoding == oldSelf.encoding)
+                  - message: locale is immutable
+                    rule: has(self.locale) == has(oldSelf.locale) && (!has(self.locale)
+                      || self.locale == oldSelf.locale)
+                  - message: localeProvider is immutable
+                    rule: has(self.localeProvider) == has(oldSelf.localeProvider)
+                      && (!has(self.localeProvider) || self.localeProvider == oldSelf.localeProvider)
+                  - message: localeCollate is immutable
+                    rule: has(self.localeCollate) == has(oldSelf.localeCollate) &&
+                      (!has(self.localeCollate) || self.localeCollate == oldSelf.localeCollate)
+                  - message: localeCType is immutable
+                    rule: has(self.localeCType) == has(oldSelf.localeCType) && (!has(self.localeCType)
+                      || self.localeCType == oldSelf.localeCType)
+                  - message: icuLocale is immutable
+                    rule: has(self.icuLocale) == has(oldSelf.icuLocale) && (!has(self.icuLocale)
+                      || self.icuLocale == oldSelf.icuLocale)
+                  - message: icuRules is immutable
+                    rule: has(self.icuRules) == has(oldSelf.icuRules) && (!has(self.icuRules)
+                      || self.icuRules == oldSelf.icuRules)
+                  - message: builtinLocale is immutable
+                    rule: has(self.builtinLocale) == has(oldSelf.builtinLocale) &&
+                      (!has(self.builtinLocale) || self.builtinLocale == oldSelf.builtinLocale)
+                  - message: collationVersion is immutable
+                    rule: has(self.collationVersion) == has(oldSelf.collationVersion)
+                      && (!has(self.collationVersion) || self.collationVersion ==
+                      oldSelf.collationVersion)
+                  - message: builtinLocale is only available when localeProvider is
+                      set to builtin
+                    rule: '!has(self.builtinLocale) || self.localeProvider == ''builtin'''
+                  - message: icuLocale is only available when localeProvider is set
+                      to icu
+                    rule: '!has(self.icuLocale) || self.localeProvider == ''icu'''
+                  - message: icuRules is only available when localeProvider is set
+                      to icu
+                    rule: '!has(self.icuRules) || self.localeProvider == ''icu'''
+                  - message: extensions cannot be managed when allowConnections is
+                      false
+                    rule: '!has(self.allowConnections) || self.allowConnections ||
+                      !has(self.extensions) || self.extensions.size() == 0'
                 maxItems: 10
                 minItems: 1
                 type: array
@@ -295,7 +414,9 @@ spec:
                             description: Selects a key from a ConfigMap.
                             properties:
                               key:
-                                description: The key to select.
+                                description: |-
+                                  The key to select from the ConfigMap's Data field.
+                                  Keys in the BinaryData field are not currently propagated to container env vars.
                                 type: string
                               name:
                                 default: ""
@@ -392,8 +513,8 @@ spec:
                       x-kubernetes-map-type: atomic
                     databaseRef:
                       description: |-
-                        LocalObjectReference contains enough information to let you locate the
-                        referenced object inside the same namespace.
+                        DatabaseRef identifies the CNPG Database after its initial SOK bootstrap
+                        has completed. It remains present while later provider changes converge.
                       properties:
                         name:
                           default: ""
@@ -406,6 +527,11 @@ spec:
                           type: string
                       type: object
                       x-kubernetes-map-type: atomic
+                    databaseUID:
+                      description: |-
+                        DatabaseUID identifies the exact provider Database that completed initial
+                        bootstrap. A different UID requires bootstrap again.
+                      type: string
                     message:
                       type: string
                     name:

@@ -96,13 +96,18 @@ func buildFreshDatabaseObjects(requestName types.NamespacedName, dbName string) 
 	}
 
 	cnpgDatabase := &cnpgv1.Database{
-		ObjectMeta: metav1.ObjectMeta{Name: cnpgDatabaseName(postgresDB.Name, dbName), Namespace: requestName.Namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       cnpgDatabaseName(postgresDB.Name, dbName),
+			Namespace:  requestName.Namespace,
+			UID:        types.UID("cnpg-database-uid"),
+			Generation: 1,
+		},
 		Spec: cnpgv1.DatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "primary-cnpg"},
 			Name:       dbName,
 			Owner:      adminRoleName(dbName),
 		},
-		Status: cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
+		Status: cnpgv1.DatabaseStatus{Applied: boolPtr(true), ObservedGeneration: 1},
 	}
 
 	return []client.Object{postgresDB, postgresCluster, cnpgCluster, superSecret, cnpgDatabase}
@@ -133,7 +138,13 @@ func TestCharacterization_SteadyStateReadyReconcileWriteCount(t *testing.T) {
 
 	newDBRepo := func(_ context.Context, _, _, _ string) (ports.DBRepo, error) { return &stubDBRepo{}, nil }
 	metrics := &captureMetricsRecorder{}
-	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(20), Metrics: metrics}
+	rc := &ReconcileContext{
+		Client:              c,
+		Scheme:              scheme,
+		Recorder:            record.NewFakeRecorder(20),
+		Metrics:             metrics,
+		DatabaseProvisioner: testDatabaseProvisioner(c, scheme),
+	}
 
 	// Settle first; this test pins only the steady-state pass below.
 	settled := &platformv1alpha1.PostgresDatabase{}

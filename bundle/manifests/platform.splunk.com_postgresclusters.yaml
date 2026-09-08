@@ -1,9 +1,11 @@
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  labels:
+    name: splunk-operator
   name: postgresclusters.platform.splunk.com
 spec:
   group: platform.splunk.com
@@ -259,7 +261,9 @@ spec:
                       description: Selects a key from a ConfigMap.
                       properties:
                         key:
-                          description: The key to select.
+                          description: |-
+                            The key to select from the ConfigMap's Data field.
+                            Keys in the BinaryData field are not currently propagated to container env vars.
                           type: string
                         name:
                           default: ""
@@ -1063,3 +1067,9 @@ spec:
     storage: true
     subresources:
       status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

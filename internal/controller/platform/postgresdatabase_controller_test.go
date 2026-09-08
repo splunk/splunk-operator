@@ -35,6 +35,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
@@ -437,10 +438,45 @@ func expectCNPGDatabaseCreated(ctx context.Context, scenario readyClusterScenari
 	return cnpgDatabase
 }
 
-func markCNPGDatabaseApplied(ctx context.Context, cnpgDatabase *cnpgv1.Database) {
+// These manager tests do not connect to PostgreSQL. Recording the provider UID
+// explicitly represents the completed bootstrap state promised by their setup.
+func markCNPGDatabaseAppliedWithBootstrap(ctx context.Context, cnpgDatabase *cnpgv1.Database) {
 	applied := true
 	cnpgDatabase.Status.Applied = &applied
+	cnpgDatabase.Status.ObservedGeneration = cnpgDatabase.Generation
 	Expect(k8sClient.Status().Update(ctx, cnpgDatabase)).To(Succeed())
+
+	owner := metav1.GetControllerOf(cnpgDatabase)
+	Expect(owner).NotTo(BeNil())
+	postgresDB := &platformv1alpha1.PostgresDatabase{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{
+		Name: owner.Name, Namespace: cnpgDatabase.Namespace,
+	}, postgresDB)).To(Succeed())
+	found := false
+	for i := range postgresDB.Status.Databases {
+		info := &postgresDB.Status.Databases[i]
+		if info.Name != cnpgDatabase.Spec.Name {
+			continue
+		}
+		Expect(info.DatabaseRef).NotTo(BeNil())
+		Expect(info.DatabaseRef.Name).To(Equal(cnpgDatabase.Name))
+		info.DatabaseUID = cnpgDatabase.UID
+		found = true
+		break
+	}
+	Expect(found).To(BeTrue(), "missing status entry for database %s", cnpgDatabase.Spec.Name)
+	Expect(k8sClient.Status().Update(ctx, postgresDB)).To(Succeed())
+}
+
+func requireCNPGDatabaseConnections(database *cnpgv1.Database, expected bool) {
+	Expect(database.Spec.AllowConnections).NotTo(BeNil())
+	Expect(*database.Spec.AllowConnections).To(Equal(expected))
+}
+
+func expectDatabaseProvisioning(ctx context.Context, key types.NamespacedName) {
+	current := fetchPostgresDatabase(ctx, key)
+	expectStatusPhase(current, phaseProvisioning)
+	expectStatusCondition(current, condDatabasesReady, metav1.ConditionFalse, reasonWaitingForCNPG)
 }
 
 func expectPoolerConfigMap(ctx context.Context, scenario readyClusterScenario) {
@@ -578,7 +614,7 @@ func reconcilePostgresDatabaseToReady(ctx context.Context, scenario readyCluster
 	result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 	expectReconcileResult(result, err, 15*time.Second)
 	cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
-	markCNPGDatabaseApplied(ctx, cnpgDatabase)
+	markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 	result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 	expectEmptyReconcileResult(result, err)
@@ -663,7 +699,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 				expectReconcileResult(result, err, 15*time.Second)
 				cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
-				markCNPGDatabaseApplied(ctx, cnpgDatabase)
+				markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 				expectEmptyReconcileResult(result, err)
@@ -676,6 +712,78 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				expectStatusCondition(current, condRolesReady, metav1.ConditionTrue, reasonRolesAvailable)
 				expectStatusCondition(current, condDatabasesReady, metav1.ConditionTrue, reasonDatabasesAvailable)
 				expectStatusCondition(current, condPrivilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted)
+			})
+
+			It("removes managed extensions before closing and waits for the final CNPG generation", func() {
+				open := true
+				scenario := newReadyClusterScenario(namespace, "close-after-extensions", "close-cluster", "close-cnpg", dbAppdb)
+				seedReadyClusterScenarioWithDatabase(ctx, scenario, false, platformv1alpha1.DatabaseDefinition{
+					Name: scenario.dbName, AllowConnections: &open, Extensions: []string{"pg_trgm"},
+				}, 2)
+
+				result, err := reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectImmediateReconcileResult(result, err)
+				current := expectFinalizerAdded(ctx, scenario.requestName)
+				seedExistingDatabaseStatus(ctx, current, scenario.dbName)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				expectProvisionedArtifacts(ctx, scenario, current)
+				expectManagedRolesPatched(ctx, scenario)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
+				requireCNPGDatabaseConnections(cnpgDatabase, true)
+				Expect(cnpgDatabase.Spec.Extensions).To(ConsistOf(cnpgv1.ExtensionSpec{
+					DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent},
+				}))
+				initialGeneration := cnpgDatabase.Generation
+				markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
+
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusPhase(current, phaseReady)
+
+				closed := false
+				current.Spec.Databases[0].Extensions = nil
+				current.Spec.Databases[0].AllowConnections = &closed
+				Expect(k8sClient.Update(ctx, current)).To(Succeed())
+
+				By("waiting for CNPG to remove the extension while the database remains open")
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				cnpgDatabase = expectCNPGDatabaseCreated(ctx, scenario, current)
+				requireCNPGDatabaseConnections(cnpgDatabase, true)
+				Expect(cnpgDatabase.Generation).To(BeNumerically(">", initialGeneration))
+				Expect(cnpgDatabase.Spec.Extensions).To(ConsistOf(cnpgv1.ExtensionSpec{
+					DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsureAbsent},
+				}))
+				removalGeneration := cnpgDatabase.Generation
+				expectDatabaseProvisioning(ctx, scenario.requestName)
+				markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
+
+				By("applying the final close and keeping the database provisioning until that exact generation is acknowledged")
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectReconcileResult(result, err, 15*time.Second)
+				cnpgDatabase = expectCNPGDatabaseCreated(ctx, scenario, current)
+				requireCNPGDatabaseConnections(cnpgDatabase, false)
+				finalGeneration := cnpgDatabase.Generation
+				Expect(finalGeneration).To(BeNumerically(">", removalGeneration))
+				Expect(cnpgDatabase.Status.ObservedGeneration).To(Equal(removalGeneration))
+				expectDatabaseProvisioning(ctx, scenario.requestName)
+
+				markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
+				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
+				expectEmptyReconcileResult(result, err)
+				current = fetchPostgresDatabase(ctx, scenario.requestName)
+				expectStatusPhase(current, phaseReady)
+				expectStatusCondition(current, condDatabasesReady, metav1.ConditionTrue, reasonDatabasesAvailable)
+				cnpgDatabase = expectCNPGDatabaseCreated(ctx, scenario, current)
+				Expect(cnpgDatabase.Status.Applied).NotTo(BeNil())
+				Expect(*cnpgDatabase.Status.Applied).To(BeTrue())
+				Expect(cnpgDatabase.Status.ObservedGeneration).To(Equal(finalGeneration))
 			})
 
 			It("propagates overridden role names through reconciliation", func() {
@@ -702,7 +810,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 				expectReconcileResult(result, err, 15*time.Second)
 				cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
-				markCNPGDatabaseApplied(ctx, cnpgDatabase)
+				markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 				expectEmptyReconcileResult(result, err)
@@ -780,7 +888,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				current.Status.Databases[0].Ready = true
 				current.Status.Databases[0].DatabaseRef = &corev1.LocalObjectReference{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName)}
 				Expect(k8sClient.Status().Update(ctx, current)).To(Succeed())
-				markCNPGDatabaseApplied(ctx, cnpgDatabase)
+				markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 				By("waiting for acknowledgement before final readiness")
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
@@ -932,7 +1040,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 				expectReconcileResult(result, err, 15*time.Second)
 				cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
-				markCNPGDatabaseApplied(ctx, cnpgDatabase)
+				markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 				expectEmptyReconcileResult(result, err)
@@ -1246,7 +1354,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 				expectReconcileResult(result, err, 15*time.Second)
 				cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
-				markCNPGDatabaseApplied(ctx, cnpgDatabase)
+				markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 				result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 				expectEmptyReconcileResult(result, err)
@@ -1511,11 +1619,16 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s-admin", scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, existingSecret)).To(Succeed())
 		})
 
-		It("recreates a deleted CNPG Database", func() {
+		It("recreates a deleted CNPG Database and requires bootstrap for its new UID", func() {
 			scenario := newReadyClusterScenario(namespace, "cnpg-database-delete", "tenant-cluster", "tenant-cnpg", "appdb")
 			owner := reconcilePostgresDatabaseToReady(ctx, scenario, false)
 
 			cnpgDatabaseName := fmt.Sprintf("%s-%s", scenario.resourceName, scenario.dbName)
+			original := &cnpgv1.Database{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseName, Namespace: scenario.namespace}, original)).To(Succeed())
+			originalUID := original.UID
+			Expect(owner.Status.Databases).To(HaveLen(1))
+			Expect(owner.Status.Databases[0].DatabaseUID).To(Equal(originalUID))
 			Expect(k8sClient.Delete(ctx, &cnpgv1.Database{
 				ObjectMeta: metav1.ObjectMeta{Name: cnpgDatabaseName, Namespace: scenario.namespace},
 			})).To(Succeed())
@@ -1527,10 +1640,12 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseName, Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 			Expect(cnpgDatabase.Spec.Name).To(Equal(scenario.dbName))
 			Expect(metav1.IsControlledBy(cnpgDatabase, owner)).To(BeTrue())
+			Expect(cnpgDatabase.UID).NotTo(Equal(originalUID))
 
-			markCNPGDatabaseApplied(ctx, cnpgDatabase)
-			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
-			expectEmptyReconcileResult(result, err)
+			current := fetchPostgresDatabase(ctx, scenario.requestName)
+			Expect(current.Status.Databases).To(HaveLen(1))
+			Expect(current.Status.Databases[0].DatabaseUID).To(Equal(originalUID), "replacement UID is recorded only after bootstrap succeeds")
+			expectStatusCondition(current, condDatabasesReady, metav1.ConditionFalse, reasonWaitingForCNPG)
 		})
 	})
 
@@ -1811,7 +1926,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectReconcileResult(result, err, 15*time.Second)
 			cnpgDatabase := expectCNPGDatabaseCreated(ctx, scenario, current)
-			markCNPGDatabaseApplied(ctx, cnpgDatabase)
+			markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectEmptyReconcileResult(result, err)
@@ -2040,7 +2155,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 			cnpgDatabase := &cnpgv1.Database{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
-			markCNPGDatabaseApplied(ctx, cnpgDatabase)
+			markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 			current = fetchPostgresDatabase(ctx, scenario.requestName)
 			current.Spec.Databases[0].Extensions = []string{"pg_trgm"}
@@ -2113,7 +2228,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			_, hasRetainedAnnotation := adoptedDb.Annotations[retainedFromAnnotation]
 			Expect(hasRetainedAnnotation).To(BeFalse())
 
-			markCNPGDatabaseApplied(ctx, adoptedDb)
+			markCNPGDatabaseAppliedWithBootstrap(ctx, adoptedDb)
 			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectEmptyReconcileResult(result, err)
 		})
@@ -2148,7 +2263,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			// Mark the CNPG Database as applied (simulating CNPG reconciliation)
 			cnpgDatabase := &cnpgv1.Database{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
-			markCNPGDatabaseApplied(ctx, cnpgDatabase)
+			markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 			// Manually reconcile to verify the controller can recover
 			Eventually(func() string {
@@ -2208,6 +2323,66 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 		})
 	})
 	When("a PostgresDatabase resource is created, the kubebuilder validation works and", func() {
+		It("rejects explicit empty creation-only options before a typed controller update", func() {
+			fields := []string{
+				"template", "encoding", "locale", "localeProvider", "localeCollate",
+				"localeCType", "icuLocale", "icuRules", "builtinLocale", "collationVersion",
+			}
+			for i, field := range fields {
+				postgresDB := &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": platformv1alpha1.GroupVersion.String(),
+					"kind":       "PostgresDatabase",
+					"metadata": map[string]any{
+						"name":      fmt.Sprintf("empty-creation-option-%d", i),
+						"namespace": namespace,
+					},
+					"spec": map[string]any{
+						"clusterRef": map[string]any{"name": "tenant-cluster"},
+						"databases":  []any{map[string]any{"name": "appdb", field: ""}},
+					},
+				}}
+
+				err := k8sClient.Create(ctx, postgresDB)
+				Expect(err).To(HaveOccurred(), field)
+				Expect(err.Error()).To(ContainSubstring("spec.databases[0]."+field), field)
+			}
+		})
+
+		It("preserves a non-empty creation-only option across an unstructured create and typed update", func() {
+			postgresDB := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": platformv1alpha1.GroupVersion.String(),
+				"kind":       "PostgresDatabase",
+				"metadata":   map[string]any{"name": "typed-update-after-unstructured-create", "namespace": namespace},
+				"spec": map[string]any{
+					"clusterRef": map[string]any{"name": "tenant-cluster"},
+					"databases":  []any{map[string]any{"name": "appdb", "template": "template0"}},
+				},
+			}}
+			Expect(k8sClient.Create(ctx, postgresDB)).To(Succeed())
+
+			typed := &platformv1alpha1.PostgresDatabase{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: postgresDB.GetName(), Namespace: namespace}, typed)).To(Succeed())
+			typed.Labels = map[string]string{"test": "typed-update"}
+			Expect(k8sClient.Update(ctx, typed)).To(Succeed())
+		})
+
+		It("rejects managed extensions on a database that disallows connections", func() {
+			closed := false
+			postgresDB := &platformv1alpha1.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{Name: "closed-with-extensions", Namespace: namespace},
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "tenant-cluster"},
+					Databases: []platformv1alpha1.DatabaseDefinition{{
+						Name: "appdb", AllowConnections: &closed, Extensions: []string{"pg_trgm"},
+					}},
+				},
+			}
+
+			err := k8sClient.Create(ctx, postgresDB)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("extensions cannot be managed when allowConnections is false"))
+		})
+
 		It("rejects database names containing underscores or hyphens", func() {
 			for i, databaseName := range []string{"my_db", "_mydb", "my__db", "my-db", "-mydb", "my--db"} {
 				postgresDB := &platformv1alpha1.PostgresDatabase{
@@ -2225,6 +2400,97 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("spec.databases[0].name"))
 				Expect(err.Error()).To(ContainSubstring("should match '^[a-z][a-z0-9]*$'"))
+			}
+		})
+
+		It("accepts PostgreSQL database options and mutable updates", func() {
+			isTemplate := false
+			allowConnections := true
+			connectionLimit := int32(0)
+			postgresDB := createPostgresDatabaseResource(ctx, namespace, "database-options", "tenant-cluster", []platformv1alpha1.DatabaseDefinition{{
+				Name: "options", Template: "template0", Encoding: "UTF8", Locale: "en_US.UTF-8",
+				LocaleProvider: "icu", LocaleCollate: "en_US.UTF-8", LocaleCType: "en_US.UTF-8",
+				ICULocale: "en-US", ICURules: "&V << w", CollationVersion: "153.120",
+				IsTemplate: &isTemplate, AllowConnections: &allowConnections,
+				ConnectionLimit: &connectionLimit, Tablespace: "fastspace",
+			}})
+
+			isTemplate = true
+			allowConnections = false
+			connectionLimit = -1
+			postgresDB.Spec.Databases[0].IsTemplate = &isTemplate
+			postgresDB.Spec.Databases[0].AllowConnections = &allowConnections
+			postgresDB.Spec.Databases[0].ConnectionLimit = &connectionLimit
+			postgresDB.Spec.Databases[0].Tablespace = "archive"
+			postgresDB.Spec.Databases = append(postgresDB.Spec.Databases, platformv1alpha1.DatabaseDefinition{
+				Name: "newdb", Template: "template0", Encoding: "UTF8",
+			})
+			Expect(k8sClient.Update(ctx, postgresDB)).To(Succeed())
+		})
+
+		It("rejects adding any creation-only option to an admitted database", func() {
+			setters := []struct {
+				name string
+				set  func(*platformv1alpha1.DatabaseDefinition)
+			}{
+				{name: "template", set: func(db *platformv1alpha1.DatabaseDefinition) { db.Template = "template0" }},
+				{name: "encoding", set: func(db *platformv1alpha1.DatabaseDefinition) { db.Encoding = "UTF8" }},
+				{name: "locale", set: func(db *platformv1alpha1.DatabaseDefinition) { db.Locale = "C" }},
+				{name: "localeProvider", set: func(db *platformv1alpha1.DatabaseDefinition) { db.LocaleProvider = "libc" }},
+				{name: "localeCollate", set: func(db *platformv1alpha1.DatabaseDefinition) { db.LocaleCollate = "C" }},
+				{name: "localeCType", set: func(db *platformv1alpha1.DatabaseDefinition) { db.LocaleCType = "C" }},
+				{name: "icuLocale", set: func(db *platformv1alpha1.DatabaseDefinition) { db.LocaleProvider = "icu"; db.ICULocale = "en-US" }},
+				{name: "icuRules", set: func(db *platformv1alpha1.DatabaseDefinition) { db.LocaleProvider = "icu"; db.ICURules = "&V << w" }},
+				{name: "builtinLocale", set: func(db *platformv1alpha1.DatabaseDefinition) {
+					db.LocaleProvider = "builtin"
+					db.BuiltinLocale = "C.UTF-8"
+				}},
+				{name: "collationVersion", set: func(db *platformv1alpha1.DatabaseDefinition) { db.CollationVersion = "153.120" }},
+			}
+
+			for i, test := range setters {
+				postgresDB := createPostgresDatabaseResource(ctx, namespace, fmt.Sprintf("immutable-option-%d", i), "tenant-cluster", []platformv1alpha1.DatabaseDefinition{{Name: "appdb"}})
+				test.set(&postgresDB.Spec.Databases[0])
+
+				err := k8sClient.Update(ctx, postgresDB)
+				Expect(err).To(HaveOccurred(), test.name)
+				Expect(err.Error()).To(ContainSubstring("immutable"), test.name)
+			}
+		})
+
+		It("rejects changing or removing an admitted creation-only option", func() {
+			postgresDB := createPostgresDatabaseResource(ctx, namespace, "immutable-option-values", "tenant-cluster", []platformv1alpha1.DatabaseDefinition{{
+				Name: "appdb", Template: "template0", Encoding: "UTF8",
+			}})
+			postgresDB.Spec.Databases[0].Template = "template1"
+			err := k8sClient.Update(ctx, postgresDB)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("template is immutable"))
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, postgresDB)).To(Succeed())
+			postgresDB.Spec.Databases[0].Encoding = ""
+			err = k8sClient.Update(ctx, postgresDB)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("encoding is immutable"))
+		})
+
+		It("rejects invalid limits and locale-provider combinations", func() {
+			invalidLimit := int32(-2)
+			definitions := []platformv1alpha1.DatabaseDefinition{
+				{Name: "badlimit", ConnectionLimit: &invalidLimit},
+				{Name: "badicu", ICULocale: "en-US"},
+				{Name: "badrules", LocaleProvider: "libc", ICURules: "&V << w"},
+				{Name: "badbuiltin", LocaleProvider: "icu", BuiltinLocale: "C.UTF-8"},
+			}
+			for i, definition := range definitions {
+				postgresDB := &platformv1alpha1.PostgresDatabase{
+					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("invalid-option-%d", i), Namespace: namespace},
+					Spec: platformv1alpha1.PostgresDatabaseSpec{
+						ClusterRef: corev1.LocalObjectReference{Name: "tenant-cluster"},
+						Databases:  []platformv1alpha1.DatabaseDefinition{definition},
+					},
+				}
+				Expect(k8sClient.Create(ctx, postgresDB)).NotTo(Succeed())
 			}
 		})
 
