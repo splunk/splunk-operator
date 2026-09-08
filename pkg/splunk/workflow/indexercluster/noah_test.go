@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/splunk/splunk-operator/pkg/splunk/client/noah"
+	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -282,6 +283,95 @@ func TestNoahBucketMapConfirmsScaleDown(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			assert.Equal(t, test.want, NoahBucketMapConfirmsScaleDown(test.bucketMap, test.remaining, test.removed))
+		})
+	}
+}
+
+func TestPlanNoahScaleOut(t *testing.T) {
+	tests := []struct {
+		name              string
+		membership        NoahMembership
+		appliedReplicas   int32
+		requestedReplicas int32
+		requireReady      bool
+		want              common.ScaleOutPlan
+	}{
+		{
+			name:              "unknown membership blocks progress",
+			appliedReplicas:   1,
+			requestedReplicas: 3,
+			want:              common.ScaleOutPlan{TargetReplicas: 1},
+		},
+		{
+			name:              "registration advances one ordinal when readiness is optional",
+			membership:        NoahMembership{AllRegistered: true},
+			appliedReplicas:   1,
+			requestedReplicas: 3,
+			want:              common.ScaleOutPlan{TargetReplicas: 2},
+		},
+		{
+			name:              "registration alone cannot advance when readiness is required",
+			membership:        NoahMembership{AllRegistered: true},
+			appliedReplicas:   1,
+			requestedReplicas: 3,
+			requireReady:      true,
+			want:              common.ScaleOutPlan{TargetReplicas: 1},
+		},
+		{
+			name:              "contradictory readiness aggregate fails closed",
+			membership:        NoahMembership{AllReady: true},
+			appliedReplicas:   1,
+			requestedReplicas: 3,
+			requireReady:      true,
+			want:              common.ScaleOutPlan{TargetReplicas: 1},
+		},
+		{
+			name:              "cache warm timeout fails closed",
+			membership:        NoahMembership{AllRegistered: true, AllReady: true, TimedOutPeerID: "peer-0"},
+			appliedReplicas:   1,
+			requestedReplicas: 3,
+			want:              common.ScaleOutPlan{TargetReplicas: 1},
+		},
+		{
+			name:              "readiness advances only one ordinal",
+			membership:        NoahMembership{AllRegistered: true, AllReady: true},
+			appliedReplicas:   1,
+			requestedReplicas: 5,
+			requireReady:      true,
+			want:              common.ScaleOutPlan{TargetReplicas: 2},
+		},
+		{
+			name:              "requested replicas and readiness complete scale-out",
+			membership:        NoahMembership{AllRegistered: true, AllReady: true},
+			appliedReplicas:   3,
+			requestedReplicas: 3,
+			requireReady:      true,
+			want:              common.ScaleOutPlan{Complete: true, TargetReplicas: 3},
+		},
+		{
+			name:              "registered final peer is not complete until ready",
+			membership:        NoahMembership{AllRegistered: true},
+			appliedReplicas:   3,
+			requestedReplicas: 3,
+			want:              common.ScaleOutPlan{TargetReplicas: 3},
+		},
+		{
+			name:              "lower requested replicas cannot trigger scale-out",
+			membership:        NoahMembership{AllRegistered: true, AllReady: true},
+			appliedReplicas:   3,
+			requestedReplicas: 2,
+			want:              common.ScaleOutPlan{TargetReplicas: 3},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, PlanNoahScaleOut(
+				test.membership,
+				test.appliedReplicas,
+				test.requestedReplicas,
+				test.requireReady,
+			))
 		})
 	}
 }

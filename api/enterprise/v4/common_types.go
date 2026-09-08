@@ -223,6 +223,7 @@ const (
 	ReasonNoahDependencyMissing     ConditionReason = "NoahDependencyMissing"
 	ReasonNoahConfigurationInvalid  ConditionReason = "NoahConfigurationInvalid"
 	ReasonNoahPeerObservationFailed ConditionReason = "NoahPeerObservationFailed"
+	ReasonNoahOperationFailed       ConditionReason = "NoahOperationFailed"
 	ReasonNoahCacheWarmTimeout      ConditionReason = "NoahCacheWarmTimeout"
 )
 
