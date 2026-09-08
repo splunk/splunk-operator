@@ -762,6 +762,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	}, created))
 	require.NotNil(t, created.Spec.Replicas)
 	assert.Equal(t, int32(3), *created.Spec.Replicas, "initial creation must start every requested replica")
+	assert.Equal(t, getSplunkLabels(cr.Name, SplunkIndexer, cr.Spec.NoahClusterRef.Name), created.Spec.Selector.MatchLabels)
 	for key, value := range created.Spec.Selector.MatchLabels {
 		assert.Equal(t, value, created.Spec.Template.Labels[key])
 	}
