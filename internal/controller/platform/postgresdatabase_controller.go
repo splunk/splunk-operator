@@ -22,6 +22,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
+	dbcnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/cnpg"
 	dbmetricsadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/custom_metrics"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
@@ -94,10 +95,11 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	rc := &dbcore.ReconcileContext{
-		Client:   r.Client,
-		Scheme:   r.Scheme,
-		Recorder: r.Recorder,
-		Metrics:  r.Metrics,
+		Client:              r.Client,
+		Scheme:              r.Scheme,
+		Recorder:            r.Recorder,
+		Metrics:             r.Metrics,
+		DatabaseProvisioner: dbcnpgadapter.NewDatabaseProvisioner(r.Client, r.Scheme),
 		NewCustomMetricsAcknowledgementRepo: func(cluster *platformv1alpha1.PostgresCluster) dbmetrics.AcknowledgementRepository {
 			return dbmetricsadapter.NewAcknowledgementRepository(cluster.Status.CustomMetricsStatus)
 		},

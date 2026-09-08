@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 const PostgresDatabaseClusterRefNameField = "spec.clusterRef.name"
@@ -52,6 +53,20 @@ type DatabaseMonitoring struct {
 
 // +kubebuilder:validation:XValidation:rule="(has(self.passwordConfig) == has(oldSelf.passwordConfig))",message="passwordConfig cannot be altered after creation"
 // +kubebuilder:validation:XValidation:rule="!has(self.passwordConfig) || self.passwordConfig == oldSelf.passwordConfig",message="passwordConfig is immutable once set"
+// +kubebuilder:validation:XValidation:rule="has(self.template) == has(oldSelf.template) && (!has(self.template) || self.template == oldSelf.template)",message="template is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.encoding) == has(oldSelf.encoding) && (!has(self.encoding) || self.encoding == oldSelf.encoding)",message="encoding is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.locale) == has(oldSelf.locale) && (!has(self.locale) || self.locale == oldSelf.locale)",message="locale is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.localeProvider) == has(oldSelf.localeProvider) && (!has(self.localeProvider) || self.localeProvider == oldSelf.localeProvider)",message="localeProvider is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.localeCollate) == has(oldSelf.localeCollate) && (!has(self.localeCollate) || self.localeCollate == oldSelf.localeCollate)",message="localeCollate is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.localeCType) == has(oldSelf.localeCType) && (!has(self.localeCType) || self.localeCType == oldSelf.localeCType)",message="localeCType is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.icuLocale) == has(oldSelf.icuLocale) && (!has(self.icuLocale) || self.icuLocale == oldSelf.icuLocale)",message="icuLocale is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.icuRules) == has(oldSelf.icuRules) && (!has(self.icuRules) || self.icuRules == oldSelf.icuRules)",message="icuRules is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.builtinLocale) == has(oldSelf.builtinLocale) && (!has(self.builtinLocale) || self.builtinLocale == oldSelf.builtinLocale)",message="builtinLocale is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.collationVersion) == has(oldSelf.collationVersion) && (!has(self.collationVersion) || self.collationVersion == oldSelf.collationVersion)",message="collationVersion is immutable"
+// +kubebuilder:validation:XValidation:rule="!has(self.builtinLocale) || self.localeProvider == 'builtin'",message="builtinLocale is only available when localeProvider is set to builtin"
+// +kubebuilder:validation:XValidation:rule="!has(self.icuLocale) || self.localeProvider == 'icu'",message="icuLocale is only available when localeProvider is set to icu"
+// +kubebuilder:validation:XValidation:rule="!has(self.icuRules) || self.localeProvider == 'icu'",message="icuRules is only available when localeProvider is set to icu"
+// +kubebuilder:validation:XValidation:rule="!has(self.allowConnections) || self.allowConnections || !has(self.extensions) || self.extensions.size() == 0",message="extensions cannot be managed when allowConnections is false"
 type DatabaseDefinition struct {
 	// Name of the PostgreSQL database to create. It must start with a lowercase
 	// letter and contain only lowercase letters and digits because it is also
@@ -74,6 +89,66 @@ type DatabaseDefinition struct {
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_$]{0,62}$`
 	RWRoleName string `json:"rwRoleName,omitempty"`
+	// Template is the PostgreSQL template used to create the database.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Template string `json:"template,omitempty"`
+	// Encoding is the database character-set encoding selected at creation.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Encoding string `json:"encoding,omitempty"`
+	// Locale sets the default collation order and character classification.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Locale string `json:"locale,omitempty"`
+	// LocaleProvider selects the PostgreSQL locale provider. It is available
+	// from PostgreSQL 16.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	LocaleProvider string `json:"localeProvider,omitempty"`
+	// LocaleCollate maps to PostgreSQL LC_COLLATE.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	LocaleCollate string `json:"localeCollate,omitempty"`
+	// LocaleCType maps to PostgreSQL LC_CTYPE.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	LocaleCType string `json:"localeCType,omitempty"`
+	// ICULocale selects the ICU locale. It requires localeProvider=icu and is
+	// available from PostgreSQL 15.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	ICULocale string `json:"icuLocale,omitempty"`
+	// ICURules provides additional ICU collation rules. It requires
+	// localeProvider=icu and is available from PostgreSQL 16.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	ICURules string `json:"icuRules,omitempty"`
+	// BuiltinLocale selects the builtin locale. It requires
+	// localeProvider=builtin and is available from PostgreSQL 17.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	BuiltinLocale string `json:"builtinLocale,omitempty"`
+	// CollationVersion records the collation version selected at creation.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	CollationVersion string `json:"collationVersion,omitempty"`
+	// IsTemplate controls whether PostgreSQL treats this database as a template.
+	// +optional
+	IsTemplate *bool `json:"isTemplate,omitempty"`
+	// AllowConnections controls whether PostgreSQL accepts connections to this
+	// database. SOK keeps a new database connectable until initial privileges
+	// have been granted, then applies the requested value.
+	// +optional
+	AllowConnections *bool `json:"allowConnections,omitempty"`
+	// ConnectionLimit is the maximum number of concurrent connections. -1 means
+	// no limit.
+	// +optional
+	// +kubebuilder:validation:Minimum=-1
+	ConnectionLimit *int32 `json:"connectionLimit,omitempty"`
+	// Tablespace is the PostgreSQL tablespace associated with this database.
+	// +optional
+	Tablespace string `json:"tablespace,omitempty"`
 	// PostgreSQL extensions to install in this database (e.g. "pg_trgm", "uuid-ossp").
 	Extensions []string `json:"extensions,omitempty"`
 	// DeletionPolicy controls what happens to the PostgreSQL database when this resource is deleted.
@@ -105,8 +180,15 @@ type DatabaseInfo struct {
 	Name  string `json:"name"`
 	Ready bool   `json:"ready"`
 	// +optional
-	Message            string                       `json:"message,omitempty"`
-	DatabaseRef        *corev1.LocalObjectReference `json:"databaseRef,omitempty"`
+	Message string `json:"message,omitempty"`
+	// DatabaseRef identifies the CNPG Database after its initial SOK bootstrap
+	// has completed. It remains present while later provider changes converge.
+	// +optional
+	DatabaseRef *corev1.LocalObjectReference `json:"databaseRef,omitempty"`
+	// DatabaseUID identifies the exact provider Database that completed initial
+	// bootstrap. A different UID requires bootstrap again.
+	// +optional
+	DatabaseUID        k8stypes.UID                 `json:"databaseUID,omitempty"`
 	AdminUserSecretRef *corev1.SecretKeySelector    `json:"adminUserSecretRef,omitempty"`
 	RWUserSecretRef    *corev1.SecretKeySelector    `json:"rwUserSecretRef,omitempty"`
 	ConfigMapRef       *corev1.LocalObjectReference `json:"configMapRef,omitempty"`

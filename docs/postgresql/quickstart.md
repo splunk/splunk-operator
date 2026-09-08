@@ -376,6 +376,10 @@ kubectl wait --namespace "$NAMESPACE" \
   postgresdatabase/quickstart-db --timeout=5m
 ```
 
+For database creation and runtime settings such as encoding, locale,
+connection limits, tablespaces, and connection disablement, see
+[PostgresDatabase options](postgresdatabase-options.md).
+
 ## 5. Retrieve connection details and connect
 
 The Postgres Operator-generated read-write Secret is named `<PostgresDatabase>-<database>-rw`; this

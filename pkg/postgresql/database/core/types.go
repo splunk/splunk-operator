@@ -34,6 +34,7 @@ type ReconcileContext struct {
 	Scheme                              *runtime.Scheme
 	Recorder                            record.EventRecorder
 	Metrics                             ports.Recorder
+	DatabaseProvisioner                 DatabaseProvisioner
 	NewCustomMetricsAcknowledgementRepo func(*platformv1alpha1.PostgresCluster) dbmetrics.AcknowledgementRepository
 }
 

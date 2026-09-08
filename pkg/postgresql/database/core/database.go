@@ -185,6 +185,26 @@ func PostgresDatabaseService(
 	// persist the whole status object and may return before the failed phase.
 	retryAfterStaleReconcileFailure := postgresDB.Status.ReconcileFailureType != "" && !currentReconcileFailure
 	if currentReconcileFailure {
+		if !requiresClosedDatabaseFinalization(postgresDB.Spec.Databases) {
+			return ctrl.Result{}, nil
+		}
+		cluster, err := fetchCluster(ctx, c, postgresDB)
+		if errors.IsNotFound(err) {
+			return ctrl.Result{RequeueAfter: clusterNotFoundRetryDelay}, nil
+		}
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("fetching cluster while restoring requested closed database state: %w", err)
+		}
+		if cluster.Status.ProvisionerRef == nil {
+			return ctrl.Result{RequeueAfter: retryDelay}, nil
+		}
+		closed, err := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, cluster)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !closed {
+			return ctrl.Result{RequeueAfter: retryDelay}, nil
+		}
 		return ctrl.Result{}, nil
 	}
 	previouslyProvisionedDatabases := existingDatabaseStatus(postgresDB)
@@ -440,7 +460,7 @@ func PostgresDatabaseService(
 	}
 
 	// Phase: DatabaseProvisioning
-	adopted, err := reconcileCNPGDatabases(ctx, c, rc.Scheme, postgresDB, cluster)
+	provisioningResult, err := reconcileDatabaseProvisioning(ctx, rc.DatabaseProvisioner, postgresDB, cluster)
 	if err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCNPGDatabasesReconcile, "reconciling CNPG databases"); ok {
 			return result, conflictErr
@@ -452,19 +472,14 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{}, err
 	}
-	if len(adopted) > 0 {
-		rc.emitNormal(postgresDB, EventResourcesAdopted, fmt.Sprintf("Adopted retained databases: %v", adopted))
+	if len(provisioningResult.adopted) > 0 {
+		rc.emitNormal(postgresDB, EventResourcesAdopted, fmt.Sprintf("Adopted retained databases: %v", provisioningResult.adopted))
 	}
 
-	notReadyReasons := make(map[string]string)
-	notReadyDBs, err := verifyDatabasesReady(ctx, c, postgresDB, notReadyReasons)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to verify database readiness: %w", err)
-	}
-	if len(notReadyDBs) > 0 {
+	if len(provisioningResult.notReady) > 0 {
 		rc.emitOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabaseReconciliationStarted, fmt.Sprintf("Reconciling %d databases, waiting for readiness", len(postgresDB.Spec.Databases)))
 		if err := updateStatus(databasesReady, metav1.ConditionFalse, reasonWaitingForCNPG,
-			fmt.Sprintf("Waiting for databases to be ready: %v", notReadyDBs), provisioningDBPhase); err != nil {
+			fmt.Sprintf("Waiting for databases to be ready: %v", provisioningResult.notReady), provisioningDBPhase); err != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases pending status"); ok {
 				return result, conflictErr
 			}
@@ -472,7 +487,7 @@ func PostgresDatabaseService(
 		}
 		// Persisted separately: the condition message is stable across requeues, so a
 		// change confined to a per-database message would be invisible to updateStatus.
-		if err := persistDatabaseMessages(ctx, c, postgresDB, notReadyReasons); err != nil {
+		if err := persistDatabaseMessages(ctx, c, postgresDB, provisioningResult.reasons); err != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases pending status"); ok {
 				return result, conflictErr
 			}
@@ -480,29 +495,54 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-	rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabasesReady, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)))
-	if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable,
-		fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases ready status"); ok {
-			return result, conflictErr
+	awaitingPrivilegeBootstrap := len(provisioningResult.bootstrap) > 0
+	finalizeClosedDatabaseAfterPrivileges := requiresClosedDatabaseFinalization(provisioningResult.bootstrap)
+	if awaitingPrivilegeBootstrap {
+		message := "Waiting for initial application privileges"
+		if finalizeClosedDatabaseAfterPrivileges {
+			message += " before applying the final database connection policy"
 		}
-		return ctrl.Result{}, err
-	}
-	// Clear now-stale per-database messages before a later phase can fail and return early.
-	if err := persistDatabaseMessages(ctx, c, postgresDB, nil); err != nil {
-		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases ready status"); ok {
-			return result, conflictErr
+		if err := updateStatus(databasesReady, metav1.ConditionFalse, reasonWaitingForCNPG, message, provisioningDBPhase); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting database bootstrap status"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
+		if err := persistDatabaseMessages(ctx, c, postgresDB, bootstrapDatabaseReasons(provisioningResult.bootstrap)); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting database bootstrap status"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
+		}
+	} else {
+		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabasesReady, fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)))
+		if err := updateStatus(databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable,
+			fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases)), provisioningDBPhase); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases ready status"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
+		}
+		// Clear now-stale per-database messages before a later phase can fail and return early.
+		if err := persistDatabaseMessages(ctx, c, postgresDB, nil); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictDatabasesStatus, "persisting databases ready status"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Phase: RWRolePrivileges
 	// Skipped when no new databases are detected — ALTER DEFAULT PRIVILEGES covers tables
-	// added by migrations on existing databases. Re-runs for all databases when a new one
-	// is added, or when a spec change leaves a stale terminal failure to recover.
+	// added by migrations on existing databases. Bootstrap grants target only new databases;
+	// stale terminal recovery retains the previous all-database retry when no database is new.
 	databaseCount := len(postgresDB.Spec.Databases)
 	privilegesMsg := fmt.Sprintf("RW role privileges already current for all %d databases", databaseCount)
-	if hasNewDatabases(postgresDB) || retryAfterStaleReconcileFailure {
+	databasesToGrant := provisioningResult.bootstrap
+	if len(databasesToGrant) > 0 || retryAfterStaleReconcileFailure {
+		if len(databasesToGrant) == 0 {
+			databasesToGrant = postgresDB.Spec.Databases
+		}
 		// Read from our own status — we created this secret and wrote the SecretKeySelector
 		// (name + key) when the cluster was provisioned. This avoids depending on CNPG's
 		// spec field and makes the key explicit.
@@ -522,8 +562,8 @@ func PostgresDatabaseService(
 			return ctrl.Result{}, fmt.Errorf("superuser secret %s missing %q key", superSecretRef.Name, superSecretRef.Key)
 		}
 
-		privilegeTargets := make([]databasePrivilegeTarget, 0, len(postgresDB.Spec.Databases))
-		for _, dbSpec := range postgresDB.Spec.Databases {
+		privilegeTargets := make([]databasePrivilegeTarget, 0, len(databasesToGrant))
+		for _, dbSpec := range databasesToGrant {
 			privilegeTargets = append(privilegeTargets, databasePrivilegeTarget{
 				Database: dbSpec.Name,
 				Roles:    EffectiveRoleNames(dbSpec),
@@ -549,6 +589,13 @@ func PostgresDatabaseService(
 					}
 					return ctrl.Result{}, stderrors.Join(err, wrappedStatusErr)
 				}
+				closed, closeErr := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, cluster)
+				if closeErr != nil {
+					return ctrl.Result{}, closeErr
+				}
+				if !closed {
+					return ctrl.Result{RequeueAfter: retryDelay}, nil
+				}
 				return ctrl.Result{}, nil
 			}
 
@@ -569,10 +616,27 @@ func PostgresDatabaseService(
 		if retryAfterStaleReconcileFailure {
 			postgresDB.Status.ReconcileFailureType = ""
 		}
-		privilegesMsg = fmt.Sprintf("RW role privileges granted for all %d databases", databaseCount)
+		privilegesMsg = fmt.Sprintf("RW role privileges granted, count: %d", len(privilegeTargets))
 		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, privilegesReady, EventPrivilegesReady, privilegesMsg)
 	}
 	applyStatus(postgresDB, privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted, privilegesMsg, readyDBPhase)
+	if finalizeClosedDatabaseAfterPrivileges {
+		if err := persistDatabaseBootstrapCompletion(
+			ctx, c, postgresDB, databasesToGrant, provisioningResult.databaseUIDs,
+		); err != nil {
+			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictPrivilegesStatus, "persisting database privilege bootstrap completion"); ok {
+				return result, conflictErr
+			}
+			return ctrl.Result{}, fmt.Errorf("persisting database privilege bootstrap completion: %w", err)
+		}
+		return ctrl.Result{RequeueAfter: retryDelay}, nil
+	}
+	recordDatabaseBootstrapCompletion(postgresDB, databasesToGrant, provisioningResult.databaseUIDs)
+	if awaitingPrivilegeBootstrap {
+		message := fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases))
+		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabasesReady, message)
+		applyStatus(postgresDB, databasesReady, metav1.ConditionTrue, reasonDatabasesAvailable, message, provisioningDBPhase)
+	}
 	lastTransitionTime, completedReadinessCycle := completeReadinessCycle(postgresDB)
 
 	metricsOutcome, err := reconcileCustomMetricsGate(ctx, rc, postgresDB, cluster)
@@ -791,75 +855,6 @@ func evaluateRoleGate(postgresDB *platformv1alpha1.PostgresDatabase, status *pla
 
 func sameRoleOwner(a, b platformv1alpha1.RoleOwnerReference) bool {
 	return a.Name == b.Name && a.UID == b.UID
-}
-
-func reconcileCNPGDatabases(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, cluster *platformv1alpha1.PostgresCluster) ([]string, error) {
-	logger := logging.FromContext(ctx)
-	var adopted []string
-	for _, dbSpec := range postgresDB.Spec.Databases {
-		cnpgDBName := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
-		reAdopted := false
-		cnpgDB := &cnpgv1.Database{
-			ObjectMeta: metav1.ObjectMeta{Name: cnpgDBName, Namespace: postgresDB.Namespace},
-		}
-		_, err := controllerutil.CreateOrUpdate(ctx, c, cnpgDB, func() error {
-			cnpgDB.Spec = buildCNPGDatabaseSpec(cluster.Status.ProvisionerRef.Name, dbSpec, reconcileExtensions(dbSpec.Extensions, cnpgDB.Spec.Extensions))
-			reAdopted = cnpgDB.Annotations[annotationRetainedFrom] == postgresDB.Name
-			if reAdopted {
-				delete(cnpgDB.Annotations, annotationRetainedFrom)
-				adopted = append(adopted, dbSpec.Name)
-			}
-			if cnpgDB.CreationTimestamp.IsZero() || reAdopted {
-				return controllerutil.SetControllerReference(postgresDB, cnpgDB, scheme)
-			}
-			return nil
-		})
-		if err != nil {
-			return adopted, fmt.Errorf("reconciling CNPG Database %s: %w", cnpgDBName, err)
-		}
-		if reAdopted {
-			logger.InfoContext(ctx, "CNPG Database re-adopted", "name", cnpgDBName)
-		}
-	}
-	return adopted, nil
-}
-
-func verifyDatabasesReady(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, reasons map[string]string) ([]string, error) {
-	if reasons == nil {
-		reasons = map[string]string{}
-	}
-	var notReady []string
-	for _, dbSpec := range postgresDB.Spec.Databases {
-		cnpgDBName := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
-		cnpgDB := &cnpgv1.Database{}
-		if err := c.Get(ctx, types.NamespacedName{Name: cnpgDBName, Namespace: postgresDB.Namespace}, cnpgDB); err != nil {
-			if errors.IsNotFound(err) {
-				notReady = append(notReady, dbSpec.Name)
-				reasons[dbSpec.Name] = reasonCNPGDatabaseNotFound
-				continue
-			}
-			return nil, fmt.Errorf("getting CNPG Database %s: %w", cnpgDBName, err)
-		}
-		if cnpgDB.Status.Applied == nil || !*cnpgDB.Status.Applied {
-			notReady = append(notReady, dbSpec.Name)
-			reasons[dbSpec.Name] = cnpgNotReadyReason(cnpgDB)
-		}
-	}
-	return notReady, nil
-}
-
-func cnpgNotReadyReason(cnpgDB *cnpgv1.Database) string {
-	// The top-level Message is a generic summary; the actionable, per-database detail
-	// lives in the failing sub-object's message.
-	for _, ext := range cnpgDB.Status.Extensions {
-		if !ext.Applied && ext.Message != "" {
-			return fmt.Sprintf("extension %q: %s", ext.Name, ext.Message)
-		}
-	}
-	if cnpgDB.Status.Message != "" {
-		return cnpgDB.Status.Message
-	}
-	return reasonCNPGDatabaseApplying
 }
 
 func persistStatus(ctx context.Context, c client.Client, metrics ports.Recorder, db *platformv1alpha1.PostgresDatabase, wasReadyAtReconcileStart bool, conditionType conditionTypes, conditionStatus metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileDBPhases,
@@ -1448,45 +1443,6 @@ func buildPasswordSecret(postgresDB *platformv1alpha1.PostgresDatabase, secretNa
 	}
 }
 
-func buildCNPGDatabaseSpec(clusterName string, dbSpec platformv1alpha1.DatabaseDefinition, extensions []cnpgv1.ExtensionSpec) cnpgv1.DatabaseSpec {
-	reclaimPolicy := cnpgv1.DatabaseReclaimDelete
-	if dbSpec.DeletionPolicy == deletionPolicyRetain {
-		reclaimPolicy = cnpgv1.DatabaseReclaimRetain
-	}
-	return cnpgv1.DatabaseSpec{
-		Name:          dbSpec.Name,
-		Owner:         EffectiveRoleNames(dbSpec).Admin,
-		ClusterRef:    corev1.LocalObjectReference{Name: clusterName},
-		ReclaimPolicy: reclaimPolicy,
-		Extensions:    extensions,
-	}
-}
-
-// reconcileExtensions produces the final extension list for a CNPG Database spec.
-// Desired extensions are marked present; extensions previously declared but now removed
-// are carried forward as absent so CNPG issues DROP EXTENSION.
-func reconcileExtensions(desired []string, existing []cnpgv1.ExtensionSpec) []cnpgv1.ExtensionSpec {
-	desiredSet := make(map[string]struct{}, len(desired))
-	result := make([]cnpgv1.ExtensionSpec, 0, len(desired))
-	for _, name := range desired {
-		desiredSet[name] = struct{}{}
-		result = append(result, cnpgv1.ExtensionSpec{
-			DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: name, Ensure: cnpgv1.EnsurePresent},
-		})
-	}
-	for _, ext := range existing {
-		if _, ok := desiredSet[ext.Name]; !ok {
-			result = append(result, cnpgv1.ExtensionSpec{
-				DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: ext.Name, Ensure: cnpgv1.EnsureAbsent},
-			})
-		}
-	}
-	if len(result) == 0 {
-		return nil
-	}
-	return result
-}
-
 func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, endpoints clusterEndpoints) error {
 	logger := logging.FromContext(ctx)
 	for _, dbSpec := range postgresDB.Spec.Databases {
@@ -1536,8 +1492,8 @@ func persistDatabaseInfos(ctx context.Context, c client.Client, postgresDB *plat
 
 // persistDatabaseMessages overlays per-database readiness onto existing status entries: a
 // database is ready exactly when the reasons map holds no failure for it, and carries that
-// reason as its message otherwise. Roles and the DatabaseRef provisioning marker hasNewDatabases
-// relies on are never touched, so reporting a failure here cannot re-run the privileges phase.
+// reason as its message otherwise. Roles and the bootstrap identity are never touched, so
+// reporting a failure here cannot re-run the privileges phase.
 func persistDatabaseMessages(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, reasons map[string]string) error {
 	before := postgresDB.Status.DeepCopy()
 	for i := range postgresDB.Status.Databases {
@@ -1610,11 +1566,13 @@ func populateDatabaseStatusForDefinitions(postgresDB *platformv1alpha1.PostgresD
 	}
 	existingProvisioned := make(map[string]bool, len(postgresDB.Status.Databases))
 	existingMessage := make(map[string]string, len(postgresDB.Status.Databases))
+	existingUID := make(map[string]types.UID, len(postgresDB.Status.Databases))
 	for _, existing := range postgresDB.Status.Databases {
 		if databaseProvisioned(existing) {
 			existingProvisioned[existing.Name] = true
 		}
 		existingMessage[existing.Name] = existing.Message
+		existingUID[existing.Name] = existing.DatabaseUID
 	}
 	databases := make([]platformv1alpha1.DatabaseInfo, 0, len(definitions))
 	for _, dbSpec := range definitions {
@@ -1627,11 +1585,11 @@ func populateDatabaseStatusForDefinitions(postgresDB *platformv1alpha1.PostgresD
 			RWUserSecretRef:    &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: rwSecretName}, Key: secretKeyPassword},
 			ConfigMapRef:       &corev1.LocalObjectReference{Name: configMapName(postgresDB.Name, dbSpec.Name)},
 		}
-		// DatabaseRef is the sticky provisioned marker hasNewDatabases keys off: stamped once a
-		// database reaches ready, then preserved so a later not-ready blip does not re-run the
-		// privileges phase. Ready alone is transient and must not gate provisioning.
+		// DatabaseRef is the sticky bootstrap marker. Ready alone is transient and must not
+		// decide whether one-time privileges need to run again.
 		if ready || (exists && existingProvisioned[dbSpec.Name]) {
 			info.DatabaseRef = &corev1.LocalObjectReference{Name: cnpgDatabaseName(postgresDB.Name, dbSpec.Name)}
+			info.DatabaseUID = existingUID[dbSpec.Name]
 		}
 		// Preserve any existing not-ready message; persistDatabaseMessages owns setting and clearing it.
 		if !info.Ready {
@@ -1648,27 +1606,11 @@ func populateDatabaseStatusForDefinitions(postgresDB *platformv1alpha1.PostgresD
 	return databases
 }
 
-// databaseProvisioned reports whether a status entry represents an already-provisioned
-// database. DatabaseRef is stamped once a database reaches ready and stays put, so this
-// stays true across a later not-ready blip — unlike Ready, which the message overlay clears.
+// databaseProvisioned reports whether a status entry completed its initial bootstrap.
+// DatabaseRef stays present across later not-ready provider changes.
 // Entries with no role status are legacy credential-only rows and count as provisioned.
 func databaseProvisioned(dbInfo platformv1alpha1.DatabaseInfo) bool {
 	return dbInfo.DatabaseRef != nil || len(dbInfo.Roles) == 0
-}
-
-func hasNewDatabases(postgresDB *platformv1alpha1.PostgresDatabase) bool {
-	existing := make(map[string]bool, len(postgresDB.Status.Databases))
-	for _, dbInfo := range postgresDB.Status.Databases {
-		if databaseProvisioned(dbInfo) {
-			existing[dbInfo.Name] = true
-		}
-	}
-	for _, dbSpec := range postgresDB.Spec.Databases {
-		if !existing[dbSpec.Name] {
-			return true
-		}
-	}
-	return false
 }
 
 // roleGateReasons maps each spec database to a not-ready message for a role-gate
