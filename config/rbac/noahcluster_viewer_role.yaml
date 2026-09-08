@@ -18,9 +18,3 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - enterprise.splunk.com
-  resources:
-  - noahclusters/status
-  verbs:
-  - get
