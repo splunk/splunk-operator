@@ -62,8 +62,7 @@ nav_order: 1
 
 #### Known Issues
 
-* Updating `queue.sqs.name` only works with Splunk Enterprise 10.6 or later. On older Splunk versions the change will not take effect because the underlying fix ships in Splunk Ansible.
-
+* Updating queue reference (queueRef) in IngestorCluster or IndexerCluster that changes the name of the underlying queue (queueRef.spec.sqs.name) only works with Splunk Enterprise 10.6 or later. On older Splunk versions the change will not take effect because the underlying fix ships in Splunk Ansible.
 ### Supported Splunk Version
 
 >| Splunk Version |
