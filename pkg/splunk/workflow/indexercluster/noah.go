@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/splunk/splunk-operator/pkg/splunk/client/noah"
+	"github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // ExpectedNoahPeer identifies the Noah peer and Splunk process incarnation
@@ -148,4 +149,27 @@ func NoahBucketMapConfirmsScaleDown(bucketMap *noah.BucketMap, remainingPeerIDs 
 	}
 
 	return true
+}
+
+// PlanNoahScaleOut returns the next safe replica target. Scale-out advances by
+// at most one ordinal after all applied peers satisfy the selected gate. Final
+// convergence always requires every applied peer to be ready in Noah.
+func PlanNoahScaleOut(membership NoahMembership, appliedReplicas, requestedReplicas int32, requireReady bool) common.ScaleOutPlan {
+	registered := membership.AllRegistered && membership.TimedOutPeerID == ""
+	ready := registered && membership.AllReady
+	plan := common.ScaleOutPlan{
+		Complete:       ready && appliedReplicas == requestedReplicas,
+		TargetReplicas: appliedReplicas,
+	}
+
+	canAdvance := registered
+	if requireReady {
+		canAdvance = ready
+	}
+
+	if canAdvance && appliedReplicas < requestedReplicas {
+		plan.TargetReplicas++
+	}
+
+	return plan
 }
