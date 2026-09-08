@@ -67,8 +67,8 @@ nav_order: 1
 ### Supported Splunk Version
 
 >| Splunk Version |
->|----------------|
->| 10.6.0.0       |
+>|--------------|
+>| 10.6.0       |
 
 ### Supported Kubernetes Version
 
