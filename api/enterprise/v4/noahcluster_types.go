@@ -17,13 +17,6 @@ package v4
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-)
-
-const (
-	// NoahClusterPausedAnnotation is the annotation that pauses the reconciliation (triggers
-	// an immediate requeue)
-	NoahClusterPausedAnnotation = "noahcluster.enterprise.splunk.com/paused"
 )
 
 // NoahClusterSpec defines the desired state of NoahCluster
@@ -73,59 +66,24 @@ type NoahClusterSpec struct {
 	CacheWarmScaleOutTimeoutSeconds *int32 `json:"cacheWarmScaleOutTimeoutSeconds,omitempty"`
 }
 
-// NoahClusterStatus defines the observed state of NoahCluster
-type NoahClusterStatus struct {
-	// Phase of the NoahCluster
-	Phase Phase `json:"phase"`
-
-	// ObservedGeneration is the most recent generation observed by the controller.
-	// It corresponds to the metadata.generation which is updated on spec changes.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// Conditions represent the latest available observations of the resource's state.
-	// Conditions are: Ready, Progressing, Paused
-	// +optional
-	// +patchMergeKey=type
-	// +patchStrategy=merge
-	// +listType=map
-	// +listMapKey=type
-	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
-
-	// Auxiliary message describing CR status
-	Message string `json:"message"`
-}
-
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 
-// NoahCluster is the Schema for a Noah cluster coordination resource
+// NoahCluster is shared, configuration-only connection detail for Splunk
+// workloads that use Noah. Because several resources (e.g. IndexerClusters and SearchHeadClusters)
+// can reference the same NoahCluster with differing health, no single controller can maintain a status
+// consistently for all of them. Operational state is reported on each referencing workload instead.
 // +k8s:openapi-gen=true
-// +kubebuilder:subresource:status
 // +kubebuilder:resource:path=noahclusters,scope=Namespaced,shortName=noah
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of noah cluster"
 // +kubebuilder:printcolumn:name="Endpoint",type="string",JSONPath=".spec.endpoint",description="Noah service endpoint"
 // +kubebuilder:printcolumn:name="Tenant",type="string",JSONPath=".spec.tenant",description="Noah tenant identifier"
 // +kubebuilder:printcolumn:name="CacheWarm",type="boolean",JSONPath=".spec.cacheWarmScaleOutEnabled",description="Cache-warm scale-out enabled"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of noah cluster resource"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
-
-// NoahCluster is the Schema for the noahclusters API.
 type NoahCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	Spec   NoahClusterSpec   `json:"spec"`
-	Status NoahClusterStatus `json:"status,omitempty,omitzero"`
-}
-
-// DeepCopyObject implements runtime.Object
-func (in *NoahCluster) DeepCopyObject() runtime.Object {
-	if c := in.DeepCopy(); c != nil {
-		return c
-	}
-	return nil
+	Spec NoahClusterSpec `json:"spec"`
 }
 
 // +kubebuilder:object:root=true
