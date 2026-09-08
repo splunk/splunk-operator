@@ -345,21 +345,27 @@ func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.C
 
 func (mgr *noahIndexerPodManager) NextReplicas(ctx context.Context, appliedReplicas, requestedReplicas int32) (splcommon.ScaleOutPlan, error) {
 	plan := splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}
-	observation, cacheWarmEnabled, err := mgr.observePeers(ctx, appliedReplicas)
+
+	observation, err := mgr.observePeers(ctx, appliedReplicas)
 	if err != nil {
 		return plan, &noahIndexerPeerObservationError{err: err}
 	}
-	if observation.timedOutPeerID != "" {
-		return plan, &noahIndexerCacheWarmTimeoutError{peerID: observation.timedOutPeerID}
+
+	if observation.TimedOutPeerID != "" {
+		return plan, &noahIndexerCacheWarmTimeoutError{peerID: observation.TimedOutPeerID}
 	}
-	plan.Complete = observation.allReady && appliedReplicas == requestedReplicas
-	canAdvance := observation.allReady
-	if !cacheWarmEnabled {
-		canAdvance = observation.allRegistered
+
+	plan.Complete = observation.AllReady && appliedReplicas == requestedReplicas
+
+	canAdvance := observation.AllReady
+	if !mgr.cacheWarmEnabled {
+		canAdvance = observation.AllRegistered
 	}
+
 	if canAdvance && appliedReplicas < requestedReplicas {
 		plan.TargetReplicas++
 	}
+
 	return plan, nil
 }
 
@@ -369,11 +375,11 @@ func (mgr *noahIndexerPodManager) PrepareScaleDown(ctx context.Context, ordinal 
 		return false, err
 	}
 
-	observation, _, err := mgr.observePeers(ctx, appliedReplicas)
+	observation, err := mgr.observePeers(ctx, appliedReplicas)
 	if err != nil {
 		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
 	}
-	if !observation.allReady {
+	if !observation.AllReady {
 		return false, nil
 	}
 
@@ -381,6 +387,7 @@ func (mgr *noahIndexerPodManager) PrepareScaleDown(ctx context.Context, ordinal 
 		mgr.statefulSet.Annotations = map[string]string{}
 	}
 	mgr.statefulSet.Annotations[pendingScaleDownOrdinalAnnotation] = strconv.FormatInt(int64(ordinal), 10)
+
 	return true, nil
 }
 
@@ -391,6 +398,7 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, _ int32) 
 	if !pending {
 		return true, nil
 	}
+
 	parsedOrdinal, err := strconv.ParseInt(value, 10, 32)
 	if err != nil || parsedOrdinal < 0 {
 		return false, fmt.Errorf("invalid pending scale-down ordinal %q", value)
@@ -414,14 +422,17 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, _ int32) 
 	if err != nil {
 		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
 	}
+
 	runtime, err := mgr.noahRuntime(ctx)
 	if err != nil {
 		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
 	}
+
 	noahClient, err := runtime.Client()
 	if err != nil {
 		return false, &noahIndexerPeerObservationError{err: err, phase: enterpriseApi.PhaseScalingDown}
 	}
+
 	if err := noahClient.UnregisterPeer(ctx, peerID); err != nil {
 		var noahErr *noahclient.Error
 		if !errors.As(err, &noahErr) || noahErr.Kind != noahclient.ErrorKindNotFound {
@@ -434,9 +445,13 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, _ int32) 
 		return false, &noahIndexerPeerObservationError{err: fmt.Errorf("get latest Noah bucket map: %w", err), phase: enterpriseApi.PhaseScalingDown}
 	}
 
-	complete, err := noahBucketMapCompletesScaleDown(bucketMap, mgr.statefulSet, ordinal)
-	if err != nil || !complete {
+	remainingPeerIDs, err := noahIndexerPeerIDs(mgr.statefulSet, ordinal)
+	if err != nil {
 		return false, err
+	}
+
+	if !indexerworkflow.NoahBucketMapConfirmsScaleDown(bucketMap, remainingPeerIDs, peerID) {
+		return false, nil
 	}
 
 	delete(mgr.statefulSet.Annotations, pendingScaleDownOrdinalAnnotation)
@@ -455,13 +470,13 @@ func (mgr *noahIndexerPodManager) PrepareRecycle(ctx context.Context, _ int32) (
 	if err != nil {
 		return false, err
 	}
-	observation, _, err := mgr.observePeers(ctx, appliedReplicas)
+
+	observation, err := mgr.observePeers(ctx, appliedReplicas)
 	if err != nil {
 		return false, &noahIndexerPeerObservationError{err: err}
 	}
-	// TODO(CSPL-5173): withdraw the target Pod from Kubernetes endpoints
-	// and observe its exact UID disappear before permitting deletion.
-	return observation.allReady, nil
+
+	return observation.AllReady, nil
 }
 
 func (mgr *noahIndexerPodManager) FinishRecycle(ctx context.Context, _ int32) (bool, error) {
@@ -469,11 +484,13 @@ func (mgr *noahIndexerPodManager) FinishRecycle(ctx context.Context, _ int32) (b
 	if err != nil {
 		return false, err
 	}
-	observation, _, err := mgr.observePeers(ctx, appliedReplicas)
+
+	observation, err := mgr.observePeers(ctx, appliedReplicas)
 	if err != nil {
 		return false, &noahIndexerPeerObservationError{err: err}
 	}
-	return observation.allReady, nil
+
+	return observation.AllReady, nil
 }
 
 func (mgr *noahIndexerPodManager) FinishUpgrade(context.Context, int32) error {
@@ -517,41 +534,36 @@ func (mgr *noahIndexerPodManager) observeReady(ctx context.Context, appliedRepli
 	}, nil
 }
 
-func (mgr *noahIndexerPodManager) observePeers(ctx context.Context, replicas int32) (noahIndexerPeerObservation, bool, error) {
+func (mgr *noahIndexerPodManager) observePeers(ctx context.Context, replicas int32) (indexerworkflow.NoahMembership, error) {
 	runtime, err := mgr.noahRuntime(ctx)
 	if err != nil {
-		return noahIndexerPeerObservation{}, false, err
+		return indexerworkflow.NoahMembership{}, err
 	}
+
 	expectedPeers, err := currentNoahIndexerPeerIncarnations(ctx, mgr.client, replicas, mgr.statefulSet)
 	if err != nil {
-		return noahIndexerPeerObservation{}, false, err
+		return indexerworkflow.NoahMembership{}, err
 	}
 	if len(expectedPeers) != int(replicas) {
-		return noahIndexerPeerObservation{}, false, nil
+		return indexerworkflow.NoahMembership{}, nil
 	}
 
 	noahClient, err := runtime.Client()
 	if err != nil {
-		return noahIndexerPeerObservation{}, mgr.cacheWarmEnabled, err
-	}
-	peers, err := noahClient.ListPeers(ctx)
-	if err != nil {
-		return noahIndexerPeerObservation{}, mgr.cacheWarmEnabled, fmt.Errorf("list Noah peers: %w", err)
+		return indexerworkflow.NoahMembership{}, err
 	}
 
-	observation := noahIndexerPeerObservation{
-		allRegistered: expectedNoahIndexerPeersRegistered(peers, expectedPeers),
-		allReady:      expectedNoahIndexerPeersReady(peers, expectedPeers),
+	peers, err := noahClient.ListPeers(ctx)
+	if err != nil {
+		return indexerworkflow.NoahMembership{}, fmt.Errorf("list Noah peers: %w", err)
 	}
-	if mgr.cacheWarmEnabled && mgr.cacheWarmTimeout > 0 {
-		observation.timedOutPeerID = timedOutNoahIndexerCacheWarmPeer(
-			peers,
-			expectedPeers,
-			mgr.cacheWarmTimeout,
-			time.Now(),
-		)
-	}
-	return observation, mgr.cacheWarmEnabled, nil
+
+	observation := indexerworkflow.EvaluateNoahMembership(expectedPeers, peers, indexerworkflow.NoahCacheWarmPolicy{
+		Required: mgr.cacheWarmEnabled,
+		Timeout:  mgr.cacheWarmTimeout,
+	}, time.Now())
+
+	return observation, nil
 }
 
 func (mgr *noahIndexerPodManager) noahRuntime(ctx context.Context) (*noah.Connection, error) {
@@ -700,12 +712,6 @@ func noahIndexerOutcomeFromError(err error) (noahIndexerOutcome, error, bool) {
 	return noahIndexerOutcome{}, err, false
 }
 
-type noahIndexerPeerObservation struct {
-	allRegistered  bool
-	allReady       bool
-	timedOutPeerID string
-}
-
 type noahIndexerCacheWarmTimeoutError struct {
 	peerID string
 }
@@ -781,28 +787,16 @@ func noahIndexerPeerID(statefulSet *appsv1.StatefulSet, ordinal int32) (string, 
 	return fmt.Sprintf("%s.%s.%s.svc.%s", podName, statefulSet.Spec.ServiceName, statefulSet.Namespace, clusterDomain), nil
 }
 
-func noahBucketMapCompletesScaleDown(bucketMap *noahclient.BucketMap, statefulSet *appsv1.StatefulSet, removedOrdinal int32) (bool, error) {
-	if bucketMap == nil || bucketMap.ID <= 0 || bucketMap.Status != noahclient.BucketMapStatusActive || bucketMap.PeerIDs == nil {
-		return false, nil
-	}
-
-	removedPeerID, err := noahIndexerPeerID(statefulSet, removedOrdinal)
-	if err != nil {
-		return false, err
-	}
-	if slices.Contains(bucketMap.PeerIDs, removedPeerID) {
-		return false, nil
-	}
-	for ordinal := range removedOrdinal {
+func noahIndexerPeerIDs(statefulSet *appsv1.StatefulSet, replicas int32) ([]string, error) {
+	peerIDs := make([]string, 0, replicas)
+	for ordinal := range replicas {
 		peerID, err := noahIndexerPeerID(statefulSet, ordinal)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
-		if !slices.Contains(bucketMap.PeerIDs, peerID) {
-			return false, nil
-		}
+		peerIDs = append(peerIDs, peerID)
 	}
-	return true, nil
+	return peerIDs, nil
 }
 
 func noahIndexerPodName(statefulSet *appsv1.StatefulSet, ordinal int32) string {
@@ -827,103 +821,6 @@ func noahIndexerClusterDomain(statefulSet *appsv1.StatefulSet) (string, error) {
 		return "", fmt.Errorf("Noah indexer StatefulSet %s/%s has no literal %s value", statefulSet.Namespace, statefulSet.Name, resources.ClusterDomainEnvName)
 	}
 	return container.Env[envIndex].Value, nil
-}
-
-func expectedNoahIndexerPeersRegistered(peers []noahclient.Peer, expectedPeers []indexerworkflow.ExpectedNoahPeer) bool {
-	counts := classifyNoahIndexerPeers(peers, expectedPeers)
-
-	for _, expectedPeer := range expectedPeers {
-		if counts.registered[expectedPeer.ID] != 1 {
-			return false
-		}
-	}
-	return len(expectedPeers) > 0
-}
-
-func expectedNoahIndexerPeersReady(peers []noahclient.Peer, expectedPeers []indexerworkflow.ExpectedNoahPeer) bool {
-	counts := classifyNoahIndexerPeers(peers, expectedPeers)
-
-	for _, expectedPeer := range expectedPeers {
-		if counts.active[expectedPeer.ID] != 1 || counts.ready[expectedPeer.ID] != 1 {
-			return false
-		}
-	}
-	return len(expectedPeers) > 0
-}
-
-type noahIndexerPeerCounts struct {
-	registered map[string]int
-	active     map[string]int
-	ready      map[string]int
-}
-
-func classifyNoahIndexerPeers(peers []noahclient.Peer, expectedPeers []indexerworkflow.ExpectedNoahPeer) noahIndexerPeerCounts {
-	counts := noahIndexerPeerCounts{
-		registered: make(map[string]int, len(expectedPeers)),
-		active:     make(map[string]int, len(expectedPeers)),
-		ready:      make(map[string]int, len(expectedPeers)),
-	}
-	expectedByID := make(map[string]indexerworkflow.ExpectedNoahPeer, len(expectedPeers))
-	for _, expectedPeer := range expectedPeers {
-		expectedByID[expectedPeer.ID] = expectedPeer
-	}
-	for _, peer := range peers {
-		expectedPeer, expected := expectedByID[peer.ID]
-		if !expected || !indexerworkflow.MatchesNoahPeerIncarnation(expectedPeer, peer) {
-			continue
-		}
-		switch peer.Status {
-		case noahclient.PeerStatusStarted, noahclient.PeerStatusWarming, noahclient.PeerStatusWarmed, noahclient.PeerStatusUp:
-			counts.registered[peer.ID]++
-		}
-		if peer.Status == noahclient.PeerStatusDown || peer.Status == noahclient.PeerStatusDecommissioned {
-			continue
-		}
-		counts.active[peer.ID]++
-		if peer.Status == noahclient.PeerStatusUp {
-			counts.ready[peer.ID]++
-		}
-	}
-	return counts
-}
-
-func timedOutNoahIndexerCacheWarmPeer(peers []noahclient.Peer, expectedPeers []indexerworkflow.ExpectedNoahPeer, timeout time.Duration, now time.Time) string {
-	if timeout <= 0 {
-		return ""
-	}
-
-	expectedByID := make(map[string]indexerworkflow.ExpectedNoahPeer, len(expectedPeers))
-	for _, expectedPeer := range expectedPeers {
-		expectedByID[expectedPeer.ID] = expectedPeer
-	}
-	observedPeers := make(map[string]struct{}, len(expectedPeers))
-	for _, peer := range peers {
-		expectedPeer, expected := expectedByID[peer.ID]
-		if !expected || !indexerworkflow.MatchesNoahPeerIncarnation(expectedPeer, peer) {
-			continue
-		}
-		observedPeers[peer.ID] = struct{}{}
-		if peer.Status != noahclient.PeerStatusUp && !now.Before(time.Unix(peer.Data.StartTime, 0).Add(timeout)) {
-			return peer.ID
-		}
-	}
-
-	// A new pod may never register with Noah, so its Kubernetes incarnation
-	// start time provides the fallback deadline when no current peer exists.
-	missingPeers := make([]string, 0, len(expectedPeers)-len(observedPeers))
-	for _, expectedPeer := range expectedPeers {
-		if _, observed := observedPeers[expectedPeer.ID]; observed {
-			continue
-		}
-		if !now.Before(expectedPeer.StartedAt.Add(timeout)) {
-			missingPeers = append(missingPeers, expectedPeer.ID)
-		}
-	}
-	if len(missingPeers) > 0 {
-		slices.Sort(missingPeers)
-		return missingPeers[0]
-	}
-	return ""
 }
 
 // getNoahIndexerStatefulSet constructs an indexer StatefulSet with the startup
