@@ -7,6 +7,75 @@ nav_order: 1
 
 # Splunk Operator for Kubernetes Change Log
 
+## 3.2.0 (2026-09-08)
+
+* This is the 3.2.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
+
+#### Breaking Changes
+
+* **Index & Ingestion Separation — Queue secret reference (breaking):** the queue secret is now referenced through `secretKeyRef` instead of the previous volume-based reference (`volList`). This is a **breaking change** to the Queue secret configuration for the Index & Ingestion Separation feature. We do not expect any customers to be relying on the old volume-based reference, but if you are, you **must** migrate your Queue secret to `secretKeyRef` before upgrading to 3.2.0.
+
+#### New Features
+
+* Certificate Management: new `spec.certs[]` API on `CommonSplunkSpec` with controller integration, certificate auto-generation, and a `CertManagement` feature gate (cert-manager Issuer-based)
+* Feature gate infrastructure using the Kubernetes `FeatureGate` pattern, with Helm chart support
+* Splunk Universal Forwarder Helm chart (stateless-by-default, Deployment-only)
+* Kubernetes-standard status conditions on all CRDs, including `status.observedGeneration` and a `Paused` condition when reconciliation is paused by annotation
+* `TerminalFailure` condition with terminality classification for existing failures, plus corresponding Kubernetes events
+* Local KV Store type for SOK pods (SPL-295139)
+* Single-group to multi-group API support (SPL-301784, SPL-302344)
+* `disableResourceDefaults` to allow non-default resource values
+* Configurable `PodAnnotations`
+* Ingestion/Indexing separation improvements: mutable Ingestor API, idempotent ingestor queue API, SmartBus config via splunk-ansible defaults (feature remains in preview)
+
+#### PostgreSQL Operator (Preview)
+
+* Postgres Controller with `PostgresCluster` and `PostgresDatabase` custom resources
+* Point-in-Time Recovery (PITR) and Barman object-storage backups for `PostgresCluster`
+* Cluster restore, major-version upgrades, and vertical scaling
+* Connection pooler (PgBouncer) reconciliation, SAN management, and policy additions
+* Custom metrics, provisioning-latency histogram, and improved grant/connection observability
+* Validation webhooks (disk-size decrease guard, underscore database names) and terminalization of deterministic external-secret failures
+* CNPG upgraded to v1.30.0; Postgres node sidecar disabled by default in SOK deployments
+
+#### Helm Chart Improvements
+
+* Add telemetry ConfigMap to Helm
+* Helm chart support for feature gates
+
+#### Dependency and Security Updates
+
+* Upgrade Operator SDK to v1.42.0
+* Upgrade Go to 1.26.2
+* Update OpenShift support to 4.22
+* Upgrade cert-manager to v1.21.1
+* Upgrade moby/spdystream and golang.org/x/* dependencies to address security vulnerabilities
+
+#### Bug Fixes
+
+* Fix empty pod name in ClusterManager bundle push (#1849)
+* Handle transient phase changes during app framework operations (CSPL-4707/4708)
+* Clear stale appContext when all AppSources are removed
+* Fix `clusterModel.Actuate` clobbering unowned CNPG cluster spec fields
+* Fix timing-dependent Cluster Manager reconciliation
+* Use Kubernetes secrets instead of `kubectl exec` to obtain admin credentials (CSPL-4187)
+
+#### Known Issues
+
+* Updating `queue.sqs.name` only works with Splunk Enterprise 10.6 or later. On older Splunk versions the change will not take effect because the underlying fix ships in Splunk Ansible.
+
+### Supported Splunk Version
+
+>| Splunk Version |
+>|----------------|
+>| 10.6.0.0       |
+
+### Supported Kubernetes Version
+
+>| Kubernetes Version |
+>|--------------------|
+>| 1.32 - 1.36         |
+
 ## 3.1.0 (2026-02-26)
 
 * This is the 3.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
