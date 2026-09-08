@@ -287,7 +287,7 @@ func TestGetSplunkServiceNoahIndexer(t *testing.T) {
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
 		},
 	}
-	wantSelector := getSplunkLabels(cr.Name, SplunkIndexer, cr.Name)
+	wantSelector := getSplunkLabels(cr.Name, SplunkIndexer, cr.Spec.NoahClusterRef.Name)
 	wantPorts := splcommon.SortServicePorts(getSplunkServicePorts(SplunkIndexer))
 
 	for _, headless := range []bool{true, false} {
@@ -308,6 +308,28 @@ func TestGetSplunkServiceNoahIndexer(t *testing.T) {
 			require.True(t, *service.OwnerReferences[0].Controller)
 		})
 	}
+}
+
+func TestGetSplunkServiceNoahIndexerGroupsSitesByNoahCluster(t *testing.T) {
+	serviceFor := func(name string) *corev1.Service {
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
+			Spec: enterpriseApi.IndexerClusterSpec{
+				NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+			},
+		}
+		return getSplunkService(t.Context(), cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false)
+	}
+
+	site1 := serviceFor("site1")
+	site2 := serviceFor("site2")
+	partOfLabel := splcommon.GetLabelTypes()["partof"]
+	instanceLabel := splcommon.GetLabelTypes()["instance"]
+
+	require.Equal(t, "splunk-noah-indexer", site1.Spec.Selector[partOfLabel])
+	require.Equal(t, site1.Spec.Selector[partOfLabel], site2.Spec.Selector[partOfLabel])
+	require.Equal(t, "splunk-site1-indexer", site1.Spec.Selector[instanceLabel])
+	require.Equal(t, "splunk-site2-indexer", site2.Spec.Selector[instanceLabel])
 }
 
 func TestGetSplunkDefaults(t *testing.T) {
