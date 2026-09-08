@@ -1,0 +1,29 @@
+{{- if .Values.splunkOperator.clusterWideAccess }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-noahcluster-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - noahclusters
+  verbs:
+  - get
+  - list
+  - watch
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-noahcluster-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - noahclusters
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
