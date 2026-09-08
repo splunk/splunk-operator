@@ -35,8 +35,8 @@ type noahDependencyReconcileOutcome struct {
 }
 
 func noahDependencyOutcome(err error) (noahDependencyReconcileOutcome, bool) {
-	var dependencyErr *noah.DependencyError
-	if !errors.As(err, &dependencyErr) {
+	dependencyErr, ok := errors.AsType[*noah.DependencyError](err)
+	if !ok {
 		return noahDependencyReconcileOutcome{}, false
 	}
 
@@ -56,7 +56,7 @@ func noahDependencyOutcome(err error) (noahDependencyReconcileOutcome, bool) {
 		conditionReason: enterpriseApi.ReasonNoahConfigurationInvalid,
 		conditionStatus: metav1.ConditionFalse,
 		err: splcommon.NewTerminalError(
-			EventReasonValidateSpecFailed,
+			EventReasonNoahConfigurationInvalid,
 			"Noah dependency validation failed",
 			dependencyErr,
 		),
