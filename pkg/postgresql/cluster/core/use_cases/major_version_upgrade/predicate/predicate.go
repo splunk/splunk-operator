@@ -18,6 +18,7 @@ package majorversionupgradepredicate
 
 import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 )
 
 // Predicate reports whether the major-version upgrade use case is possibly
@@ -31,5 +32,14 @@ func Predicate(spec *platformv1alpha1.PostgresClusterSpec) bool {
 		return true
 	}
 	cfg := spec.PostgresMajorUpgradeConfig
-	return cfg != nil && cfg.Allow != nil && *cfg.Allow
+	if cfg == nil || cfg.Allow == nil {
+		return false
+	}
+	if *cfg.Allow {
+		return true
+	}
+	// A blue/green false gate is an explicit re-arm signal after a cleaned
+	// attempt. Construct the use case so its state adapter can durably observe
+	// that edge; retain the no-work fast path for the common pgUpgrade case.
+	return cfg.Strategy != nil && *cfg.Strategy == mvutypes.MajorUpgradeFlowBlueGreen
 }

@@ -19,6 +19,7 @@ package majorupgradeadapter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -63,6 +65,40 @@ func TestMajorUpgradeInputFromClusterUsesPostgresVersionAsTarget(t *testing.T) {
 	assert.True(t, enabled)
 	assert.Equal(t, mvutypes.MajorUpgradeFlowPgUpgrade, input.Strategy)
 	assert.Equal(t, "18", input.TargetPgVersion)
+}
+
+func TestMajorUpgradeInputFromClusterSkipsUnavailableBlueGreenStrategy(t *testing.T) {
+	cluster := &platformv1alpha1.PostgresCluster{
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			PostgresVersion: ptr.To("18"),
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
+				Allow:    ptr.To(true),
+				Strategy: ptr.To(mvutypes.MajorUpgradeFlowBlueGreen),
+			},
+		},
+	}
+
+	input, enabled, err := MajorUpgradeInputFromCluster(cluster)
+	require.NoError(t, err)
+	assert.False(t, enabled)
+	assert.Empty(t, input)
+}
+
+func TestMajorUpgradeInputFromClusterKeepsBlueGreenDisabledWithoutAllow(t *testing.T) {
+	cluster := &platformv1alpha1.PostgresCluster{
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			PostgresVersion: ptr.To("18"),
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
+				Allow:    ptr.To(false),
+				Strategy: ptr.To(mvutypes.MajorUpgradeFlowBlueGreen),
+			},
+		},
+	}
+
+	input, enabled, err := MajorUpgradeInputFromCluster(cluster)
+	require.NoError(t, err)
+	assert.False(t, enabled)
+	assert.Empty(t, input)
 }
 
 func TestMajorUpgradeStateStoreReadsClusterFromSpecification(t *testing.T) {
@@ -589,6 +625,423 @@ func TestRetryRequestedAfterTerminalFailureEmptyConditions(t *testing.T) {
 	}
 }
 
+func TestStateWithProgressReplacesBlueGreenStatusAtomically(t *testing.T) {
+	source := "17"
+	target := "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	phase := string(mvutypes.ReadyForSwitchover)
+	now := metav1.NewTime(time.Date(2026, 9, 4, 15, 0, 0, 0, time.UTC))
+	updatedStatus := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+		AttemptID: "attempt-2",
+		Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{
+			Ref: corev1.ObjectReference{Name: "blue", Namespace: "default"},
+		},
+		Green: &platformv1alpha1.BlueGreenEnvironmentStatus{
+			Ref: corev1.ObjectReference{Name: "green", Namespace: "default"},
+		},
+		CandidateEndpoints: &platformv1alpha1.BlueGreenCandidateEndpointsStatus{
+			DirectService: &corev1.ObjectReference{Name: "green-rw", Namespace: "default"},
+			PoolerService: &corev1.ObjectReference{Name: "green-pooler-rw", Namespace: "default"},
+		},
+		DatabaseReplication: []platformv1alpha1.BlueGreenDatabaseReplicationStatus{{
+			PostgresDatabaseName: "app",
+			PostgresDatabaseUID:  "database-uid",
+			DatabaseName:         "application",
+			InitialCopyComplete:  ptr.To(true),
+			SubscriptionHealthy:  ptr.To(true),
+		}},
+		Gates: &platformv1alpha1.BlueGreenGateStatus{
+			Allow: &platformv1alpha1.BlueGreenGateConsumptionStatus{Generation: 4, ConsumedAt: &now},
+		},
+		EndpointPreparation: &platformv1alpha1.BlueGreenEndpointPreparationStatus{Generation: 10},
+		EndpointPublication: &platformv1alpha1.BlueGreenEndpointPublicationStatus{Generation: 11},
+		CommitReceipt:       &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 2},
+		Switchover:          &platformv1alpha1.BlueGreenSwitchoverStatus{StartedAt: &now},
+		Recoverability: &platformv1alpha1.BlueGreenRecoverabilityStatus{
+			BackupVerifiedAt: &now,
+		},
+		Cleanup: &platformv1alpha1.BlueGreenCleanupStatus{State: "Retained"},
+		Conditions: []metav1.Condition{{
+			Type:               mvutypes.ConditionReadyForSwitchover,
+			Status:             metav1.ConditionTrue,
+			Reason:             "CandidateHealthy",
+			Message:            "candidate is ready",
+			LastTransitionTime: now,
+		}},
+	}
+	intent := mvutypes.Intent{
+		Strategy:        strategy,
+		SourcePgVersion: source,
+		TargetPgVersion: target,
+		AttemptID:       "attempt-2",
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Phase:           ptr.To(string(mvutypes.Preflight)),
+			Strategy:        &strategy,
+			SourcePgVersion: &source,
+			TargetPgVersion: &target,
+			BlueGreen:       &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-2"},
+		}},
+	}
+	report := reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: phase}
+
+	next := stateWithProgress(intent, mvutypes.Progress{Report: report, BlueGreen: updatedStatus})
+
+	require.Len(t, next, 1)
+	require.NotNil(t, next[0].BlueGreen)
+	assert.Equal(t, phase, *next[0].Phase)
+	assert.Equal(t, updatedStatus, next[0].BlueGreen)
+	assert.NotSame(t, updatedStatus, next[0].BlueGreen)
+	assert.Equal(t, "attempt-2", intent.State[0].BlueGreen.AttemptID)
+
+	updatedStatus.AttemptID = "mutated"
+	updatedStatus.Blue.Ref.Name = "mutated-blue"
+	updatedStatus.CandidateEndpoints.DirectService.Name = "mutated-green-rw"
+	updatedStatus.EndpointPreparation.Generation = 11
+	updatedStatus.EndpointPublication.Generation = 12
+	updatedStatus.Conditions[0].Message = "mutated condition"
+	assert.Equal(t, "attempt-2", next[0].BlueGreen.AttemptID)
+	assert.Equal(t, "blue", next[0].BlueGreen.Blue.Ref.Name)
+	assert.Equal(t, "green-rw", next[0].BlueGreen.CandidateEndpoints.DirectService.Name)
+	assert.Equal(t, int64(10), next[0].BlueGreen.EndpointPreparation.Generation)
+	assert.Equal(t, int64(11), next[0].BlueGreen.EndpointPublication.Generation)
+	assert.Equal(t, "candidate is ready", next[0].BlueGreen.Conditions[0].Message)
+}
+
+func TestStateWithProgressPreservesExistingBlueGreenStatusWhenUnspecified(t *testing.T) {
+	source := "17"
+	target := "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	persisted := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1"}
+	intent := mvutypes.Intent{
+		Strategy:        strategy,
+		SourcePgVersion: source,
+		TargetPgVersion: target,
+		AttemptID:       "attempt-1",
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Strategy:        &strategy,
+			SourcePgVersion: &source,
+			TargetPgVersion: &target,
+			BlueGreen:       persisted,
+		}},
+	}
+
+	next := stateWithProgress(intent, mvutypes.Progress{
+		Report: reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
+	})
+
+	require.Len(t, next, 1)
+	require.NotNil(t, next[0].BlueGreen)
+	assert.Equal(t, "attempt-1", next[0].BlueGreen.AttemptID)
+}
+
+func TestStateWithProgressLeavesPgUpgradeStatusWithoutBlueGreen(t *testing.T) {
+	source := "17"
+	target := "18"
+	strategy := mvutypes.MajorUpgradeFlowPgUpgrade
+	intent := mvutypes.Intent{
+		Strategy:        strategy,
+		SourcePgVersion: source,
+		TargetPgVersion: target,
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Strategy:        &strategy,
+			SourcePgVersion: &source,
+			TargetPgVersion: &target,
+		}},
+	}
+
+	next := stateWithProgress(intent, mvutypes.Progress{
+		Report: reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
+	})
+
+	require.Len(t, next, 1)
+	assert.Nil(t, next[0].BlueGreen)
+	assert.Equal(t, strategy, *next[0].Strategy)
+	assert.Equal(t, source, *next[0].SourcePgVersion)
+	assert.Equal(t, target, *next[0].TargetPgVersion)
+}
+
+func TestBlueGreenAttemptRecordsObservedRearmWhileRuntimeIsUnavailable(t *testing.T) {
+	source := "17"
+	target := "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	cancelled := string(mvutypes.Cancelled)
+	entries := []platformv1alpha1.PostgresMajorUpgradeStatus{{
+		Phase:           &cancelled,
+		Strategy:        &strategy,
+		SourcePgVersion: &source,
+		TargetPgVersion: &target,
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+			AttemptID: "attempt-1",
+			Cleanup:   &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateCleaned},
+		},
+	}}
+	spec := &platformv1alpha1.PostgresClusterSpec{
+		PostgresVersion: ptr.To(target),
+		PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
+			Allow:    ptr.To(true),
+			Strategy: &strategy,
+		},
+	}
+
+	_, enabled, err := MajorUpgradeInputFromParts(spec, entries, nil, source)
+	require.NoError(t, err)
+	assert.False(t, enabled, "a cleaned attempt must be re-armed by an observed false allow gate")
+
+	rearmIntent, rearmRequired, err := blueGreenRearmIntent(entries, source, target)
+	require.NoError(t, err)
+	require.True(t, rearmRequired)
+	rearmed, changed := stateWithBlueGreenRearm(entries, rearmIntent)
+	require.True(t, changed)
+	require.NotNil(t, rearmed[0].BlueGreen.RearmedAt)
+
+	intent, enabled, err := MajorUpgradeInputFromParts(spec, rearmed, nil, source)
+	require.NoError(t, err)
+	assert.False(t, enabled, "the unavailable blue/green runtime must not start a new attempt")
+	assert.Empty(t, intent)
+}
+
+func TestMajorUpgradeStateStoreReadReturnsBlueGreenRearmWithoutWritingStatus(t *testing.T) {
+	source := "17"
+	target := "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	cancelled := string(mvutypes.Cancelled)
+	store := &recordingStateStore{fakeStateStore: fakeStateStore{
+		spec: &platformv1alpha1.PostgresClusterSpec{
+			PostgresVersion: ptr.To(target),
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
+				Allow:    ptr.To(false),
+				Strategy: &strategy,
+			},
+		},
+		sourcePgVersion: source,
+		entries: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Phase:           &cancelled,
+			Strategy:        &strategy,
+			SourcePgVersion: &source,
+			TargetPgVersion: &target,
+			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+				AttemptID: "attempt-1",
+				Cleanup:   &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateCleaned},
+			},
+		}},
+	}}
+
+	intent, enabled, err := NewMajorUpgradeStateStore(store).ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	require.True(t, enabled)
+	assert.True(t, intent.RequiresBlueGreenRearm)
+	assert.Equal(t, "attempt-1", intent.AttemptID)
+	assert.Empty(t, store.saved)
+
+	require.NoError(t, NewMajorUpgradeStateStore(store).SaveBlueGreenRearm(t.Context(), intent))
+	require.Len(t, store.saved, 1)
+	require.NotNil(t, store.saved[0].BlueGreen.RearmedAt)
+}
+
+func TestStateWithProgressAppendsNewBlueGreenAttemptHistory(t *testing.T) {
+	source := "17"
+	target := "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	priorPhase := string(mvutypes.Cancelled)
+	intent := mvutypes.Intent{
+		Strategy:        strategy,
+		SourcePgVersion: source,
+		TargetPgVersion: target,
+		AttemptID:       "attempt-2",
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Phase:           &priorPhase,
+			Strategy:        &strategy,
+			SourcePgVersion: &source,
+			TargetPgVersion: &target,
+			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+				AttemptID: "attempt-1",
+				RearmedAt: &metav1.Time{},
+				Cleanup:   &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateCleaned},
+			},
+		}},
+	}
+
+	next := stateWithProgress(intent, mvutypes.Progress{
+		Report: reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+			AttemptID: "attempt-2",
+		},
+	})
+
+	require.Len(t, next, 2)
+	assert.Equal(t, "attempt-1", next[0].BlueGreen.AttemptID)
+	assert.Equal(t, platformv1alpha1.BlueGreenCleanupStateCleaned, next[0].BlueGreen.Cleanup.State)
+	assert.Equal(t, "attempt-2", next[1].BlueGreen.AttemptID)
+}
+
+func TestStateWithProgressDeepCopiesPreservedBlueGreenStatus(t *testing.T) {
+	source := "17"
+	target := "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	persisted := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+		AttemptID: "attempt-1",
+		Blue:      &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "blue"}},
+	}
+	intent := mvutypes.Intent{
+		Strategy:        strategy,
+		SourcePgVersion: source,
+		TargetPgVersion: target,
+		AttemptID:       "attempt-1",
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Strategy:        &strategy,
+			SourcePgVersion: &source,
+			TargetPgVersion: &target,
+			BlueGreen:       persisted,
+		}},
+	}
+
+	next := stateWithProgress(intent, mvutypes.Progress{
+		Report: reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
+	})
+	next[0].BlueGreen.Blue.Ref.Name = "mutated"
+	assert.Equal(t, "blue", intent.State[0].BlueGreen.Blue.Ref.Name)
+}
+
+func TestValidateBlueGreenProgressRejectsAttemptAndCommitReceiptRegression(t *testing.T) {
+	source := "17"
+	target := "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	intent := mvutypes.Intent{
+		Strategy:        strategy,
+		SourcePgVersion: source,
+		TargetPgVersion: target,
+		AttemptID:       "attempt-1",
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Strategy:        &strategy,
+			SourcePgVersion: &source,
+			TargetPgVersion: &target,
+			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+				AttemptID:     "attempt-1",
+				CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 2},
+			},
+		}},
+	}
+
+	assert.Error(t, validateBlueGreenProgress(intent, mvutypes.Progress{
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "other-attempt"},
+	}))
+	assert.Error(t, validateBlueGreenProgress(intent, mvutypes.Progress{
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+			AttemptID:     "attempt-1",
+			CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1},
+		},
+	}))
+	assert.NoError(t, validateBlueGreenProgress(intent, mvutypes.Progress{
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+			AttemptID:     "attempt-1",
+			CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 2},
+		},
+	}))
+}
+
+func TestCompactBlueGreenHistoryRetainsTenCleanedSummariesAndArtifacts(t *testing.T) {
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	entries := make([]platformv1alpha1.PostgresMajorUpgradeStatus, 0, 12)
+	for i := 0; i < 11; i++ {
+		attemptID := fmt.Sprintf("cleaned-%d", i)
+		entries = append(entries, platformv1alpha1.PostgresMajorUpgradeStatus{
+			Strategy: &strategy,
+			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+				AttemptID: attemptID,
+				CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{
+					Sequence: int64(i + 1),
+				},
+				Cleanup: &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateCleaned},
+			},
+		})
+	}
+	entries = append(entries, platformv1alpha1.PostgresMajorUpgradeStatus{
+		Strategy: &strategy,
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+			AttemptID:     "retained-artifacts",
+			CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 99},
+			Cleanup:       &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateRetained},
+		},
+	})
+
+	compacted := compactBlueGreenHistory(entries)
+	require.Len(t, compacted, 11)
+	assert.Equal(t, "cleaned-1", compacted[0].BlueGreen.AttemptID)
+	assert.Nil(t, compacted[0].BlueGreen.CommitReceipt, "cleaned history must be a compacted summary")
+	assert.Equal(t, platformv1alpha1.BlueGreenCleanupStateCleaned, compacted[0].BlueGreen.Cleanup.State)
+	assert.Equal(t, "retained-artifacts", compacted[len(compacted)-1].BlueGreen.AttemptID)
+	assert.NotNil(t, compacted[len(compacted)-1].BlueGreen.CommitReceipt, "attempts with retained artifacts must not be compacted")
+}
+
+func TestMajorUpgradeInputSkipsUnavailableBlueGreenSourceHistory(t *testing.T) {
+	blueGreen := mvutypes.MajorUpgradeFlowBlueGreen
+	pgUpgrade := mvutypes.MajorUpgradeFlowPgUpgrade
+	failed := string(mvutypes.Failed)
+	completed := string(mvutypes.Completed)
+	source15 := "15"
+	target16 := "16"
+	target17 := "17"
+	spec := &platformv1alpha1.PostgresClusterSpec{
+		PostgresVersion: ptr.To(target17),
+		PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
+			Allow:    ptr.To(true),
+			Strategy: &pgUpgrade,
+		},
+	}
+	entries := []platformv1alpha1.PostgresMajorUpgradeStatus{
+		{
+			Phase:           &failed,
+			Strategy:        &blueGreen,
+			SourcePgVersion: &source15,
+			TargetPgVersion: &target16,
+			BlueGreen:       &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "unavailable"},
+			Conditions: []metav1.Condition{{
+				Type:   mvutypes.ConditionMajorUpgradeTerminalFailure,
+				Status: metav1.ConditionTrue,
+				Reason: mvutypes.ReasonBlueGreenStrategyUnavailable,
+			}},
+		},
+		{
+			Phase:           &completed,
+			Strategy:        &pgUpgrade,
+			SourcePgVersion: &source15,
+			TargetPgVersion: &target16,
+		},
+	}
+
+	intent, enabled, err := MajorUpgradeInputFromParts(spec, entries, nil, target16)
+	require.NoError(t, err)
+	assert.True(t, enabled)
+	assert.Equal(t, target16, intent.SourcePgVersion)
+	assert.Equal(t, target17, intent.TargetPgVersion)
+}
+
+func TestBlueGreenAttemptIDBlocksNewFamilyWhilePriorAttemptIsActive(t *testing.T) {
+	blueGreen := mvutypes.MajorUpgradeFlowBlueGreen
+	source15 := "15"
+	target16 := "16"
+	source16 := "16"
+	target17 := "17"
+	intent := mvutypes.Intent{
+		Strategy:        blueGreen,
+		SourcePgVersion: source16,
+		TargetPgVersion: target17,
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Strategy:        &blueGreen,
+			SourcePgVersion: &source15,
+			TargetPgVersion: &target16,
+			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+				AttemptID: "retained-15-to-16",
+				Cleanup:   &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateRetained},
+			},
+		}},
+	}
+
+	attemptID, canStart := blueGreenAttemptID(intent)
+	assert.False(t, canStart)
+	assert.Empty(t, attemptID)
+}
+
 type fakeStateStore struct {
 	spec            *platformv1alpha1.PostgresClusterSpec
 	annotations     map[string]string
@@ -596,6 +1049,16 @@ type fakeStateStore struct {
 	sourcePgVersion string
 	specErr         error
 	statusErr       error
+}
+
+type recordingStateStore struct {
+	fakeStateStore
+	saved []platformv1alpha1.PostgresMajorUpgradeStatus
+}
+
+func (s *recordingStateStore) SetMajorUpgradeStatus(_ context.Context, entries []platformv1alpha1.PostgresMajorUpgradeStatus) error {
+	s.saved = append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), entries...)
+	return s.statusErr
 }
 
 func (f fakeStateStore) GetSpecificationWithAnnotations(context.Context) (*platformv1alpha1.PostgresClusterSpec, map[string]string, error) {

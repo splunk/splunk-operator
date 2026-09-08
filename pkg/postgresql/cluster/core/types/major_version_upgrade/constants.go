@@ -18,6 +18,7 @@ package majorversionupgradetypes
 
 const (
 	MajorUpgradeFlowPgUpgrade string = "pgUpgrade"
+	MajorUpgradeFlowBlueGreen string = "blueGreen"
 )
 
 const (
@@ -36,6 +37,7 @@ const (
 	ReasonStateLoadFailed                    = "MajorUpgradeStateLoadFailed"
 	ReasonStatusPersistConflict              = "StatusPersistConflict"
 	ReasonUnsupportedUpgradeStrategy         = "UnsupportedUpgradeStrategy"
+	ReasonBlueGreenStrategyUnavailable       = "BlueGreenStrategyUnavailable"
 	ReasonUnknownMajorUpgradeError           = "UnknownMajorUpgradeError"
 	ReasonUpgradeAlreadyComplete             = "UpgradeAlreadyComplete"
 	ReasonUpgradeFlowFailed                  = "UpgradeFlowFailed"
@@ -61,6 +63,11 @@ const (
 	ConditionMajorUpgradeRetryableFailure = "MajorUpgradeRetryableFailure"
 	ConditionMajorUpgradeTerminalFailure  = "MajorUpgradeTerminalFailure"
 	ConditionMajorUpgradeCompleted        = "MajorUpgradeCompleted"
+	ConditionReadyToStart                 = "ReadyToStart"
+	ConditionReadyForSwitchover           = "ReadyForSwitchover"
+	ConditionCancellationAvailable        = "CancellationAvailable"
+	ConditionRetryAvailable               = "RetryAvailable"
+	ConditionCleanupAvailable             = "CleanupAvailable"
 )
 
 const (
@@ -93,6 +100,7 @@ const (
 	reportMessagePostUpgradeBackupNotReady          = "Waiting for post-upgrade backup to become available."
 	reportMessageInvalidUpgradeIntent               = "The PostgreSQL major upgrade request is invalid. Update the upgrade intent before retrying."
 	reportMessageUnsupportedUpgradeStrategy         = "The requested PostgreSQL major upgrade strategy is not supported."
+	reportMessageBlueGreenStrategyUnavailable       = "The blueGreen major upgrade API is declared, but its runtime flow is not implemented. Leave allow false until that flow is released."
 	reportMessageRollbackCapabilityMissing          = "The operator is not configured with rollback capability for PostgreSQL major upgrades."
 	reportMessageBackupProviderMissing              = "Major upgrades require an enabled volumeSnapshot or barmanObjectStore backup provider."
 	reportMessageRollbackCapabilityUnavailable      = "Rollback capability could not be established. Manual intervention is required before upgrade can continue."
