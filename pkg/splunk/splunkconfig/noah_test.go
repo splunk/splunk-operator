@@ -87,3 +87,15 @@ func TestNoahDeployerConf(t *testing.T) {
 	assert.Equal(t, map[string]string{"disabled": "true"}, map[string]string(server.Value.Stanzas["teleport_supervisor"]))
 	assert.NotContains(t, server.Value.Stanzas["noahService"], "pass4SymmKey")
 }
+
+func TestNoahCredentialsConf(t *testing.T) {
+	credential := t.Name()
+	entries := splunkconfig.NoahCredentialsConf(credential)
+	require.Len(t, entries, 1)
+
+	server := entries[0]
+	assert.Equal(t, "server", server.ConfFileName)
+	assert.Equal(t, map[string]string{
+		"pass4SymmKey": credential,
+	}, map[string]string(server.Value.Stanzas["noahService"]))
+}

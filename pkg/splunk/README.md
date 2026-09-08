@@ -62,9 +62,8 @@ All packages may also import `api/enterprise/v4` (CRD types).
 | `splunkconfig/` | Splunk conf builders (pure functions) | `common/`, `util/` |
 | `resources/` | K8s object builders (pure functions) | `common/`, `util/` |
 | `k8sops/` | K8s API CRUD, diff/merge, finalizers | `common/`, `util/`, `resources/` |
-| `workflow/<domain>/` | Multi-step stateful workflows | `common/`, `util/`, `client/` |
-| `noah/` | Shared, workload-neutral Noah domain and connection semantics | `common/`, `util/`, `client/noah/` |
-| `reconcile/<cr>/` | Per-CR orchestration loop | `common/`, `util/`, `resources/`, `k8sops/`, `client/`, `noah/`, `workflow/` |
+| `workflow/<domain>/` | Multi-step stateful workflows and shared dependency resolution | `common/`, `util/`, `client/`, `resources/` |
+| `reconcile/<cr>/` | Per-CR orchestration loop | `common/`, `util/`, `resources/`, `k8sops/`, `client/`, `workflow/` |
 
 ## Package Details
 
@@ -91,35 +90,29 @@ CRD types.
 |---|---|
 | `appframework/` | Bundle discovery, staging, scheduling, push |
 | `bootstrap/` | First-time init, admin secret seeding |
+| `config/` | Configuration dependency resolution, immutable defaults delivery, garbage collection |
 | `indexercluster/` | Peer decommission, rebalance wait, scale-down |
 | `shc/` | Captain election, member join/drain |
 | `telapp/` | SOK telemetry collection and sending |
 | `upgrade/` | Rolling upgrade sequencing, version gating |
 
-### `noah/`
-
-A narrow domain package for behavior genuinely shared by Splunk workloads that
-connect to Noah. It owns NoahCluster and credential resolution, connection
-validation, authenticated client construction without network I/O, and safe
-derived connection values. It may own additional pure Noah-domain rules only
-when multiple workload reconcilers require the same contract.
+`workflow/config` owns shared Kubernetes-backed configuration dependency
+resolution, including resolving a same-namespace NoahCluster and its credential
+Secret. It may validate connection inputs and construct an authenticated client
+without making a Noah network request.
 
 The resolved credential remains sensitive even when returned as a defensive
 copy. Callers may use it only for Noah client construction or Secret-backed
 workload provisioning; it must never enter ConfigMaps, status, events, logs, or
 command arguments.
 
-This package is not a pass-through facade over `client/noah`. Noah HTTP calls,
-HMAC signing, response parsing, and protocol errors remain in `client/noah`.
+Noah HTTP calls, HMAC signing, response parsing, and protocol errors remain in
+`client/noah`.
 Indexer-specific membership and lifecycle decisions belong in
 `workflow/indexercluster`; SHC-specific lifecycle decisions belong in
 `workflow/shc`. Kubernetes object construction belongs in `resources`, while
 Kubernetes mutation, status, conditions, events, and requeue decisions remain
 with reconciliation.
-
-Connection resolution may perform read-only Kubernetes lookups for a
-same-namespace NoahCluster and Secret. It must not write Kubernetes objects or
-make Noah network requests.
 
 ### `resources/`
 
@@ -160,7 +153,7 @@ package is deleted.
 |---|---|
 | A new CRD reconciler | `reconcile/<cr>/` |
 | A multi-step operation (upgrade, decommission, etc.) | `workflow/<domain>/` |
-| Connection or domain semantics shared by Noah-enabled workloads | `noah/` |
+| Noah configuration dependency resolution | `workflow/config/` |
 | An IndexerCluster- or SHC-specific Noah lifecycle decision | `workflow/indexercluster/` or `workflow/shc/` |
 | A Noah HTTP/HMAC operation or protocol type | `client/noah/` |
 | A Splunk configuration builder (role conf, queue stanzas) | `splunkconfig/` |

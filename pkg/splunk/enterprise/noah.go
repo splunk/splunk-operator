@@ -20,7 +20,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/noah"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -35,12 +35,12 @@ type noahDependencyReconcileOutcome struct {
 }
 
 func noahDependencyOutcome(err error) (noahDependencyReconcileOutcome, bool) {
-	dependencyErr, ok := errors.AsType[*noah.DependencyError](err)
+	dependencyErr, ok := errors.AsType[*configworkflow.NoahDependencyError](err)
 	if !ok {
 		return noahDependencyReconcileOutcome{}, false
 	}
 
-	if dependencyErr.Kind() == noah.DependencyMissing {
+	if dependencyErr.Kind() == configworkflow.NoahDependencyMissing {
 		return noahDependencyReconcileOutcome{
 			phase:           enterpriseApi.PhasePending,
 			message:         fmt.Sprintf("Waiting for Noah dependencies: %v", dependencyErr),
