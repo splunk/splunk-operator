@@ -28,7 +28,7 @@ nav_order: 1
 * Configurable `PodAnnotations`
 * Ingestion/Indexing separation improvements: mutable Ingestor API, idempotent ingestor queue API, SmartBus config via splunk-ansible defaults (feature remains in preview)
 
-#### PostgreSQL Operator (Preview)
+#### Postgres Integration (Preview)
 
 * Postgres Controller with `PostgresCluster` and `PostgresDatabase` custom resources
 * Point-in-Time Recovery (PITR) and Barman object-storage backups for `PostgresCluster`
@@ -45,11 +45,9 @@ nav_order: 1
 
 #### Dependency and Security Updates
 
-* Upgrade Operator SDK to v1.42.0
 * Upgrade Go to 1.26.2
 * Update OpenShift support to 4.22
 * Upgrade cert-manager to v1.21.1
-* Upgrade moby/spdystream and golang.org/x/* dependencies to address security vulnerabilities
 * Upgrade google.golang.org/grpc to v1.83.1
 
 #### Bug Fixes
