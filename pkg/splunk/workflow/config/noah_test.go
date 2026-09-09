@@ -124,6 +124,8 @@ func TestResolveNoahRejectsInvalidConfiguration(t *testing.T) {
 		secretData map[string][]byte
 	}{
 		{name: "missing secret key", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{}},
+		{name: "wrong case secret key", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{"Pass4SymmKey": []byte("unit-test-noah-key")}},
+		{name: "empty secret", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{NoahAuthSecretKey: []byte("")}},
 		{name: "short secret", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{NoahAuthSecretKey: []byte("short")}},
 		{name: "multiline secret", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{NoahAuthSecretKey: []byte("unit-test-key\nsecond-line")}},
 	}
