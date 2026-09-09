@@ -45,8 +45,11 @@ func noahClusterForSHCTest(namespace, name, authSecretName string) *enterpriseAp
 
 // applySearchHeadClusterNoah builds identity-aware deployer and search-head
 // StatefulSets: SPLUNK_NOAH_ENABLED, the headless service name, and the
-// cluster domain are present on both, and each StatefulSet keeps its own
-// distinct name/labels so deployer and member identities cannot be confused.
+// cluster domain are present on both (live-verified 2026-09-08: a deployer
+// with no Noah identity/config at all crashes splunkd's NoahConfiguration on
+// build 10.5.2605.8, same as an incomplete search-head [noahService] does),
+// and each StatefulSet keeps its own distinct name/labels so deployer and
+// member identities cannot be confused.
 func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T) {
 	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
 

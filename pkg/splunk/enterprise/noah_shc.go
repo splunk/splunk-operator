@@ -134,14 +134,21 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 }
 
 // applySearchHeadClusterNoah creates the services, deployer, and search-head
-// StatefulSets required for Noah bootstrap. Each StatefulSet gets stable pod
-// identity (resources.WithNoahPodIdentity) plus the same Noah server.conf
-// settings, matching the proven-working reference (vivek-spike), which
-// applies identical noahService/teleport_supervisor content to both roles.
-// All Noah config — structural (uri/tenant) and credential (pass4SymmKey)
-// alike — is delivered declaratively via SPLUNK_DEFAULTS_URL, the same
-// channel splunk-ansible's Noah role already reads; no operator-owned init
-// container or custom volume mount is involved.
+// StatefulSets required for Noah bootstrap. Both StatefulSets get stable pod
+// identity (resources.WithNoahPodIdentity, which sets SPLUNK_NOAH_ENABLED=true)
+// plus the Noah server.conf settings (structural uri/tenant/heartbeatPeriod
+// and credential pass4SymmKey alike), delivered declaratively via
+// SPLUNK_DEFAULTS_URL — the same channel splunk-ansible's Noah role already
+// reads; no operator-owned init container or custom volume mount is involved.
+//
+// The deployer getting the same minimal Noah config as the search head is
+// deliberate, not a leftover: live-verified 2026-09-08 against splunkd build
+// 10.5.2605.8 that a deployer with no [noahService] stanza at all crashes
+// with the same NoahConfiguration assertion (splcore/main src/framework/
+// NoahConfiguration.cpp:291) that an incomplete search-head stanza does —
+// this build's NoahConfiguration unconditionally tries to load [noahService]
+// on every role at startup and asserts rather than treating a fully-absent
+// stanza as "Noah disabled, do nothing." See NoahDeployerConf's doc comment.
 func applySearchHeadClusterNoah(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (enterpriseApi.Phase, enterpriseApi.Phase, *appsv1.StatefulSet, error) {
 	runtime, err := noah.ResolveConnection(ctx, client, cr.GetNamespace(), *cr.Spec.NoahClusterRef)
 	if err != nil {
