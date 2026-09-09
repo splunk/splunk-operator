@@ -19,6 +19,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.endpoint == oldSelf.endpoint",message="endpoint is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.tenant == oldSelf.tenant",message="tenant is immutable once created"
+
 // NoahClusterSpec defines the desired state of NoahCluster
 type NoahClusterSpec struct {
 	// +kubebuilder:validation:Required
