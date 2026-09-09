@@ -54,3 +54,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "noah.redisName" -}}
 {{- printf "%s-redis" (include "noah.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
+
+{{- define "noah.minioName" -}}
+{{- printf "%s-minio" (include "noah.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "noah.minioSecretName" -}}
+{{- printf "%s-minio" (include "noah.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}

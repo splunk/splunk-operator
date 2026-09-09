@@ -1,0 +1,164 @@
+---
+apiVersion: enterprise.splunk.com/v4
+kind: NoahCluster
+metadata:
+  name: c3
+spec:
+  # This plain YAML is not affected by NOAH_LOCAL_NAMESPACE,
+  # NOAH_LOCAL_RELEASE or NOAH_LOCAL_PORT overrides.
+  endpoint: http://noah.splunk-operator.svc:8443
+  tenant: axolotl
+  authSecretRef:
+    name: noah-auth
+
+---
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: c3
+spec:
+  volumes:
+    - name: licenses
+      secret:
+        secretName: splunk-license
+  licenseUrl: /mnt/licenses/enterprise.lic
+  etcVolumeStorageConfig:
+    ephemeralStorage: true
+    storageClassName: ""
+    storageCapacity: ""
+  varVolumeStorageConfig:
+    ephemeralStorage: true
+    storageClassName: ""
+    storageCapacity: ""
+  defaults: |
+    splunk:
+      conf:
+        web:
+          content:
+            settings:
+              startwebserver: "false"
+
+---
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: c3
+spec:
+  replicas: 2
+  noahClusterRef:
+    name: c3
+  licenseManagerRef:
+    name: c3
+  extraEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: noah-minio
+          key: accessKey
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: noah-minio
+          key: secretKey
+    - name: AWS_DEFAULT_REGION
+      value: us-east-1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  etcVolumeStorageConfig:
+    ephemeralStorage: true
+    storageClassName: ""
+    storageCapacity: ""
+  varVolumeStorageConfig:
+    ephemeralStorage: true
+    storageClassName: ""
+    storageCapacity: ""
+  defaults: |
+    splunk:
+      conf:
+        server:
+          content:
+            noahService:
+              enableBatchRoll: "true"
+              waitForRemoteBundleInit: "true"
+            general:
+              site: site1
+            kvstore:
+              disabled: "true"
+            noah_indexer_client:
+              clustered_bucket_database_granularity: index
+        indexes:
+          content:
+            "volume:remote_store":
+              storageType: remote
+              path: s3://noah-smartstore/c3
+              "remote.s3.endpoint": http://noah-minio:9000
+              "remote.s3.url_version": v1
+              "remote.s3.signature_version": v4
+              "remote.s3.auth_region": us-east-1
+              "remote.s3.supports_versioning": "false"
+            main:
+              remotePath: volume:remote_store/main
+              "hotBucketStreaming.sendSlices": "true"
+              "hotBucketStreaming.reportStatus": "true"
+              "hotBucketStreaming.removeRemoteSlicesOnRoll": "true"
+              "hotBucketStreaming.removeRemoteSlicesOnFreeze": "true"
+              "hotBucketStreaming.deleteHotsAfterRestart": "true"
+        web:
+          content:
+            settings:
+              startwebserver: "false"
+        restmap:
+          content:
+            "streams:search":
+              authKeyStanza: noahService
+            "streams:rdin":
+              authKeyStanza: "parallelreduce noahService"
+
+---
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: c3
+spec:
+  replicas: 3
+  noahClusterRef:
+    name: c3
+  licenseManagerRef:
+    name: c3
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  etcVolumeStorageConfig:
+    ephemeralStorage: true
+    storageClassName: ""
+    storageCapacity: ""
+  varVolumeStorageConfig:
+    ephemeralStorage: true
+    storageClassName: ""
+    storageCapacity: ""
+  defaults: |
+    splunk:
+      conf:
+        server:
+          content:
+            general:
+              site: site1
+        web:
+          content:
+            settings:
+              startwebserver: "false"
+        restmap:
+          content:
+            "streams:search":
+              authKeyStanza: noahService
+            "streams:rdin":
+              authKeyStanza: "parallelreduce noahService"
