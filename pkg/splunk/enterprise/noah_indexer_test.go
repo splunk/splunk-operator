@@ -28,13 +28,6 @@ import (
 	"testing"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	noahclient "github.com/splunk/splunk-operator/pkg/splunk/client/noah"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -45,6 +38,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	noahclient "github.com/splunk/splunk-operator/pkg/splunk/client/noah"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 )
 
 type noahIndexerScaleOutTestOptions struct {
@@ -1813,4 +1814,125 @@ func TestSetNoahIndexerPhaseAndConditionsPreservesTransitionTimeForRepeatedObser
 	require.NotNil(t, condition)
 	assert.Equal(t, transitionTime, condition.LastTransitionTime)
 	assert.Equal(t, int64(7), condition.ObservedGeneration)
+}
+
+func TestApplyNoahIndexerResourcesSurvivesDependencyDeletion(t *testing.T) {
+	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
+
+	ctx := t.Context()
+	client := spltest.NewMockClient()
+
+	// Two IndexerClusters share one NoahCluster, so deletion must block both.
+	first := &enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "IndexerCluster"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "first",
+			Namespace: "test",
+			UID:       types.UID("first-uid"),
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas:       1,
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+			},
+		},
+	}
+	setVolumeDefaults(&first.Spec.CommonSplunkSpec)
+
+	second := &enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "IndexerCluster"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "second",
+			Namespace: "test",
+			UID:       types.UID("second-uid"),
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas:       1,
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+			},
+		},
+	}
+	setVolumeDefaults(&second.Spec.CommonSplunkSpec)
+
+	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, first.Namespace)
+	require.NoError(t, err)
+	namespaceSecret.Data["pass4SymmKey"] = []byte(t.Name())
+	require.NoError(t, client.Update(ctx, namespaceSecret))
+
+	noahCluster := &enterpriseApi.NoahCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: first.Namespace},
+		Spec: enterpriseApi.NoahClusterSpec{
+			Endpoint:      "https://noah.test.svc:8080",
+			Tenant:        "axolotl",
+			AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+		},
+	}
+	authSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: first.Namespace},
+		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte("unit-test-noah-key")},
+	}
+	require.NoError(t, client.Create(ctx, noahCluster))
+	require.NoError(t, client.Create(ctx, authSecret))
+
+	// Both workloads resolve their dependency and build a StatefulSet.
+	firstSet, _, err := applyNoahIndexerResources(ctx, client, first, newNoahIndexerPodManager(client, first))
+	require.NoError(t, err)
+	require.NotNil(t, firstSet)
+	secondSet, _, err := applyNoahIndexerResources(ctx, client, second, newNoahIndexerPodManager(client, second))
+	require.NoError(t, err)
+	require.NotNil(t, secondSet)
+
+	// Deleting the Secret blocks every referencing workload. The reference is
+	// untouched, so NoahEnabled stays true and no Cluster Manager path runs.
+	require.NoError(t, client.Delete(ctx, authSecret))
+	for _, cr := range []*enterpriseApi.IndexerCluster{first, second} {
+		statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
+		require.Error(t, err)
+		assert.Nil(t, statefulSet)
+		assert.Equal(t, enterpriseApi.PhaseError, phase)
+		assert.True(t, cr.Spec.NoahEnabled(), "a missing dependency must not clear Noah mode")
+
+		outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err, "")
+		require.True(t, handled)
+		assert.NoError(t, outcomeErr, "a missing dependency is retryable, not terminal")
+		assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
+		assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
+		assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), outcome.condition.Reason)
+	}
+
+	// Deleting the NoahCluster blocks them the same way.
+	require.NoError(t, client.Delete(ctx, noahCluster))
+	for _, cr := range []*enterpriseApi.IndexerCluster{first, second} {
+		_, _, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
+		require.Error(t, err)
+		outcome, _, handled := noahIndexerOutcomeFromError(err, "")
+		require.True(t, handled)
+		assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
+		assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), outcome.condition.Reason)
+	}
+
+	// Recreating both dependencies under the same names recovers every
+	// workload. The rotated credential proves resolution reads the new object
+	// rather than anything cached from the deleted one.
+	recreatedNoahCluster := noahCluster.DeepCopy()
+	recreatedNoahCluster.ResourceVersion = ""
+	require.NoError(t, client.Create(ctx, recreatedNoahCluster))
+	recreatedSecret := authSecret.DeepCopy()
+	recreatedSecret.ResourceVersion = ""
+	recreatedSecret.Data = map[string][]byte{configworkflow.NoahAuthSecretKey: []byte("rotated-noah-key")}
+	require.NoError(t, client.Create(ctx, recreatedSecret))
+
+	for _, cr := range []*enterpriseApi.IndexerCluster{first, second} {
+		statefulSet, _, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
+		require.NoError(t, err)
+		require.NotNil(t, statefulSet)
+	}
+
+	runtime, err := configworkflow.ResolveNoahRuntime(ctx, client, first.Namespace, *first.Spec.NoahClusterRef)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("rotated-noah-key"), runtime.Credential(),
+		"recreation under the same name must revalidate and pick up new data")
 }
