@@ -100,3 +100,32 @@ redis:
     limits:
       cpu: 250m
       memory: 256Mi
+
+minio:
+  image:
+    repository: docker-hub.repo.splunkdev.net/minio/minio
+    tag: RELEASE.2025-09-07T16-13-09Z
+    pullPolicy: IfNotPresent
+  clientImage:
+    repository: docker-hub.repo.splunkdev.net/minio/mc
+    tag: RELEASE.2025-08-13T08-35-41Z
+    pullPolicy: IfNotPresent
+  auth:
+    rootUser: noah
+    # Generated on first install and preserved across upgrades. Set this in an
+    # untracked values file only when a known development credential is needed.
+    rootPassword: ""
+  bucket: noah-smartstore
+  service:
+    port: 9000
+  persistence:
+    enabled: true
+    storageClass: gp3-automode
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

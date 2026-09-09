@@ -9,7 +9,7 @@ NOAH_LOCAL_DEPLOYMENT_ID_FILE = $(NOAH_LOCAL_STATE_DIR)/deployment-id
 NOAH_LOCAL_PORT_FORWARD_PID_FILE = $(NOAH_LOCAL_STATE_DIR)/noah-port-forward.pid
 NOAH_LOCAL_PORT_FORWARD_LOG = $(NOAH_LOCAL_STATE_DIR)/noah-port-forward.log
 NOAH_LOCAL_CHART = helm/charts/noah
-NOAH_LOCAL_FIXTURES ?= $(NOAH_LOCAL_DIR)/fixtures/indexercluster.yaml
+NOAH_LOCAL_FIXTURES ?= $(NOAH_LOCAL_DIR)/fixtures/c3.yaml
 
 NOAH_LOCAL_DEPLOYMENT_ID ?=
 NOAH_LOCAL_CONTEXT ?= kraken
@@ -19,9 +19,10 @@ NOAH_LOCAL_RELEASE ?= noah
 # setup, the chart and the port-forward, but the endpoint in
 # $(NOAH_LOCAL_FIXTURES) is plain YAML and must be edited to match.
 NOAH_LOCAL_PORT ?= 8443
-NOAH_LOCAL_AUTH_SECRET ?= noah-auth
-# Noah waits on PostgreSQL and Redis and runs migrations before it reports ready,
-# and a fresh vCluster also has to pull every image and bind a PVC.
+NOAH_LOCAL_LICENSE_FILE ?=
+NOAH_LOCAL_C3_NAME ?= c3
+# Noah waits on PostgreSQL and Redis and runs migrations before it reports ready.
+# A fresh vCluster also pulls MinIO and binds the PostgreSQL and MinIO PVCs.
 NOAH_LOCAL_DEPLOY_TIMEOUT ?= 10m
 NOAH_LOCAL_HELM_ARGS ?=
 
@@ -98,7 +99,7 @@ noah-local-deployment-id: ## Print the saved Kraken deployment ID.
 	@cat "$(NOAH_LOCAL_DEPLOYMENT_ID_FILE)"
 
 .PHONY: noah-local-deploy
-noah-local-deploy: ## Install or upgrade Noah, PostgreSQL and Redis in the vCluster.
+noah-local-deploy: ## Install or upgrade Noah, PostgreSQL, Redis and MinIO in the vCluster.
 	helm upgrade --install "$(NOAH_LOCAL_RELEASE)" "$(NOAH_LOCAL_CHART)" \
 		--kube-context "$(NOAH_LOCAL_CONTEXT)" \
 		--namespace "$(NOAH_LOCAL_NAMESPACE)" \
@@ -106,11 +107,37 @@ noah-local-deploy: ## Install or upgrade Noah, PostgreSQL and Redis in the vClus
 		--wait --timeout $(NOAH_LOCAL_DEPLOY_TIMEOUT) $(NOAH_LOCAL_HELM_ARGS)
 
 .PHONY: noah-local-fixtures
-noah-local-fixtures: ## Create the Noah auth Secret and apply the sample custom resources.
+noah-local-fixtures: ## Create prerequisite Secrets and apply the sample C3 custom resources.
+	@set -eu; \
+		if test -n "$(NOAH_LOCAL_LICENSE_FILE)"; then \
+			test -f "$(NOAH_LOCAL_LICENSE_FILE)" || { \
+				printf 'License file not found: %s\n' "$(NOAH_LOCAL_LICENSE_FILE)" >&2; \
+				exit 1; \
+			}; \
+			kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
+				create secret generic splunk-license \
+				--from-file=enterprise.lic="$(NOAH_LOCAL_LICENSE_FILE)" \
+				--dry-run=client --output yaml | \
+			kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
+				apply -f -; \
+		elif ! kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
+			get secret splunk-license >/dev/null 2>&1; then \
+			printf '%s\n' \
+				'splunk-license does not exist.' \
+				'Pass NOAH_LOCAL_LICENSE_FILE=/absolute/path/to/enterprise.lic.' >&2; \
+			exit 1; \
+		fi
 	$(NOAH_LOCAL_DIR)/create-auth-secret \
-		"$(NOAH_LOCAL_CONTEXT)" "$(NOAH_LOCAL_NAMESPACE)" "$(NOAH_LOCAL_AUTH_SECRET)"
+		"$(NOAH_LOCAL_CONTEXT)" "$(NOAH_LOCAL_NAMESPACE)" "noah-auth"
 	kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
 		apply -f "$(NOAH_LOCAL_FIXTURES)"
+
+.PHONY: noah-local-smoke
+noah-local-smoke: ## Index on every C3 peer and search the events through Noah.
+	KUBE_CONTEXT="$(NOAH_LOCAL_CONTEXT)" \
+	NAMESPACE="$(NOAH_LOCAL_NAMESPACE)" \
+	C3_NAME="$(NOAH_LOCAL_C3_NAME)" \
+		$(NOAH_LOCAL_DIR)/smoke-test
 
 .PHONY: noah-local-port-forward
 noah-local-port-forward: ## Forward the Noah service so a locally run operator can reach it.
@@ -169,7 +196,8 @@ noah-local-lint: ## Lint the Noah chart and the local development scripts.
 	helm lint $(NOAH_LOCAL_CHART)
 	helm template $(NOAH_LOCAL_RELEASE) $(NOAH_LOCAL_CHART) \
 		--namespace $(NOAH_LOCAL_NAMESPACE) >/dev/null
-	@for script in $(NOAH_LOCAL_DIR)/create-cluster $(NOAH_LOCAL_DIR)/create-auth-secret; do \
+	yq eval-all '.' "$(NOAH_LOCAL_FIXTURES)" >/dev/null
+	@for script in $(NOAH_LOCAL_DIR)/create-cluster $(NOAH_LOCAL_DIR)/create-auth-secret $(NOAH_LOCAL_DIR)/smoke-test; do \
 		sh -n "$$script" || exit 1; \
 		if command -v shellcheck >/dev/null 2>&1; then shellcheck -s sh "$$script" || exit 1; fi; \
 	done
