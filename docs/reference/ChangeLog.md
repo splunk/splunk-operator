@@ -49,6 +49,7 @@ nav_order: 1
 * Update OpenShift support to 4.22
 * Upgrade cert-manager to v1.21.1
 * Upgrade google.golang.org/grpc to v1.83.1
+* Build the operator binary with Go's native FIPS 140-3 mode (`GOFIPS140=v1.0.0`, CMVP Certificate #5247)
 
 #### Bug Fixes
 

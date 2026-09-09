@@ -200,7 +200,7 @@ helm-check-uf: helm-lint-uf helm-test-uf ## Run UF Helm lint and unit tests
 ##@ Build
 
 build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+	GOFIPS140=v1.0.0 go build -o bin/manager cmd/main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go

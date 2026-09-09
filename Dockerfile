@@ -33,7 +33,10 @@ COPY hack hack/
 # builder's native arch, producing a binary that mismatches the image manifest.
 ARG TARGETOS
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+# GOFIPS140=v1.0.0 links the CMVP-certified (Certificate #5247) Go Cryptographic
+# Module into the binary and enables FIPS 140-3 mode by default. See
+# https://go.dev/doc/security/fips140.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GOFIPS140=v1.0.0 go build -a -o manager cmd/main.go
 
 # Use BASE_IMAGE as the base image
 FROM ${BASE_IMAGE}:${BASE_IMAGE_VERSION}
