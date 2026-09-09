@@ -1163,7 +1163,7 @@ spec:
                       type: object
                       x-kubernetes-validations:
                       - message: region is required when provider is aws
-                        rule: self.provider != 'aws' || size(self.region) > 0
+                        rule: '!has(self.provider) || self.provider != ''aws'' || (has(self.region) && size(self.region) > 0)'
                     type: array
                 type: object
               certs:
@@ -4793,7 +4793,7 @@ spec:
                           type: object
                           x-kubernetes-validations:
                           - message: region is required when provider is aws
-                            rule: self.provider != 'aws' || size(self.region) > 0
+                            rule: '!has(self.provider) || self.provider != ''aws'' || (has(self.region) && size(self.region) > 0)'
                         type: array
                     type: object
                   appSrcDeployStatus:
@@ -6186,7 +6186,7 @@ spec:
                       type: object
                       x-kubernetes-validations:
                       - message: region is required when provider is aws
-                        rule: self.provider != 'aws' || size(self.region) > 0
+                        rule: '!has(self.provider) || self.provider != ''aws'' || (has(self.region) && size(self.region) > 0)'
                     type: array
                 type: object
               certs:
@@ -10074,7 +10074,7 @@ spec:
                           type: object
                           x-kubernetes-validations:
                           - message: region is required when provider is aws
-                            rule: self.provider != 'aws' || size(self.region) > 0
+                            rule: '!has(self.provider) || self.provider != ''aws'' || (has(self.region) && size(self.region) > 0)'
                         type: array
                     type: object
                   appSrcDeployStatus:
