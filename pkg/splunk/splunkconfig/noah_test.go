@@ -40,3 +40,50 @@ func TestNoahIndexerConf(t *testing.T) {
 	assert.NotContains(t, server.Value.Stanzas["noahService"], "pass4SymmKey")
 	assert.NotContains(t, server.Value.Stanzas["noahService"], "advertisedAddr")
 }
+
+// heartbeatPeriod=0 (not unset, not 30) — live-verified 2026-09-08 against a
+// real Splunk Cloud stack's search head, which delivers this exact value.
+// Unset instead crashes splunkd's NoahConfiguration on build 10.5.2605.8;
+// 30 (vivek-spike's original value) makes the search head actually
+// heartbeat and register as a Noah peer, corrupting bucket-map generation
+// once real indexer peers go stale. pass4SymmKey_minLength=10 also matches
+// that live production stanza.
+func TestNoahSearchHeadConf(t *testing.T) {
+	entries := splunkconfig.NoahSearchHeadConf("https://noah.example.invalid:8080", "placeholder")
+	require.Len(t, entries, 1)
+
+	server := entries[0]
+	assert.Equal(t, "server", server.ConfFileName)
+	assert.Equal(t, map[string]string{
+		"disabled":               "false",
+		"uri":                    "https://noah.example.invalid:8080",
+		"tenant":                 "placeholder",
+		"heartbeatPeriod":        "0",
+		"pass4SymmKey_minLength": "10",
+	}, map[string]string(server.Value.Stanzas["noahService"]))
+	assert.NotContains(t, server.Value.Stanzas["noahService"], "usePeers",
+		"search head relies on usePeers' documented default (true), not an explicit override")
+	assert.Equal(t, map[string]string{"disabled": "true"}, map[string]string(server.Value.Stanzas["teleport_supervisor"]))
+	assert.NotContains(t, server.Value.Stanzas["noahService"], "pass4SymmKey")
+}
+
+// The deployer gets the same minimal [noahService] as the search head.
+// Live-verified 2026-09-08: a deployer with no [noahService] at all crashes
+// splunkd's NoahConfiguration on build 10.5.2605.8 exactly like an
+// incomplete search-head stanza does.
+func TestNoahDeployerConf(t *testing.T) {
+	entries := splunkconfig.NoahDeployerConf("https://noah.example.invalid:8080", "placeholder")
+	require.Len(t, entries, 1)
+
+	server := entries[0]
+	assert.Equal(t, "server", server.ConfFileName)
+	assert.Equal(t, map[string]string{
+		"disabled":               "false",
+		"uri":                    "https://noah.example.invalid:8080",
+		"tenant":                 "placeholder",
+		"heartbeatPeriod":        "0",
+		"pass4SymmKey_minLength": "10",
+	}, map[string]string(server.Value.Stanzas["noahService"]))
+	assert.Equal(t, map[string]string{"disabled": "true"}, map[string]string(server.Value.Stanzas["teleport_supervisor"]))
+	assert.NotContains(t, server.Value.Stanzas["noahService"], "pass4SymmKey")
+}

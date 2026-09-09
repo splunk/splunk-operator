@@ -41,14 +41,35 @@ func NoahIndexerConf(serviceURL, tenant string) []common.ConfFileEntry {
 }
 
 // NoahSearchHeadConf returns the non-sensitive server.conf settings for a Noah
-// search-head member. This matches the proven-working reference
-// (vivek-spike's noahDefaultsYAML) exactly: no [decouple_search_indexing] and
-// no usePeers, which that reference never sets either — decoupleSearchIndexing
-// was an unverified addition of ours with no precedent in that spike or in
-// Splunk Cloud's production Noah config, and it forced usePeers=true and
-// heartbeatPeriod=0 as hard splunkd-validation requirements that don't
-// otherwise apply. Credentials and pod-specific identity are delivered
-// separately and must not be included here.
+// search-head member. No [decouple_search_indexing] and no usePeers override:
+// decoupleSearchIndexing was an unverified addition of ours with no precedent
+// in vivek-spike or in Splunk Cloud's production Noah config, and it forced
+// usePeers=true and heartbeatPeriod=0 as hard splunkd-validation requirements
+// that don't otherwise apply.
+//
+// heartbeatPeriod=0 (not unset, not 30) — live-verified 2026-09-08 against a
+// real Splunk Cloud stack (mqiu-noah), which delivers this exact value to its
+// search head's [noahService] (etc/apps/100-whisper-searchhead/local/server.conf,
+// via `splunk btool server list noahService --debug`). Two prior assumptions
+// both turned out wrong on splunkd build 10.5.2605.8:
+//   - Leaving heartbeatPeriod entirely unset (this repo's server.conf.spec on
+//     an older Enterprise build documents unset as valid — "will not send a
+//     heartbeat") instead makes splunkd's NoahConfiguration::
+//     loadNoahServiceFromConfFilesReloadable assert and SIGABRT during
+//     startup on this build: `terminate called ... Cannot parse
+//     'heartbeatPeriod' server.conf/[noahService]/heartbeatPeriod`.
+//   - heartbeatPeriod=30 (vivek-spike's original value, copied unquestioned)
+//     parses fine but makes the search head actually heartbeat and register
+//     as a Noah peer — once real indexer peers went stale/down, Noah's
+//     bucket-map strategy substituted the search heads/deployer as the map's
+//     routing peers instead of correctly reporting no eligible peers,
+//     leaving the SHC with zero real distributed-search peers.
+//
+// pass4SymmKey_minLength=10 also matches that same live production stanza
+// (this repo's server.conf.spec instead documents a default of 12 — the
+// production value overrides it explicitly rather than relying on the
+// default). Credentials and pod-specific identity are delivered separately
+// and must not be included here.
 func NoahSearchHeadConf(serviceURL, tenant string) []common.ConfFileEntry {
 	return []common.ConfFileEntry{
 		{
@@ -56,10 +77,11 @@ func NoahSearchHeadConf(serviceURL, tenant string) []common.ConfFileEntry {
 			Value: common.ConfFileValue{
 				Stanzas: common.ConfFileStanzas{
 					"noahService": {
-						"disabled":        "false",
-						"uri":             serviceURL,
-						"tenant":          tenant,
-						"heartbeatPeriod": "30",
+						"disabled":               "false",
+						"uri":                    serviceURL,
+						"tenant":                 tenant,
+						"heartbeatPeriod":        "0",
+						"pass4SymmKey_minLength": "10",
 					},
 					"teleport_supervisor": {
 						"disabled": "true",
@@ -71,11 +93,15 @@ func NoahSearchHeadConf(serviceURL, tenant string) []common.ConfFileEntry {
 }
 
 // NoahDeployerConf returns the non-sensitive server.conf settings for a Noah
-// SHC deployer. Content is intentionally identical to NoahSearchHeadConf,
-// matching the proven-working reference (vivek-spike), which applies the same
-// shared defaults to both deployer and search-head with no role-specific
-// server.conf differences. Delivery still goes through separate ConfigMaps
-// per role (deployer vs. search-head), so this stays a distinct function.
+// SHC deployer. Content is identical to NoahSearchHeadConf. Live-verified
+// 2026-09-08: a deployer with no [noahService] stanza at all hits the same
+// splunkd assertion as an unset heartbeatPeriod does on NoahSearchHeadConf
+// (NoahConfiguration::loadNoahServiceFromConfFilesReloadable, splcore/main
+// src/framework/NoahConfiguration.cpp:291) — this build's NoahConfiguration
+// unconditionally tries to load [noahService] on every role at startup, with
+// no SPLUNK_NOAH_ENABLED gate, and asserts/crashes rather than treating a
+// fully-absent stanza as "Noah disabled, do nothing." Giving the deployer the
+// same minimal stanza as the search head avoids that crash.
 func NoahDeployerConf(serviceURL, tenant string) []common.ConfFileEntry {
 	return []common.ConfFileEntry{
 		{
@@ -83,10 +109,11 @@ func NoahDeployerConf(serviceURL, tenant string) []common.ConfFileEntry {
 			Value: common.ConfFileValue{
 				Stanzas: common.ConfFileStanzas{
 					"noahService": {
-						"disabled":        "false",
-						"uri":             serviceURL,
-						"tenant":          tenant,
-						"heartbeatPeriod": "30",
+						"disabled":               "false",
+						"uri":                    serviceURL,
+						"tenant":                 tenant,
+						"heartbeatPeriod":        "0",
+						"pass4SymmKey_minLength": "10",
 					},
 					"teleport_supervisor": {
 						"disabled": "true",
