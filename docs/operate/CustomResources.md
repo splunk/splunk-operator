@@ -278,10 +278,12 @@ spec:
 ```
 
 The presence of `noahClusterRef` selects Noah mode. An empty reference or a
-configuration that also names a Cluster Manager is rejected. The API contract
-is available before runtime Noah reconciliation; until that work is complete,
-the controller fails closed with `NoahModeNotImplemented` rather than falling
-back to the classic architecture.
+configuration that also names a Cluster Manager is rejected. The controller
+validates the referenced `NoahCluster` and authentication Secret before
+creating workloads, then configures and reconciles the deployer and search-head
+members using the existing SearchHeadCluster lifecycle. Search heads and the
+deployer are not managed as Noah indexer peers. Noah support is intended for
+functional development and validation and is not yet production hardened.
 
 ### Search Head Deployer Resource
 
@@ -432,9 +434,20 @@ spec:
 
 `noahClusterRef` is a same-namespace reference and cannot be combined with
 `clusterManagerRef` or the deprecated `clusterMasterRef`. An empty reference is
-also rejected. The API contract is available before runtime Noah
-reconciliation; until that work is complete, the controller fails closed with
-`NoahModeNotImplemented` rather than falling back to the classic architecture.
+also rejected. The controller validates the referenced `NoahCluster` and
+authentication Secret before creating workloads. It coordinates initial peer
+registration, one-at-a-time scale-out and rollout, and reports Ready only when
+the expected Kubernetes Pods are ready and their current Noah peer
+incarnations are active and up.
+
+Noah IndexerCluster scale-in is development-only. It removes the highest
+ordinal, retains its PVC, unregisters the peer after the Pod disappears, and
+waits for an active bucket map that excludes the removed peer before continuing.
+It does not perform safe Noah decommissioning or prove bucket ownership transfer
+before reducing the StatefulSet. Pod rollout also has no explicit endpoint
+withdrawal step, and deleting the custom resource does not safely decommission
+its Noah peers. These lifecycle paths are not suitable for production workloads
+until those safety contracts are implemented.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
