@@ -5,7 +5,8 @@ vCluster:
 
 - one Noah server;
 - a PostgreSQL 15 StatefulSet with persistent storage;
-- an ephemeral Redis instance; and
+- an ephemeral Redis instance;
+- a single-node MinIO SmartStore service with persistent storage; and
 - the Noah migration image as an init container.
 
 It deliberately excludes ingress, a load balancer, Istio, autoscaling, a Pod
@@ -89,6 +90,18 @@ kubectl --context kraken -n splunk-operator get secret noah-database \
 
 To pin a known value instead, set it in an untracked values file and pass it
 with `--values`. Do not commit real credentials.
+
+MinIO provides the S3-compatible remote store required for an end-to-end Noah
+bucket-routing test. The chart creates the `noah-smartstore` bucket and exposes
+it at `http://noah-minio:9000`. Its credentials are stored in the `noah-minio`
+Secret and preserved across Helm upgrades. The bundled C3 fixture uses a
+cluster-specific `s3://noah-smartstore/c3` path; do not share that path
+with another active indexer cluster.
+
+`minio.auth.rootPassword` is also empty by default and generated on first
+install. Set it in an untracked values file only if a known local credential is
+needed. The pinned MinIO images are intended only for this isolated development
+environment, and MinIO is not exposed outside the vCluster.
 
 Create the Splunk custom resources in the same namespace using Kraken's
 SmartBus-enabled `splunk-runtime` ServiceAccount. A locally run operator can

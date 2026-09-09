@@ -49,7 +49,30 @@
         }
       },
       "required": ["auth"]
+    },
+    "minio": {
+      "type": "object",
+      "properties": {
+        "auth": {
+          "type": "object",
+          "properties": {
+            "rootUser": {"type": "string", "minLength": 3},
+            "rootPassword": {
+              "type": "string",
+              "description": "Empty means the chart generates one on first install and then reuses the release Secret's value."
+            }
+          },
+          "required": ["rootUser", "rootPassword"]
+        },
+        "bucket": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 63,
+          "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+        }
+      },
+      "required": ["auth", "bucket"]
     }
   },
-  "required": ["replicaCount", "noah", "postgresql"]
+  "required": ["replicaCount", "noah", "postgresql", "minio"]
 }
