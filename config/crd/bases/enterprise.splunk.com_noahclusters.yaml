@@ -138,6 +138,11 @@ spec:
             - endpoint
             - tenant
             type: object
+            x-kubernetes-validations:
+            - message: endpoint is immutable once created
+              rule: self.endpoint == oldSelf.endpoint
+            - message: tenant is immutable once created
+              rule: self.tenant == oldSelf.tenant
         type: object
     served: true
     storage: true

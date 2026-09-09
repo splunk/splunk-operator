@@ -9894,6 +9894,10 @@ spec:
                 !has(self.clusterManagerRef.name) || self.clusterManagerRef.name ==
                 "") && (!has(self.clusterMasterRef) || !has(self.clusterMasterRef.name)
                 || self.clusterMasterRef.name == ""))'
+            - message: noahClusterRef cannot be added or removed after creation
+              rule: has(self.noahClusterRef) == has(oldSelf.noahClusterRef)
+            - message: noahClusterRef.name is immutable once created
+              rule: '!has(self.noahClusterRef) || self.noahClusterRef.name == oldSelf.noahClusterRef.name'
           status:
             description: SearchHeadClusterStatus defines the observed state of a Splunk
               Enterprise search head cluster

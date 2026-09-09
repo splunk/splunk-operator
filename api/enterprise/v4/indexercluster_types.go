@@ -36,6 +36,8 @@ const (
 
 // +kubebuilder:validation:XValidation:rule="has(self.queueRef) == has(self.objectStorageRef)",message="queueRef and objectStorageRef must both be set or both be empty"
 // +kubebuilder:validation:XValidation:rule="!has(self.noahClusterRef) || ((!has(self.clusterManagerRef) || !has(self.clusterManagerRef.name) || self.clusterManagerRef.name == \"\") && (!has(self.clusterMasterRef) || !has(self.clusterMasterRef.name) || self.clusterMasterRef.name == \"\"))",message="noahClusterRef is mutually exclusive with clusterManagerRef and clusterMasterRef"
+// +kubebuilder:validation:XValidation:rule="has(self.noahClusterRef) == has(oldSelf.noahClusterRef)",message="noahClusterRef cannot be added or removed after creation"
+// +kubebuilder:validation:XValidation:rule="!has(self.noahClusterRef) || self.noahClusterRef.name == oldSelf.noahClusterRef.name",message="noahClusterRef.name is immutable once created"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
