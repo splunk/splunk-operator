@@ -25,7 +25,6 @@ import (
 	dbmetricsadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/custom_metrics"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
-	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/predicates"
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
@@ -53,10 +52,9 @@ import (
 // PostgresDatabaseReconciler reconciles a PostgresDatabase object.
 type PostgresDatabaseReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
-	Metrics        ports.Recorder
-	FleetCollector *pgprometheus.FleetCollector
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+	Metrics  ports.Recorder
 }
 
 const (
@@ -103,7 +101,6 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		},
 	}
 	result, err := dbcore.PostgresDatabaseService(ctx, rc, postgresDB, dbadapter.NewDBRepository)
-	r.FleetCollector.CollectDatabaseMetrics(ctx, r.Client, r.Metrics)
 	if sharedreconcile.IsPureConflict(err) {
 		return ctrl.Result{Requeue: true}, nil
 	}

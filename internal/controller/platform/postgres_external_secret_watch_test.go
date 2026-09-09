@@ -95,11 +95,10 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect((&PostgresClusterReconciler{
-			Client:         watchManager.GetClient(),
-			Scheme:         watchManager.GetScheme(),
-			Recorder:       record.NewFakeRecorder(1024),
-			Metrics:        &pgprometheus.NoopRecorder{},
-			FleetCollector: pgprometheus.NewFleetCollector(),
+			Client:   watchManager.GetClient(),
+			Scheme:   watchManager.GetScheme(),
+			Recorder: record.NewFakeRecorder(1024),
+			Metrics:  &pgprometheus.NoopRecorder{},
 		}).SetupWithManager(watchManager)).To(Succeed())
 
 		mgrCtx, mgrCancel = context.WithCancel(context.Background())

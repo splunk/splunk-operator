@@ -33,7 +33,6 @@ import (
 	cnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	clusterk8s "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/k8s"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
-	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/predicates"
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
@@ -68,10 +67,9 @@ const (
 // PostgresClusterReconciler reconciles PostgresCluster resources.
 type PostgresClusterReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
-	Metrics        ports.Recorder
-	FleetCollector *pgprometheus.FleetCollector
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+	Metrics  ports.Recorder
 }
 
 // +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
@@ -98,7 +96,6 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper,
 		cnpgadapter.NewBackupBackend(r.Client, r.Scheme),
 		newCustomMetricsFactory(r.Client, r.Scheme), cnpgadapter.NewRecoveryBackend())
-	r.FleetCollector.CollectClusterMetrics(ctx, r.Client, r.Metrics)
 	if sharedreconcile.IsPureConflict(err) {
 		return ctrl.Result{Requeue: true}, nil
 	}

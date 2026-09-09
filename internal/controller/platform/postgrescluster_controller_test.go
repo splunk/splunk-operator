@@ -421,11 +421,10 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		}
 		fakeRecorder = record.NewFakeRecorder(100)
 		reconciler = &PostgresClusterReconciler{
-			Client:         k8sClient,
-			Scheme:         k8sClient.Scheme(),
-			Recorder:       fakeRecorder,
-			Metrics:        &pgprometheus.NoopRecorder{},
-			FleetCollector: pgprometheus.NewFleetCollector(),
+			Client:   k8sClient,
+			Scheme:   k8sClient.Scheme(),
+			Recorder: fakeRecorder,
+			Metrics:  &pgprometheus.NoopRecorder{},
 		}
 		req = reconcile.Request{NamespacedName: types.NamespacedName{Name: clusterName, Namespace: namespace}}
 	})

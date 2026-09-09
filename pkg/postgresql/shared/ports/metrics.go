@@ -29,8 +29,8 @@ const (
 // controller_runtime_reconcile_time_seconds, controller_runtime_reconcile_errors_total.
 //
 // Domain-specific business metrics are emitted automatically via IncStatusTransition
-// every time a status condition is written. Fleet-level gauges are populated by the
-// collector on each reconcile.
+// every time a status condition is written. A manager-owned background collector
+// periodically refreshes fleet-level gauges.
 type Recorder interface {
 	// IncStatusTransition increments the status transition counter.
 	// Called automatically by persistStatus/setStatus — no manual calls needed in service code.
