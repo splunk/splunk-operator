@@ -26,7 +26,6 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
-	"github.com/splunk/splunk-operator/pkg/splunk/noah"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
@@ -150,7 +149,7 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 // on every role at startup and asserts rather than treating a fully-absent
 // stanza as "Noah disabled, do nothing." See NoahDeployerConf's doc comment.
 func applySearchHeadClusterNoah(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (enterpriseApi.Phase, enterpriseApi.Phase, *appsv1.StatefulSet, error) {
-	runtime, err := noah.ResolveConnection(ctx, client, cr.GetNamespace(), *cr.Spec.NoahClusterRef)
+	runtime, err := configworkflow.ResolveNoahRuntime(ctx, client, cr.GetNamespace(), *cr.Spec.NoahClusterRef)
 	if err != nil {
 		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, err
 	}
@@ -184,7 +183,7 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	// same path; splunk-ansible's own defaults loader deep-merges the two
 	// files' nested maps, so the structural and credential fields union into
 	// one [noahService] stanza before Ansible ever runs.
-	credentialsSecret, err := configworkflow.EnsureSecret(ctx, client, cr, splunkconfig.NoahSHCCredentialsConf(pass4SymmKey), &owner, resources.WithDictionaryConf())
+	credentialsSecret, err := configworkflow.EnsureSecret(ctx, client, cr, splunkconfig.NoahCredentialsConf(pass4SymmKey), &owner, resources.WithDictionaryConf())
 	if err != nil {
 		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("ensure Noah SearchHeadCluster credentials: %w", err)
 	}

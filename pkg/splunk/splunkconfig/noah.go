@@ -124,15 +124,10 @@ func NoahDeployerConf(serviceURL, tenant string) []common.ConfFileEntry {
 	}
 }
 
-// NoahSHCCredentialsConf returns the credential-only server.conf ConfFileEntry
-// carrying [noahService] pass4SymmKey. It is identical for the deployer and
-// every search-head member, and is delivered via a Secret (WithDictionaryConf),
-// never a ConfigMap. splunk-ansible's own defaults loader (environ.py's
-// merge_dict) recursively deep-merges this into the same splunk.conf.server.
-// content.noahService map produced by NoahSearchHeadConf/NoahDeployerConf, so
-// the structural and credential entries union into one stanza before Ansible
-// ever runs — no operator-owned volume or init container is involved.
-func NoahSHCCredentialsConf(pass4SymmKey string) []common.ConfFileEntry {
+// NoahCredentialsConf returns the credential-only server.conf entry carrying
+// [noahService] pass4SymmKey. It is delivered through a Secret and combined
+// with the non-sensitive Noah configuration by splunk-ansible.
+func NoahCredentialsConf(pass4SymmKey string) []common.ConfFileEntry {
 	return []common.ConfFileEntry{
 		{
 			ConfFileName: "server",
