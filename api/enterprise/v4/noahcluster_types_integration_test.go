@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -252,5 +253,87 @@ func TestNoahClusterXValidation(t *testing.T) {
 				assert.ErrorContains(t, err, tC.expected)
 			})
 		}
+	})
+}
+
+func TestNoahClusterMutability(t *testing.T) {
+	apiClient := requireAPIServer(t)
+
+	t.Run("should reject an endpoint change", func(t *testing.T) {
+		noahCluster := &NoahCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "mutability-endpoint", Namespace: "default"},
+			Spec: NoahClusterSpec{
+				Endpoint:      "https://noah.test:8080",
+				Tenant:        "tenant",
+				AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+			},
+		}
+		require.NoError(t, apiClient.Create(t.Context(), noahCluster))
+
+		noahCluster.Spec.Endpoint = "https://noah.other:8080"
+		assert.ErrorContains(t, apiClient.Update(t.Context(), noahCluster), "endpoint is immutable once created")
+	})
+
+	t.Run("should reject a tenant change", func(t *testing.T) {
+		noahCluster := &NoahCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "mutability-tenant", Namespace: "default"},
+			Spec: NoahClusterSpec{
+				Endpoint:      "https://noah.test:8080",
+				Tenant:        "tenant",
+				AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+			},
+		}
+		require.NoError(t, apiClient.Create(t.Context(), noahCluster))
+
+		noahCluster.Spec.Tenant = "other-tenant"
+		assert.ErrorContains(t, apiClient.Update(t.Context(), noahCluster), "tenant is immutable once created")
+	})
+
+	t.Run("should accept an authSecretRef change so an externally managed Secret can be replaced", func(t *testing.T) {
+		noahCluster := &NoahCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "mutability-auth-secret", Namespace: "default"},
+			Spec: NoahClusterSpec{
+				Endpoint:      "https://noah.test:8080",
+				Tenant:        "tenant",
+				AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+			},
+		}
+		require.NoError(t, apiClient.Create(t.Context(), noahCluster))
+
+		noahCluster.Spec.AuthSecretRef.Name = "noah-auth-v2"
+		assert.NoError(t, apiClient.Update(t.Context(), noahCluster))
+	})
+
+	t.Run("should accept cache-warm policy changes", func(t *testing.T) {
+		noahCluster := &NoahCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "mutability-cache-warm", Namespace: "default"},
+			Spec: NoahClusterSpec{
+				Endpoint:      "https://noah.test:8080",
+				Tenant:        "tenant",
+				AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+			},
+		}
+		require.NoError(t, apiClient.Create(t.Context(), noahCluster))
+
+		disabled := false
+		noTimeout := int32(0)
+		noahCluster.Spec.CacheWarmScaleOutEnabled = &disabled
+		noahCluster.Spec.CacheWarmScaleOutTimeoutSeconds = &noTimeout
+		assert.NoError(t, apiClient.Update(t.Context(), noahCluster))
+	})
+
+	t.Run("should accept a no-op update", func(t *testing.T) {
+		noahCluster := &NoahCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "mutability-no-op", Namespace: "default"},
+			Spec: NoahClusterSpec{
+				Endpoint:      "https://noah.test:8080",
+				Tenant:        "tenant",
+				AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+			},
+		}
+		require.NoError(t, apiClient.Create(t.Context(), noahCluster))
+
+		noahCluster.Labels = map[string]string{"touched": "yes"}
+		assert.NoError(t, apiClient.Update(t.Context(), noahCluster))
 	})
 }
