@@ -105,22 +105,20 @@ const (
 
 func reconcilePostgresDatabase(ctx context.Context, nn types.NamespacedName) (ctrl.Result, error) {
 	reconciler := &PostgresDatabaseReconciler{
-		Client:         k8sClient,
-		Scheme:         k8sClient.Scheme(),
-		Recorder:       record.NewFakeRecorder(100),
-		Metrics:        &pgprometheus.NoopRecorder{},
-		FleetCollector: pgprometheus.NewFleetCollector(),
+		Client:   k8sClient,
+		Scheme:   k8sClient.Scheme(),
+		Recorder: record.NewFakeRecorder(100),
+		Metrics:  &pgprometheus.NoopRecorder{},
 	}
 	return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 }
 
 func reconcilePostgresDatabaseWithRecorder(ctx context.Context, nn types.NamespacedName, recorder record.EventRecorder) (ctrl.Result, error) {
 	reconciler := &PostgresDatabaseReconciler{
-		Client:         k8sClient,
-		Scheme:         k8sClient.Scheme(),
-		Recorder:       recorder,
-		Metrics:        &pgprometheus.NoopRecorder{},
-		FleetCollector: pgprometheus.NewFleetCollector(),
+		Client:   k8sClient,
+		Scheme:   k8sClient.Scheme(),
+		Recorder: recorder,
+		Metrics:  &pgprometheus.NoopRecorder{},
 	}
 	return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 }
@@ -2295,11 +2293,10 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 	When("enqueuePostgresDatabasesForCluster is called", func() {
 		It("returns a request for each PostgresDatabase that references the cluster", func() {
 			reconciler := &PostgresDatabaseReconciler{
-				Client:         k8sClient,
-				Scheme:         k8sClient.Scheme(),
-				Recorder:       record.NewFakeRecorder(100),
-				Metrics:        &pgprometheus.NoopRecorder{},
-				FleetCollector: pgprometheus.NewFleetCollector(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(100),
+				Metrics:  &pgprometheus.NoopRecorder{},
 			}
 			cluster := createPostgresClusterResource(ctx, namespace, "enqueue-cluster")
 			createPostgresDatabaseResource(ctx, namespace, "db-matches", "enqueue-cluster", []platformv1alpha1.DatabaseDefinition{{Name: dbAppdb}})

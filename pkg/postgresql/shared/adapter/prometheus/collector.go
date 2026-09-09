@@ -17,30 +17,75 @@ package prometheus
 
 import (
 	"context"
+	"time"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// FleetCollector recomputes fleet-state gauges from the K8s API (informer cache).
-type FleetCollector struct{}
+const fleetCollectionInterval = 30 * time.Second
 
-// NewFleetCollector returns a new FleetCollector.
-func NewFleetCollector() *FleetCollector {
-	return &FleetCollector{}
+// FleetCollector periodically recomputes fleet-state gauges from the manager cache.
+type FleetCollector struct {
+	client   client.Client
+	recorder ports.Recorder
+	clock    clock.WithTicker
+	interval time.Duration
 }
 
-// CollectClusterMetrics lists all PostgresCluster resources and updates phase
-// gauges, pooler gauges, and managed-user gauges.
-func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Client, recorder ports.Recorder) {
-	logger := log.FromContext(ctx)
+// NewFleetCollector returns a new FleetCollector.
+func NewFleetCollector(c client.Client, recorder ports.Recorder) *FleetCollector {
+	return newFleetCollector(c, recorder, clock.RealClock{}, fleetCollectionInterval)
+}
 
-	var list platformv1alpha1.PostgresClusterList
-	if err := c.List(ctx, &list); err != nil {
-		logger.Error(err, "Failed to list PostgresClusters for fleet metrics")
+func newFleetCollector(c client.Client, recorder ports.Recorder, clock clock.WithTicker, interval time.Duration) *FleetCollector {
+	return &FleetCollector{client: c, recorder: recorder, clock: clock, interval: interval}
+}
+
+// Start collects immediately, then refreshes the gauges without overlapping cycles.
+func (fc *FleetCollector) Start(ctx context.Context) error {
+	fc.collect(ctx)
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	ticker := fc.clock.NewTicker(fc.interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C():
+			fc.collect(ctx)
+		}
+	}
+}
+
+// NeedLeaderElection makes one active manager responsible for fleet gauges.
+func (*FleetCollector) NeedLeaderElection() bool {
+	return true
+}
+
+func (fc *FleetCollector) collect(ctx context.Context) {
+	logger := log.FromContext(ctx)
+	if err := fc.collectClusterMetrics(ctx); err != nil && ctx.Err() == nil {
+		logger.Error(err, "Failed to collect PostgresCluster fleet metrics")
+	}
+	if ctx.Err() != nil {
 		return
+	}
+	if err := fc.collectDatabaseMetrics(ctx); err != nil && ctx.Err() == nil {
+		logger.Error(err, "Failed to collect PostgresDatabase fleet metrics")
+	}
+}
+
+func (fc *FleetCollector) collectClusterMetrics(ctx context.Context) error {
+	var list platformv1alpha1.PostgresClusterList
+	if err := fc.client.List(ctx, &list); err != nil {
+		return err
 	}
 
 	phases := make(map[string]float64)
@@ -83,20 +128,16 @@ func (fc *FleetCollector) CollectClusterMetrics(ctx context.Context, c client.Cl
 		}
 	}
 
-	recorder.SetClusterPhases(phases)
-	recorder.SetPoolerEnabledClusters(poolerEnabledCount)
-	recorder.SetManagedUsers(ports.ControllerCluster, managedUserStates)
+	fc.recorder.SetClusterPhases(phases)
+	fc.recorder.SetPoolerEnabledClusters(poolerEnabledCount)
+	fc.recorder.SetManagedUsers(ports.ControllerCluster, managedUserStates)
+	return nil
 }
 
-// CollectDatabaseMetrics lists all PostgresDatabase resources and updates
-// phase gauges.
-func (fc *FleetCollector) CollectDatabaseMetrics(ctx context.Context, c client.Client, recorder ports.Recorder) {
-	logger := log.FromContext(ctx)
-
+func (fc *FleetCollector) collectDatabaseMetrics(ctx context.Context) error {
 	var list platformv1alpha1.PostgresDatabaseList
-	if err := c.List(ctx, &list); err != nil {
-		logger.Error(err, "Failed to list PostgresDatabases for fleet metrics")
-		return
+	if err := fc.client.List(ctx, &list); err != nil {
+		return err
 	}
 
 	phases := make(map[string]float64)
@@ -109,5 +150,6 @@ func (fc *FleetCollector) CollectDatabaseMetrics(ctx context.Context, c client.C
 		phases[phase]++
 	}
 
-	recorder.SetDatabasePhases(phases)
+	fc.recorder.SetDatabasePhases(phases)
+	return nil
 }
