@@ -32,6 +32,7 @@ import (
 func TestMapNoahClusterToSearchHeadClusters(t *testing.T) {
 	reconciler := newNoahSearchHeadWatchTestReconciler(t,
 		noahSearchHeadCluster("selected", "test", "noah"),
+		noahSearchHeadCluster("also-selected", "test", "noah"),
 		noahSearchHeadCluster("other-ref", "test", "other-noah"),
 		noahSearchHeadCluster("other-namespace", "other", "noah"),
 		&enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "classic", Namespace: "test"}},
@@ -41,9 +42,10 @@ func TestMapNoahClusterToSearchHeadClusters(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: "test"},
 	})
 
-	assert.ElementsMatch(t, []reconcile.Request{{
-		NamespacedName: types.NamespacedName{Name: "selected", Namespace: "test"},
-	}}, requests)
+	assert.ElementsMatch(t, []reconcile.Request{
+		{NamespacedName: types.NamespacedName{Name: "selected", Namespace: "test"}},
+		{NamespacedName: types.NamespacedName{Name: "also-selected", Namespace: "test"}},
+	}, requests)
 	assert.Nil(t, reconciler.mapNoahClusterToSearchHeadClusters(t.Context(), &corev1.Secret{}))
 }
 
