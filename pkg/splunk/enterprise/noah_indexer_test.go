@@ -31,16 +31,20 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	noahclient "github.com/splunk/splunk-operator/pkg/splunk/client/noah"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/noah"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
 type noahIndexerScaleOutTestOptions struct {
@@ -120,7 +124,7 @@ func newNoahIndexerScaleOutTestFixture(t *testing.T, options noahIndexerScaleOut
 	}))
 	require.NoError(t, fixture.client.Create(t.Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: fixture.cr.Namespace},
-		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	appliedReplicas := int32(1)
@@ -236,7 +240,7 @@ func newNoahIndexerScaleDownTestFixture(t *testing.T) *noahIndexerScaleDownTestF
 	}))
 	require.NoError(t, fixture.client.Create(t.Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: fixture.cr.Namespace},
-		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	replicas := int32(3)
@@ -417,7 +421,7 @@ func newNoahIndexerRolloutTestFixture(t *testing.T) *noahIndexerRolloutTestFixtu
 	}))
 	require.NoError(t, fixture.client.Create(t.Context(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: fixture.cr.Namespace},
-		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	replicas := int32(2)
@@ -712,6 +716,89 @@ func assertPodNotFound(t *testing.T, client splcommon.ControllerClient, name, na
 	require.True(t, k8serrors.IsNotFound(err))
 }
 
+func TestEnsureNoahIndexerDefaultsCombinesNoahAndSmartBusCredentials(t *testing.T) {
+	ctx := t.Context()
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+	client := newFakeClientBuilder(scheme).Build()
+	queue, objectStorage := newQueueOSFixture(t, ctx, client, "queue", "queue-secrets")
+	cr := &enterpriseApi.IndexerCluster{
+		TypeMeta:   metav1.TypeMeta{Kind: "IndexerCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			NoahClusterRef:   &corev1.LocalObjectReference{Name: "noah"},
+			QueueRef:         &corev1.ObjectReference{Name: queue.Name},
+			ObjectStorageRef: &corev1.ObjectReference{Name: objectStorage.Name},
+		},
+	}
+
+	noahCredential := t.Name()
+	configMap, secret, err := ensureNoahIndexerDefaults(
+		ctx,
+		client,
+		cr,
+		enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example.invalid:8080", Tenant: "tenant"},
+		noahCredential,
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, configMap.Name)
+	require.NotEmpty(t, secret.Name)
+
+	storedConfigMap := &corev1.ConfigMap{}
+	require.NoError(t, client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: configMap.Name}, storedConfigMap))
+	config := storedConfigMap.Data["conf-defaults.yml"]
+	assert.Contains(t, config, "https://noah.example.invalid:8080")
+	assert.Contains(t, config, "test-queue")
+	assert.NotContains(t, config, noahCredential)
+	assert.NotContains(t, config, "AKIAEXAMPLE")
+
+	storedSecret := &corev1.Secret{}
+	require.NoError(t, client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: secret.Name}, storedSecret))
+	credentials := string(storedSecret.Data["conf-defaults.yml"])
+	assert.Contains(t, credentials, noahCredential)
+	assert.Contains(t, credentials, "AKIAEXAMPLE")
+	assert.Contains(t, credentials, "shhh-secret")
+
+	_, rotatedSecret, err := ensureNoahIndexerDefaults(
+		ctx,
+		client,
+		cr,
+		enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example.invalid:8080", Tenant: "tenant"},
+		noahCredential+"-rotated",
+	)
+	require.NoError(t, err)
+	assert.NotEqual(t, secret.Name, rotatedSecret.Name)
+}
+
+func TestEnsureNoahIndexerDefaultsIgnoresEmptySmartBusReferences(t *testing.T) {
+	ctx := t.Context()
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+	client := newFakeClientBuilder(scheme).Build()
+	cr := &enterpriseApi.IndexerCluster{
+		TypeMeta:   metav1.TypeMeta{Kind: "IndexerCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			NoahClusterRef:   &corev1.LocalObjectReference{Name: "noah"},
+			QueueRef:         &corev1.ObjectReference{},
+			ObjectStorageRef: &corev1.ObjectReference{},
+		},
+	}
+
+	configMap, secret, err := ensureNoahIndexerDefaults(
+		ctx,
+		client,
+		cr,
+		enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example.invalid:8080", Tenant: "tenant"},
+		t.Name(),
+	)
+	require.NoError(t, err)
+	assert.NotEmpty(t, configMap.Name)
+	assert.NotEmpty(t, secret.Name)
+}
+
 func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) {
 	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
 
@@ -736,6 +823,11 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 		},
 	}
 	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	splunkCredential := t.Name()
+	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cr.Namespace)
+	require.NoError(t, err)
+	namespaceSecret.Data["pass4SymmKey"] = []byte(splunkCredential)
+	require.NoError(t, client.Update(ctx, namespaceSecret))
 	require.NoError(t, client.Create(ctx, &enterpriseApi.NoahCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: cr.Namespace},
 		Spec: enterpriseApi.NoahClusterSpec{
@@ -748,7 +840,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	}))
 	require.NoError(t, client.Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
-		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
@@ -794,6 +886,24 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	}, defaultsConfigMap))
 	assert.Contains(t, defaultsConfigMap.Data["conf-defaults.yml"], "https://noah.test.svc:8080")
 	assert.Contains(t, defaultsConfigMap.Data["conf-defaults.yml"], "tenant: axolotl")
+	assert.NotContains(t, defaultsConfigMap.Data["conf-defaults.yml"], "unit-test-noah-key")
+
+	var defaultsSecretName string
+	for _, volume := range created.Spec.Template.Spec.Volumes {
+		if volume.Secret != nil && strings.HasPrefix(volume.Secret.SecretName, "sok-indexercluster-creds-") {
+			defaultsSecretName = volume.Secret.SecretName
+			break
+		}
+	}
+	require.NotEmpty(t, defaultsSecretName)
+	defaultsSecret := &corev1.Secret{}
+	require.NoError(t, client.Get(ctx, types.NamespacedName{
+		Name:      defaultsSecretName,
+		Namespace: created.Namespace,
+	}, defaultsSecret))
+	assert.Contains(t, string(defaultsSecret.Data["conf-defaults.yml"]), "unit-test-noah-key")
+	assert.Contains(t, string(defaultsSecret.Data["conf-defaults.yml"]), "pass4SymmKey")
+	assert.NotContains(t, string(defaultsSecret.Data["conf-defaults.yml"]), splunkCredential)
 
 	env := make(map[string]corev1.EnvVar)
 	for _, item := range created.Spec.Template.Spec.Containers[0].Env {
@@ -805,38 +915,10 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	require.NotNil(t, env[resources.PodNameEnvName].ValueFrom)
 	require.NotNil(t, env[resources.PodNamespaceEnvName].ValueFrom)
 
-	var initEtc *corev1.Container
-	for i := range created.Spec.Template.Spec.InitContainers {
-		if created.Spec.Template.Spec.InitContainers[i].Name == "init-etc" {
-			initEtc = &created.Spec.Template.Spec.InitContainers[i]
-			break
-		}
+	for _, initContainer := range created.Spec.Template.Spec.InitContainers {
+		assert.NotEqual(t, "init-etc", initContainer.Name)
 	}
-	require.NotNil(t, initEtc)
-	require.Len(t, initEtc.Command, 3)
-	assert.Contains(t, initEtc.Command[2], `print "[noahService]"`)
-	assert.Contains(t, initEtc.Command[2], `print "disabled = true"`)
-	assert.Contains(t, initEtc.Command[2], noahAuthMountPath+"/"+noah.AuthSecretKey)
-	assert.NotContains(t, initEtc.Command[2], "unit-test-noah-key")
-
-	var authVolume *corev1.Volume
-	for i := range created.Spec.Template.Spec.Volumes {
-		if created.Spec.Template.Spec.Volumes[i].Name == noahAuthVolumeName {
-			authVolume = &created.Spec.Template.Spec.Volumes[i]
-			break
-		}
-	}
-	require.NotNil(t, authVolume)
-	require.NotNil(t, authVolume.Secret)
-	assert.Equal(t, "noah-auth", authVolume.Secret.SecretName)
-	assert.Contains(t, initEtc.VolumeMounts, corev1.VolumeMount{
-		Name:      noahAuthVolumeName,
-		MountPath: noahAuthMountPath,
-		ReadOnly:  true,
-	})
-	for _, mount := range created.Spec.Template.Spec.Containers[0].VolumeMounts {
-		assert.NotEqual(t, noahAuthVolumeName, mount.Name, "the main container must not mount the plaintext Noah credential")
-	}
+	assert.Contains(t, env["SPLUNK_DEFAULTS_URL"].Value, resources.SecretMountPath())
 }
 
 func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testing.T) {
@@ -868,7 +950,7 @@ func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testi
 	}))
 	require.NoError(t, client.Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
-		Data:       map[string][]byte{noah.AuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
 	replicas := int32(1)
@@ -970,7 +1052,7 @@ func TestApplyNoahIndexerResourcesValidatesRuntimeBeforeCreatingResources(t *tes
 	reason, _ := splcommon.TerminalReason(outcomeErr)
 	assert.Equal(t, EventReasonNoahConfigurationInvalid, reason)
 	assert.Equal(t, string(enterpriseApi.ReasonNoahConfigurationInvalid), outcome.condition.Reason)
-	assert.Contains(t, outcome.condition.Message, noah.AuthSecretKey)
+	assert.Contains(t, outcome.condition.Message, configworkflow.NoahAuthSecretKey)
 	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")
 }
 
@@ -1243,97 +1325,6 @@ func TestNoahIndexerPodManagerPropagatesScaleDownCleanupFailure(t *testing.T) {
 	statefulSet := &appsv1.StatefulSet{}
 	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
 	assert.Equal(t, "2", statefulSet.Annotations[pendingScaleDownOrdinalAnnotation])
-}
-
-func TestNoahInitEtcUsesRenderedEtcVolume(t *testing.T) {
-	statefulSet := &appsv1.StatefulSet{
-		Spec: appsv1.StatefulSetSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name: "splunk",
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "rendered-etc",
-							MountPath: "/opt/splunk/etc",
-						}},
-					}},
-				},
-			},
-		},
-	}
-
-	noahInitEtcOption(&enterpriseApi.CommonSplunkSpec{})(statefulSet)
-	require.Len(t, statefulSet.Spec.Template.Spec.InitContainers, 1)
-	initEtc := statefulSet.Spec.Template.Spec.InitContainers[0]
-	assert.Equal(t, "rendered-etc", initEtc.VolumeMounts[0].Name)
-	require.NotNil(t, initEtc.SecurityContext)
-	require.NotNil(t, initEtc.SecurityContext.AllowPrivilegeEscalation)
-	assert.False(t, *initEtc.SecurityContext.AllowPrivilegeEscalation)
-	require.NotNil(t, initEtc.SecurityContext.Capabilities)
-	assert.Equal(t, []corev1.Capability{"ALL"}, initEtc.SecurityContext.Capabilities.Drop)
-	require.NotNil(t, initEtc.SecurityContext.SeccompProfile)
-	assert.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, initEtc.SecurityContext.SeccompProfile.Type)
-}
-
-func TestNoahAuthSecretOptionUsesSecretResourceVersion(t *testing.T) {
-	statefulSet := &appsv1.StatefulSet{
-		Spec: appsv1.StatefulSetSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{InitContainers: []corev1.Container{{Name: "init-etc"}}},
-			},
-		},
-	}
-
-	noahAuthSecretOption("noah-auth", "42")(statefulSet)
-
-	assert.Equal(t, "42", statefulSet.Spec.Template.Annotations[noahAuthRevisionAnnotation])
-	require.Len(t, statefulSet.Spec.Template.Spec.Volumes, 1)
-	assert.Equal(t, "noah-auth", statefulSet.Spec.Template.Spec.Volumes[0].Secret.SecretName)
-}
-
-func TestNoahIndexerStatefulSetOptionsAppliesStableIdentityLast(t *testing.T) {
-	statefulSet := &appsv1.StatefulSet{
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: "splunk-main-indexer-headless",
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name: "splunk",
-					}},
-				},
-			},
-		},
-	}
-
-	callerOption := func(statefulSet *appsv1.StatefulSet) {
-		statefulSet.Spec.ServiceName = "caller-selected-headless"
-		statefulSet.Spec.Template.Spec.Containers[0].Env = append(
-			statefulSet.Spec.Template.Spec.Containers[0].Env,
-			corev1.EnvVar{Name: resources.NoahEnabledEnvName, Value: "false"},
-		)
-	}
-
-	options := noahIndexerStatefulSetOptions("corp.example", callerOption)
-	resources.ApplyStatefulSetOptions(statefulSet, options...)
-
-	env := make(map[string]corev1.EnvVar)
-	for _, item := range statefulSet.Spec.Template.Spec.Containers[0].Env {
-		env[item.Name] = item
-	}
-
-	assert.Equal(t, "true", env[resources.NoahEnabledEnvName].Value)
-	assert.Equal(t, "caller-selected-headless", env[resources.NoahHeadlessServiceEnvName].Value)
-	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
-
-	for envName, fieldPath := range map[string]string{
-		resources.PodNameEnvName:      "metadata.name",
-		resources.PodNamespaceEnvName: "metadata.namespace",
-	} {
-		fieldRef := env[envName].ValueFrom
-		require.NotNil(t, fieldRef)
-		require.NotNil(t, fieldRef.FieldRef)
-		assert.Equal(t, fieldPath, fieldRef.FieldRef.FieldPath)
-	}
 }
 
 func TestNoahIndexerStatefulSetConverged(t *testing.T) {

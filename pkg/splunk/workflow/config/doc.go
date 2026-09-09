@@ -13,11 +13,13 @@
 // limitations under the License.
 
 /*
-Package config implements the config delivery workflow: creating immutable
-defaults.yml ConfigMaps and garbage-collecting superseded ones.
+Package config resolves Kubernetes-backed configuration dependencies and
+delivers generated configuration through immutable ConfigMaps and Secrets.
+It also garbage-collects superseded configuration resources.
 
-It is CR-agnostic — the same functions are called from both IndexerCluster
-and IngestorCluster reconcilers.
+It is workload-neutral. External protocol behavior remains in client packages,
+while workload lifecycle decisions remain in their respective workflow
+packages.
 
 Allowed imports from pkg/splunk/:
 

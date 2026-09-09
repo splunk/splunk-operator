@@ -20,8 +20,8 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/noah"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -58,7 +58,7 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 	client.AddObject(noahClusterForSHCTest("test", "noah", "noah-auth"))
 	client.AddObject(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test"},
-		Data:       map[string][]byte{noah.AuthSecretKey: []byte(t.Name())},
+		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte(t.Name())},
 	})
 
 	cr := &enterpriseApi.SearchHeadCluster{
@@ -240,6 +240,6 @@ func TestApplySearchHeadClusterNoah_ValidatesRuntimeBeforeCreatingResources(t *t
 	reason, _ := splcommon.TerminalReason(outcome.err)
 	assert.Equal(t, EventReasonNoahConfigurationInvalid, reason)
 	assert.Equal(t, enterpriseApi.ReasonNoahConfigurationInvalid, outcome.conditionReason)
-	assert.Contains(t, outcome.message, noah.AuthSecretKey)
+	assert.Contains(t, outcome.message, configworkflow.NoahAuthSecretKey)
 	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")
 }

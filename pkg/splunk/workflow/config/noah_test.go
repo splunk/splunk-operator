@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package noah
+package config
 
 import (
 	"errors"
@@ -28,7 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestResolveConnection(t *testing.T) {
+func TestResolveNoahRuntime(t *testing.T) {
 	client := spltest.NewMockClient()
 	cluster := validNoahCluster()
 	cacheWarmEnabled := false
@@ -37,28 +37,26 @@ func TestResolveConnection(t *testing.T) {
 	require.NoError(t, client.Create(t.Context(), cluster))
 	require.NoError(t, client.Create(t.Context(), secret))
 
-	connection, err := ResolveConnection(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
+	resolved, err := ResolveNoahRuntime(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
 
 	require.NoError(t, err)
-	assert.Equal(t, cluster.Spec, connection.Spec())
-	assert.Equal(t, secret.Name, connection.AuthSecretName())
-	assert.Equal(t, secret.Data[AuthSecretKey], connection.Credential())
-	assert.Equal(t, secret.ResourceVersion, connection.AuthSecretResourceVersion())
-	returnedSpec := connection.Spec()
+	assert.Equal(t, cluster.Spec, resolved.Spec())
+	assert.Equal(t, secret.Data[NoahAuthSecretKey], resolved.Credential())
+	returnedSpec := resolved.Spec()
 	*returnedSpec.CacheWarmScaleOutEnabled = true
-	assert.False(t, *connection.Spec().CacheWarmScaleOutEnabled)
-	returnedCredential := connection.Credential()
+	assert.False(t, *resolved.Spec().CacheWarmScaleOutEnabled)
+	returnedCredential := resolved.Credential()
 	returnedCredential[0] = 'X'
-	assert.Equal(t, secret.Data[AuthSecretKey], connection.Credential())
-	assert.Nil(t, connection.client, "dependency resolution must not derive the HMAC key")
-	firstClient, err := connection.Client()
+	assert.Equal(t, secret.Data[NoahAuthSecretKey], resolved.Credential())
+	assert.Nil(t, resolved.client, "dependency resolution must not derive the HMAC key")
+	firstClient, err := resolved.Client()
 	require.NoError(t, err)
-	secondClient, err := connection.Client()
+	secondClient, err := resolved.Client()
 	require.NoError(t, err)
 	assert.Same(t, firstClient, secondClient)
 }
 
-func TestAuthSecretResourceVersionTracksSecretUpdates(t *testing.T) {
+func TestNoahCredentialTracksSecretUpdates(t *testing.T) {
 	client := spltest.NewMockClient()
 	cluster := validNoahCluster()
 	secret := validNoahSecret()
@@ -66,49 +64,59 @@ func TestAuthSecretResourceVersionTracksSecretUpdates(t *testing.T) {
 	require.NoError(t, client.Create(t.Context(), cluster))
 	require.NoError(t, client.Create(t.Context(), secret))
 
-	first, err := ResolveConnection(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
+	first, err := ResolveNoahRuntime(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
 	require.NoError(t, err)
+	firstCredential := append([]byte(nil), secret.Data[NoahAuthSecretKey]...)
 	secret.ResourceVersion = "2"
 	secret.Annotations = map[string]string{"refresh": "metadata-only"}
 	require.NoError(t, client.Update(t.Context(), secret))
-	second, err := ResolveConnection(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
+	metadataUpdate, err := ResolveNoahRuntime(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
 	require.NoError(t, err)
-	assert.Equal(t, "1", first.AuthSecretResourceVersion())
-	assert.Equal(t, "2", second.AuthSecretResourceVersion())
+	assert.Equal(t, first.Credential(), metadataUpdate.Credential())
+
+	secret.ResourceVersion = "3"
+	rotatedCredential := append([]byte(nil), firstCredential...)
+	rotatedCredential[0] = 'X'
+	secret.Data[NoahAuthSecretKey] = rotatedCredential
+	require.NoError(t, client.Update(t.Context(), secret))
+	second, err := ResolveNoahRuntime(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
+	require.NoError(t, err)
+	assert.Equal(t, firstCredential, first.Credential())
+	assert.Equal(t, secret.Data[NoahAuthSecretKey], second.Credential())
 }
 
-func TestResolveConnectionClassifiesMissingDependencies(t *testing.T) {
+func TestResolveNoahClassifiesMissingDependencies(t *testing.T) {
 	t.Run("NoahCluster", func(t *testing.T) {
-		connection, err := ResolveConnection(t.Context(), spltest.NewMockClient(), "test", corev1.LocalObjectReference{Name: "missing"})
-		assert.Nil(t, connection)
+		resolved, err := ResolveNoahRuntime(t.Context(), spltest.NewMockClient(), "test", corev1.LocalObjectReference{Name: "missing"})
+		assert.Nil(t, resolved)
 		assert.True(t, k8serrors.IsNotFound(err))
-		assertDependencyError(t, err, DependencyMissing)
+		assertNoahDependencyError(t, err, NoahDependencyMissing)
 	})
 
 	t.Run("Secret", func(t *testing.T) {
 		client := spltest.NewMockClient()
 		require.NoError(t, client.Create(t.Context(), validNoahCluster()))
-		connection, err := ResolveConnection(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
-		assert.Nil(t, connection)
+		resolved, err := ResolveNoahRuntime(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
+		assert.Nil(t, resolved)
 		assert.True(t, k8serrors.IsNotFound(err))
-		assertDependencyError(t, err, DependencyMissing)
+		assertNoahDependencyError(t, err, NoahDependencyMissing)
 	})
 }
 
-func TestResolveConnectionPreservesKubernetesReadFailures(t *testing.T) {
+func TestResolveNoahPreservesKubernetesReadFailures(t *testing.T) {
 	client := spltest.NewMockClient()
 	readErr := errors.New("API unavailable")
 	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = readErr
 
-	connection, err := ResolveConnection(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
+	resolved, err := ResolveNoahRuntime(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
 
-	assert.Nil(t, connection)
+	assert.Nil(t, resolved)
 	assert.ErrorIs(t, err, readErr)
-	var dependencyErr *DependencyError
+	var dependencyErr *NoahDependencyError
 	assert.False(t, errors.As(err, &dependencyErr))
 }
 
-func TestResolveConnectionRejectsInvalidConfiguration(t *testing.T) {
+func TestResolveNoahRejectsInvalidConfiguration(t *testing.T) {
 	tests := []struct {
 		name       string
 		endpoint   string
@@ -116,8 +124,8 @@ func TestResolveConnectionRejectsInvalidConfiguration(t *testing.T) {
 		secretData map[string][]byte
 	}{
 		{name: "missing secret key", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{}},
-		{name: "short secret", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{AuthSecretKey: []byte("short")}},
-		{name: "multiline secret", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{AuthSecretKey: []byte("unit-test-key\nsecond-line")}},
+		{name: "short secret", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{NoahAuthSecretKey: []byte("short")}},
+		{name: "multiline secret", endpoint: "https://noah.test.svc", tenant: "tenant", secretData: map[string][]byte{NoahAuthSecretKey: []byte("unit-test-key\nsecond-line")}},
 	}
 
 	for _, test := range tests {
@@ -131,18 +139,18 @@ func TestResolveConnectionRejectsInvalidConfiguration(t *testing.T) {
 			require.NoError(t, client.Create(t.Context(), cluster))
 			require.NoError(t, client.Create(t.Context(), secret))
 
-			connection, err := ResolveConnection(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
+			resolved, err := ResolveNoahRuntime(t.Context(), client, "test", corev1.LocalObjectReference{Name: "noah"})
 
-			assert.Nil(t, connection)
-			assertDependencyError(t, err, DependencyInvalid)
+			assert.Nil(t, resolved)
+			assertNoahDependencyError(t, err, NoahDependencyInvalid)
 			assert.NotContains(t, err.Error(), "unit-test-noah-key")
 		})
 	}
 }
 
-func assertDependencyError(t *testing.T, err error, kind DependencyErrorKind) {
+func assertNoahDependencyError(t *testing.T, err error, kind NoahDependencyErrorKind) {
 	t.Helper()
-	var dependencyErr *DependencyError
+	var dependencyErr *NoahDependencyError
 	require.ErrorAs(t, err, &dependencyErr)
 	assert.Equal(t, kind, dependencyErr.Kind())
 }
@@ -161,6 +169,6 @@ func validNoahCluster() *enterpriseApi.NoahCluster {
 func validNoahSecret() *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test", ResourceVersion: "1"},
-		Data:       map[string][]byte{AuthSecretKey: []byte("unit-test-noah-key")},
+		Data:       map[string][]byte{NoahAuthSecretKey: []byte("unit-test-noah-key")},
 	}
 }
