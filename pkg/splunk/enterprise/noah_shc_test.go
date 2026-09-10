@@ -83,7 +83,9 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 	}
 	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 
-	searchHeadPhase, deployerPhase, searchHeadStatefulSet, err := applySearchHeadClusterNoah(ctx, client, cr)
+	runtime, err := resolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+	require.NoError(t, err)
+	searchHeadPhase, deployerPhase, searchHeadStatefulSet, err := applySearchHeadClusterNoah(ctx, client, cr, runtime)
 	require.NoError(t, err)
 	assert.NotEmpty(t, searchHeadPhase)
 	assert.NotEmpty(t, deployerPhase)
@@ -193,7 +195,7 @@ func TestApplySearchHeadClusterNoah_PendingWhenAuthSecretMissing(t *testing.T) {
 	}))
 	client.ResetCalls()
 
-	_, _, statefulSet, err := applySearchHeadClusterNoah(t.Context(), client, cr)
+	runtime, err := resolveNoahDependency(t.Context(), client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
 
 	require.Error(t, err)
 	outcome, handled := noahDependencyOutcome(err)
@@ -201,7 +203,7 @@ func TestApplySearchHeadClusterNoah_PendingWhenAuthSecretMissing(t *testing.T) {
 	assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
 	assert.NoError(t, outcome.err)
 	assert.Contains(t, outcome.message, "missing-auth")
-	assert.Nil(t, statefulSet)
+	assert.Nil(t, runtime, "an unresolved dependency must not yield a runtime to reconcile with")
 	assert.Empty(t, client.Calls["Create"], "missing Noah dependencies must not partially create workload resources")
 }
 
@@ -227,11 +229,9 @@ func TestApplySearchHeadClusterNoah_ValidatesRuntimeBeforeCreatingResources(t *t
 	}))
 	client.ResetCalls()
 
-	searchHeadPhase, deployerPhase, statefulSet, err := applySearchHeadClusterNoah(t.Context(), client, cr)
+	runtime, err := resolveNoahDependency(t.Context(), client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
 
-	assert.Equal(t, enterpriseApi.PhaseError, searchHeadPhase)
-	assert.Equal(t, enterpriseApi.PhaseError, deployerPhase)
-	assert.Nil(t, statefulSet)
+	assert.Nil(t, runtime, "an invalid credential must not yield a runtime to reconcile with")
 	require.Error(t, err)
 	outcome, handled := noahDependencyOutcome(err)
 	require.True(t, handled)
