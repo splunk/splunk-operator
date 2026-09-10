@@ -703,19 +703,3 @@ type fakeNotifier struct {
 
 func (n *fakeNotifier) Inform(reason, _ string) { n.informs = append(n.informs, reason) }
 func (n *fakeNotifier) Warn(reason, _ string)   { n.warnings = append(n.warnings, reason) }
-
-// sequencedBackupProvider returns a different status per call so a single
-// Act() can exercise both the pre-upgrade and post-upgrade backup gates.
-type sequencedBackupProvider struct {
-	statuses []*mvutypes.BackupInfo
-	calls    int
-}
-
-func (s *sequencedBackupProvider) CreateBackup(context.Context, mvutypes.Intent, func(mvutypes.Intent) string) (*mvutypes.BackupInfo, error) {
-	status := s.statuses[len(s.statuses)-1]
-	if s.calls < len(s.statuses) {
-		status = s.statuses[s.calls]
-	}
-	s.calls++
-	return status, nil
-}

@@ -20,6 +20,7 @@ import (
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
+	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -211,7 +212,7 @@ const (
 	failedClusterPhase       reconcileClusterPhases = "Failed"
 
 	// condition types
-	clusterReady       conditionTypes = "ClusterReady"
+	clusterReady       conditionTypes = pgcnpg.ClusterReadyCondition
 	poolerReady        conditionTypes = "PoolerReady"
 	backupReady        conditionTypes = "BackupReady"
 	objectStoreReady   conditionTypes = "ObjectStoreReady"
@@ -300,9 +301,9 @@ const (
 	// condition reasons — CNPG cluster phase mapping
 	reasonCNPGClusterHealthy     conditionReasons = "CNPGClusterHealthy"
 	reasonCNPGProvisioning       conditionReasons = "CNPGClusterProvisioning"
-	reasonCNPGRecovery           conditionReasons = "CNPGClusterRecovery"
+	reasonCNPGRecovery           conditionReasons = pgcnpg.ClusterReadyReasonRecovery
 	reasonCNPGSwitchover         conditionReasons = "CNPGSwitchover"
-	reasonCNPGFailingOver        conditionReasons = "CNPGFailingOver"
+	reasonCNPGFailingOver        conditionReasons = pgcnpg.ClusterReadyReasonFailingOver
 	reasonCNPGRestarting         conditionReasons = "CNPGRestarting"
 	reasonCNPGUpgrading          conditionReasons = "CNPGUpgrading"
 	reasonCNPGApplyingConfig     conditionReasons = "CNPGApplyingConfiguration"

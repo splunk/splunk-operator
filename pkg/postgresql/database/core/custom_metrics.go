@@ -35,11 +35,11 @@ func reconcileCustomMetricsGate(
 	ctx context.Context,
 	rc *ReconcileContext,
 	postgresDB *platformv1alpha1.PostgresDatabase,
-	cluster *platformv1alpha1.PostgresCluster,
+	status *platformv1alpha1.CustomMetricsStatus,
 ) (dbmetrics.Outcome, error) {
 	var repository dbmetrics.AcknowledgementRepository = emptyAcknowledgementRepository{}
 	if rc.NewCustomMetricsAcknowledgementRepo != nil {
-		repository = rc.NewCustomMetricsAcknowledgementRepo(cluster)
+		repository = rc.NewCustomMetricsAcknowledgementRepo(status)
 	}
 
 	input := customMetricsGateInput(postgresDB)

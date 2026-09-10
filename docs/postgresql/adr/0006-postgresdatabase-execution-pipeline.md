@@ -258,6 +258,32 @@ Rules:
   ownership, and lifecycle are identical across consumers;
 - new packages must contain real, compiled code and tests, not placeholders.
 
+### 9. Extract the database cluster-readiness observation gate
+
+The first concrete database observation component is
+`database/core/components/clusterreadiness`. It owns a narrow reader port,
+database-resolved cluster facts, and the policy that classifies the
+`PostgresDatabase` prerequisite as available, provisioning, recovering,
+missing, or temporarily unreadable.
+
+The gate is read-only. It returns the existing database
+`reconciliationTypes.Outcome`, including the authoritative `ClusterReady`
+condition data and either a fixed wait or the original transient error. The
+procedural database facade remains responsible for status persistence,
+transition-aware event emission, and conflict handling, then uses the resolved
+facts for the remaining phases of that pass.
+
+The facts remain database-owned rather than shared with `PostgresCluster`.
+Cluster core interprets provider health, component convergence, scale/resize,
+and lifecycle progression differently; database core treats the cluster as an
+upstream prerequisite and needs recovery reporting plus a provider reference.
+Only the generic database outcome mechanics are shared. The gate therefore
+does not expose a `PostgresCluster` or CNPG object, and provider/Kubernetes
+translation stays in `database/adapter` and `database/infrastructure/k8s`.
+
+This is a facade-boundary extraction, not a migration of the full production
+facade to the pipeline runner. That migration remains future work.
+
 ## CPI-2150 requirement coverage
 
 | Requirement | How this MR covers it |
@@ -274,6 +300,7 @@ Rules:
 | No production facade cutover | Leaves `PostgresDatabaseService` behavior intact. |
 | No empty packages | Does not create `components`, `use_cases`, or infrastructure packages without real code. |
 | Characterization coverage | Adds tests for current status-write behavior and sticky terminal stop behavior. |
+| Concrete observation gate | Adds a database-owned cluster reader, resolved facts, read-only readiness policy, Kubernetes/provider translation, and facade integration without sharing cluster health semantics. |
 
 ## Alternatives considered
 

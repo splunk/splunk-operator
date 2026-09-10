@@ -53,11 +53,11 @@ func buildDatabaseConfigMapDataForDatabase(dbSpec platformv1alpha1.DatabaseDefin
 	return pgconninfo.BuildConfigMapData(endpoints, withDatabaseIdentityAndRoles(dbSpec.Name, EffectiveRoleNames(dbSpec)))
 }
 
-// resolveClusterEndpoints derives the database access endpoints from the cluster
-// status, mapping the pooler reconciliation gates onto PoolerAvailability.
-func resolveClusterEndpoints(cluster *platformv1alpha1.PostgresCluster, cnpgCluster *cnpgv1.Cluster, namespace string) (clusterEndpoints, error) {
+// resolveClusterEndpoints derives the database access endpoints from resolved
+// cluster facts, mapping the pooler reconciliation gates onto PoolerAvailability.
+func resolveClusterEndpoints(poolerStatus *platformv1alpha1.ConnectionPoolerStatus, cnpgCluster *cnpgv1.Cluster, namespace string) (clusterEndpoints, error) {
 	var pooler pgcnpg.PoolerAvailability
-	if poolerStatus := cluster.Status.ConnectionPoolerStatus; poolerStatus != nil && poolerStatus.Enabled {
+	if poolerStatus != nil && poolerStatus.Enabled {
 		pooler = pgcnpg.PoolerAvailability{
 			Enabled: true,
 			RWReady: poolerStatus.ReadWriteEnabled,
