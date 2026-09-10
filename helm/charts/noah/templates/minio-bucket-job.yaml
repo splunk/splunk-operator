@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "noah.minioName" . }}-create-bucket
+  name: {{ printf "%s-create-bucket" (include "noah.minioName" . | trunc 49 | trimSuffix "-") }}
   labels:
     {{- include "noah.labels" . | nindent 4 }}
     app.kubernetes.io/component: minio-bucket
