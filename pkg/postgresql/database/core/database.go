@@ -25,7 +25,9 @@ import (
 	"github.com/sethvargo/go-password/password"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
+	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -198,7 +200,7 @@ func PostgresDatabaseService(
 		if cluster.Status.ProvisionerRef == nil {
 			return ctrl.Result{RequeueAfter: retryDelay}, nil
 		}
-		closed, err := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, cluster)
+		closed, err := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, cluster.Status.ProvisionerRef.Name)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -218,69 +220,20 @@ func PostgresDatabaseService(
 	}
 
 	// Phase: ClusterValidation
-	cluster, err := fetchCluster(ctx, c, postgresDB)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, clusterReady, EventClusterNotFound, fmt.Sprintf("PostgresCluster %s not found", postgresDB.Spec.ClusterRef.Name))
-			if err := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterNotFound, "Cluster CR not found", pendingDBPhase); err != nil {
-				if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictClusterStatus, "persisting cluster not found status"); ok {
-					return result, conflictErr
-				}
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{RequeueAfter: clusterNotFoundRetryDelay}, nil
-		}
-		if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterInfoFetchFailed,
-			"Can't reach Cluster CR due to transient errors", pendingDBPhase); statusErr != nil {
-			if result, conflictErr, ok := requeueOnConflict(ctx, statusErr, conflictClusterStatus, "persisting cluster fetch failure status"); ok {
-				return result, conflictErr
-			}
-			logger.ErrorContext(ctx, "failed to persist cluster status", "error", statusErr)
-		}
-		return ctrl.Result{}, err
+	clusterFacts, result, err, stop := observeClusterReadiness(ctx, rc, postgresDB, wasReady, updateStatus)
+	if stop {
+		return result, err
 	}
-	clusterStatus := getClusterReadyStatus(cluster)
-	logger.DebugContext(ctx, "cluster validation completed", "clusterRef", postgresDB.Spec.ClusterRef.Name, "status", clusterStatus)
-
-	switch clusterStatus {
-	case ClusterNotReady, ClusterNoProvisionerRef:
-		eventReason := EventClusterNotReady
-		eventMessage := fmt.Sprintf("referenced PostgresCluster %s is not ready yet", postgresDB.Spec.ClusterRef.Name)
-		conditionReason := reasonClusterProvisioning
-		conditionMessage := "Cluster is not in ready state yet"
-		clusterCondition := meta.FindStatusCondition(postgresDB.Status.Conditions, string(clusterReady))
-		reportRecovery := wasReady || (clusterCondition != nil && clusterCondition.Reason == string(reasonClusterRecovery))
-		if reportRecovery && isClusterInRecovery(cluster) {
-			eventReason = EventWaitingForClusterRecovery
-			eventMessage = fmt.Sprintf("referenced PostgresCluster %s is recovering", postgresDB.Spec.ClusterRef.Name)
-			conditionReason = reasonClusterRecovery
-			conditionMessage = "Cluster is recovering; waiting for it to become ready"
-		}
-		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, clusterReady, eventReason, eventMessage)
-		if err := updateStatus(clusterReady, metav1.ConditionFalse, conditionReason, conditionMessage, pendingDBPhase); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictClusterStatus, "persisting cluster provisioning status"); ok {
-				return result, conflictErr
-			}
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: retryDelay}, nil
-
-	case ClusterReady:
-		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, clusterReady, EventClusterValidated, "Referenced PostgresCluster is ready")
-		if err := updateStatus(clusterReady, metav1.ConditionTrue, reasonClusterAvailable, "Cluster is operational", provisioningDBPhase); err != nil {
-			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictClusterStatus, "persisting cluster ready status"); ok {
-				return result, conflictErr
-			}
-			return ctrl.Result{}, err
-		}
+	if clusterFacts.Provider == nil {
+		return ctrl.Result{}, fmt.Errorf("cluster readiness gate converged without provider facts")
 	}
 
 	cnpgCluster := &cnpgv1.Cluster{}
 	if err := c.Get(ctx, types.NamespacedName{
-		Name:      cluster.Status.ProvisionerRef.Name,
-		Namespace: cluster.Status.ProvisionerRef.Namespace,
+		Name:      clusterFacts.Provider.Name,
+		Namespace: clusterFacts.Provider.Namespace,
 	}, cnpgCluster); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to fetch CNPG Cluster %s: %w", cluster.Status.ProvisionerRef.Name, err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch CNPG Cluster %s: %w", clusterFacts.Provider.Name, err)
 	}
 
 	// Phase: CredentialProvisioning — secrets must exist before roles are patched.
@@ -362,7 +315,7 @@ func PostgresDatabaseService(
 
 	// Phase: ConnectionMetadata — ConfigMaps carry connection info consumers need as soon
 	// as databases are ready, so they are created alongside secrets.
-	endpoints, err := resolveClusterEndpoints(cluster, cnpgCluster, postgresDB.Namespace)
+	endpoints, err := resolveClusterEndpoints(clusterFacts.ConnectionPoolerStatus, cnpgCluster, postgresDB.Namespace)
 	if err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictConfigMapsReconcile, "resolving configmap endpoints"); ok {
 			return result, conflictErr
@@ -400,7 +353,7 @@ func PostgresDatabaseService(
 		return ctrl.Result{}, err
 	}
 
-	switch gate := evaluateRoleGate(postgresDB, cluster.Status.ManagedRolesStatus); gate.State {
+	switch gate := evaluateRoleGate(postgresDB, clusterFacts.ManagedRolesStatus); gate.State {
 	case roleGateConflict:
 		conflictMsg := fmt.Sprintf(msgFmtRoleConflict, postgresDB.Name, gate.Message)
 		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, rolesReady, EventRoleConflict, conflictMsg)
@@ -460,7 +413,7 @@ func PostgresDatabaseService(
 	}
 
 	// Phase: DatabaseProvisioning
-	provisioningResult, err := reconcileDatabaseProvisioning(ctx, rc.DatabaseProvisioner, postgresDB, cluster)
+	provisioningResult, err := reconcileDatabaseProvisioning(ctx, rc.DatabaseProvisioner, postgresDB, clusterFacts.Provider.Name)
 	if err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCNPGDatabasesReconcile, "reconciling CNPG databases"); ok {
 			return result, conflictErr
@@ -543,13 +496,13 @@ func PostgresDatabaseService(
 		if len(databasesToGrant) == 0 {
 			databasesToGrant = postgresDB.Spec.Databases
 		}
-		// Read from our own status — we created this secret and wrote the SecretKeySelector
-		// (name + key) when the cluster was provisioned. This avoids depending on CNPG's
-		// spec field and makes the key explicit.
-		if cluster.Status.Resources == nil || cluster.Status.Resources.SuperUserSecretRef == nil {
-			return ctrl.Result{}, fmt.Errorf("postgresCluster %s has no superuser secret ref in status", cluster.Name)
+		// Use the readiness snapshot of the cluster-owned SecretKeySelector (name + key).
+		// The cluster created this reference when it provisioned the secret, which avoids
+		// depending on CNPG's spec field and makes the key explicit.
+		if clusterFacts.SuperUserSecretRef == nil {
+			return ctrl.Result{}, fmt.Errorf("postgresCluster %s has no superuser secret ref in status", clusterFacts.Name)
 		}
-		superSecretRef := cluster.Status.Resources.SuperUserSecretRef
+		superSecretRef := clusterFacts.SuperUserSecretRef
 		superSecret := &corev1.Secret{}
 		if err := c.Get(ctx, types.NamespacedName{
 			Name:      superSecretRef.Name,
@@ -589,7 +542,7 @@ func PostgresDatabaseService(
 					}
 					return ctrl.Result{}, stderrors.Join(err, wrappedStatusErr)
 				}
-				closed, closeErr := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, cluster)
+				closed, closeErr := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, clusterFacts.Provider.Name)
 				if closeErr != nil {
 					return ctrl.Result{}, closeErr
 				}
@@ -639,7 +592,7 @@ func PostgresDatabaseService(
 	}
 	lastTransitionTime, completedReadinessCycle := completeReadinessCycle(postgresDB)
 
-	metricsOutcome, err := reconcileCustomMetricsGate(ctx, rc, postgresDB, cluster)
+	metricsOutcome, err := reconcileCustomMetricsGate(ctx, rc, postgresDB, clusterFacts.CustomMetricsStatus)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling custom-metrics acknowledgement: %w", err)
 	}
@@ -762,22 +715,80 @@ func fetchCluster(ctx context.Context, c client.Client, postgresDB *platformv1al
 	return cluster, nil
 }
 
-func isClusterInRecovery(cluster *platformv1alpha1.PostgresCluster) bool {
-	cond := meta.FindStatusCondition(cluster.Status.Conditions, string(clusterReady))
-	if cond == nil {
-		return false
+// observeClusterReadiness applies the pure cluster readiness decision at the
+// facade boundary, where condition transitions, events, and status persistence
+// remain owned by PostgresDatabase reconciliation.
+func observeClusterReadiness(
+	ctx context.Context,
+	rc *ReconcileContext,
+	postgresDB *platformv1alpha1.PostgresDatabase,
+	wasReady bool,
+	updateStatus func(conditionTypes, metav1.ConditionStatus, conditionReasons, string, reconcileDBPhases) error,
+) (dbclusterreadiness.ResolvedClusterFacts, ctrl.Result, error, bool) {
+	previous := meta.FindStatusCondition(postgresDB.Status.Conditions, string(clusterReady))
+	previousReason := ""
+	if previous != nil {
+		previousReason = previous.Reason
 	}
-	return cond.Reason == string(cnpgReasonRecovery) || cond.Reason == string(cnpgReasonFailingOver)
-}
 
-func getClusterReadyStatus(cluster *platformv1alpha1.PostgresCluster) clusterReadyStatus {
-	if cluster.Status.Phase == nil || *cluster.Status.Phase != string(ClusterReady) {
-		return ClusterNotReady
+	decision := dbclusterreadiness.New(rc.ClusterReader).Observe(ctx, dbclusterreadiness.Input{
+		Namespace:                  postgresDB.Namespace,
+		Name:                       postgresDB.Spec.ClusterRef.Name,
+		WasReady:                   wasReady,
+		PreviousClusterReadyReason: previousReason,
+	})
+	outcome := decision.Outcome
+	if err := outcome.Validate("cluster readiness"); err != nil {
+		return decision.Facts, ctrl.Result{}, err, true
 	}
-	if cluster.Status.ProvisionerRef == nil {
-		return ClusterNoProvisionerRef
+	if outcome.StatusAction() != reconciliationTypes.StatusPersistAndContinue && outcome.StatusAction() != reconciliationTypes.StatusPersistAndStop {
+		return decision.Facts, ctrl.Result{}, fmt.Errorf("cluster readiness outcome %q does not persist status", outcome.Mode()), true
 	}
-	return ClusterReady
+	logger := logging.FromContext(ctx)
+	logger.DebugContext(ctx, "cluster validation completed", "clusterRef", postgresDB.Spec.ClusterRef.Name, "outcome", outcome.Mode(), "reason", outcome.Reason())
+
+	switch outcome.Reason() {
+	case string(reasonClusterNotFound):
+		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, clusterReady,
+			EventClusterNotFound, fmt.Sprintf("PostgresCluster %s not found", postgresDB.Spec.ClusterRef.Name))
+	case string(reasonClusterRecovery):
+		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, clusterReady,
+			EventWaitingForClusterRecovery, fmt.Sprintf("referenced PostgresCluster %s is recovering", postgresDB.Spec.ClusterRef.Name))
+	case string(reasonClusterProvisioning):
+		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, clusterReady,
+			EventClusterNotReady, fmt.Sprintf("referenced PostgresCluster %s is not ready yet", postgresDB.Spec.ClusterRef.Name))
+	case string(reasonClusterAvailable):
+		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, clusterReady,
+			EventClusterValidated, "Referenced PostgresCluster is ready")
+	}
+
+	if err := updateStatus(
+		conditionTypes(outcome.Condition()),
+		outcome.ConditionStatus(),
+		conditionReasons(outcome.Reason()),
+		outcome.Message(),
+		reconcileDBPhases(outcome.Phase()),
+	); err != nil {
+		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictClusterStatus, "persisting cluster readiness status"); ok {
+			return decision.Facts, result, conflictErr, true
+		}
+		if outcome.Mode() == reconciliationTypes.ModeRetryableRequeue {
+			logger.ErrorContext(ctx, "failed to persist cluster status", "error", err)
+			return decision.Facts, ctrl.Result{}, outcome.Err(), true
+		}
+		return decision.Facts, ctrl.Result{}, err, true
+	}
+
+	switch outcome.Mode() {
+	case reconciliationTypes.ModeConverged:
+		return decision.Facts, ctrl.Result{}, nil, false
+	case reconciliationTypes.ModeWaiting:
+		return decision.Facts, outcome.Result(), nil, true
+	case reconciliationTypes.ModeRetryableRequeue:
+		return decision.Facts, ctrl.Result{}, outcome.Err(), true
+	default:
+		return decision.Facts, ctrl.Result{}, fmt.Errorf("unexpected cluster readiness outcome %q", outcome.Mode()), true
+	}
 }
 
 func getDesiredRoles(postgresDB *platformv1alpha1.PostgresDatabase) []string {

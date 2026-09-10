@@ -37,7 +37,9 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
 	dbcnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/cnpg"
+	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
@@ -319,7 +321,7 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 
 			result, err := PostgresDatabaseService(
 				context.Background(),
-				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
+				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
 				postgresDB,
 				nil,
 			)
@@ -503,7 +505,7 @@ func TestPostgresDatabaseServiceTerminalOnMissingExternalSecret(t *testing.T) {
 		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
 		Status: platformv1alpha1.PostgresClusterStatus{
-			Phase: strPtr(string(ClusterReady)),
+			Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{
 				APIVersion: cnpgv1.SchemeGroupVersion.String(),
 				Kind:       "Cluster",
@@ -524,7 +526,7 @@ func TestPostgresDatabaseServiceTerminalOnMissingExternalSecret(t *testing.T) {
 	// any role is patched.
 	result, err := PostgresDatabaseService(
 		ctx,
-		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
+		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
 		postgresDB,
 		nil,
 	)
@@ -627,7 +629,7 @@ func TestDatabaseClusterNotReadyConditionReason(t *testing.T) {
 
 			result, err := PostgresDatabaseService(
 				ctx,
-				&ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder, Metrics: &pgprometheus.NoopRecorder{}, DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
+				&ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder, Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
 				postgresDB,
 				nil,
 			)
@@ -685,7 +687,7 @@ func TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransie
 		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
 		Status: platformv1alpha1.PostgresClusterStatus{
-			Phase: strPtr(string(ClusterReady)),
+			Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{
 				APIVersion: cnpgv1.SchemeGroupVersion.String(),
 				Kind:       "Cluster",
@@ -717,7 +719,7 @@ func TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransie
 
 	result, err := PostgresDatabaseService(
 		ctx,
-		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
+		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
 		postgresDB,
 		nil,
 	)
@@ -1054,54 +1056,6 @@ func TestReconcileRWRolePrivilegesLogsCompleteOperationWithoutCredentials(t *tes
 	assert.Equal(t, "retryable", records[2]["error_category"])
 }
 
-func TestGetClusterReadyStatus(t *testing.T) {
-	tests := []struct {
-		name       string
-		cluster    *platformv1alpha1.PostgresCluster
-		wantStatus clusterReadyStatus
-	}{
-		{
-			name:       "returns not ready when phase is nil",
-			cluster:    &platformv1alpha1.PostgresCluster{},
-			wantStatus: ClusterNotReady,
-		},
-		{
-			name: "returns not ready when phase is not ready",
-			cluster: &platformv1alpha1.PostgresCluster{
-				Status: platformv1alpha1.PostgresClusterStatus{
-					Phase: strPtr("Provisioning"),
-				},
-			},
-			wantStatus: ClusterNotReady,
-		},
-		{
-			name: "returns no provisioner ref when phase is ready but ref is missing",
-			cluster: &platformv1alpha1.PostgresCluster{
-				Status: platformv1alpha1.PostgresClusterStatus{
-					Phase: strPtr(string(ClusterReady)),
-				},
-			},
-			wantStatus: ClusterNoProvisionerRef,
-		},
-		{
-			name: "returns ready when phase and provisioner ref are present",
-			cluster: &platformv1alpha1.PostgresCluster{
-				Status: platformv1alpha1.PostgresClusterStatus{
-					Phase:          strPtr(string(ClusterReady)),
-					ProvisionerRef: &corev1.ObjectReference{Name: "cnpg-primary", Namespace: "dbs"},
-				},
-			},
-			wantStatus: ClusterReady,
-		},
-	}
-
-	for _, tst := range tests {
-		t.Run(tst.name, func(t *testing.T) {
-			assert.Equal(t, tst.wantStatus, getClusterReadyStatus(tst.cluster))
-		})
-	}
-}
-
 // Uses a fake client because fetching the referenced Cluster depends on API reads.
 func TestFetchCluster(t *testing.T) {
 	scheme := testScheme(t)
@@ -1352,7 +1306,7 @@ func TestReconcileCustomMetricsGateMapsAPIState(t *testing.T) {
 		},
 	}
 	rc := &ReconcileContext{
-		NewCustomMetricsAcknowledgementRepo: func(*platformv1alpha1.PostgresCluster) dbmetrics.AcknowledgementRepository {
+		NewCustomMetricsAcknowledgementRepo: func(*platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository {
 			return repository
 		},
 	}
@@ -1361,7 +1315,7 @@ func TestReconcileCustomMetricsGateMapsAPIState(t *testing.T) {
 		t.Context(),
 		rc,
 		postgresDB,
-		&platformv1alpha1.PostgresCluster{},
+		nil,
 	)
 
 	require.NoError(t, err)
@@ -1529,7 +1483,7 @@ func TestReconcileCustomMetricsGatePropagatesAcknowledgementRepositoryError(t *t
 	}
 	repository := &stubAcknowledgementRepository{err: transient}
 	rc := &ReconcileContext{
-		NewCustomMetricsAcknowledgementRepo: func(*platformv1alpha1.PostgresCluster) dbmetrics.AcknowledgementRepository {
+		NewCustomMetricsAcknowledgementRepo: func(*platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository {
 			return repository
 		},
 	}
@@ -1538,7 +1492,7 @@ func TestReconcileCustomMetricsGatePropagatesAcknowledgementRepositoryError(t *t
 		t.Context(),
 		rc,
 		postgresDB,
-		&platformv1alpha1.PostgresCluster{},
+		nil,
 	)
 
 	require.Error(t, err)
@@ -1639,9 +1593,7 @@ func TestReconcileDatabaseProvisioningClassifiesExactObservation(t *testing.T) {
 			},
 		},
 	}
-	cluster := &platformv1alpha1.PostgresCluster{Status: platformv1alpha1.PostgresClusterStatus{
-		ProvisionerRef: &corev1.ObjectReference{Name: "cnpg-primary"},
-	}}
+	const providerClusterName = "cnpg-primary"
 	expected := []dbtypes.ExpectedDatabase{
 		{Name: "payments", ResourceName: "primary-payments", Generation: 2},
 		{Name: "analytics", ResourceName: "primary-analytics", Generation: 4},
@@ -1693,7 +1645,7 @@ func TestReconcileDatabaseProvisioningClassifiesExactObservation(t *testing.T) {
 				applyResult: dbtypes.ApplyResult{Expected: expected},
 				observation: tst.observation,
 			}
-			got, err := reconcileDatabaseProvisioning(t.Context(), provisioner, postgresDB, cluster)
+			got, err := reconcileDatabaseProvisioning(t.Context(), provisioner, postgresDB, providerClusterName)
 			require.NoError(t, err)
 			assert.Equal(t, tst.wantNotReady, got.notReady)
 			assert.Equal(t, tst.wantReasons, got.reasons)
@@ -3258,7 +3210,7 @@ func TestResolveClusterEndpoints(t *testing.T) {
 	for _, tst := range tests {
 
 		t.Run(tst.name, func(t *testing.T) {
-			got, err := resolveClusterEndpoints(tst.cluster, tst.cnpg, tst.namespace)
+			got, err := resolveClusterEndpoints(tst.cluster.Status.ConnectionPoolerStatus, tst.cnpg, tst.namespace)
 			if tst.wantError == "" {
 				require.NoError(t, err)
 				assert.Equal(t, tst.want, got)
@@ -3452,7 +3404,7 @@ func TestReconcileReplacesRecoveredMessageWhilePrivilegeBootstrapFails(t *testin
 		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: requestName.Namespace},
 		Status: platformv1alpha1.PostgresClusterStatus{
-			Phase:          strPtr(string(ClusterReady)),
+			Phase:          strPtr(string(dbclusterreadiness.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{APIVersion: cnpgv1.SchemeGroupVersion.String(), Kind: "Cluster", Name: "primary-cnpg", Namespace: requestName.Namespace},
 			Resources: &platformv1alpha1.PostgresClusterResources{
 				SuperUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "primary-superuser"}, Key: secretKeyPassword},
@@ -3491,7 +3443,7 @@ func TestReconcileReplacesRecoveredMessageWhilePrivilegeBootstrapFails(t *testin
 	newDBRepo := func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 		return nil, fmt.Errorf("%w: password authentication failed", ErrTerminal)
 	}
-	_, err := PostgresDatabaseService(ctx, &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, DatabaseProvisioner: testDatabaseProvisioner(c, scheme)}, postgresDB.DeepCopy(), newDBRepo)
+	_, err := PostgresDatabaseService(ctx, &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)}, postgresDB.DeepCopy(), newDBRepo)
 	require.NoError(t, err)
 
 	updated := &platformv1alpha1.PostgresDatabase{}
@@ -3569,6 +3521,7 @@ func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.
 			Scheme:              scheme,
 			Recorder:            record.NewFakeRecorder(10),
 			Metrics:             &pgprometheus.NoopRecorder{},
+			ClusterReader:       dbadapter.NewClusterReader(c),
 			DatabaseProvisioner: testDatabaseProvisioner(c, scheme),
 		},
 		postgresDB,
@@ -3696,7 +3649,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 				Namespace: requestName.Namespace,
 			},
 			Status: platformv1alpha1.PostgresClusterStatus{
-				Phase: strPtr(string(ClusterReady)),
+				Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
 				ProvisionerRef: &corev1.ObjectReference{
 					APIVersion: cnpgv1.SchemeGroupVersion.String(),
 					Kind:       "Cluster",
@@ -3828,6 +3781,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 				Scheme:              scheme,
 				Recorder:            record.NewFakeRecorder(10),
 				Metrics:             metrics,
+				ClusterReader:       dbadapter.NewClusterReader(c),
 				DatabaseProvisioner: testDatabaseProvisioner(c, scheme),
 			},
 			before,

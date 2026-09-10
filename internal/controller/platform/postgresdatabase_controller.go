@@ -97,9 +97,10 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		Scheme:              r.Scheme,
 		Recorder:            r.Recorder,
 		Metrics:             r.Metrics,
+		ClusterReader:       dbadapter.NewClusterReader(r.Client),
 		DatabaseProvisioner: dbcnpgadapter.NewDatabaseProvisioner(r.Client, r.Scheme),
-		NewCustomMetricsAcknowledgementRepo: func(cluster *platformv1alpha1.PostgresCluster) dbmetrics.AcknowledgementRepository {
-			return dbmetricsadapter.NewAcknowledgementRepository(cluster.Status.CustomMetricsStatus)
+		NewCustomMetricsAcknowledgementRepo: func(status *platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository {
+			return dbmetricsadapter.NewAcknowledgementRepository(status)
 		},
 	}
 	result, err := dbcore.PostgresDatabaseService(ctx, rc, postgresDB, dbadapter.NewDBRepository)

@@ -168,7 +168,7 @@ func (a *backupBackend) BackupNow(ctx context.Context, owner client.Object, req 
 	err = a.client.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, existing)
 	if err == nil {
 		if controller := metav1.GetControllerOf(existing); controller == nil || controller.UID != owner.GetUID() {
-			return false, fmt.Errorf("Backup %s/%s already exists and is not controlled by this owner", req.Namespace, req.Name)
+			return false, fmt.Errorf("backup %s/%s already exists and is not controlled by this owner", req.Namespace, req.Name)
 		}
 		return false, nil
 	}
@@ -208,7 +208,7 @@ func (a *backupBackend) BackupNow(ctx context.Context, owner client.Object, req 
 		return false, fmt.Errorf("re-fetching Backup after AlreadyExists: %w", fetchErr)
 	}
 	if controller := metav1.GetControllerOf(existing); controller == nil || controller.UID != owner.GetUID() {
-		return false, fmt.Errorf("Backup %s/%s already exists and is not controlled by this owner", req.Namespace, req.Name)
+		return false, fmt.Errorf("backup %s/%s already exists and is not controlled by this owner", req.Namespace, req.Name)
 	}
 	return false, nil
 }

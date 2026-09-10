@@ -49,12 +49,12 @@ func reconcileDatabaseProvisioning(
 	ctx context.Context,
 	provisioner DatabaseProvisioner,
 	postgresDB *platformv1alpha1.PostgresDatabase,
-	cluster *platformv1alpha1.PostgresCluster,
+	providerClusterName string,
 ) (databaseProvisioningResult, error) {
 	if provisioner == nil {
 		return databaseProvisioningResult{}, fmt.Errorf("database provisioner is not configured")
 	}
-	target := databaseProvisionerTarget(postgresDB, cluster)
+	target := databaseProvisionerTarget(postgresDB, providerClusterName)
 	current, err := provisioner.Inspect(ctx, target, databaseIdentities(postgresDB))
 	if err != nil {
 		return databaseProvisioningResult{}, fmt.Errorf("inspecting provider databases: %w", err)
@@ -77,7 +77,7 @@ func reconcileRequestedClosedState(
 	ctx context.Context,
 	provisioner DatabaseProvisioner,
 	postgresDB *platformv1alpha1.PostgresDatabase,
-	cluster *platformv1alpha1.PostgresCluster,
+	providerClusterName string,
 ) (bool, error) {
 	if provisioner == nil {
 		return false, fmt.Errorf("database provisioner is not configured")
@@ -89,7 +89,7 @@ func reconcileRequestedClosedState(
 	result, err := reconcileDesiredDatabaseState(
 		ctx,
 		provisioner,
-		databaseProvisionerTarget(postgresDB, cluster),
+		databaseProvisionerTarget(postgresDB, providerClusterName),
 		desired,
 	)
 	if err != nil {
@@ -98,28 +98,15 @@ func reconcileRequestedClosedState(
 	return len(result.notReady) == 0, nil
 }
 
-func hasUnbootstrappedClosedDatabase(postgresDB *platformv1alpha1.PostgresDatabase) bool {
-	completed := make(map[string]bool, len(postgresDB.Status.Databases))
-	for _, database := range postgresDB.Status.Databases {
-		completed[database.Name] = databaseProvisioned(database)
-	}
-	for _, database := range postgresDB.Spec.Databases {
-		if database.AllowConnections != nil && !*database.AllowConnections && !completed[database.Name] {
-			return true
-		}
-	}
-	return false
-}
-
 func databaseProvisionerTarget(
 	postgresDB *platformv1alpha1.PostgresDatabase,
-	cluster *platformv1alpha1.PostgresCluster,
+	providerClusterName string,
 ) dbtypes.ProvisionerTarget {
 	return dbtypes.ProvisionerTarget{
 		Namespace:            postgresDB.Namespace,
 		PostgresDatabaseName: postgresDB.Name,
 		PostgresDatabaseUID:  string(postgresDB.UID),
-		ProviderClusterName:  cluster.Status.ProvisionerRef.Name,
+		ProviderClusterName:  providerClusterName,
 	}
 }
 
