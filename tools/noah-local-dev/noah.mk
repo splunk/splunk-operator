@@ -10,11 +10,17 @@ NOAH_LOCAL_PORT_FORWARD_PID_FILE = $(NOAH_LOCAL_STATE_DIR)/noah-port-forward.pid
 NOAH_LOCAL_PORT_FORWARD_LOG = $(NOAH_LOCAL_STATE_DIR)/noah-port-forward.log
 NOAH_LOCAL_CHART = helm/charts/noah
 NOAH_LOCAL_FIXTURES ?= $(NOAH_LOCAL_DIR)/fixtures/c3.yaml
+NOAH_LOCAL_OPERATOR_CHART ?= helm-chart/splunk-operator
 
 NOAH_LOCAL_DEPLOYMENT_ID ?=
 NOAH_LOCAL_CONTEXT ?= kraken
 NOAH_LOCAL_NAMESPACE ?= splunk-operator
 NOAH_LOCAL_RELEASE ?= noah
+NOAH_LOCAL_OPERATOR_RELEASE ?= splunk-operator
+# Branch pipelines publish this exact commit-addressed image.
+NOAH_LOCAL_OPERATOR_TAG ?= $(shell git rev-parse HEAD)
+NOAH_LOCAL_OPERATOR_IMAGE ?= docker-test.repo.splunkdev.net/sok/splunk-operator:$(NOAH_LOCAL_OPERATOR_TAG)
+NOAH_LOCAL_SPLUNK_IMAGE ?= $(RELATED_IMAGE_SPLUNK_ENTERPRISE)
 # NOAH_LOCAL_NAMESPACE and NOAH_LOCAL_PORT are threaded through the cluster
 # setup, the chart and the port-forward, but the endpoint in
 # $(NOAH_LOCAL_FIXTURES) is plain YAML and must be edited to match.
@@ -25,15 +31,24 @@ NOAH_LOCAL_C3_NAME ?= c3
 # A fresh vCluster also pulls MinIO and binds the PostgreSQL and MinIO PVCs.
 NOAH_LOCAL_DEPLOY_TIMEOUT ?= 10m
 NOAH_LOCAL_HELM_ARGS ?=
+NOAH_LOCAL_OPERATOR_TIMEOUT ?= 5m
+NOAH_LOCAL_OPERATOR_HELM_ARGS ?=
+
+.PHONY: noah-local-c3-up
+noah-local-c3-up: noah-local-cluster install noah-local-deploy noah-local-operator-deploy noah-local-fixtures ## Create a complete C3 deployment with an in-cluster operator.
+	@printf '\n%s\n\n' 'Noah C3 is deployed. Once the C3 Pods are running, verify it with:'
+	@printf '    %s\n\n' 'make noah-local-smoke'
 
 .PHONY: noah-local-up
-noah-local-up: noah-local-cluster install noah-local-deploy noah-local-fixtures noah-local-port-forward ## Create the vCluster, install CRDs, deploy Noah, apply fixtures and port-forward.
+noah-local-up: noah-local-cluster install noah-local-deploy noah-local-fixtures noah-local-port-forward ## Prepare a C3 deployment for an operator running locally.
 	@printf '\n%s\n\n' 'Noah is ready. Run the operator locally with:'
-	@printf '    %s \\\n      %s \\\n      %s\n\n' \
+	@printf '    %s \\\n      %s \\\n      %s \\\n      %s\n\n' \
+		'RELATED_IMAGE_SPLUNK_ENTERPRISE='"'"'<immutable Noah-capable Splunk image>'"'" \
 		'SPLUNK_GENERAL_TERMS='"'"'<your accepted terms>'"'" \
 		'WATCH_NAMESPACE=$(NOAH_LOCAL_NAMESPACE)' \
 		'go run ./cmd/main.go'
 	@printf '%s\n' \
+		'RELATED_IMAGE_SPLUNK_ENTERPRISE must identify an immutable Noah-capable Splunk image.' \
 		'SPLUNK_GENERAL_TERMS is deliberately not set for you: see docs/README.md.' \
 		'Scale any in-cluster operator to 0 first, or both will reconcile at once.'
 
@@ -105,6 +120,42 @@ noah-local-deploy: ## Install or upgrade Noah, PostgreSQL, Redis and MinIO in th
 		--namespace "$(NOAH_LOCAL_NAMESPACE)" \
 		--set service.port=$(NOAH_LOCAL_PORT) \
 		--wait --timeout $(NOAH_LOCAL_DEPLOY_TIMEOUT) $(NOAH_LOCAL_HELM_ARGS)
+
+.PHONY: noah-local-operator-deploy
+noah-local-operator-deploy: ## Install or upgrade a Noah-enabled operator in the vCluster.
+	@set -eu; \
+		test -n "$(NOAH_LOCAL_OPERATOR_IMAGE)" || { \
+			printf '%s\n' 'Set NOAH_LOCAL_OPERATOR_IMAGE to an immutable staged operator image.' >&2; \
+			exit 1; \
+		}; \
+		test -n "$(NOAH_LOCAL_SPLUNK_IMAGE)" || { \
+			printf '%s\n' 'Set NOAH_LOCAL_SPLUNK_IMAGE to an immutable Noah-capable Splunk image.' >&2; \
+			exit 1; \
+		}; \
+		test -n "$(SPLUNK_GENERAL_TERMS)" || { \
+			printf '%s\n' 'Set SPLUNK_GENERAL_TERMS after following docs/README.md.' >&2; \
+			exit 1; \
+		}; \
+		pull_secret="$$(kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
+			get serviceaccount default --output json | \
+			jq -er '[.imagePullSecrets[]?.name | select(startswith("kraken-artifactory-creds-"))][0]')"; \
+		helm upgrade --install "$(NOAH_LOCAL_OPERATOR_RELEASE)" "$(NOAH_LOCAL_OPERATOR_CHART)" \
+			--kube-context "$(NOAH_LOCAL_CONTEXT)" \
+			--namespace "$(NOAH_LOCAL_NAMESPACE)" \
+			--set-string splunkOperator.image.repository="$(NOAH_LOCAL_OPERATOR_IMAGE)" \
+			--set splunkOperator.image.pullPolicy=Always \
+			--set-string "splunkOperator.imagePullSecrets[0].name=$$pull_secret" \
+			--set-string image.repository="$(NOAH_LOCAL_SPLUNK_IMAGE)" \
+			--set splunkOperator.clusterWideAccess=false \
+			--set-string splunkOperator.splunkGeneralTerms="$(SPLUNK_GENERAL_TERMS)" \
+			--set-string splunkOperator.nodeSelector.workload=splunk \
+			--set-string "splunkOperator.tolerations[0].key=workload" \
+			--set-string "splunkOperator.tolerations[0].operator=Equal" \
+			--set-string "splunkOperator.tolerations[0].value=splunk" \
+			--set-string "splunkOperator.tolerations[0].effect=NoSchedule" \
+			--set-string splunkOperator.persistentVolumeClaim.storageClassName=gp3-automode \
+			--wait --timeout "$(NOAH_LOCAL_OPERATOR_TIMEOUT)" \
+			$(NOAH_LOCAL_OPERATOR_HELM_ARGS)
 
 .PHONY: noah-local-fixtures
 noah-local-fixtures: ## Create prerequisite Secrets and apply the sample C3 custom resources.
@@ -196,6 +247,20 @@ noah-local-lint: ## Lint the Noah chart and the local development scripts.
 	helm lint $(NOAH_LOCAL_CHART)
 	helm template $(NOAH_LOCAL_RELEASE) $(NOAH_LOCAL_CHART) \
 		--namespace $(NOAH_LOCAL_NAMESPACE) >/dev/null
+	helm lint $(NOAH_LOCAL_OPERATOR_CHART)
+	helm template $(NOAH_LOCAL_OPERATOR_RELEASE) $(NOAH_LOCAL_OPERATOR_CHART) \
+		--namespace $(NOAH_LOCAL_NAMESPACE) \
+		--set-string splunkOperator.image.repository=$(NOAH_LOCAL_OPERATOR_IMAGE) \
+		--set splunkOperator.image.pullPolicy=Always \
+		--set-string 'splunkOperator.imagePullSecrets[0].name=kraken-artifactory-creds-test' \
+		--set-string image.repository=docker.example.invalid/splunk:latest \
+		--set splunkOperator.clusterWideAccess=false \
+		--set-string splunkOperator.nodeSelector.workload=splunk \
+		--set-string 'splunkOperator.tolerations[0].key=workload' \
+		--set-string 'splunkOperator.tolerations[0].operator=Equal' \
+		--set-string 'splunkOperator.tolerations[0].value=splunk' \
+		--set-string 'splunkOperator.tolerations[0].effect=NoSchedule' \
+		--set-string splunkOperator.persistentVolumeClaim.storageClassName=gp3-automode >/dev/null
 	yq eval-all '.' "$(NOAH_LOCAL_FIXTURES)" >/dev/null
 	@for script in $(NOAH_LOCAL_DIR)/create-cluster $(NOAH_LOCAL_DIR)/create-auth-secret $(NOAH_LOCAL_DIR)/smoke-test; do \
 		sh -n "$$script" || exit 1; \
