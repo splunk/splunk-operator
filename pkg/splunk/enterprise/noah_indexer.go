@@ -24,6 +24,13 @@ import (
 	"strconv"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/client/noah"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -33,12 +40,6 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	indexerworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/indexercluster"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -108,6 +109,17 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	}
 
 	podManager := newNoahIndexerPodManager(client, cr)
+	runtime, dependencyErr := resolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+	if dependencyErr != nil {
+		if outcome, outcomeErr, handled := noahIndexerOutcomeFromError(dependencyErr, previousPhase); handled {
+			setOutcome(outcome)
+			return result, outcomeErr
+		}
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve Noah dependencies")
+		return result, dependencyErr
+	}
+	podManager.setRuntime(runtime)
+
 	statefulSet, phase, applyErr := applyNoahIndexerResources(ctx, client, cr, podManager)
 	if applyErr != nil {
 		if outcome, outcomeErr, handled := noahIndexerOutcomeFromError(applyErr, previousPhase); handled {
@@ -149,11 +161,10 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 }
 
 func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, podManager *noahIndexerPodManager) (*appsv1.StatefulSet, enterpriseApi.Phase, error) {
-	runtime, err := configworkflow.ResolveNoahRuntime(ctx, client, cr.GetNamespace(), *cr.Spec.NoahClusterRef)
+	runtime, err := podManager.noahRuntime(ctx)
 	if err != nil {
 		return nil, enterpriseApi.PhaseError, err
 	}
-	podManager.setRuntime(runtime)
 
 	if cr.Spec.LicenseManagerRef.Name != "" {
 		statefulSetKey := types.NamespacedName{
@@ -317,6 +328,11 @@ func setNoahIndexerPhaseAndConditions(cr *enterpriseApi.IndexerCluster, isPaused
 		Generation: cr.GetGeneration(),
 	})
 	for _, condition := range conditions {
+		// An outcome that reports no condition of its own leaves a zero value
+		// here; writing it would add an unusable, untyped status entry.
+		if condition.Type == "" {
+			continue
+		}
 		condition.ObservedGeneration = cr.GetGeneration()
 		status.Conditions = splcommon.UpsertCondition(status.Conditions, condition)
 	}
@@ -334,10 +350,12 @@ type noahIndexerPodManager struct {
 	cacheWarmTimeout time.Duration
 }
 
-var _ splcommon.StatefulSetPodManager = (*noahIndexerPodManager)(nil)
-var _ splcommon.StatefulSetScaleOutPlanner = (*noahIndexerPodManager)(nil)
-var _ splcommon.StatefulSetScaleDownFinisher = (*noahIndexerPodManager)(nil)
-var _ splcommon.StatefulSetScaleDownPVCPolicy = (*noahIndexerPodManager)(nil)
+var (
+	_ splcommon.StatefulSetPodManager         = (*noahIndexerPodManager)(nil)
+	_ splcommon.StatefulSetScaleOutPlanner    = (*noahIndexerPodManager)(nil)
+	_ splcommon.StatefulSetScaleDownFinisher  = (*noahIndexerPodManager)(nil)
+	_ splcommon.StatefulSetScaleDownPVCPolicy = (*noahIndexerPodManager)(nil)
+)
 
 func newNoahIndexerPodManager(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) *noahIndexerPodManager {
 	return &noahIndexerPodManager{client: client, cr: cr}
@@ -707,13 +725,18 @@ func noahIndexerOutcomeFromError(err error, fallbackPhase enterpriseApi.Phase) (
 		if dependencyOutcome.phase == enterpriseApi.PhasePending {
 			requeueAfter = noahIndexerPollInterval
 		}
+		// resolveNoahDependency reports the failure itself as
+		// NoahDependencyResolved, so this must not restate it as a peers reason.
+		// Peer readiness still becomes unknown though: without a usable
+		// dependency no peer was observed this pass, and leaving a stale True
+		// behind would advertise peers as up while Noah is unreachable.
 		return noahIndexerOutcome{
 			phase:        dependencyOutcome.phase,
 			phaseMessage: dependencyOutcome.message,
 			condition: newNoahPeersReadyCondition(
-				dependencyOutcome.conditionStatus,
-				dependencyOutcome.conditionReason,
-				dependencyOutcome.message,
+				metav1.ConditionUnknown,
+				enterpriseApi.ReasonNoahPeerObservationFailed,
+				"Noah peers were not observed because the Noah dependency is unavailable",
 			),
 			requeueAfter: requeueAfter,
 		}, dependencyOutcome.err, true

@@ -1015,8 +1015,11 @@ func TestApplyNoahIndexerResourcesRequiresReferencedNoahCluster(t *testing.T) {
 	assert.NoError(t, outcomeErr)
 	assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
 	assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
-	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), outcome.condition.Reason)
-	assert.Contains(t, outcome.condition.Message, "test/missing")
+	assert.Contains(t, outcome.phaseMessage, "test/missing")
+	// Peer state becomes unknown, but must not borrow the dependency reason;
+	// resolveNoahDependency owns NoahDependencyResolved instead.
+	assert.Equal(t, metav1.ConditionUnknown, outcome.condition.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason)
 }
 
 func TestApplyNoahIndexerResourcesValidatesRuntimeBeforeCreatingResources(t *testing.T) {
@@ -1052,8 +1055,9 @@ func TestApplyNoahIndexerResourcesValidatesRuntimeBeforeCreatingResources(t *tes
 	assert.True(t, terminal)
 	reason, _ := splcommon.TerminalReason(outcomeErr)
 	assert.Equal(t, EventReasonNoahConfigurationInvalid, reason)
-	assert.Equal(t, string(enterpriseApi.ReasonNoahConfigurationInvalid), outcome.condition.Reason)
-	assert.Contains(t, outcome.condition.Message, configworkflow.NoahAuthSecretKey)
+	assert.Contains(t, outcome.phaseMessage, configworkflow.NoahAuthSecretKey)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason,
+		"a dependency failure must not be restated as a peers reason")
 	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")
 }
 
@@ -1900,7 +1904,8 @@ func TestApplyNoahIndexerResourcesSurvivesDependencyDeletion(t *testing.T) {
 		assert.NoError(t, outcomeErr, "a missing dependency is retryable, not terminal")
 		assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
 		assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
-		assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), outcome.condition.Reason)
+		assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason,
+			"a dependency failure must not be restated as a peers reason")
 	}
 
 	// Deleting the NoahCluster blocks them the same way.
@@ -1911,7 +1916,8 @@ func TestApplyNoahIndexerResourcesSurvivesDependencyDeletion(t *testing.T) {
 		outcome, _, handled := noahIndexerOutcomeFromError(err, "")
 		require.True(t, handled)
 		assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
-		assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), outcome.condition.Reason)
+		assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason,
+			"a dependency failure must not be restated as a peers reason")
 	}
 
 	// Recreating both dependencies under the same names recovers every

@@ -39,7 +39,7 @@ const (
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
-//CAUTION: Do not change json field tags, otherwise the configuration will not be backward compatible with the existing CRs
+// CAUTION: Do not change json field tags, otherwise the configuration will not be backward compatible with the existing CRs
 
 // AppRepoState represent the App state on remote store
 type AppRepoState uint8
@@ -80,7 +80,7 @@ const (
 	DeployStatusPending AppDeploymentStatus = iota + 1
 
 	// App update on the Pod is in progress
-	//ToDo: Mostly transient state for Phase-2, more of Phase-3 status
+	// ToDo: Mostly transient state for Phase-2, more of Phase-3 status
 	DeployStatusInProgress
 
 	// App is update is complete on the Pod
@@ -179,6 +179,10 @@ const (
 
 	// ConditionNoahPeersReady indicates that every expected peer for a workload is up in Noah.
 	ConditionNoahPeersReady ConditionType = "NoahPeersReady"
+
+	// ConditionNoahDependencyResolved indicates whether the referenced NoahCluster and its
+	// authentication Secret were both found and usable.
+	ConditionNoahDependencyResolved ConditionType = "NoahDependencyResolved"
 )
 
 // ConditionReason represents the reason for a condition's status
@@ -217,11 +221,14 @@ const (
 	ReasonRestartBlockedByPDB      ConditionReason = "RestartBlockedByPDB"
 	ReasonRestartCheckIncomplete   ConditionReason = "RestartCheckIncomplete"
 
+	// NoahDependencyResolved reasons
+	ReasonNoahDependencyResolved   ConditionReason = "NoahDependencyResolved"
+	ReasonNoahDependencyMissing    ConditionReason = "NoahDependencyMissing"
+	ReasonNoahConfigurationInvalid ConditionReason = "NoahConfigurationInvalid"
+
 	// NoahPeersReady reasons
 	ReasonNoahPeersReady            ConditionReason = "NoahPeersReady"
 	ReasonNoahPeersNotReady         ConditionReason = "NoahPeersNotReady"
-	ReasonNoahDependencyMissing     ConditionReason = "NoahDependencyMissing"
-	ReasonNoahConfigurationInvalid  ConditionReason = "NoahConfigurationInvalid"
 	ReasonNoahPeerObservationFailed ConditionReason = "NoahPeerObservationFailed"
 	ReasonNoahOperationFailed       ConditionReason = "NoahOperationFailed"
 	ReasonNoahCacheWarmTimeout      ConditionReason = "NoahCacheWarmTimeout"
@@ -478,7 +485,6 @@ type IndexSpec struct {
 
 // IndexAndGlobalCommonSpec defines configurations that can be configured at index level or at global level
 type IndexAndGlobalCommonSpec struct {
-
 	// Remote Volume name
 	// +optional
 	VolName string `json:"volumeName,omitempty"`
