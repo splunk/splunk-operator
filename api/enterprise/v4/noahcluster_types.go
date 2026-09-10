@@ -69,6 +69,10 @@ type NoahClusterSpec struct {
 	CacheWarmScaleOutTimeoutSeconds *int32 `json:"cacheWarmScaleOutTimeoutSeconds,omitempty"`
 }
 
+// NoahClusterStatus is intentionally empty. NoahCluster is configuration-only;
+// operational state is reported by each referencing workload.
+type NoahClusterStatus struct{}
+
 // +kubebuilder:object:root=true
 
 // NoahCluster is shared, configuration-only connection detail for Splunk
@@ -86,7 +90,8 @@ type NoahCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	Spec NoahClusterSpec `json:"spec"`
+	Spec   NoahClusterSpec   `json:"spec"`
+	Status NoahClusterStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

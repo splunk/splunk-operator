@@ -143,6 +143,11 @@ spec:
               rule: self.endpoint == oldSelf.endpoint
             - message: tenant is immutable once created
               rule: self.tenant == oldSelf.tenant
+          status:
+            description: |-
+              NoahClusterStatus is intentionally empty. NoahCluster is configuration-only;
+              operational state is reported by each referencing workload.
+            type: object
         type: object
     served: true
     storage: true
