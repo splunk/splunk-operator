@@ -21,6 +21,10 @@ import (
 	"os"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
@@ -29,9 +33,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
-	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // ApplySearchHeadClusterNoah is the top-level reconciler for a
@@ -110,9 +111,13 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		return result, deletionErr
 	}
 
+	runtime, err := resolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+
 	var searchHeadStatefulSet *appsv1.StatefulSet
-	var searchHeadPhase, deployerPhase enterpriseApi.Phase
-	searchHeadPhase, deployerPhase, searchHeadStatefulSet, err = applySearchHeadClusterNoah(ctx, client, cr)
+	searchHeadPhase, deployerPhase := enterpriseApi.PhaseError, enterpriseApi.PhaseError
+	if err == nil {
+		searchHeadPhase, deployerPhase, searchHeadStatefulSet, err = applySearchHeadClusterNoah(ctx, client, cr, runtime)
+	}
 	phaseMessage := ""
 	if dependencyOutcome, handled := noahDependencyOutcome(err); handled {
 		searchHeadPhase = dependencyOutcome.phase
@@ -148,11 +153,7 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 // this build's NoahConfiguration unconditionally tries to load [noahService]
 // on every role at startup and asserts rather than treating a fully-absent
 // stanza as "Noah disabled, do nothing." See NoahDeployerConf's doc comment.
-func applySearchHeadClusterNoah(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (enterpriseApi.Phase, enterpriseApi.Phase, *appsv1.StatefulSet, error) {
-	runtime, err := configworkflow.ResolveNoahRuntime(ctx, client, cr.GetNamespace(), *cr.Spec.NoahClusterRef)
-	if err != nil {
-		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, err
-	}
+func applySearchHeadClusterNoah(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, runtime *configworkflow.NoahRuntime) (enterpriseApi.Phase, enterpriseApi.Phase, *appsv1.StatefulSet, error) {
 	noahSpec := runtime.Spec()
 
 	services := []struct {
