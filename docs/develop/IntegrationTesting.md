@@ -692,12 +692,6 @@ Tests run automatically on:
 
 For integration test workflows, CI provisions an EKS cluster, builds and pushes operator images to ECR, then runs `make int-test`. Smoke tests run on the existing CI infrastructure without provisioning a dedicated cluster.
 
-The SHC detention suite runs in two pipeline jobs defined in `gitlab-ci/includes/runtime.yml`:
-- **`qualification-shc-detention-validation`** — runs on MR and push events
-- **`nightly-eks-integration-shc-detention-validation`** — runs on the nightly schedule against `develop`
-
-Both jobs set `JOB_INT_ENTERPRISE_IMAGE` and `JOB_SPLUNK_UPGRADE_IMAGE` to provide the two distinct Splunk images required by the suite.
-
 **JUnit report naming:**
 
 `trigger-tests.sh` generates JUnit reports with the naming pattern:
