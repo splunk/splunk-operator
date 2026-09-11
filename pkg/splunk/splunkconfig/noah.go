@@ -92,38 +92,6 @@ func NoahSearchHeadConf(serviceURL, tenant string) []common.ConfFileEntry {
 	}
 }
 
-// NoahDeployerConf returns the non-sensitive server.conf settings for a Noah
-// SHC deployer. Content is identical to NoahSearchHeadConf. Live-verified
-// 2026-09-08: a deployer with no [noahService] stanza at all hits the same
-// splunkd assertion as an unset heartbeatPeriod does on NoahSearchHeadConf
-// (NoahConfiguration::loadNoahServiceFromConfFilesReloadable, splcore/main
-// src/framework/NoahConfiguration.cpp:291) — this build's NoahConfiguration
-// unconditionally tries to load [noahService] on every role at startup, with
-// no SPLUNK_NOAH_ENABLED gate, and asserts/crashes rather than treating a
-// fully-absent stanza as "Noah disabled, do nothing." Giving the deployer the
-// same minimal stanza as the search head avoids that crash.
-func NoahDeployerConf(serviceURL, tenant string) []common.ConfFileEntry {
-	return []common.ConfFileEntry{
-		{
-			ConfFileName: "server",
-			Value: common.ConfFileValue{
-				Stanzas: common.ConfFileStanzas{
-					"noahService": {
-						"disabled":               "false",
-						"uri":                    serviceURL,
-						"tenant":                 tenant,
-						"heartbeatPeriod":        "0",
-						"pass4SymmKey_minLength": "10",
-					},
-					"teleport_supervisor": {
-						"disabled": "true",
-					},
-				},
-			},
-		},
-	}
-}
-
 // NoahCredentialsConf returns the credential-only server.conf entry carrying
 // [noahService] pass4SymmKey. It is delivered through a Secret and combined
 // with the non-sensitive Noah configuration by splunk-ansible.
