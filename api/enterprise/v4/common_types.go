@@ -225,6 +225,7 @@ const (
 	ReasonNoahDependencyResolved   ConditionReason = "NoahDependencyResolved"
 	ReasonNoahDependencyMissing    ConditionReason = "NoahDependencyMissing"
 	ReasonNoahConfigurationInvalid ConditionReason = "NoahConfigurationInvalid"
+	ReasonNoahDependencyUnknown    ConditionReason = "NoahDependencyUnknown"
 
 	// NoahPeersReady reasons
 	ReasonNoahPeersReady            ConditionReason = "NoahPeersReady"

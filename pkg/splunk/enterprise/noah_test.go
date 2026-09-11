@@ -245,6 +245,48 @@ func (r noahForbiddenSecretReader) Get(ctx context.Context, key k8sclient.Object
 	return r.MockClient.Get(ctx, key, obj, opts...)
 }
 
+func TestNoahUnclassifiedErrorOverwritesStaleDependencyResolved(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
+	base := spltest.NewMockClient()
+	base.AddObject(&enterpriseApi.NoahCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: "test"},
+		Spec: enterpriseApi.NoahClusterSpec{
+			Endpoint:      "http://noah.example:8080",
+			Tenant:        "linus-dev",
+			AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
+		},
+	})
+	client := noahForbiddenSecretReader{base}
+
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idx", Namespace: "test", Generation: 4},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas:       1,
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+			},
+		},
+	}
+	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	// An earlier reconcile resolved the dependency successfully.
+	cr.Status.Conditions = splcommon.UpsertCondition(cr.Status.Conditions, newNoahDependencyResolvedCondition(
+		metav1.ConditionTrue, enterpriseApi.ReasonNoahDependencyResolved,
+		"Referenced NoahCluster and authentication Secret resolved"))
+	require.NoError(t, base.Create(t.Context(), cr.DeepCopy()))
+
+	_, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
+	require.Error(t, err)
+
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionUnknown, condition.Status,
+		"a Secret the operator cannot read must not still report as resolved")
+	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyUnknown), condition.Reason)
+	assert.NotContains(t, condition.Message, "resolved",
+		"the stale success message must not survive either")
+}
+
 func TestNoahUnclassifiedErrorDoesNotClaimDependencyResolved(t *testing.T) {
 	newClient := func(t *testing.T) noahForbiddenSecretReader {
 		t.Helper()
@@ -279,8 +321,13 @@ func TestNoahUnclassifiedErrorDoesNotClaimDependencyResolved(t *testing.T) {
 		_, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
 		require.Error(t, err)
 		assert.Equal(t, enterpriseApi.PhaseError, cr.Status.Phase)
-		assert.Nil(t, splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved),
-			"an unclassified failure must not claim the dependency resolved")
+
+		condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+		require.NotNil(t, condition)
+		assert.Equal(t, metav1.ConditionUnknown, condition.Status,
+			"an unclassified failure must not leave a stale True behind")
+		assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyUnknown), condition.Reason,
+			"an unreadable dependency is not the same as a missing one")
 		assertNoEmptyConditions(t, cr.Status.Conditions)
 	})
 
@@ -303,8 +350,13 @@ func TestNoahUnclassifiedErrorDoesNotClaimDependencyResolved(t *testing.T) {
 		_, err := ApplySearchHeadClusterNoah(t.Context(), client, cr)
 		require.Error(t, err)
 		assert.Equal(t, enterpriseApi.PhaseError, cr.Status.Phase)
-		assert.Nil(t, splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved),
-			"an unclassified failure must not claim the dependency resolved")
+
+		condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+		require.NotNil(t, condition)
+		assert.Equal(t, metav1.ConditionUnknown, condition.Status,
+			"an unclassified failure must not leave a stale True behind")
+		assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyUnknown), condition.Reason,
+			"an unreadable dependency is not the same as a missing one")
 		assertNoEmptyConditions(t, cr.Status.Conditions)
 	})
 }
