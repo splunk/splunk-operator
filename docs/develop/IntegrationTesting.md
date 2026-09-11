@@ -424,8 +424,8 @@ Per-spec and suite-level timeouts are defined in `test/testenv/timeouts.go`. Use
 
 | Constant | Duration | Typical Suites |
 |----------|----------|----------------|
-| `ShortSuiteTimeout` | 30 min | SmartStore, index/ingestion separation |
-| `MediumSuiteTimeout` | 120 min | Smoke, S1 app framework |
+| `ShortSuiteTimeout` | 30 min | SmartStore |
+| `MediumSuiteTimeout` | 120 min | Smoke, S1 app framework, index/ingestion separation |
 | `MediumLongSuiteTimeout` | 150 min | MC, License Manager, secret |
 | `LongSuiteTimeout` | 225 min | CR CRUD, C3/M4 app framework |
 
