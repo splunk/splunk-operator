@@ -43,13 +43,30 @@ func noahClusterForSHCTest(namespace, name, authSecretName string) *enterpriseAp
 	}
 }
 
-// applySearchHeadClusterNoah builds identity-aware deployer and search-head
-// StatefulSets: SPLUNK_NOAH_ENABLED, the headless service name, and the
-// cluster domain are present on both (live-verified 2026-09-08: a deployer
-// with no Noah identity/config at all crashes splunkd's NoahConfiguration on
-// build 10.5.2605.8, same as an incomplete search-head [noahService] does),
-// and each StatefulSet keeps its own distinct name/labels so deployer and
-// member identities cannot be confused.
+// applySearchHeadClusterNoah never creates a deployer — this is unconditional,
+// with no spec field controlling it. The search-head StatefulSet is still
+// identity-aware — SPLUNK_NOAH_ENABLED,
+// the headless service name, and the cluster domain are all present — and
+// still gets SPLUNK_DEPLOYER_URL despite there being no deployer, repointed
+// at 127.0.0.1 instead of the (nonexistent) deployer's: splunk-ansible's
+// splunk_search_head role gates running `splunk init shcluster-config` (the
+// command that actually enables search head clustering) on that variable
+// being merely non-empty, never on it being reachable
+// (roles/splunk_search_head/tasks/main.yml checks 'deployer_url' in splunk
+// and splunk.deployer_url). Omitting the env var entirely left the search
+// head permanently unclustered — a real regression an earlier version of
+// this change introduced while over-applying a Codex review finding.
+// Pointing it at a Kubernetes Service — the deleted deployer's, or even the
+// search head's own — is not viable either: search_head_clustering.yml
+// opens with a wait_for_splunk_instance check against deployer_url that
+// burns a fixed ~6.5-minute retries*delay budget regardless of how the
+// connection fails, and a not-yet-ready pod's own Service has zero ready
+// endpoints (Kubernetes only routes to pods that already passed their own
+// readiness probe), so both exceeded the pod's startup-probe deadline and
+// restarted the container in a loop that never finished provisioning
+// (live-verified 2026-09-10). 127.0.0.1 resolves that check almost
+// instantly instead, since it talks to the already-running local splunkd
+// directly, sidestepping Service routing entirely.
 func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T) {
 	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
 
@@ -88,28 +105,27 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 	searchHeadPhase, deployerPhase, searchHeadStatefulSet, err := applySearchHeadClusterNoah(ctx, client, cr, runtime)
 	require.NoError(t, err)
 	assert.NotEmpty(t, searchHeadPhase)
-	assert.NotEmpty(t, deployerPhase)
+	assert.Equal(t, enterpriseApi.PhaseReady, deployerPhase, "no deployer is ever deployed, so its phase is a fixed constant")
 	require.NotNil(t, searchHeadStatefulSet)
 
 	deployerStatefulSet := &appsv1.StatefulSet{}
-	require.NoError(t, client.Get(ctx, types.NamespacedName{
+	err = client.Get(ctx, types.NamespacedName{
 		Name:      GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
 		Namespace: cr.GetNamespace(),
-	}, deployerStatefulSet))
+	}, deployerStatefulSet)
+	assert.Error(t, err, "Noah must never create a deployer StatefulSet")
 
-	assert.NotEqual(t, searchHeadStatefulSet.Name, deployerStatefulSet.Name, "deployer and member StatefulSets must have distinct names")
-
-	for _, ss := range []*appsv1.StatefulSet{searchHeadStatefulSet, deployerStatefulSet} {
-		env := make(map[string]corev1.EnvVar)
-		for _, item := range ss.Spec.Template.Spec.Containers[0].Env {
-			env[item.Name] = item
-		}
-		assert.Equal(t, "true", env[resources.NoahEnabledEnvName].Value, "%s must have Noah pod identity", ss.Name)
-		assert.Equal(t, ss.Spec.ServiceName, env[resources.NoahHeadlessServiceEnvName].Value, "%s advertised identity must derive from its own headless service, not Pod IP", ss.Name)
-		assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
-		require.NotNil(t, env[resources.PodNameEnvName].ValueFrom, "%s identity must survive Pod IP changes via the downward API, not a literal IP", ss.Name)
-		require.NotNil(t, env[resources.PodNamespaceEnvName].ValueFrom)
+	env := make(map[string]corev1.EnvVar)
+	for _, item := range searchHeadStatefulSet.Spec.Template.Spec.Containers[0].Env {
+		env[item.Name] = item
 	}
+	assert.Equal(t, "true", env[resources.NoahEnabledEnvName].Value, "search-head must have Noah pod identity")
+	assert.Equal(t, searchHeadStatefulSet.Spec.ServiceName, env[resources.NoahHeadlessServiceEnvName].Value, "advertised identity must derive from the search-head's own headless service, not Pod IP")
+	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
+	require.NotNil(t, env[resources.PodNameEnvName].ValueFrom, "identity must survive Pod IP changes via the downward API, not a literal IP")
+	require.NotNil(t, env[resources.PodNamespaceEnvName].ValueFrom)
+	assert.Equal(t, "127.0.0.1", env["SPLUNK_DEPLOYER_URL"].Value,
+		"SPLUNK_DEPLOYER_URL must point at the local splunkd, not a Kubernetes Service (the deleted deployer's or even the search-head's own), so splunk-ansible's bootstrap check resolves instantly instead of hitting zero ready endpoints and burning its full retry budget")
 }
 
 // A failure while removing owner references during deletion must abort
@@ -172,6 +188,8 @@ func TestApplySearchHeadClusterNoah_PendingWhenNoahClusterMissing(t *testing.T) 
 	require.NoError(t, err)
 	assert.True(t, result.Requeue)
 	assert.Equal(t, enterpriseApi.PhasePending, cr.Status.Phase)
+	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.DeployerPhase,
+		"no deployer is ever deployed on the Noah path, so a search-head-side Noah dependency failure must not make status.deployerPhase falsely report Pending for a resource that was never even attempted")
 	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionReady)
 	require.NotNil(t, condition)
 	assert.Contains(t, condition.Message, "missing-noah-cluster")
