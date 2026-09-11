@@ -27,7 +27,7 @@ Prerequisites:
 ```console
 make noah-local-c3-up \
   NOAH_LOCAL_LICENSE_FILE=/absolute/path/to/enterprise.lic \
-  NOAH_LOCAL_SPLUNK_IMAGE=<immutable Noah-capable Splunk image> \
+  NOAH_LOCAL_SPLUNK_IMAGE='<immutable Noah-capable Splunk image>' \
   SPLUNK_GENERAL_TERMS='<your accepted terms>'
 ```
 
@@ -55,7 +55,7 @@ printf '%s\n' '127.0.0.1 noah.splunk-operator.svc' | sudo tee -a /etc/hosts
 Then run the operator, supplying your own accepted terms:
 
 ```console
-export RELATED_IMAGE_SPLUNK_ENTERPRISE=<immutable Noah-capable Splunk image>
+export RELATED_IMAGE_SPLUNK_ENTERPRISE='<immutable Noah-capable Splunk image>'
 SPLUNK_GENERAL_TERMS='<your accepted terms>' \
   WATCH_NAMESPACE=splunk-operator \
   go run ./cmd/main.go
