@@ -226,7 +226,6 @@ All event reasons are defined as constants in `pkg/splunk/enterprise/event_reaso
 | `EventReasonSecretMissing` | `SecretMissing` | Required secret not found |
 | `EventReasonCertSecretMalformed` | `CertSecretMalformed` | TLS Secret missing required key |
 | `EventReasonResolveQueueObjectStorageFailed` | `ResolveQueueObjectStorageFailed` | **Terminal error reason** when the referenced Queue or ObjectStorage CR is not found — sets `Stalled=True` with message `"referenced Queue or ObjectStorage CR not found"`, no requeue. Other failures from the same path (transient API errors, ConfigMap/Secret write failures) are retryable. The accompanying Warning event uses the literal reason `EnsureDefaultsFailed` |
-| `EventReasonImmutableRefsModified` | `ImmutableRefsModified` | Defined for future use. Mutating `queueRef`/`objectStorageRef` after initial apply is currently rejected by the admission webhook; this event is not emitted at runtime |
 | `EventReasonEmptyClusterManagerRef` | `EmptyClusterManagerRef` | ClusterManagerRef is empty during reconciliation |
 | `EventReasonUpgradeCheckFailed` | `UpgradeCheckFailed` | Upgrade path validation errors |
 | `EventReasonStalled` | `Stalled` | `Stalled` condition onset — manual intervention required |
