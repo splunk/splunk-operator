@@ -114,14 +114,23 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	runtime, err := resolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
 
 	var searchHeadStatefulSet *appsv1.StatefulSet
-	searchHeadPhase, deployerPhase := enterpriseApi.PhaseError, enterpriseApi.PhaseError
+	// deployerPhase defaults to PhaseReady, not PhaseError: no deployer is
+	// ever deployed on this path (see applySearchHeadClusterNoah's doc
+	// comment), including when dependency resolution fails below and
+	// applySearchHeadClusterNoah — the only other place that sets this
+	// phase — never even runs.
+	searchHeadPhase, deployerPhase := enterpriseApi.PhaseError, enterpriseApi.PhaseReady
 	if err == nil {
 		searchHeadPhase, deployerPhase, searchHeadStatefulSet, err = applySearchHeadClusterNoah(ctx, client, cr, runtime)
 	}
 	phaseMessage := ""
 	if dependencyOutcome, handled := noahDependencyOutcome(err); handled {
 		searchHeadPhase = dependencyOutcome.phase
-		deployerPhase = dependencyOutcome.phase
+		// deployerPhase is left as applySearchHeadClusterNoah's fixed
+		// PhaseReady constant: no deployer is ever deployed on this path, so
+		// a Noah dependency failure on the search-head side must not make
+		// status.deployerPhase falsely report Pending/Error for a resource
+		// that was never even attempted.
 		phaseMessage = dependencyOutcome.message
 		err = dependencyOutcome.err
 		if searchHeadPhase == enterpriseApi.PhasePending {
@@ -137,23 +146,20 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	return result, err
 }
 
-// applySearchHeadClusterNoah creates the services, deployer, and search-head
-// StatefulSets required for Noah bootstrap. Both StatefulSets get stable pod
-// identity (resources.WithNoahPodIdentity, which sets SPLUNK_NOAH_ENABLED=true)
-// plus the Noah server.conf settings (structural uri/tenant/heartbeatPeriod
-// and credential pass4SymmKey alike), delivered declaratively via
-// SPLUNK_DEFAULTS_URL — the same channel splunk-ansible's Noah role already
-// reads; no operator-owned init container or custom volume mount is involved.
-//
-// The deployer getting the same minimal Noah config as the search head is
-// deliberate, not a leftover: live-verified 2026-09-08 against splunkd build
-// 10.5.2605.8 that a deployer with no [noahService] stanza at all crashes
-// with the same NoahConfiguration assertion (splcore/main src/framework/
-// NoahConfiguration.cpp:291) that an incomplete search-head stanza does —
-// this build's NoahConfiguration unconditionally tries to load [noahService]
-// on every role at startup and asserts rather than treating a fully-absent
-// stanza as "Noah disabled, do nothing." See NoahDeployerConf's doc comment.
+// applySearchHeadClusterNoah creates the services and search-head StatefulSet
+// required for Noah bootstrap. It never creates a deployer: Noah delivers
+// every setting a classic deployer would otherwise push to search-heads as a
+// knowledge bundle (server.conf, restmap.conf) directly to each search-head
+// pod via SPLUNK_DEFAULTS_URL — the same channel splunk-ansible's Noah role
+// already reads; no operator-owned init container or custom volume mount is
+// involved — so a Noah SearchHeadCluster has no functional need for a
+// deployer at all — this is unconditional, with no spec field controlling
+// it. This is scoped to the Noah reconcile path only; the
+// Cluster-Manager-path reconciler (searchheadcluster.go) always deploys a
+// real deployer, unaffected by any of this.
 func applySearchHeadClusterNoah(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, runtime *configworkflow.NoahRuntime) (enterpriseApi.Phase, enterpriseApi.Phase, *appsv1.StatefulSet, error) {
+	const deployerPhase = enterpriseApi.PhaseReady // no deployer is ever deployed; see doc comment above.
+
 	noahSpec := runtime.Spec()
 
 	services := []struct {
@@ -162,17 +168,15 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	}{
 		{instanceType: SplunkSearchHead, headless: true},
 		{instanceType: SplunkSearchHead, headless: false},
-		{instanceType: SplunkDeployer, headless: true},
-		{instanceType: SplunkDeployer, headless: false},
 	}
 	for _, service := range services {
 		if err := k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, service.instanceType, service.headless)); err != nil {
-			return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("apply Noah %s service (headless=%t): %w", service.instanceType, service.headless, err)
+			return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("apply Noah %s service (headless=%t): %w", service.instanceType, service.headless, err)
 		}
 	}
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
 	if err != nil {
-		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("apply Noah SearchHeadCluster Splunk config: %w", err)
+		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("apply Noah SearchHeadCluster Splunk config: %w", err)
 	}
 
 	pass4SymmKey := string(runtime.Credential())
@@ -186,36 +190,10 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	// one [noahService] stanza before Ansible ever runs.
 	credentialsSecret, err := configworkflow.EnsureSecret(ctx, client, cr, splunkconfig.NoahCredentialsConf(pass4SymmKey), &owner, resources.WithDictionaryConf())
 	if err != nil {
-		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("ensure Noah SearchHeadCluster credentials: %w", err)
+		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("ensure Noah SearchHeadCluster credentials: %w", err)
 	}
 
-	deployerConfigMap, err := ensureNoahDeployerDefaults(ctx, client, cr, noahSpec, &owner)
-	if err != nil {
-		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("ensure Noah deployer defaults: %w", err)
-	}
 	identityOption := resources.WithNoahPodIdentity(os.Getenv(resources.ClusterDomainEnvName))
-	deployerStatefulSet, err := getDeployerStatefulSet(ctx, client, cr,
-		identityOption,
-		deployerConfigMap.AsStatefulSetOption(),
-		credentialsSecret.AsStatefulSetOption(),
-	)
-	if err != nil {
-		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("build Noah deployer StatefulSet: %w", err)
-	}
-	if !deployerStatefulSet.CreationTimestamp.IsZero() {
-		continueReconcile, validationErr := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
-		if validationErr != nil || !continueReconcile {
-			if validationErr == nil {
-				return enterpriseApi.PhasePending, enterpriseApi.PhasePending, nil, nil
-			}
-			return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, validationErr
-		}
-	}
-	deployerManager := k8sops.DefaultStatefulSetPodManager{}
-	deployerPhase, err := deployerManager.Update(ctx, client, deployerStatefulSet, 1)
-	if err != nil {
-		return enterpriseApi.PhaseError, enterpriseApi.PhaseError, nil, fmt.Errorf("apply Noah deployer StatefulSet: %w", err)
-	}
 
 	searchHeadConfigMap, err := ensureNoahSearchHeadDefaults(ctx, client, cr, noahSpec, &owner)
 	if err != nil {
@@ -228,6 +206,39 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	)
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("build Noah search-head StatefulSet: %w", err)
+	}
+	// TEMPORARY: getSearchHeadEnv unconditionally points SPLUNK_DEPLOYER_URL
+	// at the deployer's Service; overwrite it in place to 127.0.0.1 instead.
+	// Omitting it entirely leaves the search head permanently unclustered,
+	// and pointing it at any Kubernetes Service (the deployer's or even the
+	// search head's own) triggers a ~6.5-minute bootstrap stall and restart
+	// loop (both live-verified 2026-09-10); 127.0.0.1 avoids both by
+	// resolving against the already-running local splunkd. Remove this once
+	// splunk-ansible no longer needs a reachable deployer_url to bootstrap
+	// shcluster-config.
+	for i := range searchHeadStatefulSet.Spec.Template.Spec.Containers {
+		container := &searchHeadStatefulSet.Spec.Template.Spec.Containers[i]
+		if container.Name != "splunk" {
+			continue
+		}
+		for j := range container.Env {
+			if container.Env[j].Name == "SPLUNK_DEPLOYER_URL" {
+				container.Env[j].Value = "127.0.0.1"
+			}
+		}
+	}
+	// With no deployer, there is no deployer StatefulSet CreationTimestamp to
+	// gate the classic path's upgrade-path validation, so key the same "only
+	// validate an upgrade against an already-existing StatefulSet" check off
+	// the search-head StatefulSet's own CreationTimestamp instead.
+	if !searchHeadStatefulSet.CreationTimestamp.IsZero() {
+		continueReconcile, validationErr := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+		if validationErr != nil || !continueReconcile {
+			if validationErr == nil {
+				return enterpriseApi.PhasePending, deployerPhase, nil, nil
+			}
+			return enterpriseApi.PhaseError, deployerPhase, nil, validationErr
+		}
 	}
 	searchHeadManager := newSearchHeadClusterPodManager(client, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 	searchHeadPhase, err := searchHeadManager.Update(ctx, client, searchHeadStatefulSet, cr.Spec.Replicas)
@@ -248,13 +259,9 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 	}
 
-	configworkflow.GarbageCollectConfigMapsMulti(ctx, client, cr, nil, deployerConfigMap.Name, searchHeadConfigMap.Name)
+	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, searchHeadConfigMap.Name, searchHeadStatefulSet.Spec.Selector)
 	configworkflow.GarbageCollectSecrets(ctx, client, cr, credentialsSecret.Name, nil)
 	return searchHeadPhase, deployerPhase, searchHeadStatefulSet, nil
-}
-
-func ensureNoahDeployerDefaults(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, noahSpec enterpriseApi.NoahClusterSpec, owner *metav1.OwnerReference) (resources.DefaultsConfigMap, error) {
-	return configworkflow.EnsureConfigMap(ctx, client, cr, splunkconfig.NoahDeployerConf(noahSpec.Endpoint, noahSpec.Tenant), owner, resources.WithDictionaryConf())
 }
 
 func ensureNoahSearchHeadDefaults(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, noahSpec enterpriseApi.NoahClusterSpec, owner *metav1.OwnerReference) (resources.DefaultsConfigMap, error) {
