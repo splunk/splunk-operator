@@ -71,6 +71,14 @@ func resolveNoahDependency(ctx context.Context, client splcommon.ControllerClien
 
 	outcome, handled := noahDependencyOutcome(err)
 	if !handled {
+		condition := newNoahDependencyResolvedCondition(
+			metav1.ConditionUnknown,
+			enterpriseApi.ReasonNoahDependencyUnknown,
+			fmt.Sprintf("Unable to determine Noah dependency state: %v", err),
+		)
+		condition.ObservedGeneration = cr.GetGeneration()
+		*conditions = splcommon.UpsertCondition(*conditions, condition)
+
 		return nil, err
 	}
 
