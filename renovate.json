@@ -48,6 +48,18 @@
       "depNameTemplate": "docker.repo.splunkdev.net/ci-cd/ci-container/python-3.12-bookworm",
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^test\\/testenv\\/certmanager_deps\\.go$/"
+      ],
+      "matchStrings": [
+        "DefaultCertManagerVersion\\s*=\\s*\\\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\\""
+      ],
+      "depNameTemplate": "cert-manager/cert-manager",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
     }
   ],
   "assignAutomerge": true,
@@ -72,12 +84,17 @@
       "groupName": "SCS Loki deploy Python image"
     },
     {
-        "matchUpdateTypes": ["patch", "minor"],
-        "automerge": true,
-        "addLabels": [
-            "dependency-update",
-            "auto-merge-enabled"
-        ]
+      "matchPackageNames": [
+        "!cert-manager",
+        "!github.com/cert-manager/cert-manager",
+        "!cert-manager/cert-manager"
+      ],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "addLabels": [
+        "dependency-update",
+        "auto-merge-enabled"
+      ]
     },
     {
         "matchPackageNames": ["github.com/cloudnative-pg/cloudnative-pg"],
@@ -98,22 +115,36 @@
         "enabled": false
     },
     {
-        "matchPackageNames": ["cert-manager", "github.com/cert-manager/cert-manager"],
-        "groupName": "cert-manager"
+      "description": "Group cert-manager Go, Helm, and integration-test updates",
+      "matchPackageNames": [
+        "cert-manager",
+        "github.com/cert-manager/cert-manager",
+        "cert-manager/cert-manager"
+      ],
+      "groupName": "cert-manager",
+      "minimumGroupSize": 3,
+      "automerge": false
     },
     {
-        "matchPackageNames": ["cert-manager", "github.com/cert-manager/cert-manager"],
-        "matchUpdateTypes": ["patch"],
-        "automerge": true,
-        "addLabels": [
-            "dependency-update",
-            "auto-merge-enabled"
-        ]
+      "matchPackageNames": [
+        "cert-manager",
+        "github.com/cert-manager/cert-manager",
+        "cert-manager/cert-manager"
+      ],
+      "matchUpdateTypes": ["patch"],
+      "automerge": false,
+      "addLabels": [
+        "dependency-update"
+      ]
     },
     {
-        "matchPackageNames": ["cert-manager", "github.com/cert-manager/cert-manager"],
-        "matchUpdateTypes": ["major", "minor"],
-        "enabled": false
+      "matchPackageNames": [
+        "cert-manager",
+        "github.com/cert-manager/cert-manager",
+        "cert-manager/cert-manager"
+      ],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
     }
   ]
 }
