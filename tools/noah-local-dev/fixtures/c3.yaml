@@ -84,7 +84,8 @@ spec:
           content:
             noahService:
               enableBatchRoll: "true"
-              waitForRemoteBundleInit: "true"
+              # Remote-bundle initialization is not part of the M1 lifecycle contract.
+              waitForRemoteBundleInit: "false"
             general:
               site: site1
             kvstore:
@@ -114,6 +115,9 @@ spec:
               startwebserver: "false"
         restmap:
           content:
+            # TODO: Remove once splunk-ansible defaults this stanza for Noah workloads.
+            "admin:certificates":
+              authKeyStanza: noahService
             "streams:search":
               authKeyStanza: noahService
             "streams:rdin":
@@ -158,6 +162,9 @@ spec:
               startwebserver: "false"
         restmap:
           content:
+            # TODO: Remove once splunk-ansible defaults this stanza for Noah workloads.
+            "admin:certificates":
+              authKeyStanza: noahService
             "streams:search":
               authKeyStanza: noahService
             "streams:rdin":

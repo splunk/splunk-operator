@@ -55,8 +55,10 @@ count. Noah's source is not in this repository, so the two readings cannot be
 settled here; confirm with the Noah team before relying on either. Nothing
 validates the value.
 
-The chart also sets `NOAH_CACHE_WARM_SCALE_IN_TIMEOUT=5m` so integrated Splunk
-peers remain searchable and cache-warm scale-in processing is enabled.
+The chart also enables Redis backfill and database-down cache fallback with
+`NOAH_CACHE_ENABLE_CACHE_FALLBACK_WHEN_DB_DOWN=true`, and sets
+`NOAH_CACHE_WARM_SCALE_IN_TIMEOUT=5m` so integrated Splunk peers remain
+searchable and cache-warm scale-in processing is enabled.
 
 PostgreSQL requests the `gp3-automode` StorageClass exposed by
 `tools/noah-local-dev/kraken-request.yaml`. Override storage in a private values

@@ -6,6 +6,31 @@ context=${KUBE_CONTEXT:-kraken}
 namespace=${NAMESPACE:-splunk-operator}
 cluster=${C3_NAME:-c3}
 marker="noah-c3-smoke-$(date +%s)"
+search_head="splunk-${cluster}-search-head-0"
+
+search() {
+  query=$1
+  kubectl --context "$context" --namespace "$namespace" \
+    exec "$search_head" -c splunk -- \
+    env SMOKE_QUERY="$query" sh -c '
+      /opt/splunk/bin/splunk search "$SMOKE_QUERY" \
+        -auth "admin:$(cat /mnt/splunk-secrets/password)" \
+        -output csv
+    '
+}
+
+check_noah_peers() {
+  kubectl --context "$context" --namespace "$namespace" \
+    get indexercluster "$cluster" -o json | jq -e --argjson replicas "$replicas" '
+      .metadata.generation as $generation
+      | .status.replicas == $replicas
+        and .status.readyReplicas == $replicas
+        and any(.status.conditions[]?;
+          .type == "NoahPeersReady"
+          and .status == "True"
+          and .observedGeneration == $generation)
+    ' >/dev/null
+}
 
 printf 'Testing C3 with marker %s\n' "$marker"
 
@@ -34,34 +59,22 @@ attempt=0
 events=0
 observed=0
 while [ "$attempt" -lt 36 ]; do
-  if result=$(kubectl --context "$context" --namespace "$namespace" \
-    exec "splunk-${cluster}-search-head-0" -c splunk -- \
-    env TEST_MARKER="$marker" sh -c '
-      /opt/splunk/bin/splunk search \
-        "index=main sourcetype=noah_c3_smoke earliest=-15m \"$TEST_MARKER\" | stats count AS events dc(ordinal) AS ordinals" \
-        -auth "admin:$(cat /mnt/splunk-secrets/password)" \
-        -output csv
-    '); then
+  if result=$(search "index=main sourcetype=noah_c3_smoke earliest=-15m \"$marker\" | stats count AS events dc(ordinal) AS ordinals"); then
     events=$(printf '%s\n' "$result" | awk -F, 'NR == 2 { gsub(/"/, "", $1); print $1 }')
     observed=$(printf '%s\n' "$result" | awk -F, 'NR == 2 { gsub(/"/, "", $2); print $2 }')
   fi
-  if [ "$events" = "$replicas" ] && [ "$observed" = "$replicas" ]; then
-    kubectl --context "$context" --namespace "$namespace" \
-      exec "splunk-${cluster}-search-head-0" -c splunk -- \
-      env TEST_MARKER="$marker" sh -c '
-        /opt/splunk/bin/splunk search \
-          "index=main sourcetype=noah_c3_smoke earliest=-15m \"$TEST_MARKER\" | stats count by ordinal splunk_server | sort ordinal" \
-          -auth "admin:$(cat /mnt/splunk-secrets/password)" \
-          -output table
-      '
-    printf 'PASS: searched all %s indexed markers through Noah.\n' "$replicas"
+  if [ "$events" = "$replicas" ] && [ "$observed" = "$replicas" ] && check_noah_peers; then
+    search "index=main sourcetype=noah_c3_smoke earliest=-15m \"$marker\" | stats count by ordinal splunk_server | sort ordinal"
+    printf 'PASS: Noah control-plane health and all %s indexed markers verified.\n' "$replicas"
     exit 0
   fi
 
   attempt=$((attempt + 1))
+  printf 'Waiting for smoke checks (%s/36): generated=%s/%s, ordinals=%s/%s\n' \
+    "$attempt" "$events" "$replicas" "$observed" "$replicas" >&2
   sleep 5
 done
 
-printf 'FAIL: found %s events from %s of %s ordinals.\n' \
+printf 'FAIL: found %s events from %s of %s ordinals; Noah peers did not fully converge.\n' \
   "$events" "$observed" "$replicas" >&2
 exit 1
