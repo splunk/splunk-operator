@@ -19,7 +19,8 @@ package majorversionupgradetypes
 import (
 	"fmt"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,15 +28,35 @@ type Intent struct {
 	Strategy        string
 	SourcePgVersion string
 	TargetPgVersion string
+	// AttemptID identifies the active blue/green attempt. It is empty for the
+	// shipped pgUpgrade strategy, whose existing version/strategy identity is
+	// retained for backward compatibility.
+	AttemptID string
+	// RequiresBlueGreenRearm identifies the one-step, controller-owned action
+	// that records a false allow gate after a cleaned blue/green attempt. It is
+	// an execution directive only: Schedule may discover it but must not
+	// persist it. Act performs the durable status write before a later
+	// allow=true can create a new attempt for the same upgrade family.
+	RequiresBlueGreenRearm bool
 
 	Policy           UpgradePolicy
-	State            []enterprisev4.PostgresMajorUpgradeStatus
+	State            []platformv1alpha1.PostgresMajorUpgradeStatus
 	RetryRequestedAt *metav1.Time
 }
 
 type BackupInfo struct {
-	BackupStatus *enterprisev4.BackupStatus
+	BackupStatus *platformv1alpha1.BackupStatus
 	BackupName   string
+}
+
+// Progress is one durable major-upgrade status write. BlueGreen is optional so
+// the existing pgUpgrade flow continues to preserve its current status shape.
+// A non-nil BlueGreen value replaces the current attempt's nested durable
+// record together with the generic report and backup evidence.
+type Progress struct {
+	Report    reconciliationTypes.Report
+	Baseline  *BackupInfo
+	BlueGreen *platformv1alpha1.PostgresBlueGreenUpgradeStatus
 }
 
 type UpgradePolicy struct {

@@ -18,9 +18,14 @@ package util
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -41,6 +46,140 @@ import (
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 )
+
+// ReadFile reads the contents of location.
+func ReadFile(_ context.Context, location string) (string, error) {
+	data, err := os.ReadFile(location)
+	return string(data), err
+}
+
+// ConfigDataHash returns a deterministic SHA-256 hex digest of ConfigMap data.
+func ConfigDataHash(data map[string]string) string {
+	keys := make([]string, 0, len(data))
+	for key := range data {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	h := sha256.New()
+	for _, key := range keys {
+		_, _ = fmt.Fprintf(h, "%d:%s%d:%s", len(key), key, len(data[key]), data[key])
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+const (
+	deploymentTemplateStr         = "splunk-%s-%s"
+	statefulSetTemplateStr        = "splunk-%s-%s"
+	statefulSetPodTemplateStr     = "splunk-%s-%s-%d"
+	defaultsTemplateStr           = "splunk-%s-%s-defaults"
+	smartstoreTemplateStr         = "splunk-%s-%s-smartstore"
+	probeConfigMapTemplateStr     = "splunk-%s-probe-configmap"
+	perCrConfigMapNameTemplateStr = "splunk-%s-%s-configmap"
+	defaultSplunkImage            = "splunk/splunk"
+	portNameTemplateStr           = "%s-%s"
+	readinessScriptName           = "readinessProbe.sh"
+	livenessScriptName            = "livenessProbe.sh"
+	startupScriptName             = "startupProbe.sh"
+	readinessScriptLocation       = "tools/k8_probes/" + readinessScriptName
+	livenessScriptLocation        = "tools/k8_probes/" + livenessScriptName
+	startupScriptLocation         = "tools/k8_probes/" + startupScriptName
+	livenessDriverLocation        = "/tmp/splunk_operator_k8s/probes/"
+	livenessDriverFile            = "k8_liveness_driver.sh"
+	probeMountDirectory           = "/mnt/probes"
+	probeVolumePermission         = int32(0555)
+)
+
+// GetSplunkDeploymentName returns the deployment name for a Splunk instance.
+func GetSplunkDeploymentName(instanceType splcommon.InstanceType, identifier string) string {
+	return fmt.Sprintf(deploymentTemplateStr, identifier, instanceType)
+}
+
+// GetSplunkStatefulsetName returns the StatefulSet name for a Splunk instance.
+func GetSplunkStatefulsetName(instanceType splcommon.InstanceType, identifier string) string {
+	return fmt.Sprintf(statefulSetTemplateStr, identifier, instanceType)
+}
+
+// GetSplunkStatefulsetPodName returns the name of a specific Splunk pod.
+func GetSplunkStatefulsetPodName(instanceType splcommon.InstanceType, identifier string, index int32) string {
+	return fmt.Sprintf(statefulSetPodTemplateStr, identifier, instanceType, index)
+}
+
+// GetSplunkDefaultsName returns the defaults ConfigMap name for a Splunk instance.
+func GetSplunkDefaultsName(identifier string, instanceType splcommon.InstanceType) string {
+	return fmt.Sprintf(defaultsTemplateStr, identifier, instanceType.ToKind())
+}
+
+// GetSplunkMonitoringconsoleConfigMapName returns the Monitoring Console ConfigMap name.
+func GetSplunkMonitoringconsoleConfigMapName(identifier string, instanceType splcommon.InstanceType) string {
+	return fmt.Sprintf(statefulSetTemplateStr, identifier, instanceType.ToKind())
+}
+
+// GetSplunkSmartstoreConfigMapName returns the SmartStore ConfigMap name.
+func GetSplunkSmartstoreConfigMapName(identifier, crKind string) string {
+	return fmt.Sprintf(smartstoreTemplateStr, identifier, strings.ToLower(crKind))
+}
+
+// GetSplunkManualAppUpdateConfigMapName returns the manual app update ConfigMap name.
+func GetSplunkManualAppUpdateConfigMapName(namespace string) string {
+	return fmt.Sprintf("splunk-%s-manual-app-update", namespace)
+}
+
+// GetSplunkStatefulsetUrls returns the URLs for all pods in a Splunk StatefulSet.
+func GetSplunkStatefulsetUrls(namespace string, instanceType splcommon.InstanceType, identifier string, replicas int32, hostnameOnly bool) string {
+	urls := make([]string, replicas)
+	for i := int32(0); i < replicas; i++ {
+		urls[i] = GetSplunkStatefulsetURL(namespace, instanceType, identifier, i, hostnameOnly)
+	}
+	return strings.Join(urls, ",")
+}
+
+// GetSplunkStatefulsetURL returns the URL for a specific Splunk StatefulSet pod.
+func GetSplunkStatefulsetURL(namespace string, instanceType splcommon.InstanceType, identifier string, index int32, hostnameOnly bool) string {
+	podName := GetSplunkStatefulsetPodName(instanceType, identifier, index)
+	if hostnameOnly {
+		return podName
+	}
+	return splcommon.GetServiceFQDN(namespace, fmt.Sprintf("%s.%s", podName, splcommon.GetSplunkServiceName(instanceType, identifier, true)))
+}
+
+// GetSplunkImage returns the configured or default Splunk image.
+func GetSplunkImage(specImage string) string {
+	if specImage != "" {
+		return specImage
+	}
+	if image := os.Getenv("RELATED_IMAGE_SPLUNK_ENTERPRISE"); image != "" {
+		return image
+	}
+	return defaultSplunkImage
+}
+
+// GetPortName enriches a port name with protocol information.
+func GetPortName(port, protocol string) string {
+	return fmt.Sprintf(portNameTemplateStr, protocol, port)
+}
+
+// GetProbeConfigMapName returns the probe ConfigMap name.
+func GetProbeConfigMapName(identifier string) string {
+	return fmt.Sprintf(probeConfigMapTemplateStr, identifier)
+}
+
+var GetReadinessScriptLocation = func() string { return readinessScriptLocation }
+var GetLivenessScriptLocation = func() string { return livenessScriptLocation }
+var GetStartupScriptLocation = func() string { return startupScriptLocation }
+var GetReadinessScriptName = func() string { return readinessScriptName }
+var GetLivenessScriptName = func() string { return livenessScriptName }
+var GetStartupScriptName = func() string { return startupScriptName }
+var GetProbeMountDirectory = func() string { return probeMountDirectory }
+
+// GetProbeVolumePermission returns the permission for the probe volume mount.
+func GetProbeVolumePermission() int32 { return probeVolumePermission }
+
+// GetLivenessDriverFilePath returns the path to the liveness driver file.
+func GetLivenessDriverFilePath() string {
+	return filepath.Join(livenessDriverLocation, livenessDriverFile)
+}
+
+func GetLivenessDriverFileDir() string { return livenessDriverLocation }
 
 // kubernetes logger used by splunk.reconcile package
 //var log = logf.Log.WithName("splunk.reconcile")

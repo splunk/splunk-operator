@@ -28,6 +28,14 @@ webhooks:
     - clustermanagers
     - licensemanagers
     - monitoringconsoles
+  - apiGroups:
+    - platform.splunk.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
     - postgresclusters
     - postgresclusterclasses
     - postgresdatabases

@@ -16,7 +16,7 @@ limitations under the License.
 package core
 
 import (
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 )
 
 const (
@@ -45,7 +45,7 @@ func buildPoolerScrapeAnnotations() map[string]string {
 	return buildScrapeAnnotations(poolerMetricsPortString)
 }
 
-func isPostgreSQLMetricsEnabled(cluster *enterprisev4.PostgresCluster, class *enterprisev4.PostgresClusterClass) bool {
+func isPostgreSQLMetricsEnabled(cluster *platformv1alpha1.PostgresCluster, class *platformv1alpha1.PostgresClusterClass) bool {
 	classEnabled := class != nil &&
 		class.Spec.Config != nil &&
 		class.Spec.Config.Monitoring != nil &&
@@ -60,7 +60,7 @@ func isPostgreSQLMetricsEnabled(cluster *enterprisev4.PostgresCluster, class *en
 	return classEnabled
 }
 
-func isConnectionPoolerMetricsEnabled(cluster *enterprisev4.PostgresCluster, class *enterprisev4.PostgresClusterClass) bool {
+func isConnectionPoolerMetricsEnabled(cluster *platformv1alpha1.PostgresCluster, class *platformv1alpha1.PostgresClusterClass) bool {
 	classEnabled := class != nil &&
 		class.Spec.Config != nil &&
 		class.Spec.Config.Monitoring != nil &&

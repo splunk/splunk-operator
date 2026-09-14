@@ -20,7 +20,7 @@ import (
 	"errors"
 	"testing"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
 	"github.com/stretchr/testify/assert"
@@ -38,12 +38,12 @@ import (
 func TestEnsureClusterSecret(t *testing.T) {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
-	enterprisev4.AddToScheme(scheme)
+	platformv1alpha1.AddToScheme(scheme)
 
 	t.Run("creates secret with credentials and owner reference", func(t *testing.T) {
 		// Arrange
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cluster := &enterprisev4.PostgresCluster{
+		cluster := &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-cluster",
 				Namespace: "default",
@@ -123,9 +123,9 @@ func TestSecretModelAdoptsOrphanedSecret(t *testing.T) {
 
 	// Arrange: secret exists but has no owner reference — secretModel must patch it.
 	scheme := newTestScheme()
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default", UID: "pg-uid"},
-		Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+		Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 	}
 	orphanedSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"},
@@ -154,9 +154,9 @@ func TestSecretModelObserveFailsWhenPasswordKeyMissing(t *testing.T) {
 
 	// Arrange: secret exists but is missing the expected password key.
 	scheme := newTestScheme()
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+		Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 	}
 	secretWithoutPassword := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"},
@@ -209,16 +209,16 @@ func (p *patchCountingClient) Patch(ctx context.Context, obj client.Object, patc
 
 // provideExternalSecretsPostgresCluster returns a cluster configured for the
 // external-secret path with an initially empty superuser ref.
-func provideExternalSecretsPostgresCluster() *enterprisev4.PostgresCluster {
-	return &enterprisev4.PostgresCluster{
+func provideExternalSecretsPostgresCluster() *platformv1alpha1.PostgresCluster {
+	return &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterSpec{
-			PasswordConfig: &enterprisev4.SuperuserPasswordConfig{
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			PasswordConfig: &platformv1alpha1.SuperuserPasswordConfig{
 				SuperuserExternalSecretRef: corev1.LocalObjectReference{Name: ""},
 			},
 		},
-		Status: enterprisev4.PostgresClusterStatus{
-			Resources: &enterprisev4.PostgresClusterResources{},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Resources: &platformv1alpha1.PostgresClusterResources{},
 		},
 	}
 }
@@ -232,7 +232,7 @@ type capturedStatus struct {
 }
 
 func (cs *capturedStatus) updater() healthStatusUpdater {
-	return func(_ *enterprisev4.PostgresClusterStatus, h componentHealth) error {
+	return func(_ *platformv1alpha1.PostgresClusterStatus, h componentHealth) error {
 		cs.health = h
 		cs.count++
 		return nil
@@ -242,14 +242,14 @@ func (cs *capturedStatus) updater() healthStatusUpdater {
 // conflictUpdater simulates a status write that loses an optimistic-concurrency
 // race: it records the health like the real updater but reports a 409 Conflict.
 func (cs *capturedStatus) conflictUpdater() healthStatusUpdater {
-	return cs.failingUpdater(apierrors.NewConflict(schema.GroupResource{Group: "enterprise.splunk.com", Resource: "postgresclusters"}, "pg1", errors.New("the object has been modified")))
+	return cs.failingUpdater(apierrors.NewConflict(schema.GroupResource{Group: "platform.splunk.com", Resource: "postgresclusters"}, "pg1", errors.New("the object has been modified")))
 }
 
 // failingUpdater simulates a status write that records the health but fails with
 // the supplied error (e.g. a transient API error), so callers can exercise the
 // non-conflict status-write failure path.
 func (cs *capturedStatus) failingUpdater(err error) healthStatusUpdater {
-	return func(_ *enterprisev4.PostgresClusterStatus, h componentHealth) error {
+	return func(_ *platformv1alpha1.PostgresClusterStatus, h componentHealth) error {
 		cs.health = h
 		cs.count++
 		return err
@@ -789,14 +789,14 @@ func TestSecretModel_ActuateDispatch(t *testing.T) {
 	})
 
 	t.Run("Reconcile routes to internal path when PasswordConfig is nil", func(t *testing.T) {
-		cluster := &enterprisev4.PostgresCluster{
+		cluster := &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-			Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+			Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 		}
 
 		c := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithStatusSubresource(&enterprisev4.PostgresCluster{}).
+			WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
 			Build()
 		contracts := &reconcileContracts{}
 		s := newSecretModel(c, scheme, noopEventEmitter{}, nil, cluster, "pg1-superuser", contracts)

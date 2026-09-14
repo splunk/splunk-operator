@@ -78,7 +78,7 @@ Procedure:
 Example:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-dev
@@ -142,7 +142,7 @@ The connection pooler exposes per-endpoint knobs on both the class and the clust
 
 ```yaml
 # class default — RW + RO poolers are reconciled when enabled
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-prod
@@ -156,7 +156,7 @@ spec:
 
 ```yaml
 # cluster — overrides any sub-field independently
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 spec:
   class: postgresql-prod

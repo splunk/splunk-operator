@@ -256,7 +256,7 @@ func TestApplySearchHeadClusterNoah_ValidatesRuntimeBeforeCreatingResources(t *t
 	_, terminal := splcommon.TerminalMessage(outcome.err)
 	assert.True(t, terminal)
 	reason, _ := splcommon.TerminalReason(outcome.err)
-	assert.Equal(t, EventReasonNoahConfigurationInvalid, reason)
+	assert.Equal(t, splcommon.EventReasonNoahConfigurationInvalid, reason)
 	assert.Equal(t, enterpriseApi.ReasonNoahConfigurationInvalid, outcome.conditionReason)
 	assert.Contains(t, outcome.message, configworkflow.NoahAuthSecretKey)
 	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")

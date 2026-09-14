@@ -174,7 +174,7 @@ flowchart TD
     J -->|"conflict/failed"| K["RolesReady=False, phase Failed"] --> Z2[stop]
     J -->|"waiting for CNPG (pending)"| L["RolesReady=False, phase Provisioning"] --> M[requeue] --> Z3[stop]
     J -->|ok| N["Phase DatabaseProvisioning\n- reconcile CNPG Database CRs (DatabasesReady)"]
-    N --> O["Phase RWRolePrivileges\n- SQL grants for _rw role (PrivilegesReady)"]
+    N --> O["Phase RWRolePrivileges\n- SQL grants for configured RW role (PrivilegesReady)"]
     O --> P[set phase = Ready]
     P --> Z4[stop]
 ```

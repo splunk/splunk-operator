@@ -39,6 +39,7 @@ func TestUpgradePathValidation(t *testing.T) {
 
 	client := builder.Build()
 	ctx := context.TODO()
+
 	stdln := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -58,10 +59,6 @@ func TestUpgradePathValidation(t *testing.T) {
 	err := client.Create(ctx, &stdln)
 	if err != nil {
 		t.Errorf("create should not have returned error; err=%v", err)
-	}
-	_, err = ApplyStandalone(ctx, client, &stdln)
-	if err != nil {
-		t.Errorf("ApplyStandalone should not have returned error; err=%v", err)
 	}
 
 	// cluster manager
@@ -455,10 +452,6 @@ func TestUpgradePathValidation(t *testing.T) {
 	err = client.Update(ctx, &stdln)
 	if err != nil {
 		t.Errorf("update should not have returned error; err=%v", err)
-	}
-	_, err = ApplyStandalone(ctx, client, &stdln)
-	if err != nil {
-		t.Errorf("ApplyStandalone should not have returned error; err=%v", err)
 	}
 
 	// cluster manager

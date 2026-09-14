@@ -74,7 +74,7 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	if cr.Spec.NoahClusterRef == nil || cr.Spec.NoahClusterRef.Name == "" {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Noah Cluster reference is required")
 		return reconcile.Result{}, splcommon.NewTerminalError(
-			EventReasonValidateSpecFailed,
+			splcommon.EventReasonValidateSpecFailed,
 			"Noah IndexerCluster spec validation failed",
 			fmt.Errorf("noahClusterRef.name must not be empty"),
 		)
@@ -86,7 +86,7 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	if err = validateCommonSplunkSpec(ctx, client, &cr.Spec.CommonSplunkSpec, cr); err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Indexer Cluster spec validation failed")
 		return reconcile.Result{}, splcommon.NewTerminalError(
-			EventReasonValidateSpecFailed,
+			splcommon.EventReasonValidateSpecFailed,
 			"Noah IndexerCluster spec validation failed",
 			err,
 		)
@@ -752,7 +752,7 @@ func noahIndexerOutcomeFromError(err error, fallbackPhase enterpriseApi.Phase) (
 				enterpriseApi.ReasonNoahCacheWarmTimeout,
 				message,
 			),
-		}, splcommon.NewTerminalError(EventReasonNoahCacheWarmTimeout, message, cacheWarmTimeoutErr), true
+		}, splcommon.NewTerminalError(splcommon.EventReasonNoahCacheWarmTimeout, message, cacheWarmTimeoutErr), true
 	}
 
 	if lifecycleErr, ok := errors.AsType[*noahIndexerLifecycleError](err); ok {
@@ -792,7 +792,7 @@ func noahIndexerOutcomeFromError(err error, fallbackPhase enterpriseApi.Phase) (
 						enterpriseApi.ReasonNoahOperationFailed,
 						message,
 					),
-				}, splcommon.NewTerminalError(EventReasonNoahOperationFailed, message, lifecycleErr), true
+				}, splcommon.NewTerminalError(splcommon.EventReasonNoahOperationFailed, message, lifecycleErr), true
 			}
 			return noahIndexerOutcome{
 				phase:        phase,

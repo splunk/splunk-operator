@@ -24,8 +24,8 @@ When changing this guide, read [`AGENTS.maintenance.md`](AGENTS.maintenance.md).
 
 ### Where code lives
 
-- **CRD API types**: `api/enterprise/<version>/` (current stable: `v4`)
-- **Controller / reconcile logic**: `internal/controller/`
+- **CRD API types**: `api/<group>/<version>/` (stable Enterprise: `enterprise/v4`; PostgreSQL: `platform/v1alpha1`)
+- **Controller / reconcile logic**: `internal/controller/<api-group>/` (Enterprise: `enterprise/`; PostgreSQL: `platform/`)
 - **Business logic**: `pkg/splunk/` (see `pkg/splunk/README.md`)
 - **Entry point**: `cmd/main.go`
 - **Manifests / RBAC / samples**: `config/`
@@ -66,6 +66,12 @@ Before live Kubernetes work, inspect the full command call chain and verify the
 exact authorized context, namespace, and scope. Never infer acceptance of the
 Splunk General Terms or populate `SPLUNK_GENERAL_TERMS`; use only a value
 supplied by the user after they follow `docs/README.md`.
+
+The sole exception is the checked-in `SOK_PIPELINE_MODE=scs_deploy` CI lane:
+it may set `SPLUNK_GENERAL_TERMS` for an in-house SCS Helm deployment run by
+Splunk employees. This exception does not apply to local commands, customer
+deployments, or any other pipeline, and does not change the customer legal
+acceptance guidance in `docs/README.md`.
 
 ## Build, Test & Validate
 

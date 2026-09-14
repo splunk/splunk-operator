@@ -18,7 +18,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/test/testenv"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,9 +53,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 			// set (CRD validation requires it when config.connectionPooler.enabled=true).
 			pgClass := createPGClassWithPooler(ctx, kubeClient, ns)
 
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pooler-cluster", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 					Instances:             ptr.To(int32(2)),
@@ -67,7 +67,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 
 			By("waiting for PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -75,7 +75,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 
 			By("enabling connection pooler (RW + RO)")
 			patch := client.MergeFrom(pgCluster.DeepCopy())
-			pgCluster.Spec.ConnectionPooler = &enterprisev4.ConnectionPoolerEnableConfig{
+			pgCluster.Spec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{
 				Enabled:   ptr.To(true),
 				ReadWrite: ptr.To(true),
 				ReadOnly:  ptr.To(true),
@@ -95,7 +95,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 
 			By("verifying ConnectionPoolerStatus is populated")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.ConnectionPoolerStatus).NotTo(BeNil())
 				g.Expect(pc.Status.ConnectionPoolerStatus.Enabled).To(BeTrue())
@@ -106,7 +106,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 			By("disabling connection pooler")
 			Expect(kubeClient.Get(ctx, clusterKey, pgCluster)).To(Succeed())
 			patch = client.MergeFrom(pgCluster.DeepCopy())
-			pgCluster.Spec.ConnectionPooler = &enterprisev4.ConnectionPoolerEnableConfig{
+			pgCluster.Spec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{
 				Enabled: ptr.To(false),
 			}
 			Expect(kubeClient.Patch(ctx, pgCluster, patch)).To(Succeed())
@@ -121,7 +121,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 
 			By("verifying ConnectionPoolerStatus reflects disabled pooler")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.ConnectionPoolerStatus).To(Or(
 					BeNil(),
@@ -134,21 +134,21 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 
 // createPGClassWithPooler creates a PostgresClusterClass with 2 instances and connection
 // pooler configured (required by CRD validation when connectionPooler.enabled=true).
-func createPGClassWithPooler(ctx SpecContext, kubeClient client.Client, ns string) *enterprisev4.PostgresClusterClass {
-	pgClass := &enterprisev4.PostgresClusterClass{
+func createPGClassWithPooler(ctx SpecContext, kubeClient client.Client, ns string) *platformv1alpha1.PostgresClusterClass {
+	pgClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "postgres-pooler-e2e-" + ns,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "e2e-test",
 			},
 		},
-		Spec: enterprisev4.PostgresClusterClassSpec{
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
-			Config: &enterprisev4.PostgresClusterClassConfig{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{
 				Instances: ptr.To(int32(2)),
 			},
-			CNPG: &enterprisev4.CNPGConfig{
-				ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{},
+			CNPG: &platformv1alpha1.CNPGConfig{
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{},
 			},
 		},
 	}

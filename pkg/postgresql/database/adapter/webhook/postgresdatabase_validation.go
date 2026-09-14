@@ -25,13 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	core "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 )
 
 // ValidatePostgresDatabaseCreate validates a PostgresDatabase on CREATE.
-func ValidatePostgresDatabaseCreate(ctx context.Context, obj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+func ValidatePostgresDatabaseCreate(ctx context.Context, obj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
@@ -46,6 +46,7 @@ func ValidatePostgresDatabaseCreate(ctx context.Context, obj *enterpriseApi.Post
 		liveReader = nil
 	}
 	allErrs = append(allErrs, validateDatabaseCustomMetrics(ctx, obj, liveReader)...)
+	allErrs = append(allErrs, validateDatabaseRoleNames(ctx, obj, nil, liveReader)...)
 
 	if liveReader != nil {
 		allErrs = append(allErrs, validateExternalDatabaseSecrets(ctx, obj, liveReader)...)
@@ -55,7 +56,7 @@ func ValidatePostgresDatabaseCreate(ctx context.Context, obj *enterpriseApi.Post
 }
 
 // Admission checks reference existence; keys and mutable content remain runtime concerns.
-func validateDatabaseCustomMetrics(ctx context.Context, obj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+func validateDatabaseCustomMetrics(ctx context.Context, obj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
 	var allErrs field.ErrorList
 	for i := range obj.Spec.Databases {
 		mon := obj.Spec.Databases[i].Monitoring
@@ -93,7 +94,7 @@ func validateDatabaseCustomMetrics(ctx context.Context, obj *enterpriseApi.Postg
 }
 
 // ValidatePostgresDatabaseUpdate validates a PostgresDatabase on UPDATE.
-func ValidatePostgresDatabaseUpdate(ctx context.Context, obj, oldObj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+func ValidatePostgresDatabaseUpdate(ctx context.Context, obj, oldObj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
@@ -111,13 +112,97 @@ func ValidatePostgresDatabaseUpdate(ctx context.Context, obj, oldObj *enterprise
 		metricsReader = nil
 	}
 	allErrs = append(allErrs, validateDatabaseCustomMetrics(ctx, obj, metricsReader)...)
+	allErrs = append(allErrs, validateDatabaseRoleNames(ctx, obj, oldObj, liveReader)...)
 	if liveReader != nil {
 		allErrs = append(allErrs, validateExternalDatabaseSecrets(ctx, obj, liveReader)...)
 	}
 	return allErrs
 }
 
-func databaseMonitoringSelectorsUnchanged(obj, oldObj *enterpriseApi.PostgresDatabase) bool {
+func validateDatabaseRoleNames(ctx context.Context, obj, oldObj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+	seen := make(map[string]*field.Path, len(obj.Spec.Databases)*2)
+	oldDatabases := make(map[string]platformApi.DatabaseDefinition)
+	if oldObj != nil {
+		for _, db := range oldObj.Spec.Databases {
+			oldDatabases[db.Name] = db
+		}
+	}
+
+	for i, db := range obj.Spec.Databases {
+		roles := core.EffectiveRoleNames(db)
+		adminPath := field.NewPath("spec", "databases").Index(i).Child("adminRoleName")
+		rwPath := field.NewPath("spec", "databases").Index(i).Child("rwRoleName")
+		rolePaths := []struct {
+			name string
+			path *field.Path
+		}{
+			{name: roles.Admin, path: adminPath},
+			{name: roles.RW, path: rwPath},
+		}
+
+		if roles.Admin == roles.RW {
+			allErrs = append(allErrs, field.Invalid(rwPath, roles.RW, "admin and read-write role names must be different"))
+		}
+
+		for _, role := range rolePaths {
+			if core.IsReservedRoleName(role.name) {
+				allErrs = append(allErrs, field.Invalid(role.path, role.name, "role name is reserved by PostgreSQL or CloudNativePG"))
+			}
+			if previous, exists := seen[role.name]; exists {
+				allErrs = append(allErrs, field.Invalid(role.path, role.name, fmt.Sprintf("duplicates role name at %s", previous.String())))
+			} else {
+				seen[role.name] = role.path
+			}
+		}
+
+		if oldObj != nil {
+			if oldDB, exists := oldDatabases[db.Name]; exists && roleProvisioningStarted(ctx, oldObj, oldDB, reader) {
+				oldRoles := core.EffectiveRoleNames(oldDB)
+				if oldRoles != roles {
+					allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "databases").Index(i), db, "role-name overrides are immutable after role provisioning starts"))
+				}
+			}
+		}
+	}
+	return allErrs
+}
+
+func databaseHasPublishedRoleStatus(obj *platformApi.PostgresDatabase, databaseName string) bool {
+	for _, info := range obj.Status.Databases {
+		if info.Name == databaseName {
+			return true
+		}
+	}
+	return false
+}
+
+// roleProvisioningStarted falls back to a live generated-Secret check when status lags:
+// status.databases can miss a completed Secret write, and reconcileExistingSecret never rewrites one.
+func roleProvisioningStarted(ctx context.Context, oldObj *platformApi.PostgresDatabase, oldDB platformApi.DatabaseDefinition, reader client.Reader) bool {
+	if databaseHasPublishedRoleStatus(oldObj, oldDB.Name) {
+		return true
+	}
+	if reader == nil || oldDB.PasswordConfig != nil {
+		return false
+	}
+	adminSecretName, rwSecretName := core.ResolveSecretNames(oldObj.Name, oldDB)
+	for _, name := range []string{adminSecretName, rwSecretName} {
+		secret := &corev1.Secret{}
+		switch err := reader.Get(ctx, client.ObjectKey{Name: name, Namespace: oldObj.Namespace}, secret); {
+		case err == nil:
+			return true
+		case apierrors.IsNotFound(err):
+			continue
+		default:
+			// Fail closed: an unreadable lookup must not silently allow a role-name change.
+			return true
+		}
+	}
+	return false
+}
+
+func databaseMonitoringSelectorsUnchanged(obj, oldObj *platformApi.PostgresDatabase) bool {
 	if oldObj == nil || len(obj.Spec.Databases) != len(oldObj.Spec.Databases) {
 		return false
 	}
@@ -138,14 +223,14 @@ func databaseMonitoringSelectorsUnchanged(obj, oldObj *enterpriseApi.PostgresDat
 	return true
 }
 
-func configMapSelectorsFrom(mon *enterpriseApi.DatabaseMonitoring) []corev1.ConfigMapKeySelector {
+func configMapSelectorsFrom(mon *platformApi.DatabaseMonitoring) []corev1.ConfigMapKeySelector {
 	if mon == nil {
 		return nil
 	}
 	return mon.CustomQueriesConfigMap
 }
 
-func validateExternalDatabaseSecrets(ctx context.Context, obj *enterpriseApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+func validateExternalDatabaseSecrets(ctx context.Context, obj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
 	var allErrs field.ErrorList
 	for i := range obj.Spec.Databases {
 		db := obj.Spec.Databases[i]
@@ -153,15 +238,17 @@ func validateExternalDatabaseSecrets(ctx context.Context, obj *enterpriseApi.Pos
 			continue
 		}
 		base := field.NewPath("spec", "databases").Index(i).Child("passwordConfig")
+		roles := core.EffectiveRoleNames(db)
 		refs := []struct {
-			name string
-			path *field.Path
+			name         string
+			path         *field.Path
+			expectedRole string
 		}{
-			{db.PasswordConfig.ExternalAdminSecretRef.Name, base.Child("externalAdminSecretRef", "name")},
-			{db.PasswordConfig.ExternalRWSecretRef.Name, base.Child("externalRWSecretRef", "name")},
+			{db.PasswordConfig.ExternalAdminSecretRef.Name, base.Child("externalAdminSecretRef", "name"), roles.Admin},
+			{db.PasswordConfig.ExternalRWSecretRef.Name, base.Child("externalRWSecretRef", "name"), roles.RW},
 		}
 		for _, r := range refs {
-			if e := validateExternalDatabaseSecret(ctx, obj.Namespace, r.name, r.path, reader); e != nil {
+			if e := validateExternalDatabaseSecret(ctx, obj.Namespace, r.name, r.expectedRole, r.path, reader); e != nil {
 				allErrs = append(allErrs, e)
 			}
 		}
@@ -169,7 +256,7 @@ func validateExternalDatabaseSecrets(ctx context.Context, obj *enterpriseApi.Pos
 	return allErrs
 }
 
-func validateExternalDatabaseSecret(ctx context.Context, namespace, name string, refPath *field.Path, reader client.Reader) *field.Error {
+func validateExternalDatabaseSecret(ctx context.Context, namespace, name, expectedRole string, refPath *field.Path, reader client.Reader) *field.Error {
 	if name == "" {
 		// Empty ref is already rejected by the CRD's required field; nothing to add.
 		return nil
@@ -184,18 +271,18 @@ func validateExternalDatabaseSecret(ctx context.Context, namespace, name string,
 		return field.InternalError(refPath, err)
 	}
 
-	if err := core.ValidateExternalDatabaseSecret(secret, name); err != nil {
+	if err := core.ValidateExternalDatabaseSecret(secret, name, expectedRole); err != nil {
 		return field.Invalid(refPath, name, err.Error())
 	}
 	return nil
 }
 
 // GetPostgresDatabaseWarningsOnCreate returns warnings for PostgresDatabase CREATE.
-func GetPostgresDatabaseWarningsOnCreate(obj *enterpriseApi.PostgresDatabase) []string {
+func GetPostgresDatabaseWarningsOnCreate(obj *platformApi.PostgresDatabase) []string {
 	return nil
 }
 
 // GetPostgresDatabaseWarningsOnUpdate returns warnings for PostgresDatabase UPDATE.
-func GetPostgresDatabaseWarningsOnUpdate(obj, oldObj *enterpriseApi.PostgresDatabase) []string {
+func GetPostgresDatabaseWarningsOnUpdate(obj, oldObj *platformApi.PostgresDatabase) []string {
 	return nil
 }

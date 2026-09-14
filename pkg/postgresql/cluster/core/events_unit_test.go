@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +32,7 @@ import (
 )
 
 func TestEmitClusterPhaseTransitionEmitsReadyEvent(t *testing.T) {
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "pg1",
 			Namespace:         "default",
@@ -54,7 +54,7 @@ func TestEmitClusterPhaseTransitionEmitsReadyEvent(t *testing.T) {
 
 func TestSetPhaseStatusCompletesReadinessCycleOnce(t *testing.T) {
 	ctx := context.Background()
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "pg1",
 			Namespace:         "default",
@@ -63,7 +63,7 @@ func TestSetPhaseStatusCompletesReadinessCycleOnce(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithStatusSubresource(&enterprisev4.PostgresCluster{}).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
 		WithObjects(cluster).
 		Build()
 
@@ -82,7 +82,7 @@ func TestSetPhaseStatusCompletesReadinessCycleOnce(t *testing.T) {
 	require.NotNil(t, cluster.Status.LastTransitionTime)
 	lastTransitionTime := *cluster.Status.LastTransitionTime
 
-	started := &enterprisev4.PostgresCluster{}
+	started := &platformv1alpha1.PostgresCluster{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, started))
 	require.NotNil(t, started.Status.LastTransitionTime)
 	assert.Equal(t, lastTransitionTime, *started.Status.LastTransitionTime)
@@ -93,7 +93,7 @@ func TestSetPhaseStatusCompletesReadinessCycleOnce(t *testing.T) {
 	assert.Positive(t, duration)
 	assert.Nil(t, started.Status.LastTransitionTime)
 
-	stored := &enterprisev4.PostgresCluster{}
+	stored := &platformv1alpha1.PostgresCluster{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, stored))
 	assert.Nil(t, stored.Status.LastTransitionTime)
 
@@ -107,21 +107,21 @@ func TestStartReadinessCycleForActiveUseCase(t *testing.T) {
 	ctx := context.Background()
 	ready := string(readyClusterPhase)
 	generation := int64(1)
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "pg1",
 			Namespace:         "default",
 			CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * time.Minute)),
 			Generation:        2,
 		},
-		Status: enterprisev4.PostgresClusterStatus{
+		Status: platformv1alpha1.PostgresClusterStatus{
 			Phase:              &ready,
 			ObservedGeneration: &generation,
 		},
 	}
 	c := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithStatusSubresource(&enterprisev4.PostgresCluster{}).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
 		WithObjects(cluster).
 		Build()
 
@@ -129,7 +129,7 @@ func TestStartReadinessCycleForActiveUseCase(t *testing.T) {
 	require.NotNil(t, cluster.Status.LastTransitionTime)
 	assert.Equal(t, ready, *cluster.Status.Phase)
 
-	stored := &enterprisev4.PostgresCluster{}
+	stored := &platformv1alpha1.PostgresCluster{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, stored))
 	require.NotNil(t, stored.Status.LastTransitionTime)
 	assert.Equal(t, ready, *stored.Status.Phase)
@@ -137,7 +137,7 @@ func TestStartReadinessCycleForActiveUseCase(t *testing.T) {
 
 func TestSetPhaseStatusDoesNotCompleteReadinessCycleWhenStatusWriteFails(t *testing.T) {
 	ctx := context.Background()
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "pg1",
 			Namespace:         "default",
@@ -146,7 +146,7 @@ func TestSetPhaseStatusDoesNotCompleteReadinessCycleWhenStatusWriteFails(t *test
 	}
 	baseClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithStatusSubresource(&enterprisev4.PostgresCluster{}).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
 		WithObjects(cluster).
 		Build()
 
@@ -163,7 +163,7 @@ func TestSetPhaseStatusDoesNotCompleteReadinessCycleWhenStatusWriteFails(t *test
 		provisioningClusterPhase,
 	))
 
-	started := &enterprisev4.PostgresCluster{}
+	started := &platformv1alpha1.PostgresCluster{}
 	require.NoError(t, baseClient.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, started))
 	lastTransitionTime := *started.Status.LastTransitionTime
 
@@ -181,7 +181,7 @@ func TestSetPhaseStatusDoesNotCompleteReadinessCycleWhenStatusWriteFails(t *test
 	assert.Zero(t, duration)
 	assert.False(t, completedReadinessCycle, "the caller must not observe a failed Ready status write")
 
-	persisted := &enterprisev4.PostgresCluster{}
+	persisted := &platformv1alpha1.PostgresCluster{}
 	require.NoError(t, baseClient.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, persisted))
 	require.NotNil(t, persisted.Status.LastTransitionTime)
 	assert.Equal(t, lastTransitionTime, *persisted.Status.LastTransitionTime)

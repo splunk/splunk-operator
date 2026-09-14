@@ -17,8 +17,11 @@ package core
 
 import (
 	"errors"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
+	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,18 +36,19 @@ type ReconcileContext struct {
 	Scheme                              *runtime.Scheme
 	Recorder                            record.EventRecorder
 	Metrics                             ports.Recorder
-	NewCustomMetricsAcknowledgementRepo func(*enterprisev4.PostgresCluster) dbmetrics.AcknowledgementRepository
+	ClusterReader                       dbclusterreadiness.ClusterReader
+	DatabaseProvisioner                 DatabaseProvisioner
+	NewCustomMetricsAcknowledgementRepo func(*platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository
 }
 
 type reconcileDBPhases string
 type conditionTypes string
 type conditionReasons string
-type clusterReadyStatus string
 type reconcileConflictCategory string
 
 const (
-	retryDelay                = time.Second * 15
-	clusterNotFoundRetryDelay = time.Second * 30
+	retryDelay                = reconciliationTypes.ReadinessRetryDelay
+	clusterNotFoundRetryDelay = reconciliationTypes.ClusterNotFoundRetryDelay
 	roleCleanupTimeout        = time.Minute * 30
 
 	rolesExist  = true
@@ -52,8 +56,8 @@ const (
 
 	deletionPolicyRetain string = "Retain"
 
-	postgresDatabaseFinalizerName string = "postgresdatabases.enterprise.splunk.com/finalizer"
-	annotationRetainedFrom        string = "enterprise.splunk.com/retained-from"
+	postgresDatabaseFinalizerName string = "postgresdatabases.platform.splunk.com/finalizer"
+	annotationRetainedFrom        string = "platform.splunk.com/retained-from"
 
 	secretRoleAdmin   string = "admin"
 	secretRoleRW      string = "rw"
@@ -96,36 +100,36 @@ const (
 	customMetricsReady conditionTypes = "CustomMetricsReady"
 
 	// condition reasons
-	reasonClusterNotFound            conditionReasons = "ClusterNotFound"
-	reasonClusterProvisioning        conditionReasons = "ClusterProvisioning"
-	reasonClusterRecovery            conditionReasons = "ClusterRecovery"
-	reasonClusterInfoFetchFailed     conditionReasons = "ClusterInfoFetchNotPossible"
-	reasonClusterAvailable           conditionReasons = "ClusterAvailable"
-	reasonDatabasesAvailable         conditionReasons = "DatabasesAvailable"
-	reasonSecretsCreated             conditionReasons = "SecretsCreated"
-	reasonSecretsCreationFailed      conditionReasons = "SecretsCreationFailed"
-	reasonSecretsDriftDetected       conditionReasons = "SecretsDriftDetected"
-	reasonExternalSecretMissing      conditionReasons = "ExternalSecretMissing"
-	reasonExternalSecretInvalid      conditionReasons = "ExternalSecretInvalid"
-	reasonExternalSecretMissingData  conditionReasons = "ExternalSecretMissingData"
-	reasonExternalSecretMissingKeys  conditionReasons = "ExternalSecretMissingKeys"
-	reasonExternalSecretMissingLabel conditionReasons = "ExternalSecretMissingReloadLabel"
-	reasonWaitingForCNPG             conditionReasons = "WaitingForCNPG"
-	reasonRolesAvailable             conditionReasons = "RolesAvailable"
-	reasonRoleConflict               conditionReasons = "RoleConflict"
-	reasonRoleReconcileFailed        conditionReasons = "RoleReconcileFailed"
-	reasonRoleCleanupWaiting         conditionReasons = "RoleCleanupWaitingForCluster"
-	reasonRoleCleanupBlocked         conditionReasons = "RoleCleanupBlocked"
-	reasonConfigMapsCreationFailed   conditionReasons = "ConfigMapsCreationFailed"
-	reasonConfigMapsCreated          conditionReasons = "ConfigMapsCreated"
-	reasonDatabaseReconcileFailed    conditionReasons = "DatabaseReconcileFailed"
-	reasonPrivilegesGranted          conditionReasons = "PrivilegesGranted"
-	reasonPrivilegesGrantFailed      conditionReasons = "PrivilegesGrantFailed"
-	reasonPrivilegesTerminalFailure  conditionReasons = "PrivilegesTerminalFailure"
-	reasonCustomMetricsPending       conditionReasons = "CustomMetricsPending"
-	reasonCustomMetricsFailed        conditionReasons = "CustomMetricsFailed"
-	cnpgReasonRecovery               conditionReasons = "CNPGClusterRecovery"
-	cnpgReasonFailingOver            conditionReasons = "CNPGFailingOver"
+	reasonClusterNotFound                conditionReasons = "ClusterNotFound"
+	reasonClusterProvisioning            conditionReasons = "ClusterProvisioning"
+	reasonClusterRecovery                conditionReasons = "ClusterRecovery"
+	reasonClusterInfoFetchFailed         conditionReasons = "ClusterInfoFetchNotPossible"
+	reasonClusterAvailable               conditionReasons = "ClusterAvailable"
+	reasonDatabasesAvailable             conditionReasons = "DatabasesAvailable"
+	reasonSecretsCreated                 conditionReasons = "SecretsCreated"
+	reasonSecretsCreationFailed          conditionReasons = "SecretsCreationFailed"
+	reasonManagedSecretMissing           conditionReasons = "ManagedSecretMissing"
+	reasonManagedSecretOwnershipConflict conditionReasons = "ManagedSecretOwnershipConflict"
+	reasonExternalSecretMissing          conditionReasons = "ExternalSecretMissing"
+	reasonExternalSecretInvalid          conditionReasons = "ExternalSecretInvalid"
+	reasonExternalSecretMissingData      conditionReasons = "ExternalSecretMissingData"
+	reasonExternalSecretMissingKeys      conditionReasons = "ExternalSecretMissingKeys"
+	reasonExternalSecretMissingLabel     conditionReasons = "ExternalSecretMissingReloadLabel"
+	reasonWaitingForCNPG                 conditionReasons = "WaitingForCNPG"
+	reasonRolesAvailable                 conditionReasons = "RolesAvailable"
+	reasonRoleConflict                   conditionReasons = "RoleConflict"
+	reasonRoleReconcileFailed            conditionReasons = "RoleReconcileFailed"
+	reasonRoleCleanupWaiting             conditionReasons = "RoleCleanupWaitingForCluster"
+	reasonRoleCleanupBlocked             conditionReasons = "RoleCleanupBlocked"
+	reasonConfigMapsCreationFailed       conditionReasons = "ConfigMapsCreationFailed"
+	reasonConfigMapsCreated              conditionReasons = "ConfigMapsCreated"
+	reasonDatabaseReconcileFailed        conditionReasons = "DatabaseReconcileFailed"
+	reasonPrivilegesGranted              conditionReasons = "PrivilegesGranted"
+	reasonPrivilegesGrantFailed          conditionReasons = "PrivilegesGrantFailed"
+	reasonPrivilegesTerminalFailure      conditionReasons = "PrivilegesTerminalFailure"
+	reasonCustomMetricsPending           conditionReasons = "CustomMetricsPending"
+	reasonCustomMetricsFailed            conditionReasons = "CustomMetricsFailed"
+	cnpgReasonRecovery                   conditionReasons = "CNPGClusterRecovery"
 
 	// Per-database DatabaseInfo.Message strings.
 	reasonCNPGDatabaseNotFound = "CNPG Database not found"
@@ -135,13 +139,9 @@ const (
 	msgFmtRoleConflict        = "Role conflict in PostgresDatabase %s: %s"
 	msgFmtRoleReconcileFailed = "Role reconciliation failed for PostgresDatabase %s: %s"
 
-	// ClusterReady sentinel values returned by getClusterReadyStatus.
-	ClusterNotReady         clusterReadyStatus = "NotReady"
-	ClusterNoProvisionerRef clusterReadyStatus = "NoProvisionerRef"
-	ClusterReady            clusterReadyStatus = "Ready"
-
 	conflictDeletion               reconcileConflictCategory = "deletion"
 	conflictFinalizer              reconcileConflictCategory = "finalizer"
+	conflictInitialPhase           reconcileConflictCategory = "initial_phase"
 	conflictClusterStatus          reconcileConflictCategory = "cluster_status"
 	conflictRoleConflictStatus     reconcileConflictCategory = "role_conflict_status"
 	conflictSecretsReconcile       reconcileConflictCategory = "secrets_reconcile"
@@ -160,11 +160,11 @@ type clusterEndpoints = pgconninfo.Endpoints
 
 // deletionPlan separates databases by their DeletionPolicy for the cleanup workflow.
 type deletionPlan struct {
-	retained []enterprisev4.DatabaseDefinition
-	deleted  []enterprisev4.DatabaseDefinition
+	retained []platformv1alpha1.DatabaseDefinition
+	deleted  []platformv1alpha1.DatabaseDefinition
 }
 
 // ErrTerminal marks user-actionable errors where retrying the same spec is not expected to succeed.
-var ErrTerminal = errors.New("terminal reconciliation error")
+var ErrTerminal = ports.ErrDBRepoTerminal
 
 var errRoleCleanupPending = errors.New("waiting for managed role cleanup")

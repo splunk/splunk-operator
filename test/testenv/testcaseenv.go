@@ -154,6 +154,30 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 	return testenv, nil
 }
 
+// AttachToExistingEnv builds a TestCaseEnv that points at an already-running SOK
+// installation instead of provisioning a new one. Unlike NewTestCaseEnv, it performs no
+// setup (no namespace/SA/role/operator creation) and registers no cleanup funcs, since the
+// referenced namespace and operator are owned and torn down by something else (e.g. a
+// persistent per-environment SCS deployment that tests must not disrupt). Use NewDeployment
+// on the returned TestCaseEnv to get a Deployment for pod exec / CR reads.
+// namespace is the operator's own namespace (the SCS deploy pipeline installs cluster-wide, so
+// this is conventionally "splunk-operator"); tenant CRs/pods that live in a different,
+// dynamically-discovered namespace are addressed separately by callers via
+// PodExecCommandInNamespace and direct GetKubeClient() reads with an explicit namespace.
+func AttachToExistingEnv(kubeClient client.Client, namespace string, operatorName string) (*TestCaseEnv, error) {
+	testenv := &TestCaseEnv{
+		kubeClient:          kubeClient,
+		name:                namespace,
+		namespace:           namespace,
+		operatorName:        operatorName,
+		SkipTeardown:        true,
+		initialized:         true,
+		clusterWideOperator: "true",
+	}
+	testenv.Log = logf.Log.WithValues("testcaseenv", testenv.name)
+	return testenv, nil
+}
+
 // GetName returns the name of the testenv
 func (testenv *TestCaseEnv) GetName() string {
 	return testenv.name

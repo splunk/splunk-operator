@@ -9,7 +9,6 @@ import (
 
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -27,23 +26,27 @@ import (
 
 	"github.com/pkg/errors"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	standalone "github.com/splunk/splunk-operator/pkg/splunk/reconcile/standalone"
 )
 
 const timeout = time.Second * 10
 const interval = time.Millisecond * 250
 
+var defaultStandaloneApply = standalone.Apply
+var defaultStandaloneApplyStandalone = standalone.ApplyStandalone
+
 var _ = Describe("Standalone Controller", Label("integration"), func() {
 
 	AfterEach(func() {
-
+		standalone.Apply = defaultStandaloneApply
+		standalone.ApplyStandalone = defaultStandaloneApplyStandalone
 	})
 
 	Context("Standalone Management", func() {
 
 		It("Get Standalone custom resource should failed", func() {
 			namespace := "ns-splunk-st-1"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			standalone.Apply = func(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -54,9 +57,9 @@ var _ = Describe("Standalone Controller", Label("integration"), func() {
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create Standalone custom resource with annotations should pause", func() {
+		It("Create Standalone custom resource with annotations delegates reconcile", func() {
 			namespace := "ns-splunk-st-2"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			standalone.Apply = func(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -75,7 +78,7 @@ var _ = Describe("Standalone Controller", Label("integration"), func() {
 
 		It("Create Standalone custom resource should succeeded", func() {
 			namespace := "ns-splunk-st-3"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			standalone.Apply = func(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -88,7 +91,7 @@ var _ = Describe("Standalone Controller", Label("integration"), func() {
 
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-st-4"
-			ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			standalone.ApplyStandalone = func(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -154,7 +157,7 @@ var _ = Describe("Standalone Controller", Label("integration"), func() {
 			ssSpec := testutils.NewStandalone("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 
-			ApplyStandalone = func(ctx context.Context, cl client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+			standalone.ApplyStandalone = func(ctx context.Context, cl splcommon.ControllerClient, cr *enterpriseApi.Standalone) (reconcile.Result, error) {
 				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
 			}
 
@@ -165,12 +168,12 @@ var _ = Describe("Standalone Controller", Label("integration"), func() {
 			// First reconcile: Stalled=False → Stalled=True — Stalled event expected
 			_, err := reconciler.Reconcile(ctx, request)
 			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
-			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + splcommon.EventReasonStalled + ` `)))
 
 			// Second reconcile: Stalled=True → Stalled=True — Warning fires on every stalled reconcile
 			_, err = reconciler.Reconcile(ctx, request)
 			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
-			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + splcommon.EventReasonStalled + ` `)))
 		})
 
 	})

@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -95,13 +95,13 @@ func TestValidateComponentOrder(t *testing.T) {
 	t.Run("canonical component order is valid", func(t *testing.T) {
 		t.Parallel()
 		scheme := newTestScheme()
-		cluster := &enterprisev4.PostgresCluster{
+		cluster := &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 		}
-		clusterClass := &enterprisev4.PostgresClusterClass{
+		clusterClass := &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "cls"},
 		}
-		mergedConfig := &MergedConfig{Spec: &enterprisev4.PostgresClusterSpec{}, CNPG: &enterprisev4.CNPGConfig{}}
+		mergedConfig := &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}, CNPG: &platformv1alpha1.CNPGConfig{}}
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 		contracts := &reconcileContracts{}
 		components := []component{

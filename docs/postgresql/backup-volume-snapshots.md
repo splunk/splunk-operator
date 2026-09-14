@@ -43,7 +43,7 @@ Backup configuration uses the **two-layer** model:
 ### 3.1 PostgresClusterClass (platform team)
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: production
@@ -84,7 +84,7 @@ spec:
 ### 3.2 PostgresCluster (user / application team)
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: my-app-db

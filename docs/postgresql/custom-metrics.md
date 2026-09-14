@@ -30,7 +30,7 @@ PostgreSQL metrics must be enabled in the `PostgresClusterClass`, or enabled for
 the individual cluster:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: orders-postgres
@@ -147,7 +147,7 @@ data:
 Then reference it from the cluster:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: orders-postgres
@@ -172,7 +172,7 @@ metadata:
   name: orders-postgres-metrics
   namespace: apps
   annotations:
-    enterprise.splunk.com/monitoring-config-hash: "sha256:<content-hash>"
+    platform.splunk.com/monitoring-config-hash: "sha256:<content-hash>"
 data:
   queries.yaml: |
     "splunk_operator_cluster:active_connections":
@@ -238,7 +238,7 @@ data:
 Reference it from the matching database entry:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: orders-database

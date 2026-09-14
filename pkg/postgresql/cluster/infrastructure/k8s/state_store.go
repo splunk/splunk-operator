@@ -22,7 +22,7 @@ import (
 	"maps"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -36,7 +36,7 @@ func NewClusterStateStore(c client.Client, key client.ObjectKey) *ClusterStateSt
 	return &ClusterStateStore{client: c, key: key}
 }
 
-func (s *ClusterStateStore) GetSpecificationWithAnnotations(ctx context.Context) (*enterprisev4.PostgresClusterSpec, map[string]string, error) {
+func (s *ClusterStateStore) GetSpecificationWithAnnotations(ctx context.Context) (*platformv1alpha1.PostgresClusterSpec, map[string]string, error) {
 	cluster, err := s.getCluster(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -61,15 +61,15 @@ func (s *ClusterStateStore) SetAnnotations(ctx context.Context, annotations map[
 	return s.client.Update(ctx, cluster)
 }
 
-func (s *ClusterStateStore) GetMajorUpgradeStatus(ctx context.Context) ([]enterprisev4.PostgresMajorUpgradeStatus, error) {
+func (s *ClusterStateStore) GetMajorUpgradeStatus(ctx context.Context) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error) {
 	cluster, err := s.getCluster(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return append([]enterprisev4.PostgresMajorUpgradeStatus(nil), cluster.Status.PostgresMajorUpgradeStatus...), nil
+	return append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), cluster.Status.PostgresMajorUpgradeStatus...), nil
 }
 
-func (s *ClusterStateStore) SetMajorUpgradeStatus(ctx context.Context, entries []enterprisev4.PostgresMajorUpgradeStatus) error {
+func (s *ClusterStateStore) SetMajorUpgradeStatus(ctx context.Context, entries []platformv1alpha1.PostgresMajorUpgradeStatus) error {
 	if s == nil || s.client == nil {
 		return fmt.Errorf("postgres cluster status client is not configured")
 	}
@@ -77,7 +77,7 @@ func (s *ClusterStateStore) SetMajorUpgradeStatus(ctx context.Context, entries [
 	if err != nil {
 		return err
 	}
-	cluster.Status.PostgresMajorUpgradeStatus = append([]enterprisev4.PostgresMajorUpgradeStatus(nil), entries...)
+	cluster.Status.PostgresMajorUpgradeStatus = append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), entries...)
 	return s.client.Status().Update(ctx, cluster)
 }
 
@@ -101,11 +101,11 @@ func (s *ClusterStateStore) GetSourcePgVersion(ctx context.Context) (string, err
 	return fmt.Sprintf("%d", info.MajorVersion), nil
 }
 
-func (s *ClusterStateStore) getCluster(ctx context.Context) (*enterprisev4.PostgresCluster, error) {
+func (s *ClusterStateStore) getCluster(ctx context.Context) (*platformv1alpha1.PostgresCluster, error) {
 	if s == nil || s.client == nil {
 		return nil, fmt.Errorf("postgres cluster status client is not configured")
 	}
-	cluster := &enterprisev4.PostgresCluster{}
+	cluster := &platformv1alpha1.PostgresCluster{}
 	if err := s.client.Get(ctx, s.key, cluster); err != nil {
 		return nil, err
 	}

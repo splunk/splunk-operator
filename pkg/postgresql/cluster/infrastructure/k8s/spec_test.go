@@ -20,7 +20,7 @@ import (
 	"context"
 	"testing"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +32,7 @@ import (
 
 func TestClusterSpecificationGetSpecificationWithAnnotationsReturnsCopies(t *testing.T) {
 	ctx := context.Background()
-	k8sClient, key := newSpecificationTestClient(t, &enterprisev4.PostgresCluster{
+	k8sClient, key := newSpecificationTestClient(t, &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pg1",
 			Namespace: "default",
@@ -40,7 +40,7 @@ func TestClusterSpecificationGetSpecificationWithAnnotationsReturnsCopies(t *tes
 				"existing": "value",
 			},
 		},
-		Spec: enterprisev4.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: ptr.To("18"),
 		},
 	})
@@ -54,7 +54,7 @@ func TestClusterSpecificationGetSpecificationWithAnnotationsReturnsCopies(t *tes
 	*spec.PostgresVersion = "19"
 	annotations["existing"] = "changed"
 
-	cluster := &enterprisev4.PostgresCluster{}
+	cluster := &platformv1alpha1.PostgresCluster{}
 	require.NoError(t, k8sClient.Get(ctx, key, cluster))
 	assert.Equal(t, "18", *cluster.Spec.PostgresVersion)
 	assert.Equal(t, "value", cluster.Annotations["existing"])
@@ -62,7 +62,7 @@ func TestClusterSpecificationGetSpecificationWithAnnotationsReturnsCopies(t *tes
 
 func TestClusterSpecificationSetAnnotationsPersistsAnnotations(t *testing.T) {
 	ctx := context.Background()
-	k8sClient, key := newSpecificationTestClient(t, &enterprisev4.PostgresCluster{
+	k8sClient, key := newSpecificationTestClient(t, &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pg1",
 			Namespace: "default",
@@ -73,23 +73,23 @@ func TestClusterSpecificationSetAnnotationsPersistsAnnotations(t *testing.T) {
 	})
 
 	err := NewClusterStateStore(k8sClient, key).SetAnnotations(ctx, map[string]string{
-		"enterprise.splunk.com/major-upgrade-retry-at": "2026-06-24T10:00:00Z",
+		"platform.splunk.com/major-upgrade-retry-at": "2026-06-24T10:00:00Z",
 	})
 	require.NoError(t, err)
 
-	cluster := &enterprisev4.PostgresCluster{}
+	cluster := &platformv1alpha1.PostgresCluster{}
 	require.NoError(t, k8sClient.Get(ctx, key, cluster))
 	assert.Equal(t, map[string]string{
 		"old": "value",
-		"enterprise.splunk.com/major-upgrade-retry-at": "2026-06-24T10:00:00Z",
+		"platform.splunk.com/major-upgrade-retry-at": "2026-06-24T10:00:00Z",
 	}, cluster.Annotations)
 }
 
-func newSpecificationTestClient(t *testing.T, cluster *enterprisev4.PostgresCluster) (client.Client, client.ObjectKey) {
+func newSpecificationTestClient(t *testing.T, cluster *platformv1alpha1.PostgresCluster) (client.Client, client.ObjectKey) {
 	t.Helper()
 
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 
 	key := client.ObjectKeyFromObject(cluster)
 	return fake.NewClientBuilder().

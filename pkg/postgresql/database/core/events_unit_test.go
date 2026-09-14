@@ -33,6 +33,10 @@ func conditionFalse(condType conditionTypes) metav1.Condition {
 	return metav1.Condition{Type: string(condType), Status: metav1.ConditionFalse}
 }
 
+func conditionFalseWithReason(condType conditionTypes, reason conditionReasons) metav1.Condition {
+	return metav1.Condition{Type: string(condType), Status: metav1.ConditionFalse, Reason: string(reason)}
+}
+
 func conditionTrue(condType conditionTypes) metav1.Condition {
 	return metav1.Condition{Type: string(condType), Status: metav1.ConditionTrue}
 }
@@ -103,6 +107,48 @@ func TestEmitWarnOnceBeforeWait(t *testing.T) {
 	t.Run("suppressed when condition is already False — subsequent poll", func(t *testing.T) {
 		rc, fr := newTestRC(10)
 		rc.emitWarnOnceBeforeWait(obj, []metav1.Condition{conditionFalse(clusterReady)}, clusterReady, "Reason", "msg")
+		assert.Empty(t, fr.Events)
+	})
+}
+
+func TestEmitWarnOnConditionReasonTransition(t *testing.T) {
+	obj := &corev1.ConfigMap{}
+
+	t.Run("emits Warning when condition is absent", func(t *testing.T) {
+		rc, fr := newTestRC(10)
+		rc.emitWarnOnConditionReasonTransition(obj, nil, secretsReady, reasonManagedSecretMissing, "Reason", "msg")
+		assert.Len(t, fr.Events, 1)
+		event := <-fr.Events
+		assert.Contains(t, event, corev1.EventTypeWarning)
+	})
+
+	t.Run("emits Warning when condition is True", func(t *testing.T) {
+		rc, fr := newTestRC(10)
+		rc.emitWarnOnConditionReasonTransition(obj, []metav1.Condition{conditionTrue(secretsReady)}, secretsReady, reasonManagedSecretMissing, "Reason", "msg")
+		assert.Len(t, fr.Events, 1)
+	})
+
+	t.Run("emits Warning when condition is False with a different reason", func(t *testing.T) {
+		rc, fr := newTestRC(10)
+		rc.emitWarnOnConditionReasonTransition(obj,
+			[]metav1.Condition{conditionFalseWithReason(secretsReady, reasonManagedSecretOwnershipConflict)},
+			secretsReady,
+			reasonManagedSecretMissing,
+			"Reason",
+			"msg",
+		)
+		assert.Len(t, fr.Events, 1)
+	})
+
+	t.Run("suppressed when condition is already False with the same reason", func(t *testing.T) {
+		rc, fr := newTestRC(10)
+		rc.emitWarnOnConditionReasonTransition(obj,
+			[]metav1.Condition{conditionFalseWithReason(secretsReady, reasonManagedSecretMissing)},
+			secretsReady,
+			reasonManagedSecretMissing,
+			"Reason",
+			"msg",
+		)
 		assert.Empty(t, fr.Events)
 	})
 }

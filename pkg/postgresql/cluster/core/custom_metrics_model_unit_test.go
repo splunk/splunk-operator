@@ -20,7 +20,7 @@ import (
 	"errors"
 	"testing"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mon "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
@@ -103,7 +103,7 @@ func TestCustomMetricsModel_NonRetryableApplyErrorRemainsFailed(t *testing.T) {
 	deterministic := errors.New("generated ConfigMap is foreign-owned")
 	m := &customMetricsModel{
 		events:  noopEventEmitter{},
-		cluster: &enterprisev4.PostgresCluster{},
+		cluster: &platformv1alpha1.PostgresCluster{},
 	}
 
 	health, err := m.computeHealth(newReconcileFailure(reasonCustomMetricsApplyFailed, deterministic))

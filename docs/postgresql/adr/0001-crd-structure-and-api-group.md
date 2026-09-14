@@ -34,9 +34,10 @@ databases living inside it. Two questions had to be settled before 10.9:
 - **How many CRDs, and where is the seam?** A single fat CRD would couple
   infrastructure provisioning to per-database lifecycle and force one RBAC
   boundary onto two teams.
-- **Which API group and version?** The operator already ships an established
-  `enterprise.splunk.com` group (currently at `v4`) for its Splunk Enterprise
-  resources. A greenfield group such as `database.splunk.com` was possible.
+- **Which API group and version?** The operator already ships the stable
+  `enterprise.splunk.com/v4` API for Splunk Enterprise resources. PostgreSQL is
+  independently owned and still evolving, so it needs an API boundary and
+  pre-v1 version that do not couple it to the enterprise API's stability contract.
 
 ## Decision
 
@@ -48,10 +49,10 @@ databases living inside it. Two questions had to be settled before 10.9:
 | `PostgresCluster` | Namespaced | Service team | One PostgreSQL cluster. References a class by name; applies guard-railed overrides. |
 | `PostgresDatabase` | Namespaced | Service team | Logical databases, roles, extensions, and credentials on a referenced cluster. |
 
-**API group and version:** all three types live in the existing
-`enterprise.splunk.com/v4` group (`api/enterprise/v4/`,
-`api/enterprise/v4/groupversion_info.go`), not a new group. They register into
-the operator's existing scheme alongside the Splunk Enterprise types.
+**API group and version:** all three types live in the dedicated
+`platform.splunk.com/v1alpha1` group (`api/platform/v1alpha1/`). They register
+into their own group-version scheme alongside, but independently from, the
+stable Splunk Enterprise APIs.
 
 Key structural rules that fall out of this split:
 
@@ -81,13 +82,13 @@ Key structural rules that fall out of this split:
   (create/delete a database without touching the cluster), and because the
   cluster and database reconcilers have genuinely different status models and
   failure modes (see [ADR-0002](0002-actuate-converge-reconcile-pattern.md)).
-- **New `database.splunk.com` API group.** A clean group would read well in
-  isolation, but it would mean a second scheme, second set of RBAC group rules,
-  second conversion-webhook story, and a separate versioning timeline to
-  maintain. The resources are shipped by, and only meaningful within, the Splunk
-  Operator, so reusing `enterprise.splunk.com` keeps one scheme, one RBAC group,
-  and one release cadence. **Chosen: reuse `enterprise.splunk.com/v4`** (tracked
-  in CPI-2030, which migrated the types onto the shared group).
+- **Keep `enterprise.splunk.com/v4`.** Rejected: `v4` is a stable public API
+  contract governed by the core SOK API owners, while the PostgreSQL API is
+  pre-v1 and owned by the developing PostgreSQL team. Keeping the types in the
+  enterprise group would couple independent ownership and release timelines.
+- **Use `database.splunk.com`.** Rejected in favor of `platform.splunk.com` so
+  this API group can represent platform-managed services without naming the
+  implementation technology in the group itself.
 - **A dedicated `spec.dedicated: true` flag on PostgresCluster** to distinguish
   shared vs dedicated clusters. Rejected: shared-vs-dedicated is emergent from
   how many `PostgresDatabase` objects point at a cluster, and encoding it as
@@ -96,27 +97,28 @@ Key structural rules that fall out of this split:
 
 ## Consequences
 
-- **Positive:** clean RBAC seam (platform owns classes cluster-wide; service
-  teams own instances in their namespace); independent database lifecycles on a
-  shared cluster; infrastructure changes don't churn database state; one scheme
-  and one release cadence by staying on `enterprise.splunk.com`.
+- **Positive:** clean API ownership and RBAC seam; pre-v1 PostgreSQL types can
+  evolve independently from the stable enterprise API; platform policy remains
+  cluster-scoped while service instances remain namespaced; database lifecycles
+  remain independent from cluster infrastructure.
 - **Negative / costs:**
   - `clusterRef` being a same-namespace `LocalObjectReference` means a
     `PostgresDatabase` cannot target a cluster in another namespace. This is a
     known limitation; cross-namespace database provisioning is out of scope for
     10.9.
-  - Reusing `v4` couples the Postgres types' served version to the enterprise
-    group's version timeline. A future breaking change to the Postgres types
-    would ride the enterprise group's version bump.
+  - A separate API group requires its own scheme registration, RBAC rules,
+    webhook rule, generated CRDs, and version lifecycle.
+  - Moving groups creates new Kubernetes resource identities; no automatic
+    cross-group conversion exists for previously created objects.
   - Three CRDs is more surface area for docs, samples, and validation than one.
 - **Follow-ups:** CPI-2030 (completed API group migration). Cross-namespace
   `clusterRef` remains unaddressed by design.
 
 ## References
 
-- Code: `api/enterprise/v4/postgresclusterclass_types.go`,
-  `api/enterprise/v4/postgrescluster_types.go`,
-  `api/enterprise/v4/postgresdatabase_types.go`,
-  `api/enterprise/v4/groupversion_info.go`
+- Code: `api/platform/v1alpha1/postgresclusterclass_types.go`,
+  `api/platform/v1alpha1/postgrescluster_types.go`,
+  `api/platform/v1alpha1/postgresdatabase_types.go`,
+  `api/platform/v1alpha1/groupversion_info.go`
 - Design docs: "ERD improvement — ClusterClass CRD", "PostgreSQL on k8s + SOK"
 - Jira: CPI-2030, CPI-2066

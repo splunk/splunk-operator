@@ -20,7 +20,7 @@ import (
 	"context"
 	"errors"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	majorversionupgradetypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
@@ -42,7 +42,7 @@ type UseCase interface {
 type Factory func() UseCase
 
 // Predicate checks whether a usecase has been triggered by the user, no i/o, pure.
-type Predicate func(spec *enterprisev4.PostgresClusterSpec) bool
+type Predicate func(spec *platformv1alpha1.PostgresClusterSpec) bool
 
 type Reconciler struct {
 	// building blocks
@@ -54,7 +54,7 @@ type Reconciler struct {
 	scheduled map[string]UseCase
 
 	// misc
-	spec *enterprisev4.PostgresClusterSpec
+	spec *platformv1alpha1.PostgresClusterSpec
 	// cache of produced usecases to have uniform
 	// data across Schedule/Reconcile.
 	cache map[string]UseCase
@@ -68,7 +68,7 @@ var defaultUseCases = []struct {
 	{majorversionupgradetypes.UseCaseName, mvupredicate.Predicate},
 }
 
-func NewUseCaseReconciler(spec *enterprisev4.PostgresClusterSpec, factory map[string]Factory) *Reconciler {
+func NewUseCaseReconciler(spec *platformv1alpha1.PostgresClusterSpec, factory map[string]Factory) *Reconciler {
 	order := make([]string, 0, len(defaultUseCases))
 	predicate := make(map[string]Predicate, len(defaultUseCases))
 	for _, uc := range defaultUseCases {

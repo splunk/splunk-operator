@@ -26,16 +26,18 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type PostgresImageForVersion func(string) (string, error)
 
 type PgUpgradeDriver struct {
-	client          client.Client
-	key             client.ObjectKey
-	targetPgVersion string
-	imageForVersion PostgresImageForVersion
+	client           client.Client
+	key              client.ObjectKey
+	targetPgVersion  string
+	imageForVersion  PostgresImageForVersion
+	imagePullSecrets []cnpgv1.LocalObjectReference
 }
 
 func NewPgUpgradeDriver(client client.Client, key client.ObjectKey, targetPgVersion string) *PgUpgradeDriver {
@@ -54,17 +56,23 @@ func (d *PgUpgradeDriver) WithImageForVersion(imageForVersion PostgresImageForVe
 	return d
 }
 
+func (d *PgUpgradeDriver) WithImagePullSecrets(imagePullSecrets []cnpgv1.LocalObjectReference) *PgUpgradeDriver {
+	d.imagePullSecrets = imagePullSecrets
+	return d
+}
+
 func (d *PgUpgradeDriver) ApplyTargetImage(ctx context.Context) error {
 	cluster, targetImage, err := d.targetImage(ctx)
 	if err != nil {
 		return err
 	}
-	if cluster.Spec.ImageName == targetImage {
+	if cluster.Spec.ImageName == targetImage && equality.Semantic.DeepEqual(cluster.Spec.ImagePullSecrets, d.imagePullSecrets) {
 		return nil
 	}
 
 	original := cluster.DeepCopy()
 	cluster.Spec.ImageName = targetImage
+	cluster.Spec.ImagePullSecrets = d.imagePullSecrets
 	return d.client.Patch(ctx, cluster, client.MergeFrom(original))
 }
 

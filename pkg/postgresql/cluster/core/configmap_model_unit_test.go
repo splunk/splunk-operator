@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +33,7 @@ import (
 func TestGenerateConfigMap(t *testing.T) {
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
 			Namespace: "default",
@@ -88,7 +88,7 @@ func TestGenerateConfigMap(t *testing.T) {
 	t.Run("uses existing configmap name from status", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 		pg := cluster.DeepCopy()
-		pg.Status.Resources = &enterprisev4.PostgresClusterResources{
+		pg.Status.Resources = &platformv1alpha1.PostgresClusterResources{
 			ConfigMapRef: &corev1.LocalObjectReference{Name: "custom-configmap"},
 		}
 
@@ -125,10 +125,10 @@ func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t
 	// Arrange
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Status: enterprisev4.PostgresClusterStatus{
-			Resources: &enterprisev4.PostgresClusterResources{
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Resources: &platformv1alpha1.PostgresClusterResources{
 				ConfigMapRef: &corev1.LocalObjectReference{Name: "pg1-configmap"},
 			},
 		},
@@ -176,7 +176,7 @@ func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t
 
 func TestConfigMapModel_CheckContracts(t *testing.T) {
 	scheme := newTestScheme()
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 	cnpg := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()

@@ -87,6 +87,90 @@ func TestReconcile_DatabaseContributionAcknowledgements(t *testing.T) {
 		assert.Empty(t, cfg.applied)
 	})
 
+	t.Run("invalid cluster source preserves only an exact positive acknowledgement", func(t *testing.T) {
+		previous := []mtypes.DatabaseAcknowledgement{{
+			Identity:        identity,
+			DesiredRevision: contribution.Revision,
+			AppliedRevision: contribution.Revision,
+			Status:          mtypes.AcknowledgementTrue,
+			Reason:          "CustomMetricsReady",
+		}}
+		tests := []struct {
+			name     string
+			revision string
+			status   mtypes.AcknowledgementStatus
+			reason   string
+		}{
+			{name: "confirmed revision", revision: contribution.Revision, status: mtypes.AcknowledgementTrue, reason: "CustomMetricsReady"},
+			{name: "new revision", revision: "updated-revision", status: mtypes.AcknowledgementFalse, reason: "InvalidQueryDefinition"},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				current := contribution
+				current.Revision = tt.revision
+				repo := &stubDataRepository{
+					snapshot: mtypes.DatabaseContributionSnapshot{Contributions: []mtypes.DatabaseContribution{current}},
+				}
+				repo.set("ns", "orders-metrics", "queries.yaml", validQueryYAML)
+				repo.set("ns", "cluster-metrics", "queries.yaml", "invalid: [")
+
+				out, err := newTestModel(repo, &recordingProvisioner{}).
+					Reconcile(t.Context(), clusterWithSources("cluster-metrics"), previous)
+
+				require.NoError(t, err)
+				assert.Equal(t, InvalidQuery, out.Invalid)
+				require.Len(t, out.DatabaseContributions, 1)
+				ack := out.DatabaseContributions[0]
+				assert.Equal(t, tt.status, ack.Status)
+				assert.Equal(t, tt.reason, ack.Reason)
+				assert.Equal(t, current.Revision, ack.DesiredRevision)
+				assert.Equal(t, contribution.Revision, ack.AppliedRevision)
+			})
+		}
+	})
+
+	t.Run("pending rollback observation downgrades an exact positive acknowledgement", func(t *testing.T) {
+		repo := &stubDataRepository{
+			snapshot: mtypes.DatabaseContributionSnapshot{Contributions: []mtypes.DatabaseContribution{contribution}},
+		}
+		repo.set("ns", "orders-metrics", "queries.yaml", validQueryYAML)
+		repo.set("ns", "cluster-metrics", "queries.yaml", "invalid: [")
+		previous := []mtypes.DatabaseAcknowledgement{{
+			Identity:        identity,
+			DesiredRevision: contribution.Revision,
+			AppliedRevision: contribution.Revision,
+			Status:          mtypes.AcknowledgementTrue,
+			Reason:          "CustomMetricsReady",
+		}}
+		cfg := &recordingProvisioner{
+			observation: mtypes.Observation{
+				State:   mtypes.ObservationPending,
+				Message: "waiting for CNPG to consume restored ConfigMap",
+			},
+			rollback: mtypes.RollbackResult{
+				Available: true,
+				Expected: mtypes.ExpectedState{
+					Revision:   contribution.Revision,
+					Enabled:    true,
+					QueryCount: 1,
+				},
+			},
+		}
+
+		out, err := newTestModel(repo, cfg).
+			Reconcile(t.Context(), clusterWithSources("cluster-metrics"), previous)
+
+		require.NoError(t, err)
+		assert.True(t, out.Configuring)
+		assert.True(t, out.Requeue)
+		require.Len(t, out.DatabaseContributions, 1)
+		ack := out.DatabaseContributions[0]
+		assert.Equal(t, mtypes.AcknowledgementUnknown, ack.Status)
+		assert.Equal(t, "CustomMetricsConfiguring", ack.Reason)
+		assert.Equal(t, "waiting for CNPG to consume restored ConfigMap", ack.Message)
+		assert.Equal(t, contribution.Revision, ack.AppliedRevision)
+	})
+
 	t.Run("transient apply error remains retryable with a pending acknowledgement", func(t *testing.T) {
 		repo := &stubDataRepository{
 			snapshot: mtypes.DatabaseContributionSnapshot{

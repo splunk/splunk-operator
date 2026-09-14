@@ -20,7 +20,6 @@ import (
 	"context"
 
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 )
 
 type backupProvider interface {
@@ -29,5 +28,6 @@ type backupProvider interface {
 
 type majorUpgradeInfoStore interface {
 	ReadMajorUpgradeIntent(context.Context) (mvutypes.Intent, bool, error)
-	SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, reconciliationTypes.Report, *mvutypes.BackupInfo) error
+	SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, mvutypes.Progress) error
+	SaveBlueGreenRearm(context.Context, mvutypes.Intent) error
 }

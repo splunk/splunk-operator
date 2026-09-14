@@ -21,13 +21,16 @@ to the target version and explicitly allowing the major-upgrade workflow with
 `PostgresCluster.spec.postgresMajorUpgradeConfig.allow=true`:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
 spec:
   class: postgresql-prod
   postgresVersion: "16"
+  # If postgresImage is set on this cluster or inherited from the class, update
+  # it in the same change so it points at the target PostgreSQL major version.
+  # postgresImage: registry.example.com/team/postgresql:16
   postgresMajorUpgradeConfig:
     allow: true
 ```
@@ -54,6 +57,18 @@ entries for the requested upgrade are `Completed`.
 The operator only supports single-major-version upgrades. A request that skips intermediate versions, such as `15 -> 18`, is rejected with a terminal `Failed` condition and requires manual correction of `spec.postgresVersion` before the workflow can proceed. To reach PostgreSQL 18 from 15, perform sequential upgrades: `15 -> 16`, then `16 -> 17`, then `17 -> 18`.
 
 Minor PostgreSQL version changes are different. A same-major change, such as `15.10 -> 15.12`, is handled by normal cluster reconciliation and is documented in [Minor Version Upgrades](minor-version-upgrade.md).
+
+### Blue/green strategy availability
+
+The `blueGreen` value is reserved in the `postgresMajorUpgradeConfig.strategy`
+API so manifests and durable status can use the upcoming contract. Its runtime
+workflow is not available yet: it does not create a candidate environment,
+replicate data, or switch endpoints.
+
+You may declare future intent with `strategy: blueGreen` and `allow: false`.
+Do not set `allow: true`; admission rejects it until the blue/green workflow is
+released. The procedure in this document applies to the shipped in-place
+`pgUpgrade` strategy.
 
 ### Safety model
 
@@ -85,13 +100,16 @@ export CLUSTER=postgresql-cluster-prod
 Update the tracked `PostgresCluster` manifest:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
 spec:
   class: postgresql-prod
   postgresVersion: "16"
+  # If postgresImage is set on this cluster or inherited from the class, update
+  # it in the same change so it points at the target PostgreSQL major version.
+  # postgresImage: registry.example.com/team/postgresql:16
   postgresMajorUpgradeConfig:
     allow: true
 ```
@@ -170,7 +188,7 @@ Do not use a permanent `retry: true` field in the spec. For terminal failures, r
 
 ```bash
 kubectl annotate postgrescluster $CLUSTER \
-  enterprise.splunk.com/major-upgrade-retry-at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  platform.splunk.com/major-upgrade-retry-at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   -n $NS --overwrite
 ```
 
@@ -199,7 +217,7 @@ After the upgrade reports `Completed` for the requested target version:
 Example final manifest shape after a completed `15 -> 16` upgrade:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod

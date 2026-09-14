@@ -21,7 +21,7 @@ import (
 	"errors"
 	"testing"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	majorversionupgradetypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 )
@@ -188,7 +188,7 @@ func TestReconcilerConstructsRegisteredFactoryOnceAndActs(t *testing.T) {
 	useCase := &fakeUseCase{scheduled: true}
 	built := 0
 	reconciler := NewUseCaseReconciler(
-		&enterprisev4.PostgresClusterSpec{PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{Allow: &allow}},
+		&platformv1alpha1.PostgresClusterSpec{PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: &allow}},
 		map[string]Factory{
 			majorversionupgradetypes.UseCaseName: func() UseCase { built++; return useCase },
 		},
@@ -212,7 +212,7 @@ func TestReconcilerConstructsRegisteredFactoryOnceAndActs(t *testing.T) {
 func TestReconcilerSkipsFactoryReturningNil(t *testing.T) {
 	allow := true
 	reconciler := NewUseCaseReconciler(
-		&enterprisev4.PostgresClusterSpec{PostgresMajorUpgradeConfig: &enterprisev4.PostgresMajorUpgradeConfig{Allow: &allow}},
+		&platformv1alpha1.PostgresClusterSpec{PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: &allow}},
 		map[string]Factory{
 			majorversionupgradetypes.UseCaseName: func() UseCase { return nil },
 		},
@@ -231,7 +231,7 @@ func TestReconcilerTriggerPolicySkipsUntriggeredUseCase(t *testing.T) {
 	built := 0
 	// allow is absent (nil) — trigger policy should gate the use case out.
 	reconciler := NewUseCaseReconciler(
-		&enterprisev4.PostgresClusterSpec{},
+		&platformv1alpha1.PostgresClusterSpec{},
 		map[string]Factory{
 			majorversionupgradetypes.UseCaseName: func() UseCase { built++; return &fakeUseCase{scheduled: true} },
 		},

@@ -116,12 +116,12 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	if phase == enterpriseApi.PhaseReady {
 		if desiredReplicas > previousReadyReplicas && mgr.cr.Status.ReadyReplicas == desiredReplicas {
 			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, EventReasonScaledUp,
+				eventPublisher.Normal(ctx, splcommon.EventReasonScaledUp,
 					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
 			}
 		} else if desiredReplicas < previousReadyReplicas && mgr.cr.Status.ReadyReplicas == desiredReplicas {
 			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, EventReasonScaledDown,
+				eventPublisher.Normal(ctx, splcommon.EventReasonScaledDown,
 					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
 			}
 		}
@@ -263,7 +263,7 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 				"activeRealtimeSearchCount", mgr.cr.Status.Members[n].ActiveRealtimeSearchCount)
 			eventPublisher := GetEventPublisher(ctx, mgr.cr)
 			if eventPublisher != nil {
-				eventPublisher.Warning(ctx, EventReasonDetentionTimeoutForced,
+				eventPublisher.Warning(ctx, splcommon.EventReasonDetentionTimeoutForced,
 					fmt.Sprintf("Member %s forced recycle after %ds in detention with %d active searches",
 						memberName, timeElapsed, activeSearches))
 			} else {

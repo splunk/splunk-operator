@@ -44,6 +44,7 @@ var (
 	// surface that external intervention is required.
 	ErrInvalidUpgradeIntent               = errors.New("major upgrade intent is invalid")
 	ErrUnsupportedUpgradeStrategy         = errors.New("major upgrade strategy is unsupported")
+	ErrBlueGreenStrategyUnavailable       = errors.New("blue/green major upgrade strategy is not implemented")
 	ErrRollbackCapabilityMissing          = errors.New("major upgrade rollback capability port is not configured")
 	ErrBackupProviderMissing              = errors.New("major upgrade backup provider is not configured")
 	ErrRollbackCapabilityUnavailable      = errors.New("major upgrade rollback capability is unavailable")
@@ -119,6 +120,11 @@ func ReportFromError(err error) reconciliationTypes.Report {
 		return reconciliationTypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonUnsupportedUpgradeStrategy, Message: reportMessageUnsupportedUpgradeStrategy,
+			Retry: false, Sleep: ptr.To(reportSleepNone)}
+	case errors.Is(err, ErrBlueGreenStrategyUnavailable):
+		return reconciliationTypes.Report{
+			Name: UseCaseName, Phase: string(Failed),
+			Reason: ReasonBlueGreenStrategyUnavailable, Message: reportMessageBlueGreenStrategyUnavailable,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrRollbackCapabilityMissing):
 		return reconciliationTypes.Report{

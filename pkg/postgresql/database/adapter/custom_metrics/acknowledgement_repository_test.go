@@ -19,7 +19,7 @@ package custom_metrics
 import (
 	"testing"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,8 +32,8 @@ func TestAcknowledgementRepositoryMatchesCompleteIdentity(t *testing.T) {
 		PostgresDatabaseUID:  "uid",
 		DatabaseName:         "orders",
 	}
-	repository := NewAcknowledgementRepository(&enterprisev4.CustomMetricsStatus{
-		DatabaseContributions: []enterprisev4.DatabaseCustomMetricsStatus{{
+	repository := NewAcknowledgementRepository(&platformv1alpha1.CustomMetricsStatus{
+		DatabaseContributions: []platformv1alpha1.DatabaseCustomMetricsStatus{{
 			PostgresDatabaseName: "owner",
 			PostgresDatabaseUID:  "uid",
 			DatabaseName:         "orders",

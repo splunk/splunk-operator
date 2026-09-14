@@ -192,33 +192,6 @@ const (
 	// Number of Licensemaster replicas
 	numberOfLicenseMasterReplicas = 1
 
-	// Telemetry app.conf string
-	telAppConfString = `[install]
-is_configured = 1
-
-[ui]
-is_visible = 0
-label = Splunk Operator for K8s
-
-[launcher]
-author = Splunk
-description = When telemetry is enabled, this app is used to help Splunk understand how many customers are deploying Splunk using Splunk Operator for K8s
-version = 1.0.0
-`
-
-	telAppDefMetaConfString = `[]
-access = read : [ * ], write : [ admin ]
-`
-
-	// Command to create telemetry app on non SHC scenarios
-	createTelAppNonShcString = "mkdir -p /opt/splunk/etc/apps/app_tel_for_sok/default/; mkdir -p /opt/splunk/etc/apps/app_tel_for_sok/metadata/; printf '%%s' \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok/default/app.conf; printf '%%s' \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok/metadata/default.meta"
-
-	// Command to create telemetry app on SHC scenarios
-	createTelAppShcString = "mkdir -p %s/app_tel_for_sok/default/; mkdir -p %s/app_tel_for_sok/metadata/; printf '%%s' \"%s\" > %s/app_tel_for_sok/default/app.conf; printf '%%s' \"%s\" > %s/app_tel_for_sok/metadata/default.meta"
-
-	// Command to reload app configuration
-	telAppReloadString = "curl -k -u admin:%s https://localhost:8089/services/apps/local/_reload"
-
 	managerConfigMapTemplateStr = "%smanager-config"
 )
 
@@ -233,9 +206,14 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// redactSplunkAuth replaces adminPwd in cmd with **** for safe logging.
+// redactSplunkAuth replaces raw and shell-quoted adminPwd in cmd with **** for safe logging.
 func redactSplunkAuth(cmd, adminPwd string) string {
-	return strings.ReplaceAll(cmd, adminPwd, "****")
+	if adminPwd == "" {
+		return cmd
+	}
+
+	redacted := strings.ReplaceAll(cmd, shellQuote(adminPwd), "****")
+	return strings.ReplaceAll(redacted, adminPwd, "****")
 }
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.

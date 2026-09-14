@@ -23,7 +23,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 )
 
@@ -68,7 +68,7 @@ type run struct {
 // Desired-state failures return an Outcome; infrastructure failures return an error.
 func (m *Model) Reconcile(
 	ctx context.Context,
-	cluster *enterprisev4.PostgresCluster,
+	cluster *platformv1alpha1.PostgresCluster,
 	previous []mtypes.DatabaseAcknowledgement,
 ) (Outcome, error) {
 	r := &run{m: m, invalidContributors: map[string]acknowledgementFailure{}}
@@ -325,6 +325,14 @@ func (m *Model) rollback(ctx context.Context, out *Outcome) error {
 		out.Configuring = true
 		out.Requeue = true
 		out.InvalidDetail = appendDiagnostic(out.InvalidDetail, observation.Message)
+		for i := range out.DatabaseContributions {
+			if out.DatabaseContributions[i].Status != mtypes.AcknowledgementTrue {
+				continue
+			}
+			out.DatabaseContributions[i].Status = mtypes.AcknowledgementUnknown
+			out.DatabaseContributions[i].Reason = "CustomMetricsConfiguring"
+			out.DatabaseContributions[i].Message = observation.Message
+		}
 	case mtypes.ObservationReady:
 		if !confirmedMatchesExpected(observation.Confirmed, restored.Expected) {
 			return fmt.Errorf("provisioner reported ready without confirming restored custom-metrics revision %q",

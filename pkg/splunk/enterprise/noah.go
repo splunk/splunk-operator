@@ -111,7 +111,7 @@ func noahDependencyOutcome(err error) (noahDependencyReconcileOutcome, bool) {
 		conditionReason: enterpriseApi.ReasonNoahConfigurationInvalid,
 		conditionStatus: metav1.ConditionFalse,
 		err: splcommon.NewTerminalError(
-			EventReasonNoahConfigurationInvalid,
+			splcommon.EventReasonNoahConfigurationInvalid,
 			"Noah dependency validation failed",
 			dependencyErr,
 		),

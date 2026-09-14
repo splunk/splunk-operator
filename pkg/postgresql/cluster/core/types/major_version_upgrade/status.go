@@ -19,12 +19,17 @@ package majorversionupgradetypes
 type Status string
 
 const (
-	Scheduled         Status = "Scheduled"
-	Preflight         Status = "Preflight"
-	PreUpgradeBackup  Status = "PreUpgradeBackup"
-	Upgrading         Status = "Upgrading"
-	Verifying         Status = "Verifying"
-	PostUpgradeBackup Status = "PostUpgradeBackup"
-	Completed         Status = "Completed"
-	Failed            Status = "Failed"
+	Scheduled          Status = "Scheduled"
+	Preflight          Status = "Preflight"
+	PreUpgradeBackup   Status = "PreUpgradeBackup"
+	Upgrading          Status = "Upgrading"
+	Verifying          Status = "Verifying"
+	PostUpgradeBackup  Status = "PostUpgradeBackup"
+	ReadyForSwitchover Status = "ReadyForSwitchover"
+	SwitchingOver      Status = "SwitchingOver"
+	Recoverable        Status = "Recoverable"
+	Cancelling         Status = "Cancelling"
+	Cancelled          Status = "Cancelled"
+	Completed          Status = "Completed"
+	Failed             Status = "Failed"
 )

@@ -12,11 +12,9 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -136,7 +134,7 @@ type crDeploymentSpec struct {
 }
 
 func collectResourceTelData(spec crDeploymentSpec) map[string]string {
-	resources := enterprise.EffectiveResources(spec.Spec, enterprise.SplunkDefaultResources())
+	resources := splutil.EffectiveResources(spec.Spec.Resources, spec.Spec.DisableResourceDefaults, splutil.SplunkDefaultResources())
 	retData := make(map[string]string)
 	if cpuReq, ok := resources.Requests[corev1.ResourceCPU]; ok {
 		retData[cpuRequestKey] = cpuReq.String()

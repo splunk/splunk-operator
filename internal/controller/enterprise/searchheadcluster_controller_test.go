@@ -25,7 +25,6 @@ import (
 
 	"github.com/pkg/errors"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 var _ = Describe("SearchHeadCluster Controller", Label("integration"), func() {
@@ -161,12 +160,12 @@ var _ = Describe("SearchHeadCluster Controller", Label("integration"), func() {
 			// First reconcile: Stalled=False → Stalled=True — Stalled event expected
 			_, err := reconciler.Reconcile(ctx, request)
 			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
-			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + splcommon.EventReasonStalled + ` `)))
 
 			// Second reconcile: Stalled=True → Stalled=True — Warning fires on every stalled reconcile
 			_, err = reconciler.Reconcile(ctx, request)
 			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
-			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + splcommon.EventReasonStalled + ` `)))
 		})
 
 	})

@@ -19,23 +19,24 @@ package webhook_test
 import (
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/webhook"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/utils/ptr"
 )
 
 func TestValidatePostgresClusterClassCreate(t *testing.T) {
 	tests := []struct {
 		name         string
-		obj          *enterpriseApi.PostgresClusterClass
+		obj          *platformApi.PostgresClusterClass
 		wantErrCount int
 		wantErrField string
 	}{
 		{
 			name: "valid - no config",
-			obj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 				},
 			},
@@ -43,20 +44,20 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 		},
 		{
 			name: "valid - config without pgHBA",
-			obj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config:      &enterpriseApi.PostgresClusterClassConfig{},
+					Config:      &platformApi.PostgresClusterClassConfig{},
 				},
 			},
 			wantErrCount: 0,
 		},
 		{
 			name: "valid - correct pgHBA rules",
-			obj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{
 							"hostnossl all all 0.0.0.0/0 reject",
 							"hostssl all all 0.0.0.0/0 scram-sha-256",
@@ -67,11 +68,65 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name: "invalid - bad connection type",
-			obj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			name: "valid - tagged postgresImage",
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
+						PostgresVersion: ptr.To("18"),
+						PostgresImage:   ptr.To("registry.example.com/team/postgresql:18.1"),
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "valid - tag plus digest postgresImage",
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &platformApi.PostgresClusterClassConfig{
+						PostgresVersion: ptr.To("18"),
+						PostgresImage:   ptr.To("registry.example.com/team/postgresql:18.1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+					},
+				},
+			},
+			wantErrCount: 0,
+		},
+		{
+			name: "invalid - latest postgresImage",
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &platformApi.PostgresClusterClassConfig{
+						PostgresVersion: ptr.To("18"),
+						PostgresImage:   ptr.To("registry.example.com/team/postgresql:latest"),
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.config.postgresImage",
+		},
+		{
+			name: "invalid - postgresImage major mismatch",
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &platformApi.PostgresClusterClassConfig{
+						PostgresVersion: ptr.To("18"),
+						PostgresImage:   ptr.To("registry.example.com/team/postgresql:17.5"),
+					},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.config.postgresImage",
+		},
+		{
+			name: "invalid - bad connection type",
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
+					Provisioner: "postgresql.cnpg.io",
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{
 							"hostx all all 0.0.0.0/0 md5",
 						},
@@ -83,10 +138,10 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 		},
 		{
 			name: "invalid - bad CIDR in class",
-			obj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{
 							"host all all 256.1.1.1/24 md5",
 						},
@@ -98,10 +153,10 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 		},
 		{
 			name: "invalid - unknown auth method in class",
-			obj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{
 							"host all all 0.0.0.0/0 bogus",
 						},
@@ -127,22 +182,22 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 func TestValidatePostgresClusterClassUpdate(t *testing.T) {
 	tests := []struct {
 		name         string
-		obj          *enterpriseApi.PostgresClusterClass
-		oldObj       *enterpriseApi.PostgresClusterClass
+		obj          *platformApi.PostgresClusterClass
+		oldObj       *platformApi.PostgresClusterClass
 		wantErrCount int
 	}{
 		{
 			name: "valid update",
-			obj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{"host all all 0.0.0.0/0 scram-sha-256"},
 					},
 				},
 			},
-			oldObj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			oldObj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 				},
 			},
@@ -150,16 +205,16 @@ func TestValidatePostgresClusterClassUpdate(t *testing.T) {
 		},
 		{
 			name: "invalid update - bad pgHBA",
-			obj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			obj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterpriseApi.PostgresClusterClassConfig{
+					Config: &platformApi.PostgresClusterClassConfig{
 						PgHBA: []string{"host all all 0.0.0.0/0 fake-method"},
 					},
 				},
 			},
-			oldObj: &enterpriseApi.PostgresClusterClass{
-				Spec: enterpriseApi.PostgresClusterClassSpec{
+			oldObj: &platformApi.PostgresClusterClass{
+				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 				},
 			},
@@ -181,8 +236,8 @@ func TestValidatePostgresClusterClassCreateFeatureGateDisabled(t *testing.T) {
 		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): true})
 	})
 
-	obj := &enterpriseApi.PostgresClusterClass{
-		Spec: enterpriseApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
+	obj := &platformApi.PostgresClusterClass{
+		Spec: platformApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
 	}
 
 	errs := webhook.ValidatePostgresClusterClassCreate(obj)
@@ -197,8 +252,8 @@ func TestValidatePostgresClusterClassUpdateFeatureGateDisabled(t *testing.T) {
 		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): true})
 	})
 
-	obj := &enterpriseApi.PostgresClusterClass{
-		Spec: enterpriseApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
+	obj := &platformApi.PostgresClusterClass{
+		Spec: platformApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
 	}
 	oldObj := obj.DeepCopy()
 
@@ -209,18 +264,18 @@ func TestValidatePostgresClusterClassUpdateFeatureGateDisabled(t *testing.T) {
 }
 
 func TestGetPostgresClusterClassWarningsOnCreate(t *testing.T) {
-	obj := &enterpriseApi.PostgresClusterClass{
-		Spec: enterpriseApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
+	obj := &platformApi.PostgresClusterClass{
+		Spec: platformApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
 	}
 	assert.Empty(t, webhook.GetPostgresClusterClassWarningsOnCreate(obj))
 }
 
 func TestGetPostgresClusterClassWarningsOnUpdate(t *testing.T) {
-	obj := &enterpriseApi.PostgresClusterClass{
-		Spec: enterpriseApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
+	obj := &platformApi.PostgresClusterClass{
+		Spec: platformApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
 	}
-	oldObj := &enterpriseApi.PostgresClusterClass{
-		Spec: enterpriseApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
+	oldObj := &platformApi.PostgresClusterClass{
+		Spec: platformApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
 	}
 	assert.Empty(t, webhook.GetPostgresClusterClassWarningsOnUpdate(obj, oldObj))
 }

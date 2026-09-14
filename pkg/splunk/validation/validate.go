@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 )
 
 var (
@@ -37,6 +38,7 @@ var (
 
 func init() {
 	_ = enterpriseApi.AddToScheme(scheme)
+	_ = platformApi.AddToScheme(scheme)
 	codecs = serializer.NewCodecFactory(scheme)
 }
 

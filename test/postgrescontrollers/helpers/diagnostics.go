@@ -20,7 +20,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	snapshotclient "github.com/kubernetes-csi/external-snapshotter/client/v8/clientset/versioned"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -34,7 +34,7 @@ func RegisterSnapshotFailureDump(kubeClient client.Client, snapshots snapshotcli
 			return
 		}
 
-		clusters := &enterprisev4.PostgresClusterList{}
+		clusters := &platformv1alpha1.PostgresClusterList{}
 		if err := kubeClient.List(ctx, clusters, client.InNamespace(namespace)); err != nil {
 			fmt.Fprintf(GinkgoWriter, "snapshot diagnostics: listing PostgresClusters: %v\n", err)
 		} else {
