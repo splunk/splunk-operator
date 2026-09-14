@@ -5,7 +5,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// 	http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,8 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package indexercluster owns the reconcile loop for the IndexerCluster CR.
-Owns the IndexerCluster request-level Apply entry point.
-*/
 package indexercluster
+
+import splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
+
+// NewSplunkClientFunc is the factory signature used by the IndexerCluster pod manager.
+type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient

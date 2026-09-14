@@ -1,4 +1,19 @@
-package enterprise
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package upgrade
 
 import (
 	"context"
@@ -8,17 +23,16 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// helps in mock function
-var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
-	cm := mgr.getClusterManagerClient(ctx)
-	return cm.GetClusterInfo(false)
-}
+// ClusterInfoFunc supplies current IndexerCluster information from its manager.
+type ClusterInfoFunc func(context.Context) (*splclient.ClusterInfo, error)
 
 // UpgradePathValidation is used in validating if upgrade can be done to given custom resource
 //
@@ -32,11 +46,11 @@ var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager
 //     if its multisite then do 1 site at a time
 //     function returns bool and error , true  - go ahead with upgrade
 //     false -  exit the reconciliation loop with error
-func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, mgr *indexerClusterPodManager) (bool, error) {
+func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, getClusterInfo ClusterInfoFunc) (bool, error) {
 	logger := logging.FromContext(ctx).With("func", "UpgradePathValidation", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := getEventPublisher(ctx)
 
 	kind := cr.GroupVersionKind().Kind
 	logger.InfoContext(ctx, "kind is set to", "kind", kind)
@@ -74,7 +88,7 @@ LicenseManager:
 		}
 
 		// get current image of license manager
-		lmImage, err := getCurrentImage(ctx, c, licenseManager, SplunkLicenseManager)
+		lmImage, err := getCurrentImage(ctx, c, licenseManager, splcommon.SplunkLicenseManager)
 		if err != nil {
 			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not get the License Manager image — check operator logs for details")
 			logger.ErrorContext(ctx, "unable to get LicenseManager current image", "error", err)
@@ -101,7 +115,7 @@ ClusterManager:
 		}
 		namespacedName := types.NamespacedName{
 			Namespace: cr.GetNamespace(),
-			Name:      GetSplunkStatefulsetName(SplunkClusterManager, cr.GetName()),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkClusterManager, cr.GetName()),
 		}
 
 		// check if the stateful set is created at this instance
@@ -134,7 +148,7 @@ ClusterManager:
 		}
 
 		/// get the cluster manager image referred in custom resource
-		cmImage, err := getCurrentImage(ctx, c, clusterManager, SplunkClusterManager)
+		cmImage, err := getCurrentImage(ctx, c, clusterManager, splcommon.SplunkClusterManager)
 		if err != nil {
 			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not get the Cluster Manager image — check operator logs for details")
 			logger.ErrorContext(ctx, "unable to get ClusterManager current image", "error", err)
@@ -160,13 +174,11 @@ ClusterManager:
 IndexerCluster:
 	if cr.GroupVersionKind().Kind == "IndexerCluster" {
 
-		// if manager client is not defined, then assign current client
-		if mgr.c == nil {
-			mgr.c = c
-		}
-
 		// check cluster info call using splunk rest api
-		clusterInfo, err := GetClusterInfoCall(ctx, mgr, false)
+		if getClusterInfo == nil {
+			return false, fmt.Errorf("cluster info provider is required for IndexerCluster upgrade validation")
+		}
+		clusterInfo, err := getClusterInfo(ctx)
 		if err != nil {
 			return false, fmt.Errorf("could not get cluster info from cluster manager")
 		}
@@ -175,7 +187,7 @@ IndexerCluster:
 			opts := []runtime.ListOption{
 				runtime.InNamespace(cr.GetNamespace()),
 			}
-			indexerList, err := getIndexerClusterList(ctx, c, cr, opts)
+			indexerList, err := k8sops.GetIndexerClusterList(ctx, c, cr, opts)
 			if err != nil {
 				return false, err
 			}
@@ -195,7 +207,7 @@ IndexerCluster:
 			}
 			if len(preIdx.Name) != 0 {
 				// check if previous indexer have completed before starting next one
-				image, _ := getCurrentImage(ctx, c, &preIdx, SplunkIndexer)
+				image, _ := getCurrentImage(ctx, c, &preIdx, splcommon.SplunkIndexer)
 				if preIdx.Status.Phase != enterpriseApi.PhaseReady || image != spec.Image {
 					return false, nil
 				}
@@ -211,7 +223,7 @@ SearchHeadCluster:
 
 		namespacedName := types.NamespacedName{
 			Namespace: cr.GetNamespace(),
-			Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkSearchHead, cr.GetName()),
 		}
 
 		// check if the stateful set is created at this instance
@@ -256,7 +268,7 @@ SearchHeadCluster:
 			goto MonitoringConsole
 		}
 
-		shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, SplunkSearchHead)
+		shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, splcommon.SplunkSearchHead)
 		if err != nil {
 			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not get the Search Head Cluster image — check operator logs for details")
 			logger.ErrorContext(ctx, "unable to get SearchHeadCluster current image", "error", err)
