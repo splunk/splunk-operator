@@ -219,6 +219,7 @@ const (
 	secretsReady       conditionTypes = "SecretsReady"
 	configMapsReady    conditionTypes = "ConfigMapsReady"
 	customMetricsReady conditionTypes = "CustomMetricsReady"
+	readyCondition     conditionTypes = "Ready"
 
 	// credential-sweep log values
 	credentialSweepLogOutcomeSuccess string = "success"
@@ -230,6 +231,7 @@ const (
 
 	// condition reasons — cross-component
 	reasonUpstreamNotReady conditionReasons = "UpstreamNotReady"
+	reasonClusterReady     conditionReasons = "AllComponentsReady"
 
 	// condition reasons — cluster/provisioner
 	reasonClusterClassNotFound       conditionReasons = "ClusterClassNotFound"

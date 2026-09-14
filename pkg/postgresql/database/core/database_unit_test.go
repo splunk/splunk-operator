@@ -364,7 +364,13 @@ func TestPostgresDatabaseServiceInitialPhase(t *testing.T) {
 			require.NotNil(t, stored.Status.Phase)
 			assert.Equal(t, tt.wantPhase, *stored.Status.Phase)
 			if tt.wantInitialized {
-				assert.Empty(t, stored.Status.Conditions)
+				// Initialization writes the aggregate Ready condition and nothing else, so
+				// external tooling can key off Ready as soon as the phase is observable.
+				require.Len(t, stored.Status.Conditions, 1)
+				readyCond := meta.FindStatusCondition(stored.Status.Conditions, string(readyCondition))
+				require.NotNil(t, readyCond)
+				assert.Equal(t, metav1.ConditionFalse, readyCond.Status)
+				assert.Equal(t, string(pendingDBPhase), readyCond.Reason)
 				assert.Nil(t, stored.Status.ObservedGeneration)
 				require.NotNil(t, stored.Status.LastTransitionTime)
 				assert.Equal(t, stored.CreationTimestamp, *stored.Status.LastTransitionTime)
@@ -1191,19 +1197,116 @@ func TestSetStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, postgresDB.Status.Phase)
 	assert.Equal(t, string(provisioningDBPhase), *postgresDB.Status.Phase)
-	require.Len(t, postgresDB.Status.Conditions, 1)
+	require.Len(t, postgresDB.Status.Conditions, 2)
 	assert.Equal(t, string(clusterReady), postgresDB.Status.Conditions[0].Type)
 	assert.Equal(t, metav1.ConditionTrue, postgresDB.Status.Conditions[0].Status)
 	assert.Equal(t, string(reasonClusterAvailable), postgresDB.Status.Conditions[0].Reason)
 	assert.Equal(t, "Cluster is operational", postgresDB.Status.Conditions[0].Message)
 	assert.Equal(t, postgresDB.Generation, postgresDB.Status.Conditions[0].ObservedGeneration)
 
+	readyCond := meta.FindStatusCondition(postgresDB.Status.Conditions, string(readyCondition))
+	require.NotNil(t, readyCond)
+	assert.Equal(t, metav1.ConditionFalse, readyCond.Status,
+		"clusterReady=True at provisioningDBPhase must not be forwarded verbatim onto Ready — it would self-contradict")
+	assert.Equal(t, string(provisioningDBPhase), readyCond.Reason)
+	assert.Equal(t, "PostgresDatabase is in phase Provisioning", readyCond.Message)
+
 	got := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, got))
 	require.NotNil(t, got.Status.Phase)
 	assert.Equal(t, *postgresDB.Status.Phase, *got.Status.Phase)
-	require.Len(t, got.Status.Conditions, 1)
-	assert.Equal(t, postgresDB.Status.Conditions[0], got.Status.Conditions[0])
+	require.Len(t, got.Status.Conditions, 2)
+	assert.Equal(t, postgresDB.Status.Conditions, got.Status.Conditions)
+}
+
+func TestSetStatusReadyConditionPerPhase(t *testing.T) {
+	scheme := testScheme(t)
+	testCases := []struct {
+		name            string
+		conditionType   conditionTypes
+		status          metav1.ConditionStatus
+		reason          conditionReasons
+		message         string
+		phase           reconcileDBPhases
+		wantReadyTrue   bool
+		wantReadyReason conditionReasons
+	}{
+		{
+			name:            "pending",
+			conditionType:   clusterReady,
+			status:          metav1.ConditionFalse,
+			reason:          reasonClusterNotFound,
+			message:         "Cluster CR not found",
+			phase:           pendingDBPhase,
+			wantReadyTrue:   false,
+			wantReadyReason: reasonClusterNotFound,
+		},
+		{
+			name:            "provisioning",
+			conditionType:   secretsReady,
+			status:          metav1.ConditionTrue,
+			reason:          reasonSecretsCreated,
+			message:         "All secrets provisioned",
+			phase:           provisioningDBPhase,
+			wantReadyTrue:   false,
+			wantReadyReason: conditionReasons(provisioningDBPhase),
+		},
+		{
+			name:            "failed",
+			conditionType:   rolesReady,
+			status:          metav1.ConditionFalse,
+			reason:          reasonRoleConflict,
+			message:         "role conflict",
+			phase:           failedDBPhase,
+			wantReadyTrue:   false,
+			wantReadyReason: reasonRoleConflict,
+		},
+		{
+			name:            "deleting",
+			conditionType:   rolesReady,
+			status:          metav1.ConditionFalse,
+			reason:          reasonRoleCleanupWaiting,
+			message:         "waiting for cleanup",
+			phase:           deletingDBPhase,
+			wantReadyTrue:   false,
+			wantReadyReason: reasonRoleCleanupWaiting,
+		},
+		{
+			name:            "ready",
+			conditionType:   privilegesReady,
+			status:          metav1.ConditionTrue,
+			reason:          reasonPrivilegesGranted,
+			message:         "granted",
+			phase:           readyDBPhase,
+			wantReadyTrue:   true,
+			wantReadyReason: reasonDatabaseReady,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			existing := &platformv1alpha1.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", Generation: 3},
+			}
+			c := testClient(t, scheme, existing)
+			postgresDB := &platformv1alpha1.PostgresDatabase{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
+
+			require.NoError(t, persistStatus(
+				context.Background(), c, &pgprometheus.NoopRecorder{}, postgresDB, false,
+				tc.conditionType, tc.status, tc.reason, tc.message, tc.phase,
+			))
+
+			readyCond := meta.FindStatusCondition(postgresDB.Status.Conditions, string(readyCondition))
+			require.NotNil(t, readyCond)
+			if tc.wantReadyTrue {
+				assert.Equal(t, metav1.ConditionTrue, readyCond.Status)
+			} else {
+				assert.Equal(t, metav1.ConditionFalse, readyCond.Status)
+			}
+			assert.Equal(t, string(tc.wantReadyReason), readyCond.Reason)
+		})
+	}
 }
 
 func TestPersistCustomMetricsPublication(t *testing.T) {
@@ -1550,6 +1653,9 @@ func TestPersistStatusStartsReadinessCycleOnce(t *testing.T) {
 	))
 	require.NotNil(t, db.Status.LastTransitionTime)
 	lastTransitionTime := *db.Status.LastTransitionTime
+	readyCond := meta.FindStatusCondition(db.Status.Conditions, string(readyCondition))
+	require.NotNil(t, readyCond)
+	readyLastTransition := readyCond.LastTransitionTime
 
 	stored := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, stored))
@@ -1563,6 +1669,12 @@ func TestPersistStatusStartsReadinessCycleOnce(t *testing.T) {
 	))
 	require.NotNil(t, stored.Status.LastTransitionTime)
 	assert.Equal(t, lastTransitionTime, *stored.Status.LastTransitionTime)
+
+	readyCond = meta.FindStatusCondition(stored.Status.Conditions, string(readyCondition))
+	require.NotNil(t, readyCond)
+	assert.Equal(t, metav1.ConditionFalse, readyCond.Status)
+	assert.Equal(t, readyLastTransition, readyCond.LastTransitionTime,
+		"Ready's Status did not change across the routine update, so its LastTransitionTime must not churn")
 }
 
 func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpdate(t *testing.T) {
@@ -1590,6 +1702,10 @@ func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpda
 		"Cluster is operational", provisioningDBPhase,
 	))
 	require.Nil(t, db.Status.LastTransitionTime)
+	readyCond := meta.FindStatusCondition(db.Status.Conditions, string(readyCondition))
+	require.NotNil(t, readyCond)
+	assert.Equal(t, metav1.ConditionFalse, readyCond.Status)
+	readyLastTransition := readyCond.LastTransitionTime
 
 	require.NoError(t, persistStatus(
 		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
@@ -1597,6 +1713,12 @@ func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpda
 		"managed role secret drift detected", provisioningDBPhase,
 	))
 	require.NotNil(t, db.Status.LastTransitionTime)
+
+	readyCond = meta.FindStatusCondition(db.Status.Conditions, string(readyCondition))
+	require.NotNil(t, readyCond)
+	assert.Equal(t, metav1.ConditionFalse, readyCond.Status)
+	assert.Equal(t, readyLastTransition, readyCond.LastTransitionTime,
+		"Ready stayed False across both calls, so its LastTransitionTime must not churn even though Reason/Message changed")
 
 	persisted := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, persisted))
@@ -4543,6 +4665,51 @@ func TestCleanupManagedRolesPublishesAbsentRolesAndWaitsForClusterDrop(t *testin
 	require.NotNil(t, condition)
 	assert.Equal(t, string(reasonRoleCleanupBlocked), condition.Reason)
 	assert.Contains(t, condition.Message, "retaining finalizer")
+}
+
+// Regression test for the cleanupManagedRoles bypass: a blocked deletion must flip a
+// previously Ready=True aggregate condition to False, not leave it stuck at True.
+func TestCleanupManagedRolesBlockedDeletionFlipsReadyToFalse(t *testing.T) {
+	ctx := t.Context()
+	scheme := testScheme(t)
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default", UID: types.UID("db-uid"), Finalizers: []string{postgresDatabaseFinalizerName}},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "pg"},
+			Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "app"}},
+		},
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			Conditions: []metav1.Condition{{
+				Type:               string(readyCondition),
+				Status:             metav1.ConditionTrue,
+				Reason:             string(reasonDatabaseReady),
+				Message:            "All PostgresDatabase checks passed",
+				LastTransitionTime: metav1.Now(),
+			}},
+		},
+	}
+	// Deletion is requested out-of-band (no DeletionTimestamp needed for cleanupManagedRoles itself).
+	now := metav1.Now()
+	postgresDB.DeletionTimestamp = &now
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+		Status: platformv1alpha1.PostgresClusterStatus{ManagedRolesStatus: &platformv1alpha1.ManagedRolesStatus{RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
+			"app_admin": {Name: "orders", UID: "db-uid"},
+			"app_rw":    {Name: "orders", UID: "db-uid"},
+		}}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}})
+	require.ErrorIs(t, err, errRoleCleanupPending)
+
+	updated := &platformv1alpha1.PostgresDatabase{}
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "orders", Namespace: "default"}, updated))
+	readyCond := meta.FindStatusCondition(updated.Status.Conditions, string(readyCondition))
+	require.NotNil(t, readyCond)
+	assert.Equal(t, metav1.ConditionFalse, readyCond.Status,
+		"Ready must flip to False while deletion is blocked waiting for the cluster to drop managed roles")
 }
 
 func TestCleanupManagedRolesReleasesWhenClusterNoLongerOwnsRoles(t *testing.T) {

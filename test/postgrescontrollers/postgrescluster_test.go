@@ -22,6 +22,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -69,6 +70,9 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
+				readyCondition := meta.FindStatusCondition(pc.Status.Conditions, "Ready")
+				g.Expect(readyCondition).NotTo(BeNil())
+				g.Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			By("verifying CNPG Cluster exists and is healthy")

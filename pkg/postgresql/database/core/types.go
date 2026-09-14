@@ -95,8 +95,10 @@ const (
 	configMapsReady    conditionTypes = "ConfigMapsReady"
 	privilegesReady    conditionTypes = "PrivilegesReady"
 	customMetricsReady conditionTypes = "CustomMetricsReady"
+	readyCondition     conditionTypes = "Ready"
 
 	// condition reasons
+	reasonDatabaseReady                  conditionReasons = "AllChecksPassed"
 	reasonClusterNotFound                conditionReasons = "ClusterNotFound"
 	reasonClusterProvisioning            conditionReasons = "ClusterProvisioning"
 	reasonClusterRecovery                conditionReasons = "ClusterRecovery"

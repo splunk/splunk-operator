@@ -487,6 +487,7 @@ func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, clu
 	if phase != "" {
 		p := string(phase)
 		cluster.Status.Phase = &p
+		applyReadyCondition(cluster, phase, status, reason, message)
 	}
 	cluster.Status.ObservedGeneration = &cluster.Generation
 	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
@@ -510,6 +511,27 @@ func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, clu
 		return fmt.Errorf("failed to update PostgresCluster status: %w", err)
 	}
 	return nil
+}
+
+// applyReadyCondition derives the aggregate Ready condition from the phase this write is
+// transitioning to. setStatus's non-ready-phase calls always pair with ConditionFalse by
+// construction (see newFailedHealth/newPendingHealth/newProvisioningHealth/newConfiguringHealth),
+// so — unlike the database package — forwarding the triggering reason/message verbatim is safe here.
+func applyReadyCondition(cluster *platformv1alpha1.PostgresCluster, phase reconcileClusterPhases, status metav1.ConditionStatus, reason conditionReasons, message string) {
+	readyStatus, readyReason, readyMessage := metav1.ConditionFalse, reason, message
+	switch {
+	case phase == readyClusterPhase:
+		readyStatus, readyReason, readyMessage = metav1.ConditionTrue, reasonClusterReady, "All PostgresCluster components are ready"
+	case status != metav1.ConditionFalse:
+		readyReason, readyMessage = conditionReasons(phase), fmt.Sprintf("PostgresCluster is in phase %s", phase)
+	}
+	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+		Type:               string(readyCondition),
+		Status:             readyStatus,
+		Reason:             string(readyReason),
+		Message:            readyMessage,
+		ObservedGeneration: cluster.Generation,
+	})
 }
 
 func setStatusFromHealth(ctx context.Context, c client.Client, metrics ports.Recorder, cluster *platformv1alpha1.PostgresCluster, before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
@@ -566,6 +588,7 @@ func setPhaseStatus(ctx context.Context, c client.Client, cluster *platformv1alp
 	p := string(phase)
 	cluster.Status.Phase = &p
 	beginReadinessCycle(cluster, before, phase)
+	applyReadyCondition(cluster, phase, metav1.ConditionTrue, "", "")
 	completedReadinessCycle := phase == readyClusterPhase && cluster.Status.LastTransitionTime != nil
 	var lastTransitionTime time.Time
 	if completedReadinessCycle {
