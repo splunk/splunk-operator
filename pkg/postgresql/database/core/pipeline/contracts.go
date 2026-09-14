@@ -26,14 +26,20 @@ type ContractKey string
 
 type CNPGDatabasesReadyContract struct{}
 
+type CredentialsReadyContract struct{}
+
 type RWPrivilegesReadyContract struct{}
+
+type ConnectionMetadataReadyContract struct{}
 
 // Contracts carries typed per-pass facts that earlier steps publish for later
 // steps. It is intentionally not a general data bus; nil fields mean those
 // facts are absent in this pass.
 type Contracts struct {
-	CNPGDatabasesReady *CNPGDatabasesReadyContract
-	RWPrivilegesReady  *RWPrivilegesReadyContract
+	CredentialsReady        *CredentialsReadyContract
+	CNPGDatabasesReady      *CNPGDatabasesReadyContract
+	RWPrivilegesReady       *RWPrivilegesReadyContract
+	ConnectionMetadataReady *ConnectionMetadataReadyContract
 
 	useCaseStepResults map[*useCaseStep]useCaseStepResult
 }
@@ -49,10 +55,14 @@ func (c *Contracts) Has(key ContractKey) bool {
 		return false
 	}
 	switch key {
+	case ContractDatabaseCredentialsReady:
+		return c.CredentialsReady != nil
 	case ContractDatabaseCNPGDatabasesReady:
 		return c.CNPGDatabasesReady != nil
 	case ContractDatabaseRWPrivilegesReady:
 		return c.RWPrivilegesReady != nil
+	case ContractDatabaseConnectionMetadataReady:
+		return c.ConnectionMetadataReady != nil
 	default:
 		return false
 	}

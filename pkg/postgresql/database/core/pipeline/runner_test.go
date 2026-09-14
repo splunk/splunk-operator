@@ -23,7 +23,9 @@ import (
 
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -247,6 +249,69 @@ func TestRun_SilentStopReturnsNilErrorAndNoRequeue(t *testing.T) {
 	require.Equal(t, ctrl.Result{}, outcome.Result())
 	require.Zero(t, persistCalls)
 	require.Zero(t, reached.observeCalls)
+}
+
+func TestRun_ImmediateRequeueReturnsWithoutPersistingFailureStatus(t *testing.T) {
+	wantErr := apierrors.NewConflict(schema.GroupResource{Group: "platform.splunk.com", Resource: "postgresdatabases"}, "primary", errors.New("write conflict"))
+	reached := convergedStep("unreached")
+	requeue := &fakeStep{
+		name: "conflict",
+		observeFunc: func(*Contracts, error) (reconciliationTypes.Outcome, error) {
+			return reconciliationTypes.ImmediateRequeue(wantErr), nil
+		},
+	}
+
+	persistCalls := 0
+	outcome, err := Run(context.Background(), []Step{requeue, reached}, func(context.Context, reconciliationTypes.Outcome) error {
+		persistCalls++
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, reconciliationTypes.ModeImmediateRequeue, outcome.Mode())
+	require.Equal(t, ctrl.Result{Requeue: true}, outcome.Result())
+	require.ErrorIs(t, outcome.Err(), wantErr)
+	require.Zero(t, persistCalls)
+	require.Zero(t, reached.observeCalls)
+}
+
+func TestRun_StatusWriteConflictImmediatelyRequeuesWithoutReturningError(t *testing.T) {
+	wantErr := apierrors.NewConflict(schema.GroupResource{Group: "platform.splunk.com", Resource: "postgresdatabases"}, "primary", errors.New("write conflict"))
+	reached := convergedStep("unreached")
+	statusStep := &fakeStep{
+		name: "connection-metadata",
+		observeFunc: func(*Contracts, error) (reconciliationTypes.Outcome, error) {
+			return reconciliationTypes.ConvergedStatus("ConfigMapsReady", "ConfigMapsCreated", "ready", "Provisioning"), nil
+		},
+	}
+
+	outcome, err := Run(t.Context(), []Step{statusStep, reached}, func(context.Context, reconciliationTypes.Outcome) error {
+		return wantErr
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, reconciliationTypes.ModeImmediateRequeue, outcome.Mode())
+	require.Equal(t, ctrl.Result{Requeue: true}, outcome.Result())
+	require.True(t, apierrors.IsConflict(outcome.Err()))
+	require.Zero(t, reached.observeCalls)
+}
+
+func TestRun_StatusWriteFailurePreservesReconciliationError(t *testing.T) {
+	reconcileErr := errors.New("configmap write failed")
+	statusErr := errors.New("status write failed")
+	failing := &fakeStep{
+		name: "connection-metadata",
+		observeFunc: func(*Contracts, error) (reconciliationTypes.Outcome, error) {
+			return reconciliationTypes.RetryableRequeue("ConfigMapsReady", "ConfigMapsCreationFailed", "failed", "Provisioning", reconcileErr), nil
+		},
+	}
+
+	outcome, err := Run(t.Context(), []Step{failing}, func(context.Context, reconciliationTypes.Outcome) error {
+		return statusErr
+	})
+
+	require.ErrorIs(t, err, reconcileErr)
+	require.ErrorContains(t, err, "status write failed")
+	require.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
 }
 
 func TestRun_WellBehavedMutatingStepReconciles(t *testing.T) {
