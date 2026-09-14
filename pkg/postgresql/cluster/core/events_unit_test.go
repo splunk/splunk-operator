@@ -23,6 +23,7 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -92,6 +93,10 @@ func TestSetPhaseStatusCompletesReadinessCycleOnce(t *testing.T) {
 	require.True(t, completedReadinessCycle)
 	assert.Positive(t, duration)
 	assert.Nil(t, started.Status.LastTransitionTime)
+	readyCond := meta.FindStatusCondition(started.Status.Conditions, string(readyCondition))
+	require.NotNil(t, readyCond)
+	assert.Equal(t, metav1.ConditionTrue, readyCond.Status)
+	assert.Equal(t, string(reasonClusterReady), readyCond.Reason)
 
 	stored := &platformv1alpha1.PostgresCluster{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, stored))
@@ -101,6 +106,31 @@ func TestSetPhaseStatusCompletesReadinessCycleOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, completedReadinessCycle)
 	assert.Zero(t, duration)
+}
+
+// A component health with Phase left empty (newReadyHealth/newDegradedHealth) must not
+// touch the aggregate Ready condition at all — only the top-level reconciler (via
+// setPhaseStatus) is allowed to flip Ready to True.
+func TestSetStatusEmptyPhaseDoesNotTouchReady(t *testing.T) {
+	ctx := context.Background()
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "pg1",
+			Namespace:         "default",
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * time.Minute)),
+		},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(newTestScheme()).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
+		WithObjects(cluster).
+		Build()
+
+	require.NoError(t, setStatus(
+		ctx, c, nil, cluster, cluster.Status.DeepCopy(),
+		clusterReady, metav1.ConditionTrue, reasonCNPGClusterHealthy, "component ready", "",
+	))
+	assert.Nil(t, meta.FindStatusCondition(cluster.Status.Conditions, string(readyCondition)))
 }
 
 func TestStartReadinessCycleForActiveUseCase(t *testing.T) {
