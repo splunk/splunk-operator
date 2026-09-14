@@ -31,6 +31,7 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -310,9 +311,9 @@ func TestSetVolumeDefault(t *testing.T) {
 		},
 	}
 
-	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	if cr.Spec.CommonSplunkSpec.Volumes == nil {
-		t.Errorf("setVolumeDefaults() returns nil for Volumes")
+		t.Errorf("SetVolumeDefaults() returns nil for Volumes")
 	}
 
 	mode := int32(644)
@@ -347,23 +348,23 @@ func TestSetVolumeDefault(t *testing.T) {
 	}
 
 	// Make sure the default mode is set correctly
-	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	if cr.Spec.CommonSplunkSpec.Volumes == nil {
-		t.Errorf("setVolumeDefaults() returns nil for Volumes")
+		t.Errorf("SetVolumeDefaults() returns nil for Volumes")
 	}
 
 	for _, v := range cr.Spec.CommonSplunkSpec.Volumes {
 		if v.Name == "vol1" {
 			if *v.Secret.DefaultMode != int32(corev1.SecretVolumeSourceDefaultMode) {
-				t.Errorf("setVolumeDefaults() did not set defaultMode correctly. Want %d, Got %d", int32(corev1.SecretVolumeSourceDefaultMode), *v.Secret.DefaultMode)
+				t.Errorf("SetVolumeDefaults() did not set defaultMode correctly. Want %d, Got %d", int32(corev1.SecretVolumeSourceDefaultMode), *v.Secret.DefaultMode)
 			}
 		} else if v.Name == "vol2" {
 			if *v.Secret.DefaultMode != mode {
-				t.Errorf("setVolumeDefaults() did not set defaultMode correctly. Want %d, Got %d", mode, *v.Secret.DefaultMode)
+				t.Errorf("SetVolumeDefaults() did not set defaultMode correctly. Want %d, Got %d", mode, *v.Secret.DefaultMode)
 			}
 		} else if v.Name == "vol3" {
 			if *v.ConfigMap.DefaultMode != int32(corev1.ConfigMapVolumeSourceDefaultMode) {
-				t.Errorf("setVolumeDefaults() did not set defaultMode correctly. Want %d, Got %d", int32(corev1.ConfigMapVolumeSourceDefaultMode), *v.ConfigMap.DefaultMode)
+				t.Errorf("SetVolumeDefaults() did not set defaultMode correctly. Want %d, Got %d", int32(corev1.ConfigMapVolumeSourceDefaultMode), *v.ConfigMap.DefaultMode)
 			}
 		}
 	}

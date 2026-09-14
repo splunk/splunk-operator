@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,17 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package indexercluster
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
-	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
@@ -32,24 +28,116 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splunkconfig "github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
+	indexerworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/indexercluster"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// NewSplunkClientFunc function pointer type
-type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
+const pauseRetryDelay = 30 * time.Second
 
-// ApplyIndexerClusterManager reconciles the state of a Splunk Enterprise indexer cluster.
-func ApplyIndexerClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+// apply owns the request-level IndexerCluster reconciliation boundary.
+func apply(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
+	logger := logging.FromContext(ctx).With("controller", "IndexerCluster", "name", namespacedName.Name, "namespace", namespacedName.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
+	ctx = logging.WithLogger(ctx, logger)
+
+	instance := &enterpriseApi.IndexerCluster{}
+	if err := client.Get(ctx, namespacedName, instance); err != nil {
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, fmt.Errorf("could not load indexer cluster data: %w", err)
+	}
+
+	if instance.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true" {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
+		})
+		instance.Status.Conditions = result.Conditions
+		if err := client.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+	} else if condition := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); condition != nil && condition.Status == metav1.ConditionTrue {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
+		})
+		instance.Status.Conditions = result.Conditions
+		if err := client.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
+			return reconcile.Result{}, err
+		}
+	}
+
+	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
+	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, recorder)
+	var result reconcile.Result
+	var err error
+	if instance.Spec.ClusterManagerRef.Name != "" {
+		result, err = ApplyIndexerClusterManager(ctx, client, instance)
+	} else {
+		result, err = ApplyIndexerCluster(ctx, client, instance)
+	}
+	if result.Requeue && result.RequeueAfter != 0 {
+		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
+	}
+
+	fresh := &enterpriseApi.IndexerCluster{}
+	if fetchErr := client.Get(ctx, namespacedName, fresh); fetchErr != nil {
+		if apierrors.IsNotFound(fetchErr) {
+			return result, nil
+		}
+		logger.WarnContext(ctx, "failed to refetch CR for stalled condition update", "error", fetchErr)
+		return result, fetchErr
+	}
+	oldConditions := append([]metav1.Condition(nil), fresh.Status.Conditions...)
+	if message, ok := splcommon.TerminalMessage(err); ok {
+		reason, _ := splcommon.TerminalReason(err)
+		fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, message, fresh.GetGeneration())
+	} else {
+		fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
+	}
+	eventPublisher, publisherErr := k8sops.NewK8EventPublisherWithRecorder(recorder, fresh)
+	if publisherErr != nil {
+		logger.WarnContext(ctx, "failed to create event publisher", "error", publisherErr)
+		return result, publisherErr
+	}
+	k8sops.EmitStalledTransitionEvents(ctx, eventPublisher, fresh.GetName(), oldConditions, fresh.Status.Conditions)
+	if updateErr := client.Status().Update(ctx, fresh); updateErr != nil {
+		logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
+		return result, updateErr
+	}
+	if _, ok := splcommon.TerminalMessage(err); ok {
+		return reconcile.Result{}, err
+	}
+	return result, err
+}
+
+// Apply is the request-level entry point used by the controller.
+var Apply = apply
+
+// ApplyIndexerClusterManager and ApplyIndexerCluster are operation seams used by
+// focused reconciliation tests and selected according to the referenced manager API.
+var ApplyIndexerClusterManager = applyIndexerClusterManager
+var ApplyIndexerCluster = applyIndexerCluster
+
+// applyIndexerClusterManager reconciles an IndexerCluster using the ClusterManager API.
+func applyIndexerClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -59,7 +147,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	logger := logging.FromContext(ctx).With("func", "ApplyIndexerClusterManager", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "IndexerCluster"
 
@@ -105,7 +193,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 
 	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	namespaceScopedSecret, err := k8sops.ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer)
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplySplunkConfigFailed", "Create or update of general config failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
@@ -134,7 +222,13 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	mgr := newIndexerClusterPodManager(logger, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 	// Check if we have configured enough number(<= RF) of replicas
 	if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseReady {
-		err = VerifyRFPeers(ctx, mgr, client)
+		if VerifyRFPeersCall != nil {
+			err = VerifyRFPeersCall(ctx, client, cr)
+		} else if VerifyRFPeers != nil {
+			err = VerifyRFPeers(ctx, mgr, client)
+		} else {
+			err = mgr.workflowManager().VerifyRFPeers(ctx, client)
+		}
 		if err != nil {
 			eventPublisher.Warning(ctx, "VerifyRFPeersFailed", "Verification of RF peer failed. Check operator logs for details.")
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Replication factor peer verification failed")
@@ -144,7 +238,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
+		k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkIndexer)
 
 		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -159,7 +253,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		return result, err
 	}
 	// create or update a headless service for indexer cluster
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of headless service for Indexer Cluster failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
@@ -167,7 +261,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 
 	// create or update a regular service for indexer cluster (ingestion)
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of service for Indexer Cluster failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
@@ -239,7 +333,12 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
 	if !statefulSet.CreationTimestamp.IsZero() {
 		// check if the IndexerCluster is ready for version upgrade
-		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+		continueReconcile, err := upgrade.UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, func(ctx context.Context) (*splclient.ClusterInfo, error) {
+			if GetClusterInfoForUpgradeCall != nil {
+				return GetClusterInfoForUpgradeCall(ctx, client, cr)
+			}
+			return GetClusterInfoCall(ctx, &mgr, false)
+		})
 		if err != nil || !continueReconcile {
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
@@ -254,7 +353,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// check if version upgrade is set
 	if !versionUpgrade {
-		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+		phase, err = mgr.UpdateWorkflow(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
@@ -271,7 +370,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		time.Sleep(1 * time.Second)
 		// since we are creating new statefulset, setting resourceVersion to ""
 		statefulSet.ResourceVersion = ""
-		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+		phase, err = mgr.UpdateWorkflow(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods after upgrade")
@@ -294,7 +393,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			return result, fmt.Errorf("retrieve CM spec: %w", err)
 		}
 		if cmMonitoringConsoleConfigRef != "" {
-			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
+			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
 			_, err := k8sops.GetStatefulSetByName(ctx, client, namespacedName)
 			//if MC pod already exists
 			if err == nil {
@@ -338,7 +437,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// Set indexer cluster CR as owner reference for clustermanager
 		logger.DebugContext(ctx, "setting IndexerCluster as owner for ClusterManager")
 		if len(cr.Spec.ClusterManagerRef.Name) > 0 {
-			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterManager, cr.Spec.ClusterManagerRef.Name)}
+			namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkClusterManager, cr.Spec.ClusterManagerRef.Name)}
 		}
 		err = k8sops.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
@@ -356,8 +455,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	return result, nil
 }
 
-// ApplyIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster for Older CM CRDs.
-func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+// applyIndexerCluster reconciles an IndexerCluster using the legacy ClusterMaster API.
+func applyIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -366,7 +465,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 	logger := logging.FromContext(ctx).With("func", "ApplyIndexerCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "IndexerCluster"
 
 	// Initialize phase and conditions
@@ -411,7 +511,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	namespaceScopedSecret, err := k8sops.ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer)
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplySplunkConfigFailed", "Create or update of general config failed. Check operator logs for details.")
 		return result, fmt.Errorf("apply splunk config: %w", err)
@@ -438,7 +538,13 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	mgr := newIndexerClusterPodManager(logger, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 	// Check if we have configured enough number(<= RF) of replicas
 	if mgr.cr.Status.ClusterMasterPhase == enterpriseApi.PhaseReady {
-		err = VerifyRFPeers(ctx, mgr, client)
+		if VerifyRFPeersCall != nil {
+			err = VerifyRFPeersCall(ctx, client, cr)
+		} else if VerifyRFPeers != nil {
+			err = VerifyRFPeers(ctx, mgr, client)
+		} else {
+			err = mgr.workflowManager().VerifyRFPeers(ctx, client)
+		}
 		if err != nil {
 			eventPublisher.Warning(ctx, "VerifyRFPeersFailed", "Verify RF peer failed. Check operator logs for details.")
 			return result, fmt.Errorf("verify RF peers: %w", err)
@@ -447,7 +553,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
+		k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkIndexer)
 
 		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -463,14 +569,14 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// create or update a headless service for indexer cluster
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, true))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of headless service for Indexer Cluster failed. Check operator logs for details.")
 		return result, fmt.Errorf("apply headless service: %w", err)
 	}
 
 	// create or update a regular service for indexer cluster (ingestion)
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Create or update of service for Indexer Cluster failed. Check operator logs for details.")
 		return result, fmt.Errorf("apply service: %w", err)
@@ -541,7 +647,12 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
 	if !statefulSet.CreationTimestamp.IsZero() {
 		// check if the IndexerCluster is ready for version upgrade
-		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+		continueReconcile, err := upgrade.UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, func(ctx context.Context) (*splclient.ClusterInfo, error) {
+			if GetClusterInfoForUpgradeCall != nil {
+				return GetClusterInfoForUpgradeCall(ctx, client, cr)
+			}
+			return GetClusterInfoCall(ctx, &mgr, false)
+		})
 		if err != nil || !continueReconcile {
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
@@ -556,7 +667,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// check if version upgrade is set
 	if !versionUpgrade {
-		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+		phase, err = mgr.UpdateWorkflow(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
 			return result, fmt.Errorf("update statefulset: %w", err)
@@ -571,7 +682,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		time.Sleep(1 * time.Second)
 		// since we are creating new statefulset, setting resourceVersion to ""
 		statefulSet.ResourceVersion = ""
-		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+		phase, err = mgr.UpdateWorkflow(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
 			return result, fmt.Errorf("update statefulset: %w", err)
@@ -591,7 +702,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			return result, fmt.Errorf("retrieve CM spec: %w", err)
 		}
 		if cmMonitoringConsoleConfigRef != "" {
-			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
+			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkMonitoringConsole, cmMonitoringConsoleConfigRef)}
 			_, err := k8sops.GetStatefulSetByName(ctx, client, namespacedName)
 			//if MC pod already exists
 			if err == nil {
@@ -631,7 +742,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		result.Requeue = false
 		// Set indexer cluster CR as owner reference for clustermaster
 		logger.DebugContext(ctx, "setting IndexerCluster as owner for ClusterMaster")
-		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
+		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkClusterMaster, cr.Spec.ClusterMasterRef.Name)}
 		err = k8sops.SetStatefulSetOwnerRef(ctx, client, cr, namespacedName)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRefFailed", "Set stateful set owner reference failed. Check operator logs for details.")
@@ -648,9 +759,27 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 }
 
 // VerifyRFPeers function pointer to mock
-var VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
-	return mgr.verifyRFPeers(ctx, client)
+var VerifyRFPeers func(context.Context, indexerClusterPodManager, splcommon.ControllerClient) error
+
+// VerifyRFPeersCall is the public reconcile seam for RF validation. The
+// manager-shaped VerifyRFPeers seam remains for tests in this package.
+var VerifyRFPeersCall func(context.Context, splcommon.ControllerClient, *enterpriseApi.IndexerCluster) error
+
+// GetClusterInfoCall is a narrow seam for the indexer upgrade workflow.
+var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
+	return mgr.getClusterManagerClient(ctx).GetClusterInfo(false)
 }
+
+// GetClusterInfoForUpgradeCall is the public reconcile seam for upgrade
+// validation. It preserves the manager-shaped seam for package-local tests.
+var GetClusterInfoForUpgradeCall func(context.Context, splcommon.ControllerClient, *enterpriseApi.IndexerCluster) (*splclient.ClusterInfo, error)
+
+// GetClusterManagerInfoForReconcileCall and GetClusterManagerPeersForReconcileCall
+// are public seams for callers that exercise the IndexerCluster workflow outside
+// this package. Package-local tests continue to use the manager-shaped seams.
+var GetClusterManagerInfoForReconcileCall func(context.Context, splcommon.ControllerClient, *enterpriseApi.IndexerCluster) (*splclient.ClusterManagerInfo, error)
+
+var GetClusterManagerPeersForReconcileCall func(context.Context, splcommon.ControllerClient, *enterpriseApi.IndexerCluster) (map[string]splclient.ClusterManagerPeerInfo, error)
 
 // indexerClusterPodManager is used to manage the pods within an indexer cluster
 type indexerClusterPodManager struct {
@@ -672,49 +801,118 @@ var newIndexerClusterPodManager = func(log *slog.Logger, cr *enterpriseApi.Index
 	}
 }
 
+// workflowManager adapts the legacy test seams to the workflow-owned manager.
+// Production reconciliation uses this adapter; the local manager methods below
+// remain only as compatibility shims for package-local tests during migration.
+func (mgr *indexerClusterPodManager) workflowManager() *indexerworkflow.PodManager {
+	workflowMgr := &indexerworkflow.PodManager{
+		Client:          mgr.c,
+		Log:             mgr.log,
+		CR:              mgr.cr,
+		Secrets:         mgr.secrets,
+		NewSplunkClient: mgr.newSplunkClient,
+	}
+	if GetClusterManagerInfoForReconcileCall != nil {
+		workflowMgr.GetManagerInfo = func(ctx context.Context, _ *indexerworkflow.PodManager) (*splclient.ClusterManagerInfo, error) {
+			return GetClusterManagerInfoForReconcileCall(ctx, mgr.c, mgr.cr)
+		}
+	} else if GetClusterManagerInfoCall != nil {
+		workflowMgr.GetManagerInfo = func(ctx context.Context, _ *indexerworkflow.PodManager) (*splclient.ClusterManagerInfo, error) {
+			return GetClusterManagerInfoCall(ctx, mgr)
+		}
+	}
+	if GetClusterManagerPeersForReconcileCall != nil {
+		workflowMgr.GetManagerPeers = func(ctx context.Context, _ *indexerworkflow.PodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+			return GetClusterManagerPeersForReconcileCall(ctx, mgr.c, mgr.cr)
+		}
+	} else if GetClusterManagerPeersCall != nil {
+		workflowMgr.GetManagerPeers = func(ctx context.Context, _ *indexerworkflow.PodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+			return GetClusterManagerPeersCall(ctx, mgr)
+		}
+	}
+	return workflowMgr
+}
+
+func (mgr *indexerClusterPodManager) UpdateWorkflow(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
+
+	var err error
+
+	// Get event publisher from context
+	eventPublisher := k8sops.GetEventPublisher(ctx, mgr.cr)
+
+	// Track previous ready replicas for scaling events
+	previousReadyReplicas := mgr.cr.Status.ReadyReplicas
+
+	// Assign client
+	if mgr.c == nil {
+		mgr.c = c
+	}
+	// update statefulset, if necessary
+	if mgr.cr.Status.ClusterManagerPhase != enterpriseApi.PhaseReady && mgr.cr.Status.ClusterMasterPhase != enterpriseApi.PhaseReady {
+		mgr.log.InfoContext(ctx, "ClusterManager is not ready yet", "error", err)
+		return enterpriseApi.PhaseError, err
+	}
+	_, err = k8sops.ApplyStatefulSet(ctx, mgr.c, statefulSet)
+	if err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+
+	// Get the podExecClient with empty targetPodName.
+	// This will be set inside ApplyIdxcSecret
+	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
+	// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
+	if err := ApplyIdxcSecret(ctx, mgr, desiredReplicas, podExecClient); err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+	if err := mgr.updateStatus(ctx, statefulSet); err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
+		if terminalErr := k8sops.CheckPodsForTerminalFailures(ctx, c, statefulSet); terminalErr != nil {
+			mgr.log.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", terminalErr)
+			return enterpriseApi.PhaseError, terminalErr
+		}
+		mgr.log.InfoContext(ctx, "IndexerCluster is not ready", "error ", err)
+		return enterpriseApi.PhasePending, nil
+	}
+
+	// manage scaling and updates
+	phase, err := k8sops.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	if err != nil {
+		return phase, err
+	}
+	if phase == enterpriseApi.PhaseReady && mgr.cr.Status.ReadyReplicas == desiredReplicas && previousReadyReplicas != desiredReplicas && eventPublisher != nil {
+		if desiredReplicas > previousReadyReplicas {
+			eventPublisher.Normal(ctx, "ScaledUp", fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
+		} else if desiredReplicas < previousReadyReplicas {
+			eventPublisher.Normal(ctx, "ScaledDown", fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
+		}
+	}
+	return phase, nil
+}
+
+// Update delegates the stateful multi-step workflow to workflow/indexercluster.
+// It remains on this adapter because k8sops.UpdateStatefulSetPods consumes the
+// pod-manager interface and package-local tests still construct this adapter.
+func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
+	return mgr.UpdateWorkflow(ctx, c, statefulSet, desiredReplicas)
+}
+
 // getMonitoringConsoleClient for indexerClusterPodManager returns a SplunkClient for monitoring console
 func (mgr *indexerClusterPodManager) getMonitoringConsoleClient(cr *enterpriseApi.IndexerCluster, cmMonitoringConsoleConfigRef string) *splclient.SplunkClient {
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), splcommon.GetSplunkServiceName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef, false))
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+	return mgr.workflowManager().GetMonitoringConsoleClient(cr, cmMonitoringConsoleConfigRef)
 }
 
 // SetClusterMaintenanceMode enables/disables cluster maintenance mode
 func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, enable bool, cmPodName string, podExecClient splutil.PodExecClientImpl) error {
-	// Retrieve admin password from Pod
-	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, c, cmPodName, cr.GetNamespace(), "password")
-	if err != nil {
-		return err
-	}
-
-	var command string
-	if enable {
-		command = fmt.Sprintf("/opt/splunk/bin/splunk enable maintenance-mode --answer-yes -auth admin:%s", adminPwd)
-	} else {
-		command = fmt.Sprintf("/opt/splunk/bin/splunk disable maintenance-mode --answer-yes -auth admin:%s", adminPwd)
-	}
-	streamOptions := splutil.NewStreamOptionsObject(command)
-
-	_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-	if err != nil {
-		return err
-	}
-
-	// Set cluster manager maintenance mode
-	if enable {
-		cr.Status.MaintenanceMode = true
-	} else {
-		cr.Status.MaintenanceMode = false
-	}
-
-	return nil
+	return indexerworkflow.SetClusterMaintenanceMode(ctx, c, cr, enable, cmPodName, podExecClient, func(state bool) {
+		cr.Status.MaintenanceMode = state
+	})
 }
 
-// ApplyIdxcSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
+// ApplyIdxcSecret synchronizes the namespace idxc_secret with indexer peers.
 func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	var indIdxcSecret string
 
 	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, mgr.cr)
 
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
@@ -749,10 +947,10 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	howManyPodsHaveSecretChanged := 0
 	for i := int32(0); i <= replicas-1; i++ {
 		// Get Indexer's name
-		indexerPodName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), i)
+		indexerPodName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIndexer, mgr.cr.GetName(), i)
+		pod := &corev1.Pod{}
 
 		// Check if pod exists before updating secrets
-		pod := &corev1.Pod{}
 		namespacedName := types.NamespacedName{Namespace: mgr.cr.GetNamespace(), Name: indexerPodName}
 		logger.DebugContext(ctx, "check if pod is created before updating its secrets")
 		err := mgr.c.Get(ctx, namespacedName, pod)
@@ -766,7 +964,6 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 		if err != nil {
 			return fmt.Errorf(splcommon.PodSecretNotFoundError, indexerPodName)
 		}
-
 		// Retrieve idxc_secret token
 		if indIdxcSecretByte, ok := podSecret.Data[splcommon.IdxcSecret]; ok {
 			indIdxcSecret = string(indIdxcSecretByte)
@@ -774,77 +971,71 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			return fmt.Errorf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret)
 		}
 
-		// If idxc secret is different from namespace scoped secret change it
-		if indIdxcSecret != nsIdxcSecret {
-			logger.InfoContext(ctx, "IDXC Secret is different from namespace scoped secret")
+		if indIdxcSecret == nsIdxcSecret {
+			continue
+		}
+		logger.InfoContext(ctx, "IDXC Secret is different from namespace scoped secret")
 
-			// Enable maintenance mode
-			if len(mgr.cr.Status.IndexerSecretChanged) == 0 && !mgr.cr.Status.MaintenanceMode {
-				var managerIdxcName string
-				var cmPodName string
-				if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
-					managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
-					cmPodName = fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
-				} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
-					managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
-					cmPodName = fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
-				} else {
-					return errors.New("empty cluster manager reference")
-				}
-				podExecClient.SetTargetPodName(ctx, cmPodName)
-				err = SetClusterMaintenanceMode(ctx, mgr.c, mgr.cr, true, cmPodName, podExecClient)
-				if err != nil {
-					return err
-				}
-				logger.InfoContext(ctx, "set CM in maintenance mode")
+		// Enable maintenance mode
+		if len(mgr.cr.Status.IndexerSecretChanged) == 0 && !mgr.cr.Status.MaintenanceMode {
+			var managerIdxcName string
+			var cmPodName string
+			if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
+				managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
+				cmPodName = fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
+			} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
+				managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
+				cmPodName = fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
+			} else {
+				return errors.New("empty cluster manager reference")
 			}
-
-			// If idxc secret already changed, ignore
-			if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) {
-				if mgr.cr.Status.IndexerSecretChanged[i] {
-					continue
-				}
-			}
-
-			// Get client for indexer Pod
-			idxcClient := mgr.getClient(ctx, i)
-
-			// Change idxc secret key
-			err = idxcClient.SetIdxcSecret(nsIdxcSecret)
+			podExecClient.SetTargetPodName(ctx, cmPodName)
+			err = SetClusterMaintenanceMode(ctx, mgr.c, mgr.cr, true, cmPodName, podExecClient)
 			if err != nil {
-				// Emit event for password sync failure
-				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, "PasswordSyncFailed",
-						fmt.Sprintf("Password sync failed for pod '%s'. Check operator logs for details.", indexerPodName))
-				}
-				mgr.log.ErrorContext(ctx, "configuration push failed", "failedPeer", indexerPodName, "error", err.Error())
 				return err
 			}
-			logger.InfoContext(ctx, "changed idxc secret")
+			logger.InfoContext(ctx, "set CM in maintenance mode")
+		}
 
-			howManyPodsHaveSecretChanged += 1
+		// If idxc secret already changed, ignore
+		if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) && mgr.cr.Status.IndexerSecretChanged[i] {
+			continue
+		}
 
-			// Restart splunk instance on pod
-			err = idxcClient.RestartSplunk()
-			if err != nil {
-				// Emit event for password sync failure
-				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, "PasswordSyncFailed",
-						fmt.Sprintf("Password sync failed for pod '%s'. Check operator logs for details.", indexerPodName))
-				}
-				return fmt.Errorf("configuration push failed during restart for peer %s: %w", indexerPodName, err)
+		// Get client for indexer Pod
+		idxcClient := mgr.getClient(ctx, i)
+
+		// Change idxc secret key
+		if err := idxcClient.SetIdxcSecret(nsIdxcSecret); err != nil {
+			// Emit event for password sync failure
+			if eventPublisher != nil {
+				eventPublisher.Warning(ctx, "PasswordSyncFailed", fmt.Sprintf("Password sync failed for pod '%s'. Check operator logs for details.", indexerPodName))
 			}
-			logger.InfoContext(ctx, "restarted splunk")
+			mgr.log.ErrorContext(ctx, "configuration push failed", "failedPeer", indexerPodName, "error", err.Error())
+			return err
+		}
+		logger.InfoContext(ctx, "changed idxc secret")
 
-			// Keep a track of all the secrets on pods to change their idxc secret below
-			mgr.cr.Status.IdxcPasswordChangedSecrets[podSecret.GetName()] = true
+		howManyPodsHaveSecretChanged += 1
 
-			// Set the idxc_secret changed flag to true
-			if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) {
-				mgr.cr.Status.IndexerSecretChanged[i] = true
-			} else {
-				mgr.cr.Status.IndexerSecretChanged = append(mgr.cr.Status.IndexerSecretChanged, true)
+		// Restart splunk instance on pod
+		if err := idxcClient.RestartSplunk(); err != nil {
+			// Emit event for password sync failure
+			if eventPublisher != nil {
+				eventPublisher.Warning(ctx, "PasswordSyncFailed", fmt.Sprintf("Password sync failed for pod '%s'. Check operator logs for details.", indexerPodName))
 			}
+			return fmt.Errorf("configuration push failed during restart for peer %s: %w", indexerPodName, err)
+		}
+		logger.InfoContext(ctx, "restarted splunk")
+
+		// Keep a track of all the secrets on pods to change their idxc secret below
+		mgr.cr.Status.IdxcPasswordChangedSecrets[podSecret.GetName()] = true
+
+		// Set the idxc_secret changed flag to true
+		if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) {
+			mgr.cr.Status.IndexerSecretChanged[i] = true
+		} else {
+			mgr.cr.Status.IndexerSecretChanged = append(mgr.cr.Status.IndexerSecretChanged, true)
 		}
 	}
 
@@ -856,400 +1047,78 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 
 		Changing the idxc passwords on the secrets mounted on the indexer pods to avoid the above.
 	*/
-	if len(mgr.cr.Status.IdxcPasswordChangedSecrets) > 0 {
-		for podSecretName := range mgr.cr.Status.IdxcPasswordChangedSecrets {
-			if mgr.cr.Status.IdxcPasswordChangedSecrets[podSecretName] {
-				podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), podSecretName)
-				if err != nil {
-					return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
-				}
-
-				// Retrieve namespaced scoped secret data in splunk readable format
-				splunkReadableData, err := splutil.GetSplunkReadableNamespaceScopedSecretData(ctx, mgr.c, mgr.cr.GetNamespace())
-				if err != nil {
-					return err
-				}
-
-				podSecret.Data[splcommon.IdxcSecret] = splunkReadableData[splcommon.IdxcSecret]
-				podSecret.Data["default.yml"] = splunkReadableData["default.yml"]
-
-				_, err = k8sops.ApplySecret(ctx, mgr.c, podSecret)
-				if err != nil {
-					return err
-				}
-				logger.InfoContext(ctx, "IDXC password changed on the secret mounted on pod", "podSecretName", podSecretName)
-
-				// Set to false marking the idxc password change in the secret
-				mgr.cr.Status.IdxcPasswordChangedSecrets[podSecretName] = false
-			}
+	for podSecretName, changed := range mgr.cr.Status.IdxcPasswordChangedSecrets {
+		if !changed {
+			continue
 		}
+		podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), podSecretName)
+		if err != nil {
+			return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
+		}
+		splunkReadableData, err := splutil.GetSplunkReadableNamespaceScopedSecretData(ctx, mgr.c, mgr.cr.GetNamespace())
+		if err != nil {
+			return err
+		}
+		podSecret.Data[splcommon.IdxcSecret] = splunkReadableData[splcommon.IdxcSecret]
+		podSecret.Data["default.yml"] = splunkReadableData["default.yml"]
+		if _, err := k8sops.ApplySecret(ctx, mgr.c, podSecret); err != nil {
+			return err
+		}
+		logger.InfoContext(ctx, "IDXC password changed on the secret mounted on pod", "podSecretName", podSecretName)
+
+		// Set to false marking the idxc password change in the secret
+		mgr.cr.Status.IdxcPasswordChangedSecrets[podSecretName] = false
 	}
 
 	// Emit event for password sync completed
 	if eventPublisher != nil {
-		eventPublisher.Normal(ctx, "PasswordSyncCompleted",
-			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
+		eventPublisher.Normal(ctx, "PasswordSyncCompleted", fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
 	}
 
 	// Log configuration push completion
 	logger.InfoContext(ctx, "configuration push completed", "successCount", howManyPodsHaveSecretChanged, "duration", time.Since(pushStartTime))
-
 	return nil
 }
 
-// Update for indexerClusterPodManager handles all updates for a statefulset of indexers
-func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
-
-	var err error
-
-	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, mgr.cr)
-
-	// Track previous ready replicas for scaling events
-	previousReadyReplicas := mgr.cr.Status.ReadyReplicas
-
-	// Assign client
-	if mgr.c == nil {
-		mgr.c = c
-	}
-	// update statefulset, if necessary
-	if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseReady || mgr.cr.Status.ClusterMasterPhase == enterpriseApi.PhaseReady {
-		_, err = k8sops.ApplyStatefulSet(ctx, mgr.c, statefulSet)
-		if err != nil {
-			return enterpriseApi.PhaseError, err
-		}
-	} else {
-		mgr.log.InfoContext(ctx, "ClusterManager is not ready yet", "error", err)
-		return enterpriseApi.PhaseError, err
-	}
-
-	// Get the podExecClient with empty targetPodName.
-	// This will be set inside ApplyIdxcSecret
-	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
-	// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
-	err = ApplyIdxcSecret(ctx, mgr, desiredReplicas, podExecClient)
-	if err != nil {
-		return enterpriseApi.PhaseError, err
-	}
-
-	// update CR status with IDXC information
-	err = mgr.updateStatus(ctx, statefulSet)
-	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
-		if termErr := k8sops.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
-			mgr.log.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
-			return enterpriseApi.PhaseError, termErr
-		}
-		mgr.log.InfoContext(ctx, "IndexerCluster is not ready", "error ", err)
-		return enterpriseApi.PhasePending, nil
-	}
-
-	// manage scaling and updates
-	phase, err := k8sops.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
-	if err != nil {
-		return phase, err
-	}
-
-	// Emit scale events when phase is ready and ready replicas changed to match desired
-	if phase == enterpriseApi.PhaseReady {
-		if mgr.cr.Status.ReadyReplicas == desiredReplicas && previousReadyReplicas != desiredReplicas {
-			if desiredReplicas > previousReadyReplicas {
-				if eventPublisher != nil {
-					eventPublisher.Normal(ctx, "ScaledUp",
-						fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
-				}
-			} else if desiredReplicas < previousReadyReplicas {
-				if eventPublisher != nil {
-					eventPublisher.Normal(ctx, "ScaledDown",
-						fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
-				}
-			}
-		}
-	}
-
-	return phase, nil
-}
-
-// PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready
+// PrepareScaleDown prepares an indexer pod for removal through the workflow package.
 func (mgr *indexerClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
-	// first, decommission indexer peer with enforceCounts=true; this will rebalance buckets across other peers
-	complete, err := mgr.decommission(ctx, n, true)
-	if err != nil {
-		return false, err
-	}
-	if !complete {
-		return false, nil
-	}
-
-	// next, remove the peer
-	c := mgr.getClusterManagerClient(ctx)
-	peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
-	remainingPeers := int32(len(mgr.cr.Status.Peers)) - 1
-	mgr.log.InfoContext(ctx, "deregistering peer from ClusterManager", "peerName", peerName, "remainingPeers", remainingPeers)
-	return true, c.RemoveIndexerClusterPeer(mgr.cr.Status.Peers[n].ID)
+	return mgr.workflowManager().PrepareScaleDown(ctx, n)
 }
 
-// PrepareRecycle for indexerClusterPodManager prepares indexer pod to be recycled for updates; it returns true when ready
 func (mgr *indexerClusterPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
-	return mgr.decommission(ctx, n, false)
+	return mgr.workflowManager().PrepareRecycle(ctx, n)
 }
 
 func (mgr *indexerClusterPodManager) FinishUpgrade(ctx context.Context, n int32) error {
-	return nil
+	return mgr.workflowManager().FinishUpgrade(ctx, n)
 }
 
-// FinishRecycle for indexerClusterPodManager completes recycle event for indexer pod; it returns true when complete
 func (mgr *indexerClusterPodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
-	if n >= int32(len(mgr.cr.Status.Peers)) {
-		return false, fmt.Errorf("incorrect Peer got %d length of peer list %d", n, int32(len(mgr.cr.Status.Peers)))
-	}
-	return mgr.cr.Status.Peers[n].Status == "Up", nil
+	return mgr.workflowManager().FinishRecycle(ctx, n)
 }
 
-// decommission for indexerClusterPodManager decommissions an indexer pod; it returns true when ready
 func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, enforceCounts bool) (bool, error) {
-	peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
-
-	switch mgr.cr.Status.Peers[n].Status {
-	case "Up":
-		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
-		err := setProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne)
-		if err != nil {
-			// Don't return error here. We may be reconciling several times, and the actual Pod status is down, but
-			// not yet reflecting on the Cluster Master, in which case, the podExec fails, though the decommission is
-			// going fine.
-			mgr.log.WarnContext(ctx, "unable to lower the liveness probe level", "peerName", peerName, "enforceCounts", enforceCounts)
-		}
-
-		mgr.log.InfoContext(ctx, "decommissioning IndexerCluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
-		c := mgr.getClient(ctx, n)
-		return false, c.DecommissionIndexerClusterPeer(enforceCounts)
-
-	case "Decommissioning":
-		mgr.log.InfoContext(ctx, "waiting for decommission to complete", "peerName", peerName)
-		return false, nil
-
-	case "ReassigningPrimaries":
-		mgr.log.InfoContext(ctx, "waiting for decommission to complete", "peerName", peerName)
-		return false, nil
-
-	case "GracefulShutdown":
-		mgr.log.InfoContext(ctx, "decommission complete", "peerName", peerName, "status", mgr.cr.Status.Peers[n].Status)
-		return true, nil
-
-	case "Down":
-		mgr.log.InfoContext(ctx, "decommission complete", "peerName", peerName, "status", mgr.cr.Status.Peers[n].Status)
-		return true, nil
-
-	case "": // this can happen after the peer has been removed from the indexer cluster
-		mgr.log.InfoContext(ctx, "peer has empty ID", "peerName", peerName)
-		return false, nil
-	}
-
-	// unhandled status
-	return false, fmt.Errorf("Status=%s", mgr.cr.Status.Peers[n].Status)
+	return mgr.workflowManager().Decommission(ctx, n, enforceCounts)
 }
 
-// getClient for indexerClusterPodManager returns a SplunkClient for the member n
 func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
-	logger := slog.With("func", "indexerClusterPodManager.getClient", "name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
-
-	// Get Pod Name
-	memberName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
-
-	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)))
-
-	// Retrieve admin password from Pod
-	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
-	if err != nil {
-		logger.WarnContext(ctx, "couldn't retrieve the admin password from pod", "error", err)
-	}
-
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.workflowManager().GetClient(ctx, n)
 }
 
-// getClusterManagerClient for indexerClusterPodManager returns a SplunkClient for cluster manager
 func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context) *splclient.SplunkClient {
-	logger := slog.With("func", "indexerClusterPodManager.getClusterManagerClient", "name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
-
-	// Retrieve admin password from Pod
-	var managerIdxcName string
-	var cm InstanceType
-	if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
-		managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
-		cm = SplunkClusterManager
-	} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
-		managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
-		cm = SplunkClusterMaster
-	} else {
-		mgr.log.InfoContext(ctx, "empty ClusterManager reference")
-	}
-
-	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), splcommon.GetSplunkServiceName(cm, managerIdxcName, false))
-
-	// Retrieve admin password for Pod
-	podName := fmt.Sprintf("splunk-%s-%s-%s", managerIdxcName, cm, "0")
-	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, podName, mgr.cr.GetNamespace(), "password")
-	if err != nil {
-		logger.WarnContext(ctx, "couldn't retrieve the admin password from pod", "error", err.Error())
-	}
-
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.workflowManager().GetClusterManagerClient(ctx)
 }
 
-// getSiteRepFactorOriginCount gets the origin count of the site_replication_factor
-func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
-	re := regexp.MustCompile(".*origin:(?P<rf>.*),.*")
-	match := re.FindStringSubmatch(siteRepFactor)
-	siteRF, err := strconv.ParseInt(match[1], 10, 32)
-	if err != nil {
-		return 0
-	}
-	return int32(siteRF)
-}
-
-// verifyRFPeers verifies the number of peers specified in the replicas section
-// of IndexerClsuster CR. If it is less than RF, than we set it to RF.
 func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcommon.ControllerClient) error {
-	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, mgr.cr)
-
-	if mgr.c == nil {
-		mgr.c = c
-	}
-	cm := mgr.getClusterManagerClient(ctx)
-	clusterInfo, err := cm.GetClusterInfo(false)
-	if err != nil {
-		return fmt.Errorf("could not get cluster info from cluster manager")
-	}
-	var replicationFactor int32
-	// if it is a multisite indexer cluster, check site_replication_factor
-	if clusterInfo.MultiSite == "true" {
-		replicationFactor = getSiteRepFactorOriginCount(clusterInfo.SiteReplicationFactor)
-	} else { // for single site, check replication factor
-		replicationFactor = clusterInfo.ReplicationFactor
-	}
-
-	requestedReplicas := mgr.cr.Spec.Replicas
-	if requestedReplicas < replicationFactor {
-		mgr.log.InfoContext(ctx, "changing number of replicas as it is less than RF number of peers", "replicas", requestedReplicas)
-		// Emit event indicating scaling below RF is blocked/adjusted
-		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, "ScalingBlockedRF",
-				fmt.Sprintf("Cannot scale below replication factor: %d replicas required, %d requested. Adjust replicationFactor or replicas.", replicationFactor, requestedReplicas))
-		}
-		mgr.cr.Spec.Replicas = replicationFactor
-	}
-	return nil
+	return mgr.workflowManager().VerifyRFPeers(ctx, c)
 }
 
-var GetClusterManagerInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
-	c := mgr.getClusterManagerClient(ctx)
-	return c.GetClusterManagerInfo()
-}
+var GetClusterManagerInfoCall func(context.Context, *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error)
 
-var GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
-	c := mgr.getClusterManagerClient(ctx)
-	return c.GetClusterManagerPeers()
-}
+var GetClusterManagerPeersCall func(context.Context, *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error)
 
-// updateStatus for indexerClusterPodManager uses the REST API to update the status for an IndexerCluster custom resource
 func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
-	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
-
-	if mgr.cr.Status.ClusterManagerPhase != enterpriseApi.PhaseReady && mgr.cr.Status.ClusterMasterPhase != enterpriseApi.PhaseReady {
-		mgr.cr.Status.Initialized = false
-		mgr.cr.Status.IndexingReady = false
-		mgr.cr.Status.ServiceReady = false
-		mgr.cr.Status.MaintenanceMode = false
-		return fmt.Errorf("waiting for cluster manager to become ready")
-	}
-
-	oldInitialized := mgr.cr.Status.Initialized
-	oldIndexingReady := mgr.cr.Status.IndexingReady
-
-	// get indexer cluster info from cluster manager if it's ready
-	clusterInfo, err := GetClusterManagerInfoCall(ctx, mgr)
-	if err != nil {
-		return err
-	}
-	mgr.cr.Status.Initialized = clusterInfo.Initialized
-	mgr.cr.Status.IndexingReady = clusterInfo.IndexingReady
-	mgr.cr.Status.ServiceReady = clusterInfo.ServiceReady
-	mgr.cr.Status.MaintenanceMode = clusterInfo.MaintenanceMode
-
-	// get peer information from cluster manager
-	peers, err := GetClusterManagerPeersCall(ctx, mgr)
-	if err != nil {
-		return err
-	}
-	totalPeerCount := len(peers)
-	clusterName := mgr.cr.GetName()
-	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
-		peerStatus := enterpriseApi.IndexerClusterMemberStatus{Name: peerName}
-		peerInfo, ok := peers[peerName]
-		if ok {
-			peerStatus.ID = peerInfo.ID
-			peerStatus.Status = peerInfo.Status
-			peerStatus.ActiveBundleID = peerInfo.ActiveBundleID
-			peerStatus.BucketCount = peerInfo.BucketCount
-			peerStatus.Searchable = peerInfo.Searchable
-			slog.InfoContext(ctx, "peer registered with ClusterManager",
-				"peerName", peerName,
-				"clusterName", clusterName,
-				"totalPeerCount", totalPeerCount)
-		} else {
-			mgr.log.InfoContext(ctx, "peer is not known by ClusterManager", "peerName", peerName)
-		}
-		if n < int32(len(mgr.cr.Status.Peers)) {
-			mgr.cr.Status.Peers[n] = peerStatus
-		} else {
-			mgr.cr.Status.Peers = append(mgr.cr.Status.Peers, peerStatus)
-		}
-	}
-
-	// truncate any extra peers that we didn't check (leftover from scale down)
-	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Peers)) {
-		mgr.cr.Status.Peers = mgr.cr.Status.Peers[:statefulSet.Status.Replicas]
-	}
-
-	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, mgr.cr)
-
-	// Emit events only on state transitions
-	if eventPublisher != nil {
-		// Compute current available peers for quorum-related events
-		var available int32
-		totalPeers := len(mgr.cr.Status.Peers)
-		for _, p := range mgr.cr.Status.Peers {
-			if p.Status == "Up" && p.Searchable {
-				available++
-			}
-		}
-
-		// Cluster just finished initializing when quorum becomes ready
-		if !oldIndexingReady && mgr.cr.Status.IndexingReady {
-			if !oldInitialized && mgr.cr.Status.Initialized {
-				eventPublisher.Normal(ctx, "ClusterInitialized",
-					fmt.Sprintf("Cluster '%s' initialized with %d peers", mgr.cr.GetName(), totalPeers))
-			}
-
-			// Cluster quorum just restored
-			eventPublisher.Normal(ctx, "ClusterQuorumRestored",
-				fmt.Sprintf("Cluster quorum restored: %d/%d peers available", available, totalPeers))
-		}
-
-		// Cluster quorum lost (transition out of indexing ready)
-		if oldIndexingReady && !mgr.cr.Status.IndexingReady {
-			eventPublisher.Warning(ctx, "ClusterQuorumLost",
-				fmt.Sprintf("Cluster quorum lost: %d/%d peers available. Investigate peer failures immediately.", available, totalPeers))
-		}
-	}
-
-	return nil
+	return mgr.workflowManager().UpdateStatus(ctx, statefulSet)
 }
 
 // ensureIndexerDefaults resolves the IndexerCluster's SmartBus queue/object-storage
@@ -1286,7 +1155,7 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
 	}
-	builder, err := splunkconfig.NewSmartBusConfBuilder(&qosCfg.Queue, &qosCfg.OS)
+	structuralEntries, credentialEntries, err := splunkconfig.BuildSmartBusConfig(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 	}
@@ -1294,7 +1163,7 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 	owner := splcommon.AsOwner(cr, true)
 
 	var configMap resources.DefaultsConfigMap
-	if entries := splunkconfig.IndexerConf(builder); len(entries) > 0 {
+	if entries := structuralEntries; len(entries) > 0 {
 		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, entries, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
@@ -1302,7 +1171,7 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 	}
 
 	var secret resources.DefaultsSecret
-	if entries := splunkconfig.IndexerCredentialsConf(builder, qosCfg.AccessKey, qosCfg.SecretKey); len(entries) > 0 {
+	if entries := credentialEntries; len(entries) > 0 {
 		secret, err = configworkflow.EnsureSecret(ctx, c, cr, entries, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
@@ -1314,7 +1183,7 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 
 // getIndexerStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise indexers.
 func getIndexerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(SplunkIndexer, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkIndexer, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
@@ -1324,7 +1193,12 @@ func getIndexerStatefulSet(ctx context.Context, client splcommon.ControllerClien
 	// 1. Introduce the new env variables in the function getIndexerExtraEnv
 	// 2. Avoid SPLUNK_INDEXER_URL in getIndexerExtraEnv for idxc CR
 	// 3. Re-introduce the call to getIndexerExtraEnv here.
-	return getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, cr.Spec.Replicas, make([]corev1.EnvVar, 0), certMounts, opts...)
+	statefulSet, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer, cr.Spec.Replicas, make([]corev1.EnvVar, 0), opts...)
+	if err != nil {
+		return nil, err
+	}
+	certs.InjectCertMounts(&statefulSet.Spec.Template, certMounts)
+	return statefulSet, nil
 }
 
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.
@@ -1358,19 +1232,7 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 		return fmt.Errorf("multisite cluster does not support cluster manager to be located in a different namespace")
 	}
 
-	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
-}
-
-// helper function to get the list of IndexerCluster types in the current namespace
-func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (enterpriseApi.IndexerClusterList, error) {
-	objectList := enterpriseApi.IndexerClusterList{}
-
-	err := c.List(context.TODO(), &objectList, listOpts...)
-	if err != nil {
-		return objectList, fmt.Errorf("list IndexerCluster in namespace %s: %w", cr.GetNamespace(), err)
-	}
-
-	return objectList, nil
+	return reconcileutil.ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
 // RetrieveCMSpec finds monitoringConsole ref from cm spec
@@ -1392,52 +1254,4 @@ func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *
 	}
 
 	return "", nil
-}
-
-func getIndexerClusterSortedSiteList(ctx context.Context, c splcommon.ControllerClient, ref corev1.ObjectReference, indexerList enterpriseApi.IndexerClusterList) (enterpriseApi.IndexerClusterList, error) {
-
-	namespaceList := enterpriseApi.IndexerClusterList{}
-	for _, v := range indexerList.Items {
-		if v.Spec.ClusterManagerRef == ref {
-			namespaceList.Items = append(namespaceList.Items, v)
-		}
-	}
-
-	sort.SliceStable(namespaceList.Items, func(i, j int) bool {
-		return getSiteName(ctx, c, &namespaceList.Items[i]) < getSiteName(ctx, c, &namespaceList.Items[j])
-	})
-
-	return namespaceList, nil
-}
-
-func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) string {
-	defaults := cr.Spec.Defaults
-	// site name starts with site:
-	pattern := `site:\s+(\w+)`
-
-	// Compile the regular expression pattern
-	re := regexp.MustCompile(pattern)
-
-	// Find the first match in the input string
-	match := re.FindStringSubmatch(defaults)
-
-	var extractedValue string
-	if len(match) > 1 {
-		// Extracted value is stored in the second element of the match array
-		extractedValue := match[1]
-		return extractedValue
-	}
-
-	return extractedValue
-}
-
-// Tells if there is an image migration from 8.x.x to 9.x.x
-func imageUpdatedTo9(previousImage string, currentImage string) bool {
-	// If there is no colon, version can't be detected
-	if !strings.Contains(previousImage, ":") || !strings.Contains(currentImage, ":") {
-		return false
-	}
-	previousVersion := strings.Split(previousImage, ":")[1]
-	currentVersion := strings.Split(currentImage, ":")[1]
-	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
 }

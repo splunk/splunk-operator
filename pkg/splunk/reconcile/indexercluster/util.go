@@ -13,16 +13,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package indexercluster implements multi-step IndexerCluster workflows: peer
-decommission, rebalance wait, scale-down sequencing, and secret synchronization.
-
-This is intentionally a domain-specific workflow package. It accepts the
-IndexerCluster API type and owns only the state transitions and Splunk API
-operations required by the pod-manager contract; reconcile/indexercluster owns
-Kubernetes object application, status persistence, and request orchestration.
-
-// TODO: Once all CRs have migrated from enterprise, revisit this boundary and
-// make the workflow CR-agnostic if needed.
-*/
 package indexercluster
+
+import (
+	"strings"
+)
+
+// imageUpdatedTo9 reports whether an image changed from an 8.x version to a 9.x version.
+func imageUpdatedTo9(previousImage string, currentImage string) bool {
+	if !strings.Contains(previousImage, ":") || !strings.Contains(currentImage, ":") {
+		return false
+	}
+	previousVersion := strings.Split(previousImage, ":")[1]
+	currentVersion := strings.Split(currentImage, ":")[1]
+	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
+}

@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -1083,7 +1083,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	}
 
 	// Look for indexerClusters still holding references to the ClusterManager
-	idxcList, err := getIndexerClusterList(ctx, c, cmCr, listOpts)
+	idxcList, err := k8sops.GetIndexerClusterList(ctx, c, cmCr, listOpts)
 	if err != nil {
 		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
 			scopedLog.ErrorContext(ctx, "couldn't retrieve IndexerCluster list", "error", err)

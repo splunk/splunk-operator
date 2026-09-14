@@ -13,16 +13,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package indexercluster implements multi-step IndexerCluster workflows: peer
-decommission, rebalance wait, scale-down sequencing, and secret synchronization.
+package upgrade
 
-This is intentionally a domain-specific workflow package. It accepts the
-IndexerCluster API type and owns only the state transitions and Splunk API
-operations required by the pod-manager contract; reconcile/indexercluster owns
-Kubernetes object application, status persistence, and request orchestration.
+import (
+	"context"
 
-// TODO: Once all CRs have migrated from enterprise, revisit this boundary and
-// make the workflow CR-agnostic if needed.
-*/
-package indexercluster
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+)
+
+type eventPublisher interface {
+	Normal(context.Context, string, string)
+	Warning(context.Context, string, string)
+}
+
+type noopEventPublisher struct{}
+
+func (noopEventPublisher) Normal(context.Context, string, string)  {}
+func (noopEventPublisher) Warning(context.Context, string, string) {}
+
+func getEventPublisher(ctx context.Context) eventPublisher {
+	if publisher, ok := ctx.Value(splcommon.EventPublisherKey).(eventPublisher); ok && publisher != nil {
+		return publisher
+	}
+	return noopEventPublisher{}
+}

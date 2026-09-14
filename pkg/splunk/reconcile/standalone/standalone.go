@@ -28,6 +28,7 @@ import (
 	// TODO: Remove this legacy dependency once all CRs have migrated from enterprise.
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
@@ -405,7 +406,7 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
 func GetStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, enterprise.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkStandalone, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkStandalone, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
@@ -451,7 +452,7 @@ func ValidateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 		}
 	}
 
-	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+	return reconcileutil.ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
 func monitoringConsoleEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
