@@ -122,43 +122,42 @@ nav_order: 1
 * Update app framework documentation for deploying apps with multiple scopes
 * Update install and upgrade examples
 
-### Supported Splunk Version
+Splunk Operator 3.1.0 supports Kubernetes 1.25 through 1.34. However, Kubernetes 1.34 has additional Splunk Enterprise version requirements due to changed IRSA token format and older Splunkd versions are not compatible with. If you deploy on Kubernetes 1.34, use only the Splunk Enterprise versions listed for Kubernetes 1.34 below. Other supported Splunk Enterprise versions can still be used with Kubernetes 1.25 through 1.33.
 
->| Splunk Version |
->|----------------|
->| 10.2.0         |
+### Supported Kubernetes and Splunk versions
 
-### Supported Kubernetes Version
-
->| Kubernetes Version |
->|--------------------|
->| 1.27 - 1.33        |
+| Kubernetes Version | Supported Splunk Enterprise Version | Notes |
+| --- | --- | --- |
+| 1.34 | 9.4.9+, 10.0.4+, 10.4+ | Required for Kubernetes 1.34 deployments |
+| 1.25-1.33 | 10.2.0+, 10.4+ | Required if indexing and ingestion separation is needed |
+| 1.25-1.33 | 9.4.3 - 10.0.4 | Tested compatible without indexing and ingestion separation |
 
 ## 3.0.0 (2025-09-08)
+
+#### Breaking Changes
+
+* **Splunk General Terms acceptance (breaking):** Splunk Operator 3.0.0 introduces a breaking change. Customers must accept the Splunk General Terms (EULA) before deploying or upgrading the Splunk Operator by updating the operator deployment. For detailed steps, read the installation guide: https://github.com/splunk/splunk-operator/blob/main/docs/Install.md#install-operator-to-accept-the-splunk-general-terms
 
 * This is the 3.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * CSPL-3784: Update base image to latest ubi8-minimal version
-* CSPL-3675 Update Operator-SDK to v1.39
-* CSPL-3783: Update AppFramework docs with troubleshooting information
-* CSPL-3851 Adding info to docs about session stickiness for ingress
-* CSPL-3912 Allow Custom Probe Scripts
-* CSPL-3867: SHC and CM Error Message Visibility
-* CSPL-3186: Upgrade Enterprise Security Version 8.0.2
-* 1559: Added SplunkGeneralTerms acceptance
-* CSPL-4005: Remove CRDs from splunk/splunk-operator helm chart
+* CSPL-3675: Update Operator SDK to v1.39
+* CSPL-3783: Update App Framework docs with troubleshooting information
+* CSPL-3851: Add documentation about session stickiness for ingress
+* CSPL-3912: Allow custom probe scripts
+* CSPL-3867: Improve SHC and CM error message visibility
+* CSPL-3186: Upgrade Enterprise Security to version 8.0.2
+* CSPL-3357: Add Splunk General Terms acceptance
+* CSPL-4005: Remove CRDs from splunk/splunk-operator Helm chart
 
-### Supported Splunk Version
+Splunk Operator 3.0.0 supports Kubernetes 1.25 through 1.34. However, Kubernetes 1.34 has additional Splunk Enterprise version requirements due to changed IRSA token format and older Splunkd versions are not compatible with. If you deploy on Kubernetes 1.34, use only the Splunk Enterprise versions listed for Kubernetes 1.34 below. Other supported Splunk Enterprise versions can still be used with Kubernetes 1.25 through 1.33.
 
->| Splunk Version |
->|----------------|
->| 10.0.0         |
+### Supported Kubernetes and Splunk versions
 
-### Supported Kubernetes Version
-
->| Kubernetes Version|
->| --- |
->| 1.27+ |
+| Kubernetes Version | Supported Splunk Enterprise Version | Notes |
+| --- | --- | --- |
+| 1.34 | 9.4.9+, 10.0.4+ | Required for Kubernetes 1.34 deployments |
+| 1.25-1.33 | 9.3.7 - 10.2.0 | |
 
 ## 2.8.1 (2025-07-16)
 
@@ -182,7 +181,7 @@ nav_order: 1
 
 * This is the 2.8.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
-* CSPL-3586 - Certify FIPS 140-3 Compliance
+* CSPL-3586 - Add FIPS 140-3 cluster compatibility testing
 
 * CSPL-3624 - Update Helm Charts for 2.8.0 Support
 
