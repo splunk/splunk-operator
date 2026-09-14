@@ -54,6 +54,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1979,8 +1980,10 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	// Mock the addTelApp function for unit tests
-	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+	// Mock the telapp.AddTelApp function for unit tests
+	savedAddTelApp := telapp.AddTelApp
+	defer func() { telapp.AddTelApp = savedAddTelApp }()
+	telapp.AddTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 		return nil
 	}
 

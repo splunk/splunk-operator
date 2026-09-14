@@ -22,7 +22,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	machineryapi "github.com/cloudnative-pg/machinery/pkg/api"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	cnpginfra "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	monitoring "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	"github.com/stretchr/testify/assert"
@@ -39,7 +39,7 @@ import (
 
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	enterprisev4.AddToScheme(scheme)
+	platformv1alpha1.AddToScheme(scheme)
 	cnpgv1.AddToScheme(scheme)
 	corev1.AddToScheme(scheme)
 	return scheme
@@ -73,8 +73,8 @@ func testTarget() monitoring.Target {
 	}
 }
 
-func newFeatureOwner() *enterprisev4.PostgresCluster {
-	return &enterprisev4.PostgresCluster{
+func newFeatureOwner() *platformv1alpha1.PostgresCluster {
+	return &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "ns", UID: "feature-uid-1"},
 	}
 }

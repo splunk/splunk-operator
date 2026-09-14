@@ -19,15 +19,15 @@ package custom_metrics
 import (
 	"context"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 )
 
 type AcknowledgementRepository struct {
-	status *enterprisev4.CustomMetricsStatus
+	status *platformv1alpha1.CustomMetricsStatus
 }
 
-func NewAcknowledgementRepository(status *enterprisev4.CustomMetricsStatus) AcknowledgementRepository {
+func NewAcknowledgementRepository(status *platformv1alpha1.CustomMetricsStatus) AcknowledgementRepository {
 	return AcknowledgementRepository{status: status}
 }
 

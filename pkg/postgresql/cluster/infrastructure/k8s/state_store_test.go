@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,7 +81,7 @@ func newCNPGTestClient(t *testing.T, objects ...client.Object) client.Client {
 	t.Helper()
 
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 
 	return fake.NewClientBuilder().

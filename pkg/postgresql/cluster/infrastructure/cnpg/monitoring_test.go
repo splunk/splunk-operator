@@ -22,7 +22,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	machineryapi "github.com/cloudnative-pg/machinery/pkg/api"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	monitoring "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,7 +98,7 @@ func monitoringTestScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 	return scheme
 }
@@ -167,7 +167,7 @@ func TestApplyMonitoringConfig_DeletePreconditionsPreserveReplacement(t *testing
 
 func TestDeleteMonitoringSnapshot_DeletePreconditionsPreserveReplacement(t *testing.T) {
 	scheme := monitoringTestScheme(t)
-	owner := &enterprisev4.PostgresCluster{
+	owner := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "ns", UID: "feature-uid"},
 	}
 	safety := &corev1.ConfigMap{
@@ -185,7 +185,7 @@ func TestDeleteMonitoringSnapshot_DeletePreconditionsPreserveReplacement(t *test
 	}
 
 	_, err := DeleteMonitoringSnapshot(
-		t.Context(), racing, owner, enterprisev4.GroupVersion.String(), "PostgresCluster", "demo",
+		t.Context(), racing, owner, platformv1alpha1.GroupVersion.String(), "PostgresCluster", "demo",
 	)
 
 	require.Error(t, err)
@@ -198,7 +198,7 @@ func TestDeleteMonitoringSnapshot_DeletePreconditionsPreserveReplacement(t *test
 
 func TestDeleteMonitoringSnapshot_DeletesOwnedSnapshot(t *testing.T) {
 	scheme := monitoringTestScheme(t)
-	owner := &enterprisev4.PostgresCluster{
+	owner := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "ns", UID: "feature-uid"},
 	}
 	safety := &corev1.ConfigMap{
@@ -208,7 +208,7 @@ func TestDeleteMonitoringSnapshot_DeletesOwnedSnapshot(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, safety).Build()
 
 	changed, err := DeleteMonitoringSnapshot(
-		t.Context(), c, owner, enterprisev4.GroupVersion.String(), "PostgresCluster", "demo",
+		t.Context(), c, owner, platformv1alpha1.GroupVersion.String(), "PostgresCluster", "demo",
 	)
 
 	require.NoError(t, err)
@@ -219,7 +219,7 @@ func TestDeleteMonitoringSnapshot_DeletesOwnedSnapshot(t *testing.T) {
 
 func TestSaveMonitoringSnapshot_PreservesUnrelatedAnnotations(t *testing.T) {
 	scheme := monitoringTestScheme(t)
-	owner := &enterprisev4.PostgresCluster{
+	owner := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "ns", UID: "feature-uid"},
 	}
 	current := &corev1.ConfigMap{
@@ -242,7 +242,7 @@ func TestSaveMonitoringSnapshot_PreservesUnrelatedAnnotations(t *testing.T) {
 	snapshot := MonitoringSnapshot{YAML: yamlContent, Hash: hashContent(yamlContent), QueryCount: 1}
 
 	changed, err := SaveMonitoringSnapshot(
-		t.Context(), c, scheme, owner, enterprisev4.GroupVersion.String(), "PostgresCluster", "demo", snapshot,
+		t.Context(), c, scheme, owner, platformv1alpha1.GroupVersion.String(), "PostgresCluster", "demo", snapshot,
 	)
 	require.NoError(t, err)
 	assert.True(t, changed)
@@ -253,7 +253,7 @@ func TestSaveMonitoringSnapshot_PreservesUnrelatedAnnotations(t *testing.T) {
 	assert.Equal(t, snapshot.Hash, got.Annotations[MonitoringCMHashAnnotation])
 
 	changed, err = SaveMonitoringSnapshot(
-		t.Context(), c, scheme, owner, enterprisev4.GroupVersion.String(), "PostgresCluster", "demo", snapshot,
+		t.Context(), c, scheme, owner, platformv1alpha1.GroupVersion.String(), "PostgresCluster", "demo", snapshot,
 	)
 	require.NoError(t, err)
 	assert.False(t, changed)
@@ -303,7 +303,7 @@ func TestLoadMonitoringSnapshot_RejectsCorruptOrUnsupportedPayload(t *testing.T)
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
 			scheme := monitoringTestScheme(t)
-			owner := &enterprisev4.PostgresCluster{
+			owner := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "ns", UID: "feature-uid"},
 			}
 			cm := &corev1.ConfigMap{
@@ -323,7 +323,7 @@ func TestLoadMonitoringSnapshot_RejectsCorruptOrUnsupportedPayload(t *testing.T)
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner, cm).Build()
 
 			_, found, message, err := LoadMonitoringSnapshot(
-				t.Context(), c, owner, enterprisev4.GroupVersion.String(), "PostgresCluster", "demo",
+				t.Context(), c, owner, platformv1alpha1.GroupVersion.String(), "PostgresCluster", "demo",
 			)
 
 			require.NoError(t, err)
@@ -335,7 +335,7 @@ func TestLoadMonitoringSnapshot_RejectsCorruptOrUnsupportedPayload(t *testing.T)
 
 func TestGetMonitoringFeatureOwner_RequiresMatchingUID(t *testing.T) {
 	scheme := monitoringTestScheme(t)
-	owner := &enterprisev4.PostgresCluster{
+	owner := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "ns", UID: "current-uid"},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(owner).Build()

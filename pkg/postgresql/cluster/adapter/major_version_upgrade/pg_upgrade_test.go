@@ -50,6 +50,29 @@ func TestPgUpgradeDriverStartUpgradePatchesCNPGImage(t *testing.T) {
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", cluster.Spec.ImageName)
 }
 
+func TestPgUpgradeDriverStartUpgradePatchesCNPGImagePullSecrets(t *testing.T) {
+	ctx := t.Context()
+	k8sClient, key := newPgUpgradeTestClient(t, &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg1",
+			Namespace: "default",
+		},
+		Spec: cnpgv1.ClusterSpec{
+			ImageName: "ghcr.io/cloudnative-pg/postgresql:18",
+		},
+	})
+
+	err := NewPgUpgradeDriver(k8sClient, key, "18").
+		WithImagePullSecrets([]cnpgv1.LocalObjectReference{{Name: "target-registry-creds"}}).
+		ApplyTargetImage(ctx)
+	require.NoError(t, err)
+
+	cluster := &cnpgv1.Cluster{}
+	require.NoError(t, k8sClient.Get(ctx, key, cluster))
+	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", cluster.Spec.ImageName)
+	assert.Equal(t, []cnpgv1.LocalObjectReference{{Name: "target-registry-creds"}}, cluster.Spec.ImagePullSecrets)
+}
+
 func TestPgUpgradeDriverUpgradeCompleteWaitsForCNPGMajorUpgrade(t *testing.T) {
 	ctx := t.Context()
 	k8sClient, key := newPgUpgradeTestClient(t, &cnpgv1.Cluster{

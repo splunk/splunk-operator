@@ -19,7 +19,7 @@ import (
 	"context"
 	"testing"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -77,7 +77,7 @@ func TestObjectStoreModel_Reconcile_CreatesWhenBackupEnabled(t *testing.T) {
 
 // foreignObjectStore builds an ObjectStore with the deterministic name but owned by a
 // different controller, simulating a pre-existing or orphaned object the operator must not touch.
-func foreignObjectStore(cluster *enterprisev4.PostgresCluster) *unstructured.Unstructured {
+func foreignObjectStore(cluster *platformv1alpha1.PostgresCluster) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(ObjectStoreGVK)
 	obj.SetName(objectStoreName(cluster.Name))

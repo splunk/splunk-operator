@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	corev1 "k8s.io/api/core/v1"
@@ -42,11 +42,11 @@ type configMapModel struct {
 	events       eventEmitter
 	updateStatus healthStatusUpdater
 	contracts    *reconcileContracts
-	cluster      *enterprisev4.PostgresCluster
+	cluster      *platformv1alpha1.PostgresCluster
 	cm           *corev1.ConfigMap
 }
 
-func newConfigMapModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, contracts *reconcileContracts) *configMapModel {
+func newConfigMapModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, contracts *reconcileContracts) *configMapModel {
 	return &configMapModel{client: c, scheme: scheme, events: events, updateStatus: updateStatus, contracts: contracts, cluster: cluster}
 }
 
@@ -111,7 +111,7 @@ func (c *configMapModel) computeHealth(reconcileErr error) (componentHealth, err
 	}
 
 	if c.cluster.Status.Resources == nil {
-		c.cluster.Status.Resources = &enterprisev4.PostgresClusterResources{}
+		c.cluster.Status.Resources = &platformv1alpha1.PostgresClusterResources{}
 	}
 	if c.cluster.Status.Resources.ConfigMapRef == nil {
 		c.cluster.Status.Resources.ConfigMapRef = &corev1.LocalObjectReference{Name: c.cm.Name}
@@ -170,7 +170,7 @@ func caMetadataForConfigMap(
 }
 
 // generateConfigMap builds a ConfigMap with connection details for the PostgresCluster.
-func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string) (*corev1.ConfigMap, error) {
+func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string) (*corev1.ConfigMap, error) {
 	cmName := fmt.Sprintf("%s%s", cluster.Name, defaultConfigMapSuffix)
 	if cluster.Status.Resources != nil && cluster.Status.Resources.ConfigMapRef != nil {
 		cmName = cluster.Status.Resources.ConfigMapRef.Name

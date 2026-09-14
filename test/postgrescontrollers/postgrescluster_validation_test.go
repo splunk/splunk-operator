@@ -17,7 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/test/testenv"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,9 +49,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "validate-class", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -76,9 +76,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
 			initialStorage := resource.MustParse("10Gi")
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "validate-storage", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 					Storage:               &initialStorage,
@@ -109,9 +109,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "validate-pgversion", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 					PostgresVersion:       ptr.To("18"),
@@ -138,18 +138,18 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 		func(ctx SpecContext) {
 			ns := testcaseEnvInst.GetName()
 			schedule := "* * * * *"
-			pgClass := &enterprisev4.PostgresClusterClass{
+			pgClass := &platformv1alpha1.PostgresClusterClass{
 				ObjectMeta: metav1.ObjectMeta{Name: "postgres-backup-validation-" + ns},
-				Spec: enterprisev4.PostgresClusterClassSpec{
+				Spec: platformv1alpha1.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
-					Config: &enterprisev4.PostgresClusterClassConfig{
+					Config: &platformv1alpha1.PostgresClusterClassConfig{
 						Instances: ptr.To(int32(1)),
-						Backup: &enterprisev4.BackupConfig{
+						Backup: &platformv1alpha1.BackupConfig{
 							Enabled:  ptr.To(true),
 							Schedule: &schedule,
 						},
 					},
-					CNPG: &enterprisev4.CNPGConfig{},
+					CNPG: &platformv1alpha1.CNPGConfig{},
 				},
 			}
 

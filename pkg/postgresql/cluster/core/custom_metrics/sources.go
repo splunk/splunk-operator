@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 )
 
@@ -84,7 +84,7 @@ func (r *run) resolveSource(ctx context.Context, ref sourceRef) ([]mtypes.Resolv
 }
 
 // Cluster packages precede committed database packages.
-func (m *Model) gatherSourceRefs(ctx context.Context, cluster *enterprisev4.PostgresCluster) ([]sourceRef, mtypes.DatabaseContributionSnapshot, error) {
+func (m *Model) gatherSourceRefs(ctx context.Context, cluster *platformv1alpha1.PostgresCluster) ([]sourceRef, mtypes.DatabaseContributionSnapshot, error) {
 	var refs []sourceRef
 
 	if cluster.Spec.Monitoring != nil {

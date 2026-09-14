@@ -17,21 +17,27 @@ package core
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func TestReconcileErrorPassdownToObserve(t *testing.T) {
@@ -43,7 +49,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 	version := "16"
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -51,12 +57,12 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 
@@ -71,10 +77,10 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			expectedCondition: clusterReady,
 			expectedReason:    reasonClusterGetFailed,
 			build: func(updateStatus healthStatusUpdater) component {
-				cluster := &enterprisev4.PostgresCluster{
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-					Status: enterprisev4.PostgresClusterStatus{
-						Resources: &enterprisev4.PostgresClusterResources{
+					Status: platformv1alpha1.PostgresClusterStatus{
+						Resources: &platformv1alpha1.PostgresClusterResources{
 							SuperUserSecretRef: &corev1.SecretKeySelector{
 								LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
 								Key:                  "password",
@@ -99,7 +105,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			expectedCondition: managedRolesReady,
 			expectedReason:    reasonManagedRolesFailed,
 			build: func(updateStatus healthStatusUpdater) component {
-				cluster := &enterprisev4.PostgresCluster{
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
 				}
 				postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
@@ -122,8 +128,8 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			expectedReason:    reasonPoolerReconciliationFailed,
 			build: func(updateStatus healthStatusUpdater) component {
 				poolerInstances := int32(2)
-				poolerMode := enterprisev4.ConnectionPoolerModeTransaction
-				cluster := &enterprisev4.PostgresCluster{
+				poolerMode := platformv1alpha1.ConnectionPoolerModeTransaction
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 				}
 				contracts := &reconcileContracts{
@@ -133,11 +139,11 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 					},
 				}
 				poolerSpec := mergedConfig.Spec.DeepCopy()
-				poolerSpec.ConnectionPooler = &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}
+				poolerSpec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}
 				poolerCfg := &MergedConfig{
 					Spec: poolerSpec,
-					CNPG: &enterprisev4.CNPGConfig{
-						ConnectionPooler: &enterprisev4.ConnectionPoolerConfig{
+					CNPG: &platformv1alpha1.CNPGConfig{
+						ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
 							Instances: &poolerInstances,
 							Mode:      &poolerMode,
 							Config:    map[string]string{},
@@ -160,9 +166,9 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			expectedCondition: configMapsReady,
 			expectedReason:    reasonConfigMapFailed,
 			build: func(updateStatus healthStatusUpdater) component {
-				cluster := &enterprisev4.PostgresCluster{
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-					Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+					Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 				}
 				contracts := &reconcileContracts{
 					CNPGCluster: &cnpgv1.Cluster{
@@ -187,9 +193,9 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			expectedCondition: secretsReady,
 			expectedReason:    reasonSuperUserSecretFailed,
 			build: func(updateStatus healthStatusUpdater) component {
-				cluster := &enterprisev4.PostgresCluster{
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-					Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+					Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 				}
 				errClient := getErrorClient{
 					Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
@@ -212,7 +218,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			// Arrange
 			var written componentHealth
 			var writes int
-			updateStatus := func(_ *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+			updateStatus := func(_ *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 				written = health
 				writes++
 				return nil
@@ -246,7 +252,7 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 	version := "16"
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -254,12 +260,12 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
-	clusterClass := &enterprisev4.PostgresClusterClass{
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			Config: &enterprisev4.PostgresClusterClassConfig{ConnectionPooler: &enterprisev4.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
 
@@ -270,10 +276,10 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 		{
 			name: "cluster component emits warning from Observe",
 			build: func(events *captureEventEmitter) component {
-				cluster := &enterprisev4.PostgresCluster{
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-					Status: enterprisev4.PostgresClusterStatus{
-						Resources: &enterprisev4.PostgresClusterResources{
+					Status: platformv1alpha1.PostgresClusterStatus{
+						Resources: &platformv1alpha1.PostgresClusterResources{
 							SuperUserSecretRef: &corev1.SecretKeySelector{
 								LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
 								Key:                  "password",
@@ -296,9 +302,9 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 		{
 			name: "secret component emits warning from Observe",
 			build: func(events *captureEventEmitter) component {
-				cluster := &enterprisev4.PostgresCluster{
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-					Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+					Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 				}
 				errClient := getErrorClient{
 					Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
@@ -314,9 +320,9 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 		{
 			name: "configmap component emits warning from Observe",
 			build: func(events *captureEventEmitter) component {
-				cluster := &enterprisev4.PostgresCluster{
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-					Status:     enterprisev4.PostgresClusterStatus{Resources: &enterprisev4.PostgresClusterResources{}},
+					Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 				}
 				contracts := &reconcileContracts{
 					CNPGCluster: &cnpgv1.Cluster{
@@ -339,7 +345,7 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 		{
 			name: "managed roles component emits warning from Observe",
 			build: func(events *captureEventEmitter) component {
-				cluster := &enterprisev4.PostgresCluster{
+				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
 				}
 				postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
@@ -375,7 +381,7 @@ func TestClusterModelStorageResizeInProgress(t *testing.T) {
 	t.Parallel()
 
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 	require.NoError(t, corev1.AddToScheme(scheme))
 
@@ -383,7 +389,7 @@ func TestClusterModelStorageResizeInProgress(t *testing.T) {
 	version := "15.13"
 	storageSize := resource.MustParse("10Gi")
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -391,7 +397,7 @@ func TestClusterModelStorageResizeInProgress(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
 	}
 
 	cases := []struct {
@@ -438,10 +444,10 @@ func TestClusterModelStorageResizeInProgress(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cluster := &enterprisev4.PostgresCluster{
+			cluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-				Status: enterprisev4.PostgresClusterStatus{
-					Resources: &enterprisev4.PostgresClusterResources{
+				Status: platformv1alpha1.PostgresClusterStatus{
+					Resources: &platformv1alpha1.PostgresClusterResources{
 						SuperUserSecretRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "pg1-secret"},
 							Key:                  "password",
@@ -452,7 +458,7 @@ func TestClusterModelStorageResizeInProgress(t *testing.T) {
 			model := newClusterModel(
 				fake.NewClientBuilder().WithScheme(scheme).Build(),
 				scheme, noopEventEmitter{}, nil, cluster,
-				&enterprisev4.PostgresClusterClass{},
+				&platformv1alpha1.PostgresClusterClass{},
 				cfg, &reconcileContracts{Secret: &corev1.Secret{}},
 			)
 			model.cnpgCluster = &cnpgv1.Cluster{
@@ -535,10 +541,10 @@ func TestPhaseWaitingForInstancesToBeActive(t *testing.T) {
 
 			ctx := context.Background()
 			scheme := newTestScheme()
-			cluster := &enterprisev4.PostgresCluster{
+			cluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-				Spec:       enterprisev4.PostgresClusterSpec{},
-				Status: enterprisev4.PostgresClusterStatus{
+				Spec:       platformv1alpha1.PostgresClusterSpec{},
+				Status: platformv1alpha1.PostgresClusterStatus{
 					Phase: tt.clusterPhase,
 					Conditions: []metav1.Condition{{
 						Type:    string(clusterReady),
@@ -558,12 +564,12 @@ func TestPhaseWaitingForInstancesToBeActive(t *testing.T) {
 			}
 			c := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithStatusSubresource(&enterprisev4.PostgresCluster{}).
+				WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
 				WithObjects(cluster).
 				Build()
 			recorder := record.NewFakeRecorder(10)
 			rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder}
-			updateStatus := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+			updateStatus := func(before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 				oldPhase := ""
 				if cluster.Status.Phase != nil {
 					oldPhase = *cluster.Status.Phase
@@ -585,8 +591,8 @@ func TestPhaseWaitingForInstancesToBeActive(t *testing.T) {
 				rc,
 				updateStatus,
 				cluster,
-				&enterprisev4.PostgresClusterClass{},
-				&MergedConfig{Spec: &enterprisev4.PostgresClusterSpec{Instances: &instances}},
+				&platformv1alpha1.PostgresClusterClass{},
+				&MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Instances: &instances}},
 				&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}},
 			)
 			model.cnpgCluster = cnpg
@@ -625,9 +631,9 @@ func TestPhaseFailOverEmitsClusterDegraded(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	readyPhase := string(readyClusterPhase)
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Status: enterprisev4.PostgresClusterStatus{
+		Status: platformv1alpha1.PostgresClusterStatus{
 			Phase: &readyPhase,
 			Conditions: []metav1.Condition{{
 				Type:    string(clusterReady),
@@ -643,12 +649,12 @@ func TestPhaseFailOverEmitsClusterDegraded(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithStatusSubresource(&enterprisev4.PostgresCluster{}).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
 		WithObjects(cluster).
 		Build()
 	recorder := record.NewFakeRecorder(10)
 	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder}
-	updateStatus := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+	updateStatus := func(before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 		oldPhase := ""
 		if cluster.Status.Phase != nil {
 			oldPhase = *cluster.Status.Phase
@@ -665,7 +671,7 @@ func TestPhaseFailOverEmitsClusterDegraded(t *testing.T) {
 	}
 	model := newClusterModel(
 		c, scheme, rc, updateStatus, cluster,
-		&enterprisev4.PostgresClusterClass{},
+		&platformv1alpha1.PostgresClusterClass{},
 		&MergedConfig{},
 		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}},
 	)
@@ -692,23 +698,173 @@ func TestPhaseFailOverEmitsClusterDegraded(t *testing.T) {
 	}
 }
 
+func TestPostgresClusterServiceInitialPhase(t *testing.T) {
+	ready := string(readyClusterPhase)
+	tests := []struct {
+		name            string
+		phase           *string
+		finalizers      []string
+		wantPhase       string
+		wantResult      ctrl.Result
+		wantInitialized bool
+		wantFinalizer   bool
+	}{
+		{
+			name:            "initializes Pending while adding the finalizer",
+			wantPhase:       string(pendingClusterPhase),
+			wantResult:      ctrl.Result{Requeue: true},
+			wantInitialized: true,
+			wantFinalizer:   true,
+		},
+		{
+			name:            "initializes Pending when the finalizer already exists",
+			finalizers:      []string{PostgresClusterFinalizerName},
+			wantPhase:       string(pendingClusterPhase),
+			wantResult:      ctrl.Result{Requeue: true},
+			wantInitialized: true,
+			wantFinalizer:   true,
+		},
+		{
+			name:          "preserves a nonnil phase while adding the finalizer",
+			phase:         &ready,
+			wantPhase:     ready,
+			wantFinalizer: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			scheme := newTestScheme()
+			cluster := newTestCluster("primary", "dbs")
+			cluster.CreationTimestamp = metav1.Now()
+			cluster.Status.Phase = tt.phase
+			cluster.Finalizers = tt.finalizers
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
+				WithObjects(cluster).
+				Build()
+
+			result, err := PostgresClusterService(ctx, &ReconcileContext{
+				Client:   c,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(1),
+			}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil, nil, nil)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantResult, result)
+			stored := &platformv1alpha1.PostgresCluster{}
+			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(cluster), stored))
+			assert.Equal(t, tt.wantFinalizer, controllerutil.ContainsFinalizer(stored, PostgresClusterFinalizerName))
+			require.NotNil(t, stored.Status.Phase)
+			assert.Equal(t, tt.wantPhase, *stored.Status.Phase)
+			if tt.wantInitialized {
+				assert.Empty(t, stored.Status.Conditions)
+				assert.Nil(t, stored.Status.ObservedGeneration)
+				assert.Nil(t, stored.Status.Resources)
+				require.NotNil(t, stored.Status.LastTransitionTime)
+				assert.Equal(t, stored.CreationTimestamp, *stored.Status.LastTransitionTime)
+
+				readinessDuration, completed, err := setPhaseStatus(ctx, c, stored, readyClusterPhase)
+				require.NoError(t, err)
+				assert.True(t, completed)
+				assert.Positive(t, readinessDuration)
+				assert.Nil(t, stored.Status.LastTransitionTime)
+			}
+		})
+	}
+}
+
+func TestPostgresClusterServiceReturnsInitialPhaseConflict(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	cluster := newTestCluster("primary", "dbs")
+	conflict := apierrors.NewConflict(
+		schema.GroupResource{Group: platformv1alpha1.GroupVersion.Group, Resource: "postgresclusters"},
+		cluster.Name,
+		errors.New("resource version conflict"),
+	)
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
+		WithObjects(cluster).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(_ context.Context, _ client.Client, subresource string, _ client.Object, _ ...client.SubResourceUpdateOption) error {
+				if subresource == "status" {
+					return conflict
+				}
+				return nil
+			},
+		}).
+		Build()
+
+	result, err := PostgresClusterService(ctx, &ReconcileContext{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(1),
+	}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil, nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	stored := &platformv1alpha1.PostgresCluster{}
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(cluster), stored))
+	assert.True(t, controllerutil.ContainsFinalizer(stored, PostgresClusterFinalizerName))
+	assert.Nil(t, stored.Status.Phase)
+}
+
+func TestPostgresClusterServiceSkipsPendingPhaseDuringDeletion(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	deletionTimestamp := metav1.Now()
+	cluster := newTestCluster("primary", "dbs")
+	cluster.DeletionTimestamp = &deletionTimestamp
+	cluster.Finalizers = []string{PostgresClusterFinalizerName}
+	deletePolicy := clusterDeletionPolicyDelete
+	cluster.Spec.ClusterDeletionPolicy = &deletePolicy
+	statusUpdates := 0
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
+		WithObjects(cluster).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(ctx context.Context, c client.Client, subresource string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				if subresource == "status" {
+					statusUpdates++
+				}
+				return c.SubResource(subresource).Update(ctx, obj, opts...)
+			},
+		}).
+		Build()
+
+	result, err := PostgresClusterService(ctx, &ReconcileContext{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(1),
+	}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil, nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+	assert.Zero(t, statusUpdates)
+}
+
 func TestHandleFinalizerUnknownDeletionPolicy(t *testing.T) {
 	t.Parallel()
 
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 
 	now := metav1.Now()
 	unknownPolicy := "delete" // typo — lowercase, not a valid constant
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "pg1",
 			Namespace:         "default",
 			DeletionTimestamp: &now,
 			Finalizers:        []string{PostgresClusterFinalizerName},
 		},
-		Spec: enterprisev4.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			ClusterDeletionPolicy: &unknownPolicy,
 		},
 	}
@@ -782,13 +938,13 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 	t.Parallel()
 
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 	require.NoError(t, corev1.AddToScheme(scheme))
 
 	now := metav1.Now()
 	retain := clusterDeletionPolicyRetain
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "pg1",
 			Namespace:         "default",
@@ -796,7 +952,7 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 			DeletionTimestamp: &now,
 			Finalizers:        []string{PostgresClusterFinalizerName},
 		},
-		Spec: enterprisev4.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{
 			ClusterDeletionPolicy: &retain,
 		},
 	}
@@ -806,7 +962,7 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 			Name:      "pg1",
 			Namespace: "default",
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: "enterprise.splunk.com/v4",
+				APIVersion: "platform.splunk.com/v1alpha1",
 				Kind:       "PostgresCluster",
 				Name:       "pg1",
 				UID:        "owner-uid",
@@ -840,9 +996,9 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 func TestRemoveOwnerRef(t *testing.T) {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
-	enterprisev4.AddToScheme(scheme)
+	platformv1alpha1.AddToScheme(scheme)
 
-	owner := &enterprisev4.PostgresCluster{
+	owner := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
 			Namespace: "default",
@@ -857,7 +1013,7 @@ func TestRemoveOwnerRef(t *testing.T) {
 		UID:        "other-uid",
 	}
 	ourOwnerRef := metav1.OwnerReference{
-		APIVersion: "enterprise.splunk.com/v4",
+		APIVersion: "platform.splunk.com/v1alpha1",
 		Kind:       "PostgresCluster",
 		Name:       "my-cluster",
 		UID:        "owner-uid",
@@ -1012,19 +1168,19 @@ func TestGeneratePassword(t *testing.T) {
 }
 
 func TestValidateCrossResource_VersionFloor(t *testing.T) {
-	makeClass := func(floor string) *enterprisev4.PostgresClusterClass {
-		return &enterprisev4.PostgresClusterClass{
+	makeClass := func(floor string) *platformv1alpha1.PostgresClusterClass {
+		return &platformv1alpha1.PostgresClusterClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "cls"},
-			Spec: enterprisev4.PostgresClusterClassSpec{
+			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: "postgresql.cnpg.io",
-				Config:      &enterprisev4.PostgresClusterClassConfig{PostgresVersion: ptr.To(floor)},
+				Config:      &platformv1alpha1.PostgresClusterClassConfig{PostgresVersion: ptr.To(floor)},
 			},
 		}
 	}
-	makeCluster := func(version string) *enterprisev4.PostgresCluster {
-		return &enterprisev4.PostgresCluster{
+	makeCluster := func(version string) *platformv1alpha1.PostgresCluster {
+		return &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg"},
-			Spec:       enterprisev4.PostgresClusterSpec{PostgresVersion: ptr.To(version)},
+			Spec:       platformv1alpha1.PostgresClusterSpec{PostgresVersion: ptr.To(version)},
 		}
 	}
 

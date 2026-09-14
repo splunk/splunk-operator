@@ -145,80 +145,6 @@ func runCustomCommandOnSplunkPods(ctx context.Context, cr splcommon.MetaObject, 
 	return err
 }
 
-// Get extension for name of telemetry app
-func getTelAppNameExtension(crKind string) (string, error) {
-	switch crKind {
-	case "Standalone":
-		return "stdaln", nil
-	case "LicenseMaster":
-		return "lmaster", nil
-	case "LicenseManager":
-		return "lmanager", nil
-	case "SearchHeadCluster":
-		return "shc", nil
-	case "ClusterMaster":
-		return "cmaster", nil
-	case "ClusterManager":
-		return "cmanager", nil
-	case "IngestorCluster":
-		return "ingestor", nil
-	default:
-		return "", errors.New("Invalid CR kind for telemetry app")
-	}
-}
-
-// addTelApp adds a telemetry app
-var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
-	var err error
-
-	scopedLog := logging.FromContext(ctx).With("func", "addTelApp",
-		"name", cr.GetObjectMeta().GetName(),
-		"namespace", cr.GetObjectMeta().GetNamespace())
-
-	// Create pod exec client
-	crKind := cr.GetObjectKind().GroupVersionKind().Kind
-
-	adminPwd, err := splutil.GetAdminPasswordFromNamespaceScopedSecret(ctx, podExecClient.GetClient(), cr.GetNamespace())
-	if err != nil {
-		scopedLog.ErrorContext(ctx, "failed to retrieve admin password", "error", err)
-		return err
-	}
-
-	// Commands to run on pods
-	var command1, command2 string
-
-	// Handle non SHC scenarios(Standalone, CM, LM)
-	if crKind != "SearchHeadCluster" {
-		// Create dir on pods
-		command1 = fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString)
-
-		// App reload
-		command2 = fmt.Sprintf(telAppReloadString, shellQuote(adminPwd))
-
-	} else {
-		// Create dir on pods
-		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer)
-
-		// Bundle push
-		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), shellQuote(adminPwd), "/tmp/status.txt")
-	}
-
-	// Run the commands on Splunk pods
-	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command1, adminPwd, podExecClient)
-	if err != nil {
-		scopedLog.ErrorContext(ctx, "unable to run command on splunk pod", "error", err)
-		return err
-	}
-
-	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command2, adminPwd, podExecClient)
-	if err != nil {
-		scopedLog.ErrorContext(ctx, "unable to run command on splunk pod", "error", err)
-		return err
-	}
-
-	return err
-}
-
 // getOrdinalValFromPodName returns the pod ordinal value
 func getOrdinalValFromPodName(podName string) (int, error) {
 	// K8 pod name should contain at least 3 occurrences of character "-"
@@ -489,6 +415,17 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 
 	appDeployInfo := downloadWorker.appDeployInfo
 	appName := appDeployInfo.AppName
+
+	// Stop before starting the remote read when the context is already
+	// cancelled (e.g. namespace delete during test teardown), so download
+	// workers do not hold pod connections open past shutdown.
+	select {
+	case <-ctx.Done():
+		scopedLog.InfoContext(ctx, "context cancelled, skipping app download", "appName", appName)
+		updatePplnWorkerPhaseInfo(ctx, appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadPending)
+		return
+	default:
+	}
 
 	localFile := getLocalAppFileName(ctx, localPath, appName, appDeployInfo.ObjectHash)
 	remoteFile, err := getRemoteObjectKey(ctx, splunkCR, downloadWorker.afwConfig, appSrcName, appName)

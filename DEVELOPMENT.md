@@ -41,7 +41,7 @@ package, controller, generated, or user-visible boundaries.
 | `pkg/splunk/` Go code | Run `make fmt vet`, then a scoped `go test` or `make test-unit` |
 | `internal/controller/` behavior | Run relevant scoped envtest; inspect current `Makefile` labels and include classic and Postgres specs for complete coverage; then run `make build` |
 | Cross-package Go behavior | Run relevant scoped tests, then `make test` and `make build` |
-| `api/enterprise/` or generated `config/` assets | Run `make manifests generate`, relevant tests, and `make build`; inspect generated changes |
+| `api/` or generated `config/` assets | Run `make manifests generate`, relevant tests, and `make build`; inspect generated changes |
 | `helm-chart/` | Run `make helm-check` or the narrower chart target shown by `make help` |
 | `test/`, `test/testenv/`, or integration runners | Follow the `splunk-operator-integration-tests` skill and `docs/develop/IntegrationTesting.md`; compile and dry-run the scoped suite before authorized live execution |
 | `kuttl/tests/` | Run `kubectl kuttl test --config kuttl/kuttl-test-kind.yaml` only when its cluster context is explicitly in scope |

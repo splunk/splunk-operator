@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,14 +39,14 @@ const barmanCloudPluginName = "barman-cloud.cloudnative-pg.io"
 
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	enterprisev4.AddToScheme(scheme)
+	platformv1alpha1.AddToScheme(scheme)
 	cnpgv1.AddToScheme(scheme)
 	corev1.AddToScheme(scheme)
 	return scheme
 }
 
-func newTestCluster(name, ns string) *enterprisev4.PostgresCluster {
-	return &enterprisev4.PostgresCluster{
+func newTestCluster(name, ns string) *platformv1alpha1.PostgresCluster {
+	return &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
@@ -58,9 +58,9 @@ func newTestCluster(name, ns string) *enterprisev4.PostgresCluster {
 // ownedByCluster returns an OwnerReferences slice marking the object as controlled by the
 // given PostgresCluster, matching what ctrl.SetControllerReference writes at runtime. Used to
 // seed ScheduledBackups that the controller is allowed to garbage-collect.
-func ownedByCluster(cluster *enterprisev4.PostgresCluster) []metav1.OwnerReference {
+func ownedByCluster(cluster *platformv1alpha1.PostgresCluster) []metav1.OwnerReference {
 	return []metav1.OwnerReference{{
-		APIVersion: enterprisev4.GroupVersion.String(),
+		APIVersion: platformv1alpha1.GroupVersion.String(),
 		Kind:       "PostgresCluster",
 		Name:       cluster.Name,
 		UID:        cluster.UID,

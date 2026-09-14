@@ -18,7 +18,6 @@ package core
 // The following functions are intentionally not tested directly here.
 // Their business logic is covered by narrower helper tests where practical,
 // and the remaining behavior is mostly controller-runtime orchestration:
-// - reconcileCNPGDatabases
 // - handleDeletion
 // - orphanRetainedResources
 // - deleteRemovedResources
@@ -36,9 +35,13 @@ import (
 	"unicode"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
+	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
+	dbcnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/cnpg"
+	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
+	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
@@ -60,12 +63,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type stubDBRepo struct {
-	execErr error
-	calls   []string
+	execErr   error
+	calls     []string
+	roleCalls map[string]ports.DatabaseRoleNames
 }
 
 type stubAcknowledgementRepository struct {
@@ -73,6 +78,33 @@ type stubAcknowledgementRepository struct {
 	found      bool
 	err        error
 	identities []mtypes.ContributorIdentity
+}
+
+type stubDatabaseProvisioner struct {
+	desired     []dbtypes.DesiredDatabase
+	inspect     dbtypes.Observation
+	inspectErr  error
+	applyResult dbtypes.ApplyResult
+	applyErr    error
+	observation dbtypes.Observation
+	observeErr  error
+}
+
+func (s *stubDatabaseProvisioner) Inspect(_ context.Context, _ dbtypes.ProvisionerTarget, _ []dbtypes.DatabaseIdentity) (dbtypes.Observation, error) {
+	return s.inspect, s.inspectErr
+}
+
+func (s *stubDatabaseProvisioner) Apply(_ context.Context, _ dbtypes.ProvisionerTarget, desired []dbtypes.DesiredDatabase) (dbtypes.ApplyResult, error) {
+	s.desired = desired
+	return s.applyResult, s.applyErr
+}
+
+func (s *stubDatabaseProvisioner) Observe(_ context.Context, _ dbtypes.ProvisionerTarget, _ []dbtypes.ExpectedDatabase) (dbtypes.Observation, error) {
+	return s.observation, s.observeErr
+}
+
+func testDatabaseProvisioner(c client.Client, scheme *runtime.Scheme) DatabaseProvisioner {
+	return dbcnpgadapter.NewDatabaseProvisioner(c, scheme)
 }
 
 func (r *stubAcknowledgementRepository) Find(
@@ -103,9 +135,13 @@ func (r *captureMetricsRecorder) SetManagedUsers(string, map[string]float64) {}
 
 var _ ports.Recorder = (*captureMetricsRecorder)(nil)
 
-// ExecGrants is a stub implementation of the DBRepo interface that records calls and returns a predefined error.
-func (r *stubDBRepo) ExecGrants(_ context.Context, dbName string) error {
+// AssignRequiredPermissionsToRole is a stub implementation of the ports.DBRepo interface that records calls and returns a predefined error.
+func (r *stubDBRepo) AssignRequiredPermissionsToRole(_ context.Context, dbName string, roles ports.DatabaseRoleNames) error {
 	r.calls = append(r.calls, dbName)
+	if r.roleCalls == nil {
+		r.roleCalls = make(map[string]ports.DatabaseRoleNames)
+	}
+	r.roleCalls[dbName] = roles
 	return r.execErr
 }
 
@@ -124,7 +160,7 @@ func int64Ptr(v int64) *int64 {
 	return ptr.To(v)
 }
 
-func databaseNames(defs []enterprisev4.DatabaseDefinition) []string {
+func databaseNames(defs []platformv1alpha1.DatabaseDefinition) []string {
 	names := make([]string, 0, len(defs))
 	for _, def := range defs {
 		names = append(names, def.Name)
@@ -155,7 +191,7 @@ func testScheme(t *testing.T) *runtime.Scheme {
 
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(enterprisev4.AddToScheme(scheme))
+	utilruntime.Must(platformv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(cnpgv1.AddToScheme(scheme))
 
 	return scheme
@@ -167,7 +203,7 @@ func testClient(t *testing.T, scheme *runtime.Scheme, objs ...client.Object) cli
 
 	builder := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+		WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
 		WithObjects(objs...)
 
 	return builder.Build()
@@ -176,7 +212,7 @@ func testClient(t *testing.T, scheme *runtime.Scheme, objs ...client.Object) cli
 func postgresDatabaseConflict(name string) error {
 	return apierrors.NewConflict(
 		schema.GroupResource{
-			Group:    enterprisev4.GroupVersion.Group,
+			Group:    platformv1alpha1.GroupVersion.Group,
 			Resource: "postgresdatabases",
 		},
 		name,
@@ -188,21 +224,21 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 	scheme := testScheme(t)
 	tests := []struct {
 		name     string
-		existing *enterprisev4.PostgresDatabase
-		build    func(*enterprisev4.PostgresDatabase) client.Client
+		existing *platformv1alpha1.PostgresDatabase
+		build    func(*platformv1alpha1.PostgresDatabase) client.Client
 	}{
 		{
 			name: "when adding the finalizer",
-			existing: &enterprisev4.PostgresDatabase{
+			existing: &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "primary",
 					Namespace: "dbs",
 				},
 			},
-			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+			build: func(existing *platformv1alpha1.PostgresDatabase) client.Client {
 				return fake.NewClientBuilder().
 					WithScheme(scheme).
-					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
 					WithObjects(existing).
 					WithInterceptorFuncs(interceptor.Funcs{
 						Update: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.UpdateOption) error {
@@ -214,20 +250,20 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 		},
 		{
 			name: "when persisting status",
-			existing: &enterprisev4.PostgresDatabase{
+			existing: &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "primary",
 					Namespace:  "dbs",
 					Finalizers: []string{postgresDatabaseFinalizerName},
 				},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: "missing-cluster"},
 				},
 			},
-			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+			build: func(existing *platformv1alpha1.PostgresDatabase) client.Client {
 				return fake.NewClientBuilder().
 					WithScheme(scheme).
-					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
 					WithObjects(existing).
 					WithInterceptorFuncs(interceptor.Funcs{
 						SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
@@ -242,24 +278,24 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 		},
 		{
 			name: "when status update conflicts while handling another error",
-			existing: &enterprisev4.PostgresDatabase{
+			existing: &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "primary",
 					Namespace:  "dbs",
 					Finalizers: []string{postgresDatabaseFinalizerName},
 				},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: "primary"},
 				},
 			},
-			build: func(existing *enterprisev4.PostgresDatabase) client.Client {
+			build: func(existing *platformv1alpha1.PostgresDatabase) client.Client {
 				return fake.NewClientBuilder().
 					WithScheme(scheme).
-					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
 					WithObjects(existing).
 					WithInterceptorFuncs(interceptor.Funcs{
 						Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-							if _, ok := obj.(*enterprisev4.PostgresCluster); ok {
+							if _, ok := obj.(*platformv1alpha1.PostgresCluster); ok {
 								return errors.New("temporary get failure")
 							}
 							return client.Get(ctx, key, obj, opts...)
@@ -280,12 +316,12 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 		t.Run(tst.name, func(t *testing.T) {
 			c := tst.build(tst.existing)
 
-			postgresDB := &enterprisev4.PostgresDatabase{}
+			postgresDB := &platformv1alpha1.PostgresDatabase{}
 			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: tst.existing.Name, Namespace: tst.existing.Namespace}, postgresDB))
 
 			result, err := PostgresDatabaseService(
 				context.Background(),
-				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}},
+				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
 				postgresDB,
 				nil,
 			)
@@ -294,6 +330,147 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 			assert.Equal(t, ctrl.Result{Requeue: true}, result)
 		})
 	}
+}
+
+func reconcilePostgresDatabaseServiceForTest(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase) (ctrl.Result, error) {
+	return PostgresDatabaseService(ctx, &ReconcileContext{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(1),
+	}, postgresDB, nil)
+}
+
+func TestPostgresDatabaseServiceInitialPhase(t *testing.T) {
+	ready := string(readyDBPhase)
+	tests := []struct {
+		name            string
+		phase           *string
+		finalizers      []string
+		wantPhase       string
+		wantResult      ctrl.Result
+		wantInitialized bool
+		wantFinalizer   bool
+	}{
+		{
+			name:            "initializes Pending while adding the finalizer",
+			wantPhase:       string(pendingDBPhase),
+			wantResult:      ctrl.Result{Requeue: true},
+			wantInitialized: true,
+			wantFinalizer:   true,
+		},
+		{
+			name:            "initializes Pending when the finalizer already exists",
+			finalizers:      []string{postgresDatabaseFinalizerName},
+			wantPhase:       string(pendingDBPhase),
+			wantResult:      ctrl.Result{Requeue: true},
+			wantInitialized: true,
+			wantFinalizer:   true,
+		},
+		{
+			name:          "preserves a nonnil phase while adding the finalizer",
+			phase:         &ready,
+			wantPhase:     ready,
+			wantFinalizer: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			scheme := testScheme(t)
+			postgresDB := &platformv1alpha1.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", Finalizers: tt.finalizers, CreationTimestamp: metav1.Now()},
+				Status:     platformv1alpha1.PostgresDatabaseStatus{Phase: tt.phase},
+			}
+			c := testClient(t, scheme, postgresDB)
+
+			result, err := reconcilePostgresDatabaseServiceForTest(ctx, c, scheme, postgresDB)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantResult, result)
+			stored := &platformv1alpha1.PostgresDatabase{}
+			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(postgresDB), stored))
+			assert.Equal(t, tt.wantFinalizer, controllerutil.ContainsFinalizer(stored, postgresDatabaseFinalizerName))
+			require.NotNil(t, stored.Status.Phase)
+			assert.Equal(t, tt.wantPhase, *stored.Status.Phase)
+			if tt.wantInitialized {
+				assert.Empty(t, stored.Status.Conditions)
+				assert.Nil(t, stored.Status.ObservedGeneration)
+				require.NotNil(t, stored.Status.LastTransitionTime)
+				assert.Equal(t, stored.CreationTimestamp, *stored.Status.LastTransitionTime)
+				applyStatus(stored, privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted, "ready", readyDBPhase)
+				lastTransitionTime, completed := completeReadinessCycle(stored)
+				assert.True(t, completed)
+				assert.Equal(t, stored.CreationTimestamp.Time, lastTransitionTime)
+				assert.Nil(t, stored.Status.LastTransitionTime)
+				assert.Equal(t, string(readyDBPhase), *stored.Status.Phase)
+			}
+		})
+	}
+}
+
+func TestPostgresDatabaseServiceRequeuesOnInitialPhaseConflict(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
+		WithObjects(postgresDB).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(_ context.Context, _ client.Client, subresource string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+				if subresource != "status" {
+					return nil
+				}
+				return postgresDatabaseConflict(obj.GetName())
+			},
+		}).
+		Build()
+
+	result, err := reconcilePostgresDatabaseServiceForTest(ctx, c, scheme, postgresDB)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{Requeue: true}, result)
+	stored := &platformv1alpha1.PostgresDatabase{}
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(postgresDB), stored))
+	assert.Contains(t, stored.Finalizers, postgresDatabaseFinalizerName)
+	assert.Nil(t, stored.Status.Phase)
+}
+
+func TestPostgresDatabaseServiceSkipsPendingPhaseDuringDeletion(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	deletionTimestamp := metav1.Now()
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "primary",
+			Namespace:         "dbs",
+			DeletionTimestamp: &deletionTimestamp,
+			Finalizers:        []string{postgresDatabaseFinalizerName},
+		},
+	}
+	var statusPhase *string
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
+		WithObjects(postgresDB).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(ctx context.Context, c client.Client, subresource string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				if subresource == "status" {
+					statusPhase = obj.(*platformv1alpha1.PostgresDatabase).Status.Phase
+				}
+				return c.SubResource(subresource).Update(ctx, obj, opts...)
+			},
+		}).
+		Build()
+
+	result, err := reconcilePostgresDatabaseServiceForTest(ctx, c, scheme, postgresDB)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+	assert.Nil(t, statusPhase)
 }
 
 // TestPostgresDatabaseServiceTerminalOnMissingExternalSecret verifies that a
@@ -306,29 +483,29 @@ func TestPostgresDatabaseServiceTerminalOnMissingExternalSecret(t *testing.T) {
 	ctx := context.Background()
 	const ns = "dbs"
 
-	postgresDB := &enterprisev4.PostgresDatabase{
-		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresDatabase"},
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: ns, UID: types.UID("pdb-uid"), Generation: 1, Finalizers: []string{postgresDatabaseFinalizerName}},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
-			Databases: []enterprisev4.DatabaseDefinition{
-				{Name: "payments", PasswordConfig: &enterprisev4.PasswordConfig{
+			Databases: []platformv1alpha1.DatabaseDefinition{
+				{Name: "payments", PasswordConfig: &platformv1alpha1.PasswordConfig{
 					ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "external-admin-secret"},
 					ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "external-rw-secret"},
 				}},
 			},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
 			Phase:     strPtr(string(readyDBPhase)),
-			Databases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			Databases: []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 		},
 	}
 
-	postgresCluster := &enterprisev4.PostgresCluster{
-		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresCluster"},
+	postgresCluster := &platformv1alpha1.PostgresCluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
-		Status: enterprisev4.PostgresClusterStatus{
-			Phase: strPtr(string(ClusterReady)),
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{
 				APIVersion: cnpgv1.SchemeGroupVersion.String(),
 				Kind:       "Cluster",
@@ -349,7 +526,7 @@ func TestPostgresDatabaseServiceTerminalOnMissingExternalSecret(t *testing.T) {
 	// any role is patched.
 	result, err := PostgresDatabaseService(
 		ctx,
-		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}},
+		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
 		postgresDB,
 		nil,
 	)
@@ -420,8 +597,8 @@ func TestDatabaseClusterNotReadyConditionReason(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			postgresDB := &enterprisev4.PostgresDatabase{
-				TypeMeta: metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresDatabase"},
+			postgresDB := &platformv1alpha1.PostgresDatabase{
+				TypeMeta: metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "primary",
 					Namespace:  ns,
@@ -429,20 +606,20 @@ func TestDatabaseClusterNotReadyConditionReason(t *testing.T) {
 					Generation: 1,
 					Finalizers: []string{postgresDatabaseFinalizerName},
 				},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
-					Databases:  []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+					Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 				},
-				Status: enterprisev4.PostgresDatabaseStatus{
+				Status: platformv1alpha1.PostgresDatabaseStatus{
 					Phase:      &tt.dbPhase,
 					Conditions: []metav1.Condition{tt.dbCondition},
-					Databases:  []enterprisev4.DatabaseInfo{{Name: "payments"}},
+					Databases:  []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 				},
 			}
-			postgresCluster := &enterprisev4.PostgresCluster{
-				TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresCluster"},
+			postgresCluster := &platformv1alpha1.PostgresCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
-				Status: enterprisev4.PostgresClusterStatus{
+				Status: platformv1alpha1.PostgresClusterStatus{
 					Phase:      &pendingPhase,
 					Conditions: tt.clusterConditions,
 				},
@@ -452,14 +629,14 @@ func TestDatabaseClusterNotReadyConditionReason(t *testing.T) {
 
 			result, err := PostgresDatabaseService(
 				ctx,
-				&ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder, Metrics: &pgprometheus.NoopRecorder{}},
+				&ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder, Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
 				postgresDB,
 				nil,
 			)
 
 			require.NoError(t, err)
 			assert.Equal(t, ctrl.Result{RequeueAfter: retryDelay}, result)
-			updated := &enterprisev4.PostgresDatabase{}
+			updated := &platformv1alpha1.PostgresDatabase{}
 			require.NoError(t, c.Get(ctx, types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, updated))
 			condition := meta.FindStatusCondition(updated.Status.Conditions, string(clusterReady))
 			require.NotNil(t, condition)
@@ -488,29 +665,29 @@ func TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransie
 	ctx := context.Background()
 	const ns = "dbs"
 
-	postgresDB := &enterprisev4.PostgresDatabase{
-		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresDatabase"},
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: ns, UID: types.UID("pdb-uid"), Generation: 1, Finalizers: []string{postgresDatabaseFinalizerName}},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
-			Databases: []enterprisev4.DatabaseDefinition{
-				{Name: "payments", PasswordConfig: &enterprisev4.PasswordConfig{
+			Databases: []platformv1alpha1.DatabaseDefinition{
+				{Name: "payments", PasswordConfig: &platformv1alpha1.PasswordConfig{
 					ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "external-admin-secret"},
 					ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "external-rw-secret"},
 				}},
 			},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
 			Phase:     strPtr(string(readyDBPhase)),
-			Databases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			Databases: []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 		},
 	}
 
-	postgresCluster := &enterprisev4.PostgresCluster{
-		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresCluster"},
+	postgresCluster := &platformv1alpha1.PostgresCluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
-		Status: enterprisev4.PostgresClusterStatus{
-			Phase: strPtr(string(ClusterReady)),
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{
 				APIVersion: cnpgv1.SchemeGroupVersion.String(),
 				Kind:       "Cluster",
@@ -528,7 +705,7 @@ func TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransie
 	transient := apierrors.NewServiceUnavailable("apiserver is on a coffee break")
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+		WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
 		WithObjects(postgresDB, postgresCluster, cnpgCluster).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, _ client.Object, _ ...client.SubResourceUpdateOption) error {
@@ -542,7 +719,7 @@ func TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransie
 
 	result, err := PostgresDatabaseService(
 		ctx,
-		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}},
+		&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
 		postgresDB,
 		nil,
 	)
@@ -585,6 +762,56 @@ func TestSecretMissingPolicyForDB(t *testing.T) {
 	}
 }
 
+func TestChooseSecretErrorPrioritizesMissingSecrets(t *testing.T) {
+	externalMissingErr := secretReconcileError{
+		message: "external secret missing",
+		reason:  reasonExternalSecretMissing,
+	}
+	managedMissingErr := secretReconcileError{
+		message: "managed secret missing",
+		reason:  reasonManagedSecretMissing,
+	}
+	managedConflictErr := secretReconcileError{
+		message: "managed secret ownership conflict",
+		reason:  reasonManagedSecretOwnershipConflict,
+	}
+	externalInvalidErr := secretReconcileError{
+		message: "external secret invalid",
+		reason:  reasonExternalSecretMissingLabel,
+	}
+
+	tests := []struct {
+		name       string
+		err        error
+		wantReason conditionReasons
+	}{
+		{
+			name:       "external missing wins over managed missing",
+			err:        errors.Join(managedMissingErr, externalMissingErr),
+			wantReason: reasonExternalSecretMissing,
+		},
+		{
+			name:       "managed missing wins over earlier managed conflict",
+			err:        errors.Join(managedConflictErr, managedMissingErr),
+			wantReason: reasonManagedSecretMissing,
+		},
+		{
+			name:       "first non-missing secret error wins",
+			err:        errors.Join(managedConflictErr, externalInvalidErr),
+			wantReason: reasonManagedSecretOwnershipConflict,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := chooseSecretError(tt.err)
+
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantReason, got.reason)
+		})
+	}
+}
+
 func TestExistingDatabaseStatusDoesNotDependOnCurrentPhase(t *testing.T) {
 	for _, phase := range []string{
 		string(provisioningDBPhase),
@@ -592,10 +819,10 @@ func TestExistingDatabaseStatusDoesNotDependOnCurrentPhase(t *testing.T) {
 		string(readyDBPhase),
 	} {
 		t.Run(phase, func(t *testing.T) {
-			postgresDB := &enterprisev4.PostgresDatabase{
-				Status: enterprisev4.PostgresDatabaseStatus{
+			postgresDB := &platformv1alpha1.PostgresDatabase{
+				Status: platformv1alpha1.PostgresDatabaseStatus{
 					Phase:     &phase,
-					Databases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
+					Databases: []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 				},
 			}
 
@@ -605,9 +832,9 @@ func TestExistingDatabaseStatusDoesNotDependOnCurrentPhase(t *testing.T) {
 }
 
 func TestGetDesiredRoles(t *testing.T) {
-	postgresDB := &enterprisev4.PostgresDatabase{
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{
 				{Name: "maindb"},
 				{Name: "secondarydb"},
 			},
@@ -623,6 +850,69 @@ func TestGetDesiredRoles(t *testing.T) {
 	got := getDesiredRoles(postgresDB)
 
 	assert.Equal(t, want, got)
+}
+
+func TestRoleNameOverridesPropagateToDatabaseModels(t *testing.T) {
+	db := platformv1alpha1.DatabaseDefinition{
+		Name:          "payments",
+		AdminRoleName: "tenant_owner",
+		RWRoleName:    "tenant_rw",
+	}
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary"},
+		Spec:       platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{db}},
+	}
+
+	assert.Equal(t, ports.DatabaseRoleNames{Admin: "tenant_owner", RW: "tenant_rw"}, EffectiveRoleNames(db))
+	assert.Equal(t, []string{"tenant_owner", "tenant_rw"}, getDesiredRoles(postgresDB))
+	assert.Equal(t, "payments", databaseForRole(postgresDB, "tenant_owner"))
+	assert.Equal(t, "payments", databaseForRole(postgresDB, "tenant_rw"))
+	desired := desiredDatabasesForProvisioning(postgresDB, nil)
+	require.Len(t, desired, 1)
+	assert.Equal(t, "tenant_owner", desired[0].Owner)
+
+	status := populateDatabaseStatus(postgresDB, true)
+	require.Len(t, status, 1)
+	require.Len(t, status[0].Roles, 2)
+	assert.Equal(t, "tenant_owner", status[0].Roles[0].Name)
+	assert.Equal(t, "tenant_rw", status[0].Roles[1].Name)
+}
+
+func TestReconcileRWRolePrivilegesUsesConfiguredRoleNames(t *testing.T) {
+	repo := &stubDBRepo{}
+	newDBRepo := func(_ context.Context, _, _, _ string) (ports.DBRepo, error) { return repo, nil }
+	targets := []databasePrivilegeTarget{{
+		Database: "payments",
+		Roles:    ports.DatabaseRoleNames{Admin: "tenant_owner", RW: "tenant_rw"},
+	}}
+
+	require.NoError(t, reconcileRWRolePrivileges(context.Background(), "rw.example.internal", "supersecret", targets, newDBRepo))
+	assert.Equal(t, ports.DatabaseRoleNames{Admin: "tenant_owner", RW: "tenant_rw"}, repo.roleCalls["payments"])
+}
+
+func TestRoleCleanupUsesConfiguredRoleNames(t *testing.T) {
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", UID: types.UID("postgresdb-uid")},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{{
+			Name:          "payments",
+			AdminRoleName: "tenant_owner",
+			RWRoleName:    "tenant_rw",
+		}}},
+	}
+	owner := platformv1alpha1.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
+
+	assert.True(t, rolesStillOwnedBySelf(postgresDB, &platformv1alpha1.ManagedRolesStatus{
+		RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
+			"tenant_owner": owner,
+			"tenant_rw":    owner,
+		},
+	}, postgresDB.Spec.Databases))
+	assert.False(t, rolesStillOwnedBySelf(postgresDB, &platformv1alpha1.ManagedRolesStatus{
+		RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
+			"payments_admin": owner,
+			"payments_rw":    owner,
+		},
+	}, postgresDB.Spec.Databases))
 }
 
 func TestReconcileRWRolePrivileges(t *testing.T) {
@@ -670,7 +960,7 @@ func TestReconcileRWRolePrivileges(t *testing.T) {
 				repos[dbName] = &stubDBRepo{execErr: tst.execErrs[dbName]}
 			}
 
-			newDBRepo := func(_ context.Context, host, dbName, password string) (DBRepo, error) {
+			newDBRepo := func(_ context.Context, host, dbName, password string) (ports.DBRepo, error) {
 				repoCalls = append(repoCalls, dbName)
 				if err := tst.newRepoErrs[dbName]; err != nil {
 					return nil, err
@@ -679,7 +969,11 @@ func TestReconcileRWRolePrivileges(t *testing.T) {
 				return repos[dbName], nil
 			}
 
-			err := reconcileRWRolePrivileges(context.Background(), "rw.example.internal", "supersecret", tst.dbNames, newDBRepo)
+			targets := make([]databasePrivilegeTarget, 0, len(tst.dbNames))
+			for _, dbName := range tst.dbNames {
+				targets = append(targets, databasePrivilegeTarget{Database: dbName, Roles: ports.DatabaseRoleNames{Admin: adminRoleName(dbName), RW: rwRoleName(dbName)}})
+			}
+			err := reconcileRWRolePrivileges(context.Background(), "rw.example.internal", "supersecret", targets, newDBRepo)
 
 			assert.Equal(t, tst.wantRepoCalls, repoCalls)
 			for dbName, wantCalls := range tst.wantExecCalls {
@@ -704,7 +998,7 @@ func TestReconcileRWRolePrivilegesLogsCompleteOperationWithoutCredentials(t *tes
 	ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(&logOutput, nil)))
 	terminalErr := fmt.Errorf("%w: authentication error containing supersecret", ErrTerminal)
 	retryableGrantErr := errors.New("grant failure containing supersecret")
-	newDBRepo := func(_ context.Context, _, dbName, _ string) (DBRepo, error) {
+	newDBRepo := func(_ context.Context, _, dbName, _ string) (ports.DBRepo, error) {
 		if dbName == "analytics" {
 			return nil, terminalErr
 		}
@@ -714,7 +1008,11 @@ func TestReconcileRWRolePrivilegesLogsCompleteOperationWithoutCredentials(t *tes
 		return &stubDBRepo{}, nil
 	}
 
-	err := reconcileRWRolePrivileges(ctx, "rw.example.internal", "supersecret", []string{"payments", "analytics", "audit"}, newDBRepo)
+	err := reconcileRWRolePrivileges(ctx, "rw.example.internal", "supersecret", []databasePrivilegeTarget{
+		{Database: "payments", Roles: ports.DatabaseRoleNames{Admin: "payments_admin", RW: "payments_rw"}},
+		{Database: "analytics", Roles: ports.DatabaseRoleNames{Admin: "analytics_admin", RW: "analytics_rw"}},
+		{Database: "audit", Roles: ports.DatabaseRoleNames{Admin: "audit_admin", RW: "audit_rw"}},
+	}, newDBRepo)
 
 	require.ErrorIs(t, err, ErrTerminal)
 	assert.NotErrorIs(t, err, terminalErr)
@@ -758,61 +1056,13 @@ func TestReconcileRWRolePrivilegesLogsCompleteOperationWithoutCredentials(t *tes
 	assert.Equal(t, "retryable", records[2]["error_category"])
 }
 
-func TestGetClusterReadyStatus(t *testing.T) {
-	tests := []struct {
-		name       string
-		cluster    *enterprisev4.PostgresCluster
-		wantStatus clusterReadyStatus
-	}{
-		{
-			name:       "returns not ready when phase is nil",
-			cluster:    &enterprisev4.PostgresCluster{},
-			wantStatus: ClusterNotReady,
-		},
-		{
-			name: "returns not ready when phase is not ready",
-			cluster: &enterprisev4.PostgresCluster{
-				Status: enterprisev4.PostgresClusterStatus{
-					Phase: strPtr("Provisioning"),
-				},
-			},
-			wantStatus: ClusterNotReady,
-		},
-		{
-			name: "returns no provisioner ref when phase is ready but ref is missing",
-			cluster: &enterprisev4.PostgresCluster{
-				Status: enterprisev4.PostgresClusterStatus{
-					Phase: strPtr(string(ClusterReady)),
-				},
-			},
-			wantStatus: ClusterNoProvisionerRef,
-		},
-		{
-			name: "returns ready when phase and provisioner ref are present",
-			cluster: &enterprisev4.PostgresCluster{
-				Status: enterprisev4.PostgresClusterStatus{
-					Phase:          strPtr(string(ClusterReady)),
-					ProvisionerRef: &corev1.ObjectReference{Name: "cnpg-primary", Namespace: "dbs"},
-				},
-			},
-			wantStatus: ClusterReady,
-		},
-	}
-
-	for _, tst := range tests {
-		t.Run(tst.name, func(t *testing.T) {
-			assert.Equal(t, tst.wantStatus, getClusterReadyStatus(tst.cluster))
-		})
-	}
-}
-
 // Uses a fake client because fetching the referenced Cluster depends on API reads.
 func TestFetchCluster(t *testing.T) {
 	scheme := testScheme(t)
 
 	tests := []struct {
 		name       string
-		cluster    *enterprisev4.PostgresCluster
+		cluster    *platformv1alpha1.PostgresCluster
 		wantName   string
 		wantErr    string
 		wantAbsent bool
@@ -823,7 +1073,7 @@ func TestFetchCluster(t *testing.T) {
 		},
 		{
 			name: "returns referenced cluster when present",
-			cluster: &enterprisev4.PostgresCluster{
+			cluster: &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
 			},
 			wantName: "primary",
@@ -832,9 +1082,9 @@ func TestFetchCluster(t *testing.T) {
 
 	for _, tst := range tests {
 		t.Run(tst.name, func(t *testing.T) {
-			postgresDB := &enterprisev4.PostgresDatabase{
+			postgresDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "dbs"},
-				Spec: enterprisev4.PostgresDatabaseSpec{
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: "primary"},
 				},
 			}
@@ -867,9 +1117,9 @@ func TestFetchCluster(t *testing.T) {
 	}
 
 	t.Run("returns error on client failure", func(t *testing.T) {
-		postgresDB := &enterprisev4.PostgresDatabase{
+		postgresDB := &platformv1alpha1.PostgresDatabase{
 			ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "dbs"},
-			Spec: enterprisev4.PostgresDatabaseSpec{
+			Spec: platformv1alpha1.PostgresDatabaseSpec{
 				ClusterRef: corev1.LocalObjectReference{Name: "primary"},
 			},
 		}
@@ -893,7 +1143,7 @@ func TestFetchCluster(t *testing.T) {
 // Uses a fake client because the helper mutates status in-memory and persists it through the status subresource.
 func TestSetStatus(t *testing.T) {
 	scheme := testScheme(t)
-	existing := &enterprisev4.PostgresDatabase{
+	existing := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "primary",
 			Namespace:  "dbs",
@@ -901,7 +1151,7 @@ func TestSetStatus(t *testing.T) {
 		},
 	}
 	c := testClient(t, scheme, existing)
-	postgresDB := &enterprisev4.PostgresDatabase{}
+	postgresDB := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
 
 	err := persistStatus(
@@ -927,7 +1177,7 @@ func TestSetStatus(t *testing.T) {
 	assert.Equal(t, "Cluster is operational", postgresDB.Status.Conditions[0].Message)
 	assert.Equal(t, postgresDB.Generation, postgresDB.Status.Conditions[0].ObservedGeneration)
 
-	got := &enterprisev4.PostgresDatabase{}
+	got := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, got))
 	require.NotNil(t, got.Status.Phase)
 	assert.Equal(t, *postgresDB.Status.Phase, *got.Status.Phase)
@@ -937,18 +1187,18 @@ func TestSetStatus(t *testing.T) {
 
 func TestPersistCustomMetricsPublication(t *testing.T) {
 	scheme := testScheme(t)
-	existing := &enterprisev4.PostgresDatabase{
+	existing := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "database-owner",
 			Namespace:  "dbs",
 			UID:        types.UID("database-owner-uid"),
 			Generation: 7,
 		},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{
 				{
 					Name: "orders",
-					Monitoring: &enterprisev4.DatabaseMonitoring{
+					Monitoring: &platformv1alpha1.DatabaseMonitoring{
 						CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "orders-metrics"},
 							Key:                  "queries.yaml",
@@ -960,14 +1210,14 @@ func TestPersistCustomMetricsPublication(t *testing.T) {
 		},
 	}
 	c := testClient(t, scheme, existing)
-	postgresDB := &enterprisev4.PostgresDatabase{}
+	postgresDB := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existing), postgresDB))
 
 	changed, err := persistCustomMetricsPublication(t.Context(), c, postgresDB)
 
 	require.NoError(t, err)
 	assert.True(t, changed)
-	got := &enterprisev4.PostgresDatabase{}
+	got := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existing), got))
 	require.NotNil(t, got.Status.CustomMetricsPublication)
 	assert.Equal(t, int64(7), got.Status.CustomMetricsPublication.ObservedGeneration)
@@ -1011,27 +1261,27 @@ func TestReconcileCustomMetricsGateMapsAPIState(t *testing.T) {
 	}
 	ordersRevision := mtypes.ContributionRevision("orders", true, []mtypes.QuerySelector{querySelector})
 	disabledRevision := mtypes.ContributionRevision("analytics", false, nil)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ownerName,
 			Namespace: namespace,
 			UID:       ownerUID,
 		},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{
 				{
 					Name: "orders",
-					Monitoring: &enterprisev4.DatabaseMonitoring{
+					Monitoring: &platformv1alpha1.DatabaseMonitoring{
 						CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selector},
 					},
 				},
 				{Name: "analytics"},
 			},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			CustomMetricsPublication: &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 				ObservedGeneration: 1,
-				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{
+				Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{
 					{
 						DatabaseName:           "orders",
 						Revision:               ordersRevision,
@@ -1056,7 +1306,7 @@ func TestReconcileCustomMetricsGateMapsAPIState(t *testing.T) {
 		},
 	}
 	rc := &ReconcileContext{
-		NewCustomMetricsAcknowledgementRepo: func(*enterprisev4.PostgresCluster) dbmetrics.AcknowledgementRepository {
+		NewCustomMetricsAcknowledgementRepo: func(*platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository {
 			return repository
 		},
 	}
@@ -1065,7 +1315,7 @@ func TestReconcileCustomMetricsGateMapsAPIState(t *testing.T) {
 		t.Context(),
 		rc,
 		postgresDB,
-		&enterprisev4.PostgresCluster{},
+		nil,
 	)
 
 	require.NoError(t, err)
@@ -1139,19 +1389,19 @@ func TestPersistCustomMetricsStatus(t *testing.T) {
 	for _, tst := range tests {
 		t.Run(tst.name, func(t *testing.T) {
 			scheme := testScheme(t)
-			existing := &enterprisev4.PostgresDatabase{
+			existing := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "database-owner",
 					Namespace:  "dbs",
 					Generation: 3,
 				},
-				Spec: enterprisev4.PostgresDatabaseSpec{
-					Databases: []enterprisev4.DatabaseDefinition{{Name: "orders"}},
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
+					Databases: []platformv1alpha1.DatabaseDefinition{{Name: "orders"}},
 				},
-				Status: enterprisev4.PostgresDatabaseStatus{
-					CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+				Status: platformv1alpha1.PostgresDatabaseStatus{
+					CustomMetricsPublication: &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 						ObservedGeneration: 3,
-						Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+						Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 							DatabaseName: "orders",
 							Revision:     "published-revision",
 							Exists:       true,
@@ -1160,7 +1410,7 @@ func TestPersistCustomMetricsStatus(t *testing.T) {
 				},
 			}
 			c := testClient(t, scheme, existing)
-			postgresDB := &enterprisev4.PostgresDatabase{}
+			postgresDB := &platformv1alpha1.PostgresDatabase{}
 			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existing), postgresDB))
 			rc := &ReconcileContext{
 				Client:  c,
@@ -1177,7 +1427,7 @@ func TestPersistCustomMetricsStatus(t *testing.T) {
 			)
 
 			require.NoError(t, err)
-			got := &enterprisev4.PostgresDatabase{}
+			got := &platformv1alpha1.PostgresDatabase{}
 			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existing), got))
 			require.NotNil(t, got.Status.Phase)
 			assert.Equal(t, string(tst.phase), *got.Status.Phase)
@@ -1205,24 +1455,24 @@ func TestReconcileCustomMetricsGatePropagatesAcknowledgementRepositoryError(t *t
 		ConfigMapName: selector.Name,
 		ConfigMapKey:  selector.Key,
 	}})
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "database-owner",
 			Namespace: "dbs",
 			UID:       types.UID("database-owner-uid"),
 		},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{{
 				Name: "orders",
-				Monitoring: &enterprisev4.DatabaseMonitoring{
+				Monitoring: &platformv1alpha1.DatabaseMonitoring{
 					CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{selector},
 				},
 			}},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			CustomMetricsPublication: &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 				ObservedGeneration: 1,
-				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+				Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 					DatabaseName:           "orders",
 					Revision:               revision,
 					Exists:                 true,
@@ -1233,7 +1483,7 @@ func TestReconcileCustomMetricsGatePropagatesAcknowledgementRepositoryError(t *t
 	}
 	repository := &stubAcknowledgementRepository{err: transient}
 	rc := &ReconcileContext{
-		NewCustomMetricsAcknowledgementRepo: func(*enterprisev4.PostgresCluster) dbmetrics.AcknowledgementRepository {
+		NewCustomMetricsAcknowledgementRepo: func(*platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository {
 			return repository
 		},
 	}
@@ -1242,7 +1492,7 @@ func TestReconcileCustomMetricsGatePropagatesAcknowledgementRepositoryError(t *t
 		t.Context(),
 		rc,
 		postgresDB,
-		&enterprisev4.PostgresCluster{},
+		nil,
 	)
 
 	require.Error(t, err)
@@ -1256,21 +1506,21 @@ func TestPersistStatusStartsReadinessCycleOnce(t *testing.T) {
 	creationTime := metav1.NewTime(time.Now().Add(-2 * time.Minute))
 	ready := string(readyDBPhase)
 	generation := int64(1)
-	existing := &enterprisev4.PostgresDatabase{
+	existing := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "primary",
 			Namespace:         "dbs",
 			Generation:        generation,
 			CreationTimestamp: creationTime,
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
 			Phase:              &ready,
 			ObservedGeneration: &generation,
 		},
 	}
 	c := testClient(t, scheme, existing)
 
-	db := &enterprisev4.PostgresDatabase{}
+	db := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, db))
 	require.NoError(t, persistStatus(
 		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
@@ -1280,7 +1530,7 @@ func TestPersistStatusStartsReadinessCycleOnce(t *testing.T) {
 	require.NotNil(t, db.Status.LastTransitionTime)
 	lastTransitionTime := *db.Status.LastTransitionTime
 
-	stored := &enterprisev4.PostgresDatabase{}
+	stored := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, stored))
 	require.NotNil(t, stored.Status.LastTransitionTime)
 	assert.Equal(t, lastTransitionTime, *stored.Status.LastTransitionTime)
@@ -1298,20 +1548,20 @@ func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpda
 	scheme := testScheme(t)
 	generation := int64(1)
 	ready := string(readyDBPhase)
-	existing := &enterprisev4.PostgresDatabase{
+	existing := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "primary",
 			Namespace:  "dbs",
 			Generation: generation,
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
 			Phase:              &ready,
 			ObservedGeneration: &generation,
 		},
 	}
 	c := testClient(t, scheme, existing)
 
-	db := &enterprisev4.PostgresDatabase{}
+	db := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, db))
 	require.NoError(t, persistStatus(
 		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
@@ -1322,124 +1572,217 @@ func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpda
 
 	require.NoError(t, persistStatus(
 		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
-		secretsReady, metav1.ConditionFalse, reasonSecretsDriftDetected,
+		secretsReady, metav1.ConditionFalse, reasonManagedSecretMissing,
 		"managed role secret drift detected", provisioningDBPhase,
 	))
 	require.NotNil(t, db.Status.LastTransitionTime)
 
-	persisted := &enterprisev4.PostgresDatabase{}
+	persisted := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, persisted))
 	require.NotNil(t, persisted.Status.LastTransitionTime)
 	assert.Equal(t, *db.Status.LastTransitionTime, *persisted.Status.LastTransitionTime)
 }
 
-// Uses a fake client because readiness is determined from CNPG Database objects in the API.
-func TestVerifyDatabasesReady(t *testing.T) {
-	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
+func TestReconcileDatabaseProvisioningClassifiesExactObservation(t *testing.T) {
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{
 				{Name: "payments"},
 				{Name: "analytics"},
 			},
 		},
 	}
+	const providerClusterName = "cnpg-primary"
+	expected := []dbtypes.ExpectedDatabase{
+		{Name: "payments", ResourceName: "primary-payments", Generation: 2},
+		{Name: "analytics", ResourceName: "primary-analytics", Generation: 4},
+	}
 
 	tests := []struct {
 		name         string
-		objects      []client.Object
+		observation  dbtypes.Observation
 		wantNotReady []string
 		wantReasons  map[string]string
-		wantErr      string
 	}{
 		{
-			name: "returns empty when all databases are applied",
-			objects: []client.Object{
-				&cnpgv1.Database{
-					ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"},
-					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
-				},
-				&cnpgv1.Database{
-					ObjectMeta: metav1.ObjectMeta{Name: "primary-analytics", Namespace: "dbs"},
-					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
-				},
-			},
+			name: "converged exact generations",
+			observation: dbtypes.Observation{Databases: []dbtypes.ObservedDatabase{
+				{Name: "payments", Found: true, Applied: true, ObservedGeneration: 2},
+				{Name: "analytics", Found: true, Applied: true, ObservedGeneration: 4},
+			}},
 			wantNotReady: nil,
 			wantReasons:  map[string]string{},
 		},
 		{
-			name: "returns names and reasons for databases that are not applied",
-			objects: []client.Object{
-				&cnpgv1.Database{
-					ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"},
-					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(false), Message: "role \"payments_rw\" does not exist"},
-				},
-				&cnpgv1.Database{
-					ObjectMeta: metav1.ObjectMeta{Name: "primary-analytics", Namespace: "dbs"},
-				},
-			},
+			name: "provider rejection and missing resource",
+			observation: dbtypes.Observation{Databases: []dbtypes.ObservedDatabase{
+				{Name: "payments", Found: true, ObservedGeneration: 2, Message: "role does not exist"},
+			}},
 			wantNotReady: []string{"payments", "analytics"},
 			wantReasons: map[string]string{
-				"payments":  "role \"payments_rw\" does not exist",
-				"analytics": "Waiting for CNPG to apply the database",
+				"payments":  "role does not exist",
+				"analytics": "CNPG Database not found",
 			},
 		},
 		{
-			name: "returns not ready and not-found reason when a database is missing",
-			objects: []client.Object{
-				&cnpgv1.Database{
-					ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"},
-					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
-				},
-			},
-			wantNotReady: []string{"analytics"},
-			wantReasons:  map[string]string{"analytics": "CNPG Database not found"},
-		},
-		{
-			name: "prefers the failing extension detail over the generic top-level message",
-			objects: []client.Object{
-				&cnpgv1.Database{
-					ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"},
-					Status: cnpgv1.DatabaseStatus{
-						Applied: boolPtr(false),
-						Message: "database object reconciliation failed",
-						Extensions: []cnpgv1.DatabaseObjectStatus{
-							{Name: "missing_ext", Applied: false, Message: "ERROR: extension \"missing_ext\" is not available (SQLSTATE 0A000)"},
-						},
-					},
-				},
-				&cnpgv1.Database{
-					ObjectMeta: metav1.ObjectMeta{Name: "primary-analytics", Namespace: "dbs"},
-					Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
-				},
-			},
+			name: "stale applied status is still configuring",
+			observation: dbtypes.Observation{Databases: []dbtypes.ObservedDatabase{
+				{Name: "payments", Found: true, Applied: true, ObservedGeneration: 1},
+				{Name: "analytics", Found: true, Applied: true, ObservedGeneration: 4},
+			}},
 			wantNotReady: []string{"payments"},
 			wantReasons: map[string]string{
-				"payments": "extension \"missing_ext\": ERROR: extension \"missing_ext\" is not available (SQLSTATE 0A000)",
+				"payments": "Waiting for CNPG to apply the database",
 			},
 		},
 	}
 
 	for _, tst := range tests {
-
 		t.Run(tst.name, func(t *testing.T) {
-			c := testClient(t, scheme, tst.objects...)
-
-			reasons := make(map[string]string)
-			got, err := verifyDatabasesReady(context.Background(), c, postgresDB, reasons)
-
-			if tst.wantErr != "" {
-				require.Error(t, err)
-				assert.ErrorContains(t, err, tst.wantErr)
-				return
+			provisioner := &stubDatabaseProvisioner{
+				inspect:     tst.observation,
+				applyResult: dbtypes.ApplyResult{Expected: expected},
+				observation: tst.observation,
 			}
-
+			got, err := reconcileDatabaseProvisioning(t.Context(), provisioner, postgresDB, providerClusterName)
 			require.NoError(t, err)
-			assert.Equal(t, tst.wantNotReady, got)
-			assert.Equal(t, tst.wantReasons, reasons)
+			assert.Equal(t, tst.wantNotReady, got.notReady)
+			assert.Equal(t, tst.wantReasons, got.reasons)
 		})
 	}
+}
+
+func TestDesiredDatabasesForProvisioningMapsOptionsAndEffectiveOwner(t *testing.T) {
+	allowConnections := true
+	isTemplate := false
+	connectionLimit := int32(-1)
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary"},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{{
+			Name: "payments", AdminRoleName: "tenant_owner", DeletionPolicy: deletionPolicyRetain,
+			Template: "template0", Encoding: "UTF8", Locale: "en_US.UTF-8",
+			LocaleProvider: "icu", LocaleCollate: "en_US.UTF-8", LocaleCType: "en_US.UTF-8",
+			ICULocale: "en-US", ICURules: "&V << w", CollationVersion: "153.120",
+			IsTemplate: &isTemplate, AllowConnections: &allowConnections,
+			ConnectionLimit: &connectionLimit, Tablespace: "fastspace", Extensions: []string{"pg_trgm"},
+		}}},
+	}
+
+	desired := desiredDatabasesForProvisioning(postgresDB, nil)
+
+	require.Len(t, desired, 1)
+	assert.Equal(t, "primary-payments", desired[0].ResourceName)
+	assert.Equal(t, "payments", desired[0].Name)
+	assert.Equal(t, "tenant_owner", desired[0].Owner)
+	assert.Equal(t, dbtypes.ReclaimRetain, desired[0].Reclaim)
+	assert.Equal(t, []string{"pg_trgm"}, desired[0].Extensions)
+	assert.Equal(t, dbtypes.DatabaseCreationOptions{
+		Template: "template0", Encoding: "UTF8", Locale: "en_US.UTF-8",
+		LocaleProvider: "icu", LocaleCollate: "en_US.UTF-8", LocaleCType: "en_US.UTF-8",
+		ICULocale: "en-US", ICURules: "&V << w", CollationVersion: "153.120",
+	}, desired[0].Creation)
+	require.NotNil(t, desired[0].Mutable.IsTemplate)
+	assert.False(t, *desired[0].Mutable.IsTemplate)
+	require.NotNil(t, desired[0].Mutable.AllowConnections)
+	assert.True(t, *desired[0].Mutable.AllowConnections)
+	require.NotNil(t, desired[0].Mutable.ConnectionLimit)
+	assert.Equal(t, int32(-1), *desired[0].Mutable.ConnectionLimit)
+	assert.Equal(t, "fastspace", desired[0].Mutable.Tablespace)
+	assert.NotSame(t, &isTemplate, desired[0].Mutable.IsTemplate)
+	assert.NotSame(t, &allowConnections, desired[0].Mutable.AllowConnections)
+	assert.NotSame(t, &connectionLimit, desired[0].Mutable.ConnectionLimit)
+}
+
+func TestDesiredDatabasesForProvisioningStagesOnlyNewClosedDatabases(t *testing.T) {
+	closed := false
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary"},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{
+			{Name: "established", AllowConnections: &closed},
+			{Name: "newdb", AllowConnections: &closed},
+		}},
+		Status: platformv1alpha1.PostgresDatabaseStatus{Databases: []platformv1alpha1.DatabaseInfo{{
+			Name: "established", DatabaseRef: &corev1.LocalObjectReference{Name: "primary-established"},
+		}}},
+	}
+
+	desired := desiredDatabasesForProvisioning(postgresDB, map[string]bool{"established": true})
+
+	require.Len(t, desired, 2)
+	require.NotNil(t, desired[0].Mutable.AllowConnections)
+	assert.False(t, *desired[0].Mutable.AllowConnections, "an established closed database must remain closed")
+	require.NotNil(t, desired[1].Mutable.AllowConnections)
+	assert.True(t, *desired[1].Mutable.AllowConnections, "a new closed database must remain connectable for privilege bootstrap")
+	assert.True(t, requiresClosedDatabaseFinalization([]platformv1alpha1.DatabaseDefinition{postgresDB.Spec.Databases[1]}))
+}
+
+func TestDatabaseBootstrapCompletionRequiresCurrentProviderIdentity(t *testing.T) {
+	postgresDB := &platformv1alpha1.PostgresDatabase{Status: platformv1alpha1.PostgresDatabaseStatus{
+		Databases: []platformv1alpha1.DatabaseInfo{
+			{Name: "matching", DatabaseRef: &corev1.LocalObjectReference{Name: "primary-matching"}, DatabaseUID: "uid-a"},
+			{Name: "recreated", DatabaseRef: &corev1.LocalObjectReference{Name: "primary-recreated"}, DatabaseUID: "uid-old"},
+			{Name: "missing", DatabaseRef: &corev1.LocalObjectReference{Name: "primary-missing"}, DatabaseUID: "uid-c"},
+			{Name: "missing-uid", DatabaseRef: &corev1.LocalObjectReference{Name: "primary-missing-uid"}},
+		},
+	}}
+
+	completed := databaseBootstrapCompletion(postgresDB, dbtypes.Observation{Databases: []dbtypes.ObservedDatabase{
+		{Name: "matching", Found: true, UID: "uid-a"},
+		{Name: "recreated", Found: true, UID: "uid-new"},
+		{Name: "missing-uid", Found: true, UID: "uid-current"},
+	}})
+
+	assert.True(t, completed["matching"])
+	assert.False(t, completed["recreated"], "a replacement provider database requires privilege bootstrap")
+	assert.False(t, completed["missing"], "a missing provider database requires privilege bootstrap")
+	assert.False(t, completed["missing-uid"], "bootstrap proof without provider identity is not trusted")
+}
+
+func TestPersistDatabaseBootstrapCompletionMarksOnlyNewEntries(t *testing.T) {
+	scheme := testScheme(t)
+	phase := string(readyDBPhase)
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", Generation: 3},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{
+			{Name: "established"},
+			{Name: "newdb", AllowConnections: ptr.To(false)},
+		}},
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			Phase: &phase,
+			Databases: []platformv1alpha1.DatabaseInfo{
+				{Name: "established", Ready: true, DatabaseRef: &corev1.LocalObjectReference{Name: "primary-established"}},
+				{Name: "newdb", Ready: true},
+			},
+		},
+	}
+	c := testClient(t, scheme, postgresDB)
+	persisted := &platformv1alpha1.PostgresDatabase{}
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "primary", Namespace: "dbs"}, persisted))
+
+	require.NoError(t, persistDatabaseBootstrapCompletion(
+		t.Context(), c, persisted,
+		[]platformv1alpha1.DatabaseDefinition{postgresDB.Spec.Databases[1]},
+		map[string]types.UID{"newdb": "newdb-uid"},
+	))
+
+	require.Len(t, persisted.Status.Databases, 2)
+	assert.True(t, persisted.Status.Databases[0].Ready)
+	assert.Empty(t, persisted.Status.Databases[0].Message)
+	assert.Equal(t, "primary-established", persisted.Status.Databases[0].DatabaseRef.Name)
+	assert.False(t, persisted.Status.Databases[1].Ready)
+	assert.Equal(t, reasonCNPGDatabaseApplying, persisted.Status.Databases[1].Message)
+	require.NotNil(t, persisted.Status.Databases[1].DatabaseRef)
+	assert.Equal(t, "primary-newdb", persisted.Status.Databases[1].DatabaseRef.Name)
+	assert.Equal(t, types.UID("newdb-uid"), persisted.Status.Databases[1].DatabaseUID)
+	require.NotNil(t, persisted.Status.ObservedGeneration)
+	assert.Equal(t, int64(3), *persisted.Status.ObservedGeneration)
+	require.NotNil(t, persisted.Status.Phase)
+	assert.Equal(t, string(provisioningDBPhase), *persisted.Status.Phase)
+	condition := meta.FindStatusCondition(persisted.Status.Conditions, string(databasesReady))
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionFalse, condition.Status)
+	assert.Equal(t, string(reasonWaitingForCNPG), condition.Reason)
 }
 
 // Uses a fake client because the helper wraps Kubernetes get/not-found behavior.
@@ -1474,9 +1817,9 @@ func TestGetSecret(t *testing.T) {
 // Uses a fake client because adoption updates object metadata and persists it through the client.
 func TestAdoptResource(t *testing.T) {
 	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev4.GroupVersion.String(),
+			APIVersion: platformv1alpha1.GroupVersion.String(),
 			Kind:       "PostgresDatabase",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1509,9 +1852,9 @@ func TestAdoptResource(t *testing.T) {
 
 func TestAdoptResourceNilAnnotations(t *testing.T) {
 	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev4.GroupVersion.String(),
+			APIVersion: platformv1alpha1.GroupVersion.String(),
 			Kind:       "PostgresDatabase",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1541,14 +1884,14 @@ func TestAdoptResourceNilAnnotations(t *testing.T) {
 // Uses a fake client because these helpers mutate existing API objects during orphaning.
 func TestOrphanResourceHelpers(t *testing.T) {
 	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "primary",
 			Namespace: "dbs",
 			UID:       types.UID("postgresdb-uid"),
 		},
 	}
-	databases := []enterprisev4.DatabaseDefinition{{Name: "payments"}}
+	databases := []platformv1alpha1.DatabaseDefinition{{Name: "payments"}}
 
 	t.Run("orphanCNPGDatabases strips owner and adds retain annotation", func(t *testing.T) {
 		db := &cnpgv1.Database{
@@ -1609,9 +1952,9 @@ func TestOrphanResourceHelpers(t *testing.T) {
 			Data: map[string][]byte{secretKeyUsername: []byte("u"), secretKeyPassword: []byte("p")},
 		}
 		c := testClient(t, scheme, external)
-		externalDatabases := []enterprisev4.DatabaseDefinition{{
+		externalDatabases := []platformv1alpha1.DatabaseDefinition{{
 			Name: "payments",
-			PasswordConfig: &enterprisev4.PasswordConfig{
+			PasswordConfig: &platformv1alpha1.PasswordConfig{
 				ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "primary-payments-admin"},
 				ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "external-rw"},
 			},
@@ -1629,10 +1972,10 @@ func TestOrphanResourceHelpers(t *testing.T) {
 // Uses a fake client because these helpers delete Kubernetes resources and must verify API state.
 func TestDeleteResourceHelpers(t *testing.T) {
 	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
 	}
-	databases := []enterprisev4.DatabaseDefinition{{Name: "payments"}}
+	databases := []platformv1alpha1.DatabaseDefinition{{Name: "payments"}}
 
 	t.Run("deleteCNPGDatabases removes existing object", func(t *testing.T) {
 		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"}}
@@ -1660,9 +2003,9 @@ func TestDeleteResourceHelpers(t *testing.T) {
 			Data:       map[string][]byte{secretKeyPassword: []byte("p")},
 		}
 		c := testClient(t, scheme, external)
-		externalDatabases := []enterprisev4.DatabaseDefinition{{
+		externalDatabases := []platformv1alpha1.DatabaseDefinition{{
 			Name: "payments",
-			PasswordConfig: &enterprisev4.PasswordConfig{
+			PasswordConfig: &platformv1alpha1.PasswordConfig{
 				ExternalAdminSecretRef: corev1.LocalObjectReference{Name: "primary-payments-admin"},
 				ExternalRWSecretRef:    corev1.LocalObjectReference{Name: "external-rw"},
 			},
@@ -1689,9 +2032,9 @@ func TestGeneratePassword(t *testing.T) {
 // Uses a fake client because the helper creates Secret objects and persists owner references through the Kubernetes API.
 func TestCreateRoleSecret(t *testing.T) {
 	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev4.GroupVersion.String(),
+			APIVersion: platformv1alpha1.GroupVersion.String(),
 			Kind:       "PostgresDatabase",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1751,9 +2094,9 @@ func TestCreateRoleSecret(t *testing.T) {
 // Uses a fake client because the helper decides between get/create/adopt behavior based on Secret state in the API.
 func TestEnsureSecret(t *testing.T) {
 	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev4.GroupVersion.String(),
+			APIVersion: platformv1alpha1.GroupVersion.String(),
 			Kind:       "PostgresDatabase",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1826,7 +2169,7 @@ func TestEnsureSecret(t *testing.T) {
 		assert.Equal(t, wantRolename, string(got.Data["username"]))
 		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
 		assert.Contains(t, got.OwnerReferences, metav1.OwnerReference{
-			APIVersion:         enterprisev4.GroupVersion.String(),
+			APIVersion:         platformv1alpha1.GroupVersion.String(),
 			Kind:               "PostgresDatabase",
 			Name:               postgresDB.Name,
 			UID:                wantOwnerUID,
@@ -1851,7 +2194,7 @@ func TestEnsureSecret(t *testing.T) {
 				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion:         enterprisev4.GroupVersion.String(),
+						APIVersion:         platformv1alpha1.GroupVersion.String(),
 						Kind:               "PostgresDatabase",
 						Name:               postgresDB.Name,
 						UID:                wantOwnerUID,
@@ -1880,7 +2223,7 @@ func TestEnsureSecret(t *testing.T) {
 		assert.Equal(t, wantOwnerUID, got.OwnerReferences[0].UID)
 	})
 
-	t.Run("returns drift error when a previously provisioned secret is missing", func(t *testing.T) {
+	t.Run("returns managed-secret-missing error when a previously provisioned secret is missing", func(t *testing.T) {
 		roleName := "payments_admin"
 		secretName := "primary-payments-admin"
 		c := testClient(t, scheme)
@@ -1890,8 +2233,9 @@ func TestEnsureSecret(t *testing.T) {
 		require.Error(t, err)
 		var driftErr secretReconcileError
 		require.ErrorAs(t, err, &driftErr)
-		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.Equal(t, reasonManagedSecretMissing, driftErr.reason)
 		assert.ErrorContains(t, err, secretName)
+		assert.ErrorContains(t, err, "restore the Secret with the original credential data")
 	})
 
 	t.Run("re-attaches owner reference when ownership was manually stripped", func(t *testing.T) {
@@ -1954,7 +2298,7 @@ func TestEnsureSecret(t *testing.T) {
 		assert.Equal(t, "existing-password", string(got.Data[secretKeyPassword]))
 	})
 
-	t.Run("returns drift error when secret is owned by a different controller", func(t *testing.T) {
+	t.Run("returns managed-secret-ownership-conflict error when secret is owned by a different controller", func(t *testing.T) {
 		roleName := "payments_admin"
 		secretName := "primary-payments-admin"
 		otherOwnerUID := types.UID("other-owner-uid")
@@ -1985,8 +2329,9 @@ func TestEnsureSecret(t *testing.T) {
 		require.Error(t, err)
 		var driftErr secretReconcileError
 		require.ErrorAs(t, err, &driftErr)
-		assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+		assert.Equal(t, reasonManagedSecretOwnershipConflict, driftErr.reason)
 		assert.ErrorContains(t, err, secretName)
+		assert.ErrorContains(t, err, "remove the conflicting owner or restore operator ownership")
 	})
 }
 
@@ -2014,9 +2359,9 @@ func createExternalSecrets(t *testing.T, c client.Client, secretNames []string, 
 // Uses a fake client because the helper reconciles multiple Secret objects through the Kubernetes API.
 func TestReconcileRoleSecrets(t *testing.T) {
 	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev4.GroupVersion.String(),
+			APIVersion: platformv1alpha1.GroupVersion.String(),
 			Kind:       "PostgresDatabase",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -2024,31 +2369,27 @@ func TestReconcileRoleSecrets(t *testing.T) {
 			Namespace: "dbs",
 			UID:       types.UID("postgresdb-uid"),
 		},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{
 				{Name: "payments"},
 				{Name: "analytics"},
 			},
 		},
 	}
 
-	provideExternalSecretsPostgresDB := func() *enterprisev4.PostgresDatabase {
-		return &enterprisev4.PostgresDatabase{
+	provideExternalSecretsPostgresDB := func() *platformv1alpha1.PostgresDatabase {
+		return &platformv1alpha1.PostgresDatabase{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: enterprisev4.GroupVersion.String(),
+				APIVersion: platformv1alpha1.GroupVersion.String(),
 				Kind:       "PostgresDatabase",
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "primary",
 				Namespace: "dbs",
 			},
-			Spec: enterprisev4.PostgresDatabaseSpec{
-				Databases: []enterprisev4.DatabaseDefinition{
-					{Name: "payments", PasswordConfig: &enterprisev4.PasswordConfig{
-						ExternalAdminSecretRef: corev1.LocalObjectReference{Name: ""},
-						ExternalRWSecretRef:    corev1.LocalObjectReference{Name: ""},
-					}},
-					{Name: "analytics", PasswordConfig: &enterprisev4.PasswordConfig{
+			Spec: platformv1alpha1.PostgresDatabaseSpec{
+				Databases: []platformv1alpha1.DatabaseDefinition{
+					{Name: "payments", PasswordConfig: &platformv1alpha1.PasswordConfig{
 						ExternalAdminSecretRef: corev1.LocalObjectReference{Name: ""},
 						ExternalRWSecretRef:    corev1.LocalObjectReference{Name: ""},
 					}},
@@ -2082,6 +2423,25 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		}
 	})
 
+	t.Run("uses overridden role names in generated secret usernames", func(t *testing.T) {
+		custom := postgresDB.DeepCopy()
+		custom.Spec.Databases = []platformv1alpha1.DatabaseDefinition{{
+			Name:          "payments",
+			AdminRoleName: "tenant_owner",
+			RWRoleName:    "tenant_rw",
+		}}
+		c := testClient(t, scheme)
+
+		require.NoError(t, reconcileRoleSecrets(context.Background(), c, scheme, custom, nil))
+
+		admin := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-admin", Namespace: custom.Namespace}, admin))
+		assert.Equal(t, "tenant_owner", string(admin.Data[secretKeyUsername]))
+		rw := &corev1.Secret{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-rw", Namespace: custom.Namespace}, rw))
+		assert.Equal(t, "tenant_rw", string(rw.Data[secretKeyUsername]))
+	})
+
 	t.Run("is idempotent when secrets already exist", func(t *testing.T) {
 		c := testClient(t, scheme)
 
@@ -2106,7 +2466,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		t.Run("does not recreate missing secrets for previously provisioned databases in phase "+string(phase), func(t *testing.T) {
 			existing := postgresDB.DeepCopy()
 			existing.Status.Phase = strPtr(string(phase))
-			existing.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+			existing.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: "payments"}}
 			c := testClient(t, scheme)
 
 			err := reconcileRoleSecrets(context.Background(), c, scheme, existing, existingDatabaseStatus(existing))
@@ -2114,7 +2474,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 			require.Error(t, err)
 			var driftErr secretReconcileError
 			require.ErrorAs(t, err, &driftErr)
-			assert.Equal(t, reasonSecretsDriftDetected, driftErr.reason)
+			assert.Equal(t, reasonManagedSecretMissing, driftErr.reason)
 			assert.Error(t, c.Get(t.Context(), types.NamespacedName{
 				Name:      "primary-payments-admin",
 				Namespace: existing.Namespace,
@@ -2126,7 +2486,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 
 		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
 		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
-		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+		externalSecretsPostgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: "payments"}}
 
 		c := testClient(t, scheme)
 
@@ -2141,7 +2501,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 
 		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
 		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
-		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+		externalSecretsPostgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: "payments"}}
 
 		externalSecretNames := []string{
 			"external-admin-secret",
@@ -2149,8 +2509,6 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		}
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
 
 		c := testClient(t, scheme)
 
@@ -2170,7 +2528,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 	t.Run("succeeds with user-set reload label, never mutating the external secret", func(t *testing.T) {
 		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
 		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
-		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+		externalSecretsPostgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: "payments"}}
 
 		externalSecretNames := []string{
 			"external-admin-secret",
@@ -2186,18 +2544,16 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		exampleDataValue := "kwas"
 		exampleData := []map[string][]byte{
 			{
-				secretKeyUsername: []byte(exampleDataValue),
+				secretKeyUsername: []byte("payments_admin"),
 				secretKeyPassword: []byte(exampleDataValue),
 			},
 			{
 				secretKeyPassword: []byte(exampleDataValue),
-				secretKeyUsername: []byte(exampleDataValue),
+				secretKeyUsername: []byte("payments_rw"),
 			},
 		}
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
 
 		c := testClient(t, scheme)
 		createExternalSecrets(t, c, externalSecretNames, externalSecretsPostgresDB.Namespace, exampleLabels, exampleData)
@@ -2208,7 +2564,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		for _, secretName := range externalSecretNames {
 			got := &corev1.Secret{}
 			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
-			assert.Equal(t, exampleDataValue, string(got.Data[secretKeyUsername]))
+			assert.Contains(t, []string{"payments_admin", "payments_rw"}, string(got.Data[secretKeyUsername]))
 			assert.Equal(t, exampleDataValue, string(got.Data[secretKeyPassword]))
 			assert.Equal(t, "true", got.Labels["cnpg.io/reload"])
 			assert.Equal(t, value, got.Labels[key])
@@ -2218,20 +2574,18 @@ func TestReconcileRoleSecrets(t *testing.T) {
 	t.Run("fails when external secret is missing the reload label — user must set it", func(t *testing.T) {
 		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
 		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
-		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+		externalSecretsPostgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: "payments"}}
 
 		externalSecretNames := []string{
 			"external-admin-nolabel",
 			"external-rw-nolabel",
 		}
 		validData := []map[string][]byte{
-			{secretKeyUsername: []byte("u"), secretKeyPassword: []byte("p")},
-			{secretKeyUsername: []byte("u"), secretKeyPassword: []byte("p")},
+			{secretKeyUsername: []byte("payments_admin"), secretKeyPassword: []byte("p")},
+			{secretKeyUsername: []byte("payments_rw"), secretKeyPassword: []byte("p")},
 		}
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretNames[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretNames[1]
 
 		c := testClient(t, scheme)
 		// Valid data but no cnpg.io/reload label.
@@ -2255,7 +2609,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 	t.Run("signals the external secret being invalid, missing data keys or data map", func(t *testing.T) {
 		externalSecretsPostgresDB := provideExternalSecretsPostgresDB()
 		externalSecretsPostgresDB.Status.Phase = strPtr(string(readyDBPhase))
-		externalSecretsPostgresDB.Status.Databases = []enterprisev4.DatabaseInfo{{Name: "payments"}}
+		externalSecretsPostgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: "payments"}}
 
 		externalSecretsNoDataMap := []string{
 			"external-admin-missingdata",
@@ -2264,8 +2618,6 @@ func TestReconcileRoleSecrets(t *testing.T) {
 
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretsNoDataMap[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretsNoDataMap[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretsNoDataMap[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretsNoDataMap[1]
 
 		c := testClient(t, scheme)
 		createExternalSecrets(t, c, externalSecretsNoDataMap, externalSecretsPostgresDB.Namespace, nil, nil)
@@ -2295,8 +2647,6 @@ func TestReconcileRoleSecrets(t *testing.T) {
 
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretDataMapMissingKey[0]
 		externalSecretsPostgresDB.Spec.Databases[0].PasswordConfig.ExternalRWSecretRef.Name = externalSecretDataMapMissingKey[1]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalAdminSecretRef.Name = externalSecretDataMapMissingKey[0]
-		externalSecretsPostgresDB.Spec.Databases[1].PasswordConfig.ExternalRWSecretRef.Name = externalSecretDataMapMissingKey[1]
 
 		createExternalSecrets(t, c, externalSecretDataMapMissingKey, externalSecretsPostgresDB.Namespace, nil, exampleData)
 
@@ -2320,9 +2670,9 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 	}
 
 	t.Run("creates configmaps for all databases", func(t *testing.T) {
-		postgresDB := &enterprisev4.PostgresDatabase{
+		postgresDB := &platformv1alpha1.PostgresDatabase{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: enterprisev4.GroupVersion.String(),
+				APIVersion: platformv1alpha1.GroupVersion.String(),
 				Kind:       "PostgresDatabase",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -2330,8 +2680,8 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 				Namespace: "dbs",
 				UID:       types.UID("postgresdb-uid"),
 			},
-			Spec: enterprisev4.PostgresDatabaseSpec{
-				Databases: []enterprisev4.DatabaseDefinition{
+			Spec: platformv1alpha1.PostgresDatabaseSpec{
+				Databases: []platformv1alpha1.DatabaseDefinition{
 					{Name: "payments"},
 					{Name: "analytics"},
 				},
@@ -2365,9 +2715,9 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 	})
 
 	t.Run("re-adopts retained configmap", func(t *testing.T) {
-		postgresDB := &enterprisev4.PostgresDatabase{
+		postgresDB := &platformv1alpha1.PostgresDatabase{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: enterprisev4.GroupVersion.String(),
+				APIVersion: platformv1alpha1.GroupVersion.String(),
 				Kind:       "PostgresDatabase",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -2375,8 +2725,8 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 				Namespace: "dbs",
 				UID:       types.UID("postgresdb-uid"),
 			},
-			Spec: enterprisev4.PostgresDatabaseSpec{
-				Databases: []enterprisev4.DatabaseDefinition{
+			Spec: platformv1alpha1.PostgresDatabaseSpec{
+				Databases: []platformv1alpha1.DatabaseDefinition{
 					{Name: "payments"},
 				},
 			},
@@ -2417,7 +2767,7 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		assert.False(t, hasRetainedAnnotation)
 		assert.Equal(t, wantData, got.Data)
 		assert.Contains(t, got.OwnerReferences, metav1.OwnerReference{
-			APIVersion:         enterprisev4.GroupVersion.String(),
+			APIVersion:         platformv1alpha1.GroupVersion.String(),
 			Kind:               "PostgresDatabase",
 			Name:               postgresDB.Name,
 			UID:                wantOwnerUID,
@@ -2426,10 +2776,28 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		})
 	})
 
+	t.Run("uses overridden role names in the connection configmap", func(t *testing.T) {
+		postgresDB := &platformv1alpha1.PostgresDatabase{
+			ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", UID: types.UID("postgresdb-uid")},
+			Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{{
+				Name:          "payments",
+				AdminRoleName: "tenant_owner",
+				RWRoleName:    "tenant_rw",
+			}}},
+		}
+		c := testClient(t, scheme)
+
+		require.NoError(t, reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints))
+		got := &corev1.ConfigMap{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-config", Namespace: postgresDB.Namespace}, got))
+		assert.Equal(t, "tenant_owner", got.Data[ConfigMapKeyAdminUser])
+		assert.Equal(t, "tenant_rw", got.Data[ConfigMapKeyRWUser])
+	})
+
 	t.Run("re-attaches owner reference when configmap ownership was manually stripped", func(t *testing.T) {
-		postgresDB := &enterprisev4.PostgresDatabase{
+		postgresDB := &platformv1alpha1.PostgresDatabase{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: enterprisev4.GroupVersion.String(),
+				APIVersion: platformv1alpha1.GroupVersion.String(),
 				Kind:       "PostgresDatabase",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -2437,8 +2805,8 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 				Namespace: "dbs",
 				UID:       types.UID("postgresdb-uid"),
 			},
-			Spec: enterprisev4.PostgresDatabaseSpec{
-				Databases: []enterprisev4.DatabaseDefinition{
+			Spec: platformv1alpha1.PostgresDatabaseSpec{
+				Databases: []platformv1alpha1.DatabaseDefinition{
 					{Name: "payments"},
 				},
 			},
@@ -2468,9 +2836,9 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 	})
 
 	t.Run("fails when endpoints are incomplete", func(t *testing.T) {
-		postgresDB := &enterprisev4.PostgresDatabase{
+		postgresDB := &platformv1alpha1.PostgresDatabase{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: enterprisev4.GroupVersion.String(),
+				APIVersion: platformv1alpha1.GroupVersion.String(),
 				Kind:       "PostgresDatabase",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -2478,8 +2846,8 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 				Namespace: "dbs",
 				UID:       types.UID("postgresdb-uid"),
 			},
-			Spec: enterprisev4.PostgresDatabaseSpec{
-				Databases: []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			Spec: platformv1alpha1.PostgresDatabaseSpec{
+				Databases: []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			},
 		}
 		c := testClient(t, scheme)
@@ -2495,7 +2863,7 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 }
 
 func TestBuildDeletionPlan(t *testing.T) {
-	databases := []enterprisev4.DatabaseDefinition{
+	databases := []platformv1alpha1.DatabaseDefinition{
 		{Name: "payments", DeletionPolicy: deletionPolicyRetain},
 		{Name: "analytics"},
 		{Name: "audit", DeletionPolicy: deletionPolicyRetain},
@@ -2526,7 +2894,7 @@ func TestStripOwnerReference(t *testing.T) {
 }
 
 func TestBuildPasswordSecret(t *testing.T) {
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "primary",
 			Namespace: "dbs",
@@ -2547,123 +2915,6 @@ func TestBuildPasswordSecret(t *testing.T) {
 	assert.Equal(t, wantReload, got.Labels[labelCNPGReload])
 	assert.Equal(t, wantRolename, string(got.Data["username"]))
 	assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
-}
-
-func TestBuildCNPGDatabaseSpec(t *testing.T) {
-	tests := []struct {
-		name       string
-		db         enterprisev4.DatabaseDefinition
-		extensions []cnpgv1.ExtensionSpec
-		want       cnpgv1.DatabaseSpec
-	}{
-		{
-			name: "uses delete reclaim policy by default",
-			db:   enterprisev4.DatabaseDefinition{Name: "payments"},
-			want: cnpgv1.DatabaseSpec{
-				Name:          "payments",
-				Owner:         "payments_admin",
-				ClusterRef:    corev1.LocalObjectReference{Name: "cnpg-primary"},
-				ReclaimPolicy: cnpgv1.DatabaseReclaimDelete,
-			},
-		},
-		{
-			name: "uses retain reclaim policy when deletion policy is retain",
-			db:   enterprisev4.DatabaseDefinition{Name: "analytics", DeletionPolicy: deletionPolicyRetain},
-			want: cnpgv1.DatabaseSpec{
-				Name:          "analytics",
-				Owner:         "analytics_admin",
-				ClusterRef:    corev1.LocalObjectReference{Name: "cnpg-primary"},
-				ReclaimPolicy: cnpgv1.DatabaseReclaimRetain,
-			},
-		},
-		{
-			name: "passes extensions through unchanged",
-			db:   enterprisev4.DatabaseDefinition{Name: "myapp"},
-			extensions: []cnpgv1.ExtensionSpec{
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
-			},
-			want: cnpgv1.DatabaseSpec{
-				Name:          "myapp",
-				Owner:         "myapp_admin",
-				ClusterRef:    corev1.LocalObjectReference{Name: "cnpg-primary"},
-				ReclaimPolicy: cnpgv1.DatabaseReclaimDelete,
-				Extensions: []cnpgv1.ExtensionSpec{
-					{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
-				},
-			},
-		},
-	}
-
-	for _, tst := range tests {
-		t.Run(tst.name, func(t *testing.T) {
-			got := buildCNPGDatabaseSpec("cnpg-primary", tst.db, tst.extensions)
-			assert.Equal(t, tst.want, got)
-		})
-	}
-}
-
-func TestReconcileExtensions(t *testing.T) {
-	tests := []struct {
-		name     string
-		desired  []string
-		existing []cnpgv1.ExtensionSpec
-		want     []cnpgv1.ExtensionSpec
-	}{
-		{
-			name:    "no extensions returns nil",
-			desired: nil,
-			want:    nil,
-		},
-		{
-			name:    "desired extensions all marked present",
-			desired: []string{"pg_trgm", "unaccent"},
-			want: []cnpgv1.ExtensionSpec{
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsurePresent}},
-			},
-		},
-		{
-			name:    "removed extension marked absent",
-			desired: []string{"pg_trgm"},
-			existing: []cnpgv1.ExtensionSpec{
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsurePresent}},
-			},
-			want: []cnpgv1.ExtensionSpec{
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsureAbsent}},
-			},
-		},
-		{
-			name:    "already absent extension persisted",
-			desired: []string{},
-			existing: []cnpgv1.ExtensionSpec{
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsureAbsent}},
-			},
-			want: []cnpgv1.ExtensionSpec{
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsureAbsent}},
-			},
-		},
-		{
-			name:    "all extensions removed marks all absent",
-			desired: []string{},
-			existing: []cnpgv1.ExtensionSpec{
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsurePresent}},
-			},
-			want: []cnpgv1.ExtensionSpec{
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsureAbsent}},
-				{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsureAbsent}},
-			},
-		},
-	}
-
-	for _, tst := range tests {
-		t.Run(tst.name, func(t *testing.T) {
-			got := reconcileExtensions(tst.desired, tst.existing)
-			assert.Equal(t, tst.want, got)
-		})
-	}
 }
 
 func TestBuildDatabaseConfigMapData(t *testing.T) {
@@ -2781,7 +3032,7 @@ func TestBuildDatabaseConfigMapData(t *testing.T) {
 func TestResolveClusterEndpoints(t *testing.T) {
 	tests := []struct {
 		name      string
-		cluster   *enterprisev4.PostgresCluster
+		cluster   *platformv1alpha1.PostgresCluster
 		cnpg      *cnpgv1.Cluster
 		namespace string
 		want      clusterEndpoints
@@ -2789,7 +3040,7 @@ func TestResolveClusterEndpoints(t *testing.T) {
 	}{
 		{
 			name:    "without connection pooler",
-			cluster: &enterprisev4.PostgresCluster{},
+			cluster: &platformv1alpha1.PostgresCluster{},
 			cnpg: &cnpgv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"},
 				Status: cnpgv1.ClusterStatus{
@@ -2807,16 +3058,16 @@ func TestResolveClusterEndpoints(t *testing.T) {
 		},
 		{
 			name:      "fails when CNPG service names are not available",
-			cluster:   &enterprisev4.PostgresCluster{},
+			cluster:   &platformv1alpha1.PostgresCluster{},
 			cnpg:      &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "cnpg-primary"}},
 			namespace: "dbs",
 			wantError: "write service name is required",
 		},
 		{
 			name: "with connection pooler and both endpoints reconciled",
-			cluster: &enterprisev4.PostgresCluster{
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+			cluster: &platformv1alpha1.PostgresCluster{
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{
 						Enabled:          true,
 						ReadWriteEnabled: true,
 						ReadOnlyEnabled:  true,
@@ -2844,9 +3095,9 @@ func TestResolveClusterEndpoints(t *testing.T) {
 		},
 		{
 			name: "with connection pooler but RO disabled in status omits PoolerROHost",
-			cluster: &enterprisev4.PostgresCluster{
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+			cluster: &platformv1alpha1.PostgresCluster{
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{
 						Enabled:          true,
 						ReadWriteEnabled: true,
 					},
@@ -2872,9 +3123,9 @@ func TestResolveClusterEndpoints(t *testing.T) {
 		},
 		{
 			name: "with connection pooler but RW disabled in status omits PoolerRWHost",
-			cluster: &enterprisev4.PostgresCluster{
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+			cluster: &platformv1alpha1.PostgresCluster{
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{
 						Enabled:         true,
 						ReadOnlyEnabled: true,
 					},
@@ -2900,9 +3151,9 @@ func TestResolveClusterEndpoints(t *testing.T) {
 		},
 		{
 			name: "clears ROHost when fewer than two instances are ready",
-			cluster: &enterprisev4.PostgresCluster{
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+			cluster: &platformv1alpha1.PostgresCluster{
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{
 						Enabled:          true,
 						ReadWriteEnabled: true,
 						ReadOnlyEnabled:  true,
@@ -2928,9 +3179,9 @@ func TestResolveClusterEndpoints(t *testing.T) {
 		},
 		{
 			name: "clears ROHost and PoolerROHost when no instances are ready",
-			cluster: &enterprisev4.PostgresCluster{
-				Status: enterprisev4.PostgresClusterStatus{
-					ConnectionPoolerStatus: &enterprisev4.ConnectionPoolerStatus{
+			cluster: &platformv1alpha1.PostgresCluster{
+				Status: platformv1alpha1.PostgresClusterStatus{
+					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{
 						Enabled:          true,
 						ReadWriteEnabled: true,
 						ReadOnlyEnabled:  true,
@@ -2959,7 +3210,7 @@ func TestResolveClusterEndpoints(t *testing.T) {
 	for _, tst := range tests {
 
 		t.Run(tst.name, func(t *testing.T) {
-			got, err := resolveClusterEndpoints(tst.cluster, tst.cnpg, tst.namespace)
+			got, err := resolveClusterEndpoints(tst.cluster.Status.ConnectionPoolerStatus, tst.cnpg, tst.namespace)
 			if tst.wantError == "" {
 				require.NoError(t, err)
 				assert.Equal(t, tst.want, got)
@@ -2980,19 +3231,19 @@ func mustBuildDatabaseConfigMapData(t *testing.T, dbName string, endpoints clust
 }
 
 func TestPopulateDatabaseStatus(t *testing.T) {
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary"},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{
 				{Name: "payments"},
 				{Name: "analytics"},
 			},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			Databases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			Databases: []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 		},
 	}
-	want := []enterprisev4.DatabaseInfo{
+	want := []platformv1alpha1.DatabaseInfo{
 		{
 			Name:        "payments",
 			Ready:       true,
@@ -3030,32 +3281,32 @@ func TestPopulateDatabaseStatus(t *testing.T) {
 
 // TestPersistDatabaseMessages verifies the message overlay: a database named in reasons is
 // marked not-ready with its message, one absent from the map is cleared and restored to ready,
-// and Roles and the DatabaseRef provisioning marker hasNewDatabases relies on are never touched.
+// and Roles and the bootstrap identity are never touched.
 func TestPersistDatabaseMessages(t *testing.T) {
 	scheme := testScheme(t)
 	ctx := context.Background()
 	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
 
-	build := func() *enterprisev4.PostgresDatabase {
-		return &enterprisev4.PostgresDatabase{
-			TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresDatabase"},
+	build := func() *platformv1alpha1.PostgresDatabase {
+		return &platformv1alpha1.PostgresDatabase{
+			TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase"},
 			ObjectMeta: metav1.ObjectMeta{Name: requestName.Name, Namespace: requestName.Namespace, Generation: 1},
-			Status: enterprisev4.PostgresDatabaseStatus{
-				Databases: []enterprisev4.DatabaseInfo{
-					{Name: "payments", Ready: true, DatabaseRef: &corev1.LocalObjectReference{Name: "primary-payments"}, Message: "extension \"pgcrypto\": not available", Roles: []enterprisev4.DatabaseRoleInfo{{Name: "payments_admin"}, {Name: "payments_rw"}}},
-					{Name: "analytics", Ready: true, DatabaseRef: &corev1.LocalObjectReference{Name: "primary-analytics"}, Roles: []enterprisev4.DatabaseRoleInfo{{Name: "analytics_admin"}, {Name: "analytics_rw"}}},
+			Status: platformv1alpha1.PostgresDatabaseStatus{
+				Databases: []platformv1alpha1.DatabaseInfo{
+					{Name: "payments", Ready: true, DatabaseRef: &corev1.LocalObjectReference{Name: "primary-payments"}, Message: "extension \"pgcrypto\": not available", Roles: []platformv1alpha1.DatabaseRoleInfo{{Name: "payments_admin"}, {Name: "payments_rw"}}},
+					{Name: "analytics", Ready: true, DatabaseRef: &corev1.LocalObjectReference{Name: "primary-analytics"}, Roles: []platformv1alpha1.DatabaseRoleInfo{{Name: "analytics_admin"}, {Name: "analytics_rw"}}},
 				},
 			},
 		}
 	}
 
 	// payments absent from the map is cleared and stays ready; analytics is reasoned so it flips
-	// not-ready. Roles and DatabaseRef survive on both, so hasNewDatabases still sees them as provisioned.
+	// not-ready. Roles and DatabaseRef survive on both, so neither needs privilege bootstrap again.
 	db := build()
 	c := testClient(t, scheme, db)
 	require.NoError(t, persistDatabaseMessages(ctx, c, db, map[string]string{"analytics": "Waiting for CNPG to apply the database"}))
 
-	updated := &enterprisev4.PostgresDatabase{}
+	updated := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(ctx, requestName, updated))
 	require.Len(t, updated.Status.Databases, 2)
 	assert.Empty(t, updated.Status.Databases[0].Message, "recovered database must not retain its stale message")
@@ -3064,10 +3315,8 @@ func TestPersistDatabaseMessages(t *testing.T) {
 	assert.Equal(t, "Waiting for CNPG to apply the database", updated.Status.Databases[1].Message)
 	assert.False(t, updated.Status.Databases[1].Ready, "reasoned database is marked not-ready")
 	assert.NotNil(t, updated.Status.Databases[1].DatabaseRef, "provisioning marker survives a not-ready blip")
-	assert.False(t, hasNewDatabases(&enterprisev4.PostgresDatabase{
-		Spec:   enterprisev4.PostgresDatabaseSpec{Databases: []enterprisev4.DatabaseDefinition{{Name: "payments"}, {Name: "analytics"}}},
-		Status: updated.Status,
-	}), "a reasoned not-ready database must not re-trigger the privileges phase")
+	assert.True(t, databaseProvisioned(updated.Status.Databases[0]))
+	assert.True(t, databaseProvisioned(updated.Status.Databases[1]))
 
 	// A nil map clears every message and restores readiness, even on an entry left not-ready by
 	// an earlier requeue — otherwise it could linger ready:false with no message once the
@@ -3077,7 +3326,7 @@ func TestPersistDatabaseMessages(t *testing.T) {
 	c2 := testClient(t, scheme, db2)
 	require.NoError(t, persistDatabaseMessages(ctx, c2, db2, nil))
 
-	cleared := &enterprisev4.PostgresDatabase{}
+	cleared := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c2.Get(ctx, requestName, cleared))
 	require.Len(t, cleared.Status.Databases, 2)
 	assert.Empty(t, cleared.Status.Databases[0].Message)
@@ -3087,18 +3336,18 @@ func TestPersistDatabaseMessages(t *testing.T) {
 // TestPopulateDatabaseStatusPreservesMessage confirms the builder carries an existing not-ready
 // message forward so a later message overlay is not the only thing keeping it alive.
 func TestPopulateDatabaseStatusPreservesMessage(t *testing.T) {
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary"},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{
 				{Name: "payments"},
 				{Name: "analytics"},
 			},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			Databases: []enterprisev4.DatabaseInfo{
-				{Name: "payments", Ready: false, Message: "extension \"pgcrypto\": not available", Roles: []enterprisev4.DatabaseRoleInfo{{Name: "payments_admin"}, {Name: "payments_rw"}}},
-				{Name: "analytics", Ready: false, Message: "Waiting for CNPG to apply the database", Roles: []enterprisev4.DatabaseRoleInfo{{Name: "analytics_admin"}, {Name: "analytics_rw"}}},
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			Databases: []platformv1alpha1.DatabaseInfo{
+				{Name: "payments", Ready: false, Message: "extension \"pgcrypto\": not available", Roles: []platformv1alpha1.DatabaseRoleInfo{{Name: "payments_admin"}, {Name: "payments_rw"}}},
+				{Name: "analytics", Ready: false, Message: "Waiting for CNPG to apply the database", Roles: []platformv1alpha1.DatabaseRoleInfo{{Name: "analytics_admin"}, {Name: "analytics_rw"}}},
 			},
 		},
 	}
@@ -3109,23 +3358,21 @@ func TestPopulateDatabaseStatusPreservesMessage(t *testing.T) {
 	assert.Equal(t, "Waiting for CNPG to apply the database", preserved[1].Message)
 }
 
-// TestReconcileClearsRecoveredMessageWhenLaterPhaseFails exercises the flow where a
-// database recovers (DatabasesReady transitions to true) and a later phase then fails
-// and returns before the final status write. The recovered database's stale message
-// must already be cleared at the DatabasesReady transition.
-func TestReconcileClearsRecoveredMessageWhenLaterPhaseFails(t *testing.T) {
+// TestReconcileReplacesRecoveredMessageWhilePrivilegeBootstrapFails exercises
+// the flow where provider readiness recovers but privilege bootstrap then fails.
+func TestReconcileReplacesRecoveredMessageWhilePrivilegeBootstrapFails(t *testing.T) {
 	scheme := testScheme(t)
 	ctx := context.Background()
 	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
 
-	postgresDB := &enterprisev4.PostgresDatabase{
-		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresDatabase"},
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase"},
 		ObjectMeta: metav1.ObjectMeta{Name: requestName.Name, Namespace: requestName.Namespace, UID: types.UID("postgresdb-uid"), Generation: 1, Finalizers: []string{postgresDatabaseFinalizerName}},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
-			Databases:  []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
 			// Stale terminal failure recovering: retryAfterStaleReconcileFailure runs the
 			// privileges phase for the already-provisioned database.
 			Phase:                strPtr(string(failedDBPhase)),
@@ -3134,12 +3381,12 @@ func TestReconcileClearsRecoveredMessageWhenLaterPhaseFails(t *testing.T) {
 			// The database was not-ready last reconcile (message set, roles published),
 			// so its message is preserved through credential provisioning and only the
 			// DatabasesReady transition can clear it.
-			Databases: []enterprisev4.DatabaseInfo{
+			Databases: []platformv1alpha1.DatabaseInfo{
 				{
 					Name:    "payments",
 					Ready:   false,
 					Message: "extension \"pgcrypto\": not available",
-					Roles: []enterprisev4.DatabaseRoleInfo{
+					Roles: []platformv1alpha1.DatabaseRoleInfo{
 						{Name: adminRoleName("payments"), Exists: true},
 						{Name: rwRoleName("payments"), Exists: true},
 					},
@@ -3148,21 +3395,21 @@ func TestReconcileClearsRecoveredMessageWhenLaterPhaseFails(t *testing.T) {
 		},
 	}
 
-	roleOwners := make(map[string]enterprisev4.RoleOwnerReference, len(getDesiredRoles(postgresDB)))
+	roleOwners := make(map[string]platformv1alpha1.RoleOwnerReference, len(getDesiredRoles(postgresDB)))
 	for _, roleName := range getDesiredRoles(postgresDB) {
-		roleOwners[roleName] = enterprisev4.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
+		roleOwners[roleName] = platformv1alpha1.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
 	}
 
-	postgresCluster := &enterprisev4.PostgresCluster{
-		TypeMeta:   metav1.TypeMeta{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresCluster"},
+	postgresCluster := &platformv1alpha1.PostgresCluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: requestName.Namespace},
-		Status: enterprisev4.PostgresClusterStatus{
-			Phase:          strPtr(string(ClusterReady)),
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Phase:          strPtr(string(dbclusterreadiness.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{APIVersion: cnpgv1.SchemeGroupVersion.String(), Kind: "Cluster", Name: "primary-cnpg", Namespace: requestName.Namespace},
-			Resources: &enterprisev4.PostgresClusterResources{
+			Resources: &platformv1alpha1.PostgresClusterResources{
 				SuperUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "primary-superuser"}, Key: secretKeyPassword},
 			},
-			ManagedRolesStatus: &enterprisev4.ManagedRolesStatus{Reconciled: getDesiredRoles(postgresDB), RoleOwners: roleOwners},
+			ManagedRolesStatus: &platformv1alpha1.ManagedRolesStatus{Reconciled: getDesiredRoles(postgresDB), RoleOwners: roleOwners},
 		},
 	}
 	cnpgCluster := &cnpgv1.Cluster{
@@ -3174,12 +3421,13 @@ func TestReconcileClearsRecoveredMessageWhenLaterPhaseFails(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-superuser", Namespace: requestName.Namespace},
 		Data:       map[string][]byte{secretKeyPassword: []byte("supersecret")},
 	}
-	// CNPG database has recovered (Applied=true), so DatabasesReady transitions to true.
+	// CNPG database has recovered, but database readiness must remain false until
+	// privilege bootstrap has also completed.
 	cnpgDB := &cnpgv1.Database{
 		ObjectMeta: metav1.ObjectMeta{Name: cnpgDatabaseName(requestName.Name, "payments"), Namespace: requestName.Namespace},
 		Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
 	}
-	ownerRef := metav1.OwnerReference{APIVersion: enterprisev4.GroupVersion.String(), Kind: "PostgresDatabase", Name: requestName.Name, UID: postgresDB.UID, Controller: boolPtr(true), BlockOwnerDeletion: boolPtr(true)}
+	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: requestName.Name, UID: postgresDB.UID, Controller: boolPtr(true), BlockOwnerDeletion: boolPtr(true)}
 	adminSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: roleSecretName(requestName.Name, "payments", secretRoleAdmin), Namespace: requestName.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}},
 		Data:       map[string][]byte{"username": []byte(adminRoleName("payments")), secretKeyPassword: []byte("admin-password")},
@@ -3192,69 +3440,22 @@ func TestReconcileClearsRecoveredMessageWhenLaterPhaseFails(t *testing.T) {
 	c := testClient(t, scheme, postgresDB, postgresCluster, cnpgCluster, superSecret, cnpgDB, adminSecret, rwSecret)
 
 	// Privilege grant fails terminally, so reconcile returns before the final status write.
-	newDBRepo := func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	newDBRepo := func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 		return nil, fmt.Errorf("%w: password authentication failed", ErrTerminal)
 	}
-	_, err := PostgresDatabaseService(ctx, &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}}, postgresDB.DeepCopy(), newDBRepo)
+	_, err := PostgresDatabaseService(ctx, &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)}, postgresDB.DeepCopy(), newDBRepo)
 	require.NoError(t, err)
 
-	updated := &enterprisev4.PostgresDatabase{}
+	updated := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(ctx, requestName, updated))
 	require.Len(t, updated.Status.Databases, 1)
-	assert.Empty(t, updated.Status.Databases[0].Message, "recovered database must not retain its stale message after a later phase fails")
+	assert.Equal(t, "Waiting for initial application privileges", updated.Status.Databases[0].Message)
+	assert.False(t, updated.Status.Databases[0].Ready)
+	databaseCondition := meta.FindStatusCondition(updated.Status.Conditions, string(databasesReady))
+	require.NotNil(t, databaseCondition)
+	assert.Equal(t, metav1.ConditionFalse, databaseCondition.Status)
 	// The terminal privileges failure is still reported on its own condition.
 	assert.Equal(t, string(failedDBPhase), *updated.Status.Phase)
-}
-
-func TestHasNewDatabases(t *testing.T) {
-	tests := []struct {
-		name       string
-		postgresDB *enterprisev4.PostgresDatabase
-		want       bool
-	}{
-		{
-			name: "returns true when spec contains a new database",
-			postgresDB: &enterprisev4.PostgresDatabase{
-				Spec: enterprisev4.PostgresDatabaseSpec{
-					Databases: []enterprisev4.DatabaseDefinition{
-						{Name: "payments"},
-						{Name: "analytics"},
-					},
-				},
-				Status: enterprisev4.PostgresDatabaseStatus{
-					Databases: []enterprisev4.DatabaseInfo{
-						{Name: "payments"},
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "returns false when all spec databases already exist in status",
-			postgresDB: &enterprisev4.PostgresDatabase{
-				Spec: enterprisev4.PostgresDatabaseSpec{
-					Databases: []enterprisev4.DatabaseDefinition{
-						{Name: "payments"},
-					},
-				},
-				Status: enterprisev4.PostgresDatabaseStatus{
-					Databases: []enterprisev4.DatabaseInfo{
-						{Name: "payments"},
-						{Name: "legacy-extra"},
-					},
-				},
-			},
-			want: false,
-		},
-	}
-
-	for _, tst := range tests {
-
-		t.Run(tst.name, func(t *testing.T) {
-			got := hasNewDatabases(tst.postgresDB)
-			assert.Equal(t, tst.want, got)
-		})
-	}
 }
 
 func TestNamingHelpers(t *testing.T) {
@@ -3283,9 +3484,9 @@ func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.
 	ctx := context.Background()
 	deletionTime := metav1.Now()
 	generation := int64(7)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: enterprisev4.GroupVersion.String(),
+			APIVersion: platformv1alpha1.GroupVersion.String(),
 			Kind:       "PostgresDatabase",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -3296,11 +3497,11 @@ func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.
 			DeletionTimestamp: &deletionTime,
 			Finalizers:        []string{postgresDatabaseFinalizerName},
 		},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
-			Databases:  []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
 			Phase:                strPtr(string(failedDBPhase)),
 			ObservedGeneration:   int64Ptr(generation),
 			ReconcileFailureType: reconcileFailurePrivileges,
@@ -3308,7 +3509,7 @@ func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.
 	}
 	c := testClient(t, scheme, postgresDB)
 	repoCalls := 0
-	newDBRepo := func(_ context.Context, _, _, _ string) (DBRepo, error) {
+	newDBRepo := func(_ context.Context, _, _, _ string) (ports.DBRepo, error) {
 		repoCalls++
 		return &stubDBRepo{}, nil
 	}
@@ -3316,10 +3517,12 @@ func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.
 	result, err := PostgresDatabaseService(
 		ctx,
 		&ReconcileContext{
-			Client:   c,
-			Scheme:   scheme,
-			Recorder: record.NewFakeRecorder(10),
-			Metrics:  &pgprometheus.NoopRecorder{},
+			Client:              c,
+			Scheme:              scheme,
+			Recorder:            record.NewFakeRecorder(10),
+			Metrics:             &pgprometheus.NoopRecorder{},
+			ClusterReader:       dbadapter.NewClusterReader(c),
+			DatabaseProvisioner: testDatabaseProvisioner(c, scheme),
 		},
 		postgresDB,
 		newDBRepo,
@@ -3329,7 +3532,7 @@ func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.
 	assert.Equal(t, ctrl.Result{}, result)
 	assert.Equal(t, 0, repoCalls)
 
-	updated := &enterprisev4.PostgresDatabase{}
+	updated := &platformv1alpha1.PostgresDatabase{}
 	err = c.Get(ctx, types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, updated)
 	if apierrors.IsNotFound(err) {
 		return
@@ -3343,15 +3546,15 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 	ctx := context.Background()
 	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
 
-	failingGrantRepoFunc := func(dbName string) NewDBRepoFunc {
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	failingGrantRepoFunc := func(dbName string) ports.NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			return &stubDBRepo{execErr: fmt.Errorf("grant failed for %s", dbName)}, nil
 		}
 	}
 
-	failingGrantThenSuccessfulRepoFunc := func(dbName string) NewDBRepoFunc {
+	failingGrantThenSuccessfulRepoFunc := func(dbName string) ports.NewDBRepoFunc {
 		attempts := 0
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			attempts++
 			if attempts == 1 {
 				return &stubDBRepo{execErr: fmt.Errorf("grant failed for %s", dbName)}, nil
@@ -3360,33 +3563,33 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		}
 	}
 
-	failingConnectionRepoFunc := func(calls *int, err error) NewDBRepoFunc {
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	failingConnectionRepoFunc := func(calls *int, err error) ports.NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			(*calls)++
 			return nil, err
 		}
 	}
 
-	failingTerminalRepoFunc := func(errMsg string) NewDBRepoFunc {
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	failingTerminalRepoFunc := func(errMsg string) ports.NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			return nil, fmt.Errorf("%w: %s", ErrTerminal, errMsg)
 		}
 	}
 
-	successfulRepoFunc := func() NewDBRepoFunc {
-		return func(_ context.Context, _, _ string, _ string) (DBRepo, error) {
+	successfulRepoFunc := func() ports.NewDBRepoFunc {
+		return func(_ context.Context, _, _ string, _ string) (ports.DBRepo, error) {
 			return &stubDBRepo{}, nil
 		}
 	}
 
 	buildObjects := func(tst struct {
 		generation         int64
-		databases          []enterprisev4.DatabaseDefinition
+		databases          []platformv1alpha1.DatabaseDefinition
 		statusPhase        *string
 		observedGeneration *int64
 		failureState       bool
 		omitFinalizer      bool
-		statusDatabases    []enterprisev4.DatabaseInfo
+		statusDatabases    []platformv1alpha1.DatabaseInfo
 		conditions         []metav1.Condition
 		databaseApplied    *bool
 		omittedSecrets     []string
@@ -3395,9 +3598,9 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		if tst.failureState {
 			reconcileFailureType = reconcileFailurePrivileges
 		}
-		postgresDB := &enterprisev4.PostgresDatabase{
+		postgresDB := &platformv1alpha1.PostgresDatabase{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: enterprisev4.GroupVersion.String(),
+				APIVersion: platformv1alpha1.GroupVersion.String(),
 				Kind:       "PostgresDatabase",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -3406,11 +3609,11 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 				UID:        types.UID("postgresdb-uid"),
 				Generation: tst.generation,
 			},
-			Spec: enterprisev4.PostgresDatabaseSpec{
+			Spec: platformv1alpha1.PostgresDatabaseSpec{
 				ClusterRef: corev1.LocalObjectReference{Name: "primary-cluster"},
 				Databases:  tst.databases,
 			},
-			Status: enterprisev4.PostgresDatabaseStatus{
+			Status: platformv1alpha1.PostgresDatabaseStatus{
 				Phase:                tst.statusPhase,
 				ObservedGeneration:   tst.observedGeneration,
 				ReconcileFailureType: reconcileFailureType,
@@ -3418,39 +3621,48 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 				Conditions:           tst.conditions,
 			},
 		}
+		providerDatabaseUID := func(name string) types.UID {
+			return types.UID("cnpg-database-" + name + "-uid")
+		}
+		for i := range postgresDB.Status.Databases {
+			info := &postgresDB.Status.Databases[i]
+			if databaseProvisioned(*info) && info.DatabaseUID == "" {
+				info.DatabaseUID = providerDatabaseUID(info.Name)
+			}
+		}
 		if !tst.omitFinalizer {
 			postgresDB.Finalizers = []string{postgresDatabaseFinalizerName}
 		}
 
-		roleOwners := make(map[string]enterprisev4.RoleOwnerReference, len(getDesiredRoles(postgresDB)))
+		roleOwners := make(map[string]platformv1alpha1.RoleOwnerReference, len(getDesiredRoles(postgresDB)))
 		for _, roleName := range getDesiredRoles(postgresDB) {
-			roleOwners[roleName] = enterprisev4.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
+			roleOwners[roleName] = platformv1alpha1.RoleOwnerReference{Name: postgresDB.Name, UID: string(postgresDB.UID)}
 		}
 
-		postgresCluster := &enterprisev4.PostgresCluster{
+		postgresCluster := &platformv1alpha1.PostgresCluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: enterprisev4.GroupVersion.String(),
+				APIVersion: platformv1alpha1.GroupVersion.String(),
 				Kind:       "PostgresCluster",
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "primary-cluster",
 				Namespace: requestName.Namespace,
 			},
-			Status: enterprisev4.PostgresClusterStatus{
-				Phase: strPtr(string(ClusterReady)),
+			Status: platformv1alpha1.PostgresClusterStatus{
+				Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
 				ProvisionerRef: &corev1.ObjectReference{
 					APIVersion: cnpgv1.SchemeGroupVersion.String(),
 					Kind:       "Cluster",
 					Name:       "primary-cnpg",
 					Namespace:  requestName.Namespace,
 				},
-				Resources: &enterprisev4.PostgresClusterResources{
+				Resources: &platformv1alpha1.PostgresClusterResources{
 					SuperUserSecretRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{Name: "primary-superuser"},
 						Key:                  secretKeyPassword,
 					},
 				},
-				ManagedRolesStatus: &enterprisev4.ManagedRolesStatus{
+				ManagedRolesStatus: &platformv1alpha1.ManagedRolesStatus{
 					Reconciled: getDesiredRoles(postgresDB),
 					RoleOwners: roleOwners,
 				},
@@ -3491,7 +3703,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			omittedSecrets[name] = struct{}{}
 		}
 		ownerRef := metav1.OwnerReference{
-			APIVersion:         enterprisev4.GroupVersion.String(),
+			APIVersion:         platformv1alpha1.GroupVersion.String(),
 			Kind:               "PostgresDatabase",
 			Name:               requestName.Name,
 			UID:                postgresDB.UID,
@@ -3542,6 +3754,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      cnpgDatabaseName(requestName.Name, dbDef.Name),
 						Namespace: requestName.Namespace,
+						UID:       providerDatabaseUID(dbDef.Name),
 					},
 					Spec: cnpgv1.DatabaseSpec{
 						ClusterRef: corev1.LocalObjectReference{Name: "primary-cnpg"},
@@ -3555,67 +3768,191 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		return objects
 	}
 
-	runService := func(t *testing.T, c client.Client, newDBRepo NewDBRepoFunc, metrics ports.Recorder) (ctrl.Result, *enterprisev4.PostgresDatabase, error) {
+	runService := func(t *testing.T, c client.Client, newDBRepo ports.NewDBRepoFunc, metrics ports.Recorder) (ctrl.Result, *platformv1alpha1.PostgresDatabase, error) {
 		t.Helper()
 
-		before := &enterprisev4.PostgresDatabase{}
+		before := &platformv1alpha1.PostgresDatabase{}
 		require.NoError(t, c.Get(ctx, requestName, before))
 
 		result, err := PostgresDatabaseService(
 			ctx,
 			&ReconcileContext{
-				Client:   c,
-				Scheme:   scheme,
-				Recorder: record.NewFakeRecorder(10),
-				Metrics:  metrics,
+				Client:              c,
+				Scheme:              scheme,
+				Recorder:            record.NewFakeRecorder(10),
+				Metrics:             metrics,
+				ClusterReader:       dbadapter.NewClusterReader(c),
+				DatabaseProvisioner: testDatabaseProvisioner(c, scheme),
 			},
 			before,
 			newDBRepo,
 		)
 
-		updated := &enterprisev4.PostgresDatabase{}
+		updated := &platformv1alpha1.PostgresDatabase{}
 		require.NoError(t, c.Get(ctx, requestName, updated))
 		return result, updated, err
 	}
 
+	t.Run("stages allowConnections false until privilege bootstrap completes", func(t *testing.T) {
+		closed := false
+		definition := platformv1alpha1.DatabaseDefinition{Name: "payments", AllowConnections: &closed}
+		objects := buildObjects(struct {
+			generation         int64
+			databases          []platformv1alpha1.DatabaseDefinition
+			statusPhase        *string
+			observedGeneration *int64
+			failureState       bool
+			omitFinalizer      bool
+			statusDatabases    []platformv1alpha1.DatabaseInfo
+			conditions         []metav1.Condition
+			databaseApplied    *bool
+			omittedSecrets     []string
+		}{
+			generation:  7,
+			databases:   []platformv1alpha1.DatabaseDefinition{definition},
+			statusPhase: strPtr(string(provisioningDBPhase)),
+			statusDatabases: []platformv1alpha1.DatabaseInfo{{
+				Name: "payments", Roles: []platformv1alpha1.DatabaseRoleInfo{{Name: "payments_admin", Exists: true}},
+			}},
+		})
+		c := testClient(t, scheme, objects...)
+		grantCalls := 0
+		newDBRepo := func(_ context.Context, _, _, _ string) (ports.DBRepo, error) {
+			grantCalls++
+			return &stubDBRepo{}, nil
+		}
+
+		result, updated, err := runService(t, c, newDBRepo, &captureMetricsRecorder{})
+		require.NoError(t, err)
+		assert.Equal(t, ctrl.Result{RequeueAfter: retryDelay}, result)
+		assert.Equal(t, 1, grantCalls)
+		require.Len(t, updated.Status.Databases, 1)
+		require.NotNil(t, updated.Status.Databases[0].DatabaseRef)
+		assert.False(t, updated.Status.Databases[0].Ready)
+		assert.Equal(t, string(provisioningDBPhase), *updated.Status.Phase)
+		condition := meta.FindStatusCondition(updated.Status.Conditions, string(databasesReady))
+		require.NotNil(t, condition)
+		assert.Equal(t, metav1.ConditionFalse, condition.Status)
+
+		providerDatabase := &cnpgv1.Database{}
+		providerKey := types.NamespacedName{Name: cnpgDatabaseName(requestName.Name, "payments"), Namespace: requestName.Namespace}
+		require.NoError(t, c.Get(ctx, providerKey, providerDatabase))
+		require.NotNil(t, providerDatabase.Spec.AllowConnections)
+		assert.True(t, *providerDatabase.Spec.AllowConnections)
+
+		result, updated, err = runService(t, c, newDBRepo, &captureMetricsRecorder{})
+		require.NoError(t, err)
+		assert.Equal(t, ctrl.Result{}, result)
+		assert.Equal(t, 1, grantCalls, "the completed bootstrap marker must prevent a second live grant")
+		assert.Equal(t, string(readyDBPhase), *updated.Status.Phase)
+		require.NoError(t, c.Get(ctx, providerKey, providerDatabase))
+		require.NotNil(t, providerDatabase.Spec.AllowConnections)
+		assert.False(t, *providerDatabase.Spec.AllowConnections)
+	})
+
+	t.Run("does not regrant an established closed database when adding a database", func(t *testing.T) {
+		closed := false
+		objects := buildObjects(struct {
+			generation         int64
+			databases          []platformv1alpha1.DatabaseDefinition
+			statusPhase        *string
+			observedGeneration *int64
+			failureState       bool
+			omitFinalizer      bool
+			statusDatabases    []platformv1alpha1.DatabaseInfo
+			conditions         []metav1.Condition
+			databaseApplied    *bool
+			omittedSecrets     []string
+		}{
+			generation: 8,
+			databases: []platformv1alpha1.DatabaseDefinition{
+				{Name: "established", AllowConnections: &closed},
+				{Name: "newdb", AllowConnections: &closed},
+			},
+			statusPhase: strPtr(string(readyDBPhase)),
+			statusDatabases: []platformv1alpha1.DatabaseInfo{{
+				Name:        "established",
+				Ready:       true,
+				DatabaseRef: &corev1.LocalObjectReference{Name: "primary-established"},
+				Roles: []platformv1alpha1.DatabaseRoleInfo{
+					{Name: "established_admin", Exists: true},
+					{Name: "established_rw", Exists: true},
+				},
+			}},
+		})
+		c := testClient(t, scheme, objects...)
+		var grantedDatabases []string
+		newDBRepo := func(_ context.Context, _, databaseName, _ string) (ports.DBRepo, error) {
+			grantedDatabases = append(grantedDatabases, databaseName)
+			if databaseName == "established" {
+				return nil, errors.New("closed database must not be contacted")
+			}
+			return &stubDBRepo{}, nil
+		}
+
+		result, updated, err := runService(t, c, newDBRepo, &captureMetricsRecorder{})
+
+		require.NoError(t, err)
+		assert.Equal(t, ctrl.Result{RequeueAfter: retryDelay}, result)
+		assert.Equal(t, []string{"newdb"}, grantedDatabases)
+		require.Len(t, updated.Status.Databases, 2)
+		require.NotNil(t, updated.Status.Databases[1].DatabaseRef)
+
+		established := &cnpgv1.Database{}
+		require.NoError(t, c.Get(ctx, types.NamespacedName{
+			Name: cnpgDatabaseName(requestName.Name, "established"), Namespace: requestName.Namespace,
+		}, established))
+		require.NotNil(t, established.Spec.AllowConnections)
+		assert.False(t, *established.Spec.AllowConnections)
+
+		newDatabase := &cnpgv1.Database{}
+		require.NoError(t, c.Get(ctx, types.NamespacedName{
+			Name: cnpgDatabaseName(requestName.Name, "newdb"), Namespace: requestName.Namespace,
+		}, newDatabase))
+		require.NotNil(t, newDatabase.Spec.AllowConnections)
+		assert.True(t, *newDatabase.Spec.AllowConnections)
+	})
+
 	tests := []struct {
-		name                         string
-		generation                   int64
-		databases                    []enterprisev4.DatabaseDefinition
-		statusPhase                  *string
-		observedGeneration           *int64
-		failureState                 bool
-		omitFinalizer                bool
-		statusDatabases              []enterprisev4.DatabaseInfo
-		conditions                   []metav1.Condition
-		databaseApplied              *bool
-		omittedSecrets               []string
-		newDBRepo                    NewDBRepoFunc
-		reconcileCount               int
-		wantRepoCalls                int
-		wantErr                      bool
-		wantErrContains              []string
-		wantErrExcludes              []string
-		statusUpdateErrOnReason      conditionReasons
-		statusUpdateConflictOnReason conditionReasons
-		wantResult                   ctrl.Result
-		wantFailureState             bool
-		wantFailureFieldsCleared     bool
-		wantFinalizer                bool
-		wantPhase                    reconcileDBPhases
-		wantConditionType            conditionTypes
-		wantConditionStatus          metav1.ConditionStatus
-		wantConditionReason          conditionReasons
-		wantConditionMessageContains []string
-		wantConditionMessageExcludes []string
-		wantProvisioningObservations *int
+		name                          string
+		generation                    int64
+		databases                     []platformv1alpha1.DatabaseDefinition
+		statusPhase                   *string
+		observedGeneration            *int64
+		failureState                  bool
+		omitFinalizer                 bool
+		statusDatabases               []platformv1alpha1.DatabaseInfo
+		conditions                    []metav1.Condition
+		databaseApplied               *bool
+		omittedSecrets                []string
+		newDBRepo                     ports.NewDBRepoFunc
+		reconcileCount                int
+		wantRepoCalls                 int
+		wantErr                       bool
+		wantErrContains               []string
+		wantErrExcludes               []string
+		statusUpdateErrOnReason       conditionReasons
+		statusUpdateConflictOnReason  conditionReasons
+		wantResult                    ctrl.Result
+		wantFailureState              bool
+		wantFailureFieldsCleared      bool
+		wantFinalizer                 bool
+		wantPhase                     reconcileDBPhases
+		wantConditionType             conditionTypes
+		wantConditionStatus           metav1.ConditionStatus
+		wantConditionReason           conditionReasons
+		wantConditionMessageContains  []string
+		wantConditionMessageExcludes  []string
+		wantDatabasesReadyStatus      metav1.ConditionStatus
+		wantProviderAllowsConnections *bool
+		wantProvisioningObservations  *int
 	}{
 		{
 			name:        "retryable privileges error stays provisioning",
 			generation:  7,
-			databases:   []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:   []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase: strPtr(string(readyDBPhase)),
-			newDBRepo: func(_ context.Context, _, _, _ string) (DBRepo, error) {
+			newDBRepo: func(_ context.Context, _, _, _ string) (ports.DBRepo, error) {
 				return &stubDBRepo{execErr: errors.New("grant failure containing supersecret")}, nil
 			},
 			wantErr:                  true,
@@ -3631,7 +3968,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:                         "provisioning blocker after routine update records one duration on recovery",
 			generation:                   7,
-			databases:                    []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:                    []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:                  strPtr(string(readyDBPhase)),
 			newDBRepo:                    failingGrantThenSuccessfulRepoFunc("payments"),
 			reconcileCount:               2,
@@ -3641,7 +3978,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:                "retryable connection failures keep retrying",
 			generation:          7,
-			databases:           []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:           []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:         strPtr(string(readyDBPhase)),
 			wantPhase:           provisioningDBPhase,
 			wantConditionReason: reasonPrivilegesGrantFailed,
@@ -3652,7 +3989,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:                "retryable failure keeps stale failure marker for retry",
 			generation:          7,
-			databases:           []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:           []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:         strPtr(string(readyDBPhase)),
 			failureState:        true,
 			wantRepoCalls:       1,
@@ -3667,7 +4004,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:               "does not requeue after current terminal failure",
 			generation:         7,
-			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:          []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:        strPtr(string(failedDBPhase)),
 			observedGeneration: int64Ptr(7),
 			failureState:       true,
@@ -3686,7 +4023,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:               "repairs missing finalizer before current terminal failure early return",
 			generation:         7,
-			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:          []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:        strPtr(string(failedDBPhase)),
 			observedGeneration: int64Ptr(7),
 			failureState:       true,
@@ -3698,7 +4035,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:         "successful reconcile clears stale failure marker",
 			generation:   7,
-			databases:    []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:    []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:  strPtr(string(readyDBPhase)),
 			failureState: true,
 			conditions: []metav1.Condition{
@@ -3716,15 +4053,15 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantConditionStatus:      metav1.ConditionTrue,
 			wantConditionReason:      reasonPrivilegesGranted,
 			wantConditionMessageContains: []string{
-				"RW role privileges granted for all 1 databases",
+				"RW role privileges granted, count: 1",
 			},
 		},
 		{
 			name:            "marks privileges already current when no new databases require live grants",
 			generation:      7,
-			databases:       []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:       []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:     strPtr(string(readyDBPhase)),
-			statusDatabases: []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			statusDatabases: []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 			conditions: []metav1.Condition{
 				{
 					Type:               string(privilegesReady),
@@ -3744,11 +4081,11 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:               "pending database keeps stale failure marker before privileges retry",
 			generation:         8,
-			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:          []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:        strPtr(string(failedDBPhase)),
 			observedGeneration: int64Ptr(7),
 			failureState:       true,
-			statusDatabases:    []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			statusDatabases:    []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 			conditions: []metav1.Condition{
 				{
 					Type:               string(privilegesReady),
@@ -3767,11 +4104,11 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:               "stale terminal recovery reports missing existing secret as drift",
 			generation:         8,
-			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:          []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:        strPtr(string(failedDBPhase)),
 			observedGeneration: int64Ptr(7),
 			failureState:       true,
-			statusDatabases:    []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			statusDatabases:    []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 			conditions: []metav1.Condition{
 				{
 					Type:               string(privilegesReady),
@@ -3788,20 +4125,21 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantRepoCalls:       0,
 			wantConditionType:   secretsReady,
 			wantConditionStatus: metav1.ConditionFalse,
-			wantConditionReason: reasonSecretsDriftDetected,
+			wantConditionReason: reasonManagedSecretMissing,
 			wantConditionMessageContains: []string{
 				"Managed Secret primary-payments-rw is missing",
 				"previously provisioned role payments_rw",
+				"restore the Secret with the original credential data",
 			},
 		},
 		{
 			name:               "spec change retries privileges after terminal failure without new databases",
 			generation:         8,
-			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:          []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:        strPtr(string(failedDBPhase)),
 			observedGeneration: int64Ptr(7),
 			failureState:       true,
-			statusDatabases:    []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			statusDatabases:    []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 			conditions: []metav1.Condition{
 				{
 					Type:               string(privilegesReady),
@@ -3817,7 +4155,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantConditionStatus:      metav1.ConditionTrue,
 			wantConditionReason:      reasonPrivilegesGranted,
 			wantConditionMessageContains: []string{
-				"RW role privileges granted for all 1 databases",
+				"RW role privileges granted, count: 1",
 			},
 			wantConditionMessageExcludes: []string{
 				"already current",
@@ -3827,11 +4165,11 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:               "does not observe provisioning duration when final Ready status write fails",
 			generation:         8,
-			databases:          []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:          []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:        strPtr(string(failedDBPhase)),
 			observedGeneration: int64Ptr(7),
 			failureState:       true,
-			statusDatabases:    []enterprisev4.DatabaseInfo{{Name: "payments"}},
+			statusDatabases:    []platformv1alpha1.DatabaseInfo{{Name: "payments"}},
 			conditions: []metav1.Condition{
 				{
 					Type:               string(privilegesReady),
@@ -3850,7 +4188,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:       "spec change restarts from Failed",
 			generation: 8,
-			databases: []enterprisev4.DatabaseDefinition{
+			databases: []platformv1alpha1.DatabaseDefinition{
 				{Name: "payments"},
 				{Name: "analytics"},
 			},
@@ -3862,14 +4200,16 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			wantPhase:                readyDBPhase,
 		},
 		{
-			name:                "terminal privileges error transitions to Failed",
-			generation:          7,
-			databases:           []enterprisev4.DatabaseDefinition{{Name: "payments"}},
-			statusPhase:         strPtr(string(readyDBPhase)),
-			newDBRepo:           failingTerminalRepoFunc("password authentication failed"),
-			wantFailureState:    true,
-			wantPhase:           failedDBPhase,
-			wantConditionReason: reasonPrivilegesTerminalFailure,
+			name:                          "terminal privileges error transitions to Failed",
+			generation:                    7,
+			databases:                     []platformv1alpha1.DatabaseDefinition{{Name: "payments", AllowConnections: ptr.To(false)}},
+			statusPhase:                   strPtr(string(readyDBPhase)),
+			newDBRepo:                     failingTerminalRepoFunc("password authentication failed"),
+			wantFailureState:              true,
+			wantPhase:                     failedDBPhase,
+			wantConditionReason:           reasonPrivilegesTerminalFailure,
+			wantDatabasesReadyStatus:      metav1.ConditionFalse,
+			wantProviderAllowsConnections: ptr.To(false),
 			wantConditionMessageContains: []string{
 				"Manual intervention required",
 				"spec change",
@@ -3881,7 +4221,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:                    "returns joined error when non-terminal privileges status update fails",
 			generation:              7,
-			databases:               []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:               []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:             strPtr(string(readyDBPhase)),
 			newDBRepo:               failingGrantRepoFunc("payments"),
 			wantErr:                 true,
@@ -3895,7 +4235,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:                         "returns clean requeue when non-terminal privileges status update conflicts",
 			generation:                   7,
-			databases:                    []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:                    []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:                  strPtr(string(readyDBPhase)),
 			newDBRepo:                    failingGrantRepoFunc("payments"),
 			statusUpdateConflictOnReason: reasonPrivilegesGrantFailed,
@@ -3904,7 +4244,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:                    "returns error when terminal status update fails",
 			generation:              7,
-			databases:               []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:               []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:             strPtr(string(readyDBPhase)),
 			newDBRepo:               failingTerminalRepoFunc("password authentication failed"),
 			wantErr:                 true,
@@ -3918,7 +4258,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:                         "returns clean requeue when terminal status update conflicts",
 			generation:                   7,
-			databases:                    []enterprisev4.DatabaseDefinition{{Name: "payments"}},
+			databases:                    []platformv1alpha1.DatabaseDefinition{{Name: "payments"}},
 			statusPhase:                  strPtr(string(readyDBPhase)),
 			newDBRepo:                    failingTerminalRepoFunc("password authentication failed"),
 			statusUpdateConflictOnReason: reasonPrivilegesTerminalFailure,
@@ -3930,12 +4270,12 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		t.Run(tst.name, func(t *testing.T) {
 			objects := buildObjects(struct {
 				generation         int64
-				databases          []enterprisev4.DatabaseDefinition
+				databases          []platformv1alpha1.DatabaseDefinition
 				statusPhase        *string
 				observedGeneration *int64
 				failureState       bool
 				omitFinalizer      bool
-				statusDatabases    []enterprisev4.DatabaseInfo
+				statusDatabases    []platformv1alpha1.DatabaseInfo
 				conditions         []metav1.Condition
 				databaseApplied    *bool
 				omittedSecrets     []string
@@ -3955,14 +4295,14 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			if tst.statusUpdateErrOnReason != "" || tst.statusUpdateConflictOnReason != "" {
 				c = fake.NewClientBuilder().
 					WithScheme(scheme).
-					WithStatusSubresource(&enterprisev4.PostgresDatabase{}).
+					WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
 					WithObjects(objects...).
 					WithInterceptorFuncs(interceptor.Funcs{
 						SubResourceUpdate: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 							if subResourceName != "status" {
 								return client.SubResource(subResourceName).Update(ctx, obj, opts...)
 							}
-							postgresDB, ok := obj.(*enterprisev4.PostgresDatabase)
+							postgresDB, ok := obj.(*platformv1alpha1.PostgresDatabase)
 							if ok {
 								condition := meta.FindStatusCondition(postgresDB.Status.Conditions, string(privilegesReady))
 								if condition != nil && condition.Reason == string(tst.statusUpdateErrOnReason) {
@@ -3990,7 +4330,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 
 			var result ctrl.Result
 			var err error
-			var updated *enterprisev4.PostgresDatabase
+			var updated *platformv1alpha1.PostgresDatabase
 			metrics := &captureMetricsRecorder{}
 			for i := 1; i <= reconcileCount; i++ {
 				result, updated, err = runService(t, c, newDBRepo, metrics)
@@ -4046,6 +4386,19 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 					assert.NotContains(t, condition.Message, unwantedMessage)
 				}
 			}
+			if tst.wantDatabasesReadyStatus != "" {
+				condition := meta.FindStatusCondition(updated.Status.Conditions, string(databasesReady))
+				require.NotNil(t, condition)
+				assert.Equal(t, tst.wantDatabasesReadyStatus, condition.Status)
+			}
+			if tst.wantProviderAllowsConnections != nil {
+				providerDatabase := &cnpgv1.Database{}
+				require.NoError(t, c.Get(ctx, types.NamespacedName{
+					Name: cnpgDatabaseName(requestName.Name, tst.databases[0].Name), Namespace: requestName.Namespace,
+				}, providerDatabase))
+				require.NotNil(t, providerDatabase.Spec.AllowConnections)
+				assert.Equal(t, *tst.wantProviderAllowsConnections, *providerDatabase.Spec.AllowConnections)
+			}
 			if tst.wantProvisioningObservations != nil {
 				require.Len(t, metrics.provisioningDurations, *tst.wantProvisioningObservations)
 				if *tst.wantProvisioningObservations == 1 {
@@ -4062,17 +4415,17 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 	}
 }
 
-func gateDB() *enterprisev4.PostgresDatabase {
-	return &enterprisev4.PostgresDatabase{
+func gateDB() *platformv1alpha1.PostgresDatabase {
+	return &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "orders", UID: types.UID("db-uid")},
-		Spec:       enterprisev4.PostgresDatabaseSpec{Databases: []enterprisev4.DatabaseDefinition{{Name: "app"}}},
+		Spec:       platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}},
 	}
 }
 
 func TestEvaluateRoleGateProceedWhenReconciledAndOwnedBySelf(t *testing.T) {
-	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
+	decision := evaluateRoleGate(gateDB(), &platformv1alpha1.ManagedRolesStatus{
 		Reconciled: []string{"app_admin", "app_rw"},
-		RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+		RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
 			"app_admin": {Name: "orders", UID: "db-uid"},
 			"app_rw":    {Name: "orders", UID: "db-uid"},
 		},
@@ -4081,18 +4434,18 @@ func TestEvaluateRoleGateProceedWhenReconciledAndOwnedBySelf(t *testing.T) {
 }
 
 func TestEvaluateRoleGateConflictForAttemptedBySelf(t *testing.T) {
-	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
-		Conflicts: []enterprisev4.RoleConflict{{Role: "app_admin", AttemptedBy: enterprisev4.RoleOwnerReference{Name: "orders", UID: "db-uid"}}},
+	decision := evaluateRoleGate(gateDB(), &platformv1alpha1.ManagedRolesStatus{
+		Conflicts: []platformv1alpha1.RoleConflict{{Role: "app_admin", AttemptedBy: platformv1alpha1.RoleOwnerReference{Name: "orders", UID: "db-uid"}}},
 	})
 	assert.Equal(t, roleGateConflict, decision.State)
 	assert.Equal(t, "app_admin", decision.Role)
 }
 
 func TestRoleGateReasons(t *testing.T) {
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "orders", UID: types.UID("db-uid")},
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{{Name: "app"}, {Name: "reports"}},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{{Name: "app"}, {Name: "reports"}},
 		},
 	}
 
@@ -4121,9 +4474,9 @@ func TestRoleGateReasons(t *testing.T) {
 }
 
 func TestDatabaseForRole(t *testing.T) {
-	postgresDB := &enterprisev4.PostgresDatabase{
-		Spec: enterprisev4.PostgresDatabaseSpec{
-			Databases: []enterprisev4.DatabaseDefinition{{Name: "app"}, {Name: "reports"}},
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			Databases: []platformv1alpha1.DatabaseDefinition{{Name: "app"}, {Name: "reports"}},
 		},
 	}
 	assert.Equal(t, "app", databaseForRole(postgresDB, "app_admin"))
@@ -4133,9 +4486,9 @@ func TestDatabaseForRole(t *testing.T) {
 }
 
 func TestEvaluateRoleGatePendingUntilOwnedAndReconciled(t *testing.T) {
-	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
+	decision := evaluateRoleGate(gateDB(), &platformv1alpha1.ManagedRolesStatus{
 		Reconciled: []string{"app_admin"},
-		RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+		RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
 			"app_admin": {Name: "orders", UID: "db-uid"},
 		},
 	})
@@ -4143,8 +4496,8 @@ func TestEvaluateRoleGatePendingUntilOwnedAndReconciled(t *testing.T) {
 }
 
 func TestEvaluateRoleGateFailedSurfacesCNPGFailure(t *testing.T) {
-	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
-		RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+	decision := evaluateRoleGate(gateDB(), &platformv1alpha1.ManagedRolesStatus{
+		RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
 			"app_admin": {Name: "orders", UID: "db-uid"},
 			"app_rw":    {Name: "orders", UID: "db-uid"},
 		},
@@ -4156,9 +4509,9 @@ func TestEvaluateRoleGateFailedSurfacesCNPGFailure(t *testing.T) {
 }
 
 func TestEvaluateRoleGateIgnoresFailureForUnrelatedRole(t *testing.T) {
-	decision := evaluateRoleGate(gateDB(), &enterprisev4.ManagedRolesStatus{
+	decision := evaluateRoleGate(gateDB(), &platformv1alpha1.ManagedRolesStatus{
 		Reconciled: []string{"app_admin", "app_rw"},
-		RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+		RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
 			"app_admin": {Name: "orders", UID: "db-uid"},
 			"app_rw":    {Name: "orders", UID: "db-uid"},
 		},
@@ -4168,16 +4521,16 @@ func TestEvaluateRoleGateIgnoresFailureForUnrelatedRole(t *testing.T) {
 }
 
 func TestEvaluateRoleGateFailedIsDeterministicAcrossDatabases(t *testing.T) {
-	multiDB := &enterprisev4.PostgresDatabase{
+	multiDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "orders", UID: types.UID("db-uid")},
-		Spec: enterprisev4.PostgresDatabaseSpec{Databases: []enterprisev4.DatabaseDefinition{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{
 			{Name: "payments"},
 			{Name: "analytics"},
 		}},
 	}
 	// Two databases fail at once; spec order (payments before analytics) must decide the blame
 	// on every reconcile rather than whichever map key Go happens to visit first.
-	status := &enterprisev4.ManagedRolesStatus{
+	status := &platformv1alpha1.ManagedRolesStatus{
 		Failed: map[string]string{
 			"analytics_rw":    "permission denied",
 			"payments_admin":  "permission denied",
@@ -4193,16 +4546,16 @@ func TestEvaluateRoleGateFailedIsDeterministicAcrossDatabases(t *testing.T) {
 }
 
 func TestEvaluateRoleGatePendingIsDeterministicAcrossDatabases(t *testing.T) {
-	multiDB := &enterprisev4.PostgresDatabase{
+	multiDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "orders", UID: types.UID("db-uid")},
-		Spec: enterprisev4.PostgresDatabaseSpec{Databases: []enterprisev4.DatabaseDefinition{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{
 			{Name: "payments"},
 			{Name: "analytics"},
 		}},
 	}
 	// No roles owned yet: the first-declared role must be reported every time.
 	for i := 0; i < 20; i++ {
-		decision := evaluateRoleGate(multiDB, &enterprisev4.ManagedRolesStatus{})
+		decision := evaluateRoleGate(multiDB, &platformv1alpha1.ManagedRolesStatus{})
 		assert.Equal(t, roleGatePending, decision.State)
 		assert.Equal(t, "payments_admin", decision.Role)
 	}
@@ -4212,27 +4565,27 @@ func TestCleanupManagedRolesPublishesAbsentRolesAndWaitsForClusterDrop(t *testin
 	ctx := t.Context()
 	scheme := testScheme(t)
 	deletionTime := metav1.NewTime(time.Now().Add(-roleCleanupTimeout - time.Minute))
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default", UID: types.UID("db-uid"), DeletionTimestamp: &deletionTime, Finalizers: []string{postgresDatabaseFinalizerName}},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "pg"},
-			Databases:  []enterprisev4.DatabaseDefinition{{Name: "app"}},
+			Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "app"}},
 		},
 	}
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
-		Status: enterprisev4.PostgresClusterStatus{ManagedRolesStatus: &enterprisev4.ManagedRolesStatus{RoleOwners: map[string]enterprisev4.RoleOwnerReference{
+		Status: platformv1alpha1.PostgresClusterStatus{ManagedRolesStatus: &platformv1alpha1.ManagedRolesStatus{RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
 			"app_admin": {Name: "orders", UID: "db-uid"},
 			"app_rw":    {Name: "orders", UID: "db-uid"},
 		}}},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&enterprisev4.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
 	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
-	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []enterprisev4.DatabaseDefinition{{Name: "app"}}})
+	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}})
 	require.ErrorIs(t, err, errRoleCleanupPending)
 
-	updated := &enterprisev4.PostgresDatabase{}
+	updated := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "orders", Namespace: "default"}, updated))
 	require.Len(t, updated.Status.Databases, 1)
 	assert.False(t, updated.Status.Databases[0].Ready)
@@ -4251,18 +4604,18 @@ func TestCleanupManagedRolesPublishesAbsentRolesAndWaitsForClusterDrop(t *testin
 func TestCleanupManagedRolesReleasesWhenClusterNoLongerOwnsRoles(t *testing.T) {
 	ctx := t.Context()
 	scheme := testScheme(t)
-	postgresDB := &enterprisev4.PostgresDatabase{
+	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default", UID: types.UID("db-uid")},
-		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}, Databases: []enterprisev4.DatabaseDefinition{{Name: "app"}}},
+		Spec:       platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}, Databases: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}},
 	}
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}, Status: enterprisev4.PostgresClusterStatus{ManagedRolesStatus: &enterprisev4.ManagedRolesStatus{}}}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&enterprisev4.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}, Status: platformv1alpha1.PostgresClusterStatus{ManagedRolesStatus: &platformv1alpha1.ManagedRolesStatus{}}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
 	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
-	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []enterprisev4.DatabaseDefinition{{Name: "app"}}})
+	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}})
 	require.NoError(t, err)
 
-	updated := &enterprisev4.PostgresDatabase{}
+	updated := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "orders", Namespace: "default"}, updated))
 	require.Len(t, updated.Status.Databases, 1)
 	for _, role := range updated.Status.Databases[0].Roles {

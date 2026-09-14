@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	"github.com/stretchr/testify/assert"
@@ -70,10 +70,10 @@ func newBackupTestAdapter(t *testing.T, method backuptypes.BackupMethod, pluginN
 	t.Helper()
 
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 
-	owner := &enterprisev4.PostgresCluster{
+	owner := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg-demo", Namespace: "default"},
 	}
 	cluster := &cnpgv1.Cluster{
@@ -236,7 +236,7 @@ func TestCreateBackupPreAndPostNamesAreDifferent(t *testing.T) {
 
 func TestCreateBackupPropagatesOwnerFetchError(t *testing.T) {
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 
 	// No objects registered — Get will return NotFound.
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()

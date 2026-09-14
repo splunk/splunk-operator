@@ -19,7 +19,7 @@ package custom_metrics
 import (
 	"testing"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -32,15 +32,15 @@ import (
 
 func TestListDatabaseContributionsUsesCommittedStatus(t *testing.T) {
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 
-	db := &enterprisev4.PostgresDatabase{
+	db := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "owner", Namespace: "ns", UID: types.UID("uid"), Generation: 3},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "pg"},
-			Databases: []enterprisev4.DatabaseDefinition{{
+			Databases: []platformv1alpha1.DatabaseDefinition{{
 				Name: "orders",
-				Monitoring: &enterprisev4.DatabaseMonitoring{
+				Monitoring: &platformv1alpha1.DatabaseMonitoring{
 					CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 						LocalObjectReference: corev1.LocalObjectReference{Name: "spec-only"},
 						Key:                  "queries.yaml",
@@ -48,10 +48,10 @@ func TestListDatabaseContributionsUsesCommittedStatus(t *testing.T) {
 				},
 			}},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			CustomMetricsPublication: &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 				ObservedGeneration: 3,
-				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+				Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 					DatabaseName: "orders",
 					Revision:     "revision",
 					Exists:       true,
@@ -66,8 +66,8 @@ func TestListDatabaseContributionsUsesCommittedStatus(t *testing.T) {
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(db).
-		WithIndex(&enterprisev4.PostgresDatabase{}, enterprisev4.PostgresDatabaseClusterRefNameField, func(obj client.Object) []string {
-			return []string{obj.(*enterprisev4.PostgresDatabase).Spec.ClusterRef.Name}
+		WithIndex(&platformv1alpha1.PostgresDatabase{}, platformv1alpha1.PostgresDatabaseClusterRefNameField, func(obj client.Object) []string {
+			return []string{obj.(*platformv1alpha1.PostgresDatabase).Spec.ClusterRef.Name}
 		}).
 		Build()
 
@@ -84,18 +84,18 @@ func TestListDatabaseContributionsTreatsMissingOrStalePublicationAsUnpublished(t
 	// A DB with monitoring intent but a missing or stale publication must block
 	// the cluster (Unpublished) until it publishes a current generation.
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
-	for _, publication := range []*enterprisev4.PostgresDatabaseCustomMetricsPublication{
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	for _, publication := range []*platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 		nil,
 		{ObservedGeneration: 2},
 	} {
-		db := &enterprisev4.PostgresDatabase{
+		db := &platformv1alpha1.PostgresDatabase{
 			ObjectMeta: metav1.ObjectMeta{Name: "owner", Namespace: "ns", UID: types.UID("uid"), Generation: 3},
-			Spec: enterprisev4.PostgresDatabaseSpec{
+			Spec: platformv1alpha1.PostgresDatabaseSpec{
 				ClusterRef: corev1.LocalObjectReference{Name: "pg"},
-				Databases: []enterprisev4.DatabaseDefinition{{
+				Databases: []platformv1alpha1.DatabaseDefinition{{
 					Name: "orders",
-					Monitoring: &enterprisev4.DatabaseMonitoring{
+					Monitoring: &platformv1alpha1.DatabaseMonitoring{
 						CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "my-cm"},
 							Key:                  "queries.yaml",
@@ -103,7 +103,7 @@ func TestListDatabaseContributionsTreatsMissingOrStalePublicationAsUnpublished(t
 					},
 				}},
 			},
-			Status: enterprisev4.PostgresDatabaseStatus{
+			Status: platformv1alpha1.PostgresDatabaseStatus{
 				CustomMetricsPublication: publication,
 			},
 		}
@@ -123,16 +123,16 @@ func TestListDatabaseContributionsUsesPublishedNonParticipationInsteadOfDatabase
 	// provisioning gates. The cluster consumes that status and does not inspect
 	// the producer's monitoring spec across the controller boundary.
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
-	db := &enterprisev4.PostgresDatabase{
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	db := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "owner", Namespace: "ns", UID: types.UID("uid"), Generation: 3},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "pg"},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			CustomMetricsPublication: &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 				ObservedGeneration: 3,
-				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+				Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 					DatabaseName: "orders",
 					Revision:     "disabled",
 					Exists:       false,
@@ -152,10 +152,10 @@ func TestListDatabaseContributionsUsesPublishedNonParticipationInsteadOfDatabase
 
 func TestListDatabaseContributionsDoesNotInferParticipationFromDatabaseSpec(t *testing.T) {
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
-	db := &enterprisev4.PostgresDatabase{
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	db := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "owner", Namespace: "ns", UID: types.UID("uid"), Generation: 3},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "pg"},
 		},
 	}
@@ -173,14 +173,14 @@ func TestListDatabaseContributionsAcceptsExplicitNonParticipation(t *testing.T) 
 	// A DB with monitoring intent that has published Exists=false for a database
 	// is accepted as a non-participating contribution (not unpublished).
 	scheme := runtime.NewScheme()
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
-	db := &enterprisev4.PostgresDatabase{
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	db := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "owner", Namespace: "ns", UID: types.UID("uid"), Generation: 3},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "pg"},
-			Databases: []enterprisev4.DatabaseDefinition{{
+			Databases: []platformv1alpha1.DatabaseDefinition{{
 				Name: "orders",
-				Monitoring: &enterprisev4.DatabaseMonitoring{
+				Monitoring: &platformv1alpha1.DatabaseMonitoring{
 					CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 						LocalObjectReference: corev1.LocalObjectReference{Name: "my-cm"},
 						Key:                  "queries.yaml",
@@ -188,10 +188,10 @@ func TestListDatabaseContributionsAcceptsExplicitNonParticipation(t *testing.T) 
 				},
 			}},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			CustomMetricsPublication: &enterprisev4.PostgresDatabaseCustomMetricsPublication{
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			CustomMetricsPublication: &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
 				ObservedGeneration: 3,
-				Contributions: []enterprisev4.DatabaseCustomMetricsContribution{{
+				Contributions: []platformv1alpha1.DatabaseCustomMetricsContribution{{
 					DatabaseName: "orders",
 					Revision:     "disabled",
 					Exists:       false,

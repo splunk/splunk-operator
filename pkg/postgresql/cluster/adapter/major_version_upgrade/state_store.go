@@ -19,10 +19,11 @@ package majorupgradeadapter
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -30,9 +31,9 @@ import (
 )
 
 type MajorUpgradeStateStore interface {
-	GetSpecificationWithAnnotations(context.Context) (*enterprisev4.PostgresClusterSpec, map[string]string, error)
-	GetMajorUpgradeStatus(context.Context) ([]enterprisev4.PostgresMajorUpgradeStatus, error)
-	SetMajorUpgradeStatus(context.Context, []enterprisev4.PostgresMajorUpgradeStatus) error
+	GetSpecificationWithAnnotations(context.Context) (*platformv1alpha1.PostgresClusterSpec, map[string]string, error)
+	GetMajorUpgradeStatus(context.Context) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error)
+	SetMajorUpgradeStatus(context.Context, []platformv1alpha1.PostgresMajorUpgradeStatus) error
 	GetSourcePgVersion(context.Context) (string, error)
 }
 
@@ -64,18 +65,21 @@ func (r *majorUpgradeInfoStoreAdapter) ReadMajorUpgradeIntent(ctx context.Contex
 	if err != nil {
 		return mvutypes.Intent{}, false, err
 	}
-	sourcePgVersion, err := r.store.GetSourcePgVersion(ctx)
+	sourceVersion, err := r.store.GetSourcePgVersion(ctx)
 	if err != nil {
 		return mvutypes.Intent{}, false, err
 	}
-	return MajorUpgradeInputFromParts(spec, entries, annotations, sourcePgVersion)
+	return MajorUpgradeInputFromParts(spec, entries, annotations, sourceVersion)
 }
 
-func (r *majorUpgradeInfoStoreAdapter) SaveMajorUpgradeProgress(ctx context.Context, intent mvutypes.Intent, report reconciliationTypes.Report, baseline *mvutypes.BackupInfo) error {
-	return r.store.SetMajorUpgradeStatus(ctx, stateWithReport(intent, report, baseline))
+func (r *majorUpgradeInfoStoreAdapter) SaveMajorUpgradeProgress(ctx context.Context, intent mvutypes.Intent, progress mvutypes.Progress) error {
+	if err := validateBlueGreenProgress(intent, progress); err != nil {
+		return err
+	}
+	return r.store.SetMajorUpgradeStatus(ctx, stateWithProgress(intent, progress))
 }
 
-func MajorUpgradeInputFromCluster(cluster *enterprisev4.PostgresCluster) (mvutypes.Intent, bool, error) {
+func MajorUpgradeInputFromCluster(cluster *platformv1alpha1.PostgresCluster) (mvutypes.Intent, bool, error) {
 	if cluster == nil {
 		return mvutypes.Intent{}, false, nil
 	}
@@ -83,8 +87,14 @@ func MajorUpgradeInputFromCluster(cluster *enterprisev4.PostgresCluster) (mvutyp
 	return MajorUpgradeInputFromParts(&cluster.Spec, cluster.Status.PostgresMajorUpgradeStatus, cluster.Annotations, cluster.Status.CurrentPgVersion)
 }
 
-func MajorUpgradeInputFromParts(spec *enterprisev4.PostgresClusterSpec, entries []enterprisev4.PostgresMajorUpgradeStatus, annotations map[string]string, fallbackPgVersion string) (mvutypes.Intent, bool, error) {
-	if spec == nil || !majorUpgradeAllowed(spec.PostgresMajorUpgradeConfig) || spec.PostgresVersion == nil {
+func MajorUpgradeInputFromParts(spec *platformv1alpha1.PostgresClusterSpec, entries []platformv1alpha1.PostgresMajorUpgradeStatus, annotations map[string]string, fallbackPgVersion string) (mvutypes.Intent, bool, error) {
+	if spec == nil || spec.PostgresVersion == nil {
+		return mvutypes.Intent{}, false, nil
+	}
+	if shouldObserveBlueGreenRearm(spec) {
+		return blueGreenRearmIntent(entries, sourcePgVersion(entries, fallbackPgVersion), *spec.PostgresVersion)
+	}
+	if !majorUpgradeAllowed(spec.PostgresMajorUpgradeConfig) {
 		return mvutypes.Intent{}, false, nil
 	}
 
@@ -94,10 +104,7 @@ func MajorUpgradeInputFromParts(spec *enterprisev4.PostgresClusterSpec, entries 
 	}
 
 	cfg := spec.PostgresMajorUpgradeConfig
-	strategy := mvutypes.MajorUpgradeFlowPgUpgrade
-	if cfg.Strategy != nil && *cfg.Strategy != "" {
-		strategy = *cfg.Strategy
-	}
+	strategy := majorUpgradeStrategy(cfg)
 
 	source := sourcePgVersion(entries, fallbackPgVersion)
 	target := *spec.PostgresVersion
@@ -105,18 +112,30 @@ func MajorUpgradeInputFromParts(spec *enterprisev4.PostgresClusterSpec, entries 
 		return mvutypes.Intent{}, false, nil
 	}
 
-	return mvutypes.Intent{
+	intent := mvutypes.Intent{
 		Strategy:         strategy,
 		SourcePgVersion:  source,
 		TargetPgVersion:  target,
 		Policy:           mvutypes.DefaultUpgradePolicy(),
-		State:            append([]enterprisev4.PostgresMajorUpgradeStatus(nil), entries...),
+		State:            append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), entries...),
 		RetryRequestedAt: retryRequestedAt,
-	}, true, nil
+	}
+	if strategy == mvutypes.MajorUpgradeFlowBlueGreen {
+		return mvutypes.Intent{}, false, nil
+	}
+
+	return intent, true, nil
 }
 
-func majorUpgradeAllowed(config *enterprisev4.PostgresMajorUpgradeConfig) bool {
+func majorUpgradeAllowed(config *platformv1alpha1.PostgresMajorUpgradeConfig) bool {
 	return config != nil && config.Allow != nil && *config.Allow
+}
+
+func majorUpgradeStrategy(config *platformv1alpha1.PostgresMajorUpgradeConfig) string {
+	if config != nil && config.Strategy != nil && *config.Strategy != "" {
+		return *config.Strategy
+	}
+	return mvutypes.MajorUpgradeFlowPgUpgrade
 }
 
 func samePostgresMajor(source, target string) bool {
@@ -125,10 +144,23 @@ func samePostgresMajor(source, target string) bool {
 	return sourceMajor != "" && sourceMajor == targetMajor
 }
 
-func sourcePgVersion(entries []enterprisev4.PostgresMajorUpgradeStatus, fallbackPgVersion string) string {
-	for i := len(entries) - 1; i >= 0; i-- {
+func sourcePgVersion(entries []platformv1alpha1.PostgresMajorUpgradeStatus, fallbackPgVersion string) string {
+	for i := range slices.Backward(entries) {
 		entry := entries[i]
+		unavailableBlueGreen := false
+		if entry.BlueGreen != nil && entry.Phase != nil && *entry.Phase == string(mvutypes.Failed) {
+			for _, condition := range entry.Conditions {
+				if condition.Type == mvutypes.ConditionMajorUpgradeTerminalFailure &&
+					condition.Reason == mvutypes.ReasonBlueGreenStrategyUnavailable {
+					unavailableBlueGreen = true
+					break
+				}
+			}
+		}
 		if entry.Phase != nil && *entry.Phase != string(mvutypes.Completed) && entry.SourcePgVersion != nil {
+			if unavailableBlueGreen {
+				continue
+			}
 			return *entry.SourcePgVersion
 		}
 	}
@@ -160,21 +192,26 @@ func retryRequestedAt(annotations map[string]string) (*metav1.Time, error) {
 	return &retryAt, nil
 }
 
-func stateWithReport(intent mvutypes.Intent, report reconciliationTypes.Report, baseline *mvutypes.BackupInfo) []enterprisev4.PostgresMajorUpgradeStatus {
+func stateWithReport(intent mvutypes.Intent, report reconciliationTypes.Report, baseline *mvutypes.BackupInfo) []platformv1alpha1.PostgresMajorUpgradeStatus {
+	return stateWithProgress(intent, mvutypes.Progress{Report: report, Baseline: baseline})
+}
+
+func stateWithProgress(intent mvutypes.Intent, progress mvutypes.Progress) []platformv1alpha1.PostgresMajorUpgradeStatus {
 	current := currentOrNewEntry(intent.State, intent)
 	current.SourcePgVersion = &intent.SourcePgVersion
 	current.TargetPgVersion = &intent.TargetPgVersion
 	current.Strategy = &intent.Strategy
-	applyTimestamps(&current, report)
-	if report.Phase != "" {
-		current.Phase = &report.Phase
+	applyTimestamps(&current, progress.Report)
+	if progress.Report.Phase != "" {
+		current.Phase = &progress.Report.Phase
 	}
-	applyBaseline(&current, report, baseline)
-	applyConditions(&current, intent, report)
+	applyBaseline(&current, progress.Report, progress.Baseline)
+	applyBlueGreenProgress(&current, intent, progress)
+	applyConditions(&current, intent, progress.Report)
 	return stateWithCurrentEntry(intent.State, intent, current)
 }
 
-func applyTimestamps(current *enterprisev4.PostgresMajorUpgradeStatus, report reconciliationTypes.Report) {
+func applyTimestamps(current *platformv1alpha1.PostgresMajorUpgradeStatus, report reconciliationTypes.Report) {
 	if current.StartedAt == nil {
 		now := metav1.Now()
 		current.StartedAt = &now
@@ -191,7 +228,7 @@ func applyTimestamps(current *enterprisev4.PostgresMajorUpgradeStatus, report re
 // non-Completed report is paired with a post-upgrade backup the name lands in
 // PreUpgrade, corrupting status. This coupling is intentional but fragile: do
 // not change the pairing without updating the corresponding test.
-func applyBaseline(current *enterprisev4.PostgresMajorUpgradeStatus, report reconciliationTypes.Report, baseline *mvutypes.BackupInfo) {
+func applyBaseline(current *platformv1alpha1.PostgresMajorUpgradeStatus, report reconciliationTypes.Report, baseline *mvutypes.BackupInfo) {
 	if baseline == nil {
 		return
 	}
@@ -202,7 +239,7 @@ func applyBaseline(current *enterprisev4.PostgresMajorUpgradeStatus, report reco
 		return
 	}
 	if current.BackupNames == nil {
-		current.BackupNames = &enterprisev4.UpgradeBackupNames{}
+		current.BackupNames = &platformv1alpha1.UpgradeBackupNames{}
 	}
 	if report.Phase == string(mvutypes.Completed) {
 		current.BackupNames.PostUpgrade = &baseline.BackupName
@@ -211,7 +248,7 @@ func applyBaseline(current *enterprisev4.PostgresMajorUpgradeStatus, report reco
 	}
 }
 
-func applyConditions(current *enterprisev4.PostgresMajorUpgradeStatus, intent mvutypes.Intent, report reconciliationTypes.Report) {
+func applyConditions(current *platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent, report reconciliationTypes.Report) {
 	if mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, *current) && report.Phase != string(mvutypes.Failed) {
 		current.Conditions = removeCondition(current.Conditions, mvutypes.ConditionMajorUpgradeTerminalFailure)
 	}
@@ -224,25 +261,25 @@ func applyConditions(current *enterprisev4.PostgresMajorUpgradeStatus, intent mv
 	meta.SetStatusCondition(&current.Conditions, condition)
 }
 
-func currentOrNewEntry(entries []enterprisev4.PostgresMajorUpgradeStatus, intent mvutypes.Intent) enterprisev4.PostgresMajorUpgradeStatus {
+func currentOrNewEntry(entries []platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent) platformv1alpha1.PostgresMajorUpgradeStatus {
 	for i := len(entries) - 1; i >= 0; i-- {
 		if mvutypes.MatchesIntent(entries[i], intent) {
-			return entries[i]
+			return *entries[i].DeepCopy()
 		}
 	}
 
-	return enterprisev4.PostgresMajorUpgradeStatus{}
+	return platformv1alpha1.PostgresMajorUpgradeStatus{}
 }
 
-func stateWithCurrentEntry(entries []enterprisev4.PostgresMajorUpgradeStatus, intent mvutypes.Intent, current enterprisev4.PostgresMajorUpgradeStatus) []enterprisev4.PostgresMajorUpgradeStatus {
-	next := append([]enterprisev4.PostgresMajorUpgradeStatus(nil), entries...)
+func stateWithCurrentEntry(entries []platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent, current platformv1alpha1.PostgresMajorUpgradeStatus) []platformv1alpha1.PostgresMajorUpgradeStatus {
+	next := append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), entries...)
 	for i := len(next) - 1; i >= 0; i-- {
 		if mvutypes.MatchesIntent(next[i], intent) {
 			next[i] = current
-			return next
+			return compactBlueGreenHistory(next)
 		}
 	}
-	return append(next, current)
+	return compactBlueGreenHistory(append(next, current))
 }
 
 func removeCondition(conditions []metav1.Condition, conditionType string) []metav1.Condition {

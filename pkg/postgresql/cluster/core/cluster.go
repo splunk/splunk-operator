@@ -24,7 +24,7 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	mon "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
@@ -56,7 +56,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	var postgresSecretName string
 
 	// 1. Fetch the PostgresCluster instance, stop if not found.
-	postgresCluster := &enterprisev4.PostgresCluster{}
+	postgresCluster := &platformv1alpha1.PostgresCluster{}
 	if err := c.Get(ctx, req.NamespacedName, postgresCluster); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.InfoContext(ctx, "PostgresCluster deleted, skipping reconciliation")
@@ -64,10 +64,6 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to fetch PostgresCluster: %w", err)
 	}
-	if postgresCluster.Status.Resources == nil {
-		postgresCluster.Status.Resources = &enterprisev4.PostgresClusterResources{}
-	}
-
 	logger = logger.With("postgresCluster", postgresCluster.Name)
 	ctx = logging.WithLogger(ctx, logger)
 
@@ -86,7 +82,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), reason, message)
 		return nil
 	}
-	updateComponentHealthStatus := func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+	updateComponentHealthStatus := func(before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 		oldPhase := currentPhase()
 		if err := setStatusFromHealth(ctx, c, rc.Metrics, postgresCluster, before, health); err != nil {
 			return err
@@ -109,6 +105,12 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), "", "")
 		return nil
 	}
+	initializePendingPhase := func() (bool, error) {
+		if postgresCluster.Status.Phase != nil {
+			return false, nil
+		}
+		return true, updatePhaseStatus(pendingClusterPhase)
+	}
 
 	// Finalizer handling must come before any other processing.
 	if err := handleFinalizer(ctx, rc, postgresCluster); err != nil {
@@ -126,6 +128,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	finalizerAdded := false
 	// Add finalizer if not present.
 	if !controllerutil.ContainsFinalizer(postgresCluster, PostgresClusterFinalizerName) {
 		controllerutil.AddFinalizer(postgresCluster, PostgresClusterFinalizerName)
@@ -133,11 +136,33 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		logger.InfoContext(ctx, "finalizer added")
+		finalizerAdded = true
+	}
+
+	// A status-only update does not re-enqueue this resource, so initialize the
+	// observable phase and explicitly schedule the normal reconciliation path.
+	initialized, err := initializePendingPhase()
+	if err != nil {
+		if apierrors.IsConflict(err) {
+			logger.WarnContext(ctx, "conflict initializing PostgresCluster phase, will requeue")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("failed to initialize PostgresCluster phase: %w", err)
+	}
+	if initialized {
+		logger.InfoContext(ctx, "initialized PostgresCluster phase", "phase", pendingClusterPhase)
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if finalizerAdded {
 		return ctrl.Result{}, nil
 	}
 
+	if postgresCluster.Status.Resources == nil {
+		postgresCluster.Status.Resources = &platformv1alpha1.PostgresClusterResources{}
+	}
+
 	// Load the referenced PostgresClusterClass.
-	clusterClass := &enterprisev4.PostgresClusterClass{}
+	clusterClass := &platformv1alpha1.PostgresClusterClass{}
 	if err := c.Get(ctx, client.ObjectKey{Name: postgresCluster.Spec.Class}, clusterClass); err != nil {
 		rc.emitWarning(postgresCluster, EventClusterClassNotFound, fmt.Sprintf("ClusterClass %s not found for PostgresCluster %s", postgresCluster.Spec.Class, postgresCluster.Name))
 		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterClassNotFound,
@@ -255,11 +280,11 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	return ctrl.Result{}, nil
 }
 
-func newUseCaseReconciler(rc *ReconcileContext, key types.NamespacedName, cluster *enterprisev4.PostgresCluster, mergedConfig *MergedConfig) *usecases.Reconciler {
+func newUseCaseReconciler(rc *ReconcileContext, key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, mergedConfig *MergedConfig) *usecases.Reconciler {
 	if rc == nil || rc.UseCaseRegistryProvider == nil {
 		return nil
 	}
-	var spec *enterprisev4.PostgresClusterSpec
+	var spec *platformv1alpha1.PostgresClusterSpec
 	if cluster != nil {
 		spec = &cluster.Spec
 	}
@@ -290,7 +315,7 @@ func resultFromUseCaseReport(report *reconciliationTypes.Report) ctrl.Result {
 	return ctrl.Result{Requeue: true}
 }
 
-func writeComponentStatus(updateStatus healthStatusUpdater, before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+func writeComponentStatus(updateStatus healthStatusUpdater, before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 	if updateStatus == nil {
 		return nil
 	}
@@ -406,7 +431,7 @@ type component interface {
 	Provides() []contractKey
 }
 
-type healthStatusUpdater func(before *enterprisev4.PostgresClusterStatus, health componentHealth) error
+type healthStatusUpdater func(before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error
 
 // classifyReconcileErr inspects reconcileErr and returns the appropriate componentHealth
 // and error for the two sentinel cases every Observe method must handle before doing its
@@ -458,7 +483,7 @@ func isIntermediateState(state pgcConstants.State) bool {
 // setStatus sets the phase, condition and persists the status.
 // It skips the API write when the resulting status is identical to the current
 // state, avoiding unnecessary etcd churn and ResourceVersion bumps on stable clusters.
-func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, cluster *enterprisev4.PostgresCluster, before *enterprisev4.PostgresClusterStatus, condType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileClusterPhases) error {
+func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, cluster *platformv1alpha1.PostgresCluster, before *platformv1alpha1.PostgresClusterStatus, condType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string, phase reconcileClusterPhases) error {
 	if phase != "" {
 		p := string(phase)
 		cluster.Status.Phase = &p
@@ -487,7 +512,7 @@ func setStatus(ctx context.Context, c client.Client, metrics ports.Recorder, clu
 	return nil
 }
 
-func setStatusFromHealth(ctx context.Context, c client.Client, metrics ports.Recorder, cluster *enterprisev4.PostgresCluster, before *enterprisev4.PostgresClusterStatus, health componentHealth) error {
+func setStatusFromHealth(ctx context.Context, c client.Client, metrics ports.Recorder, cluster *platformv1alpha1.PostgresCluster, before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 	conditionStatus := metav1.ConditionFalse
 	if health.State == pgcConstants.Ready {
 		conditionStatus = metav1.ConditionTrue
@@ -501,7 +526,7 @@ func setStatusFromHealth(ctx context.Context, c client.Client, metrics ports.Rec
 // beginReadinessCycle persists the start of a single time-to-Ready cycle. Initial
 // provisioning starts at creation. Later cycles start when a persisted Ready
 // cluster becomes non-Ready, or when a new generation resumes a failed cycle.
-func beginReadinessCycle(cluster *enterprisev4.PostgresCluster, before *enterprisev4.PostgresClusterStatus, phase reconcileClusterPhases) {
+func beginReadinessCycle(cluster *platformv1alpha1.PostgresCluster, before *platformv1alpha1.PostgresClusterStatus, phase reconcileClusterPhases) {
 	if phase == "" || phase == readyClusterPhase || cluster.Status.LastTransitionTime != nil {
 		return
 	}
@@ -522,7 +547,7 @@ func beginReadinessCycle(cluster *enterprisev4.PostgresCluster, before *enterpri
 
 // startReadinessCycle records a readiness cycle when an active use case blocks
 // normal component reconciliation before a non-Ready status can be written.
-func startReadinessCycle(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster) error {
+func startReadinessCycle(ctx context.Context, c client.Client, cluster *platformv1alpha1.PostgresCluster) error {
 	before := cluster.Status.DeepCopy()
 	beginReadinessCycle(cluster, before, provisioningClusterPhase)
 	if equality.Semantic.DeepEqual(*before, cluster.Status) {
@@ -536,10 +561,11 @@ func startReadinessCycle(ctx context.Context, c client.Client, cluster *enterpri
 
 // setPhaseStatus persists a final phase and returns the duration only when that
 // successful write completes an active time-to-Ready cycle.
-func setPhaseStatus(ctx context.Context, c client.Client, cluster *enterprisev4.PostgresCluster, phase reconcileClusterPhases) (float64, bool, error) {
+func setPhaseStatus(ctx context.Context, c client.Client, cluster *platformv1alpha1.PostgresCluster, phase reconcileClusterPhases) (float64, bool, error) {
 	before := cluster.Status.DeepCopy()
 	p := string(phase)
 	cluster.Status.Phase = &p
+	beginReadinessCycle(cluster, before, phase)
 	completedReadinessCycle := phase == readyClusterPhase && cluster.Status.LastTransitionTime != nil
 	var lastTransitionTime time.Time
 	if completedReadinessCycle {
@@ -574,7 +600,7 @@ func deleteCNPGCluster(ctx context.Context, c client.Client, cnpgCluster *cnpgv1
 
 // handleFinalizer processes deletion cleanup: removes poolers, then deletes or orphans the CNPG Cluster
 // based on ClusterDeletionPolicy, then removes the finalizer.
-func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *enterprisev4.PostgresCluster) error {
+func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platformv1alpha1.PostgresCluster) error {
 	c := rc.Client
 	scheme := rc.Scheme
 	logger := logging.FromContext(ctx).With("func", "handleFinalizer")

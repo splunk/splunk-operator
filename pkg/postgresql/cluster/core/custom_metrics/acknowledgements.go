@@ -134,6 +134,17 @@ func invalidAcknowledgements(
 	fallback acknowledgementFailure,
 ) []mtypes.DatabaseAcknowledgement {
 	result := pendingAcknowledgements(contributions, previous, "CustomMetricsPending", "Blocked by an invalid custom-metrics contribution")
+	prior := previousAcknowledgements(previous)
+	for i := range result {
+		old, found := prior[acknowledgementKey(result[i].Identity)]
+		if found &&
+			old.Status == mtypes.AcknowledgementTrue &&
+			old.DesiredRevision == result[i].DesiredRevision &&
+			old.AppliedRevision == result[i].DesiredRevision {
+			old.Identity = result[i].Identity
+			result[i] = old
+		}
+	}
 	for i := range result {
 		if failure, found := failures[acknowledgementKey(result[i].Identity)]; found {
 			result[i].Status = mtypes.AcknowledgementFalse

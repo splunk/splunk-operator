@@ -17,11 +17,29 @@ limitations under the License.
 package majorversionupgradetypes
 
 import (
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func MatchesIntent(entry enterprisev4.PostgresMajorUpgradeStatus, intent Intent) bool {
+func MatchesIntent(entry platformv1alpha1.PostgresMajorUpgradeStatus, intent Intent) bool {
+	if !MatchesUpgradeFamily(entry, intent) {
+		return false
+	}
+
+	if intent.Strategy != MajorUpgradeFlowBlueGreen {
+		return true
+	}
+
+	return intent.AttemptID != "" &&
+		entry.BlueGreen != nil &&
+		entry.BlueGreen.AttemptID == intent.AttemptID
+}
+
+// MatchesUpgradeFamily reports whether an entry belongs to the source, target,
+// and strategy family selected by an intent. A blue/green family can have more
+// than one durable attempt; callers that mutate an attempt must use
+// MatchesIntent, which additionally requires the attempt ID.
+func MatchesUpgradeFamily(entry platformv1alpha1.PostgresMajorUpgradeStatus, intent Intent) bool {
 	deref := func(s *string) string {
 		if s == nil {
 			return ""
@@ -33,7 +51,30 @@ func MatchesIntent(entry enterprisev4.PostgresMajorUpgradeStatus, intent Intent)
 		deref(entry.Strategy) == intent.Strategy
 }
 
-func RetryRequestedAfterTerminalFailure(retryRequestedAt *metav1.Time, entry enterprisev4.PostgresMajorUpgradeStatus) bool {
+// IsBlueGreenAttemptCleaned reports whether an attempt is retained only as a
+// cleaned history entry and is eligible to be re-armed by an observed false
+// allow gate.
+func IsBlueGreenAttemptCleaned(entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
+	return entry.BlueGreen != nil &&
+		entry.BlueGreen.Cleanup != nil &&
+		entry.BlueGreen.Cleanup.State == platformv1alpha1.BlueGreenCleanupStateCleaned
+}
+
+// IsBlueGreenAttemptActive reports whether a blue/green entry still owns active lifecycle state.
+func IsBlueGreenAttemptActive(entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
+	if entry.BlueGreen == nil || IsBlueGreenAttemptCleaned(entry) {
+		return false
+	}
+	for _, condition := range entry.Conditions {
+		if condition.Type == ConditionMajorUpgradeTerminalFailure &&
+			condition.Reason == ReasonBlueGreenStrategyUnavailable {
+			return false
+		}
+	}
+	return true
+}
+
+func RetryRequestedAfterTerminalFailure(retryRequestedAt *metav1.Time, entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
 	if retryRequestedAt == nil {
 		return false
 	}

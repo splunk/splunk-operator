@@ -16,7 +16,7 @@ limitations under the License.
 package core
 
 import (
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/recoverytypes"
 )
 
@@ -42,7 +42,7 @@ type RecoveryBackend interface {
 // no bootstrapFrom or the source is malformed (exactly-one-source is enforced by
 // the structural checks in validateBootstrapFrom, so a malformed request has
 // already produced an actionable error and needs no capability check).
-func deriveRecoveryPlan(class *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) (recoverytypes.RecoveryPlan, bool) {
+func deriveRecoveryPlan(class *platformv1alpha1.PostgresClusterClass, cluster *platformv1alpha1.PostgresCluster) (recoverytypes.RecoveryPlan, bool) {
 	b := cluster.Spec.BootstrapFrom
 	if b == nil {
 		return recoverytypes.RecoveryPlan{}, false
@@ -77,7 +77,7 @@ func deriveRecoveryPlan(class *enterprisev4.PostgresClusterClass, cluster *enter
 // classProvidesObjectStore reports whether the referenced class defines an object
 // store the backend can resolve WAL/base-backup access from. Core reports the
 // fact; the backend decides whether a given plan requires it.
-func classProvidesObjectStore(class *enterprisev4.PostgresClusterClass) bool {
+func classProvidesObjectStore(class *platformv1alpha1.PostgresClusterClass) bool {
 	return class.Spec.CNPG != nil &&
 		class.Spec.CNPG.Backup != nil &&
 		class.Spec.CNPG.Backup.BarmanObjectStore != nil
@@ -90,7 +90,7 @@ func classProvidesObjectStore(class *enterprisev4.PostgresClusterClass) bool {
 // are provisioner-independent and stay in validateBootstrapFrom. Both composition
 // roots that gate recovery (the admission webhook and the reconciler) call this
 // with a concrete backend, mirroring how BackupBackend is injected at runtime.
-func ValidateRecoveryCapabilities(backend RecoveryBackend, class *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) []ConfigValidationError {
+func ValidateRecoveryCapabilities(backend RecoveryBackend, class *platformv1alpha1.PostgresClusterClass, cluster *platformv1alpha1.PostgresCluster) []ConfigValidationError {
 	if backend == nil {
 		return nil
 	}

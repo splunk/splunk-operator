@@ -1,4 +1,4 @@
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: test-invalid-policy

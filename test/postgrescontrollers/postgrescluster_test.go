@@ -18,7 +18,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -52,9 +52,9 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
 
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-cluster", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -65,7 +65,7 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 
 			By("waiting for PostgresCluster to reach Ready phase")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -89,9 +89,9 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
 
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "delete-cluster", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -102,7 +102,7 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 
 			By("waiting for PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -113,7 +113,7 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 
 			By("waiting for PostgresCluster to be removed")
 			Eventually(func() error {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				return kubeClient.Get(ctx, clusterKey, pc)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Satisfy(apierrors.IsNotFound))
 
@@ -135,9 +135,9 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 			pgClass := createPGClass(ctx, kubeClient, ns)
 
 			// clusterDeletionPolicy defaults to Retain — omit it to test the default.
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "retain-cluster", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class: pgClass.Name,
 				},
 			}
@@ -148,7 +148,7 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 			By("waiting for PostgresCluster to reach Ready")
 			var secretName string
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -175,7 +175,7 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 
 			By("waiting for PostgresCluster to be removed")
 			Eventually(func() error {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				return kubeClient.Get(ctx, clusterKey, pc)
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Satisfy(apierrors.IsNotFound))
 
@@ -200,31 +200,31 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 // a DeferCleanup to delete it. PostgresClusterClass is cluster-scoped, so it is not
 // covered by the per-namespace TestCaseEnv teardown — the name is keyed by namespace
 // to keep parallel specs isolated.
-func createPGClass(ctx SpecContext, kubeClient client.Client, ns string) *enterprisev4.PostgresClusterClass {
+func createPGClass(ctx SpecContext, kubeClient client.Client, ns string) *platformv1alpha1.PostgresClusterClass {
 	return createPGClassAtVersion(ctx, kubeClient, ns, "")
 }
 
 // createPGClassAtVersion creates a class with an explicit PostgreSQL version.
 // An empty version retains the API default used by general scenarios.
-func createPGClassAtVersion(ctx SpecContext, kubeClient client.Client, ns, postgresVersion string) *enterprisev4.PostgresClusterClass {
-	config := &enterprisev4.PostgresClusterClassConfig{
+func createPGClassAtVersion(ctx SpecContext, kubeClient client.Client, ns, postgresVersion string) *platformv1alpha1.PostgresClusterClass {
+	config := &platformv1alpha1.PostgresClusterClassConfig{
 		Instances: ptr.To(int32(1)),
 	}
 	if postgresVersion != "" {
 		config.PostgresVersion = ptr.To(postgresVersion)
 	}
 
-	pgClass := &enterprisev4.PostgresClusterClass{
+	pgClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "postgres-e2e-" + ns,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "e2e-test",
 			},
 		},
-		Spec: enterprisev4.PostgresClusterClassSpec{
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config:      config,
-			CNPG:        &enterprisev4.CNPGConfig{},
+			CNPG:        &platformv1alpha1.CNPGConfig{},
 		},
 	}
 	Expect(kubeClient.Create(ctx, pgClass)).To(Succeed())

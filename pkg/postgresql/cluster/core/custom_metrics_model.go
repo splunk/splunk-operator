@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"sort"
 
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mon "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
@@ -35,14 +35,14 @@ type customMetricsModel struct {
 	events       eventEmitter
 	updateStatus healthStatusUpdater
 	contracts    *reconcileContracts
-	cluster      *enterprisev4.PostgresCluster
+	cluster      *platformv1alpha1.PostgresCluster
 
 	// Observe diffs against the pre-reconcile status.
-	statusBefore *enterprisev4.PostgresClusterStatus
+	statusBefore *platformv1alpha1.PostgresClusterStatus
 	outcome      mon.Outcome
 }
 
-func newCustomMetricsModel(model *mon.Model, events eventEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, contracts *reconcileContracts) *customMetricsModel {
+func newCustomMetricsModel(model *mon.Model, events eventEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, contracts *reconcileContracts) *customMetricsModel {
 	return &customMetricsModel{
 		model:        model,
 		events:       events,
@@ -195,7 +195,7 @@ func retryableCustomMetricsError(err error) (error, bool) {
 	return nil, false
 }
 
-func databaseAcknowledgementsFromStatus(status *enterprisev4.CustomMetricsStatus) []mtypes.DatabaseAcknowledgement {
+func databaseAcknowledgementsFromStatus(status *platformv1alpha1.CustomMetricsStatus) []mtypes.DatabaseAcknowledgement {
 	if status == nil {
 		return nil
 	}
@@ -217,7 +217,7 @@ func databaseAcknowledgementsFromStatus(status *enterprisev4.CustomMetricsStatus
 	return result
 }
 
-func customMetricsStatusFromAcknowledgements(acknowledgements []mtypes.DatabaseAcknowledgement) *enterprisev4.CustomMetricsStatus {
+func customMetricsStatusFromAcknowledgements(acknowledgements []mtypes.DatabaseAcknowledgement) *platformv1alpha1.CustomMetricsStatus {
 	if len(acknowledgements) == 0 {
 		return nil
 	}
@@ -230,11 +230,11 @@ func customMetricsStatusFromAcknowledgements(acknowledgements []mtypes.DatabaseA
 		}
 		return acknowledgements[i].Identity.DatabaseName < acknowledgements[j].Identity.DatabaseName
 	})
-	status := &enterprisev4.CustomMetricsStatus{
-		DatabaseContributions: make([]enterprisev4.DatabaseCustomMetricsStatus, 0, len(acknowledgements)),
+	status := &platformv1alpha1.CustomMetricsStatus{
+		DatabaseContributions: make([]platformv1alpha1.DatabaseCustomMetricsStatus, 0, len(acknowledgements)),
 	}
 	for _, acknowledgement := range acknowledgements {
-		status.DatabaseContributions = append(status.DatabaseContributions, enterprisev4.DatabaseCustomMetricsStatus{
+		status.DatabaseContributions = append(status.DatabaseContributions, platformv1alpha1.DatabaseCustomMetricsStatus{
 			PostgresDatabaseName: acknowledgement.Identity.PostgresDatabaseName,
 			PostgresDatabaseUID:  acknowledgement.Identity.PostgresDatabaseUID,
 			DatabaseName:         acknowledgement.Identity.DatabaseName,

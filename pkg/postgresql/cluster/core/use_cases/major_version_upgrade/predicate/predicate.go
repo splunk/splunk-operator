@@ -17,7 +17,8 @@ limitations under the License.
 package majorversionupgradepredicate
 
 import (
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 )
 
 // Predicate reports whether the major-version upgrade use case is possibly
@@ -26,10 +27,19 @@ import (
 // so the reconciler can skip construction and status reads entirely. The use
 // case's own Schedule makes the precise decision that needs live CNPG reads.
 // When spec is nil it returns true so a missing cluster falls through to Schedule.
-func Predicate(spec *enterprisev4.PostgresClusterSpec) bool {
+func Predicate(spec *platformv1alpha1.PostgresClusterSpec) bool {
 	if spec == nil {
 		return true
 	}
 	cfg := spec.PostgresMajorUpgradeConfig
-	return cfg != nil && cfg.Allow != nil && *cfg.Allow
+	if cfg == nil || cfg.Allow == nil {
+		return false
+	}
+	if *cfg.Allow {
+		return true
+	}
+	// A blue/green false gate is an explicit re-arm signal after a cleaned
+	// attempt. Construct the use case so its state adapter can durably observe
+	// that edge; retain the no-work fast path for the common pgUpgrade case.
+	return cfg.Strategy != nil && *cfg.Strategy == mvutypes.MajorUpgradeFlowBlueGreen
 }

@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	password "github.com/sethvargo/go-password/password"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -41,12 +41,12 @@ type secretModel struct {
 	scheme       *runtime.Scheme
 	events       eventEmitter
 	updateStatus healthStatusUpdater
-	cluster      *enterprisev4.PostgresCluster
+	cluster      *platformv1alpha1.PostgresCluster
 	name         string
 	contracts    *reconcileContracts
 }
 
-func newSecretModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, name string, contracts *reconcileContracts) *secretModel {
+func newSecretModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, name string, contracts *reconcileContracts) *secretModel {
 	return &secretModel{client: c, scheme: scheme, events: events, updateStatus: updateStatus, cluster: cluster, name: name, contracts: contracts}
 }
 
@@ -224,7 +224,7 @@ func ValidateExternalSuperuserSecret(secret *corev1.Secret) error {
 }
 
 // ensureClusterSecret creates the superuser secret. Caller must verify it does not already exist.
-func ensureClusterSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, secretName string) (*corev1.Secret, error) {
+func ensureClusterSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, secretName string) (*corev1.Secret, error) {
 	pw, err := generatePassword()
 	if err != nil {
 		return nil, err

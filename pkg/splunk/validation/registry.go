@@ -23,11 +23,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgclusterwebhook "github.com/splunk/splunk-operator/pkg/postgresql/cluster/adapter/webhook"
 	pgdbwebhook "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/webhook"
 )
 
-// GVR constants for all Splunk Enterprise CRDs
+// GVR constants for all CRDs handled by the shared validation webhook.
 var (
 	StandaloneGVR = schema.GroupVersionResource{
 		Group:    "enterprise.splunk.com",
@@ -84,25 +85,25 @@ var (
 	}
 
 	PostgresClusterGVR = schema.GroupVersionResource{
-		Group:    "enterprise.splunk.com",
-		Version:  "v4",
+		Group:    "platform.splunk.com",
+		Version:  "v1alpha1",
 		Resource: "postgresclusters",
 	}
 
 	PostgresClusterClassGVR = schema.GroupVersionResource{
-		Group:    "enterprise.splunk.com",
-		Version:  "v4",
+		Group:    "platform.splunk.com",
+		Version:  "v1alpha1",
 		Resource: "postgresclusterclasses",
 	}
 
 	PostgresDatabaseGVR = schema.GroupVersionResource{
-		Group:    "enterprise.splunk.com",
-		Version:  "v4",
+		Group:    "platform.splunk.com",
+		Version:  "v1alpha1",
 		Resource: "postgresdatabases",
 	}
 )
 
-// DefaultValidators is the registry of validators for all Splunk Enterprise CRDs
+// DefaultValidators is the registry of validators for all supported CRDs.
 var DefaultValidators = map[schema.GroupVersionResource]Validator{
 	StandaloneGVR: &GenericValidator[*enterpriseApi.Standalone]{
 		ValidateCreateFunc:            ValidateStandaloneCreate,
@@ -223,54 +224,54 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 		},
 	},
 
-	PostgresClusterGVR: &GenericValidator[*enterpriseApi.PostgresCluster]{
-		ValidateCreateFunc: func(obj *enterpriseApi.PostgresCluster) field.ErrorList {
+	PostgresClusterGVR: &GenericValidator[*platformApi.PostgresCluster]{
+		ValidateCreateFunc: func(obj *platformApi.PostgresCluster) field.ErrorList {
 			return pgclusterwebhook.ValidatePostgresClusterCreate(context.Background(), obj, nil)
 		},
-		ValidateUpdateFunc: func(obj, oldObj *enterpriseApi.PostgresCluster) field.ErrorList {
+		ValidateUpdateFunc: func(obj, oldObj *platformApi.PostgresCluster) field.ErrorList {
 			return pgclusterwebhook.ValidatePostgresClusterUpdate(context.Background(), obj, oldObj, nil)
 		},
-		ValidateCreateWithContextFunc: func(obj *enterpriseApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
+		ValidateCreateWithContextFunc: func(obj *platformApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
 			return pgclusterwebhook.ValidatePostgresClusterCreate(vc.Ctx, obj, vc.Client)
 		},
-		ValidateUpdateWithContextFunc: func(obj *enterpriseApi.PostgresCluster, oldObj *enterpriseApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
+		ValidateUpdateWithContextFunc: func(obj *platformApi.PostgresCluster, oldObj *platformApi.PostgresCluster, vc *ValidationContext) field.ErrorList {
 			return pgclusterwebhook.ValidatePostgresClusterUpdate(vc.Ctx, obj, oldObj, vc.Client)
 		},
 		WarningsOnCreateFunc: pgclusterwebhook.GetPostgresClusterWarningsOnCreate,
 		WarningsOnUpdateFunc: pgclusterwebhook.GetPostgresClusterWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
-			Group: "enterprise.splunk.com",
+			Group: "platform.splunk.com",
 			Kind:  "PostgresCluster",
 		},
 	},
 
-	PostgresClusterClassGVR: &GenericValidator[*enterpriseApi.PostgresClusterClass]{
+	PostgresClusterClassGVR: &GenericValidator[*platformApi.PostgresClusterClass]{
 		ValidateCreateFunc:   pgclusterwebhook.ValidatePostgresClusterClassCreate,
 		ValidateUpdateFunc:   pgclusterwebhook.ValidatePostgresClusterClassUpdate,
 		WarningsOnCreateFunc: pgclusterwebhook.GetPostgresClusterClassWarningsOnCreate,
 		WarningsOnUpdateFunc: pgclusterwebhook.GetPostgresClusterClassWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
-			Group: "enterprise.splunk.com",
+			Group: "platform.splunk.com",
 			Kind:  "PostgresClusterClass",
 		},
 	},
-	PostgresDatabaseGVR: &GenericValidator[*enterpriseApi.PostgresDatabase]{
-		ValidateCreateFunc: func(obj *enterpriseApi.PostgresDatabase) field.ErrorList {
+	PostgresDatabaseGVR: &GenericValidator[*platformApi.PostgresDatabase]{
+		ValidateCreateFunc: func(obj *platformApi.PostgresDatabase) field.ErrorList {
 			return pgdbwebhook.ValidatePostgresDatabaseCreate(context.Background(), obj, nil)
 		},
-		ValidateUpdateFunc: func(obj, oldObj *enterpriseApi.PostgresDatabase) field.ErrorList {
+		ValidateUpdateFunc: func(obj, oldObj *platformApi.PostgresDatabase) field.ErrorList {
 			return pgdbwebhook.ValidatePostgresDatabaseUpdate(context.Background(), obj, oldObj, nil)
 		},
-		ValidateCreateWithContextFunc: func(obj *enterpriseApi.PostgresDatabase, vc *ValidationContext) field.ErrorList {
+		ValidateCreateWithContextFunc: func(obj *platformApi.PostgresDatabase, vc *ValidationContext) field.ErrorList {
 			return pgdbwebhook.ValidatePostgresDatabaseCreate(vc.Ctx, obj, vc.Client)
 		},
-		ValidateUpdateWithContextFunc: func(obj, oldObj *enterpriseApi.PostgresDatabase, vc *ValidationContext) field.ErrorList {
+		ValidateUpdateWithContextFunc: func(obj, oldObj *platformApi.PostgresDatabase, vc *ValidationContext) field.ErrorList {
 			return pgdbwebhook.ValidatePostgresDatabaseUpdate(vc.Ctx, obj, oldObj, vc.Client)
 		},
 		WarningsOnCreateFunc: pgdbwebhook.GetPostgresDatabaseWarningsOnCreate,
 		WarningsOnUpdateFunc: pgdbwebhook.GetPostgresDatabaseWarningsOnUpdate,
 		GroupKind: schema.GroupKind{
-			Group: "enterprise.splunk.com",
+			Group: "platform.splunk.com",
 			Kind:  "PostgresDatabase",
 		},
 	},

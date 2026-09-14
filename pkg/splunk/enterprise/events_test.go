@@ -157,7 +157,7 @@ func TestEmitStalledTransitionEvents(t *testing.T) {
 			newConditions: stalledTrue,
 			wantCount:     1,
 			wantType:      "Warning",
-			wantReason:    EventReasonStalled,
+			wantReason:    splcommon.EventReasonStalled,
 		},
 		{
 			name:          "true to false emits Normal/StalledResolved",
@@ -165,7 +165,7 @@ func TestEmitStalledTransitionEvents(t *testing.T) {
 			newConditions: stalledFalse,
 			wantCount:     1,
 			wantType:      "Normal",
-			wantReason:    EventReasonStalledResolved,
+			wantReason:    splcommon.EventReasonStalledResolved,
 		},
 		{
 			name:          "false stays false emits no event",
@@ -179,7 +179,7 @@ func TestEmitStalledTransitionEvents(t *testing.T) {
 			newConditions: stalledTrue,
 			wantCount:     1,
 			wantType:      "Warning",
-			wantReason:    EventReasonStalled,
+			wantReason:    splcommon.EventReasonStalled,
 		},
 		{
 			name:          "empty old conditions treated as not-stalled, new stalled emits Warning",
@@ -187,7 +187,7 @@ func TestEmitStalledTransitionEvents(t *testing.T) {
 			newConditions: stalledTrue,
 			wantCount:     1,
 			wantType:      "Warning",
-			wantReason:    EventReasonStalled,
+			wantReason:    splcommon.EventReasonStalled,
 		},
 		{
 			name:          "empty old conditions treated as not-stalled, new not-stalled emits no event",
@@ -243,7 +243,7 @@ func TestEmitStalledTransitionEvents_AlwaysOnStalled(t *testing.T) {
 		rec := &mockEventRecorder{events: []mockEvent{}}
 		ep := &K8EventPublisher{recorder: rec, instance: cr}
 		EmitStalledTransitionEvents(context.TODO(), ep, "cr", oldConds, stalled)
-		if len(rec.events) != 1 || rec.events[0].reason != EventReasonStalled {
+		if len(rec.events) != 1 || rec.events[0].reason != splcommon.EventReasonStalled {
 			t.Errorf("oldConds=%v: got %v, want 1x Warning/Stalled", oldConds, rec.events)
 		}
 	}
@@ -252,7 +252,7 @@ func TestEmitStalledTransitionEvents_AlwaysOnStalled(t *testing.T) {
 	rec := &mockEventRecorder{events: []mockEvent{}}
 	ep := &K8EventPublisher{recorder: rec, instance: cr}
 	EmitStalledTransitionEvents(context.TODO(), ep, "cr", stalled, notStalled)
-	if len(rec.events) != 1 || rec.events[0].reason != EventReasonStalledResolved {
+	if len(rec.events) != 1 || rec.events[0].reason != splcommon.EventReasonStalledResolved {
 		t.Errorf("resolved: got %v, want 1x Normal/StalledResolved", rec.events)
 	}
 
@@ -282,7 +282,7 @@ func TestEmitStalledTransitionEvents_BaselineAdvance(t *testing.T) {
 
 	// First real non-stalled call: Stalled=True→False emits StalledResolved.
 	EmitStalledTransitionEvents(context.TODO(), ep, "cr", preReconcile, notStalled)
-	if len(rec.events) != 1 || rec.events[0].reason != EventReasonStalledResolved {
+	if len(rec.events) != 1 || rec.events[0].reason != splcommon.EventReasonStalledResolved {
 		t.Fatalf("first non-stalled call: got %v, want 1x Normal/StalledResolved", rec.events)
 	}
 
@@ -295,7 +295,7 @@ func TestEmitStalledTransitionEvents_BaselineAdvance(t *testing.T) {
 
 	// Without baseline advance (stale baseline), a duplicate would be emitted.
 	EmitStalledTransitionEvents(context.TODO(), ep, "cr", preReconcile, notStalled)
-	if len(rec.events) != 2 || rec.events[1].reason != EventReasonStalledResolved {
+	if len(rec.events) != 2 || rec.events[1].reason != splcommon.EventReasonStalledResolved {
 		t.Errorf("second non-stalled call with stale baseline: got %v, want duplicate StalledResolved", rec.events)
 	}
 }

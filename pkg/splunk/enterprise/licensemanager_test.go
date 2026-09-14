@@ -47,6 +47,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 )
 
 func TestApplyLicenseManager(t *testing.T) {
@@ -837,10 +838,10 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		return nil
 	}
 
-	// Mock the addTelApp function for unit tests
-	savedAddTelApp := addTelApp
-	defer func() { addTelApp = savedAddTelApp }()
-	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+	// Mock the telapp.AddTelApp function for unit tests
+	savedAddTelApp := telapp.AddTelApp
+	defer func() { telapp.AddTelApp = savedAddTelApp }()
+	telapp.AddTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 		return nil
 	}
 

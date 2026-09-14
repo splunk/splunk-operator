@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
@@ -42,10 +42,10 @@ import (
 
 func indexedManagedRolesTestClient(scheme *runtime.Scheme, objs ...client.Object) *fake.ClientBuilder {
 	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).WithIndex(
-		&enterprisev4.PostgresDatabase{},
-		enterprisev4.PostgresDatabaseClusterRefNameField,
+		&platformv1alpha1.PostgresDatabase{},
+		platformv1alpha1.PostgresDatabaseClusterRefNameField,
 		func(obj client.Object) []string {
-			db, ok := obj.(*enterprisev4.PostgresDatabase)
+			db, ok := obj.(*platformv1alpha1.PostgresDatabase)
 			if !ok || db.Spec.ClusterRef.Name == "" {
 				return nil
 			}
@@ -54,10 +54,10 @@ func indexedManagedRolesTestClient(scheme *runtime.Scheme, objs ...client.Object
 	)
 }
 
-func postgresDatabaseWithManagedRoles(name string, roles []managedRole) *enterprisev4.PostgresDatabase {
-	dbRoles := make([]enterprisev4.DatabaseRoleInfo, 0, len(roles))
+func postgresDatabaseWithManagedRoles(name string, roles []managedRole) *platformv1alpha1.PostgresDatabase {
+	dbRoles := make([]platformv1alpha1.DatabaseRoleInfo, 0, len(roles))
 	for _, role := range roles {
-		info := enterprisev4.DatabaseRoleInfo{Name: role.Name, Exists: role.Exists}
+		info := platformv1alpha1.DatabaseRoleInfo{Name: role.Name, Exists: role.Exists}
 		if role.Exists {
 			secretName := role.Name + "-secret"
 			if role.PasswordSecretRef != nil {
@@ -67,13 +67,13 @@ func postgresDatabaseWithManagedRoles(name string, roles []managedRole) *enterpr
 		}
 		dbRoles = append(dbRoles, info)
 	}
-	return &enterprisev4.PostgresDatabase{
+	return &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: types.UID("uid-" + name)},
-		Spec: enterprisev4.PostgresDatabaseSpec{
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
 			ClusterRef: corev1.LocalObjectReference{Name: "pg"},
 		},
-		Status: enterprisev4.PostgresDatabaseStatus{
-			Databases: []enterprisev4.DatabaseInfo{{Name: "app", Roles: dbRoles}},
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			Databases: []platformv1alpha1.DatabaseInfo{{Name: "app", Roles: dbRoles}},
 		},
 	}
 }
@@ -138,7 +138,7 @@ func TestSyncManagedRolesStatusFromCNPG(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cluster := &enterprisev4.PostgresCluster{}
+			cluster := &platformv1alpha1.PostgresCluster{}
 			cnpgCluster := &cnpgv1.Cluster{
 				Status: cnpgv1.ClusterStatus{
 					ManagedRolesStatus: tt.cnpgStatus,
@@ -160,7 +160,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 
 	makeCNPG := func(phase string, managedRoles cnpgv1.ManagedRoles) *cnpgv1.Cluster {
 		return &cnpgv1.Cluster{
@@ -233,7 +233,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 			t.Parallel()
 
 			// Arrange
-			cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+			cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
 			postgresDB := postgresDatabaseWithManagedRoles("app-db", tt.specRoles)
 			contracts := &reconcileContracts{
 				CNPGCluster: tt.cnpg,
@@ -267,7 +267,7 @@ func TestManagedRolesContractsNotReadyIsUpstreamPending(t *testing.T) {
 	t.Parallel()
 
 	// Arrange: contracts has no CNPGCluster — simulates clusterModel not yet ready.
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
 	contracts := &reconcileContracts{}
 	model := newManagedRolesModel(
 		fake.NewClientBuilder().Build(), nil, noopEventEmitter{}, nil, cluster, contracts, nil,
@@ -290,7 +290,7 @@ func TestManagedRolesConvergeDoesNotEmitFailureForPending(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
 	postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
 	events := &captureEventEmitter{}
 	cnpg := &cnpgv1.Cluster{
@@ -300,7 +300,7 @@ func TestManagedRolesConvergeDoesNotEmitFailureForPending(t *testing.T) {
 	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
 	scheme := runtime.NewScheme()
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
-	require.NoError(t, enterprisev4.AddToScheme(scheme))
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
 	model := newManagedRolesModel(
 		indexedManagedRolesTestClient(scheme, cnpg, postgresDB).Build(), scheme, events, nil, cluster, contracts, nil,
 	)
@@ -319,7 +319,7 @@ func TestManagedRolesConvergeEmitsReadyEventOnTransition(t *testing.T) {
 
 	// Arrange
 	scheme := newTestScheme()
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
 	postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
 	events := &captureEventEmitter{}
 	cnpg := &cnpgv1.Cluster{
@@ -366,12 +366,12 @@ func TestManagedRolesModelRetainsOwnersOnEmptyObservation(t *testing.T) {
 			{Name: "app_admin", Ensure: cnpgv1.EnsurePresent, Login: true},
 		}}},
 	}
-	owner := enterprisev4.RoleOwnerReference{Name: "app-db", UID: "app-uid"}
-	cluster := &enterprisev4.PostgresCluster{
+	owner := platformv1alpha1.RoleOwnerReference{Name: "app-db", UID: "app-uid"}
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
-		Status: enterprisev4.PostgresClusterStatus{ManagedRolesStatus: &enterprisev4.ManagedRolesStatus{
+		Status: platformv1alpha1.PostgresClusterStatus{ManagedRolesStatus: &platformv1alpha1.ManagedRolesStatus{
 			Reconciled: []string{"app_admin"},
-			RoleOwners: map[string]enterprisev4.RoleOwnerReference{"app_admin": owner},
+			RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{"app_admin": owner},
 		}},
 	}
 	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
@@ -400,7 +400,7 @@ func TestManagedRolesModelPreservesCurrentRolesForLegacyDatabaseStatus(t *testin
 		}}},
 	}
 	legacyDB := postgresDatabaseWithManagedRoles("legacy-db", nil)
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
 	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
 	model := newManagedRolesModel(
 		indexedManagedRolesTestClient(scheme, cnpg, legacyDB).Build(),
@@ -423,7 +423,7 @@ func TestManagedRolesModelNoOpWhenRolesEmpty(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
 	}
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
 	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{}}
 	model := newManagedRolesModel(
 		indexedManagedRolesTestClient(scheme, cnpg).Build(),
@@ -447,7 +447,7 @@ func TestManagedRolesModelNoOpWhenRolesEmpty(t *testing.T) {
 func TestManagedRolesRuntimeGateHealthMatchesConverge(t *testing.T) {
 	t.Parallel()
 
-	cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
 	postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
 	scheme := newTestScheme()
 	cnpg := &cnpgv1.Cluster{
@@ -483,32 +483,32 @@ func TestManagedRolesRuntimeGateHealthMatchesConverge(t *testing.T) {
 func TestManagedRolesNeedsCredentialSweep(t *testing.T) {
 	t.Parallel()
 
-	restoreSource := &enterprisev4.BootstrapFrom{
-		VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+	restoreSource := &platformv1alpha1.BootstrapFrom{
+		VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1"},
 	}
 
 	tests := []struct {
 		name    string
-		cluster *enterprisev4.PostgresCluster
+		cluster *platformv1alpha1.PostgresCluster
 		want    bool
 	}{
 		{
 			name:    "fresh cluster does not need sweep",
-			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{}},
+			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{}},
 			want:    false,
 		},
 		{
 			name:    "restore cluster without restore status needs sweep",
-			cluster: &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{BootstrapFrom: restoreSource}},
+			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{BootstrapFrom: restoreSource}},
 			want:    true,
 		},
 		{
 			name: "restore cluster with incomplete sweep status needs sweep",
-			cluster: &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{BootstrapFrom: restoreSource},
-				Status: enterprisev4.PostgresClusterStatus{
-					Restore: &enterprisev4.RestoreStatus{
-						CredentialSweep: enterprisev4.RestoreCredentialSweepStatus{Completed: false},
+			cluster: &platformv1alpha1.PostgresCluster{
+				Spec: platformv1alpha1.PostgresClusterSpec{BootstrapFrom: restoreSource},
+				Status: platformv1alpha1.PostgresClusterStatus{
+					Restore: &platformv1alpha1.RestoreStatus{
+						CredentialSweep: platformv1alpha1.RestoreCredentialSweepStatus{Completed: false},
 					},
 				},
 			},
@@ -516,11 +516,11 @@ func TestManagedRolesNeedsCredentialSweep(t *testing.T) {
 		},
 		{
 			name: "restore cluster with completed sweep status does not need sweep",
-			cluster: &enterprisev4.PostgresCluster{
-				Spec: enterprisev4.PostgresClusterSpec{BootstrapFrom: restoreSource},
-				Status: enterprisev4.PostgresClusterStatus{
-					Restore: &enterprisev4.RestoreStatus{
-						CredentialSweep: enterprisev4.RestoreCredentialSweepStatus{Completed: true},
+			cluster: &platformv1alpha1.PostgresCluster{
+				Spec: platformv1alpha1.PostgresClusterSpec{BootstrapFrom: restoreSource},
+				Status: platformv1alpha1.PostgresClusterStatus{
+					Restore: &platformv1alpha1.RestoreStatus{
+						CredentialSweep: platformv1alpha1.RestoreCredentialSweepStatus{Completed: true},
 					},
 				},
 			},
@@ -589,7 +589,7 @@ func TestManagedRolesCredentialSweepLogsCompleteOperation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var logOutput bytes.Buffer
 			ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(&logOutput, nil)))
-			cluster := &enterprisev4.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
+			cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 			contracts := &reconcileContracts{
 				CNPGCluster: &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1"}},
 				Secret:      &corev1.Secret{Data: map[string][]byte{secretKeyPassword: []byte("supersecret")}},
@@ -644,11 +644,11 @@ func TestManagedRolesCredentialSweepSuccess(t *testing.T) {
 	scheme := newTestScheme()
 
 	snapName := "source-pg-backup-20260501"
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterSpec{
-			BootstrapFrom: &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: snapName},
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			BootstrapFrom: &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: snapName},
 			},
 		},
 	}
@@ -713,11 +713,11 @@ func TestManagedRolesCredentialSweepConnectWaits(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterSpec{
-			BootstrapFrom: &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			BootstrapFrom: &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1"},
 			},
 		},
 	}
@@ -766,11 +766,11 @@ func TestManagedRolesCredentialSweepConnectTerminal(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterSpec{
-			BootstrapFrom: &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			BootstrapFrom: &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1"},
 			},
 		},
 	}
@@ -823,11 +823,11 @@ func TestManagedRolesCredentialSweepExecFails(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	cluster := &enterprisev4.PostgresCluster{
+	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: enterprisev4.PostgresClusterSpec{
-			BootstrapFrom: &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+		Spec: platformv1alpha1.PostgresClusterSpec{
+			BootstrapFrom: &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1"},
 			},
 		},
 	}
@@ -871,23 +871,23 @@ func TestManagedRolesCredentialSweepExecFails(t *testing.T) {
 	assert.Contains(t, events.warnings[0], EventUnmanagedRolesSweepFailed)
 }
 
-func roleDB(name, uid, cluster, role, secret string, exists bool) enterprisev4.PostgresDatabase {
-	return enterprisev4.PostgresDatabase{
+func roleDB(name, uid, cluster, role, secret string, exists bool) platformv1alpha1.PostgresDatabase {
+	return platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: name, UID: types.UID(uid)},
-		Spec:       enterprisev4.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: cluster}},
-		Status: enterprisev4.PostgresDatabaseStatus{Databases: []enterprisev4.DatabaseInfo{{
+		Spec:       platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: cluster}},
+		Status: platformv1alpha1.PostgresDatabaseStatus{Databases: []platformv1alpha1.DatabaseInfo{{
 			Name:  "app",
-			Roles: []enterprisev4.DatabaseRoleInfo{{Name: role, SecretRef: &corev1.LocalObjectReference{Name: secret}, Exists: exists}},
+			Roles: []platformv1alpha1.DatabaseRoleInfo{{Name: role, SecretRef: &corev1.LocalObjectReference{Name: secret}, Exists: exists}},
 		}}},
 	}
 }
 
 func TestComputeDesiredRolesIncumbentWins(t *testing.T) {
-	owner := enterprisev4.RoleOwnerReference{Name: "incumbent", UID: "uid-1"}
-	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+	owner := platformv1alpha1.RoleOwnerReference{Name: "incumbent", UID: "uid-1"}
+	decision := computeDesiredRoles([]platformv1alpha1.PostgresDatabase{
 		roleDB("incumbent", "uid-1", "pg", "app_admin", "inc-secret", true),
 		roleDB("newcomer", "uid-2", "pg", "app_admin", "new-secret", true),
-	}, map[string]enterprisev4.RoleOwnerReference{"app_admin": owner}, nil, nil)
+	}, map[string]platformv1alpha1.RoleOwnerReference{"app_admin": owner}, nil, nil)
 
 	assert.Equal(t, owner, decision.RoleOwners["app_admin"])
 	assert.Len(t, decision.Roles, 1)
@@ -897,7 +897,7 @@ func TestComputeDesiredRolesIncumbentWins(t *testing.T) {
 }
 
 func TestComputeDesiredRolesSimultaneousFirstClaimWithholdsBoth(t *testing.T) {
-	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+	decision := computeDesiredRoles([]platformv1alpha1.PostgresDatabase{
 		roleDB("a", "uid-a", "pg", "shared_rw", "a-secret", true),
 		roleDB("b", "uid-b", "pg", "shared_rw", "b-secret", true),
 	}, nil, nil, nil)
@@ -908,10 +908,10 @@ func TestComputeDesiredRolesSimultaneousFirstClaimWithholdsBoth(t *testing.T) {
 }
 
 func TestComputeDesiredRolesExplicitFalseKeepsTombstoneUntilAbsentReconciled(t *testing.T) {
-	owner := enterprisev4.RoleOwnerReference{Name: "db", UID: "uid"}
-	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+	owner := platformv1alpha1.RoleOwnerReference{Name: "db", UID: "uid"}
+	decision := computeDesiredRoles([]platformv1alpha1.PostgresDatabase{
 		roleDB("db", "uid", "pg", "old_rw", "old-secret", false),
-	}, map[string]enterprisev4.RoleOwnerReference{"old_rw": owner}, nil, nil)
+	}, map[string]platformv1alpha1.RoleOwnerReference{"old_rw": owner}, nil, nil)
 
 	assert.Equal(t, owner, decision.RoleOwners["old_rw"])
 	assert.Len(t, decision.Roles, 1)
@@ -920,21 +920,21 @@ func TestComputeDesiredRolesExplicitFalseKeepsTombstoneUntilAbsentReconciled(t *
 }
 
 func TestComputeDesiredRolesExplicitFalseRemovesTombstoneAfterAbsentReconciled(t *testing.T) {
-	owner := enterprisev4.RoleOwnerReference{Name: "db", UID: "uid"}
-	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+	owner := platformv1alpha1.RoleOwnerReference{Name: "db", UID: "uid"}
+	decision := computeDesiredRoles([]platformv1alpha1.PostgresDatabase{
 		roleDB("db", "uid", "pg", "old_rw", "old-secret", false),
-	}, map[string]enterprisev4.RoleOwnerReference{"old_rw": owner}, nil, map[string]struct{}{"old_rw": {}})
+	}, map[string]platformv1alpha1.RoleOwnerReference{"old_rw": owner}, nil, map[string]struct{}{"old_rw": {}})
 
 	assert.Empty(t, decision.RoleOwners)
 	assert.Empty(t, decision.Roles)
 }
 
 func TestComputeDesiredRolesExplicitFalseDropsOwnedRoleWhenConflictingClaimantAlsoDrops(t *testing.T) {
-	owner := enterprisev4.RoleOwnerReference{Name: "incumbent", UID: "uid-1"}
-	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+	owner := platformv1alpha1.RoleOwnerReference{Name: "incumbent", UID: "uid-1"}
+	decision := computeDesiredRoles([]platformv1alpha1.PostgresDatabase{
 		roleDB("incumbent", "uid-1", "pg", "shared_rw", "inc-secret", false),
 		roleDB("newcomer", "uid-2", "pg", "shared_rw", "new-secret", false),
-	}, map[string]enterprisev4.RoleOwnerReference{"shared_rw": owner}, nil, nil)
+	}, map[string]platformv1alpha1.RoleOwnerReference{"shared_rw": owner}, nil, nil)
 
 	assert.Equal(t, owner, decision.RoleOwners["shared_rw"])
 	assert.Len(t, decision.Roles, 1)
@@ -943,10 +943,10 @@ func TestComputeDesiredRolesExplicitFalseDropsOwnedRoleWhenConflictingClaimantAl
 }
 
 func TestComputeDesiredRolesNeverDropsOnMereStatusAbsence(t *testing.T) {
-	owner := enterprisev4.RoleOwnerReference{Name: "db", UID: "uid"}
-	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{{
+	owner := platformv1alpha1.RoleOwnerReference{Name: "db", UID: "uid"}
+	decision := computeDesiredRoles([]platformv1alpha1.PostgresDatabase{{
 		ObjectMeta: metav1.ObjectMeta{Name: "db", UID: types.UID("uid")},
-	}}, map[string]enterprisev4.RoleOwnerReference{"app_rw": owner}, map[string]managedRole{
+	}}, map[string]platformv1alpha1.RoleOwnerReference{"app_rw": owner}, map[string]managedRole{
 		"app_rw": {Name: "app_rw", Exists: true, PasswordSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "rw-secret"}, Key: "password"}},
 	}, nil)
 
@@ -957,8 +957,8 @@ func TestComputeDesiredRolesNeverDropsOnMereStatusAbsence(t *testing.T) {
 }
 
 func TestComputeDesiredRolesOwnerGoneStopsManagingRole(t *testing.T) {
-	owner := enterprisev4.RoleOwnerReference{Name: "gone", UID: "uid"}
-	decision := computeDesiredRoles(nil, map[string]enterprisev4.RoleOwnerReference{"app_rw": owner}, map[string]managedRole{
+	owner := platformv1alpha1.RoleOwnerReference{Name: "gone", UID: "uid"}
+	decision := computeDesiredRoles(nil, map[string]platformv1alpha1.RoleOwnerReference{"app_rw": owner}, map[string]managedRole{
 		"app_rw": {Name: "app_rw", Exists: true},
 	}, nil)
 
@@ -968,24 +968,24 @@ func TestComputeDesiredRolesOwnerGoneStopsManagingRole(t *testing.T) {
 }
 
 func TestComputeDesiredRolesNonCollidingRoleProceedsForConflictedDatabase(t *testing.T) {
-	incumbent := enterprisev4.RoleOwnerReference{Name: "incumbent", UID: "uid-1"}
-	decision := computeDesiredRoles([]enterprisev4.PostgresDatabase{
+	incumbent := platformv1alpha1.RoleOwnerReference{Name: "incumbent", UID: "uid-1"}
+	decision := computeDesiredRoles([]platformv1alpha1.PostgresDatabase{
 		roleDB("incumbent", "uid-1", "pg", "shared_admin", "inc-secret", true),
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "newcomer", UID: types.UID("uid-2")},
-			Status: enterprisev4.PostgresDatabaseStatus{
-				Databases: []enterprisev4.DatabaseInfo{{
-					Roles: []enterprisev4.DatabaseRoleInfo{
+			Status: platformv1alpha1.PostgresDatabaseStatus{
+				Databases: []platformv1alpha1.DatabaseInfo{{
+					Roles: []platformv1alpha1.DatabaseRoleInfo{
 						{Name: "shared_admin", SecretRef: &corev1.LocalObjectReference{Name: "new-shared"}, Exists: true},
 						{Name: "private_rw", SecretRef: &corev1.LocalObjectReference{Name: "private-secret"}, Exists: true},
 					},
 				}},
 			},
 		},
-	}, map[string]enterprisev4.RoleOwnerReference{"shared_admin": incumbent}, nil, nil)
+	}, map[string]platformv1alpha1.RoleOwnerReference{"shared_admin": incumbent}, nil, nil)
 
 	assert.Equal(t, incumbent, decision.RoleOwners["shared_admin"])
-	assert.Equal(t, enterprisev4.RoleOwnerReference{Name: "newcomer", UID: "uid-2"}, decision.RoleOwners["private_rw"])
+	assert.Equal(t, platformv1alpha1.RoleOwnerReference{Name: "newcomer", UID: "uid-2"}, decision.RoleOwners["private_rw"])
 	assert.Len(t, decision.Conflicts, 1)
 	assert.ElementsMatch(t, []string{"shared_admin", "private_rw"}, []string{decision.Roles[0].Name, decision.Roles[1].Name})
 }

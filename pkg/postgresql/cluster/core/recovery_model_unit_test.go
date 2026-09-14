@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/recoverytypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,23 +31,23 @@ import (
 
 // recoveryTestCfg builds a MergedConfig with the given bootstrapFrom and (optionally) a class
 // barman object store, enough to exercise the recovery translation helpers.
-func recoveryTestCfg(b *enterprisev4.BootstrapFrom, withObjectStore bool) *MergedConfig {
+func recoveryTestCfg(b *platformv1alpha1.BootstrapFrom, withObjectStore bool) *MergedConfig {
 	version := "17"
 	instances := int32(1)
 	cfg := &MergedConfig{
-		Spec: &enterprisev4.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: &version,
 			Instances:       &instances,
 			BootstrapFrom:   b,
 			Resources:       &corev1.ResourceRequirements{},
 		},
-		CNPG: &enterprisev4.CNPGConfig{},
+		CNPG: &platformv1alpha1.CNPGConfig{},
 	}
 	if withObjectStore {
-		cfg.CNPG.Backup = &enterprisev4.CNPGBackupConfig{
-			BarmanObjectStore: &enterprisev4.CNPGBarmanObjectStoreConfig{
+		cfg.CNPG.Backup = &platformv1alpha1.CNPGBackupConfig{
+			BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{
 				DestinationPath: "s3://bucket/pg",
-				S3Credentials: enterprisev4.CNPGBarmanS3Credentials{
+				S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
 					AccessKeyId:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "id"},
 					SecretAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "secret"},
 				},
@@ -64,7 +64,7 @@ func TestBuildBootstrapRecovery(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		bootstrap   *enterprisev4.BootstrapFrom
+		bootstrap   *platformv1alpha1.BootstrapFrom
 		wantStorage string  // "" => no volumeSnapshots
 		wantWalSnap string  // "" => no walStorage in the snapshot data source
 		wantSource  string  // "" => recovery.Source unset
@@ -72,27 +72,27 @@ func TestBuildBootstrapRecovery(t *testing.T) {
 	}{
 		{
 			name: "volume snapshot only",
-			bootstrap: &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+			bootstrap: &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1"},
 			},
 			wantStorage: "snap-1",
 		},
 		{
 			name: "volume snapshot with separate WAL volume snapshot",
-			bootstrap: &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1", WalStorage: ptr.To("wal-snap-1")},
+			bootstrap: &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1", WalStorage: ptr.To("wal-snap-1")},
 			},
 			wantStorage: "snap-1",
 			wantWalSnap: "wal-snap-1",
 		},
 		{
 			name: "volume snapshot + walArchive + PITR sets recovery.source",
-			bootstrap: &enterprisev4.BootstrapFrom{
-				VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+			bootstrap: &platformv1alpha1.BootstrapFrom{
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{
 					Storage:    "snap-1",
-					WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"},
+					WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
 				},
-				RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+				RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
 			},
 			wantStorage: "snap-1",
 			wantSource:  recoveryExternalClusterName,
@@ -101,9 +101,9 @@ func TestBuildBootstrapRecovery(t *testing.T) {
 		},
 		{
 			name: "object storage source sets recovery.source, no volumeSnapshots",
-			bootstrap: &enterprisev4.BootstrapFrom{
-				ObjectStorage:  &enterprisev4.ObjectStorageSource{ServerName: "src"},
-				RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+			bootstrap: &platformv1alpha1.BootstrapFrom{
+				ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
+				RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
 			},
 			wantSource: recoveryExternalClusterName,
 			wantTarget: ptr.To("2026-05-01 13:30:00+00:00"),
@@ -155,17 +155,17 @@ func TestBuildRecoveryTargetMapsAllFields(t *testing.T) {
 
 	assert.Nil(t, buildRecoveryTarget(nil), "nil target => nil (recover to latest)")
 
-	tt := buildRecoveryTarget(&enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)})
+	tt := buildRecoveryTarget(&platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)})
 	require.NotNil(t, tt)
 	assert.Equal(t, "2026-05-01 13:30:00+00:00", tt.TargetTime)
 	require.NotNil(t, tt.Exclusive)
 	assert.True(t, *tt.Exclusive)
 
-	assert.Equal(t, "0/16D68D0", buildRecoveryTarget(&enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetLSN, Value: "0/16D68D0"}).TargetLSN)
-	assert.Equal(t, "1234567", buildRecoveryTarget(&enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetXID, Value: "1234567"}).TargetXID)
-	assert.Equal(t, "before-migration", buildRecoveryTarget(&enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetName, Value: "before-migration"}).TargetName)
+	assert.Equal(t, "0/16D68D0", buildRecoveryTarget(&platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetLSN, Value: "0/16D68D0"}).TargetLSN)
+	assert.Equal(t, "1234567", buildRecoveryTarget(&platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetXID, Value: "1234567"}).TargetXID)
+	assert.Equal(t, "before-migration", buildRecoveryTarget(&platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetName, Value: "before-migration"}).TargetName)
 
-	imm := buildRecoveryTarget(&enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetImmediate})
+	imm := buildRecoveryTarget(&platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetImmediate})
 	require.NotNil(t, imm.TargetImmediate)
 	assert.True(t, *imm.TargetImmediate)
 }
@@ -190,7 +190,7 @@ func TestBuildRecoveryTargetNormalizesTime(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := buildRecoveryTarget(&enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: tc.value})
+			got := buildRecoveryTarget(&platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: tc.value})
 			require.NotNil(t, got)
 			assert.Equal(t, tc.want, got.TargetTime)
 			assert.NotContains(t, got.TargetTime, "Z", "recovery_target_time must not carry the Z designator PG rejects")
@@ -203,18 +203,18 @@ func TestBuildRecoveryExternalClusters(t *testing.T) {
 
 	t.Run("nil when no object store source", func(t *testing.T) {
 		t.Parallel()
-		cfg := recoveryTestCfg(&enterprisev4.BootstrapFrom{
-			VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+		cfg := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
+			VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1"},
 		}, true)
 		assert.Nil(t, buildRecoveryExternalClusters(cfg, "c1"))
 	})
 
 	t.Run("built for walArchive source", func(t *testing.T) {
 		t.Parallel()
-		cfg := recoveryTestCfg(&enterprisev4.BootstrapFrom{
-			VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+		cfg := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
+			VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{
 				Storage:    "snap-1",
-				WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"},
+				WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
 			},
 		}, true)
 		ext := buildRecoveryExternalClusters(cfg, "c1")
@@ -228,8 +228,8 @@ func TestBuildRecoveryExternalClusters(t *testing.T) {
 
 	t.Run("built for objectStorage source", func(t *testing.T) {
 		t.Parallel()
-		cfg := recoveryTestCfg(&enterprisev4.BootstrapFrom{
-			ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"},
+		cfg := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
+			ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
 		}, true)
 		ext := buildRecoveryExternalClusters(cfg, "c1")
 		require.Len(t, ext, 1)
@@ -242,9 +242,9 @@ func TestBuildRecoveryExternalClusters(t *testing.T) {
 func TestBuildCNPGClusterSpec_RecoveryWiring(t *testing.T) {
 	t.Parallel()
 
-	cfg := recoveryTestCfg(&enterprisev4.BootstrapFrom{
-		ObjectStorage:  &enterprisev4.ObjectStorageSource{ServerName: "src"},
-		RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+	cfg := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
+		ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
+		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
 	}, true)
 	storage := resource.MustParse("1Gi")
 	cfg.Spec.Storage = &storage
@@ -272,8 +272,8 @@ func TestBuildCNPGClusterSpec_RecoveryWiring(t *testing.T) {
 func TestBuildCNPGClusterSpec_ReservedOriginNameCollision(t *testing.T) {
 	t.Parallel()
 
-	cfg := recoveryTestCfg(&enterprisev4.BootstrapFrom{
-		ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"},
+	cfg := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
+		ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
 	}, true)
 	storage := resource.MustParse("1Gi")
 	cfg.Spec.Storage = &storage
@@ -302,24 +302,24 @@ func TestManagedObjectStoreCfg_RestoreWithBackupDisabled(t *testing.T) {
 	t.Parallel()
 
 	// backup disabled, but an objectStorage restore source is set => ObjectStore CR still required.
-	cfg := recoveryTestCfg(&enterprisev4.BootstrapFrom{
-		ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"},
+	cfg := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
+		ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
 	}, true)
 	assert.Nil(t, activeBarmanObjectStoreCfg(cfg), "precondition: backup not enabled")
 	assert.NotNil(t, managedObjectStoreCfg(cfg), "restore source must require the ObjectStore CR even with backup disabled")
 
 	// walArchive on a snapshot source also requires it.
-	cfgWal := recoveryTestCfg(&enterprisev4.BootstrapFrom{
-		VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{
+	cfgWal := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
+		VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{
 			Storage:    "snap-1",
-			WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"},
+			WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
 		},
 	}, true)
 	assert.NotNil(t, managedObjectStoreCfg(cfgWal))
 
 	// plain snapshot restore, no object store use => not required.
-	cfgPlain := recoveryTestCfg(&enterprisev4.BootstrapFrom{
-		VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+	cfgPlain := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
+		VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1"},
 	}, true)
 	assert.Nil(t, managedObjectStoreCfg(cfgPlain))
 }
@@ -327,29 +327,29 @@ func TestManagedObjectStoreCfg_RestoreWithBackupDisabled(t *testing.T) {
 func TestValidateBootstrapFrom(t *testing.T) {
 	t.Parallel()
 
-	classWithStore := &enterprisev4.PostgresClusterClass{
+	classWithStore := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "c"},
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			CNPG: &enterprisev4.CNPGConfig{
-				Backup: &enterprisev4.CNPGBackupConfig{
-					BarmanObjectStore: &enterprisev4.CNPGBarmanObjectStoreConfig{DestinationPath: "s3://b/p"},
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			CNPG: &platformv1alpha1.CNPGConfig{
+				Backup: &platformv1alpha1.CNPGBackupConfig{
+					BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{DestinationPath: "s3://b/p"},
 				},
 			},
 		},
 	}
-	classNoStore := &enterprisev4.PostgresClusterClass{
+	classNoStore := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "c"},
-		Spec:       enterprisev4.PostgresClusterClassSpec{CNPG: &enterprisev4.CNPGConfig{}},
+		Spec:       platformv1alpha1.PostgresClusterClassSpec{CNPG: &platformv1alpha1.CNPGConfig{}},
 	}
 
-	clusterWith := func(b *enterprisev4.BootstrapFrom) *enterprisev4.PostgresCluster {
-		return &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{BootstrapFrom: b}}
+	clusterWith := func(b *platformv1alpha1.BootstrapFrom) *platformv1alpha1.PostgresCluster {
+		return &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{BootstrapFrom: b}}
 	}
 
 	tests := []struct {
 		name      string
-		class     *enterprisev4.PostgresClusterClass
-		bootstrap *enterprisev4.BootstrapFrom
+		class     *platformv1alpha1.PostgresClusterClass
+		bootstrap *platformv1alpha1.BootstrapFrom
 		wantField string // "" => expect no error
 	}{
 		{
@@ -360,30 +360,30 @@ func TestValidateBootstrapFrom(t *testing.T) {
 		{
 			name:      "plain snapshot valid without object store",
 			class:     classNoStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s"}},
 		},
 		{
 			name:      "both sources set rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s"}, ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s"}, ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}},
 			wantField: "spec.bootstrapFrom",
 		},
 		{
 			name:      "neither source set rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{},
+			bootstrap: &platformv1alpha1.BootstrapFrom{},
 			wantField: "spec.bootstrapFrom",
 		},
 		{
 			name:      "snapshot PITR without walArchive rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s"}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s"}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"}},
 			wantField: "spec.bootstrapFrom.volumeSnapshot.walArchive",
 		},
 		{
 			name:      "snapshot PITR with walArchive accepted",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s", WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s", WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"}},
 		},
 		// Note: the class-object-store requirement and the object-store target-kind restriction are
 		// provider capability rules and no longer live in validateBootstrapFrom — they are exercised
@@ -391,45 +391,45 @@ func TestValidateBootstrapFrom(t *testing.T) {
 		{
 			name:      "objectStorage with class object store accepted",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}},
 		},
 		{
 			name:      "objectStorage with type time accepted",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"}},
 		},
 		{
 			name:      "objectStorage with type lsn accepted",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetLSN, Value: "0/16D68D0"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetLSN, Value: "0/16D68D0"}},
 		},
 		{
 			name:      "volumeSnapshot with type xid accepted (format valid; capability checked via backend)",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s", WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetXID, Value: "1234567"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s", WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetXID, Value: "1234567"}},
 		},
 		{
 			name:      "malformed type time value rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01 13:30"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01 13:30"}},
 			wantField: "spec.bootstrapFrom.recoveryTarget.value",
 		},
 		{
 			name:      "malformed type lsn value rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetLSN, Value: "not-an-lsn"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetLSN, Value: "not-an-lsn"}},
 			wantField: "spec.bootstrapFrom.recoveryTarget.value",
 		},
 		{
 			name:      "non-numeric type xid value rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s", WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetXID, Value: "12ab"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s", WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetXID, Value: "12ab"}},
 			wantField: "spec.bootstrapFrom.recoveryTarget.value",
 		},
 		{
 			name:      "type name value with control character rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s", WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetName, Value: "bad\x00name"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s", WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetName, Value: "bad\x00name"}},
 			wantField: "spec.bootstrapFrom.recoveryTarget.value",
 		},
 		// Empty values are normally caught by the CRD CEL rule (self.value != ''); these assert the
@@ -437,26 +437,26 @@ func TestValidateBootstrapFrom(t *testing.T) {
 		{
 			name:      "empty type time value rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: ""}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: ""}},
 			wantField: "spec.bootstrapFrom.recoveryTarget.value",
 		},
 		{
 			name:      "empty type lsn value rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetLSN, Value: ""}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetLSN, Value: ""}},
 			wantField: "spec.bootstrapFrom.recoveryTarget.value",
 		},
 		{
 			name:      "empty type name value rejected",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s", WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetName, Value: ""}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s", WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetName, Value: ""}},
 			wantField: "spec.bootstrapFrom.recoveryTarget.value",
 		},
 		{
 			// immediate carries no value and must be accepted format-wise (the empty value is expected).
 			name:      "type immediate with no value accepted",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s", WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetImmediate}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s", WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetImmediate}},
 		},
 	}
 
@@ -482,44 +482,44 @@ func TestValidateBootstrapFrom(t *testing.T) {
 func TestRestoreSourceStatus(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, enterprisev4.RestoreSourceStatus{}, restoreSourceStatus(nil))
+	assert.Equal(t, platformv1alpha1.RestoreSourceStatus{}, restoreSourceStatus(nil))
 
-	snap := restoreSourceStatus(&enterprisev4.BootstrapFrom{
-		VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "snap-1"},
+	snap := restoreSourceStatus(&platformv1alpha1.BootstrapFrom{
+		VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1"},
 	})
 	require.NotNil(t, snap.VolumeSnapshot)
 	assert.Equal(t, "snap-1", *snap.VolumeSnapshot)
 	assert.Nil(t, snap.ObjectStorage)
 	assert.Nil(t, snap.RequestedRecoveryTarget)
 
-	obj := restoreSourceStatus(&enterprisev4.BootstrapFrom{
-		ObjectStorage:  &enterprisev4.ObjectStorageSource{ServerName: "src"},
-		RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
+	obj := restoreSourceStatus(&platformv1alpha1.BootstrapFrom{
+		ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
+		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
 	})
 	require.NotNil(t, obj.ObjectStorage)
 	assert.Equal(t, "src", *obj.ObjectStorage)
 	require.NotNil(t, obj.RequestedRecoveryTarget)
-	assert.Equal(t, enterprisev4.RecoveryTargetTime, obj.RequestedRecoveryTarget.Type)
+	assert.Equal(t, platformv1alpha1.RecoveryTargetTime, obj.RequestedRecoveryTarget.Type)
 	assert.Equal(t, "2026-05-01T13:30:00Z", obj.RequestedRecoveryTarget.Value)
 	assert.Nil(t, obj.RequestedRecoveryTarget.Exclusive)
 
 	// exclusive is echoed structurally so inclusive and exclusive restores to the same target are
 	// distinguishable in status.
-	excl := restoreSourceStatus(&enterprisev4.BootstrapFrom{
-		ObjectStorage:  &enterprisev4.ObjectStorageSource{ServerName: "src"},
-		RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)},
+	excl := restoreSourceStatus(&platformv1alpha1.BootstrapFrom{
+		ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
+		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)},
 	})
 	require.NotNil(t, excl.RequestedRecoveryTarget)
 	require.NotNil(t, excl.RequestedRecoveryTarget.Exclusive)
 	assert.True(t, *excl.RequestedRecoveryTarget.Exclusive)
 
 	// exclusive:false is echoed as-is (false, not dropped) so status faithfully mirrors the spec.
-	incl := restoreSourceStatus(&enterprisev4.BootstrapFrom{
-		ObjectStorage:  &enterprisev4.ObjectStorageSource{ServerName: "src"},
-		RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetLSN, Value: "0/16D68D0", Exclusive: ptr.To(false)},
+	incl := restoreSourceStatus(&platformv1alpha1.BootstrapFrom{
+		ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
+		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetLSN, Value: "0/16D68D0", Exclusive: ptr.To(false)},
 	})
 	require.NotNil(t, incl.RequestedRecoveryTarget)
-	assert.Equal(t, enterprisev4.RecoveryTargetLSN, incl.RequestedRecoveryTarget.Type)
+	assert.Equal(t, platformv1alpha1.RecoveryTargetLSN, incl.RequestedRecoveryTarget.Type)
 	assert.Equal(t, "0/16D68D0", incl.RequestedRecoveryTarget.Value)
 	require.NotNil(t, incl.RequestedRecoveryTarget.Exclusive)
 	assert.False(t, *incl.RequestedRecoveryTarget.Exclusive)
@@ -543,24 +543,24 @@ func (f *fakeRecoveryBackend) ValidatePlan(plan recoverytypes.RecoveryPlan) []re
 func TestDeriveRecoveryPlan(t *testing.T) {
 	t.Parallel()
 
-	classWithStore := &enterprisev4.PostgresClusterClass{
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			CNPG: &enterprisev4.CNPGConfig{
-				Backup: &enterprisev4.CNPGBackupConfig{
-					BarmanObjectStore: &enterprisev4.CNPGBarmanObjectStoreConfig{DestinationPath: "s3://b/p"},
+	classWithStore := &platformv1alpha1.PostgresClusterClass{
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			CNPG: &platformv1alpha1.CNPGConfig{
+				Backup: &platformv1alpha1.CNPGBackupConfig{
+					BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{DestinationPath: "s3://b/p"},
 				},
 			},
 		},
 	}
-	classNoStore := &enterprisev4.PostgresClusterClass{Spec: enterprisev4.PostgresClusterClassSpec{CNPG: &enterprisev4.CNPGConfig{}}}
-	clusterWith := func(b *enterprisev4.BootstrapFrom) *enterprisev4.PostgresCluster {
-		return &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{BootstrapFrom: b}}
+	classNoStore := &platformv1alpha1.PostgresClusterClass{Spec: platformv1alpha1.PostgresClusterClassSpec{CNPG: &platformv1alpha1.CNPGConfig{}}}
+	clusterWith := func(b *platformv1alpha1.BootstrapFrom) *platformv1alpha1.PostgresCluster {
+		return &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{BootstrapFrom: b}}
 	}
 
 	tests := []struct {
 		name      string
-		class     *enterprisev4.PostgresClusterClass
-		bootstrap *enterprisev4.BootstrapFrom
+		class     *platformv1alpha1.PostgresClusterClass
+		bootstrap *platformv1alpha1.BootstrapFrom
 		wantOK    bool
 		wantPlan  recoverytypes.RecoveryPlan
 	}{
@@ -568,27 +568,27 @@ func TestDeriveRecoveryPlan(t *testing.T) {
 		{
 			name:      "both sources => not ok (structural error owns it)",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s"}, ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s"}, ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}},
 			wantOK:    false,
 		},
 		{
 			name:      "plain snapshot",
 			class:     classNoStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s"}},
 			wantOK:    true,
 			wantPlan:  recoverytypes.RecoveryPlan{Source: recoverytypes.SourceVolumeSnapshot, ClassProvidesObjectStore: false},
 		},
 		{
 			name:      "snapshot + walArchive + target",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{VolumeSnapshot: &enterprisev4.VolumeSnapshotSource{Storage: "s", WalArchive: &enterprisev4.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetXID, Value: "1234567"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "s", WalArchive: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}}, RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetXID, Value: "1234567"}},
 			wantOK:    true,
 			wantPlan:  recoverytypes.RecoveryPlan{Source: recoverytypes.SourceVolumeSnapshotWithWAL, HasTarget: true, TargetKind: recoverytypes.TargetXID, ClassProvidesObjectStore: true},
 		},
 		{
 			name:      "objectStorage, no target",
 			class:     classWithStore,
-			bootstrap: &enterprisev4.BootstrapFrom{ObjectStorage: &enterprisev4.ObjectStorageSource{ServerName: "src"}},
+			bootstrap: &platformv1alpha1.BootstrapFrom{ObjectStorage: &platformv1alpha1.ObjectStorageSource{ServerName: "src"}},
 			wantOK:    true,
 			wantPlan:  recoverytypes.RecoveryPlan{Source: recoverytypes.SourceObjectStorage, ClassProvidesObjectStore: true},
 		},
@@ -611,19 +611,19 @@ func TestDeriveRecoveryPlan(t *testing.T) {
 func TestValidateRecoveryCapabilities(t *testing.T) {
 	t.Parallel()
 
-	classWithStore := &enterprisev4.PostgresClusterClass{
-		Spec: enterprisev4.PostgresClusterClassSpec{
-			CNPG: &enterprisev4.CNPGConfig{
-				Backup: &enterprisev4.CNPGBackupConfig{
-					BarmanObjectStore: &enterprisev4.CNPGBarmanObjectStoreConfig{DestinationPath: "s3://b/p"},
+	classWithStore := &platformv1alpha1.PostgresClusterClass{
+		Spec: platformv1alpha1.PostgresClusterClassSpec{
+			CNPG: &platformv1alpha1.CNPGConfig{
+				Backup: &platformv1alpha1.CNPGBackupConfig{
+					BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{DestinationPath: "s3://b/p"},
 				},
 			},
 		},
 	}
-	cluster := &enterprisev4.PostgresCluster{Spec: enterprisev4.PostgresClusterSpec{
-		BootstrapFrom: &enterprisev4.BootstrapFrom{
-			ObjectStorage:  &enterprisev4.ObjectStorageSource{ServerName: "src"},
-			RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetXID, Value: "1234567"},
+	cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{
+		BootstrapFrom: &platformv1alpha1.BootstrapFrom{
+			ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
+			RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetXID, Value: "1234567"},
 		},
 	}}
 
@@ -635,7 +635,7 @@ func TestValidateRecoveryCapabilities(t *testing.T) {
 	t.Run("no bootstrapFrom does not call the backend", func(t *testing.T) {
 		t.Parallel()
 		backend := &fakeRecoveryBackend{}
-		errs := ValidateRecoveryCapabilities(backend, classWithStore, &enterprisev4.PostgresCluster{})
+		errs := ValidateRecoveryCapabilities(backend, classWithStore, &platformv1alpha1.PostgresCluster{})
 		assert.Empty(t, errs)
 		assert.False(t, backend.called, "backend must not be consulted without a restore request")
 	})
@@ -670,9 +670,9 @@ func TestValidateRecoveryCapabilities(t *testing.T) {
 func TestNormalizeRecoveryDriftDetection(t *testing.T) {
 	t.Parallel()
 
-	cfg := recoveryTestCfg(&enterprisev4.BootstrapFrom{
-		ObjectStorage:  &enterprisev4.ObjectStorageSource{ServerName: "src"},
-		RecoveryTarget: &enterprisev4.RecoveryTarget{Type: enterprisev4.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)},
+	cfg := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
+		ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
+		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)},
 	}, true)
 	storage := resource.MustParse("1Gi")
 	cfg.Spec.Storage = &storage

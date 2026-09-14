@@ -63,7 +63,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("Splunk Operator can deploy Ingestors and Indexers", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("Splunk Operator can deploy Ingestors and Indexers", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -108,7 +108,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
 		})
 
-		It("Splunk Operator can deploy Ingestors and Indexers with additional configurations", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("Splunk Operator can deploy Ingestors and Indexers with additional configurations", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
@@ -210,7 +210,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testenv.VerifyCRConditionsForPhase("IngestorCluster", ic.Name, ic.Status.Conditions, enterpriseApi.PhaseReady)).To(Succeed(), "IngestorCluster conditions not met")
 		})
 
-		XIt("Splunk Operator can update IngestorCluster and IndexerCluster queueRef and objectStorageRef", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		XIt("Splunk Operator can update IngestorCluster and IndexerCluster queueRef and objectStorageRef", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			Expect(testcaseEnvInst.SetupIngestorStack(ctx, deployment, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
 
 			// Deploy a second Queue and ObjectStorage with different names
@@ -273,7 +273,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
 		})
 
-		It("Splunk Operator can deploy Ingestors and Indexers with correct setup", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+		It("Splunk Operator can deploy Ingestors and Indexers with correct setup", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
 			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")

@@ -16,6 +16,10 @@ limitations under the License.
 
 package majorversionupgradetypes
 
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
 // retryableFailureReasons are reasons attached to retryable reports that signal
 // an obstacle blocking forward progress (a prerequisite is missing, state could
 // not be read/written, or an unexpected error occurred) rather than healthy
@@ -42,4 +46,17 @@ var retryableFailureReasons = map[string]struct{}{
 func IsRetryableFailureReason(reason string) bool {
 	_, ok := retryableFailureReasons[reason]
 	return ok
+}
+
+// NewBlueGreenCondition creates a condition for a blue/green attempt's nested
+// status. It intentionally does not modify the generic major-upgrade
+// conditions, which preserve their existing pgUpgrade meaning.
+func NewBlueGreenCondition(conditionType string, status metav1.ConditionStatus, reason, message string) metav1.Condition {
+	return metav1.Condition{
+		Type:               conditionType,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+	}
 }

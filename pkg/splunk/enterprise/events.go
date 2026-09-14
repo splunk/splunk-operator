@@ -83,9 +83,9 @@ func EmitStalledTransitionEvents(ctx context.Context, ep *K8EventPublisher, crNa
 	}
 	isNowStalled := splcommon.IsStalled(newConditions)
 	if isNowStalled {
-		ep.Warning(ctx, EventReasonStalled, fmt.Sprintf("%s reconciliation has stalled and requires manual intervention", crName))
+		ep.Warning(ctx, splcommon.EventReasonStalled, fmt.Sprintf("%s reconciliation has stalled and requires manual intervention", crName))
 	} else if splcommon.IsStalled(oldConditions) {
-		ep.Normal(ctx, EventReasonStalledResolved, fmt.Sprintf("%s stall condition resolved", crName))
+		ep.Normal(ctx, splcommon.EventReasonStalledResolved, fmt.Sprintf("%s stall condition resolved", crName))
 	}
 }
 

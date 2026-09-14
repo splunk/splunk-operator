@@ -18,7 +18,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -51,9 +51,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "storage-resize", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -64,7 +64,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 
 			By("waiting for PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -78,7 +78,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 
 			By("waiting for PostgresCluster to return to Ready with updated storage")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -101,9 +101,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "resources-change", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 				},
@@ -114,7 +114,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 
 			By("waiting for PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -133,7 +133,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 
 			By("waiting for PostgresCluster to return to Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -157,9 +157,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
-			pgCluster := &enterprisev4.PostgresCluster{
+			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "horiz-scale", Namespace: ns},
-				Spec: enterprisev4.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: ptr.To("Delete"),
 					Instances:             ptr.To(int32(1)),
@@ -171,7 +171,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 
 			By("waiting for single-instance PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -188,7 +188,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 			// count — the two together can't both be satisfied by a stale read.
 			By("observing Provisioning phase with ReadyInstances below target during scale-out")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Provisioning"))
@@ -198,7 +198,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 
 			By("waiting for 3-instance PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
@@ -220,7 +220,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 
 			By("waiting for 1-instance PostgresCluster to reach Ready")
 			Eventually(func(g Gomega) {
-				pc := &enterprisev4.PostgresCluster{}
+				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(pc.Status.Phase).NotTo(BeNil())
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))

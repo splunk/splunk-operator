@@ -9,8 +9,9 @@ nav_order: 3
 ## Repository Structure
 
 ```
-├── api/
-│   └── enterprise/   CRD Go types for current and compatibility API versions
+├── api/              CRD Go types organized by API group and version
+│   ├── enterprise/   Splunk Enterprise APIs (current stable: v4)
+│   └── platform/     Platform-managed service APIs (PostgreSQL: v1alpha1)
 ├── cmd/              Main entry point for the operator
 ├── config/           Kubernetes manifests and configuration
 │   ├── crd/          CRD base files
@@ -19,7 +20,10 @@ nav_order: 3
 │   └── rbac/         RBAC configurations
 ├── docs/             User-facing documentation
 ├── helm-chart/       Helm charts for operator and enterprise
-├── internal/         Internal controller logic
+├── internal/         Internal controller logic organized by API group
+│   └── controller/
+│       ├── enterprise/  Splunk Enterprise reconcilers
+│       └── platform/    Platform service reconcilers (PostgreSQL)
 ├── kuttl/            KUTTL test scenarios
 ├── pkg/              Core business logic
 │   └── splunk/

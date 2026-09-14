@@ -85,3 +85,13 @@ func (rc *ReconcileContext) emitWarnOnceBeforeWait(obj client.Object, conditions
 		rc.emitWarning(obj, reason, message)
 	}
 }
+
+// emitWarnOnConditionReasonTransition emits a Warning when the condition enters
+// or re-enters a degraded reason. Requeue polls with the same False reason are
+// suppressed, but a different reason while still False gets a fresh event.
+func (rc *ReconcileContext) emitWarnOnConditionReasonTransition(obj client.Object, conditions []metav1.Condition, condType conditionTypes, conditionReason conditionReasons, eventReason, message string) {
+	cond := meta.FindStatusCondition(conditions, string(condType))
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != string(conditionReason) {
+		rc.emitWarning(obj, eventReason, message)
+	}
+}

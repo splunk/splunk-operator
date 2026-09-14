@@ -103,6 +103,8 @@ overridable by any `PostgresCluster` that uses the class):
 | `spec.config.instances` | overridable | Instance count (1 = no HA; 3+ recommended for production). |
 | `spec.config.storage` | overridable | Per-instance PVC size. Can only be *increased* later, never decreased. |
 | `spec.config.postgresVersion` | overridable | Major/minor version. Major version can only go up once set. |
+| `spec.config.postgresImage` | overridable | Optional CNPG-compatible PostgreSQL image. Must include a non-`latest` tag whose leading major version matches the effective `postgresVersion`; tag-plus-digest references are supported. |
+| `spec.config.imagePullSecrets` | overridable | Optional same-namespace image pull Secrets passed to CNPG for private/custom PostgreSQL image registries. |
 | `spec.config.resources` | overridable | CPU/memory requests and limits, shared by all instances. |
 | `spec.config.postgresqlConfig` | overridable | `postgresql.conf` parameters, cluster-wide. |
 | `spec.config.pgHBA` | overridable | `pg_hba.conf` rules, cluster-wide. |
@@ -118,13 +120,13 @@ Since a class can't be edited after creation, platform teams instead maintain a 
 different tiers, and consumers pick the one that fits. The repo ships representative examples you
 can adapt:
 
-- [`config/samples/enterprise_v4_postgresclusterclass_dev.yaml`](../../config/samples/enterprise_v4_postgresclusterclass_dev.yaml) —
+- [`config/samples/platform_v1alpha1_postgresclusterclass_dev.yaml`](../../config/samples/platform_v1alpha1_postgresclusterclass_dev.yaml) —
   single instance, minimal resources (500m/1Gi requests), `primaryUpdateMethod: restart`. Suitable
   for development/test workloads that can tolerate restarts.
-- [`config/samples/enterprise_v4_postgresclusterclass_prod.yaml`](../../config/samples/enterprise_v4_postgresclusterclass_prod.yaml) —
+- [`config/samples/platform_v1alpha1_postgresclusterclass_prod.yaml`](../../config/samples/platform_v1alpha1_postgresclusterclass_prod.yaml) —
   3 instances (HA), tuned `postgresqlConfig` for OLTP, SSL-only `pgHBA`, `primaryUpdateMethod:
   switchover`, and a 3-instance transaction-mode pooler. Suitable for production workloads.
-- [`config/samples/enterprise_v4_postgresclusterclass_backup.yaml`](../../config/samples/enterprise_v4_postgresclusterclass_backup.yaml) —
+- [`config/samples/platform_v1alpha1_postgresclusterclass_backup.yaml`](../../config/samples/platform_v1alpha1_postgresclusterclass_backup.yaml) —
   adds a daily volume-snapshot backup schedule on top of a mid-tier resource profile.
 
 If none of these fit — for example, a workload needs more memory than the `prod` class's 8Gi
@@ -137,7 +139,7 @@ does not need a read-only pooler:
 
 ```yaml
 # PostgresClusterClass is cluster-scoped; do not set metadata.namespace.
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-memory-heavy
@@ -213,6 +215,12 @@ Most `spec.config` fields from the class can be overridden per-cluster, with gua
 - `storage` — can only be increased, never decreased, relative to the class default or a prior
   value.
 - `postgresVersion` — major version can only go up, never down, once set.
+- `postgresImage` — cluster value overrides the class default, which overrides the generated
+  `ghcr.io/cloudnative-pg/postgresql:<postgresVersion>` image. Explicit images must include a
+  non-`latest` tag that starts with the effective PostgreSQL major version. Digest-only references
+  are rejected; tag-plus-digest references are accepted and compared exactly for drift.
+- `imagePullSecrets` — cluster value overrides the class default and is passed to CNPG as
+  same-namespace pull credentials for private/custom PostgreSQL image registries.
 - `instances`, `resources`, `postgresqlConfig`, `pgHBA`, `backup` (generic fields), `monitoring`,
   `connectionPooler` — freely overridable within the class's platform-policy constraints.
 - `clusterDeletionPolicy` (`Delete` or `Retain`, default `Retain`) — what happens to the underlying
@@ -221,15 +229,15 @@ Most `spec.config` fields from the class can be overridden per-cluster, with gua
 
 Reference samples (do not need to be modified to use as a starting point):
 
-- [`config/samples/enterprise_v4_postgrescluster_dev.yaml`](../../config/samples/enterprise_v4_postgrescluster_dev.yaml) —
+- [`config/samples/platform_v1alpha1_postgrescluster_dev.yaml`](../../config/samples/platform_v1alpha1_postgrescluster_dev.yaml) —
   built on `postgresql-dev`, overrides `storage`, `postgresVersion`, and `resources` above the
-  class defaults.
-- [`config/samples/enterprise_v4_postgrescluster_prod.yaml`](../../config/samples/enterprise_v4_postgrescluster_prod.yaml) —
+  class defaults, with a commented example for a cluster-level `postgresImage`.
+- [`config/samples/platform_v1alpha1_postgrescluster_prod.yaml`](../../config/samples/platform_v1alpha1_postgrescluster_prod.yaml) —
   built on `postgresql-prod`. Note that this sample currently overrides `instances: 1`, while the
   `postgresql-prod` class uses `primaryUpdateMethod: switchover` and enables a read-only pooler by
   default. That combination is not a production-ready shape and may be rejected by admission; omit
   the override or set `instances >= 2` when using the production class.
-- [`config/samples/enterprise_v4_postgrescluster_backup.yaml`](../../config/samples/enterprise_v4_postgrescluster_backup.yaml) —
+- [`config/samples/platform_v1alpha1_postgrescluster_backup.yaml`](../../config/samples/platform_v1alpha1_postgrescluster_backup.yaml) —
   built on `postgresql-backup`, overrides only the backup schedule.
 
 For TLS enforcement today, see [Connecting to PostgreSQL with TLS](connecting-to-postgres-with-TLS.md)
@@ -259,7 +267,7 @@ platform-policy pooler settings.
 Complete example — transaction-mode PgBouncer with RW and RO pooler endpoints:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-pooler-transaction
@@ -300,7 +308,7 @@ spec:
         max_client_conn: "300"
         default_pool_size: "30"
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: orders-postgres
@@ -309,7 +317,7 @@ spec:
   class: postgresql-pooler-transaction
   clusterDeletionPolicy: Retain
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: orders-db
@@ -362,13 +370,14 @@ Required fields and impact:
 A `PostgresDatabase` declares one or more application databases on an existing `PostgresCluster`
 via `spec.clusterRef.name` — a same-namespace reference (see
 [No cross-namespace access](#no-cross-namespace-access)) that is **immutable** after creation. Each
-entry in `spec.databases[]` (1–10 per resource) produces a `<name>_admin` and `<name>_rw`
+entry in `spec.databases[]` (1–10 per resource) produces `<name>_admin` and `<name>_rw` roles by
+default. `adminRoleName` and `rwRoleName` can override those names. Provisioning also creates the
 PostgreSQL role, generated credential Secrets, and a connection ConfigMap. See
 [PostgresDatabase Managed Roles](postgresdatabase-managed-roles.md) for the full role-reconciliation
 and deletion-policy behavior.
 
 Reference sample:
-[`config/samples/enterprise_v4_postgresdatabase.yaml`](../../config/samples/enterprise_v4_postgresdatabase.yaml) —
+[`config/samples/platform_v1alpha1_postgresdatabase.yaml`](../../config/samples/platform_v1alpha1_postgresdatabase.yaml) —
 one `PostgresDatabase` declaring two databases (`kvstore`, `analytics`) against a single cluster.
 
 ### Shared cluster vs. dedicated cluster
@@ -381,7 +390,7 @@ entries in one `PostgresDatabase`'s `databases[]` list, or as separate `Postgres
 in the same namespace all referencing the same `clusterRef`:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-shared-standard
@@ -418,7 +427,7 @@ spec:
         max_client_conn: "300"
         default_pool_size: "30"
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: shared-postgres
@@ -427,7 +436,7 @@ spec:
   class: postgresql-shared-standard
   clusterDeletionPolicy: Retain
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: team-a-db
@@ -439,7 +448,7 @@ spec:
     - name: teamaapp
       deletionPolicy: Delete
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: team-b-db
@@ -470,7 +479,7 @@ Required fields and impact:
 - `PostgresCluster.spec.class` selects the shared sizing, PostgreSQL version, backup, TLS, and pooler
   policy for every database on the cluster.
 - Each `PostgresDatabase.spec.clusterRef.name` must match a `PostgresCluster` in the same namespace.
-- Each `databases[].name` gets its own PostgreSQL database plus `<name>_admin` and `<name>_rw` roles.
+- Each `databases[].name` gets its own PostgreSQL database plus configured admin and read-write roles (defaulting to `<name>_admin` and `<name>_rw`).
 - `deletionPolicy` is per database entry, so one team's retention choice does not change another
   team's entry when deleting a `PostgresDatabase`; cluster-level deletion is controlled by
   `PostgresCluster.spec.clusterDeletionPolicy`.
@@ -478,7 +487,7 @@ Required fields and impact:
 **Dedicated cluster** — one `PostgresCluster` (and its own `PostgresDatabase`) per workload:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresClusterClass
 metadata:
   name: postgresql-dedicated-prod
@@ -515,7 +524,7 @@ spec:
         max_client_conn: "200"
         default_pool_size: "25"
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: team-c-postgres
@@ -534,7 +543,7 @@ spec:
       memory: "40Gi"
   clusterDeletionPolicy: Retain
 ---
-apiVersion: enterprise.splunk.com/v4
+apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: team-c-db

@@ -63,16 +63,16 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	if cr.Spec.NoahClusterRef == nil || cr.Spec.NoahClusterRef.Name == "" {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Noah Cluster reference is required")
 		return reconcile.Result{}, splcommon.NewTerminalError(
-			EventReasonValidateSpecFailed,
+			splcommon.EventReasonValidateSpecFailed,
 			"Noah Search Head Cluster spec validation failed",
 			fmt.Errorf("noahClusterRef.name must not be empty"),
 		)
 	}
 
 	if err = validateSearchHeadClusterSpec(ctx, client, cr); err != nil {
-		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
+		eventPublisher.Warning(ctx, splcommon.EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Search Head Cluster spec validation failed")
-		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Search Head Cluster spec validation failed", err)
+		return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, "Search Head Cluster spec validation failed", err)
 	}
 
 	cr.Status.Replicas = cr.Spec.Replicas

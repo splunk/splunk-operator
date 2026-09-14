@@ -76,6 +76,12 @@ func initGlobalResourceTracker() {
 	initCommonResourceTracker()
 }
 
+// InitGlobalResourceTracker resets the shared resource tracker for callers that
+// exercise the legacy app framework from another package.
+func InitGlobalResourceTracker() {
+	initGlobalResourceTracker()
+}
+
 func initCommonResourceTracker() {
 	operatorResourceTracker.commonResourceTracker = &commonResourceTracker{
 		mutexMap: make(map[string]*sync.Mutex),
@@ -175,7 +181,7 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 			// Emit event for missing secret
 			if k8serrors.IsNotFound(err) {
 				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, EventReasonSecretMissing,
+					eventPublisher.Warning(ctx, splcommon.EventReasonSecretMissing,
 						fmt.Sprintf("Required secret '%s' not found in namespace '%s'. Create secret to proceed.", appSecretRef, cr.GetNamespace()))
 				}
 			}
@@ -231,7 +237,7 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		scopedLog.ErrorContext(ctx, "failed to get the S3 client", "error", err)
 		// Emit event when operator cannot connect to the remote app repository
 		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, EventReasonAppRepoConnFailed,
+			eventPublisher.Warning(ctx, splcommon.EventReasonAppRepoConnFailed,
 				fmt.Sprintf("Failed to connect to app repository '%s': %s. Check credentials and network.", vol.Name, err.Error()))
 		}
 		return remoteDataClient, err
@@ -435,7 +441,7 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 		// Emit event for missing secret
 		if k8serrors.IsNotFound(err) {
 			if eventPublisher != nil {
-				eventPublisher.Warning(ctx, EventReasonSecretMissing,
+				eventPublisher.Warning(ctx, splcommon.EventReasonSecretMissing,
 					fmt.Sprintf("Required secret '%s' not found in namespace '%s'. Create secret to proceed.", volume.SecretRef, cr.GetNamespace()))
 			}
 		}
@@ -449,13 +455,13 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 
 	if accessKey == "" {
 		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, EventReasonSecretInvalid,
+			eventPublisher.Warning(ctx, splcommon.EventReasonSecretInvalid,
 				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", namespaceScopedSecret.GetName(), "accessKey"))
 		}
 		return "", "", "", fmt.Errorf("s3 Access Key is missing")
 	} else if secretKey == "" {
 		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, EventReasonSecretInvalid,
+			eventPublisher.Warning(ctx, splcommon.EventReasonSecretInvalid,
 				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", namespaceScopedSecret.GetName(), "s3SecretKey"))
 		}
 		return "", "", "", fmt.Errorf("s3 Secret Key is missing")
@@ -2622,4 +2628,40 @@ func ApplyIngestorPodDisruptionBudget(ctx context.Context, c splcommon.Controlle
 	}
 	return fmt.Errorf("PodDisruptionBudget for IngestorCluster %q exists in namespace %q but is not owned by this CR",
 		cr.GetName(), cr.GetNamespace())
+}
+
+// The migration facade keeps legacy reconcilers source-compatible while the
+// implementation is consumed from the layered workflow packages.
+func CheckAndMigrateAppDeployStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, status *enterpriseApi.AppDeploymentContext, conf *enterpriseApi.AppFrameworkSpec, localScope bool) error {
+	return checkAndMigrateAppDeployStatus(ctx, client, cr, status, conf, localScope)
+}
+
+func InitAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, conf *enterpriseApi.AppFrameworkSpec, status *enterpriseApi.AppDeploymentContext) error {
+	return initAndCheckAppInfoStatus(ctx, client, cr, conf, status)
+}
+
+func HandleAppFrameworkActivity(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, status *enterpriseApi.AppDeploymentContext, conf *enterpriseApi.AppFrameworkSpec) *reconcile.Result {
+	return handleAppFrameworkActivity(ctx, client, cr, status, conf)
+}
+
+// MonitoringConsoleEnv is retained for compatibility with callers of the legacy helper location.
+// Deprecated: use the standalone reconciler's Monitoring Console environment construction.
+func MonitoringConsoleEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
+	return getStandaloneExtraEnv(cr, replicas)
+}
+
+func ChangeAppSrcDeployInfoStatus(ctx context.Context, appSrc string, statuses map[string]enterpriseApi.AppSrcDeployInfo, repoState enterpriseApi.AppRepoState, oldStatus enterpriseApi.AppDeploymentStatus, newStatus enterpriseApi.AppDeploymentStatus) {
+	changeAppSrcDeployInfoStatus(ctx, appSrc, statuses, repoState, oldStatus, newStatus)
+}
+
+func ChangePhaseInfo(ctx context.Context, replicas int32, appSrc string, statuses map[string]enterpriseApi.AppSrcDeployInfo) {
+	changePhaseInfo(ctx, replicas, appSrc, statuses)
+}
+
+func RemoveStaleEntriesFromAuxPhaseInfo(ctx context.Context, replicas int32, appSrc string, statuses map[string]enterpriseApi.AppSrcDeployInfo) {
+	removeStaleEntriesFromAuxPhaseInfo(ctx, replicas, appSrc, statuses)
+}
+
+func SetupAppsStagingVolume(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, podTemplate *corev1.PodTemplateSpec, conf *enterpriseApi.AppFrameworkSpec) {
+	setupAppsStagingVolume(ctx, client, cr, podTemplate, conf)
 }

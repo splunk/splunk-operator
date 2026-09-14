@@ -45,6 +45,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -661,7 +662,9 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// Mock some functions for unit tests
-	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+	savedAddTelApp := telapp.AddTelApp
+	defer func() { telapp.AddTelApp = savedAddTelApp }()
+	telapp.AddTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 		return nil
 	}
 
@@ -2103,8 +2106,10 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 		t.Errorf("Failed to create resource  %s", current.GetName())
 	}
 
-	// Mock the addTelApp function for unit tests
-	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+	// Mock the telapp.AddTelApp function for unit tests
+	savedAddTelApp := telapp.AddTelApp
+	defer func() { telapp.AddTelApp = savedAddTelApp }()
+	telapp.AddTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 		return nil
 	}
 
