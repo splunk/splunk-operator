@@ -23,6 +23,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [ClusterManager Resource Spec Parameters](#clustermanager-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
   - [IngestorCluster Resource Spec Parameters](#ingestorcluster-resource-spec-parameters)
+    - [Queue and ObjectStorage Reference Updates](#queue-and-objectstorage-reference-updates)
   - [ObjectStorage Resource Spec Parameters](#objectstorage-resource-spec-parameters)
   - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
@@ -327,33 +328,44 @@ kind: Queue
 metadata:
   name: queue
 spec:
-  replicas: 3
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
 ```
 
-Queue inputs can be found in the table below. As of now, only SQS provider of message queue is supported.
+To use static AWS credentials instead of workload identity, add the following optional `secretKeyRef` under `spec.sqs`:
 
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of message queue (Allowed values: sqs) |
-| sqs   | SQS | [Required if provider=sqs] SQS message queue inputs  |
+```yaml
+secretKeyRef:
+  awsAccessKey:
+    name: s3-secret
+    key: s3_access_key
+  awsSecretKey:
+    name: s3-secret
+    key: s3_secret_key
+```
+
+`Queue` stores the configuration for an external message queue and dead-letter queue. SOK does not create or manage those external resources. Queue inputs can be found in the table below. The supported provider is `sqs`.
+
+| Key        | Type    | Required | Description                                       |
+| ---------- | ------- | -------- | ------------------------------------------------- |
+| provider   | string | Yes | Provider of message queue (Allowed value: `sqs`) |
+| sqs   | SQS | Yes if provider = `sqs` | SQS message queue inputs |
 
 SQS message queue inputs can be found in the table below.
 
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| name   | string | [Required] Name of the queue |
-| region   | string | [Required] Region where the queue is located  |
-| endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
-| dlq   | string | [Required] Name of the dead letter queue |
-| secretKeyRef | object | [Optional] Per-key selectors for AWS credentials. Contains `awsAccessKey` and `awsSecretKey`, each a `SecretKeySelector` with `name` (Secret name) and `key` (key within the Secret). When not set, IRSA / workload identity is assumed. |
+| Key        | Type    | Required | Description                                       |
+| ---------- | ------- | -------- | ------------------------------------------------- |
+| name   | string | Yes | Name of the physical queue |
+| authRegion   | string | No | Region used for authentication and endpoint resolution |
+| endpoint   | string | No | AWS SQS service endpoint. If omitted, SOK resolves it from `authRegion` |
+| dlq   | string | Yes | Name of the physical dead-letter queue |
+| secretKeyRef | object | No | Per-key selectors for AWS credentials. When not set, IRSA / workload identity is assumed. Contains `awsAccessKey` and `awsSecretKey`, each a `SecretKeySelector` with `name` and `key`. |
 
-Change of any of the queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+The provider, queue name, auth region, endpoint, and dead-letter queue are immutable after creation. `secretKeyRef` can be changed. If static credentials are configured, the referenced Secrets must be kept in the same namespace as the resource that uses them. SOK resolves the selected Secret keys and mounts generated credential-only defaults into the referenced `IndexerCluster` and `IngestorCluster` pods. Changes to the referenced credential Secret are watched. SOK creates a new credential Secret and rolls the affected pods declaratively.
 
 ## ClusterManager Resource Spec Parameters
 ClusterManager resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
@@ -401,9 +413,15 @@ In addition to [Common Spec Parameters for All Resources](#common-spec-parameter
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
 the `IndexerCluster` resource provides the following `Spec` configuration parameters:
 
-| Key        | Type    | Description                                           |
-| ---------- | ------- | ----------------------------------------------------- |
-| replicas   | integer | The number of indexer cluster members (minimum of 3, which is the default) |
+| Key        | Type    | Required | Description                                           |
+| ---------- | ------- | -------- | ----------------------------------------------------- |
+| replicas   | integer | Yes | The number of indexer peers. Must be at least 3 |
+| queueRef   | corev1.ObjectReference | No | Message queue reference. Set together with `objectStorageRef` to enable index-only mode |
+| objectStorageRef   | corev1.ObjectReference | No | Object storage reference. Set together with `queueRef` |
+
+When both references are set, SOK configures the indexer peers to consume from the remote queue and use the object storage for large messages.
+
+For reference update behavior that also applies to `IndexerCluster`, see [Queue and ObjectStorage Reference Updates](#queue-and-objectstorage-reference-updates).
 
 ## IngestorCluster Resource Spec Parameters
 
@@ -425,9 +443,17 @@ In addition to [Common Spec Parameters for All Resources](#common-spec-parameter
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
 the `IngestorCluster` resource provides the following `Spec` configuration parameters:
 
-| Key        | Type    | Description                                           |
-| ---------- | ------- | ----------------------------------------------------- |
-| replicas   | integer | The number of ingestor peers (minimum of 3 which is the default) |
+| Key        | Type    | Required | Description                                           |
+| ---------- | ------- | -------- | ----------------------------------------------------- |
+| replicas   | integer | No | The number of ingestor pods (defaults to 1) |
+| queueRef   | corev1.ObjectReference | Yes | Message queue reference |
+| objectStorageRef   | corev1.ObjectReference | Yes | Object storage reference |
+
+### Queue and ObjectStorage Reference Updates
+
+Although the `Queue` and `ObjectStorage` configuration values are immutable after creation, these references can be changed. Changing either reference causes SOK to regenerate the content-addressed defaults resources and update the corresponding StatefulSet declaratively.
+
+There is no supported migration strategy for moving data from previously referenced resources, which means that the existing data will not be available through the new configuration.
 
 ## ObjectStorage Resource Spec Parameters
 
@@ -443,24 +469,24 @@ spec:
     endpoint: https://s3.us-west-2.amazonaws.com
 ```
 
-ObjectStorage inputs can be found in the table below. As of now, only S3 provider of object storage is supported.
+`ObjectStorage` stores the large messages that exceed the queue message-size limit. SOK does not create or manage the external bucket. ObjectStorage inputs can be found in the table below. The supported provider is `s3`.
 
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of object storage (Allowed values: s3) |
-| s3   | S3 | [Required if provider=s3] S3 object storage inputs  |
+| Key        | Type    | Required | Description                                       |
+| ---------- | ------- | -------- | ------------------------------------------------- |
+| provider   | string | Yes | Provider of object storage (Allowed value: `s3`) |
+| s3   | S3 | Yes if provider = `s3` | S3 object storage inputs |
 
 S3 object storage inputs can be found in the table below.
 
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
-| endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint |
-| encryptionScheme | string | [Optional] Encryption scheme used by remote storage. Allowed values: `sse-s3`, `sse-c`, `none` |
-| kmsEndpoint | string | [Optional] KMS endpoint for generating data keys. Required when `encryptionScheme` is `sse-c`; auto-derived from region if not provided |
-| kmsKeyId | string | [Optional] ID of the primary KMS key (UUID, alias, or ARN). Required when `encryptionScheme` is `sse-c` |
+| Key        | Type    | Required | Description                                       |
+| ---------- | ------- | -------- | ------------------------------------------------- |
+| path   | string | Yes | Remote storage location for messages that are larger than the underlying maximum message size |
+| endpoint   | string | No | S3-compatible service endpoint. If omitted, SOK resolves it from the Queue `authRegion` |
+| encryptionScheme | string | No | Encryption scheme used by remote storage. Allowed values: `sse-s3`, `sse-c`, `none` |
+| kmsEndpoint | string | No | KMS endpoint for generating data keys; auto-derived from the Queue region when not provided |
+| kmsKeyId | string | No | ID of the primary KMS key (UUID, alias, or ARN) |
 
-Change of any of the object storage inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+All ObjectStorage spec inputs are immutable after creation. `kmsKeyId` is required when `encryptionScheme` is `sse-c`.
 
 ## MonitoringConsole Resource Spec Parameters
 
@@ -705,7 +731,6 @@ Some failure states are non-recoverable without external intervention. When the 
 | The TLS Secret referenced by `spec.certs[]` is missing a required key (`tls.crt` or `tls.key`) | `cert secret <namespace>/<name> is missing required key "<key>"` | All |
 | The CR spec fails validation during reconciliation (e.g. missing required field, invalid value) | `<CR type> spec validation failed` | All |
 | The Queue or ObjectStorage CR referenced by an IndexerCluster or IngestorCluster cannot be found | `Referenced Queue or ObjectStorage CR not found` | IndexerCluster, IngestorCluster |
-| `queueRef` or `objectStorageRef` is removed after having been applied | `queueRef and objectStorageRef cannot be removed once applied` | IndexerCluster, IngestorCluster |
 | `clusterManagerRef` is empty at the point where it is required at runtime | `empty Cluster Manager reference` | IndexerCluster |
 
 **Detecting a terminal failure**
@@ -746,17 +771,13 @@ For a malformed TLS Secret:
 2. The operator detects the fix and resumes automatically on the next reconcile cycle.
 
 For a missing Queue or ObjectStorage CR (IndexerCluster, IngestorCluster):
-1. Create the missing CR in the same namespace as the IndexerCluster or IngestorCluster.
+1. Create the missing CR in the namespace specified by the corresponding object reference, or in the cluster's namespace when no reference namespace is set.
 2. The operator resumes automatically on the next reconcile cycle.
 
 For a spec validation failure:
 1. Check the `Stalled` condition `message` and operator logs to identify the invalid field.
 2. Correct the spec with `kubectl edit` or `kubectl patch`.
 3. The operator processes the spec change and resumes reconciliation automatically.
-
-For immutable refs cleared (`queueRef`/`objectStorageRef` removed after being applied):
-1. Restore the previous `queueRef` and `objectStorageRef` values in the CR spec.
-2. Apply the corrected spec — the operator resumes automatically.
 
 For an empty ClusterManager reference (IndexerCluster):
 1. Ensure `spec.clusterManagerRef.name` is set on the IndexerCluster.
