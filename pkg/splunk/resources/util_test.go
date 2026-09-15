@@ -43,6 +43,24 @@ func TestGetSplunkService(t *testing.T) {
 	assert.Equal(t, service.Spec.Selector, service.Labels)
 }
 
+func TestGetSplunkServiceForNoahIndexer(t *testing.T) {
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "stack1", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+		},
+	}
+	expectedSelector := resources.GetSplunkLabels(cr.Name, splcommon.SplunkIndexer, cr.Spec.NoahClusterRef.Name)
+
+	regular := resources.GetSplunkService(t.Context(), cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer, false)
+	headless := resources.GetSplunkService(t.Context(), cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer, true)
+
+	assert.Equal(t, expectedSelector, regular.Spec.Selector)
+	assert.False(t, regular.Spec.PublishNotReadyAddresses)
+	assert.Equal(t, expectedSelector, headless.Spec.Selector)
+	assert.True(t, headless.Spec.PublishNotReadyAddresses)
+}
+
 func TestGetSplunkDefaults(t *testing.T) {
 	defaults := resources.GetSplunkDefaults("stack1", "test", splcommon.SplunkIndexer, "defaults_string")
 

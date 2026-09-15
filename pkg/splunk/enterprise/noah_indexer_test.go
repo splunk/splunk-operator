@@ -42,6 +42,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	noahclient "github.com/splunk/splunk-operator/pkg/splunk/client/noah"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -84,6 +85,28 @@ func newNoahResponseClient(t *testing.T, statusCode int, responseBody string) *n
 	)
 	require.NoError(t, err)
 	return client
+}
+
+func newNoahIndexerDependencyTestCR(generation int64, noahClusterName string) *enterpriseApi.IndexerCluster {
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idx", Namespace: "test", Generation: generation},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas:       1,
+			NoahClusterRef: &corev1.LocalObjectReference{Name: noahClusterName},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+			},
+		},
+	}
+	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	return cr
+}
+
+func newNoahIndexerPodManagerForTest(t *testing.T, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) *noahIndexerPodManager {
+	t.Helper()
+	runtime, err := configworkflow.ResolveNoahRuntime(t.Context(), client, cr.Namespace, *cr.Spec.NoahClusterRef)
+	require.NoError(t, err)
+	return newNoahIndexerPodManager(client, cr, runtime)
 }
 
 func newNoahIndexerScaleOutTestFixture(t *testing.T, options noahIndexerScaleOutTestOptions) *noahIndexerScaleOutTestFixture {
@@ -170,8 +193,9 @@ func newNoahIndexerScaleOutTestFixture(t *testing.T, options noahIndexerScaleOut
 	return fixture
 }
 
-func (fixture *noahIndexerScaleOutTestFixture) podManager() *noahIndexerPodManager {
-	mgr := newNoahIndexerPodManager(fixture.client, fixture.cr)
+func (fixture *noahIndexerScaleOutTestFixture) podManager(t *testing.T) *noahIndexerPodManager {
+	t.Helper()
+	mgr := newNoahIndexerPodManagerForTest(t, fixture.client, fixture.cr)
 	mgr.statefulSet = fixture.statefulSet
 	return mgr
 }
@@ -317,7 +341,7 @@ func (fixture *noahIndexerScaleDownTestFixture) update(t *testing.T) (enterprise
 	t.Helper()
 	statefulSet := &appsv1.StatefulSet{}
 	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
-	phase, err := newNoahIndexerPodManager(fixture.client, fixture.cr).Update(
+	phase, err := newNoahIndexerPodManagerForTest(t, fixture.client, fixture.cr).Update(
 		t.Context(), fixture.client, statefulSet, fixture.cr.Spec.Replicas,
 	)
 	fixture.cr.Status.Phase = phase
@@ -526,7 +550,7 @@ func (fixture *noahIndexerRolloutTestFixture) update(t *testing.T) (enterpriseAp
 	t.Helper()
 	statefulSet := &appsv1.StatefulSet{}
 	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
-	return newNoahIndexerPodManager(fixture.client, fixture.cr).Update(
+	return newNoahIndexerPodManagerForTest(t, fixture.client, fixture.cr).Update(
 		t.Context(),
 		fixture.client,
 		statefulSet,
@@ -648,7 +672,7 @@ func TestValidateNoahIndexerUpgradePath(t *testing.T) {
 	require.NoError(t, fixture.client.Create(t.Context(), licenseManager))
 	licenseManagerStatefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkLicenseManager, licenseManager.Name),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkLicenseManager, licenseManager.Name),
 			Namespace: licenseManager.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
@@ -844,7 +868,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte("unit-test-noah-key")},
 	}))
 
-	statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
+	statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManagerForTest(t, client, cr))
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhasePending, phase)
 
@@ -855,14 +879,14 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	}, created))
 	require.NotNil(t, created.Spec.Replicas)
 	assert.Equal(t, int32(3), *created.Spec.Replicas, "initial creation must start every requested replica")
-	assert.Equal(t, getSplunkLabels(cr.Name, SplunkIndexer, cr.Spec.NoahClusterRef.Name), created.Spec.Selector.MatchLabels)
+	assert.Equal(t, resources.GetSplunkLabels(cr.Name, splcommon.SplunkIndexer, cr.Spec.NoahClusterRef.Name), created.Spec.Selector.MatchLabels)
 	for key, value := range created.Spec.Selector.MatchLabels {
 		assert.Equal(t, value, created.Spec.Template.Labels[key])
 	}
 	for _, headless := range []bool{true, false} {
 		service := &corev1.Service{}
 		require.NoError(t, client.Get(ctx, types.NamespacedName{
-			Name:      splcommon.GetSplunkServiceName(SplunkIndexer, cr.Name, headless),
+			Name:      splcommon.GetSplunkServiceName(splcommon.SplunkIndexer, cr.Name, headless),
 			Namespace: cr.Namespace,
 		}, service))
 		assert.Equal(t, created.Spec.Selector.MatchLabels, service.Spec.Selector)
@@ -957,7 +981,7 @@ func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testi
 	replicas := int32(1)
 	currentStatefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkIndexer, cr.Name),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkIndexer, cr.Name),
 			Namespace: cr.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -973,7 +997,7 @@ func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testi
 	require.NoError(t, client.Create(ctx, licenseManager))
 	require.NoError(t, client.Create(ctx, &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkLicenseManager, licenseManager.Name),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkLicenseManager, licenseManager.Name),
 			Namespace: licenseManager.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
@@ -988,7 +1012,7 @@ func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testi
 	require.NoError(t, client.Create(ctx, staleConfigMap))
 	require.NoError(t, client.Create(ctx, staleSecret))
 
-	statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
+	statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManagerForTest(t, client, cr))
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhasePending, phase)
 	assert.Equal(t, currentStatefulSet.Name, statefulSet.Name)
@@ -996,69 +1020,105 @@ func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testi
 	require.NoError(t, client.Get(ctx, types.NamespacedName{Name: staleSecret.Name, Namespace: staleSecret.Namespace}, &corev1.Secret{}))
 }
 
-func TestApplyNoahIndexerResourcesRequiresReferencedNoahCluster(t *testing.T) {
+func TestApplyNoahIndexerClusterReportsMissingDependency(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
 	client := spltest.NewMockClient()
-	cr := &enterpriseApi.IndexerCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "main", Namespace: "test"},
-		Spec: enterpriseApi.IndexerClusterSpec{
-			NoahClusterRef: &corev1.LocalObjectReference{Name: "missing"},
-		},
-	}
+	cr := newNoahIndexerDependencyTestCR(7, "missing-noah")
+	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 
-	statefulSet, phase, err := applyNoahIndexerResources(t.Context(), client, cr, newNoahIndexerPodManager(client, cr))
-	require.Error(t, err)
-	assert.Nil(t, statefulSet)
-	assert.Equal(t, enterpriseApi.PhaseError, phase)
-	assert.Contains(t, err.Error(), "get referenced NoahCluster test/missing")
-	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err, "")
-	assert.True(t, handled)
-	assert.NoError(t, outcomeErr)
-	assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
-	assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
-	assert.Contains(t, outcome.phaseMessage, "test/missing")
-	// Peer state becomes unknown, but must not borrow the dependency reason;
-	// resolveNoahDependency owns NoahDependencyResolved instead.
-	assert.Equal(t, metav1.ConditionUnknown, outcome.condition.Status)
-	assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason)
+	_, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
+	require.NoError(t, err, "a missing dependency is retryable, not terminal")
+
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionUnknown, condition.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), condition.Reason)
+	assert.Equal(t, int64(7), condition.ObservedGeneration)
+	assert.Contains(t, condition.Message, "missing-noah")
 }
 
-func TestApplyNoahIndexerResourcesValidatesRuntimeBeforeCreatingResources(t *testing.T) {
+func TestApplyNoahIndexerClusterPreservesPeerStatusOnUnknownDependencyReadFailure(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
 	client := spltest.NewMockClient()
-	cr := &enterpriseApi.IndexerCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "main", Namespace: "test"},
-		Spec: enterpriseApi.IndexerClusterSpec{
-			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
-		},
+	cr := newNoahIndexerDependencyTestCR(4, "noah")
+	cr.Status.Conditions = splcommon.UpsertCondition(cr.Status.Conditions, metav1.Condition{
+		Type:    string(enterpriseApi.ConditionNoahDependencyResolved),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(enterpriseApi.ReasonNoahDependencyResolved),
+		Message: "Referenced NoahCluster and authentication Secret resolved",
+	})
+	cr.Status.Conditions = splcommon.UpsertCondition(cr.Status.Conditions, newNoahPeersReadyCondition(
+		metav1.ConditionTrue, enterpriseApi.ReasonNoahPeersReady, "All expected Noah peers are up"))
+	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
+	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = assert.AnError
+
+	_, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
+	require.Error(t, err)
+
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionUnknown, condition.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyUnknown), condition.Reason)
+	assert.NotContains(t, condition.Message, "resolved")
+	peers := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahPeersReady)
+	require.NotNil(t, peers)
+	assert.Equal(t, metav1.ConditionTrue, peers.Status)
+	ready := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionReady)
+	require.NotNil(t, ready)
+	assert.Equal(t, "Failed to resolve Noah dependencies", ready.Message)
+	for _, condition := range cr.Status.Conditions {
+		assert.NotEmpty(t, condition.Type)
 	}
-	require.NoError(t, client.Create(t.Context(), &enterpriseApi.NoahCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: cr.Namespace},
+}
+
+func TestApplyNoahIndexerClusterReportsResolvedDependency(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
+	client := spltest.NewMockClient()
+	client.AddObject(&enterpriseApi.NoahCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: "test"},
 		Spec: enterpriseApi.NoahClusterSpec{
-			Endpoint:      "https://noah.test.svc",
-			Tenant:        "tenant",
+			Endpoint:      "http://noah.example:8080",
+			Tenant:        "linus-dev",
 			AuthSecretRef: corev1.LocalObjectReference{Name: "noah-auth"},
 		},
-	}))
-	require.NoError(t, client.Create(t.Context(), &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: cr.Namespace},
-		Data:       map[string][]byte{"wrong-key": []byte("unit-test-noah-key")},
-	}))
-	client.ResetCalls()
+	})
+	client.AddObject(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test"},
+		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte(t.Name())},
+	})
+	cr := newNoahIndexerDependencyTestCR(5, "noah")
+	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 
-	statefulSet, phase, err := applyNoahIndexerResources(t.Context(), client, cr, newNoahIndexerPodManager(client, cr))
+	result, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
+	require.NoError(t, err)
+	assert.NotZero(t, result.RequeueAfter)
 
-	assert.Nil(t, statefulSet)
-	assert.Equal(t, enterpriseApi.PhaseError, phase)
-	require.Error(t, err)
-	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err, "")
-	require.True(t, handled)
-	_, terminal := splcommon.TerminalMessage(outcomeErr)
-	assert.True(t, terminal)
-	reason, _ := splcommon.TerminalReason(outcomeErr)
-	assert.Equal(t, splcommon.EventReasonNoahConfigurationInvalid, reason)
-	assert.Contains(t, outcome.phaseMessage, configworkflow.NoahAuthSecretKey)
-	assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason,
-		"a dependency failure must not be restated as a peers reason")
-	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyResolved), condition.Reason)
+	assert.Equal(t, int64(5), condition.ObservedGeneration)
+}
+
+func TestApplyNoahIndexerClusterDependencyLossClearsStalePeersReady(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
+	client := spltest.NewMockClient()
+	cr := newNoahIndexerDependencyTestCR(3, "missing-noah")
+	cr.Status.Conditions = splcommon.UpsertCondition(cr.Status.Conditions, newNoahPeersReadyCondition(
+		metav1.ConditionTrue, enterpriseApi.ReasonNoahPeersReady, "All expected Noah peers are up"))
+	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
+
+	_, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
+	require.NoError(t, err, "a missing dependency is retryable, not terminal")
+
+	peers := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahPeersReady)
+	require.NotNil(t, peers)
+	assert.Equal(t, metav1.ConditionUnknown, peers.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), peers.Reason)
+
+	dependency := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+	require.NotNil(t, dependency)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), dependency.Reason)
 }
 
 func TestNoahIndexerPodManagerScalesDownOneOrdinalAndWaitsForNoahCleanup(t *testing.T) {
@@ -1472,7 +1532,7 @@ func TestNoahCacheWarmScaleOutPolicyDefaults(t *testing.T) {
 
 func TestNoahIndexerScaleOutUsesReferencedAuthentication(t *testing.T) {
 	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{peerStatus: noahclient.PeerStatusUp})
-	plan, err := fixture.podManager().NextReplicas(t.Context(), 1, fixture.cr.Spec.Replicas)
+	plan, err := fixture.podManager(t).NextReplicas(t.Context(), 1, fixture.cr.Spec.Replicas)
 	require.NoError(t, err)
 	assert.Equal(t, int32(2), plan.TargetReplicas)
 	assert.NotEmpty(t, fixture.requestHeaders.Get("x-splunk-lm-nonce"))
@@ -1502,7 +1562,7 @@ func TestNoahIndexerScaleOutPolicy(t *testing.T) {
 				peerStatus:       test.peerStatus,
 				cacheWarmEnabled: test.cacheWarmEnabled,
 			})
-			plan, err := fixture.podManager().NextReplicas(t.Context(), 1, test.requested)
+			plan, err := fixture.podManager(t).NextReplicas(t.Context(), 1, test.requested)
 			require.NoError(t, err)
 			assert.Equal(t, test.wantTarget, plan.TargetReplicas)
 			assert.Equal(t, test.wantComplete, plan.Complete)
@@ -1517,7 +1577,7 @@ func TestNoahIndexerPodManagerAppliesScaleOutTarget(t *testing.T) {
 		cacheWarmEnabled: &disabled,
 	})
 
-	phase, err := fixture.podManager().Update(t.Context(), fixture.client, fixture.statefulSet, fixture.cr.Spec.Replicas)
+	phase, err := fixture.podManager(t).Update(t.Context(), fixture.client, fixture.statefulSet, fixture.cr.Spec.Replicas)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingUp, phase)
 
@@ -1536,7 +1596,7 @@ func TestNoahIndexerPodManagerWaitsForStatefulSetToObserveTemplate(t *testing.T)
 	statefulSet.Generation++
 	require.NoError(t, fixture.client.Update(t.Context(), statefulSet))
 
-	phase, err := fixture.podManager().Update(t.Context(), fixture.client, statefulSet, fixture.cr.Spec.Replicas)
+	phase, err := fixture.podManager(t).Update(t.Context(), fixture.client, statefulSet, fixture.cr.Spec.Replicas)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhasePending, phase)
 	assert.Equal(t, int32(1), *statefulSet.Spec.Replicas)
@@ -1547,7 +1607,7 @@ func TestNoahIndexerPodManagerPropagatesScaleOutUpdateError(t *testing.T) {
 	wantErr := errors.New("StatefulSet update failed")
 	fixture.client.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = wantErr
 
-	phase, err := fixture.podManager().Update(t.Context(), fixture.client, fixture.statefulSet, fixture.cr.Spec.Replicas)
+	phase, err := fixture.podManager(t).Update(t.Context(), fixture.client, fixture.statefulSet, fixture.cr.Spec.Replicas)
 
 	require.ErrorIs(t, err, wantErr)
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
@@ -1561,7 +1621,7 @@ func TestNoahIndexerCacheWarmTimeoutStopsRequeueAndAllowsReevaluation(t *testing
 		timeoutSeconds: &timeoutSeconds,
 	})
 
-	phase, err := fixture.podManager().Update(t.Context(), fixture.client, fixture.statefulSet, fixture.cr.Spec.Replicas)
+	phase, err := fixture.podManager(t).Update(t.Context(), fixture.client, fixture.statefulSet, fixture.cr.Spec.Replicas)
 	require.Error(t, err)
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
 	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err, "")
@@ -1582,7 +1642,7 @@ func TestNoahIndexerCacheWarmTimeoutStopsRequeueAndAllowsReevaluation(t *testing
 	noahCluster.Spec.CacheWarmScaleOutEnabled = &cacheWarmDisabled
 	require.NoError(t, fixture.client.Update(t.Context(), noahCluster))
 
-	phase, err = fixture.podManager().Update(t.Context(), fixture.client, fixture.statefulSet, fixture.cr.Spec.Replicas)
+	phase, err = fixture.podManager(t).Update(t.Context(), fixture.client, fixture.statefulSet, fixture.cr.Spec.Replicas)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingUp, phase)
 	stored := &appsv1.StatefulSet{}
@@ -1820,7 +1880,7 @@ func TestSetNoahIndexerPhaseAndConditionsPreservesTransitionTimeForRepeatedObser
 	assert.Equal(t, int64(7), condition.ObservedGeneration)
 }
 
-func TestApplyNoahIndexerResourcesSurvivesDependencyDeletion(t *testing.T) {
+func TestNoahIndexerResourcesRecoverAfterDependencyRecreation(t *testing.T) {
 	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
 
 	ctx := t.Context()
@@ -1882,10 +1942,10 @@ func TestApplyNoahIndexerResourcesSurvivesDependencyDeletion(t *testing.T) {
 	require.NoError(t, client.Create(ctx, authSecret))
 
 	// Both workloads resolve their dependency and build a StatefulSet.
-	firstSet, _, err := applyNoahIndexerResources(ctx, client, first, newNoahIndexerPodManager(client, first))
+	firstSet, _, err := applyNoahIndexerResources(ctx, client, first, newNoahIndexerPodManagerForTest(t, client, first))
 	require.NoError(t, err)
 	require.NotNil(t, firstSet)
-	secondSet, _, err := applyNoahIndexerResources(ctx, client, second, newNoahIndexerPodManager(client, second))
+	secondSet, _, err := applyNoahIndexerResources(ctx, client, second, newNoahIndexerPodManagerForTest(t, client, second))
 	require.NoError(t, err)
 	require.NotNil(t, secondSet)
 
@@ -1893,15 +1953,12 @@ func TestApplyNoahIndexerResourcesSurvivesDependencyDeletion(t *testing.T) {
 	// untouched, so NoahEnabled stays true and no Cluster Manager path runs.
 	require.NoError(t, client.Delete(ctx, authSecret))
 	for _, cr := range []*enterpriseApi.IndexerCluster{first, second} {
-		statefulSet, phase, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
-		require.Error(t, err)
-		assert.Nil(t, statefulSet)
-		assert.Equal(t, enterpriseApi.PhaseError, phase)
 		assert.True(t, cr.Spec.NoahEnabled(), "a missing dependency must not clear Noah mode")
 
-		outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err, "")
-		require.True(t, handled)
-		assert.NoError(t, outcomeErr, "a missing dependency is retryable, not terminal")
+		dependency := reconcileutil.ResolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+		assert.Nil(t, dependency.Runtime)
+		assert.NoError(t, dependency.ReconcileErr, "a missing dependency is retryable, not terminal")
+		outcome := noahIndexerDependencyOutcome(dependency)
 		assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
 		assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
 		assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason,
@@ -1911,10 +1968,9 @@ func TestApplyNoahIndexerResourcesSurvivesDependencyDeletion(t *testing.T) {
 	// Deleting the NoahCluster blocks them the same way.
 	require.NoError(t, client.Delete(ctx, noahCluster))
 	for _, cr := range []*enterpriseApi.IndexerCluster{first, second} {
-		_, _, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
-		require.Error(t, err)
-		outcome, _, handled := noahIndexerOutcomeFromError(err, "")
-		require.True(t, handled)
+		dependency := reconcileutil.ResolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+		assert.Nil(t, dependency.Runtime)
+		outcome := noahIndexerDependencyOutcome(dependency)
 		assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
 		assert.Equal(t, string(enterpriseApi.ReasonNoahPeerObservationFailed), outcome.condition.Reason,
 			"a dependency failure must not be restated as a peers reason")
@@ -1932,7 +1988,7 @@ func TestApplyNoahIndexerResourcesSurvivesDependencyDeletion(t *testing.T) {
 	require.NoError(t, client.Create(ctx, recreatedSecret))
 
 	for _, cr := range []*enterpriseApi.IndexerCluster{first, second} {
-		statefulSet, _, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManager(client, cr))
+		statefulSet, _, err := applyNoahIndexerResources(ctx, client, cr, newNoahIndexerPodManagerForTest(t, client, cr))
 		require.NoError(t, err)
 		require.NotNil(t, statefulSet)
 	}

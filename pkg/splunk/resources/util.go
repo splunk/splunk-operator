@@ -158,8 +158,12 @@ func GetSplunkService(_ context.Context, cr splcommon.MetaObject, spec *enterpri
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
+	indexerCluster, isIndexerCluster := cr.(*enterpriseApi.IndexerCluster)
+	isNoahIndexerService := instanceType == splcommon.SplunkIndexer && isIndexerCluster && indexerCluster.Spec.NoahEnabled()
 	if instanceType == splcommon.SplunkIndexer {
-		if len(spec.ClusterManagerRef.Name) == 0 && len(spec.ClusterMasterRef.Name) == 0 {
+		if isNoahIndexerService {
+			partOfIdentifier = indexerCluster.Spec.NoahClusterRef.Name
+		} else if len(spec.ClusterManagerRef.Name) == 0 && len(spec.ClusterMasterRef.Name) == 0 {
 			partOfIdentifier = instanceIdentifier
 			instanceIdentifier = ""
 		} else if len(spec.ClusterManagerRef.Name) > 0 {
@@ -181,6 +185,9 @@ func GetSplunkService(_ context.Context, cr splcommon.MetaObject, spec *enterpri
 	}
 	splcommon.AppendParentMeta(service.ObjectMeta.GetObjectMeta(), cr.GetObjectMeta())
 	if instanceType == splcommon.SplunkDeployer || (instanceType == splcommon.SplunkSearchHead && isHeadless) {
+		service.Spec.PublishNotReadyAddresses = true
+	}
+	if isNoahIndexerService && isHeadless {
 		service.Spec.PublishNotReadyAddresses = true
 	}
 	service.SetOwnerReferences(append(service.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
