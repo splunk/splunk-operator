@@ -54,6 +54,28 @@ func init() {
 	initGlobalResourceTracker()
 }
 
+type mockEvent struct {
+	eventType string
+	reason    string
+	message   string
+}
+
+type mockEventRecorder struct {
+	events []mockEvent
+}
+
+func (m *mockEventRecorder) Event(object pkgruntime.Object, eventType, reason, message string) {
+	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: message})
+}
+
+func (m *mockEventRecorder) Eventf(object pkgruntime.Object, eventType, reason, messageFmt string, args ...interface{}) {
+	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: fmt.Sprintf(messageFmt, args...)})
+}
+
+func (m *mockEventRecorder) AnnotatedEventf(object pkgruntime.Object, annotations map[string]string, eventType, reason, messageFmt string, args ...interface{}) {
+	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: fmt.Sprintf(messageFmt, args...)})
+}
+
 func TestGetRemoteStorageClient(t *testing.T) {
 	ctx := context.TODO()
 	c := spltest.NewMockClient()

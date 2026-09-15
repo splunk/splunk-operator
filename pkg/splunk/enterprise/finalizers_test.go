@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -475,7 +475,7 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 	rerr := errors.New(splcommon.Rerr)
 	c := spltest.NewMockClient()
 	c.InduceErrorKind[splcommon.MockClientInduceErrorList] = rerr
-	err := DeleteSplunkPvc(ctx, &cr, c)
+	err := k8sops.DeleteSplunkPvc(ctx, &cr, c)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -493,7 +493,7 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 		},
 	}
 	c.ListObj = &pvclist
-	err = DeleteSplunkPvc(ctx, &cr, c)
+	err = k8sops.DeleteSplunkPvc(ctx, &cr, c)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -503,7 +503,7 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 	// License Master
 	c.InduceErrorKind[splcommon.MockClientInduceErrorList] = rerr
 	lmasCr := &enterpriseApiV3.LicenseMaster{}
-	err = DeleteSplunkPvc(ctx, lmasCr, c)
+	err = k8sops.DeleteSplunkPvc(ctx, lmasCr, c)
 	if err != nil {
 		t.Errorf("Incorrect kind, but no expected error")
 	}
@@ -513,7 +513,7 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 			Kind: "LicenseMaster",
 		},
 	}
-	err = DeleteSplunkPvc(ctx, lmasCr, c)
+	err = k8sops.DeleteSplunkPvc(ctx, lmasCr, c)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -524,7 +524,7 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 			Kind: "LicenseManager",
 		},
 	}
-	err = DeleteSplunkPvc(ctx, lmanCr, c)
+	err = k8sops.DeleteSplunkPvc(ctx, lmanCr, c)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -535,7 +535,7 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 			Kind: "SearchHeadCluster",
 		},
 	}
-	err = DeleteSplunkPvc(ctx, shcCr, c)
+	err = k8sops.DeleteSplunkPvc(ctx, shcCr, c)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -546,7 +546,7 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 			Kind: "ClusterManager",
 		},
 	}
-	err = DeleteSplunkPvc(ctx, cmanCr, c)
+	err = k8sops.DeleteSplunkPvc(ctx, cmanCr, c)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -557,7 +557,7 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 			Kind: "MonitoringConsole",
 		},
 	}
-	err = DeleteSplunkPvc(ctx, mcCr, c)
+	err = k8sops.DeleteSplunkPvc(ctx, mcCr, c)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -568,7 +568,7 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 			Kind: "IngestorCluster",
 		},
 	}
-	err = DeleteSplunkPvc(ctx, icCr, c)
+	err = k8sops.DeleteSplunkPvc(ctx, icCr, c)
 	if err == nil {
 		t.Errorf("Expected error")
 	}

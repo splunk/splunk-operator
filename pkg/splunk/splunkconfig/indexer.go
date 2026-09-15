@@ -15,7 +15,20 @@
 
 package splunkconfig
 
-import "github.com/splunk/splunk-operator/pkg/splunk/common"
+import (
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/splunk/common"
+)
+
+// BuildSmartBusConfig creates the structural and credential-only configuration
+// entries used by IndexerCluster pods.
+func BuildSmartBusConfig(queue *enterpriseApi.QueueSpec, objectStorage *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (structural, credentials []common.ConfFileEntry, err error) {
+	builder, err := NewSmartBusConfBuilder(queue, objectStorage)
+	if err != nil {
+		return nil, nil, err
+	}
+	return IndexerConf(builder), IndexerCredentialsConf(builder, accessKey, secretKey), nil
+}
 
 // IndexerConf returns the full set of default.yml ConfFileEntries for an IndexerCluster.
 func IndexerConf(builder SmartBusConfBuilder) []common.ConfFileEntry {

@@ -15,6 +15,6 @@
 
 /*
 Package indexercluster owns the reconcile loop for the IndexerCluster CR.
-Migrated from enterprise.ApplyIndexerCluster().
+Owns the IndexerCluster request-level Apply entry point.
 */
 package indexercluster

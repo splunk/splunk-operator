@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,6 +46,7 @@ import (
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -1655,7 +1656,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		t.Errorf("update should not have returned error; err=%v", err)
 	}
 
-	check, err := UpgradePathValidation(ctx, client, clusterManager, clusterManager.Spec.CommonSplunkSpec, nil)
+	check, err := upgrade.UpgradePathValidation(ctx, client, clusterManager, clusterManager.Spec.CommonSplunkSpec, nil)
 
 	if err != nil {
 		t.Errorf("Unexpected upgradeScenario error %v", err)
