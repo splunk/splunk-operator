@@ -27,7 +27,7 @@ import (
 
 const (
 	// DefaultCertManagerVersion is the default cert-manager release to install.
-	DefaultCertManagerVersion = "v1.21.1"
+	DefaultCertManagerVersion = "v1.21.2"
 
 	certManagerReadyTimeout = 120 * time.Second
 )
