@@ -26,6 +26,8 @@ import (
 )
 
 const (
+	acceptedGeneralTerms = "--accept-sgt-current-at-splunk-com"
+
 	testStack1ClusterManagerService             = "Service-test-splunk-stack1-" + splcommon.ClusterManager + "-service"
 	testStack1ClusterManagerStatefulSet         = "StatefulSet-test-splunk-stack1-" + splcommon.ClusterManager
 	testStack1ClusterManagerConfigMapSmartStore = "ConfigMap-test-splunk-stack1-clustermaster-smartstore"

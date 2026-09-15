@@ -35,6 +35,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/client/noah"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -56,7 +57,7 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	previousPhase := cr.Status.Phase
 	previousReplicas := cr.Status.Replicas
 
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "IndexerCluster"
 
@@ -95,7 +96,7 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 
 	if cr.GetDeletionTimestamp() != nil {
-		if cleanupErr := DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer); cleanupErr != nil {
+		if cleanupErr := k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkIndexer); cleanupErr != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Failed to clean up owned resources")
 			return result, cleanupErr
 		}
@@ -108,17 +109,16 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 		return result, deletionErr
 	}
 
-	podManager := newNoahIndexerPodManager(client, cr)
-	runtime, dependencyErr := resolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
-	if dependencyErr != nil {
-		if outcome, outcomeErr, handled := noahIndexerOutcomeFromError(dependencyErr, previousPhase); handled {
-			setOutcome(outcome)
-			return result, outcomeErr
+	dependency := reconcileutil.ResolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+	if dependency.Runtime == nil {
+		if !dependency.StateKnown {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve Noah dependencies")
+			return result, dependency.ReconcileErr
 		}
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve Noah dependencies")
-		return result, dependencyErr
+		setOutcome(noahIndexerDependencyOutcome(dependency))
+		return result, dependency.ReconcileErr
 	}
-	podManager.setRuntime(runtime)
+	podManager := newNoahIndexerPodManager(client, cr, dependency.Runtime)
 
 	statefulSet, phase, applyErr := applyNoahIndexerResources(ctx, client, cr, podManager)
 	if applyErr != nil {
@@ -161,14 +161,9 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 }
 
 func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, podManager *noahIndexerPodManager) (*appsv1.StatefulSet, enterpriseApi.Phase, error) {
-	runtime, err := podManager.noahRuntime(ctx)
-	if err != nil {
-		return nil, enterpriseApi.PhaseError, err
-	}
-
 	if cr.Spec.LicenseManagerRef.Name != "" {
 		statefulSetKey := types.NamespacedName{
-			Name:      GetSplunkStatefulsetName(SplunkIndexer, cr.Name),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkIndexer, cr.Name),
 			Namespace: cr.Namespace,
 		}
 		currentStatefulSet := &appsv1.StatefulSet{}
@@ -185,7 +180,7 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 		}
 	}
 
-	if _, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer); err != nil {
+	if _, err := k8sops.ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer); err != nil {
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("apply Splunk config: %w", err)
 	}
 
@@ -197,13 +192,13 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 		{headless: false, name: "regular"},
 	}
 	for _, service := range services {
-		if err := k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, service.headless)); err != nil {
+		if err := k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer, service.headless)); err != nil {
 			return nil, enterpriseApi.PhaseError, fmt.Errorf("apply %s Service: %w", service.name, err)
 		}
 	}
 
-	noahSpec := runtime.Spec()
-	defaultsConfigMap, defaultsSecret, err := ensureNoahIndexerDefaults(ctx, client, cr, noahSpec, string(runtime.Credential()))
+	noahSpec := podManager.runtime.Spec()
+	defaultsConfigMap, defaultsSecret, err := ensureNoahIndexerDefaults(ctx, client, cr, noahSpec, string(podManager.runtime.Credential()))
 	if err != nil {
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("ensure indexer defaults: %w", err)
 	}
@@ -357,8 +352,15 @@ var (
 	_ splcommon.StatefulSetScaleDownPVCPolicy = (*noahIndexerPodManager)(nil)
 )
 
-func newNoahIndexerPodManager(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) *noahIndexerPodManager {
-	return &noahIndexerPodManager{client: client, cr: cr}
+func newNoahIndexerPodManager(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, runtime *configworkflow.NoahRuntime) *noahIndexerPodManager {
+	spec := runtime.Spec()
+	return &noahIndexerPodManager{
+		client:           client,
+		cr:               cr,
+		runtime:          runtime,
+		cacheWarmEnabled: noahCacheWarmScaleOutEnabled(spec),
+		cacheWarmTimeout: noahCacheWarmScaleOutTimeout(spec),
+	}
 }
 
 // Update applies the desired StatefulSet and delegates existing-workload
@@ -476,12 +478,7 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, _ int32) 
 		return false, newNoahIndexerOperationError(err, enterpriseApi.PhaseScalingDown)
 	}
 
-	runtime, err := mgr.noahRuntime(ctx)
-	if err != nil {
-		return false, newNoahIndexerOperationError(err, enterpriseApi.PhaseScalingDown)
-	}
-
-	noahClient, err := runtime.Client()
+	noahClient, err := mgr.runtime.Client()
 	if err != nil {
 		return false, newNoahIndexerOperationError(err, enterpriseApi.PhaseScalingDown)
 	}
@@ -594,11 +591,6 @@ func (mgr *noahIndexerPodManager) observeReady(ctx context.Context, appliedRepli
 }
 
 func (mgr *noahIndexerPodManager) observePeers(ctx context.Context, replicas int32) (indexerworkflow.NoahMembership, error) {
-	runtime, err := mgr.noahRuntime(ctx)
-	if err != nil {
-		return indexerworkflow.NoahMembership{}, err
-	}
-
 	expectedPeers, err := currentNoahIndexerPeerIncarnations(ctx, mgr.client, replicas, mgr.statefulSet)
 	if err != nil {
 		return indexerworkflow.NoahMembership{}, err
@@ -607,7 +599,7 @@ func (mgr *noahIndexerPodManager) observePeers(ctx context.Context, replicas int
 		return indexerworkflow.NoahMembership{}, nil
 	}
 
-	noahClient, err := runtime.Client()
+	noahClient, err := mgr.runtime.Client()
 	if err != nil {
 		return indexerworkflow.NoahMembership{}, err
 	}
@@ -623,27 +615,6 @@ func (mgr *noahIndexerPodManager) observePeers(ctx context.Context, replicas int
 	}, time.Now())
 
 	return observation, nil
-}
-
-func (mgr *noahIndexerPodManager) noahRuntime(ctx context.Context) (*configworkflow.NoahRuntime, error) {
-	if mgr.runtime != nil {
-		return mgr.runtime, nil
-	}
-
-	runtime, err := configworkflow.ResolveNoahRuntime(ctx, mgr.client, mgr.cr.GetNamespace(), *mgr.cr.Spec.NoahClusterRef)
-	if err != nil {
-		return nil, err
-	}
-	mgr.setRuntime(runtime)
-
-	return runtime, nil
-}
-
-func (mgr *noahIndexerPodManager) setRuntime(runtime *configworkflow.NoahRuntime) {
-	mgr.runtime = runtime
-	spec := runtime.Spec()
-	mgr.cacheWarmEnabled = noahCacheWarmScaleOutEnabled(spec)
-	mgr.cacheWarmTimeout = noahCacheWarmScaleOutTimeout(spec)
 }
 
 // validateNoahIndexerUpgradePath preserves the common LicenseManager upgrade
@@ -668,7 +639,7 @@ func validateNoahIndexerUpgradePath(ctx context.Context, client splcommon.Contro
 		return false, err
 	}
 
-	image, err := getCurrentImage(ctx, client, licenseManager, SplunkLicenseManager)
+	image, err := getCurrentImage(ctx, client, licenseManager, splcommon.SplunkLicenseManager)
 	if err != nil {
 		return false, fmt.Errorf("get LicenseManager %s image: %w", key, err)
 	}
@@ -720,28 +691,6 @@ func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, applie
 }
 
 func noahIndexerOutcomeFromError(err error, fallbackPhase enterpriseApi.Phase) (noahIndexerOutcome, error, bool) {
-	if dependencyOutcome, handled := noahDependencyOutcome(err); handled {
-		requeueAfter := time.Duration(0)
-		if dependencyOutcome.phase == enterpriseApi.PhasePending {
-			requeueAfter = noahIndexerPollInterval
-		}
-		// resolveNoahDependency reports the failure itself as
-		// NoahDependencyResolved, so this must not restate it as a peers reason.
-		// Peer readiness still becomes unknown though: without a usable
-		// dependency no peer was observed this pass, and leaving a stale True
-		// behind would advertise peers as up while Noah is unreachable.
-		return noahIndexerOutcome{
-			phase:        dependencyOutcome.phase,
-			phaseMessage: dependencyOutcome.message,
-			condition: newNoahPeersReadyCondition(
-				metav1.ConditionUnknown,
-				enterpriseApi.ReasonNoahPeerObservationFailed,
-				"Noah peers were not observed because the Noah dependency is unavailable",
-			),
-			requeueAfter: requeueAfter,
-		}, dependencyOutcome.err, true
-	}
-
 	if cacheWarmTimeoutErr, ok := errors.AsType[*noahIndexerCacheWarmTimeoutError](err); ok {
 		message := cacheWarmTimeoutErr.Error()
 		return noahIndexerOutcome{
@@ -818,6 +767,23 @@ func noahIndexerOutcomeFromError(err error, fallbackPhase enterpriseApi.Phase) (
 	}
 
 	return noahIndexerOutcome{}, err, false
+}
+
+func noahIndexerDependencyOutcome(dependency reconcileutil.NoahDependencyResult) noahIndexerOutcome {
+	requeueAfter := time.Duration(0)
+	if dependency.Phase == enterpriseApi.PhasePending {
+		requeueAfter = noahIndexerPollInterval
+	}
+	return noahIndexerOutcome{
+		phase:        dependency.Phase,
+		phaseMessage: dependency.Message,
+		condition: newNoahPeersReadyCondition(
+			metav1.ConditionUnknown,
+			enterpriseApi.ReasonNoahPeerObservationFailed,
+			"Noah peers were not observed because the Noah dependency is unavailable",
+		),
+		requeueAfter: requeueAfter,
+	}
 }
 
 func noahIndexerLifecyclePhase(phase enterpriseApi.Phase) enterpriseApi.Phase {
