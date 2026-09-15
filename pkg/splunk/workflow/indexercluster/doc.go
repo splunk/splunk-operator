@@ -14,7 +14,15 @@
 // limitations under the License.
 
 /*
-Package indexercluster implements pure indexer membership and lifecycle policy,
-including peer incarnation, decommission, rebalance, and scaling decisions.
+Package indexercluster implements multi-step IndexerCluster workflows: peer
+incarnation, decommission, rebalance, scaling, and secret synchronization.
+
+This is intentionally a domain-specific workflow package. It accepts the
+IndexerCluster API type and owns only the state transitions and Splunk API
+operations required by the pod-manager contract; reconcile/indexercluster owns
+Kubernetes object application, status persistence, and request orchestration.
+
+// TODO: Once all CRs have migrated from enterprise, revisit this boundary and
+// make the workflow CR-agnostic if needed.
 */
 package indexercluster

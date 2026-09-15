@@ -14,7 +14,13 @@
 // limitations under the License.
 
 /*
-Package upgrade implements rolling upgrade sequencing and version gating logic.
-Migrated from enterprise/upgrade.go.
+Package upgrade contains the shared upgrade-path validation used by the
+Enterprise CR implementations.
+
+The current implementation retains its existing CRD and Kubernetes-client
+inputs and receives the event publisher through context to avoid changing
+upgrade behavior. TODO: once all CRs have migrated from enterprise, revisit
+this boundary and split it into pure decision logic plus caller-owned
+Kubernetes orchestration if needed.
 */
 package upgrade

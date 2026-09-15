@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,6 +45,9 @@ const (
 // InstanceType is a type alias preserved for backward compatibility.
 // New code should use splcommon.InstanceType directly.
 type InstanceType = splcommon.InstanceType
+
+// NewSplunkClientFunc is shared by the remaining legacy pod managers.
+type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
 const (
 	SplunkStandalone        = splcommon.SplunkStandalone

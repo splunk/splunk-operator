@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package indexercluster
 
 import (
 	"context"
@@ -49,10 +49,10 @@ const (
 	defaultNoahCacheWarmScaleOutTimeoutSeconds = int32(3600)
 )
 
-// ApplyNoahIndexerCluster reconciles the Kubernetes resources required to
+// applyNoahIndexerCluster reconciles the Kubernetes resources required to
 // start and roll out a Noah-selected IndexerCluster and verifies its expected
 // Noah peers. Scale-down is development-only and does not decommission peers.
-func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (result reconcile.Result, err error) {
+func applyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (result reconcile.Result, err error) {
 	result = reconcile.Result{RequeueAfter: noahIndexerPollInterval}
 	previousPhase := cr.Status.Phase
 	previousReplicas := cr.Status.Replicas
@@ -84,7 +84,7 @@ func ApplyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	if cr.Spec.Replicas == 0 {
 		cr.Spec.Replicas = 1
 	}
-	if err = validateCommonSplunkSpec(ctx, client, &cr.Spec.CommonSplunkSpec, cr); err != nil {
+	if err = reconcileutil.ValidateCommonSplunkSpec(ctx, client, &cr.Spec.CommonSplunkSpec, cr); err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Indexer Cluster spec validation failed")
 		return reconcile.Result{}, splcommon.NewTerminalError(
 			splcommon.EventReasonValidateSpecFailed,
@@ -206,6 +206,7 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr,
 		defaultsConfigMap.AsStatefulSetOption(),
 		defaultsSecret.AsStatefulSetOption(),
+		withNoahIndexerLabels(cr.Name, cr.Spec.NoahClusterRef.Name),
 		resources.WithNoahPodIdentity(os.Getenv(resources.ClusterDomainEnvName)),
 	)
 	if err != nil {
@@ -222,13 +223,9 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 	return statefulSet, phase, nil
 }
 
-// ensureNoahIndexerDefaults keeps Noah-specific credential aggregation out of
-// the shared IndexerCluster defaults path. Noah and optional SmartBus settings
-// are rendered into one ConfigMap and one credentials Secret because each
-// defaults resource type has a single fixed pod mount.
 func ensureNoahIndexerDefaults(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, noahSpec enterpriseApi.NoahClusterSpec, credential string) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
-	entries := splunkconfig.NoahIndexerConf(noahSpec.Endpoint, noahSpec.Tenant)
-	credentials := splunkconfig.NoahCredentialsConf(credential)
+	structuralEntries := splunkconfig.NoahIndexerConf(noahSpec.Endpoint, noahSpec.Tenant)
+	credentialEntries := splunkconfig.NoahCredentialsConf(credential)
 
 	if (cr.Spec.QueueRef != nil && cr.Spec.QueueRef.Name != "") ||
 		(cr.Spec.ObjectStorageRef != nil && cr.Spec.ObjectStorageRef.Name != "") {
@@ -244,28 +241,47 @@ func ensureNoahIndexerDefaults(ctx context.Context, client splcommon.ControllerC
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
 		}
-
-		builder, err := splunkconfig.NewSmartBusConfBuilder(&resolved.Queue, &resolved.OS)
+		smartBusEntries, smartBusCredentialEntries, err := splunkconfig.BuildSmartBusConfig(&resolved.Queue, &resolved.OS, resolved.AccessKey, resolved.SecretKey)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
-
-		entries = append(entries, splunkconfig.IndexerConf(builder)...)
-		credentials = append(credentials, splunkconfig.IndexerCredentialsConf(builder, resolved.AccessKey, resolved.SecretKey)...)
+		structuralEntries = append(structuralEntries, smartBusEntries...)
+		credentialEntries = append(credentialEntries, smartBusCredentialEntries...)
 	}
 
 	owner := splcommon.AsOwner(cr, true)
-	configMap, err := configworkflow.EnsureConfigMap(ctx, client, cr, entries, &owner, resources.WithDictionaryConf())
+	configMap, err := configworkflow.EnsureConfigMap(ctx, client, cr, structuralEntries, &owner, resources.WithDictionaryConf())
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 	}
-
-	secret, err := configworkflow.EnsureSecret(ctx, client, cr, credentials, &owner, resources.WithDictionaryConf())
+	secret, err := configworkflow.EnsureSecret(ctx, client, cr, credentialEntries, &owner, resources.WithDictionaryConf())
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 	}
-
 	return configMap, secret, nil
+}
+
+func withNoahIndexerLabels(indexerClusterName, noahClusterName string) resources.StatefulSetOption {
+	labels := resources.GetSplunkLabels(indexerClusterName, splcommon.SplunkIndexer, noahClusterName)
+	return func(statefulSet *appsv1.StatefulSet) {
+		statefulSet.Labels = mergeNoahIndexerLabels(statefulSet.Labels, labels)
+		statefulSet.Spec.Selector.MatchLabels = labels
+		statefulSet.Spec.Template.Labels = mergeNoahIndexerLabels(statefulSet.Spec.Template.Labels, labels)
+		for i := range statefulSet.Spec.VolumeClaimTemplates {
+			claim := &statefulSet.Spec.VolumeClaimTemplates[i]
+			claim.Labels = mergeNoahIndexerLabels(claim.Labels, labels)
+		}
+	}
+}
+
+func mergeNoahIndexerLabels(current, desired map[string]string) map[string]string {
+	if current == nil {
+		current = make(map[string]string, len(desired))
+	}
+	for key, value := range desired {
+		current[key] = value
+	}
+	return current
 }
 
 func noahIndexerStatefulSetReplicas(statefulSet *appsv1.StatefulSet) (int32, error) {
@@ -639,10 +655,18 @@ func validateNoahIndexerUpgradePath(ctx context.Context, client splcommon.Contro
 		return false, err
 	}
 
-	image, err := getCurrentImage(ctx, client, licenseManager, splcommon.SplunkLicenseManager)
-	if err != nil {
-		return false, fmt.Errorf("get LicenseManager %s image: %w", key, err)
+	statefulSet := &appsv1.StatefulSet{}
+	statefulSetKey := types.NamespacedName{
+		Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkLicenseManager, licenseManager.Name),
+		Namespace: licenseManager.Namespace,
 	}
+	if err := client.Get(ctx, statefulSetKey, statefulSet); err != nil {
+		return false, fmt.Errorf("get LicenseManager %s StatefulSet: %w", key, err)
+	}
+	if len(statefulSet.Spec.Template.Spec.Containers) == 0 {
+		return false, fmt.Errorf("LicenseManager %s StatefulSet has no containers", key)
+	}
+	image := statefulSet.Spec.Template.Spec.Containers[0].Image
 	if image != cr.Spec.Image {
 		return false, fmt.Errorf("license manager current image (%s) is different than CR image (%s)", image, cr.Spec.Image)
 	}

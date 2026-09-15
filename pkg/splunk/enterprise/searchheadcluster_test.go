@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -2022,11 +2022,6 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest7, 200, string(response2), nil)
 	mclient.AddHandler(wantRequest8, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest9, 200, string(response3), nil)
-
-	// mock the verify RF peer function
-	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
-		return nil
-	}
 
 	// mock new search pod manager
 	newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {

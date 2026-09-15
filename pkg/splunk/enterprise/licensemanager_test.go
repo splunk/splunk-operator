@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -830,13 +830,6 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json", nil)
 	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
-
-	// mock the verify RF peer function
-	savedVerifyRFPeers := VerifyRFPeers
-	defer func() { VerifyRFPeers = savedVerifyRFPeers }()
-	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
-		return nil
-	}
 
 	// Mock the telapp.AddTelApp function for unit tests
 	savedAddTelApp := telapp.AddTelApp

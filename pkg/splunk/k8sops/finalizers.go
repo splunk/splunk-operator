@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,11 +21,51 @@ import (
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func init() {
-	SplunkFinalizerRegistry = make(map[string]SplunkFinalizerMethod)
+	SplunkFinalizerRegistry = map[string]SplunkFinalizerMethod{
+		"enterprise.splunk.com/delete-pvc": DeleteSplunkPvc,
+	}
+}
+
+// DeleteSplunkPvc removes all PersistentVolumeClaims associated with a
+// Splunk custom resource. It is shared by every CR reconcile package.
+func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) error {
+	logger := logging.FromContext(ctx).With("func", "DeleteSplunkPvc")
+	components := map[string][]string{
+		"Standalone":        {"standalone"},
+		"LicenseMaster":     {splcommon.LicenseManager},
+		"LicenseManager":    {"license-manager"},
+		"SearchHeadCluster": {"search-head", "deployer"},
+		"IndexerCluster":    {"indexer"},
+		"ClusterManager":    {"cluster-manager"},
+		"ClusterMaster":     {splcommon.ClusterManager},
+		"MonitoringConsole": {"monitoring-console"},
+		"IngestorCluster":   {"ingestor"},
+	}
+	if len(components[cr.GetObjectKind().GroupVersionKind().Kind]) == 0 {
+		logger.DebugContext(ctx, "skipping PVC removal")
+		return nil
+	}
+	for _, component := range components[cr.GetObjectKind().GroupVersionKind().Kind] {
+		labels := map[string]string{"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), component)}
+		listOpts := []client.ListOption{client.InNamespace(cr.GetNamespace()), client.MatchingLabels(labels)}
+		pvcList := corev1.PersistentVolumeClaimList{}
+		if err := c.List(ctx, &pvcList, listOpts...); err != nil {
+			return err
+		}
+		for i := range pvcList.Items {
+			logger.InfoContext(ctx, "deleting PVC", "name", pvcList.Items[i].ObjectMeta.Name)
+			if err := c.Delete(ctx, &pvcList.Items[i]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // SplunkFinalizerMethod is used to register finalizer callbacks in the registry

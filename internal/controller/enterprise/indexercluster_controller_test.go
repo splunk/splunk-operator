@@ -1,3 +1,18 @@
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package controller
 
 import (
@@ -7,12 +22,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	indexercluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/indexercluster"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -27,6 +42,10 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
+var defaultIndexerClusterApply = indexercluster.Apply
+var defaultIndexerClusterApplyManager = indexercluster.ApplyIndexerClusterManager
+var defaultIndexerClusterApplyLegacy = indexercluster.ApplyIndexerCluster
+
 var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
 
 	BeforeEach(func() {
@@ -34,14 +53,16 @@ var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
 	})
 
 	AfterEach(func() {
-
+		indexercluster.Apply = defaultIndexerClusterApply
+		indexercluster.ApplyIndexerClusterManager = defaultIndexerClusterApplyManager
+		indexercluster.ApplyIndexerCluster = defaultIndexerClusterApplyLegacy
 	})
 
 	Context("IndexerCluster Management", func() {
 
 		It("Get IndexerCluster custom resource should failed", func() {
 			namespace := "ns-splunk-ic-1"
-			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+			indexercluster.Apply = func(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -54,7 +75,7 @@ var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
 
 		It("Create IndexerCluster custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-ic-2"
-			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+			indexercluster.Apply = func(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -74,7 +95,7 @@ var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
 
 		It("Create IndexerCluster custom resource should succeeded", func() {
 			namespace := "ns-splunk-ic-3"
-			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+			indexercluster.Apply = func(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -87,7 +108,7 @@ var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
 
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-ic-4"
-			ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+			indexercluster.ApplyIndexerCluster = func(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -153,7 +174,7 @@ var _ = Describe("IndexerCluster Controller", Label("integration"), func() {
 			ssSpec := testutils.NewIndexerCluster("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 
-			ApplyIndexerCluster = func(ctx context.Context, cl client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+			indexercluster.ApplyIndexerCluster = func(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("missing ClusterManagerRef"))
 			}
 
