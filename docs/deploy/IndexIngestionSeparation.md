@@ -19,6 +19,9 @@ This separation enables:
 # Important Note
 
 > [!WARNING]
+> **Index and Ingestion separation is currently supported only on AWS. Other cloud providers are not supported at this time.**
+
+> [!WARNING]
 > **At this time, this guide focuses on configuring new separated topologies. A supported migration strategy for existing deployments has not yet been established.**
 
 # Queue
