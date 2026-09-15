@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package indexercluster
 
 import (
 	"context"
@@ -48,6 +48,8 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 )
+
+const acceptedGeneralTerms = "--accept-sgt-current-at-splunk-com"
 
 type noahIndexerScaleOutTestOptions struct {
 	peerStatus       noahclient.PeerStatus
@@ -98,7 +100,7 @@ func newNoahIndexerDependencyTestCR(generation int64, noahClusterName string) *e
 			},
 		},
 	}
-	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	return cr
 }
 
@@ -847,7 +849,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 			},
 		},
 	}
-	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	splunkCredential := t.Name()
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cr.Namespace)
 	require.NoError(t, err)
@@ -1026,7 +1028,7 @@ func TestApplyNoahIndexerClusterReportsMissingDependency(t *testing.T) {
 	cr := newNoahIndexerDependencyTestCR(7, "missing-noah")
 	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 
-	_, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
+	_, err := applyNoahIndexerCluster(t.Context(), client, cr)
 	require.NoError(t, err, "a missing dependency is retryable, not terminal")
 
 	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
@@ -1052,7 +1054,7 @@ func TestApplyNoahIndexerClusterPreservesPeerStatusOnUnknownDependencyReadFailur
 	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = assert.AnError
 
-	_, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
+	_, err := applyNoahIndexerCluster(t.Context(), client, cr)
 	require.Error(t, err)
 
 	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
@@ -1089,7 +1091,7 @@ func TestApplyNoahIndexerClusterReportsResolvedDependency(t *testing.T) {
 	cr := newNoahIndexerDependencyTestCR(5, "noah")
 	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 
-	result, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
+	result, err := applyNoahIndexerCluster(t.Context(), client, cr)
 	require.NoError(t, err)
 	assert.NotZero(t, result.RequeueAfter)
 
@@ -1108,7 +1110,7 @@ func TestApplyNoahIndexerClusterDependencyLossClearsStalePeersReady(t *testing.T
 		metav1.ConditionTrue, enterpriseApi.ReasonNoahPeersReady, "All expected Noah peers are up"))
 	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 
-	_, err := ApplyNoahIndexerCluster(t.Context(), client, cr)
+	_, err := applyNoahIndexerCluster(t.Context(), client, cr)
 	require.NoError(t, err, "a missing dependency is retryable, not terminal")
 
 	peers := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahPeersReady)
@@ -1902,7 +1904,7 @@ func TestNoahIndexerResourcesRecoverAfterDependencyRecreation(t *testing.T) {
 			},
 		},
 	}
-	setVolumeDefaults(&first.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&first.Spec.CommonSplunkSpec)
 
 	second := &enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "IndexerCluster"},
@@ -1919,7 +1921,7 @@ func TestNoahIndexerResourcesRecoverAfterDependencyRecreation(t *testing.T) {
 			},
 		},
 	}
-	setVolumeDefaults(&second.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&second.Spec.CommonSplunkSpec)
 
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, first.Namespace)
 	require.NoError(t, err)

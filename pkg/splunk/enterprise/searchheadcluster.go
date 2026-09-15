@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,9 +30,12 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	// TODO: Remove this temporary dependency once all CRs have migrated from enterprise.
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -190,7 +193,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
 	if !statefulSet.CreationTimestamp.IsZero() {
-		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+		continueReconcile, err := upgrade.UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if err != nil || !continueReconcile {
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
@@ -476,7 +479,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
 func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, ToCertEntries(cr.Spec.Certs, certs.AutoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
@@ -531,7 +534,7 @@ func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	// autoDNSNamesDeployer alone: this runs first, and EnsureCertificate is
 	// create-only, so whichever call creates the cert first fixes its SANs
 	// for the shared secret's lifetime.
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, ToCertEntries(cr.Spec.Certs, certs.AutoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}

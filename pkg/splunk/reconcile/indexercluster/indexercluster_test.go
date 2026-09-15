@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package indexercluster
 
 import (
 	"context"
@@ -50,26 +50,25 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
-	"gopkg.in/yaml.v3"
 )
 
 func init() {
 	// Re-Assigning GetReadinessScriptLocation, GetLivenessScriptLocation, GetStartupScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation
-	GetReadinessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
+	splutil.GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../" + readinessScriptLocation)
 		return fileLocation
 	}
-	GetLivenessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
+	splutil.GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../" + livenessScriptLocation)
 		return fileLocation
 	}
-	GetStartupScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
+	splutil.GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../" + startupScriptLocation)
 		return fileLocation
 	}
 }
@@ -1594,12 +1593,12 @@ func TestApplyIndexerClusterValidationFailureReturnsTerminalError(t *testing.T) 
 
 	_, err := ApplyIndexerCluster(context.TODO(), c, &idxc)
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
-		t.Fatalf("expected terminal error from validation failure, got: %v", err)
+		t.Errorf("expected terminal error from validation failure, got: %v", err)
 	}
 
 	_, err = ApplyIndexerCluster(context.TODO(), c, &idxc)
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
-		t.Fatalf("expected terminal error from persisting validation failure, got: %v", err)
+		t.Errorf("expected terminal error from persisting validation failure, got: %v", err)
 	}
 }
 
@@ -1619,7 +1618,7 @@ func TestGetIndexerClusterList(t *testing.T) {
 
 	client.ListObj = idxcList
 
-	objectList, err := getIndexerClusterList(ctx, client, &idxc, listOpts)
+	objectList, err := k8sops.GetIndexerClusterList(ctx, client, &idxc, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
@@ -2257,7 +2256,7 @@ func TestPasswordSyncCompleted(t *testing.T) {
 
 	// Create a mock event recorder to capture events
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher := newTestEventPublisher(recorder)
 
 	cm := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -2363,7 +2362,7 @@ func TestClusterQuorumRestoredClusterInitialized(t *testing.T) {
 
 	// Create a mock event recorder to capture events
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher := newTestEventPublisher(recorder)
 
 	cm := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -2498,7 +2497,7 @@ func TestClusterQuorumLostEvent(t *testing.T) {
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher := newTestEventPublisher(recorder)
 
 	cm := enterpriseApi.ClusterManager{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterManager"},
@@ -2604,7 +2603,7 @@ func TestScalingBlockedRFEvent(t *testing.T) {
 
 	ctx := context.TODO()
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher := newTestEventPublisher(recorder)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	// Use the same fixture and URL as TestVerifyRFPeers
@@ -2653,7 +2652,7 @@ func TestScalingBlockedRFEvent(t *testing.T) {
 func TestIdxcScaledUpScaledDownEvent(t *testing.T) {
 	ctx := context.TODO()
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher := newTestEventPublisher(recorder)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	crName := "test-idxc"
@@ -2770,7 +2769,7 @@ func TestIdxcPasswordSyncFailedEvent(t *testing.T) {
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher := newTestEventPublisher(recorder)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	// Create namespace scoped secret
@@ -3063,62 +3062,6 @@ func TestEnsureIndexerCredentialsSecret_NoQueueRef(t *testing.T) {
 	assert.Empty(t, credsSecret.Name, "no queueRef → no credentials Secret")
 }
 
-func TestEnsureIndexerDefaultsCombinesNoahAndSmartBusConfig(t *testing.T) {
-	ctx := context.TODO()
-
-	sch := pkgruntime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(sch))
-	utilruntime.Must(corev1.AddToScheme(sch))
-	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	c := newFakeClientBuilder(sch).Build()
-
-	queue, objectStorage := newQueueOSFixture(t, ctx, c, "queue", "queue-secrets")
-	cr := &enterpriseApi.IndexerCluster{
-		TypeMeta:   metav1.TypeMeta{Kind: "IndexerCluster"},
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
-		Spec: enterpriseApi.IndexerClusterSpec{
-			Replicas:         1,
-			NoahClusterRef:   &corev1.LocalObjectReference{Name: "noah"},
-			QueueRef:         &corev1.ObjectReference{Name: queue.Name},
-			ObjectStorageRef: &corev1.ObjectReference{Name: objectStorage.Name},
-		},
-	}
-
-	noahEntries := splunkconfig.NoahIndexerConf("https://noah.example.invalid:8080", "placeholder")
-	defaultsConfigMap, _, err := ensureIndexerDefaults(ctx, c, cr, noahEntries...)
-	require.NoError(t, err)
-	require.NotEmpty(t, defaultsConfigMap.Name)
-
-	stored := &corev1.ConfigMap{}
-	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: defaultsConfigMap.Name}, stored))
-	var defaults struct {
-		Splunk struct {
-			Conf map[string]splcommon.ConfFileValue `yaml:"conf"`
-		} `yaml:"splunk"`
-	}
-	require.NoError(t, yaml.Unmarshal([]byte(stored.Data["conf-defaults.yml"]), &defaults))
-
-	confFiles := make(map[string]bool, len(defaults.Splunk.Conf))
-	for name := range defaults.Splunk.Conf {
-		confFiles[name] = true
-	}
-	assert.Equal(t, map[string]bool{
-		"server":       true,
-		"inputs":       true,
-		"outputs":      true,
-		"default-mode": true,
-	}, confFiles)
-	server := defaults.Splunk.Conf["server"]
-	assert.Empty(t, server.Directory)
-	assert.Equal(t, "false", server.Stanzas["noahService"]["disabled"])
-	assert.Equal(t, "https://noah.example.invalid:8080", server.Stanzas["noahService"]["uri"])
-	assert.Equal(t, "placeholder", server.Stanzas["noahService"]["tenant"])
-	assert.Equal(t, "30", server.Stanzas["noahService"]["heartbeatPeriod"])
-	assert.Equal(t, "false", server.Stanzas["noahService"]["usePeers"])
-	assert.NotContains(t, server.Stanzas, "teleport_supervisor")
-	assert.NotContains(t, stored.Data["conf-defaults.yml"], "- key: server")
-}
-
 // TestEnsureIndexerCredentialsSecret_IRSAProducesNoStaticCreds verifies that when the Queue
 // has no VolList (IRSA / workload identity), ResolveQueueAndObjectStorage leaves the keys
 // empty and no static-credential Secret is produced.
@@ -3187,7 +3130,7 @@ func TestApplyIndexerClusterManager_QueueCredsSecretLifecycle(t *testing.T) {
 
 	ctx := context.TODO()
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher := newTestEventPublisher(recorder)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	oldVerifyRFPeers := VerifyRFPeers
@@ -3403,7 +3346,7 @@ func TestIdxcQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 
 	ctx := context.TODO()
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher := newTestEventPublisher(recorder)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	oldVerifyRFPeers := VerifyRFPeers
@@ -3652,7 +3595,7 @@ func TestIdxcQueueRefRemovedGCsResources(t *testing.T) {
 
 	ctx := context.TODO()
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher := newTestEventPublisher(recorder)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	oldVerifyRFPeers := VerifyRFPeers

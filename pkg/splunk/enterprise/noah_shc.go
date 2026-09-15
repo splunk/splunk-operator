@@ -34,6 +34,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 )
 
 // ApplySearchHeadClusterNoah is the top-level reconciler for a
@@ -234,7 +235,7 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	// validate an upgrade against an already-existing StatefulSet" check off
 	// the search-head StatefulSet's own CreationTimestamp instead.
 	if !searchHeadStatefulSet.CreationTimestamp.IsZero() {
-		continueReconcile, validationErr := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+		continueReconcile, validationErr := upgrade.UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if validationErr != nil || !continueReconcile {
 			if validationErr == nil {
 				return enterpriseApi.PhasePending, deployerPhase, nil, nil

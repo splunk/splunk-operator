@@ -36,6 +36,8 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	// TODO: Remove this temporary dependency once all CRs have migrated from enterprise.
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 )
 
 // newSplunkClientFunc is a package-level variable for creating Splunk clients, allowing test injection.
@@ -228,7 +230,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 
 // getLicenseManagerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getLicenseManagerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (*appsv1.StatefulSet, error) {
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(SplunkLicenseManager, cr.GetName(), cr.GetNamespace(), 1)))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(SplunkLicenseManager, cr.GetName(), cr.GetNamespace(), 1)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}

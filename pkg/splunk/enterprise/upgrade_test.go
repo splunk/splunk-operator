@@ -1,3 +1,18 @@
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package enterprise
 
 import (
@@ -11,6 +26,9 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	indexercluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/indexercluster"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,6 +57,31 @@ func TestUpgradePathValidation(t *testing.T) {
 
 	client := builder.Build()
 	ctx := context.TODO()
+
+	oldVerifyRFPeersCall := indexercluster.VerifyRFPeersCall
+	oldGetClusterInfoForUpgradeCall := indexercluster.GetClusterInfoForUpgradeCall
+	oldGetClusterManagerInfoForReconcileCall := indexercluster.GetClusterManagerInfoForReconcileCall
+	oldGetClusterManagerPeersForReconcileCall := indexercluster.GetClusterManagerPeersForReconcileCall
+	defer func() {
+		indexercluster.VerifyRFPeersCall = oldVerifyRFPeersCall
+		indexercluster.GetClusterInfoForUpgradeCall = oldGetClusterInfoForUpgradeCall
+		indexercluster.GetClusterManagerInfoForReconcileCall = oldGetClusterManagerInfoForReconcileCall
+		indexercluster.GetClusterManagerPeersForReconcileCall = oldGetClusterManagerPeersForReconcileCall
+	}()
+	indexercluster.VerifyRFPeersCall = func(context.Context, splcommon.ControllerClient, *enterpriseApi.IndexerCluster) error {
+		return nil
+	}
+	indexercluster.GetClusterInfoForUpgradeCall = func(context.Context, splcommon.ControllerClient, *enterpriseApi.IndexerCluster) (*splclient.ClusterInfo, error) {
+		return &splclient.ClusterInfo{}, nil
+	}
+	indexercluster.GetClusterManagerInfoForReconcileCall = func(context.Context, splcommon.ControllerClient, *enterpriseApi.IndexerCluster) (*splclient.ClusterManagerInfo, error) {
+		return &splclient.ClusterManagerInfo{Initialized: true, IndexingReady: true, ServiceReady: true}, nil
+	}
+	indexercluster.GetClusterManagerPeersForReconcileCall = func(_ context.Context, _ splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (map[string]splclient.ClusterManagerPeerInfo, error) {
+		return map[string]splclient.ClusterManagerPeerInfo{
+			fmt.Sprintf("splunk-%s-indexer-0", cr.Name): {ID: "peer-0", Status: "Up", Searchable: true},
+		}, nil
+	}
 
 	stdln := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
@@ -197,7 +240,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplySearchHeadCluster should not have returned error; err=%v", err)
 	}
 
-	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	_, err = indexercluster.ApplyIndexerClusterManager(ctx, client, &idx)
 	// license manager statefulset is not created so if its NotFound error we are good
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("ApplyIndexerClusterManagershould not have returned error; err=%v", err)
@@ -238,7 +281,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplySearchHeadCluster should not have returned error; err=%v", err)
 	}
 
-	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	_, err = indexercluster.ApplyIndexerClusterManager(ctx, client, &idx)
 	// cluster manager statefulset is not created so if its NotFound error we are good
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("ApplyIndexerClusterManagershould not have returned error; err=%v", err)
@@ -296,12 +339,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplySearchHeadCluster should not have returned error; err=%v", err)
 	}
 
-	// mock the verify RF peer function
-	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
-		return nil
-	}
-
-	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	_, err = indexercluster.ApplyIndexerClusterManager(ctx, client, &idx)
 	// monitoring console statefulset is not created so if its NotFound error we are good
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("ApplyIndexerClusterManager should not have returned error; err=%v", err)
@@ -354,41 +392,8 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("shc is not in ready state")
 	}
 
-	// mock the verify RF peer function
-	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
-		return nil
-	}
-
-	// mock the call
-	GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
-		cinfo := &splclient.ClusterInfo{
-			MultiSite: "false",
-		}
-		return cinfo, nil
-	}
-	GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
-		response := map[string]splclient.ClusterManagerPeerInfo{
-			"splunk-test-indexer-0": {
-				ID:             "site-1",
-				Status:         "Up",
-				ActiveBundleID: "1",
-				BucketCount:    10,
-				Searchable:     true,
-			},
-		}
-		return response, err
-	}
-	GetClusterManagerInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
-		response := &splclient.ClusterManagerInfo{
-			Initialized:   true,
-			IndexingReady: true,
-			ServiceReady:  true,
-		}
-		return response, err
-	}
-
 	// search head cluster is ready, this should create statefulset but they are not ready
-	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	_, err = indexercluster.ApplyIndexerClusterManager(ctx, client, &idx)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("ApplyIndexerClusterManager should not have returned error; err=%v", err)
 	}
@@ -398,7 +403,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-indexer", idx.Name), idx.Namespace)
 
 	// search head cluster is not ready, so wait for search head cluster
-	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	_, err = indexercluster.ApplyIndexerClusterManager(ctx, client, &idx)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("ApplyIndexerClusterManager should not have returned error; err=%v", err)
 	}
@@ -537,7 +542,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("applySearchHeadCluster after update should not have returned error; err=%v", err)
 	}
-	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	_, err = indexercluster.ApplyIndexerClusterManager(ctx, client, &idx)
 	if err != nil {
 		t.Errorf("ApplyIndexerClusterManager after update should not have returned error; err=%v", err)
 	}
@@ -609,7 +614,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("applySearchHeadCluster after update should not have returned error; err=%v", err)
 	}
 
-	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	_, err = indexercluster.ApplyIndexerClusterManager(ctx, client, &idx)
 	if err != nil {
 		t.Errorf("ApplyIndexerClusterManager after update should not have returned error; err=%v", err)
 	}
@@ -681,7 +686,7 @@ func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
 		t.Fatalf("Failed to update LicenseManager status: %v", err)
 	}
 
-	continueReconcile, err := UpgradePathValidation(ctx, client, &cm, cm.Spec.CommonSplunkSpec, nil)
+	continueReconcile, err := upgrade.UpgradePathValidation(ctx, client, &cm, cm.Spec.CommonSplunkSpec, nil)
 	if err != nil {
 		t.Errorf("Expected no error when LicenseManager is transiently not Ready, got: %v", err)
 	}
@@ -700,7 +705,7 @@ func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
 		t.Fatalf("Failed to update LicenseManager StatefulSet image: %v", err)
 	}
 
-	continueReconcile, err = UpgradePathValidation(ctx, client, &cm, cm.Spec.CommonSplunkSpec, nil)
+	continueReconcile, err = upgrade.UpgradePathValidation(ctx, client, &cm, cm.Spec.CommonSplunkSpec, nil)
 	if err == nil {
 		t.Errorf("Expected an error when LicenseManager image differs from CR image")
 	}
@@ -725,7 +730,10 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	eventPublisher, err := k8sops.NewK8EventPublisherWithRecorder(recorder, &enterpriseApi.IndexerCluster{})
+	if err != nil {
+		t.Fatalf("failed to create event publisher: %v", err)
+	}
 
 	// Create ClusterManager with old image, phase Ready
 	cm := enterpriseApi.ClusterManager{
@@ -774,8 +782,7 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
-	mgr := &indexerClusterPodManager{}
-	continueReconcile, err := UpgradePathValidation(ctx, client, &idx, idx.Spec.CommonSplunkSpec, mgr)
+	continueReconcile, err := upgrade.UpgradePathValidation(ctx, client, &idx, idx.Spec.CommonSplunkSpec, nil)
 
 	if continueReconcile {
 		t.Errorf("Expected continueReconcile to be false when CM image mismatches IDX image")
