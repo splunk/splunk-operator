@@ -99,7 +99,7 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 			},
 		},
 	}
-	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 
 	dependency := reconcileutil.ResolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
 	require.NotNil(t, dependency.Runtime)
@@ -160,7 +160,7 @@ func TestApplySearchHeadClusterNoah_DeletionAbortsOnOwnerReferenceCleanupError(t
 			},
 		},
 	}
-	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 
 	_, err := ApplySearchHeadClusterNoah(ctx, client, cr)
 	require.Error(t, err)
@@ -183,7 +183,7 @@ func TestApplySearchHeadClusterNoah_PendingWhenNoahClusterMissing(t *testing.T) 
 			},
 		},
 	}
-	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 
 	result, err := ApplySearchHeadClusterNoah(t.Context(), client, cr)
@@ -220,7 +220,7 @@ func TestApplySearchHeadClusterNoah_ReportsUnknownDependencyReadFailure(t *testi
 			},
 		},
 	}
-	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = assert.AnError
 
@@ -258,7 +258,7 @@ func TestApplySearchHeadClusterNoah_ReportsResolvedDependency(t *testing.T) {
 			},
 		},
 	}
-	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 
 	result, err := ApplySearchHeadClusterNoah(t.Context(), client, cr)

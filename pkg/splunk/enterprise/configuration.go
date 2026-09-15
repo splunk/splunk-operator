@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -264,33 +264,6 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	return service
 }
 
-// setVolumeDefaults set properties in Volumes to default values
-func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
-
-	// work-around openapi validation error by ensuring it is not nil
-	if spec.Volumes == nil {
-		spec.Volumes = []corev1.Volume{}
-	}
-
-	for _, v := range spec.Volumes {
-		if v.Secret != nil {
-			if v.Secret.DefaultMode == nil {
-				perm := corev1.SecretVolumeSourceDefaultMode
-				v.Secret.DefaultMode = &perm
-			}
-			continue
-		}
-
-		if v.ConfigMap != nil {
-			if v.ConfigMap.DefaultMode == nil {
-				perm := corev1.ConfigMapVolumeSourceDefaultMode
-				v.ConfigMap.DefaultMode = &perm
-			}
-			continue
-		}
-	}
-}
-
 // ValidateImagePullPolicy checks validity of the ImagePullPolicy spec parameter, and returns error if it is invalid.
 func ValidateImagePullPolicy(imagePullPolicy *string) error {
 	// ImagePullPolicy
@@ -384,7 +357,7 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 		return err
 	}
 
-	setVolumeDefaults(spec)
+	resources.SetVolumeDefaults(spec)
 
 	return ValidateSpec(&spec.Spec, splutil.SplunkDefaultResources())
 }
@@ -2145,10 +2118,7 @@ maxGlobalRawDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalRawDataSizeMB)
 
 // validateProbe validates a generic probe values
 func validateProbe(probe *enterpriseApi.Probe) error {
-	if probe.InitialDelaySeconds < 0 || probe.TimeoutSeconds < 0 || probe.PeriodSeconds < 0 || probe.FailureThreshold < 0 {
-		return fmt.Errorf("negative values are not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.FailureThreshold)
-	}
-	return nil
+	return splcommon.ValidateProbeValues(probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.FailureThreshold)
 }
 
 // validateLivenessProbe validates the liveness probe config
