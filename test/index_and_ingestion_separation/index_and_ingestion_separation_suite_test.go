@@ -108,9 +108,12 @@ func init() {
 	awsEnvVars = []string{
 		fmt.Sprintf("AWS_REGION=%s", awsRegion),
 		fmt.Sprintf("AWS_DEFAULT_REGION=%s", awsRegion),
-		"AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token",
-		"AWS_ROLE_ARN=arn:aws:iam::",
+		"AWS_ACCESS_KEY_ID=",
+		"AWS_SECRET_ACCESS_KEY=",
 		"AWS_STS_REGIONAL_ENDPOINTS=regional",
+	}
+	if os.Getenv("AWS_SESSION_TOKEN") != "" {
+		awsEnvVars = append(awsEnvVars, "AWS_SESSION_TOKEN=")
 	}
 
 	inputsShouldNotContain = []string{

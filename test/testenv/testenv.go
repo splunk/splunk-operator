@@ -205,7 +205,6 @@ type TestEnv struct {
 	licenseFilePath            string
 	licenseCMName              string
 	s3IndexSecret              string
-	indexIngestSepSecret       string
 	kubeClient                 client.Client
 	Log                        logr.Logger
 	cleanupFuncs               []cleanupFunc
@@ -287,7 +286,6 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		licenseCMName:              envName,
 		licenseFilePath:            licenseFilePath,
 		s3IndexSecret:              "splunk-s3-index-" + envName,
-		indexIngestSepSecret:       "splunk--index-ingest-sep-" + name,
 		debug:                      os.Getenv("DEBUG"),
 		splunkProvisionAnnotations: splunkProvisionAnnotations,
 	}

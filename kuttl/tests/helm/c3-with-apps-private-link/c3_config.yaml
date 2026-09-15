@@ -17,12 +17,32 @@ sva:
     - name: shc
 indexerCluster:
   replicaCount: 3
+  extraEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef: {name: s3-secret, key: s3_access_key}
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef: {name: s3-secret, key: s3_secret_key}
+    - name: AWS_SESSION_TOKEN
+      valueFrom:
+        secretKeyRef: {name: s3-secret, key: s3_session_token}
   startupProbe:
     initialDelaySeconds: 40
     timeoutSeconds: 30
     periodSeconds: 30
     failureThreshold: 24
 clusterManager:
+  extraEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef: {name: s3-secret, key: s3_access_key}
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef: {name: s3-secret, key: s3_secret_key}
+    - name: AWS_SESSION_TOKEN
+      valueFrom:
+        secretKeyRef: {name: s3-secret, key: s3_session_token}
   appRepo:
     appsRepoPollIntervalSeconds: 60
     defaults:
@@ -54,10 +74,10 @@ clusterManager:
     - name: helm-test-c3-with-apps-smartstore-testnew
       path: helm-test-c3-with-apps-smartstore-testnew/smartstore
       endpoint: https://s3-us-west-2.amazonaws.com
-      secretRef: s3-secret
       storageType: s3
       provider: aws
       region: us-west-2
+      secretRef: s3-secret
     cacheManager:
       hotlistBloomFilterRecencyHours: 360 # 15 days - splunk defaults - (can be lowered to 5 days)
       hotlistRecencySecs: 86400 # 24 hours - splunk defaults
@@ -67,6 +87,16 @@ clusterManager:
       maxConcurrentDownloads: 8 # splunk defaults
       maxConcurrentUploads: 8 # splunk defaults
 searchHeadCluster:
+  extraEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef: {name: s3-secret, key: s3_access_key}
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef: {name: s3-secret, key: s3_secret_key}
+    - name: AWS_SESSION_TOKEN
+      valueFrom:
+        secretKeyRef: {name: s3-secret, key: s3_session_token}
   appRepo:
     appsRepoPollIntervalSeconds: 60
     defaults:
