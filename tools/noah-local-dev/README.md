@@ -88,7 +88,7 @@ the targets under **Noah Local Development**. They are defined in
 | `noah-local-operator-deploy`   | install or upgrade a staged operator image in the vCluster                                                               |
 | `noah-local-fixtures`          | create prerequisite Secrets, apply [`fixtures/c3.yaml`](fixtures/c3.yaml)                                                |
 | `noah-local-port-forward`      | forward the Noah service to localhost                                                                                    |
-| `noah-local-smoke`             | index one marker per indexer, roll the buckets, and search every marker through the SHC                                  |
+| `noah-local-smoke`             | verify Noah peer readiness, then index on every peer and search through the SHC                                          |
 | `noah-local-destroy`           | terminate the vCluster                                                                                                   |
 | `noah-local-stop-port-forward` | stop the forward                                                                                                         |
 | `noah-local-deployment-id`     | print the saved deployment ID                                                                                            |
@@ -110,8 +110,9 @@ data remains accessible. As with the PostgreSQL password, set
 `minio.auth.rootPassword` in an untracked values file if a known development
 credential is required.
 
-Once the operator has reconciled the C3 deployment, verify indexing, SmartStore
-bucket rolls, and distributed search with:
+Once the operator has reconciled the C3 deployment, verify generation-current
+Noah peer readiness, indexing, SmartStore bucket rolls, and distributed search
+of generated events with:
 
 ```console
 make noah-local-smoke

@@ -184,7 +184,7 @@ noah-local-fixtures: ## Create prerequisite Secrets and apply the sample C3 cust
 		apply -f "$(NOAH_LOCAL_FIXTURES)"
 
 .PHONY: noah-local-smoke
-noah-local-smoke: ## Index on every C3 peer and search the events through Noah.
+noah-local-smoke: ## Verify Noah health, then index on every C3 peer and search through the SHC.
 	KUBE_CONTEXT="$(NOAH_LOCAL_CONTEXT)" \
 	NAMESPACE="$(NOAH_LOCAL_NAMESPACE)" \
 	C3_NAME="$(NOAH_LOCAL_C3_NAME)" \

@@ -50,6 +50,7 @@ noah:
   maxIdleConnections: 10
   tenantConfig: {}
   extraEnv:
+    NOAH_CACHE_ENABLE_CACHE_FALLBACK_WHEN_DB_DOWN: "true"
     NOAH_ENABLE_FREEZER_DAEMON: "false"
 
 resources:
