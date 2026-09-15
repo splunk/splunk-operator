@@ -20,6 +20,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	"github.com/stretchr/testify/assert"
@@ -100,9 +101,10 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 	}
 	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 
-	runtime, err := resolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
-	require.NoError(t, err)
-	searchHeadPhase, deployerPhase, searchHeadStatefulSet, err := applySearchHeadClusterNoah(ctx, client, cr, runtime)
+	dependency := reconcileutil.ResolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+	require.NotNil(t, dependency.Runtime)
+	require.NoError(t, dependency.ReconcileErr)
+	searchHeadPhase, deployerPhase, searchHeadStatefulSet, err := applySearchHeadClusterNoah(ctx, client, cr, dependency.Runtime)
 	require.NoError(t, err)
 	assert.NotEmpty(t, searchHeadPhase)
 	assert.Equal(t, enterpriseApi.PhaseReady, deployerPhase, "no deployer is ever deployed, so its phase is a fixed constant")
@@ -169,9 +171,10 @@ func TestApplySearchHeadClusterNoah_DeletionAbortsOnOwnerReferenceCleanupError(t
 // requeue as PhasePending rather than error — the CR may simply not have
 // been created yet.
 func TestApplySearchHeadClusterNoah_PendingWhenNoahClusterMissing(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
 	client := spltest.NewMockClient()
 	cr := &enterpriseApi.SearchHeadCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test"},
+		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test", Generation: 4},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			Replicas:       3,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "missing-noah-cluster"},
@@ -193,6 +196,80 @@ func TestApplySearchHeadClusterNoah_PendingWhenNoahClusterMissing(t *testing.T) 
 	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionReady)
 	require.NotNil(t, condition)
 	assert.Contains(t, condition.Message, "missing-noah-cluster")
+
+	dependency := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+	require.NotNil(t, dependency)
+	assert.Equal(t, metav1.ConditionUnknown, dependency.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), dependency.Reason)
+	assert.Equal(t, int64(4), dependency.ObservedGeneration)
+	assert.Contains(t, dependency.Message, "missing-noah-cluster")
+	assert.Nil(t, splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahPeersReady),
+		"search heads do not register as Noah peers")
+}
+
+func TestApplySearchHeadClusterNoah_ReportsUnknownDependencyReadFailure(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
+	client := spltest.NewMockClient()
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test", Generation: 3},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			Replicas:       3,
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+			},
+		},
+	}
+	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
+	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = assert.AnError
+
+	_, err := ApplySearchHeadClusterNoah(t.Context(), client, cr)
+	require.Error(t, err)
+	assert.Equal(t, enterpriseApi.PhaseError, cr.Status.Phase)
+
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionUnknown, condition.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyUnknown), condition.Reason)
+	ready := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionReady)
+	require.NotNil(t, ready)
+	assert.Equal(t, "Reconciliation failed", ready.Message)
+	for _, condition := range cr.Status.Conditions {
+		assert.NotEmpty(t, condition.Type)
+	}
+}
+
+func TestApplySearchHeadClusterNoah_ReportsResolvedDependency(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
+	client := spltest.NewMockClient()
+	client.AddObject(noahClusterForSHCTest("test", "noah", "noah-auth"))
+	client.AddObject(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test"},
+		Data:       map[string][]byte{configworkflow.NoahAuthSecretKey: []byte(t.Name())},
+	})
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test", Generation: 9},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			Replicas:       3,
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+			},
+		},
+	}
+	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
+
+	result, err := ApplySearchHeadClusterNoah(t.Context(), client, cr)
+	require.NoError(t, err)
+	assert.True(t, result.Requeue)
+
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyResolved), condition.Reason)
+	assert.Equal(t, int64(9), condition.ObservedGeneration)
 }
 
 func TestApplySearchHeadClusterNoah_PendingWhenAuthSecretMissing(t *testing.T) {
@@ -213,15 +290,12 @@ func TestApplySearchHeadClusterNoah_PendingWhenAuthSecretMissing(t *testing.T) {
 	}))
 	client.ResetCalls()
 
-	runtime, err := resolveNoahDependency(t.Context(), client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+	dependency := reconcileutil.ResolveNoahDependency(t.Context(), client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
 
-	require.Error(t, err)
-	outcome, handled := noahDependencyOutcome(err)
-	require.True(t, handled)
-	assert.Equal(t, enterpriseApi.PhasePending, outcome.phase)
-	assert.NoError(t, outcome.err)
-	assert.Contains(t, outcome.message, "missing-auth")
-	assert.Nil(t, runtime, "an unresolved dependency must not yield a runtime to reconcile with")
+	assert.Equal(t, enterpriseApi.PhasePending, dependency.Phase)
+	assert.NoError(t, dependency.ReconcileErr)
+	assert.Contains(t, dependency.Message, "missing-auth")
+	assert.Nil(t, dependency.Runtime, "an unresolved dependency must not yield a runtime to reconcile with")
 	assert.Empty(t, client.Calls["Create"], "missing Noah dependencies must not partially create workload resources")
 }
 
@@ -247,17 +321,17 @@ func TestApplySearchHeadClusterNoah_ValidatesRuntimeBeforeCreatingResources(t *t
 	}))
 	client.ResetCalls()
 
-	runtime, err := resolveNoahDependency(t.Context(), client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+	dependency := reconcileutil.ResolveNoahDependency(t.Context(), client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
 
-	assert.Nil(t, runtime, "an invalid credential must not yield a runtime to reconcile with")
-	require.Error(t, err)
-	outcome, handled := noahDependencyOutcome(err)
-	require.True(t, handled)
-	_, terminal := splcommon.TerminalMessage(outcome.err)
+	assert.Nil(t, dependency.Runtime, "an invalid credential must not yield a runtime to reconcile with")
+	require.Error(t, dependency.ReconcileErr)
+	_, terminal := splcommon.TerminalMessage(dependency.ReconcileErr)
 	assert.True(t, terminal)
-	reason, _ := splcommon.TerminalReason(outcome.err)
+	reason, _ := splcommon.TerminalReason(dependency.ReconcileErr)
 	assert.Equal(t, splcommon.EventReasonNoahConfigurationInvalid, reason)
-	assert.Equal(t, enterpriseApi.ReasonNoahConfigurationInvalid, outcome.conditionReason)
-	assert.Contains(t, outcome.message, configworkflow.NoahAuthSecretKey)
+	condition := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
+	require.NotNil(t, condition)
+	assert.Equal(t, string(enterpriseApi.ReasonNoahConfigurationInvalid), condition.Reason)
+	assert.Contains(t, dependency.Message, configworkflow.NoahAuthSecretKey)
 	assert.Empty(t, client.Calls["Create"], "invalid Noah configuration must fail before creating workload resources")
 }

@@ -30,6 +30,7 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
@@ -111,7 +112,7 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		return result, deletionErr
 	}
 
-	runtime, err := resolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
+	dependency := reconcileutil.ResolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
 
 	var searchHeadStatefulSet *appsv1.StatefulSet
 	// deployerPhase defaults to PhaseReady, not PhaseError: no deployer is
@@ -120,19 +121,20 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	// applySearchHeadClusterNoah — the only other place that sets this
 	// phase — never even runs.
 	searchHeadPhase, deployerPhase := enterpriseApi.PhaseError, enterpriseApi.PhaseReady
-	if err == nil {
-		searchHeadPhase, deployerPhase, searchHeadStatefulSet, err = applySearchHeadClusterNoah(ctx, client, cr, runtime)
-	}
 	phaseMessage := ""
-	if dependencyOutcome, handled := noahDependencyOutcome(err); handled {
-		searchHeadPhase = dependencyOutcome.phase
+	if dependency.Runtime != nil {
+		searchHeadPhase, deployerPhase, searchHeadStatefulSet, err = applySearchHeadClusterNoah(ctx, client, cr, dependency.Runtime)
+	} else {
+		searchHeadPhase = dependency.Phase
 		// deployerPhase is left as applySearchHeadClusterNoah's fixed
 		// PhaseReady constant: no deployer is ever deployed on this path, so
 		// a Noah dependency failure on the search-head side must not make
 		// status.deployerPhase falsely report Pending/Error for a resource
 		// that was never even attempted.
-		phaseMessage = dependencyOutcome.message
-		err = dependencyOutcome.err
+		if dependency.StateKnown {
+			phaseMessage = dependency.Message
+		}
+		err = dependency.ReconcileErr
 		if searchHeadPhase == enterpriseApi.PhasePending {
 			logger.WarnContext(ctx, "Noah dependency is not available; requeueing", "message", phaseMessage)
 		}
