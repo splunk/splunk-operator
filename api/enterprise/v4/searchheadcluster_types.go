@@ -145,6 +145,15 @@ type SearchHeadClusterStatus struct {
 	// true if the search head cluster is in maintenance mode
 	MaintenanceMode bool `json:"maintenanceMode"`
 
+	// Unix timestamp from which the current Captain label has been observed
+	// continuously (same label, ready) across reconciles. Resets whenever the
+	// captain label changes or reports not-ready. A rolling update will not
+	// recycle another member until this has held stable for a minimum
+	// settle duration, so that recycling the captain and immediately
+	// recycling the next member can never happen back-to-back with no
+	// confirmation the newly elected captain actually held.
+	CaptainStableSince int64 `json:"captainStableSince,omitempty"`
+
 	// Indicates when the shc_secret has been changed for a peer
 	ShcSecretChanged []bool `json:"shcSecretChangedFlag"`
 
