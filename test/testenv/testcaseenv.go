@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
@@ -52,7 +53,6 @@ type TestCaseEnv struct {
 	licenseFilePath            string
 	licenseCMName              string
 	s3IndexSecret              string
-	indexIngestSepSecret       string
 	Log                        logr.Logger
 	cleanupFuncs               []cleanupFunc
 	debug                      string
@@ -87,6 +87,70 @@ func (testenv *TestCaseEnv) cleanupParentCtx() context.Context {
 // GetKubeClient returns the kube client to talk to kube-apiserver
 func (testenv *TestCaseEnv) GetKubeClient() client.Client {
 	return testenv.kubeClient
+}
+
+// injectAWSCredentials adds the short-lived pipeline credentials to Splunk
+// workload pods. The credentials remain in a test-namespace Secret and are
+// referenced through the pod environment instead of being copied into S3/SQS
+// configuration.
+func (testenv *TestCaseEnv) injectAWSCredentials(cr client.Object) {
+	if ClusterProvider != "eks" || os.Getenv("AWS_ACCESS_KEY_ID") == "" || os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
+		return
+	}
+
+	extraEnv := []corev1.EnvVar{
+		{
+			Name: "AWS_ACCESS_KEY_ID",
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: testenv.s3IndexSecret},
+				Key:                  "s3_access_key",
+			}},
+		},
+		{
+			Name: "AWS_SECRET_ACCESS_KEY",
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: testenv.s3IndexSecret},
+				Key:                  "s3_secret_key",
+			}},
+		},
+	}
+	if os.Getenv("AWS_SESSION_TOKEN") != "" {
+		extraEnv = append(extraEnv, corev1.EnvVar{
+			Name: "AWS_SESSION_TOKEN",
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: testenv.s3IndexSecret},
+				Key:                  "s3_session_token",
+			}},
+		})
+	}
+
+	appendEnv := func(env *[]corev1.EnvVar) {
+		*env = append(*env, extraEnv...)
+	}
+	switch workload := cr.(type) {
+	case *enterpriseApi.Standalone:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApi.SearchHeadCluster:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApi.ClusterManager:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApi.IndexerCluster:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApi.IngestorCluster:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApi.LicenseManager:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApiV3.Standalone:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApiV3.SearchHeadCluster:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApiV3.ClusterMaster:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApiV3.IndexerCluster:
+		appendEnv(&workload.Spec.ExtraEnv)
+	case *enterpriseApiV3.LicenseMaster:
+		appendEnv(&workload.Spec.ExtraEnv)
+	}
 }
 
 // OperatorDeployment returns the (namespace, name) of the active operator
@@ -138,7 +202,6 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 		licenseCMName:              name,
 		licenseFilePath:            licenseFilePath,
 		s3IndexSecret:              "splunk-s3-index-" + name,
-		indexIngestSepSecret:       "splunk--index-ingest-sep-" + name,
 		debug:                      os.Getenv("DEBUG"),
 		clusterWideOperator:        installOperatorClusterWide,
 		splunkProvisionAnnotations: splunkProvisionAnnotations,
@@ -223,9 +286,6 @@ func (testenv *TestCaseEnv) setup() error {
 	switch ClusterProvider {
 	case "eks":
 		if err = testenv.createIndexSecret(); err != nil {
-			return err
-		}
-		if err = testenv.createIndexIngestSepSecret(); err != nil {
 			return err
 		}
 	case "azure":
@@ -662,23 +722,23 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 	secretName := testenv.s3IndexSecret
 	ns := testenv.namespace
 
-	accessKey := os.Getenv("TEST_S3_ACCESS_KEY_ID")
+	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 	if accessKey == "" {
-		accessKey = os.Getenv("AWS_ACCESS_KEY_ID")
+		return fmt.Errorf("required environment variable AWS_ACCESS_KEY_ID is not set")
 	}
-	if accessKey == "" {
-		return fmt.Errorf("required environment variable not set; expected one of [TEST_S3_ACCESS_KEY_ID AWS_ACCESS_KEY_ID]")
-	}
-	secretKey := os.Getenv("TEST_S3_SECRET_ACCESS_KEY")
+	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 	if secretKey == "" {
-		secretKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
-	}
-	if secretKey == "" {
-		return fmt.Errorf("required environment variable not set; expected one of [TEST_S3_SECRET_ACCESS_KEY AWS_SECRET_ACCESS_KEY]")
+		return fmt.Errorf("required environment variable AWS_SECRET_ACCESS_KEY is not set")
 	}
 
-	data := map[string][]byte{"s3_access_key": []byte(accessKey),
-		"s3_secret_key": []byte(secretKey)}
+	sessionToken := os.Getenv("AWS_SESSION_TOKEN")
+	data := map[string][]byte{
+		"s3_access_key": []byte(accessKey),
+		"s3_secret_key": []byte(secretKey),
+	}
+	if sessionToken != "" {
+		data["s3_session_token"] = []byte(sessionToken)
+	}
 	secret := newSecretSpec(ns, secretName, data)
 	if err := testenv.GetKubeClient().Create(ctx, secret); err != nil {
 		testenv.Log.Error(err, "Unable to create s3 index secret object")
@@ -762,49 +822,9 @@ func (testenv *TestCaseEnv) createIndexSecretAzure() error {
 	return nil
 }
 
-// CreateIndexIngestSepSecret creates secret object
-func (testenv *TestCaseEnv) createIndexIngestSepSecret() error {
-	ctx := context.Background()
-	secretName := testenv.indexIngestSepSecret
-	ns := testenv.namespace
-
-	accessKey := os.Getenv("AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID")
-	if accessKey == "" {
-		return fmt.Errorf("required environment variable AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID is not set")
-	}
-	secretKey := os.Getenv("AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY")
-	if secretKey == "" {
-		return fmt.Errorf("required environment variable AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY is not set")
-	}
-
-	data := map[string][]byte{"s3_access_key": []byte(accessKey),
-		"s3_secret_key": []byte(secretKey)}
-	secret := newSecretSpec(ns, secretName, data)
-
-	if err := testenv.GetKubeClient().Create(ctx, secret); err != nil {
-		testenv.Log.Error(err, "Unable to create index and ingestion sep secret object")
-		return err
-	}
-
-	testenv.pushCleanupFunc(func() error {
-		err := testenv.GetKubeClient().Delete(testenv.cleanupParentCtx(), secret)
-		if err != nil {
-			testenv.Log.Error(err, "Unable to delete index and ingestion sep secret object")
-			return err
-		}
-		return nil
-	})
-	return nil
-}
-
 // GetIndexSecretName return index secret object name
 func (testenv *TestCaseEnv) GetIndexSecretName() string {
 	return testenv.s3IndexSecret
-}
-
-// GetIndexSecretName return index and ingestion separation secret object name
-func (testenv *TestCaseEnv) GetIndexIngestSepSecretName() string {
-	return testenv.indexIngestSepSecret
 }
 
 // GetLMConfigMap Return name of license config map

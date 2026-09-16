@@ -892,6 +892,9 @@ func initializePendingPhase(ctx context.Context, c client.Client, db *platformv1
 	pending := string(pendingDBPhase)
 	db.Status.Phase = &pending
 	beginReadinessCycle(db, before, false, metav1.ConditionFalse, pendingDBPhase)
+	// No sub-condition triggered this write, so pass ConditionTrue to have the reason
+	// and message synthesized from the phase rather than forwarded from a caller.
+	applyReadyCondition(db, pendingDBPhase, metav1.ConditionTrue, "", "")
 	if err := c.Status().Update(ctx, db); err != nil {
 		return false, err
 	}
@@ -918,6 +921,29 @@ func applyStatus(db *platformv1alpha1.PostgresDatabase, conditionType conditionT
 	p := string(phase)
 	db.Status.Phase = &p
 	db.Status.ObservedGeneration = &db.Generation
+	applyReadyCondition(db, phase, conditionStatus, reason, message)
+}
+
+// applyReadyCondition derives the aggregate Ready condition from the phase this
+// write is transitioning to. Naively forwarding the triggering call's reason/message
+// would self-contradict for the sub-checks that report ConditionTrue while the phase
+// is still non-ready (e.g. clusterReady=True at provisioningDBPhase), so those are
+// synthesized from the phase instead of forwarded.
+func applyReadyCondition(db *platformv1alpha1.PostgresDatabase, phase reconcileDBPhases, status metav1.ConditionStatus, reason conditionReasons, message string) {
+	readyStatus, readyReason, readyMessage := metav1.ConditionFalse, reason, message
+	switch {
+	case phase == readyDBPhase:
+		readyStatus, readyReason, readyMessage = metav1.ConditionTrue, reasonDatabaseReady, "All PostgresDatabase checks passed"
+	case status != metav1.ConditionFalse:
+		readyReason, readyMessage = conditionReasons(phase), fmt.Sprintf("PostgresDatabase is in phase %s", phase)
+	}
+	meta.SetStatusCondition(&db.Status.Conditions, metav1.Condition{
+		Type:               string(readyCondition),
+		Status:             readyStatus,
+		Reason:             string(readyReason),
+		Message:            readyMessage,
+		ObservedGeneration: db.Generation,
+	})
 }
 
 // beginReadinessCycle persists the start of a single time-to-Ready cycle. Initial
@@ -1036,15 +1062,7 @@ func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *
 			message = fmt.Sprintf("Managed role cleanup is still pending after %s; retaining finalizer to avoid leaking roles", roleCleanupTimeout)
 			logger.WarnContext(ctx, "managed role cleanup timed out; retaining finalizer", "timeout", roleCleanupTimeout.String())
 		}
-		deleting := string(deletingDBPhase)
-		postgresDB.Status.Phase = &deleting
-		meta.SetStatusCondition(&postgresDB.Status.Conditions, metav1.Condition{
-			Type:               string(rolesReady),
-			Status:             metav1.ConditionFalse,
-			Reason:             string(reason),
-			Message:            message,
-			ObservedGeneration: postgresDB.Generation,
-		})
+		applyStatus(postgresDB, rolesReady, metav1.ConditionFalse, reason, message, deletingDBPhase)
 		if priorRolesCond == nil || priorRolesCond.Reason != string(reason) {
 			rc.emitWarning(postgresDB, EventRoleCleanupBlocked, fmt.Sprintf("PostgresDatabase %s deletion is %s", postgresDB.Name, message))
 		}

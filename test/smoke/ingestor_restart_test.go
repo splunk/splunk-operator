@@ -76,7 +76,6 @@ var _ = Describe("Ingestor rolling restart driven by reconcile loop", Label("tie
 				const replicas = 3
 				icName := deployment.GetName() + "-ingest"
 
-				secretName := testcaseEnvInst.GetIndexIngestSepSecretName()
 				qSpec := enterpriseApi.QueueSpec{
 					Provider: "sqs",
 					SQS: enterpriseApi.SQSSpec{
@@ -84,10 +83,6 @@ var _ = Describe("Ingestor rolling restart driven by reconcile loop", Label("tie
 						AuthRegion: ingestorSmokeAWSRegion,
 						Endpoint:   ingestorSmokeSQSEndpt,
 						DLQ:        ingestorSmokeDLQName,
-						SecretKeyRef: &enterpriseApi.SQSSecretKeyRef{
-							AwsAccessKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_access_key"},
-							AwsSecretKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_secret_key"},
-						},
 					},
 				}
 				osSpec := enterpriseApi.ObjectStorageSpec{

@@ -47,6 +47,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
+	storageaws "github.com/splunk/splunk-operator/pkg/splunk/client/storage/aws"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -169,6 +170,7 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 	appSecretRef := vol.SecretRef
 	var accessKeyID string
 	var secretAccessKey string
+	var sessionToken string
 	if appSecretRef == "" {
 		// No secretRef means we should try to use the credentials available in the pod already via kube2iam or something similar
 		scopedLog.InfoContext(ctx, "no secrectRef provided.  Attempt to access remote storage client without access/secret keys")
@@ -199,6 +201,7 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		} else {
 			accessKeyID = string(remoteDataClientSecret.Data["s3_access_key"])
 			secretAccessKey = string(remoteDataClientSecret.Data["s3_secret_key"])
+			sessionToken = string(remoteDataClientSecret.Data["s3_session_token"])
 		}
 
 		// Do we need to handle if IAM_ROLE is set in the secret as well?
@@ -210,6 +213,9 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 			err = fmt.Errorf("s3 Secret Key is missing")
 			return remoteDataClient, err
 		}
+	}
+	if vol.Provider == "aws" && sessionToken != "" {
+		ctx = storageaws.WithSessionToken(ctx, sessionToken)
 	}
 
 	// Get the bucket name form the "path" field

@@ -14,13 +14,6 @@ queue:
     authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: index-ingest-separation-test-dlq
-    secretKeyRef:
-      awsAccessKey:
-        name: index-ing-sep-secret
-        key: s3_access_key
-      awsSecretKey:
-        name: index-ing-sep-secret
-        key: s3_secret_key
 
 objectStorage:
   enabled: true
@@ -38,8 +31,19 @@ ingestorCluster:
     name: queue
   objectStorageRef:
     name: os
+  extraEnv: &awsEphemeralEnv
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef: {name: index-ing-sep-secret, key: s3_access_key}
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef: {name: index-ing-sep-secret, key: s3_secret_key}
+    - name: AWS_SESSION_TOKEN
+      valueFrom:
+        secretKeyRef: {name: index-ing-sep-secret, key: s3_session_token}
 
 clusterManager:
+  extraEnv: *awsEphemeralEnv
   enabled: true
   name: cm
   replicaCount: 1
@@ -54,3 +58,4 @@ indexerCluster:
     name: queue
   objectStorageRef:
     name: os
+  extraEnv: *awsEphemeralEnv

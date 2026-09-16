@@ -499,7 +499,11 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(controllerutil.ContainsFinalizer(pc, core.PostgresClusterFinalizerName)).To(BeTrue())
 				Expect(pc.Status.Phase).NotTo(BeNil())
 				Expect(*pc.Status.Phase).To(Equal("Pending"))
-				Expect(pc.Status.Conditions).To(BeEmpty())
+				Expect(pc.Status.Conditions).To(HaveLen(1))
+				readyCondition := meta.FindStatusCondition(pc.Status.Conditions, "Ready")
+				Expect(readyCondition).NotTo(BeNil())
+				Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+				Expect(readyCondition.Reason).To(Equal("Pending"))
 				Expect(pc.Status.ObservedGeneration).To(BeNil())
 			})
 
