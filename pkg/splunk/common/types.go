@@ -77,6 +77,19 @@ type StatefulSetScaleDownPVCPolicy interface {
 	RetainPVCsOnScaleDown() bool
 }
 
+// StatefulSetRecycleOrderer optionally lets a manager defer recycling a
+// specific ordinal during a rolling update, so the generic loop tries a
+// lower ordinal instead this reconcile rather than stopping. Managers that
+// do not implement this keep the default behavior: strictly
+// highest-ordinal-first, one at a time.
+type StatefulSetRecycleOrderer interface {
+	// DeferRecycle reports whether ordinal n — whose pod revision does not
+	// match updateRevision — should be skipped this reconcile in favor of a
+	// lower ordinal. Returning true does not mean n will never be
+	// recycled; it is re-evaluated fresh every reconcile.
+	DeferRecycle(ctx context.Context, n int32, updateRevision string) (bool, error)
+}
+
 // ScaleOutPlan describes the next safe replica target and whether the requested
 // scale-out has converged.
 type ScaleOutPlan struct {
