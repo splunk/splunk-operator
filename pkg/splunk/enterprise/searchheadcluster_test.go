@@ -3154,6 +3154,205 @@ func TestPrepareRecycle_TimerResetOnRevisionChange(t *testing.T) {
 	}
 }
 
+// A captain that was just observed (stable clock started this instant) must
+// block recycling the next member — recycling the captain and then
+// immediately recycling another member with no confirmation the new captain
+// held is exactly the gap this check exists to close.
+func TestPrepareRecycle_BlocksWhileCaptainNotYetStable(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("Up", 0, 0)
+	cr.Status.Captain = "splunk-test-shc-search-head-1"
+	cr.Status.CaptainStableSince = time.Now().Unix() // just observed this reconcile
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ready {
+		t.Error("expected (false, nil) while the captain has not yet held stable for the settle window")
+	}
+	// The member-status switch must never have been reached: no detention
+	// bookkeeping should have started.
+	if cr.Status.DetentionStartTimestamp != 0 {
+		t.Error("expected no detention bookkeeping to start while blocked on captain stability")
+	}
+}
+
+// Once the captain has held stable for at least the settle window, recycling
+// proceeds exactly as it would have without this check.
+func TestPrepareRecycle_ProceedsOnceCaptainIsStable(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("ManualDetention", 0, 0)
+	cr.Spec.DetentionTimeoutSeconds = 3600
+	cr.Status.DetentionStartTimestamp = time.Now().Unix() - 10
+	cr.Status.DetainedMemberName = "splunk-test-shc-search-head-0"
+	cr.Status.Captain = "splunk-test-shc-search-head-1"
+	cr.Status.CaptainStableSince = time.Now().Unix() - captainStabilizationSeconds
+
+	mgr := newTestSHCPodManager(cr)
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Error("expected (true, nil) — captain has held stable for the full settle window and searches are drained")
+	}
+}
+
+// threeMemberSHCCR builds a 3-member CR with the given (name, podRevision,
+// status) per member, for DeferRecycle tests that need more than one member.
+func threeMemberSHCCR(members [3]struct{ podRevision, status string }) *enterpriseApi.SearchHeadCluster {
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
+	}
+	for i, m := range members {
+		cr.Status.Members = append(cr.Status.Members, enterpriseApi.SearchHeadClusterMemberStatus{
+			Name:        fmt.Sprintf("splunk-test-shc-search-head-%d", i),
+			PodRevision: m.podRevision,
+			Status:      m.status,
+		})
+	}
+	return cr
+}
+
+func TestDeferRecycle_DefersCaptainWhileOthersPending(t *testing.T) {
+	ctx := context.Background()
+	cr := threeMemberSHCCR([3]struct{ podRevision, status string }{
+		{"v0", "Up"}, // ordinal 0: not yet recycled
+		{"v1", "Up"}, // ordinal 1: already rolled and rejoined
+		{"v0", "Up"}, // ordinal 2: captain, not yet recycled
+	})
+	cr.Status.Captain = "splunk-test-shc-search-head-2.splunk-test-shc-search-head-headless.test.svc.cluster.local" // FQDN, not the short member name
+
+	mgr := newTestSHCPodManager(cr)
+	deferred, err := mgr.DeferRecycle(ctx, 2, "v1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deferred {
+		t.Error("expected the captain's recycle to be deferred while ordinal 0 still needs recycling")
+	}
+}
+
+func TestDeferRecycle_ProceedsOnceAllOthersAreRolled(t *testing.T) {
+	ctx := context.Background()
+	cr := threeMemberSHCCR([3]struct{ podRevision, status string }{
+		{"v1", "Up"}, // ordinal 0: already rolled and rejoined
+		{"v1", "Up"}, // ordinal 1: already rolled and rejoined
+		{"v0", "Up"}, // ordinal 2: captain, last one left
+	})
+	cr.Status.Captain = "splunk-test-shc-search-head-2.splunk-test-shc-search-head-headless.test.svc.cluster.local" // FQDN, not the short member name
+
+	mgr := newTestSHCPodManager(cr)
+	deferred, err := mgr.DeferRecycle(ctx, 2, "v1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deferred {
+		t.Error("expected the captain's recycle to proceed once every other member has fully rolled")
+	}
+}
+
+func TestDeferRecycle_WaitsForOthersToFullyRejoinNotJustRecreate(t *testing.T) {
+	ctx := context.Background()
+	cr := threeMemberSHCCR([3]struct{ podRevision, status string }{
+		{"v1", "ManualDetention"}, // ordinal 0: recreated on v1, but not yet rejoined
+		{"v1", "Up"},
+		{"v0", "Up"}, // ordinal 2: captain
+	})
+	cr.Status.Captain = "splunk-test-shc-search-head-2.splunk-test-shc-search-head-headless.test.svc.cluster.local" // FQDN, not the short member name
+
+	mgr := newTestSHCPodManager(cr)
+	deferred, err := mgr.DeferRecycle(ctx, 2, "v1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deferred {
+		t.Error("expected the captain's recycle to stay deferred until ordinal 0 fully rejoins (status Up), not merely be recreated")
+	}
+}
+
+// The captain can only ever reach ManualDetention once every other member
+// was already fully recycled (others was 0 at that point). If some
+// already-recycled member's live status independently regresses away from
+// "Up" afterward — unrelated to this rollout, e.g. an admin action or a
+// transient blip — the captain must not be re-deferred and left paused
+// indefinitely; it should finish the recycle it already started.
+func TestDeferRecycle_DoesNotReDeferCaptainAlreadyInDetention(t *testing.T) {
+	ctx := context.Background()
+	cr := threeMemberSHCCR([3]struct{ podRevision, status string }{
+		{"v1", "Up"},              // ordinal 0: already rolled and rejoined
+		{"v1", "ManualDetention"}, // ordinal 1: already on v1, but independently regressed away from Up
+		{"v1", "ManualDetention"}, // ordinal 2: captain, already mid-recycle from an earlier pass
+	})
+	cr.Status.Captain = "splunk-test-shc-search-head-2.splunk-test-shc-search-head-headless.test.svc.cluster.local" // FQDN, not the short member name
+
+	mgr := newTestSHCPodManager(cr)
+	deferred, err := mgr.DeferRecycle(ctx, 2, "v1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deferred {
+		t.Error("expected a captain already in ManualDetention to never be re-deferred, even if another member's status has since regressed")
+	}
+}
+
+func TestDeferRecycle_DoesNotDeferNonCaptainMembers(t *testing.T) {
+	ctx := context.Background()
+	cr := threeMemberSHCCR([3]struct{ podRevision, status string }{
+		{"v0", "Up"},
+		{"v0", "Up"},
+		{"v0", "Up"}, // captain
+	})
+	cr.Status.Captain = "splunk-test-shc-search-head-2.splunk-test-shc-search-head-headless.test.svc.cluster.local" // FQDN, not the short member name
+
+	mgr := newTestSHCPodManager(cr)
+	deferred, err := mgr.DeferRecycle(ctx, 0, "v1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deferred {
+		t.Error("expected a non-captain member to never be deferred by this check")
+	}
+}
+
+// If the captain changes mid rolling-update, the newly-current captain is
+// deferred on the very next call — there is no "captain as of when the
+// rollout started" bookkeeping that could go stale.
+func TestDeferRecycle_FollowsCaptainChangeMidRollout(t *testing.T) {
+	ctx := context.Background()
+	cr := threeMemberSHCCR([3]struct{ podRevision, status string }{
+		{"v0", "Up"}, // ordinal 0: the OLD captain, now just a regular stale member
+		{"v1", "Up"}, // ordinal 1: already rolled
+		{"v0", "Up"}, // ordinal 2: the NEW captain, not yet recycled
+	})
+	cr.Status.Captain = "splunk-test-shc-search-head-2.splunk-test-shc-search-head-headless.test.svc.cluster.local" // captain changed to ordinal 2, FQDN form
+
+	mgr := newTestSHCPodManager(cr)
+
+	// The old captain (ordinal 0) is no longer captain, so it must not be
+	// deferred even though it's still stale.
+	deferred, err := mgr.DeferRecycle(ctx, 0, "v1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deferred {
+		t.Error("expected the former captain to be recyclable like any other member once it no longer holds the role")
+	}
+
+	// The new captain (ordinal 2) must be deferred while ordinal 0 is still stale.
+	deferred, err = mgr.DeferRecycle(ctx, 2, "v1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deferred {
+		t.Error("expected the new captain to be deferred while the former captain still needs recycling")
+	}
+}
+
 func TestUpdateStatusPreservesPodRevisionByMemberName(t *testing.T) {
 	ctx := context.Background()
 	restoreSearchHeadClusterInfoStubs(t)
@@ -3252,6 +3451,159 @@ func TestUpdateStatusUsesCurrentPodRevisionWhenPresent(t *testing.T) {
 	}
 	if got := cr.Status.Members[0].PodRevision; got != "current-revision" {
 		t.Errorf("expected current pod revision to win, got %q", got)
+	}
+}
+
+func TestUpdateStatusFirstCaptainObservationIsImmediatelyStable(t *testing.T) {
+	ctx := context.Background()
+	restoreSearchHeadClusterInfoStubs(t) // stubs captain label "splunk-test-shc-search-head-0", ServiceReady=true
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
+	}
+	mgr := newTestSHCPodManager(cr)
+	mgr.c = spltest.NewMockClient()
+
+	if err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", 1)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// A brand new cluster's very first captain observation must not block
+	// its first rolling update behind the settle window.
+	if !captainStable(cr.Status.Captain, cr.Status.CaptainStableSince, time.Now()) {
+		t.Error("expected a cluster's first-ever captain observation to be immediately stable")
+	}
+}
+
+func TestUpdateStatusPreservesCaptainStableSinceForSameCaptain(t *testing.T) {
+	ctx := context.Background()
+	restoreSearchHeadClusterInfoStubs(t) // stubs captain label "splunk-test-shc-search-head-0", ServiceReady=true
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
+	}
+	cr.Status.Captain = "splunk-test-shc-search-head-0" // same label the stub reports
+	cr.Status.CaptainReady = true                       // previous reconcile observed it ready, same as CaptainStableSince below
+	stableSince := time.Now().Unix() - 500
+	cr.Status.CaptainStableSince = stableSince
+
+	mgr := newTestSHCPodManager(cr)
+	mgr.c = spltest.NewMockClient()
+
+	if err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", 1)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cr.Status.CaptainStableSince != stableSince {
+		t.Errorf("expected CaptainStableSince unchanged at %d for the same, still-ready captain, got %d", stableSince, cr.Status.CaptainStableSince)
+	}
+}
+
+func TestUpdateStatusRestartsCaptainStableClockOnCaptainChange(t *testing.T) {
+	ctx := context.Background()
+	restoreSearchHeadClusterInfoStubs(t) // stubs captain label "splunk-test-shc-search-head-0", ServiceReady=true
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
+	}
+	cr.Status.Captain = "splunk-test-shc-search-head-1" // a different, previous captain
+	cr.Status.CaptainStableSince = time.Now().Unix() - 500
+
+	mgr := newTestSHCPodManager(cr)
+	mgr.c = spltest.NewMockClient()
+
+	before := time.Now().Unix()
+	if err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", 1)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cr.Status.CaptainStableSince < before {
+		t.Errorf("expected CaptainStableSince to restart to approximately now after a captain change, got %d", cr.Status.CaptainStableSince)
+	}
+}
+
+// Requested by review on !2490: a captain that was already ready and stable,
+// then transiently unreachable (all captain/info requests failing), then
+// observed again under the same label must not have that outage counted as
+// stable time. updateStatus's failure branch never touches CaptainStableSince
+// at all, leaving it at its pre-outage value; nextCaptainStableSince must
+// still restart the clock on the first post-outage success because
+// previousCaptainReady (captured from the failure reconcile, where
+// CaptainReady was left false) is false.
+func TestUpdateStatusRestartsCaptainStableClockAfterCaptainInfoFailureWithSameCaptain(t *testing.T) {
+	ctx := context.Background()
+	restoreSearchHeadClusterInfoStubs(t) // stubs captain label "splunk-test-shc-search-head-0", ServiceReady=true
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
+	}
+	cr.Status.Captain = "splunk-test-shc-search-head-0"
+	cr.Status.CaptainReady = true
+	stableSince := time.Now().Unix() - 500
+	cr.Status.CaptainStableSince = stableSince
+
+	mgr := newTestSHCPodManager(cr)
+	mgr.c = spltest.NewMockClient()
+
+	originalCaptainInfo := GetSearchHeadCaptainInfo
+	GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
+		return nil, fmt.Errorf("connection refused")
+	}
+	if err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", 1)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cr.Status.Captain != "" || cr.Status.CaptainReady {
+		t.Errorf("expected Captain/CaptainReady cleared on a captain/info failure, got Captain=%q CaptainReady=%v", cr.Status.Captain, cr.Status.CaptainReady)
+	}
+	if cr.Status.CaptainStableSince != stableSince {
+		t.Errorf("expected CaptainStableSince left untouched at %d by the failure itself, got %d", stableSince, cr.Status.CaptainStableSince)
+	}
+
+	// Connectivity returns; captain/info reports the same captain again.
+	GetSearchHeadCaptainInfo = originalCaptainInfo
+	before := time.Now().Unix()
+	if err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", 1)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cr.Status.CaptainStableSince < before {
+		t.Errorf("expected CaptainStableSince to restart to approximately now after the outage, not inherit the stale pre-outage %d, got %d", stableSince, cr.Status.CaptainStableSince)
+	}
+}
+
+// Requested by review on !2490: updateStatus returns immediately when
+// ReadyReplicas is 0, before ever calling nextCaptainStableSince, leaving
+// CaptainStableSince at whatever it held before all replicas went
+// unready. Once replicas recover and a captain is observed again, that
+// stale timestamp must not be inherited.
+func TestUpdateStatusRestartsCaptainStableClockAfterZeroReadyReplicasRecovers(t *testing.T) {
+	ctx := context.Background()
+	restoreSearchHeadClusterInfoStubs(t) // stubs captain label "splunk-test-shc-search-head-0", ServiceReady=true
+
+	cr := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
+	}
+	cr.Status.Captain = "splunk-test-shc-search-head-0"
+	cr.Status.CaptainReady = true
+	stableSince := time.Now().Unix() - 500
+	cr.Status.CaptainStableSince = stableSince
+
+	mgr := newTestSHCPodManager(cr)
+	mgr.c = spltest.NewMockClient()
+
+	if err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", 0)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cr.Status.Captain != "" || cr.Status.CaptainReady {
+		t.Errorf("expected Captain/CaptainReady cleared with zero ready replicas, got Captain=%q CaptainReady=%v", cr.Status.Captain, cr.Status.CaptainReady)
+	}
+	if cr.Status.CaptainStableSince != stableSince {
+		t.Errorf("expected CaptainStableSince left untouched at %d while ReadyReplicas is 0, got %d", stableSince, cr.Status.CaptainStableSince)
+	}
+
+	// Replicas recover; captain/info reports a captain again.
+	before := time.Now().Unix()
+	if err := mgr.updateStatus(ctx, searchHeadStatefulSet("test-shc", 1)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cr.Status.CaptainStableSince < before {
+		t.Errorf("expected CaptainStableSince to restart to approximately now after recovering from zero ready replicas, not inherit the stale pre-outage %d, got %d", stableSince, cr.Status.CaptainStableSince)
 	}
 }
 

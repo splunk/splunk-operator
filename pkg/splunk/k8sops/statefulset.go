@@ -312,6 +312,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	// readyReplicas == desiredReplicas
 
 	// check existing pods for desired updates
+	deferredOrdinal := false
 	for n := readyReplicas - 1; n >= 0; n-- {
 		// get Pod
 		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
@@ -332,7 +333,31 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		}
 
 		// terminate pod if it has pending updates; k8s will start a new one with revised template
-		if statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"] {
+		needsRecycle := statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"]
+		if needsRecycle {
+			if orderer, ok := mgr.(splcommon.StatefulSetRecycleOrderer); ok {
+				deferred, err := orderer.DeferRecycle(ctx, n, statefulSet.Status.UpdateRevision)
+				if err != nil {
+					scopedLog.ErrorContext(ctx, "unable to determine recycle order for Pod", "podName", podName, "error", err)
+					return enterpriseApi.PhaseError, err
+				}
+				if deferred {
+					// This ordinal is intentionally left for a later pass (e.g. it
+					// currently holds a role — such as SHC captain — that must not
+					// be touched until every other member has already been
+					// recycled). Skip straight to the next ordinal instead of
+					// falling through to FinishRecycle below: for a manager like
+					// SHC, FinishRecycle can have side effects (e.g. releasing
+					// ManualDetention) or itself return not-complete, either of
+					// which would touch or block on a pod that was deliberately
+					// left untouched this pass.
+					scopedLog.InfoContext(ctx, "deferring recycle of Pod to a later pass", "podName", podName)
+					deferredOrdinal = true
+					continue
+				}
+			}
+		}
+		if needsRecycle {
 			// pod needs to be updated; first, prepare it to be recycled
 			ready, err := mgr.PrepareRecycle(ctx, n)
 			if err != nil {
@@ -369,6 +394,18 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			// return and wait until next reconcile to let things settle down
 			return enterpriseApi.PhaseUpdating, nil
 		}
+	}
+
+	if deferredOrdinal {
+		// At least one ordinal (e.g. the SHC captain) was deliberately left
+		// unresolved this pass via DeferRecycle, possibly including ordinal 0
+		// — the last one this loop checks. Falling through from here would
+		// report Ready/finalize the upgrade even though that ordinal was
+		// skipped, not actually recycled. Wait for a later reconcile instead,
+		// by which point either it is no longer deferrable (every other
+		// member is settled) or something else in this pass will need to
+		// resolve first anyway.
+		return enterpriseApi.PhaseUpdating, nil
 	}
 
 	// Remove unwanted owner references
