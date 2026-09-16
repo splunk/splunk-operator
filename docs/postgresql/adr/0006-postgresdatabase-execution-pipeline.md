@@ -10,7 +10,7 @@ nav_order: 6
 - **Status:** Proposed
 - **Date:** 2026-08-31
 - **Deciders:** Postgres operator team (CPI), proposed for CPI-2150 review
-- **Related:** CPI-2150, CPI-1962, CPI-1961,
+- **Related:** CPI-2150, CPI-2155, CPI-1962, CPI-1961,
   [ADR-0002](0002-actuate-converge-reconcile-pattern.md)
 
 ## Context
@@ -42,9 +42,10 @@ different lifecycle semantics:
   accumulates in memory and flushes a single status write.
 
 CPI-2150 asks for the minimum package, contract, outcome, and execution model
-baseline needed before concrete database phases are extracted. This ADR
-therefore avoids production facade cutover and avoids unreachable parallel
-implementations of existing phases.
+baseline needed before concrete database phases are extracted. Subsequent
+component tickets may prepare one dormant horizontal slice beside the active
+facade, provided that the active path remains the only writer and the cutover
+and legacy removal are explicitly assigned to the pipeline-linking task.
 
 ## Decision
 
@@ -175,6 +176,8 @@ must distinguish the current database stop shapes:
 - `SilentStop`: stop without status write, requeue, or error;
 - `Deferred`: prerequisite or runtime dependency missing, status-free requeue
   after unrelated later steps have had a chance to run;
+- `ImmediateRequeue`: Kubernetes conflict, status-free immediate retry with the
+  cause retained for structured logging but not returned as controller error;
 - `ConvergedApply`: apply status in memory and continue;
 - `ConvergedStatus`: persist status and continue;
 - `ConvergedFlush`: persist the authoritative final status and stop.
@@ -200,7 +203,14 @@ updates, and the final `Ready` flush without hard-coding phases in the runner.
 
 Events stay outside `Outcome`. Event emission depends on pre-write transition
 state, so it remains the caller's responsibility rather than becoming a hidden
-side effect of `Observe`.
+side effect of `Observe`. A pipeline cutover must preserve the active facade's
+success and warning events. It must also log immediate conflicts with the
+existing category and action fields before returning the outcome's requeue
+result.
+
+Status-write conflicts use `ImmediateRequeue`, just like mutation conflicts.
+For other status-write failures, a classified reconciliation error remains the
+primary returned error; the status failure is retained as diagnostic context.
 
 ### 6. Keep ports consumer-owned
 
@@ -284,13 +294,26 @@ translation stays in `database/adapter` and `database/infrastructure/k8s`.
 This is a facade-boundary extraction, not a migration of the full production
 facade to the pipeline runner. That migration remains future work.
 
+### 10. Prepare connection metadata as a dormant slice
+
+CPI-2155 adds `database/core/steps/connectionmetadata` with its CNPG adapter,
+Kubernetes infrastructure, and tests. It requires the current-pass credential
+fact, applies one connection ConfigMap per desired database, and provides
+`ConnectionMetadataReady` before the managed-role gate.
+
+The existing ConfigMap logic in `database.go` remains authoritative until the
+pipeline-linking task composes the extracted credential, connection-metadata,
+and managed-role steps. That cutover must preserve status reasons, transition
+events, immediate conflict logging and requeues, and then remove the legacy
+ConfigMap path so two production implementations never run in parallel.
+
 ## CPI-2150 requirement coverage
 
 | Requirement | How this MR covers it |
 | --- | --- |
 | Minimum package baseline | Adds `database/core/pipeline` and `database/core/types/reconciliation` only, with compiled code and tests. |
-| Contract baseline | Defines public contract keys, typed per-pass contracts, two concrete database contract constants, `Requires`, `Provides`, order validation, runtime requirement checks, and incomplete runtime dependency handling. |
-| Outcome baseline | Defines converged, waiting, deferred, waiting with explicit condition status, retryable, terminal, silent stop, apply-and-continue, persist-and-continue, and flush outcomes in a lower-level types package importable by future components and use cases. |
+| Contract baseline | Defines typed per-pass contract keys, `Requires`, `Provides`, order validation, runtime requirement checks, and incomplete runtime dependency handling. |
+| Outcome baseline | Defines converged, waiting, deferred, immediate requeue, waiting with explicit condition status, retryable, terminal, silent stop, apply-and-continue, persist-and-continue, and flush outcomes in a lower-level types package importable by future components and use cases. |
 | Sequential execution | Adds a runner that executes ordered steps and stops on the first non-converged outcome. |
 | Observe-only gates | Keeps mutation opt-in through `MutatingStep`; observe-only steps do not implement fake mutation. |
 | Authoritative status | Routes status-bearing outcomes to a status handler, including in-memory tail updates and persisted `Pending`, `Provisioning`, `Failed`, and final `Ready` phases; rejects unflushed in-memory status. |
@@ -301,14 +324,16 @@ facade to the pipeline runner. That migration remains future work.
 | No empty packages | Does not create `components`, `use_cases`, or infrastructure packages without real code. |
 | Characterization coverage | Adds tests for current status-write behavior and sticky terminal stop behavior. |
 | Concrete observation gate | Adds a database-owned cluster reader, resolved facts, read-only readiness policy, Kubernetes/provider translation, and facade integration without sharing cluster health semantics. |
+| Incremental component extraction | Allows a tested dormant slice with one active writer, explicit cutover ownership, and mandatory legacy removal when the pipeline is linked. |
 
 ## Alternatives considered
 
 - **Reuse the cluster runner and health model directly.** Rejected because the
   database lifecycle has different terminal, retry, and status-flush behavior.
-- **Introduce concrete database components now.** Rejected because this ADR does
-  not cut production over to a component runner; unreachable component copies
-  would make the MR larger without proving production behavior.
+- **Introduce concrete database components in the CPI-2150 baseline.** Rejected
+  because the baseline did not cut production over to a component runner.
+  Later component tickets may add one tested dormant slice under the explicit
+  cutover and removal rule above.
 - **Use two database runners, one for components and one for use cases.**
   Rejected for the prototype because the first required database workflow shape
   is positional. A single ordered pipeline proves that decision with less

@@ -64,11 +64,6 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 
 	Context("Ingestor and Indexer deployment", func() {
 		It("Splunk Operator can deploy Ingestors and Indexers", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
-			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
-			// Create Service Account
-			// testcaseEnvInst.Log.Info("Create Service Account")
-			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
-
 			Expect(testcaseEnvInst.SetupIngestorStack(ctx, deployment, queue, objectStorage, cmSpec)).To(Succeed(), "Unable to setup ingestor stack")
 
 			Expect(testenv.DeleteIngestorStack(ctx, deployment)).To(Succeed(), "Unable to delete ingestor stack")
@@ -109,18 +104,6 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 		})
 
 		It("Splunk Operator can deploy Ingestors and Indexers with additional configurations", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
-			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
-			// Create Service Account
-			// testcaseEnvInst.Log.Info("Create Service Account")
-			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
-
-			// Secret reference
-			secretName := testcaseEnvInst.GetIndexIngestSepSecretName()
-			queue.SQS.SecretKeyRef = &enterpriseApi.SQSSecretKeyRef{
-				AwsAccessKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_access_key"},
-				AwsSecretKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_secret_key"},
-			}
-
 			// Deploy Queue and ObjectStorage
 			q, objStorage, err := testenv.DeployQueueAndObjectStorage(ctx, deployment, queue, objectStorage)
 			Expect(err).To(Succeed(), "Unable to deploy Queue and ObjectStorage")
@@ -274,7 +257,6 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 		})
 
 		It("Splunk Operator can deploy Ingestors and Indexers with correct setup", Label("tier:e2e-full", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
-			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
 			// testcaseEnvInst.Log.Info("Create Service Account")
 			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
@@ -341,13 +323,6 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 
 	Context("Ingestor deployment with user-supplied ConfigMap volume", func() {
 		It("Operator rolls IngestorCluster pods when a user-supplied ConfigMap volume changes", Label("tier:e2e-pr", "cloud:aws", "feature:indingsep"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
-			// Secret reference
-			secretName := testcaseEnvInst.GetIndexIngestSepSecretName()
-			queue.SQS.SecretKeyRef = &enterpriseApi.SQSSecretKeyRef{
-				AwsAccessKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_access_key"},
-				AwsSecretKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_secret_key"},
-			}
-
 			// Deploy Queue and ObjectStorage using shared helper
 			testcaseEnvInst.Log.Info("Deploy Queue and ObjectStorage")
 			q, objStorage, err := testenv.DeployQueueAndObjectStorage(ctx, deployment, queue, objectStorage)

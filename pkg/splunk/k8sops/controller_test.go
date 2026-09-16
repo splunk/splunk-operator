@@ -43,6 +43,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/recorder"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	webhookconversion "sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 	//"sigs.k8s.io/controller-runtime/pkg/log"
@@ -226,7 +227,7 @@ func (mgr MockManager) GetEventRecorderFor(name string) record.EventRecorder {
 }
 
 // GetEventRecorder returns a new EventRecorder for the provided name
-func (mgr MockManager) GetEventRecorder(name string) events.EventRecorder {
+func (mgr MockManager) GetEventRecorder(name string) recorder.EventRecorder {
 	return events.NewFakeRecorder(100)
 }
 

@@ -34,6 +34,7 @@ const (
 	ModeTerminalError    Mode = "TerminalError"
 	ModeSilentStop       Mode = "SilentStop"
 	ModeDeferred         Mode = "Deferred"
+	ModeImmediateRequeue Mode = "ImmediateRequeue"
 )
 
 type StatusAction string
@@ -93,6 +94,14 @@ func (o Outcome) Validate(stepName string) error {
 	}
 	if (o.mode == ModeWaiting || o.mode == ModeDeferred) && o.result.RequeueAfter <= 0 {
 		return fmt.Errorf("%s: %s outcome must set RequeueAfter", stepName, o.mode)
+	}
+	if o.mode == ModeImmediateRequeue {
+		if !o.result.Requeue {
+			return fmt.Errorf("%s: immediate requeue outcome must request requeue", stepName)
+		}
+		if o.err == nil {
+			return fmt.Errorf("%s: immediate requeue outcome must retain its cause", stepName)
+		}
 	}
 	if o.mode == ModeDeferred && o.statusAction != StatusNone {
 		return fmt.Errorf("%s: deferred outcome must not handle status", stepName)
@@ -175,12 +184,24 @@ func Deferred(after time.Duration) Outcome {
 	return Outcome{mode: ModeDeferred, result: ctrl.Result{RequeueAfter: after}}
 }
 
+// ImmediateRequeue retries a conflict without publishing a failure status.
+// The cause is retained for the caller's conflict log, but is not returned to
+// controller-runtime because the explicit requeue is the retry mechanism.
+func ImmediateRequeue(err error) Outcome {
+	return Outcome{mode: ModeImmediateRequeue, result: ctrl.Result{Requeue: true}, err: err}
+}
+
 // RetryableRequeue reports a transient error.
 func RetryableRequeue(condition, reason, message, phase string, err error) Outcome {
 	return Outcome{
 		mode: ModeRetryableRequeue, statusAction: StatusPersistAndStop, phase: phase, condition: condition, conditionStatus: metav1.ConditionFalse,
 		reason: reason, message: message, err: err,
 	}
+}
+
+// RetryableError returns a transient error without changing status.
+func RetryableError(err error) Outcome {
+	return Outcome{mode: ModeRetryableRequeue, err: err}
 }
 
 // TerminalError reports a user-actionable failure.
@@ -224,7 +245,7 @@ func isValidConditionStatus(status metav1.ConditionStatus) bool {
 
 func isValidMode(mode Mode) bool {
 	switch mode {
-	case ModeConverged, ModeWaiting, ModeRetryableRequeue, ModeTerminalError, ModeSilentStop, ModeDeferred:
+	case ModeConverged, ModeWaiting, ModeRetryableRequeue, ModeTerminalError, ModeSilentStop, ModeDeferred, ModeImmediateRequeue:
 		return true
 	default:
 		return false

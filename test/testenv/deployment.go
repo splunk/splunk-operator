@@ -679,6 +679,7 @@ func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterM
 }
 
 func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object) (client.Object, error) {
+	d.testenv.injectAWSCredentials(cr)
 
 	// Apply splunk-provision annotations when SPLUNK_PROVISION_ENABLED=true
 	if len(d.testenv.splunkProvisionAnnotations) > 0 {

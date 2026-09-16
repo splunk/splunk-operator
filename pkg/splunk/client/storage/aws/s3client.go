@@ -42,6 +42,21 @@ const (
 	httpClientTimeout = 2000
 )
 
+type sessionTokenContextKey struct{}
+
+// WithSessionToken attaches temporary AWS session credentials to the client
+// initialization context. The generic remote-storage interface predates
+// session tokens, so the token is carried in context without changing the
+// signatures used by the other storage providers.
+func WithSessionToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, sessionTokenContextKey{}, token)
+}
+
+func sessionTokenFromContext(ctx context.Context) string {
+	token, _ := ctx.Value(sessionTokenContextKey{}).(string)
+	return token
+}
+
 var regionRegex = ".*.s3[-,.]([a-z]+-[a-z]+(?:-[a-z]+)?-[0-9]+)\\..*amazonaws\\.com"
 
 // blank assignment to verify that S3Client implements splcommon.RemoteDataClient
@@ -85,11 +100,11 @@ func GetRegion(ctx context.Context, endpoint string, region *string) error {
 
 // InitClientWrapper is a wrapper around InitClientConfig
 func InitClientWrapper(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-	return InitClientConfig(ctx, region, accessKeyID, secretAccessKey)
+	return InitClientConfig(ctx, region, accessKeyID, secretAccessKey, sessionTokenFromContext(ctx))
 }
 
 // InitClientConfig initializes and returns a client config object
-func InitClientConfig(ctx context.Context, regionWithEndpoint string, accessKeyID string, secretAccessKey string) SplunkS3Client {
+func InitClientConfig(ctx context.Context, regionWithEndpoint string, accessKeyID string, secretAccessKey string, sessionToken ...string) SplunkS3Client {
 	scopedLog := logging.FromContext(ctx).With("func", "InitClientConfig")
 
 	// Enforcing minimum version TLS1.2
@@ -119,6 +134,10 @@ func InitClientConfig(ctx context.Context, regionWithEndpoint string, accessKeyI
 	endpoint = regEndSl[1]
 
 	if accessKeyID != "" && secretAccessKey != "" {
+		token := ""
+		if len(sessionToken) > 0 {
+			token = sessionToken[0]
+		}
 		cfg, err = config.LoadDefaultConfig(ctx,
 			config.WithRegion(region),
 			config.WithRetryMaxAttempts(3),
@@ -126,7 +145,7 @@ func InitClientConfig(ctx context.Context, regionWithEndpoint string, accessKeyI
 			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 				accessKeyID,     // id
 				secretAccessKey, // secret
-				"")),            // token
+				token)),         // token
 		)
 	} else {
 		scopedLog.InfoContext(ctx, "no valid access/secret keys.  Attempt to connect without them")

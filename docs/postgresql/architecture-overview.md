@@ -130,6 +130,17 @@ CPI-1961):
   `ClusterValidation → CredentialProvisioning → ConnectionMetadata → Roles →
   DatabaseProvisioning → RWRolePrivileges`, persisting status between steps.
 
+Both statuses additionally expose an aggregate `Ready` condition, derived purely
+from `Phase` at the same choke point(s) that write it (`applyStatus` for
+`PostgresDatabase`; `setStatus`/`setPhaseStatus` for `PostgresCluster`). `Ready`
+is `True` only when `Phase` is `Ready`; otherwise it is `False`, carrying either
+the triggering sub-condition's reason/message (when that sub-condition is itself
+`False`) or a phase-derived reason/message (when a sub-condition reports `True`/
+`Unknown` while the phase is still non-ready, which would otherwise look
+self-contradictory). This lets external tooling (e.g. `kubectl wait
+--for=condition=Ready`, ArgoCD health checks) key off one condition instead of
+reasoning about the whole sub-condition pipeline described below.
+
 **PostgresCluster controller**
 
 ```mermaid
@@ -217,7 +228,10 @@ stateDiagram-v2
     note right of Ready
         Phase is projected from the CNPG Cluster phase; only the
         top-level reconciler declares Ready, and only once every
-        component observes Ready.
+        component observes Ready. The aggregate Ready *condition*
+        mirrors this phase: it is set True only via setPhaseStatus
+        (the only place Phase=Ready is written), and False via
+        setStatus for every other phase transition.
     end note
 ```
 
@@ -251,6 +265,9 @@ stateDiagram-v2
         at the DatabasesReady step, one step before PrivilegesReady
         - a superuser secret fetch failure in that last step can
         leave phase ReadyDB with PrivilegesReady still False.
+        The aggregate Ready condition mirrors Phase directly, so it
+        flips True at the same PrivilegesReady step where Phase
+        becomes ReadyDB.
     end note
 ```
 

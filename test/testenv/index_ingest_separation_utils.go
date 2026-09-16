@@ -45,12 +45,6 @@ func DeployQueueAndObjectStorage(ctx context.Context, deployment *Deployment, qS
 // resources simultaneously, which caused KVStore (MongoDB) crashes during Splunk's first restart
 // cycle when credentials were written and a restart was triggered under memory pressure.
 func (testcaseEnvInst *TestCaseEnv) SetupIngestorStack(ctx context.Context, deployment *Deployment, qSpec enterpriseApi.QueueSpec, osSpec enterpriseApi.ObjectStorageSpec, cmSpec enterpriseApi.ClusterManagerSpec) error {
-	secretName := testcaseEnvInst.GetIndexIngestSepSecretName()
-	qSpec.SQS.SecretKeyRef = &enterpriseApi.SQSSecretKeyRef{
-		AwsAccessKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_access_key"},
-		AwsSecretKey: v1.SecretKeySelector{LocalObjectReference: v1.LocalObjectReference{Name: secretName}, Key: "s3_secret_key"},
-	}
-
 	q, objStorage, err := DeployQueueAndObjectStorage(ctx, deployment, qSpec, osSpec)
 	if err != nil {
 		return err

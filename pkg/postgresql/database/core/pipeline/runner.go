@@ -21,6 +21,7 @@ import (
 	"time"
 
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const runtimeDependencyRequeueAfter = 15 * time.Second
@@ -71,7 +72,7 @@ func Run(ctx context.Context, steps []Step, handleStatus HandleStatus) (reconcil
 				return outcome, fmt.Errorf("%s: final converged status cannot be persisted after incomplete runtime dependencies", s.Name())
 			}
 			if err := handleStatusOutcome(ctx, handleStatus, s.Name(), outcome); err != nil {
-				return outcome, err
+				return statusFailureOutcome(outcome, err)
 			}
 			statusDirty = trackStatusDirty(statusDirty, outcome.StatusAction())
 			if outcome.StatusAction() == reconciliationTypes.StatusPersistAndStop {
@@ -82,6 +83,11 @@ func Run(ctx context.Context, steps []Step, handleStatus HandleStatus) (reconcil
 			runtimeIncomplete = true
 			deferredOutcome, hasDeferredOutcome = selectDeferredOutcome(deferredOutcome, hasDeferredOutcome, outcome)
 			continue
+		case reconciliationTypes.ModeImmediateRequeue:
+			if statusDirty {
+				return outcome, unflushedStatusError(s.Name())
+			}
+			return outcome, nil
 		case reconciliationTypes.ModeSilentStop:
 			if statusDirty {
 				return outcome, unflushedStatusError(s.Name())
@@ -89,7 +95,7 @@ func Run(ctx context.Context, steps []Step, handleStatus HandleStatus) (reconcil
 			return outcome, nil
 		case reconciliationTypes.ModeWaiting, reconciliationTypes.ModeRetryableRequeue, reconciliationTypes.ModeTerminalError:
 			if err := handleStatusOutcome(ctx, handleStatus, s.Name(), outcome); err != nil {
-				return outcome, err
+				return statusFailureOutcome(outcome, err)
 			}
 			statusDirty = trackStatusDirty(statusDirty, outcome.StatusAction())
 			if statusDirty {
@@ -111,6 +117,16 @@ func Run(ctx context.Context, steps []Step, handleStatus HandleStatus) (reconcil
 		return runtimeDependenciesWaiting(), nil
 	}
 	return reconciliationTypes.Converged(), nil
+}
+
+func statusFailureOutcome(outcome reconciliationTypes.Outcome, statusErr error) (reconciliationTypes.Outcome, error) {
+	if apierrors.IsConflict(statusErr) {
+		return reconciliationTypes.ImmediateRequeue(statusErr), nil
+	}
+	if outcome.Err() != nil {
+		return outcome, fmt.Errorf("%w (status action also failed: %v)", outcome.Err(), statusErr)
+	}
+	return outcome, statusErr
 }
 
 func selectDeferredOutcome(current reconciliationTypes.Outcome, hasCurrent bool, candidate reconciliationTypes.Outcome) (reconciliationTypes.Outcome, bool) {

@@ -22,6 +22,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -94,6 +95,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
+				readyCondition := meta.FindStatusCondition(pd.Status.Conditions, "Ready")
+				g.Expect(readyCondition).NotTo(BeNil())
+				g.Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			By("verifying managed roles for the database are present on the PostgresCluster")
@@ -499,6 +503,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 					}
 				}
 				g.Expect(found).To(BeTrue(), "expected ClusterReady=False/ClusterNotFound condition")
+				readyCondition := meta.FindStatusCondition(pd.Status.Conditions, "Ready")
+				g.Expect(readyCondition).NotTo(BeNil())
+				g.Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			By("creating the referenced PostgresCluster")
@@ -518,6 +525,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 				g.Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
 				g.Expect(pd.Status.Phase).NotTo(BeNil())
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
+				readyCondition := meta.FindStatusCondition(pd.Status.Conditions, "Ready")
+				g.Expect(readyCondition).NotTo(BeNil())
+				g.Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 		},
 	)

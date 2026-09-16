@@ -64,6 +64,16 @@ func TestOutcomeValidateRejectsMalformedValues(t *testing.T) {
 			wantErr: "Deferred outcome must set RequeueAfter",
 		},
 		{
+			name:    "immediate requeue without requeue result",
+			outcome: Outcome{mode: ModeImmediateRequeue},
+			wantErr: "immediate requeue outcome must request requeue",
+		},
+		{
+			name:    "immediate requeue without cause",
+			outcome: Outcome{mode: ModeImmediateRequeue, result: ctrl.Result{Requeue: true}},
+			wantErr: "immediate requeue outcome must retain its cause",
+		},
+		{
 			name: "deferred with status action",
 			outcome: Outcome{
 				mode: ModeDeferred, statusAction: StatusPersistAndStop,
@@ -112,6 +122,8 @@ func TestOutcomeValidateAcceptsConstructedValues(t *testing.T) {
 		Waiting("Ready", "Pending", "waiting", "Pending", time.Second),
 		WaitingWithStatus("Ready", metav1.ConditionUnknown, "Pending", "waiting", "Provisioning", time.Second),
 		Deferred(time.Second),
+		ImmediateRequeue(wantErr),
+		RetryableError(wantErr),
 		RetryableRequeue("Ready", "Retry", "retry", "Provisioning", wantErr),
 		TerminalError("Ready", "Terminal", "terminal", "Failed", wantErr),
 		SilentStop(),

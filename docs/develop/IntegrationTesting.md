@@ -882,10 +882,9 @@ Credential validation runs whenever a `TestCaseEnv` is created with `CLUSTER_PRO
 | Variable | Description |
 |----------|-------------|
 | `ECR_REGISTRY` | ECR registry URL |
-| `TEST_S3_ACCESS_KEY_ID` | Required S3 access key for test buckets; `AWS_ACCESS_KEY_ID` is accepted as a fallback |
-| `TEST_S3_SECRET_ACCESS_KEY` | Required S3 secret key; `AWS_SECRET_ACCESS_KEY` is accepted as a fallback |
-| `AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID` | Required S3 access key for the index/ingestion separation Secret |
-| `AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY` | Required S3 secret key for the index/ingestion separation Secret |
+| `AWS_ACCESS_KEY_ID` | Required AWS access key for EKS test buckets, queues, and workload pods |
+| `AWS_SECRET_ACCESS_KEY` | Required AWS secret key for EKS test buckets, queues, and workload pods |
+| `AWS_SESSION_TOKEN` | Optional AWS session token; set this when using temporary AWS credentials |
 | `TEST_BUCKET` / `TEST_S3_BUCKET` | S3 bucket for test data |
 | `TEST_INDEXES_S3_BUCKET` | S3 bucket for index tests |
 | `S3_REGION` | AWS region (default: `us-west-2`) |

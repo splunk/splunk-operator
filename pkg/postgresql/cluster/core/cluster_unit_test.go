@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -605,6 +606,11 @@ func TestPhaseWaitingForInstancesToBeActive(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantPhase, health.Phase)
 			assert.Equal(t, tt.wantReason, health.Reason)
+			readyCond := meta.FindStatusCondition(cluster.Status.Conditions, string(readyCondition))
+			require.NotNil(t, readyCond)
+			assert.Equal(t, metav1.ConditionFalse, readyCond.Status)
+			assert.Equal(t, string(tt.wantReason), readyCond.Reason,
+				"non-ready-phase setStatus calls always pair with ConditionFalse, so Ready forwards the failing component's reason verbatim")
 			if tt.wantEvent != "" {
 				assert.NotEmpty(t, health.Message)
 				select {
@@ -683,6 +689,10 @@ func TestPhaseFailOverEmitsClusterDegraded(t *testing.T) {
 	assert.Equal(t, pendingClusterPhase, health.Phase)
 	assert.Equal(t, reasonCNPGFailingOver, health.Reason)
 	assert.NotEmpty(t, health.Message)
+	readyCond := meta.FindStatusCondition(cluster.Status.Conditions, string(readyCondition))
+	require.NotNil(t, readyCond)
+	assert.Equal(t, metav1.ConditionFalse, readyCond.Status)
+	assert.Equal(t, string(reasonCNPGFailingOver), readyCond.Reason)
 	select {
 	case event := <-recorder.Events:
 		assert.Contains(t, event, corev1.EventTypeWarning)
@@ -760,7 +770,13 @@ func TestPostgresClusterServiceInitialPhase(t *testing.T) {
 			require.NotNil(t, stored.Status.Phase)
 			assert.Equal(t, tt.wantPhase, *stored.Status.Phase)
 			if tt.wantInitialized {
-				assert.Empty(t, stored.Status.Conditions)
+				// Initialization writes the aggregate Ready condition and nothing else, so
+				// external tooling can key off Ready as soon as the phase is observable.
+				require.Len(t, stored.Status.Conditions, 1)
+				readyCond := meta.FindStatusCondition(stored.Status.Conditions, string(readyCondition))
+				require.NotNil(t, readyCond)
+				assert.Equal(t, metav1.ConditionFalse, readyCond.Status)
+				assert.Equal(t, string(pendingClusterPhase), readyCond.Reason)
 				assert.Nil(t, stored.Status.ObservedGeneration)
 				assert.Nil(t, stored.Status.Resources)
 				require.NotNil(t, stored.Status.LastTransitionTime)
