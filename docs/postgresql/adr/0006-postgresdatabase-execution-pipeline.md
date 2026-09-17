@@ -10,7 +10,7 @@ nav_order: 6
 - **Status:** Proposed
 - **Date:** 2026-08-31
 - **Deciders:** Postgres operator team (CPI), proposed for CPI-2150 review
-- **Related:** CPI-2150, CPI-2155, CPI-1962, CPI-1961,
+- **Related:** CPI-2150, CPI-2155, CPI-2156, CPI-1962, CPI-1961,
   [ADR-0002](0002-actuate-converge-reconcile-pattern.md)
 
 ## Context
@@ -22,12 +22,13 @@ service function, `PostgresDatabaseService`, in
 1. finalizer and sticky failure checks
 2. `PostgresCluster` existence and readiness checks
 3. role credential secret reconciliation
-4. connection metadata `ConfigMap` reconciliation
-5. managed-role acknowledgement checks
-6. CNPG `Database` reconciliation
-7. PostgreSQL RW privilege reconciliation
-8. custom metrics acknowledgement
-9. final Ready status
+4. credential-ready managed-role intent publication
+5. connection metadata `ConfigMap` reconciliation
+6. managed-role acknowledgement checks
+7. CNPG `Database` reconciliation
+8. PostgreSQL RW privilege reconciliation
+9. custom metrics acknowledgement
+10. final Ready status
 
 The sibling `PostgresCluster` controller already has an ordered component
 runner and a finite use-case runner. That code is useful precedent for
@@ -298,14 +299,31 @@ facade to the pipeline runner. That migration remains future work.
 
 CPI-2155 adds `database/core/steps/connectionmetadata` with its CNPG adapter,
 Kubernetes infrastructure, and tests. It requires the current-pass credential
-fact, applies one connection ConfigMap per desired database, and provides
-`ConnectionMetadataReady` before the managed-role gate.
+and managed-role-publication facts, applies one connection ConfigMap per desired
+database, and provides `ConnectionMetadataReady` before the managed-role gate.
 
 The existing ConfigMap logic in `database.go` remains authoritative until the
 pipeline-linking task composes the extracted credential, connection-metadata,
 and managed-role steps. That cutover must preserve status reasons, transition
 events, immediate conflict logging and requeues, and then remove the legacy
 ConfigMap path so two production implementations never run in parallel.
+
+### 11. Prepare the managed-role protocol as two dormant units
+
+CPI-2156 keeps the managed-role handshake as one business slice but represents
+its two lifecycle positions explicitly. A mutating publication unit requires
+`CredentialsReady`, persists credential-ready role intent, and provides
+`ManagedRoleIntentPublished`. Connection metadata requires that publication
+fact. An observation-only acknowledgement gate then requires both
+`ManagedRoleIntentPublished` and `ConnectionMetadataReady`, and provides
+`ManagedRolesReady` only when every desired role is reconciled and owned by the
+current PostgresDatabase name and UID.
+
+This split preserves the current order without delaying role publication or
+moving connection metadata behind the acknowledgement wait. The new units and
+their adapters remain dormant: `database.go` is still the sole production
+writer of role intent and role-gate status. The later pipeline-linking task must
+compose the new units and remove the legacy path in the same cutover.
 
 ## CPI-2150 requirement coverage
 
