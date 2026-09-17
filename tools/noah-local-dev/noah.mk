@@ -121,8 +121,13 @@ noah-local-deploy: ## Install or upgrade Noah, PostgreSQL, Redis and MinIO in th
 		--set service.port=$(NOAH_LOCAL_PORT) \
 		--wait --timeout $(NOAH_LOCAL_DEPLOY_TIMEOUT) $(NOAH_LOCAL_HELM_ARGS)
 
+.PHONY: noah-local-operator-chart-deps
+noah-local-operator-chart-deps: ## Fetch the operator chart's subchart dependencies.
+	helm repo add jetstack https://charts.jetstack.io --force-update
+	helm dependency build "$(NOAH_LOCAL_OPERATOR_CHART)"
+
 .PHONY: noah-local-operator-deploy
-noah-local-operator-deploy: ## Install or upgrade a Noah-enabled operator in the vCluster.
+noah-local-operator-deploy: noah-local-operator-chart-deps ## Install or upgrade a Noah-enabled operator in the vCluster.
 	@set -eu; \
 		test -n "$(NOAH_LOCAL_OPERATOR_IMAGE)" || { \
 			printf '%s\n' 'Set NOAH_LOCAL_OPERATOR_IMAGE to an immutable staged operator image.' >&2; \
