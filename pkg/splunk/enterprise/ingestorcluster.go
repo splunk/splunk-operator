@@ -77,6 +77,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		cr.Status.Conditions = result.Conditions
 		cr.Status.ObservedGeneration = cr.GetGeneration()
 	}
+	// (Placeholder) Default to Error before anything is checked, so an unexpected early
+	// return leaves the CR reporting failure instead of stale success.
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
@@ -152,7 +154,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIngestor)
 
 		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
-		if terminating && err != nil {
+		if terminating && err == nil {
 			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
