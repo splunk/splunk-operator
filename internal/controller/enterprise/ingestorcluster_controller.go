@@ -72,25 +72,34 @@ type IngestorClusterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	var err error
+
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "IngestorCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "IngestorCluster")
+	defer func() {
+		if err != nil {
+			metrics.ReconcileErrorCounter.With(metrics.GetPrometheusLabels(req, "IngestorCluster")).Inc()
+		}
+	}()
 
 	logger := slog.Default().With("controller", "IngestorCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 
 	// Fetch the IngestorCluster
 	instance := &enterpriseApi.IngestorCluster{}
-	err := r.Get(ctx, req.NamespacedName, instance)
+	err = r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after
 			// reconcile request.  Owned objects are automatically
 			// garbage collected. For additional cleanup logic use
 			// finalizers.  Return and don't requeue
-			return ctrl.Result{}, nil
+			err = nil
+			return ctrl.Result{}, err
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load ingestor cluster data")
+		err = errors.Wrap(err, "could not load ingestor cluster data")
+		return ctrl.Result{}, err
 	}
 
 	// If the reconciliation is paused, set the Paused condition and requeue
@@ -99,18 +108,20 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
 		})
 		instance.Status.Conditions = result.Conditions
-		if err := r.Status().Update(ctx, instance); err != nil {
-			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
+		if statusErr := r.Status().Update(ctx, instance); statusErr != nil {
+			logger.ErrorContext(ctx, "failed to update paused status", "error", statusErr)
+			err = statusErr
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, err
 	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
 		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
 		})
 		instance.Status.Conditions = result.Conditions
-		if err := r.Status().Update(ctx, instance); err != nil {
-			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
+		if statusErr := r.Status().Update(ctx, instance); statusErr != nil {
+			logger.ErrorContext(ctx, "failed to update unpaused status", "error", statusErr)
+			err = statusErr
 			return ctrl.Result{}, err
 		}
 	}
@@ -120,17 +131,34 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Pass event recorder through context
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
+	// Phase as of reconcile entry, so we can tell a genuine transition into
+	// the Error phase apart from a CR that was already in Error.
+	previousPhase := instance.Status.Phase
+
 	result, err := ApplyIngestorCluster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
 	}
+	// Record metrics if Error phase was entered. instance was mutated in place by
+	// ApplyIngestorCluster, so this doesn't depend on the refetch below succeeding.
+	if instance.Status.Phase == enterpriseApi.PhaseError && previousPhase != enterpriseApi.PhaseError {
+		errorType := "Reconciliation failed"
+		if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionReady)); cond != nil && cond.Message != "" {
+			errorType = cond.Message
+		}
+		labels := metrics.GetPrometheusLabels(req, "IngestorCluster")
+		labels[metrics.LabelErrorType] = errorType
+		metrics.ActionFailureCounters.With(labels).Inc()
+	}
 	fresh := &enterpriseApi.IngestorCluster{}
 	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr != nil {
 		if k8serrors.IsNotFound(fetchErr) {
-			return result, nil
+			err = nil
+			return result, err
 		}
 		logger.WarnContext(ctx, "failed to refetch CR for stalled condition update", "error", fetchErr)
-		return result, fetchErr
+		err = fetchErr
+		return result, err
 	}
 	oldConditions := append([]metav1.Condition(nil), fresh.Status.Conditions...)
 	if msg, ok := splcommon.TerminalMessage(err); ok {
@@ -142,12 +170,14 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	ep, epErr := enterprise.NewK8EventPublisherWithRecorder(r.Recorder, fresh)
 	if epErr != nil {
 		logger.WarnContext(ctx, "failed to create event publisher", "error", epErr)
-		return result, epErr
+		err = epErr
+		return result, err
 	}
 	enterprise.EmitStalledTransitionEvents(ctx, ep, fresh.GetName(), oldConditions, fresh.Status.Conditions)
 	if updateErr := r.Status().Update(ctx, fresh); updateErr != nil {
 		logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
-		return result, updateErr
+		err = updateErr
+		return result, err
 	}
 	if _, ok := splcommon.TerminalMessage(err); ok {
 		return reconcile.Result{}, err
