@@ -86,13 +86,13 @@ const (
 	// DB reconcile phases
 	readyDBPhase        reconcileDBPhases = "Ready"
 	pendingDBPhase      reconcileDBPhases = "Pending"
-	provisioningDBPhase reconcileDBPhases = "Provisioning"
-	failedDBPhase       reconcileDBPhases = "Failed"
+	provisioningDBPhase reconcileDBPhases = reconcileDBPhases(reconciliationTypes.PhaseProvisioning)
+	failedDBPhase       reconcileDBPhases = reconcileDBPhases(reconciliationTypes.PhaseFailed)
 	deletingDBPhase     reconcileDBPhases = "Deleting"
 
 	// condition types
 	clusterReady       conditionTypes = "ClusterReady"
-	rolesReady         conditionTypes = "RolesReady"
+	rolesReady         conditionTypes = conditionTypes(reconciliationTypes.ConditionRolesReady)
 	databasesReady     conditionTypes = "DatabasesReady"
 	secretsReady       conditionTypes = "SecretsReady"
 	configMapsReady    conditionTypes = "ConfigMapsReady"
@@ -117,10 +117,10 @@ const (
 	reasonExternalSecretMissingData      conditionReasons = "ExternalSecretMissingData"
 	reasonExternalSecretMissingKeys      conditionReasons = "ExternalSecretMissingKeys"
 	reasonExternalSecretMissingLabel     conditionReasons = "ExternalSecretMissingReloadLabel"
-	reasonWaitingForCNPG                 conditionReasons = "WaitingForCNPG"
-	reasonRolesAvailable                 conditionReasons = "RolesAvailable"
-	reasonRoleConflict                   conditionReasons = "RoleConflict"
-	reasonRoleReconcileFailed            conditionReasons = "RoleReconcileFailed"
+	reasonWaitingForCNPG                 conditionReasons = conditionReasons(reconciliationTypes.ReasonWaitingForCNPG)
+	reasonRolesAvailable                 conditionReasons = conditionReasons(reconciliationTypes.ReasonRolesAvailable)
+	reasonRoleConflict                   conditionReasons = conditionReasons(reconciliationTypes.ReasonRoleConflict)
+	reasonRoleReconcileFailed            conditionReasons = conditionReasons(reconciliationTypes.ReasonRoleReconcileFailed)
 	reasonRoleCleanupWaiting             conditionReasons = "RoleCleanupWaitingForCluster"
 	reasonRoleCleanupBlocked             conditionReasons = "RoleCleanupBlocked"
 	reasonConfigMapsCreationFailed       conditionReasons = "ConfigMapsCreationFailed"
