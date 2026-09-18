@@ -24,6 +24,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -31,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -257,7 +259,7 @@ func TestPoolerExists(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-			got, err := poolerExists(context.Background(), c, cluster, "rw")
+			got, err := poolerExistsForEnvironment(context.Background(), c, cluster, &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace}}, "rw", testEnvironmentNamer)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -273,26 +275,30 @@ func TestDeleteConnectionPoolers(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
 			Namespace: "default",
+			UID:       "cluster-uid",
 		},
 	}
+	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: cluster.Name, UID: cluster.UID, Controller: ptr.To(true)}
 
 	rwPooler := &cnpgv1.Pooler{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster-pooler-rw",
-			Namespace: "default",
+			Name:            "my-cluster-pooler-rw",
+			Namespace:       "default",
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
 	}
 	roPooler := &cnpgv1.Pooler{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster-pooler-ro",
-			Namespace: "default",
+			Name:            "my-cluster-pooler-ro",
+			Namespace:       "default",
+			OwnerReferences: []metav1.OwnerReference{ownerRef},
 		},
 	}
 
 	t.Run("deletes both poolers when they exist", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler.DeepCopy(), roPooler.DeepCopy()).Build()
 
-		err := deleteConnectionPoolers(context.Background(), c, cluster)
+		err := deleteConnectionPoolers(context.Background(), c, cluster, testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.True(t, apierrors.IsNotFound(c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, &cnpgv1.Pooler{})))
@@ -302,7 +308,7 @@ func TestDeleteConnectionPoolers(t *testing.T) {
 	t.Run("no-op when no poolers exist", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		err := deleteConnectionPoolers(context.Background(), c, cluster)
+		err := deleteConnectionPoolers(context.Background(), c, cluster, testEnvironmentNamer)
 
 		require.NoError(t, err)
 	})
@@ -365,7 +371,7 @@ func TestCreateConnectionPooler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
 
-			err := createAndUpdateConnectionPooler(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpg, "rw", false)
+			err := createAndUpdateConnectionPooler(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpg, "rw", false, testEnvironmentNamer)
 
 			require.NoError(t, err)
 			fetched := &cnpgv1.Pooler{}
@@ -422,7 +428,7 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 	t.Run("creates both rw and ro poolers", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false)
+		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false, testEnvironmentNamer)
 
 		require.NoError(t, err)
 
@@ -452,7 +458,7 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing...).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false)
+		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false, testEnvironmentNamer)
 
 		require.NoError(t, err)
 		rw := &cnpgv1.Pooler{}
@@ -481,7 +487,7 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing...).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false)
+		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false, testEnvironmentNamer)
 
 		require.NoError(t, err)
 		rw := &cnpgv1.Pooler{}
@@ -498,7 +504,7 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 	t.Run("creates both rw and ro poolers with scrape annotations when metrics are enabled", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, true)
+		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, true, testEnvironmentNamer)
 
 		require.NoError(t, err)
 
@@ -548,7 +554,7 @@ func TestBuildCNPGPooler(t *testing.T) {
 	}
 
 	t.Run("rw pooler", func(t *testing.T) {
-		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "rw", false)
+		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "rw", false, testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-rw", pooler.Name)
@@ -566,7 +572,7 @@ func TestBuildCNPGPooler(t *testing.T) {
 	})
 
 	t.Run("ro pooler", func(t *testing.T) {
-		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "ro", true)
+		pooler, err := buildCNPGPooler(scheme, postgresCluster, cfg, cnpgCluster, "ro", true, testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-ro", pooler.Name)
@@ -738,7 +744,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readOnlyEndpoint), Namespace: cluster.Namespace},
 			Status:     cnpgv1.PoolerStatus{Instances: 3},
 		}
-		contracts := &reconcileContracts{CNPGCluster: cnpgReady}
+		contracts := &reconcileContracts{CNPGCluster: cnpgReady, EnvironmentNamer: testEnvironmentNamer}
 		model := newPoolerModel(
 			fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler, tlsSecret).Build(),
 			scheme, noopEventEmitter{}, nil, cluster, clusterClass, poolerEnabledConfig(), contracts,
@@ -775,7 +781,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 				return key.Name == rwName
 			},
 		}
-		contracts := &reconcileContracts{CNPGCluster: healthyCNPG}
+		contracts := &reconcileContracts{CNPGCluster: healthyCNPG, EnvironmentNamer: testEnvironmentNamer}
 		model := newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, poolerEnabledConfig(), contracts)
 
 		// Act
@@ -808,7 +814,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 				return key.Name == roName
 			},
 		}
-		contracts := &reconcileContracts{CNPGCluster: healthyCNPG}
+		contracts := &reconcileContracts{CNPGCluster: healthyCNPG, EnvironmentNamer: testEnvironmentNamer}
 		model := newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, poolerEnabledConfig(), contracts)
 
 		// Act
@@ -828,7 +834,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 			Status:     platformv1alpha1.PostgresClusterStatus{ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true}},
 		}
-		contracts := &reconcileContracts{CNPGCluster: healthyCNPG}
+		contracts := &reconcileContracts{CNPGCluster: healthyCNPG, EnvironmentNamer: testEnvironmentNamer}
 		model := newPoolerModel(
 			fake.NewClientBuilder().WithScheme(scheme).Build(),
 			scheme, noopEventEmitter{}, nil, cluster, clusterClass, &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
@@ -868,7 +874,7 @@ func TestPoolerConvergeEmitsReadyEventOnTransition(t *testing.T) {
 		Status:     cnpgv1.PoolerStatus{Instances: 3},
 	}
 	cnpgReady, tlsSecret := makePoolerReadyCNPG(t, "pg1", "default")
-	contracts := &reconcileContracts{CNPGCluster: cnpgReady}
+	contracts := &reconcileContracts{CNPGCluster: cnpgReady, EnvironmentNamer: testEnvironmentNamer}
 	model := newPoolerModel(
 		fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler, tlsSecret).Build(),
 		scheme, events, nil, cluster, clusterClass, poolerEnabledConfig(), contracts,
@@ -913,6 +919,7 @@ func TestPoolerModelConvergeWaitsForSANPolicy(t *testing.T) {
 	roPooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readOnlyEndpoint), Namespace: cluster.Namespace}}
 	// SANs not yet converged: pooler SANs absent from spec
 	contracts := &reconcileContracts{
+		EnvironmentNamer: testEnvironmentNamer,
 		CNPGCluster: &cnpgv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 			Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
@@ -953,7 +960,7 @@ func TestPoolerModelConvergeWaitsForTLSLeafMaterial(t *testing.T) {
 	roPooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readOnlyEndpoint), Namespace: cluster.Namespace}}
 	// SANs converged but TLS secret NOT seeded → isServerTLSLeafAlignedWithSpec returns false
 	cnpgReady, _ := makePoolerReadyCNPG(t, "pg1", "default")
-	contracts := &reconcileContracts{CNPGCluster: cnpgReady}
+	contracts := &reconcileContracts{CNPGCluster: cnpgReady, EnvironmentNamer: testEnvironmentNamer}
 	model := newPoolerModel(
 		fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler).Build(),
 		scheme, noopEventEmitter{}, nil, cluster, clusterClass, poolerEnabledConfig(), contracts,
@@ -991,7 +998,7 @@ func TestPoolerModelConvergeTLSLeafInvalidCertEmitsFailed(t *testing.T) {
 		ObjectMeta: validSecret.ObjectMeta, // same name/ns — overrides the valid cert
 		Data:       map[string][]byte{corev1.TLSCertKey: []byte("not a valid PEM block")},
 	}
-	contracts := &reconcileContracts{CNPGCluster: cnpgLive}
+	contracts := &reconcileContracts{CNPGCluster: cnpgLive, EnvironmentNamer: testEnvironmentNamer}
 
 	rwPooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readWriteEndpoint), Namespace: cluster.Namespace}}
 	roPooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readOnlyEndpoint), Namespace: cluster.Namespace}}
@@ -1036,7 +1043,7 @@ func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
 	}
 
 	events := &captureEventEmitter{}
-	contracts := &reconcileContracts{} // no CNPGCluster — bootstrap race
+	contracts := &reconcileContracts{EnvironmentNamer: testEnvironmentNamer} // no CNPGCluster — bootstrap race
 	model := newPoolerModel(
 		fake.NewClientBuilder().WithScheme(scheme).Build(),
 		scheme, events, nil, cluster, clusterClass, &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
@@ -1047,6 +1054,54 @@ func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
 	require.NoError(t, err, "disabled-branch + nil CNPG must not produce an error")
 	assert.NotEqual(t, pgcConstants.Failed, health.State, "disabled-branch + nil CNPG must not produce a Failed health condition")
 	assert.Empty(t, events.warnings, "no warning events should be emitted on the happy bootstrap-race path")
+}
+
+func TestPoolerModelActuateDisabledDeletesManagedEnvironmentPoolers(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := newTestCluster("orders", "postgres")
+	green := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "orders-green", Namespace: cluster.Namespace}}
+	authority := identitytypes.ClusterCard{
+		Logical:       conventionalClusterCard(cluster).Logical,
+		Authoritative: testEnvironment(cluster, green.Name, "", identitytypes.EnvironmentRoleAuthoritative),
+		Managed: []identitytypes.Environment{
+			testEnvironment(cluster, green.Name, "", identitytypes.EnvironmentRoleAuthoritative),
+			testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained),
+		},
+	}
+
+	var poolers []client.Object
+	for _, environmentName := range []string{cluster.Name, green.Name} {
+		for _, poolerType := range []string{readWriteEndpoint, readOnlyEndpoint} {
+			pooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{
+				Name:      poolerResourceName(environmentName, poolerType),
+				Namespace: cluster.Namespace,
+			}}
+			require.NoError(t, ctrl.SetControllerReference(cluster, pooler, scheme))
+			poolers = append(poolers, pooler)
+		}
+	}
+
+	contracts := &reconcileContracts{
+		CNPGCluster:      green,
+		Authority:        authority,
+		EnvironmentNamer: testEnvironmentNamer,
+	}
+	model := newPoolerModel(
+		fake.NewClientBuilder().WithScheme(scheme).WithObjects(poolers...).Build(),
+		scheme, noopEventEmitter{}, nil, cluster, nil,
+		&MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
+	)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+	for _, environmentName := range []string{cluster.Name, green.Name} {
+		for _, poolerType := range []string{readWriteEndpoint, readOnlyEndpoint} {
+			err := model.client.Get(context.Background(), client.ObjectKey{
+				Name:      poolerResourceName(environmentName, poolerType),
+				Namespace: cluster.Namespace,
+			}, &cnpgv1.Pooler{})
+			assert.True(t, apierrors.IsNotFound(err), "Pooler for %s must be removed when pooling is disabled", environmentName)
+		}
+	}
 }
 
 func TestPoolerModelROPoolerWanted(t *testing.T) {

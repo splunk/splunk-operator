@@ -232,3 +232,51 @@ func TestDatabaseProvisionerReAdoptsRetainedDatabase(t *testing.T) {
 	require.Len(t, database.OwnerReferences, 1)
 	assert.Equal(t, types.UID("owner-uid"), database.OwnerReferences[0].UID)
 }
+
+func TestDatabaseProvisionerAdoptsAndVerifiesSchemaImportedGreenDatabase(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	database := &cnpgv1.Database{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "primary-primary-green-payments",
+			Namespace:   "dbs",
+			Annotations: map[string]string{cnpginfra.AnnotationRetainedFrom: "primary"},
+		},
+		Spec: cnpgv1.DatabaseSpec{
+			Name:       "payments",
+			ClusterRef: corev1.LocalObjectReference{Name: "primary-green"},
+		},
+		Status: cnpgv1.DatabaseStatus{Applied: ptr.To(true), ObservedGeneration: 1},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&cnpgv1.Database{}).WithObjects(database).Build()
+	provisioner := NewDatabaseProvisioner(c, scheme)
+	target := dbtypes.ProvisionerTarget{
+		Namespace: "dbs", PostgresDatabaseName: "primary",
+		PostgresDatabaseUID: "owner-uid", ProviderClusterName: "primary-green",
+	}
+
+	result, err := provisioner.Apply(t.Context(), target, []dbtypes.DesiredDatabase{{
+		ResourceName: database.Name, Name: "payments", Owner: "payments_admin",
+	}})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"payments"}, result.Adopted)
+	require.Len(t, result.Expected, 1)
+	assert.Equal(t, database.Name, result.Expected[0].ResourceName)
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: database.Name, Namespace: database.Namespace}, database))
+	assert.Equal(t, "primary-green", database.Spec.ClusterRef.Name)
+	assert.NotContains(t, database.Annotations, cnpginfra.AnnotationRetainedFrom)
+	require.Len(t, database.OwnerReferences, 1)
+	assert.Equal(t, types.UID("owner-uid"), database.OwnerReferences[0].UID)
+
+	database.Status.Applied = ptr.To(true)
+	database.Status.ObservedGeneration = result.Expected[0].Generation
+	require.NoError(t, c.Status().Update(t.Context(), database))
+	observation, err := provisioner.Observe(t.Context(), target, result.Expected)
+	require.NoError(t, err)
+	require.Len(t, observation.Databases, 1)
+	assert.True(t, observation.Databases[0].Found)
+	assert.True(t, observation.Databases[0].Applied)
+	assert.Equal(t, result.Expected[0].Generation, observation.Databases[0].ObservedGeneration)
+}

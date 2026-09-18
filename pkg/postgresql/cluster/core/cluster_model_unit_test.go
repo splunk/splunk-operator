@@ -37,6 +37,7 @@ import (
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	structuraldefaulting "k8s.io/apiextensions-apiserver/pkg/apiserver/schema/defaulting"
 	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -235,6 +236,72 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, cnpgv1.PrimaryUpdateMethodSwitchover, updated.Spec.PrimaryUpdateMethod)
 	assert.Contains(t, events.normals, EventClusterUpdateStarted+":CNPG cluster spec updated for PostgresCluster pg1, waiting for healthy state")
+}
+
+func TestClusterModelReconcilesNonconventionalAuthoritativeEnvironmentIdempotently(t *testing.T) {
+	scheme := newTestScheme()
+	instances := int32(2)
+	version := "16"
+	storageSize := resource.MustParse("10Gi")
+	mergedConfig := &MergedConfig{
+		Spec: &platformv1alpha1.PostgresClusterSpec{
+			Instances:        &instances,
+			PostgresVersion:  &version,
+			Storage:          &storageSize,
+			Resources:        &corev1.ResourceRequirements{},
+			PostgreSQLConfig: map[string]string{},
+			PgHBA:            []string{},
+		},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+	}
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "default"},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			ProvisionerRef: &corev1.ObjectReference{
+				APIVersion: cnpgv1.SchemeGroupVersion.String(),
+				Kind:       "Cluster",
+				Namespace:  "default",
+				Name:       "primary-green",
+			},
+		},
+	}
+	green := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: "default"},
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, "primary-green", "primary-secret", false),
+		Status: cnpgv1.ClusterStatus{
+			Phase:           cnpgv1.PhaseHealthy,
+			Instances:       int(instances),
+			ReadyInstances:  int(instances),
+			CurrentPrimary:  "primary-green-1",
+			PGDataImageInfo: &cnpgv1.ImageInfo{MajorVersion: 16},
+		},
+	}
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, green)
+	contracts := &reconcileContracts{
+		Secret:    &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-secret", Namespace: "default"}},
+		Authority: testClusterCard(cluster, green.Name, green.UID),
+	}
+	model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, &platformv1alpha1.PostgresClusterClass{}, mergedConfig, contracts)
+
+	require.NoError(t, model.Reconcile(t.Context()))
+	require.NoError(t, model.Reconcile(t.Context()))
+	health, err := model.computeHealth(nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, pgcConstants.Ready, health.State)
+	require.NotNil(t, contracts.CNPGCluster)
+	assert.Equal(t, green.Name, contracts.CNPGCluster.Name)
+	require.NotNil(t, cluster.Status.ProvisionerRef)
+	assert.Equal(t, green.Name, cluster.Status.ProvisionerRef.Name)
+	require.NotNil(t, cluster.Status.Instances)
+	assert.Equal(t, instances, *cluster.Status.Instances)
+	assert.Equal(t, "16", cluster.Status.CurrentPgVersion)
+	assert.Equal(t, "primary-green-1", *cluster.Status.CurrentPrimary)
+	assert.False(t, model.cnpgCreated)
+
+	conventional := &cnpgv1.Cluster{}
+	err = c.Get(t.Context(), client.ObjectKey{Name: cluster.Name, Namespace: cluster.Namespace}, conventional)
+	assert.True(t, apierrors.IsNotFound(err), "reconciliation must not recreate the conventional CNPG Cluster")
 }
 
 func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
@@ -1804,7 +1871,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			Status:     cnpgStatus,
 		}
 		require.NoError(t, ctrl.SetControllerReference(cluster, cnpg, scheme))
-		return &reconcileContracts{CNPGCluster: cnpg}
+		return &reconcileContracts{CNPGCluster: cnpg, Authority: conventionalClusterCard(cluster), EnvironmentNamer: testEnvironmentNamer}
 	}
 
 	combinations := []struct {
@@ -1827,7 +1894,8 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 				require.NoError(t, ctrl.SetControllerReference(cluster, cnpg, scheme))
 				// provisioner gets full contracts; pooler gets empty contracts (no CNPGCluster).
 				provisionerContracts := &reconcileContracts{
-					Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}},
+					Secret:    &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}},
+					Authority: conventionalClusterCard(cluster),
 				}
 				poolerContracts := &reconcileContracts{} // simulates pooler running before provisioner publishes
 				provisioner := newClusterModel(

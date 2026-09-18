@@ -50,12 +50,13 @@ func reconcileDatabaseProvisioning(
 	provisioner DatabaseProvisioner,
 	postgresDB *platformv1alpha1.PostgresDatabase,
 	providerClusterName string,
+	environmentName string,
 ) (databaseProvisioningResult, error) {
 	if provisioner == nil {
 		return databaseProvisioningResult{}, fmt.Errorf("database provisioner is not configured")
 	}
 	target := databaseProvisionerTarget(postgresDB, providerClusterName)
-	current, err := provisioner.Inspect(ctx, target, databaseIdentities(postgresDB))
+	current, err := provisioner.Inspect(ctx, target, databaseIdentities(postgresDB, environmentName))
 	if err != nil {
 		return databaseProvisioningResult{}, fmt.Errorf("inspecting provider databases: %w", err)
 	}
@@ -64,7 +65,7 @@ func reconcileDatabaseProvisioning(
 		ctx,
 		provisioner,
 		target,
-		desiredDatabasesForProvisioning(postgresDB, bootstrapCompleted),
+		desiredDatabasesForProvisioning(postgresDB, bootstrapCompleted, environmentName),
 	)
 	if err != nil {
 		return databaseProvisioningResult{}, err
@@ -78,11 +79,12 @@ func reconcileRequestedClosedState(
 	provisioner DatabaseProvisioner,
 	postgresDB *platformv1alpha1.PostgresDatabase,
 	providerClusterName string,
+	environmentName string,
 ) (bool, error) {
 	if provisioner == nil {
 		return false, fmt.Errorf("database provisioner is not configured")
 	}
-	desired := desiredClosedDatabases(postgresDB)
+	desired := desiredClosedDatabases(postgresDB, environmentName)
 	if len(desired) == 0 {
 		return true, nil
 	}
@@ -161,6 +163,7 @@ func reconcileDesiredDatabaseState(
 func desiredDatabasesForProvisioning(
 	postgresDB *platformv1alpha1.PostgresDatabase,
 	bootstrapCompleted map[string]bool,
+	providerClusterName string,
 ) []dbtypes.DesiredDatabase {
 	desired := make([]dbtypes.DesiredDatabase, 0, len(postgresDB.Spec.Databases))
 	for _, database := range postgresDB.Spec.Databases {
@@ -170,32 +173,33 @@ func desiredDatabasesForProvisioning(
 			// privileges. The requested false value is applied after that bootstrap.
 			allowConnections = boolPointer(true)
 		}
-		desired = append(desired, desiredDatabase(postgresDB.Name, database, allowConnections))
+		desired = append(desired, desiredDatabase(postgresDB, database, allowConnections, providerClusterName))
 	}
 	return desired
 }
 
-func desiredClosedDatabases(postgresDB *platformv1alpha1.PostgresDatabase) []dbtypes.DesiredDatabase {
+func desiredClosedDatabases(postgresDB *platformv1alpha1.PostgresDatabase, providerClusterName string) []dbtypes.DesiredDatabase {
 	desired := make([]dbtypes.DesiredDatabase, 0, len(postgresDB.Spec.Databases))
 	for _, database := range postgresDB.Spec.Databases {
 		if database.AllowConnections != nil && !*database.AllowConnections {
-			desired = append(desired, desiredDatabase(postgresDB.Name, database, cloneBool(database.AllowConnections)))
+			desired = append(desired, desiredDatabase(postgresDB, database, cloneBool(database.AllowConnections), providerClusterName))
 		}
 	}
 	return desired
 }
 
 func desiredDatabase(
-	postgresDatabaseName string,
+	postgresDB *platformv1alpha1.PostgresDatabase,
 	database platformv1alpha1.DatabaseDefinition,
 	allowConnections *bool,
+	providerClusterName string,
 ) dbtypes.DesiredDatabase {
 	reclaim := dbtypes.ReclaimDelete
 	if database.DeletionPolicy == deletionPolicyRetain {
 		reclaim = dbtypes.ReclaimRetain
 	}
 	return dbtypes.DesiredDatabase{
-		ResourceName: cnpgDatabaseName(postgresDatabaseName, database.Name),
+		ResourceName: cnpgDatabaseResourceName(postgresDB, database.Name, providerClusterName),
 		Name:         database.Name,
 		Owner:        EffectiveRoleNames(database).Admin,
 		Reclaim:      reclaim,
@@ -221,11 +225,11 @@ func desiredDatabase(
 	}
 }
 
-func databaseIdentities(postgresDB *platformv1alpha1.PostgresDatabase) []dbtypes.DatabaseIdentity {
+func databaseIdentities(postgresDB *platformv1alpha1.PostgresDatabase, providerClusterName string) []dbtypes.DatabaseIdentity {
 	result := make([]dbtypes.DatabaseIdentity, 0, len(postgresDB.Spec.Databases))
 	for _, database := range postgresDB.Spec.Databases {
 		result = append(result, dbtypes.DatabaseIdentity{
-			Name: database.Name, ResourceName: cnpgDatabaseName(postgresDB.Name, database.Name),
+			Name: database.Name, ResourceName: cnpgDatabaseResourceName(postgresDB, database.Name, providerClusterName),
 		})
 	}
 	return result
@@ -292,6 +296,7 @@ func persistDatabaseBootstrapCompletion(
 	postgresDB *platformv1alpha1.PostgresDatabase,
 	bootstrapped []platformv1alpha1.DatabaseDefinition,
 	databaseUIDs map[string]k8stypes.UID,
+	environmentName string,
 ) error {
 	before := postgresDB.Status.DeepCopy()
 	applyStatus(
@@ -302,7 +307,7 @@ func persistDatabaseBootstrapCompletion(
 		"Waiting for CNPG to apply the final database connection policy",
 		provisioningDBPhase,
 	)
-	recordDatabaseBootstrapCompletion(postgresDB, bootstrapped, databaseUIDs)
+	recordDatabaseBootstrapCompletion(postgresDB, bootstrapped, databaseUIDs, environmentName)
 	closed := make(map[string]struct{}, len(bootstrapped))
 	for _, database := range bootstrapped {
 		if database.AllowConnections != nil && !*database.AllowConnections {
@@ -328,6 +333,7 @@ func recordDatabaseBootstrapCompletion(
 	postgresDB *platformv1alpha1.PostgresDatabase,
 	bootstrapped []platformv1alpha1.DatabaseDefinition,
 	databaseUIDs map[string]k8stypes.UID,
+	environmentName string,
 ) {
 	targets := make(map[string]struct{}, len(bootstrapped))
 	for _, database := range bootstrapped {
@@ -338,7 +344,7 @@ func recordDatabaseBootstrapCompletion(
 		if _, found := targets[info.Name]; !found {
 			continue
 		}
-		info.DatabaseRef = &corev1.LocalObjectReference{Name: cnpgDatabaseName(postgresDB.Name, info.Name)}
+		info.DatabaseRef = &corev1.LocalObjectReference{Name: cnpgDatabaseResourceName(postgresDB, info.Name, environmentName)}
 		info.DatabaseUID = databaseUIDs[info.Name]
 	}
 }

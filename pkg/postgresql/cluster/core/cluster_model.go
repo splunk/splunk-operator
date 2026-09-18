@@ -99,8 +99,10 @@ func newClusterModel(c client.Client, scheme *runtime.Scheme, events eventEmitte
 	return model
 }
 
-func (p *clusterModel) Name() string            { return pgcConstants.ComponentProvisioner }
-func (p *clusterModel) Requires() []contractKey { return []contractKey{contractSecret} }
+func (p *clusterModel) Name() string { return pgcConstants.ComponentProvisioner }
+func (p *clusterModel) Requires() []contractKey {
+	return []contractKey{contractSecret, contractAuthority}
+}
 func (p *clusterModel) Provides() []contractKey { return []contractKey{contractCNPGCluster} }
 
 func (p *clusterModel) CheckContracts() error {
@@ -118,22 +120,19 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 	poolerEnabled := p.mergedConfig != nil && p.mergedConfig.Spec != nil &&
 		isPoolerEnabled(p.mergedConfig.Spec.ConnectionPooler)
 
-	existingCNPG := &cnpgv1.Cluster{}
-	err := p.client.Get(ctx, types.NamespacedName{Name: p.cluster.Name, Namespace: p.cluster.Namespace}, existingCNPG)
-
-	desiredSpec := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, p.cluster.Name, p.contracts.Secret.Name, p.metricsEnabled)
-	desiredSpec.PostgresConfiguration.Parameters = maps.Clone(existingCNPG.Spec.PostgresConfiguration.Parameters)
-	applyPoolerSANs(&desiredSpec, poolerEnabled, p.cluster.Name, p.cluster.Namespace)
+	existingCNPG, conventionalFallback, err := resolveAuthoritativeCNPGCluster(ctx, p.client, p.cluster, p.contracts.Authority)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return newReconcileFailure(reasonClusterGetFailed, err)
 	}
-
+	if err != nil && !conventionalFallback {
+		return newReconcileFailure(reasonClusterGetFailed, fmt.Errorf("getting authoritative CNPG cluster: %w", err))
+	}
 	if apierrors.IsNotFound(err) {
 		newCluster, err := buildCNPGCluster(p.scheme, p.cluster, p.mergedConfig, p.contracts.Secret.Name, p.metricsEnabled)
 		if err != nil {
 			return newReconcileFailure(reasonClusterBuildFailed, err)
 		}
-		applyPoolerSANs(&newCluster.Spec, poolerEnabled, p.cluster.Name, p.cluster.Namespace)
+		applyPoolerSANs(&newCluster.Spec, poolerEnabled, newCluster.Name, p.cluster.Namespace)
 		desiredParameters := maps.Clone(newCluster.Spec.PostgresConfiguration.Parameters)
 		newCluster.Spec.PostgresConfiguration.Parameters = nil
 		if err = p.client.Create(ctx, newCluster); err != nil {
@@ -152,6 +151,10 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		p.cnpgCreated = true
 		return nil
 	}
+
+	desiredSpec := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, existingCNPG.Name, p.contracts.Secret.Name, p.metricsEnabled)
+	desiredSpec.PostgresConfiguration.Parameters = maps.Clone(existingCNPG.Spec.PostgresConfiguration.Parameters)
+	applyPoolerSANs(&desiredSpec, poolerEnabled, existingCNPG.Name, p.cluster.Namespace)
 
 	p.cnpgCluster = existingCNPG
 	hasOwnerRef, ownerRefErr := controllerutil.HasOwnerReference(p.cnpgCluster.GetOwnerReferences(), p.cluster, p.scheme)

@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -95,10 +96,11 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect((&PostgresClusterReconciler{
-			Client:   watchManager.GetClient(),
-			Scheme:   watchManager.GetScheme(),
-			Recorder: record.NewFakeRecorder(1024),
-			Metrics:  &pgprometheus.NoopRecorder{},
+			Client:           watchManager.GetClient(),
+			Scheme:           watchManager.GetScheme(),
+			Recorder:         record.NewFakeRecorder(1024),
+			Metrics:          &pgprometheus.NoopRecorder{},
+			IdentityResolver: identityadapter.NewIdentityResolver(),
 		}).SetupWithManager(watchManager)).To(Succeed())
 
 		mgrCtx, mgrCancel = context.WithCancel(context.Background())

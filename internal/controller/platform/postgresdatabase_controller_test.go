@@ -174,6 +174,13 @@ func cnpgDatabaseNameForTest(resourceName, dbName string) string {
 	return fmt.Sprintf("%s-%s", resourceName, dbName)
 }
 
+func cnpgDatabaseNameForEnvironmentTest(resourceName, environmentName, dbName string) string {
+	if environmentName == "" {
+		return cnpgDatabaseNameForTest(resourceName, dbName)
+	}
+	return fmt.Sprintf("%s-%s-%s", resourceName, environmentName, dbName)
+}
+
 func ownedByPostgresDatabase(postgresDB *platformv1alpha1.PostgresDatabase) []metav1.OwnerReference {
 	controller := true
 	blockOwnerDeletion := true
@@ -280,6 +287,14 @@ type readyClusterScenario struct {
 	cnpgClusterName string
 	dbName          string
 	requestName     types.NamespacedName
+}
+
+func (s readyClusterScenario) cnpgDatabaseName() string {
+	environmentName := ""
+	if s.cnpgClusterName != s.clusterName {
+		environmentName = s.cnpgClusterName
+	}
+	return cnpgDatabaseNameForEnvironmentTest(s.resourceName, environmentName, s.dbName)
 }
 
 func newReadyClusterScenario(namespace, resourceName, clusterName, cnpgClusterName, dbName string) readyClusterScenario {
@@ -428,7 +443,7 @@ func simulateClusterRoleOwnership(ctx context.Context, clusterName, namespace st
 
 func expectCNPGDatabaseCreated(ctx context.Context, scenario readyClusterScenario, owner *platformv1alpha1.PostgresDatabase) *cnpgv1.Database {
 	cnpgDatabase := &cnpgv1.Database{}
-	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgDatabaseName(), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 	Expect(cnpgDatabase.Spec.Name).To(Equal(scenario.dbName))
 	Expect(cnpgDatabase.Spec.Owner).To(Equal(roleNamesForTest(owner, scenario.dbName).Admin))
 	Expect(cnpgDatabase.Spec.ClusterRef.Name).To(Equal(scenario.cnpgClusterName))
@@ -499,7 +514,7 @@ func seedConflictScenario(ctx context.Context, namespace, resourceName, clusterN
 	return types.NamespacedName{Name: resourceName, Namespace: namespace}
 }
 
-func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, clusterName string, postgresDB *platformv1alpha1.PostgresDatabase, dbNames ...string) {
+func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, clusterName, environmentName string, postgresDB *platformv1alpha1.PostgresDatabase, dbNames ...string) {
 	ownerReferences := ownedByPostgresDatabase(postgresDB)
 	for _, dbName := range dbNames {
 		Expect(k8sClient.Create(ctx, &corev1.Secret{
@@ -536,7 +551,7 @@ func seedOwnedDatabaseArtifacts(ctx context.Context, namespace, resourceName, cl
 
 		Expect(k8sClient.Create(ctx, &cnpgv1.Database{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            cnpgDatabaseNameForTest(resourceName, dbName),
+				Name:            cnpgDatabaseNameForEnvironmentTest(resourceName, environmentName, dbName),
 				Namespace:       namespace,
 				OwnerReferences: ownerReferences,
 			},
@@ -888,7 +903,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				Expect(current.Status.Databases).To(HaveLen(1))
 				Expect(current.Status.CustomMetricsPublication.Contributions[0].Revision).To(Equal(revision))
 				current.Status.Databases[0].Ready = true
-				current.Status.Databases[0].DatabaseRef = &corev1.LocalObjectReference{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName)}
+				current.Status.Databases[0].DatabaseRef = &corev1.LocalObjectReference{Name: scenario.cnpgDatabaseName()}
 				Expect(k8sClient.Status().Update(ctx, current)).To(Succeed())
 				markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
@@ -1625,7 +1640,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			scenario := newReadyClusterScenario(namespace, "cnpg-database-delete", "tenant-cluster", "tenant-cnpg", "appdb")
 			owner := reconcilePostgresDatabaseToReady(ctx, scenario, false)
 
-			cnpgDatabaseName := fmt.Sprintf("%s-%s", scenario.resourceName, scenario.dbName)
+			cnpgDatabaseName := scenario.cnpgDatabaseName()
 			original := &cnpgv1.Database{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseName, Namespace: scenario.namespace}, original)).To(Succeed())
 			originalUID := original.UID
@@ -1821,6 +1836,29 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
 		})
 
+		It("passes PostgresCluster provider cutover updates", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &platformv1alpha1.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
+				Status:     platformv1alpha1.PostgresClusterStatus{ProvisionerRef: &corev1.ObjectReference{Name: "pg-blue"}},
+			}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.ProvisionerRef = &corev1.ObjectReference{Name: "pg-green"}
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
+		})
+
+		It("passes PostgresCluster major-upgrade status updates", func() {
+			pred := postgresClusterForDatabasePredicator()
+			oldCluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}}
+			newCluster := oldCluster.DeepCopy()
+			newCluster.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{
+				BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+					Green: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "pg-green"}},
+				},
+			}}
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
+		})
+
 		It("blocks PostgresCluster updates that change unrelated status fields", func() {
 			pred := postgresClusterForDatabasePredicator()
 			phaseReady := "Ready"
@@ -2002,7 +2040,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			expectStatusCondition(current, condRolesReady, metav1.ConditionFalse, reasonRoleConflict)
 
 			cnpgDatabase := &cnpgv1.Database{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest("conflict-cluster", dbAppdb), Namespace: namespace}, cnpgDatabase)
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForEnvironmentTest("conflict-cluster", "conflict-cnpg", dbAppdb), Namespace: namespace}, cnpgDatabase)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		})
 	})
@@ -2028,7 +2066,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				adminRoleNameForTest(dbDropdb), rwRoleNameForTest(dbDropdb),
 			}, "tenant-rw", "tenant-ro")
 
-			seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, cnpgClusterName, postgresDB, dbKeepdb, dbDropdb)
+			seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, cnpgClusterName, cnpgClusterName, postgresDB, dbKeepdb, dbDropdb)
 
 			simulateClusterRoleOwnership(ctx, clusterName, namespace, postgresDB,
 				adminRoleNameForTest(dbKeepdb), rwRoleNameForTest(dbKeepdb),
@@ -2065,7 +2103,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 				createPostgresClusterResource(ctx, namespace, clusterName)
 
-				seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, clusterName, postgresDB, dbKeepdb, dbDropdb)
+				seedOwnedDatabaseArtifacts(ctx, namespace, resourceName, clusterName, "", postgresDB, dbKeepdb, dbDropdb)
 
 				simulateClusterRoleOwnership(ctx, clusterName, namespace, postgresDB,
 					adminRoleNameForTest(dbKeepdb), rwRoleNameForTest(dbKeepdb),
@@ -2130,7 +2168,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			expectReconcileResult(result, err, 15*time.Second)
 
 			cnpgDatabase := &cnpgv1.Database{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgDatabaseName(), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 			Expect(cnpgDatabase.Spec.Extensions).To(ConsistOf(
 				cnpgv1.ExtensionSpec{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
 				cnpgv1.ExtensionSpec{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsurePresent}},
@@ -2156,7 +2194,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			reconcilePostgresDatabase(ctx, scenario.requestName)
 
 			cnpgDatabase := &cnpgv1.Database{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgDatabaseName(), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 			markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 			current = fetchPostgresDatabase(ctx, scenario.requestName)
@@ -2166,7 +2204,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			reconcilePostgresDatabase(ctx, scenario.requestName)
 
 			cnpgDatabase = &cnpgv1.Database{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgDatabaseName(), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 			Expect(cnpgDatabase.Spec.Extensions).To(ConsistOf(
 				cnpgv1.ExtensionSpec{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
 				cnpgv1.ExtensionSpec{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsureAbsent}},
@@ -2174,7 +2212,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 			reconcilePostgresDatabase(ctx, scenario.requestName)
 			cnpgDatabase = &cnpgv1.Database{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgDatabaseName(), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 			Expect(cnpgDatabase.Spec.Extensions).To(ConsistOf(
 				cnpgv1.ExtensionSpec{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent}},
 				cnpgv1.ExtensionSpec{DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "unaccent", Ensure: cnpgv1.EnsureAbsent}},
@@ -2194,7 +2232,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			// Create a CNPG Database with retained annotation but no owner reference
 			retainedCNPGDb := &cnpgv1.Database{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName),
+					Name:      scenario.cnpgDatabaseName(),
 					Namespace: scenario.namespace,
 					Annotations: map[string]string{
 						retainedFromAnnotation: scenario.resourceName,
@@ -2225,7 +2263,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			expectReconcileResult(result, err, 15*time.Second)
 
 			adoptedDb := &cnpgv1.Database{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, adoptedDb)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgDatabaseName(), Namespace: scenario.namespace}, adoptedDb)).To(Succeed())
 			Expect(metav1.IsControlledBy(adoptedDb, current)).To(BeTrue())
 			_, hasRetainedAnnotation := adoptedDb.Annotations[retainedFromAnnotation]
 			Expect(hasRetainedAnnotation).To(BeFalse())
@@ -2264,7 +2302,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 
 			// Mark the CNPG Database as applied (simulating CNPG reconciliation)
 			cnpgDatabase := &cnpgv1.Database{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cnpgDatabaseNameForTest(scenario.resourceName, scenario.dbName), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgDatabaseName(), Namespace: scenario.namespace}, cnpgDatabase)).To(Succeed())
 			markCNPGDatabaseAppliedWithBootstrap(ctx, cnpgDatabase)
 
 			// Manually reconcile to verify the controller can recover

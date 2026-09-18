@@ -61,6 +61,7 @@ import (
 
 	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -329,26 +330,29 @@ func main() {
 	}
 
 	if config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
+		identityResolver := identityadapter.NewIdentityResolver()
 		if err := mgr.Add(pgprometheus.NewFleetCollector(mgr.GetClient(), pgMetricsRecorder)); err != nil {
 			setupLog.Error(err, "unable to register PostgreSQL fleet metrics collector")
 			os.Exit(1)
 		}
 
 		if err := (&platformController.PostgresDatabaseReconciler{
-			Client:   mgr.GetClient(),
-			Scheme:   mgr.GetScheme(),
-			Recorder: mgr.GetEventRecorderFor("postgresdatabase-controller"),
-			Metrics:  pgMetricsRecorder,
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			Recorder:         mgr.GetEventRecorderFor("postgresdatabase-controller"),
+			Metrics:          pgMetricsRecorder,
+			IdentityResolver: identityResolver,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PostgresDatabase")
 			os.Exit(1)
 		}
 
 		if err := (&platformController.PostgresClusterReconciler{
-			Client:   mgr.GetClient(),
-			Scheme:   mgr.GetScheme(),
-			Recorder: mgr.GetEventRecorderFor("postgrescluster-controller"),
-			Metrics:  pgMetricsRecorder,
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			Recorder:         mgr.GetEventRecorderFor("postgrescluster-controller"),
+			Metrics:          pgMetricsRecorder,
+			IdentityResolver: identityResolver,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PostgresCluster")
 			os.Exit(1)
