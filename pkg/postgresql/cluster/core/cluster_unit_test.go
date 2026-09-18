@@ -22,7 +22,11 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	custommetrics "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
+	monitoring "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -111,6 +116,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 				}
 				postgresDB := postgresDatabaseWithManagedRoles("app-db", []managedRole{{Name: "app_user", Exists: true}})
 				contracts := &reconcileContracts{
+					EnvironmentNamer: testEnvironmentNamer,
 					CNPGCluster: &cnpgv1.Cluster{
 						ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 						Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
@@ -134,6 +140,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 				}
 				contracts := &reconcileContracts{
+					EnvironmentNamer: testEnvironmentNamer,
 					CNPGCluster: &cnpgv1.Cluster{
 						ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 						Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
@@ -172,6 +179,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 					Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 				}
 				contracts := &reconcileContracts{
+					EnvironmentNamer: testEnvironmentNamer,
 					CNPGCluster: &cnpgv1.Cluster{
 						ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 						Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
@@ -326,6 +334,7 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 					Status:     platformv1alpha1.PostgresClusterStatus{Resources: &platformv1alpha1.PostgresClusterResources{}},
 				}
 				contracts := &reconcileContracts{
+					EnvironmentNamer: testEnvironmentNamer,
 					CNPGCluster: &cnpgv1.Cluster{
 						ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 						Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy},
@@ -792,6 +801,47 @@ func TestPostgresClusterServiceInitialPhase(t *testing.T) {
 	}
 }
 
+func TestPostgresClusterServiceTargetsCustomMetricsAtAuthoritativeEnvironment(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	ready := string(readyClusterPhase)
+	cluster := newTestCluster("primary", "dbs")
+	cluster.Spec.Class = "primary-class"
+	cluster.Finalizers = []string{PostgresClusterFinalizerName}
+	cluster.Status.Phase = &ready
+	cluster.Status.ProvisionerRef = &corev1.ObjectReference{
+		APIVersion: cnpgv1.SchemeGroupVersion.String(),
+		Kind:       "Cluster",
+		Name:       "primary-green",
+		Namespace:  cluster.Namespace,
+	}
+	clusterClass := &platformv1alpha1.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: cluster.Spec.Class},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&platformv1alpha1.PostgresCluster{}).
+		WithObjects(cluster, clusterClass).
+		Build()
+
+	var target monitoring.Target
+	_, err := PostgresClusterService(ctx, &ReconcileContext{
+		Client:              c,
+		Scheme:              scheme,
+		Recorder:            record.NewFakeRecorder(10),
+		ClusterCardResolver: identityadapter.NewIdentityResolver(),
+		EnvironmentNamer:    identityadapter.NewIdentityResolver(),
+		ClusterInputFactory: identityadapter.ClusterInputFromPostgresCluster,
+	}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil,
+		func(_ string, got monitoring.Target) (*custommetrics.Model, error) {
+			target = got
+			return nil, errors.New("stop after target capture")
+		}, nil)
+
+	require.ErrorContains(t, err, "stop after target capture")
+	assert.Equal(t, "primary-green", target.ProviderName)
+}
+
 func TestPostgresClusterServiceReturnsInitialPhaseConflict(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
@@ -854,10 +904,11 @@ func TestPostgresClusterServiceSkipsPendingPhaseDuringDeletion(t *testing.T) {
 		Build()
 
 	result, err := PostgresClusterService(ctx, &ReconcileContext{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(1),
-	}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil, nil, nil)
+		Client:           c,
+		Scheme:           scheme,
+		Recorder:         record.NewFakeRecorder(1),
+		EnvironmentNamer: testEnvironmentNamer,
+	}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, noopBackupBackend{}, nil, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, ctrl.Result{}, result)
@@ -886,11 +937,12 @@ func TestHandleFinalizerUnknownDeletionPolicy(t *testing.T) {
 	}
 
 	rc := &ReconcileContext{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build(),
-		Scheme: scheme,
+		Client:           fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build(),
+		Scheme:           scheme,
+		EnvironmentNamer: testEnvironmentNamer,
 	}
 
-	err := handleFinalizer(context.Background(), rc, cluster)
+	err := handleFinalizer(context.Background(), rc, cluster, conventionalClusterCard(cluster), noopBackupBackend{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), unknownPolicy)
@@ -994,9 +1046,9 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, cnpg).Build()
-	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
 
-	require.NoError(t, handleFinalizer(context.Background(), rc, cluster))
+	require.NoError(t, handleFinalizer(context.Background(), rc, cluster, conventionalClusterCard(cluster), noopBackupBackend{}))
 
 	got := &cnpgv1.Cluster{}
 	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, got))
@@ -1007,6 +1059,249 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 	}
 	assert.Equal(t, []string{"keep-me.plugin.io"}, gotNames, "barman plugin stripped, foreign plugin retained")
 	assert.Empty(t, got.OwnerReferences, "owner reference removed so retained cluster is orphaned")
+}
+
+func TestHandleFinalizerDeletesConventionalPoolersOnce(t *testing.T) {
+	scheme := newTestScheme()
+	now := metav1.Now()
+	retain := clusterDeletionPolicyRetain
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "primary",
+			Namespace:         "default",
+			UID:               "owner-uid",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{PostgresClusterFinalizerName},
+		},
+		Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &retain},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			ProvisionerRef: &corev1.ObjectReference{Name: "primary-green", Namespace: "default"},
+		},
+	}
+	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: cluster.Name, UID: cluster.UID, Controller: ptr.To(true)}
+	cnpgCluster := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
+	poolers := []client.Object{
+		&cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: "primary-pooler-rw", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}},
+		&cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: "primary-pooler-ro", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}},
+	}
+	poolerGets := 0
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster, cnpgCluster, poolers[0], poolers[1]).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, object client.Object, options ...client.GetOption) error {
+				if _, ok := object.(*cnpgv1.Pooler); ok &&
+					(key.Name == "primary-pooler-rw" || key.Name == "primary-pooler-ro") {
+					poolerGets++
+				}
+				return c.Get(ctx, key, object, options...)
+			},
+		}).
+		Build()
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+
+	card := testClusterCard(cluster, "primary-green", "")
+	card.Managed = append(card.Managed, testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained))
+	require.NoError(t, handleFinalizer(context.Background(), rc, cluster, card, noopBackupBackend{}))
+	assert.Equal(t, 4, poolerGets, "each conventional pooler is checked and fetched once")
+	for _, name := range []string{"primary-pooler-rw", "primary-pooler-ro"} {
+		err := c.Get(context.Background(), client.ObjectKey{Name: name, Namespace: cluster.Namespace}, &cnpgv1.Pooler{})
+		assert.True(t, apierrors.IsNotFound(err), "%s must be deleted", name)
+	}
+}
+
+func TestHandleFinalizerCleansScheduledBackupsForEveryManagedEnvironment(t *testing.T) {
+	scheme := newTestScheme()
+	now := metav1.Now()
+	retain := clusterDeletionPolicyRetain
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "primary",
+			Namespace:         "default",
+			UID:               "owner-uid",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{PostgresClusterFinalizerName},
+		},
+		Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &retain},
+	}
+	ownerRef := metav1.OwnerReference{
+		APIVersion: platformv1alpha1.GroupVersion.String(),
+		Kind:       "PostgresCluster",
+		Name:       cluster.Name,
+		UID:        cluster.UID,
+		Controller: ptr.To(true),
+	}
+	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
+	green := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, conventional, green).Build()
+	backend := &spyBackupBackend{}
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+	card := testClusterCard(cluster, green.Name, green.UID)
+	card.Managed = append(card.Managed, testEnvironment(cluster, conventional.Name, conventional.UID, identitytypes.EnvironmentRoleRetained))
+
+	require.NoError(t, handleFinalizer(context.Background(), rc, cluster, card, backend))
+	assert.ElementsMatch(t, []string{
+		"primary-backup", "primary-backup-objectstore",
+		"primary-green-backup", "primary-green-backup-objectstore",
+	}, backend.deletedNames())
+}
+
+func TestHandleFinalizerLeavesUnvalidatedCNPGClusters(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		policy     string
+		clusterUID types.UID
+		ownerUID   types.UID
+	}{
+		{
+			name:       "delete skips a reused environment name",
+			policy:     clusterDeletionPolicyDelete,
+			clusterUID: "reused-uid",
+			ownerUID:   "owner-uid",
+		},
+		{
+			name:       "retain skips a foreign environment",
+			policy:     clusterDeletionPolicyRetain,
+			clusterUID: "expected-uid",
+			ownerUID:   "other-owner-uid",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := newTestScheme()
+			now := metav1.Now()
+			cluster := &platformv1alpha1.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "primary",
+					Namespace:         "default",
+					UID:               "owner-uid",
+					DeletionTimestamp: &now,
+					Finalizers:        []string{PostgresClusterFinalizerName},
+				},
+				Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &tt.policy},
+			}
+			green := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-green",
+				Namespace: cluster.Namespace,
+				UID:       tt.clusterUID,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: platformv1alpha1.GroupVersion.String(),
+					Kind:       "PostgresCluster",
+					Name:       "primary",
+					UID:        tt.ownerUID,
+					Controller: ptr.To(true),
+				}},
+			}}
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, green).Build()
+			rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+
+			require.NoError(t, handleFinalizer(context.Background(), rc, cluster, testClusterCard(cluster, green.Name, "expected-uid"), noopBackupBackend{}))
+			stored := &cnpgv1.Cluster{}
+			require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(green), stored))
+			assert.Equal(t, green.UID, stored.UID)
+			assert.Equal(t, green.OwnerReferences, stored.OwnerReferences)
+		})
+	}
+}
+
+func TestManagedCNPGClustersSkipsForeignAndStaleReferences(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "default", UID: "owner-uid"},
+	}
+	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: cluster.Name, UID: cluster.UID, Controller: ptr.To(true)}
+	foreignRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: "other", UID: "other-uid", Controller: ptr.To(true)}
+	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
+	stale := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, UID: "stale-uid", OwnerReferences: []metav1.OwnerReference{ownerRef}}}
+	foreign := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-blue", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{foreignRef}}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(conventional, stale, foreign).Build()
+
+	card := testClusterCard(cluster, "primary-green", "expected-uid")
+	card.Managed = append(card.Managed,
+		testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained),
+		testEnvironment(cluster, "primary-blue", "", identitytypes.EnvironmentRoleRetained),
+	)
+	managed, err := managedCNPGClusters(context.Background(), c, cluster, card)
+
+	require.NoError(t, err)
+	require.Len(t, managed, 1)
+	assert.Equal(t, cluster.Name, managed[0].Name)
+}
+
+func TestHandleFinalizerRetainsConventionalAndCurrentEnvironments(t *testing.T) {
+	scheme := newTestScheme()
+	now := metav1.Now()
+	retain := clusterDeletionPolicyRetain
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "primary",
+			Namespace:         "default",
+			UID:               "owner-uid",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{PostgresClusterFinalizerName},
+		},
+		Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &retain},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			ProvisionerRef: &corev1.ObjectReference{Name: "primary-green", Namespace: "default"},
+		},
+	}
+	ownerRef := metav1.OwnerReference{
+		APIVersion: "platform.splunk.com/v1alpha1",
+		Kind:       "PostgresCluster",
+		Name:       cluster.Name,
+		UID:        cluster.UID,
+		Controller: ptr.To(true),
+	}
+	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
+	current := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, conventional, current).Build()
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+
+	card := testClusterCard(cluster, "primary-green", "")
+	card.Managed = append(card.Managed, testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained))
+	require.NoError(t, handleFinalizer(context.Background(), rc, cluster, card, noopBackupBackend{}))
+	for _, name := range []string{conventional.Name, current.Name} {
+		retained := &cnpgv1.Cluster{}
+		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: name, Namespace: cluster.Namespace}, retained))
+		assert.Empty(t, retained.OwnerReferences, "%s must be orphaned by the Retain finalizer", name)
+	}
+}
+
+func TestHandleFinalizerDeletesConventionalAndCurrentEnvironments(t *testing.T) {
+	scheme := newTestScheme()
+	now := metav1.Now()
+	deletePolicy := clusterDeletionPolicyDelete
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "primary",
+			Namespace:         "default",
+			UID:               "owner-uid",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{PostgresClusterFinalizerName},
+		},
+		Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &deletePolicy},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			ProvisionerRef: &corev1.ObjectReference{Name: "primary-green", Namespace: "default"},
+		},
+	}
+	ownerRef := metav1.OwnerReference{
+		APIVersion: "platform.splunk.com/v1alpha1",
+		Kind:       "PostgresCluster",
+		Name:       cluster.Name,
+		UID:        cluster.UID,
+		Controller: ptr.To(true),
+	}
+	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
+	current := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, conventional, current).Build()
+	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+
+	card := testClusterCard(cluster, "primary-green", "")
+	card.Managed = append(card.Managed, testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained))
+	require.NoError(t, handleFinalizer(context.Background(), rc, cluster, card, noopBackupBackend{}))
+	for _, name := range []string{conventional.Name, current.Name} {
+		err := c.Get(context.Background(), client.ObjectKey{Name: name, Namespace: cluster.Namespace}, &cnpgv1.Cluster{})
+		assert.True(t, apierrors.IsNotFound(err), "%s must be deleted by the Delete finalizer", name)
+	}
 }
 
 func TestRemoveOwnerRef(t *testing.T) {

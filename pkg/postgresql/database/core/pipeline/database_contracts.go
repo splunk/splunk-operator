@@ -16,8 +16,10 @@ limitations under the License.
 package pipeline
 
 const (
-	ContractDatabaseCredentialsReady        ContractKey = "database.credentials.ready"
-	ContractDatabaseCNPGDatabasesReady      ContractKey = "database.cnpg-databases.ready"
-	ContractDatabaseConnectionMetadataReady ContractKey = "database.connection-metadata.ready"
-	ContractDatabaseRWPrivilegesReady       ContractKey = "database.rw-privileges.ready"
+	ContractDatabaseCredentialsReady           ContractKey = "database.credentials.ready"
+	ContractDatabaseManagedRoleIntentPublished ContractKey = "database.managed-role-intent.published"
+	ContractDatabaseManagedRolesReady          ContractKey = "database.managed-roles.ready"
+	ContractDatabaseCNPGDatabasesReady         ContractKey = "database.cnpg-databases.ready"
+	ContractDatabaseConnectionMetadataReady    ContractKey = "database.connection-metadata.ready"
+	ContractDatabaseRWPrivilegesReady          ContractKey = "database.rw-privileges.ready"
 )

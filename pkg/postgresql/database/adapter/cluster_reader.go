@@ -19,59 +19,87 @@ import (
 	"context"
 	"fmt"
 
-	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	dbk8s "github.com/splunk/splunk-operator/pkg/postgresql/database/infrastructure/k8s"
+	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
+	dbidentity "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/identity"
+	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ dbclusterreadiness.ClusterReader = (*clusterReader)(nil)
+var _ dbclusterinfo.ClusterReader = (*clusterReader)(nil)
 
 type clusterReader struct {
-	reader dbk8s.ClusterReader
+	reader   dbk8s.ClusterReader
+	resolver dbidentity.ClusterCardResolver
 }
 
 // NewClusterReader returns the database adapter for Kubernetes PostgresCluster
-// reads and provider-status translation.
-func NewClusterReader(reader client.Reader) dbclusterreadiness.ClusterReader {
-	return &clusterReader{reader: dbk8s.NewClusterReader(reader)}
+// reads and provider-status translation. Production callers provide the shared
+// resolver constructed by the composition root. A nil resolver is accepted for
+// focused adapter tests and uses the same stateless implementation.
+func NewClusterReader(reader client.Reader, resolvers ...dbidentity.ClusterCardResolver) *clusterReader {
+	resolver := dbidentity.ClusterCardResolver(identityadapter.NewIdentityResolver())
+	if len(resolvers) > 0 && resolvers[0] != nil {
+		resolver = resolvers[0]
+	}
+	return &clusterReader{reader: dbk8s.NewClusterReader(reader), resolver: resolver}
 }
 
-func (r *clusterReader) Read(ctx context.Context, namespace, name string) (dbclusterreadiness.ResolvedClusterFacts, error) {
+func (r *clusterReader) Read(ctx context.Context, namespace, name string) (dbclusterinfo.ResolvedClusterFacts, error) {
 	snapshot, err := r.reader.Read(ctx, namespace, name)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return dbclusterreadiness.ResolvedClusterFacts{}, fmt.Errorf("%w: %w", dbclusterreadiness.ErrClusterNotFound, err)
+			return dbclusterinfo.ResolvedClusterFacts{}, fmt.Errorf("%w: %w", dbclusterinfo.ErrClusterNotFound, err)
 		}
-		return dbclusterreadiness.ResolvedClusterFacts{}, err
+		return dbclusterinfo.ResolvedClusterFacts{}, err
 	}
 
-	facts := dbclusterreadiness.ResolvedClusterFacts{
+	facts := dbclusterinfo.ResolvedClusterFacts{
 		Name:                   snapshot.Name,
 		Namespace:              snapshot.Namespace,
-		Recovery:               dbclusterreadiness.RecoveryNone,
+		Recovery:               dbclusterinfo.RecoveryNone,
 		ManagedRolesStatus:     snapshot.ManagedRolesStatus,
 		ConnectionPoolerStatus: snapshot.ConnectionPoolerStatus,
 		CustomMetricsStatus:    snapshot.CustomMetricsStatus,
 	}
 	if snapshot.Phase != nil {
-		facts.Lifecycle = dbclusterreadiness.Lifecycle(*snapshot.Phase)
+		facts.Lifecycle = dbclusterinfo.Lifecycle(*snapshot.Phase)
 	}
-	if snapshot.ProvisionerRef != nil {
-		facts.Provider = &dbclusterreadiness.ProviderReference{
-			Kind:      dbclusterreadiness.ProviderCNPG,
-			Name:      snapshot.ProvisionerRef.Name,
-			Namespace: snapshot.ProvisionerRef.Namespace,
-		}
+	card, err := r.resolveClusterCard(snapshot)
+	if err != nil {
+		return dbclusterinfo.ResolvedClusterFacts{}, err
 	}
+	facts.Cluster = &card
 	if snapshot.Resources != nil {
 		facts.SuperUserSecretRef = snapshot.Resources.SuperUserSecretRef
 	}
 	if condition := meta.FindStatusCondition(snapshot.Conditions, pgcnpg.ClusterReadyCondition); condition != nil &&
 		(condition.Reason == pgcnpg.ClusterReadyReasonRecovery || condition.Reason == pgcnpg.ClusterReadyReasonFailingOver) {
-		facts.Recovery = dbclusterreadiness.RecoveryInProgress
+		facts.Recovery = dbclusterinfo.RecoveryInProgress
 	}
 	return facts, nil
+}
+
+func (r *clusterReader) resolveClusterCard(snapshot dbk8s.ClusterSnapshot) (identitytypes.ClusterCard, error) {
+	input, err := identityadapter.ClusterInputFromPostgresCluster(&platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: snapshot.Name, Namespace: snapshot.Namespace, UID: snapshot.UID},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			ProvisionerRef:             snapshot.ProvisionerRef,
+			PostgresMajorUpgradeStatus: snapshot.MajorUpgrades,
+		},
+	})
+	if err != nil {
+		return identitytypes.ClusterCard{}, fmt.Errorf("resolving PostgresCluster identity input: %w", err)
+	}
+	card, err := r.resolver.ResolveCluster(input)
+	if err != nil {
+		return identitytypes.ClusterCard{}, fmt.Errorf("resolving PostgresCluster authority: %w", err)
+	}
+	return card, nil
 }

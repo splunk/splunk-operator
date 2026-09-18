@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package searchheadcluster
 
 import (
 	"context"
@@ -34,6 +34,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
+	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 )
 
@@ -45,7 +46,7 @@ import (
 func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (result reconcile.Result, err error) {
 	result = reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}
 	logger := logging.FromContext(ctx).With("func", "ApplySearchHeadClusterNoah", "name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "SearchHeadCluster"
 
@@ -103,7 +104,7 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		// call removes finalizers once its own callbacks succeed, and doing so
 		// before owner references are actually cleared would orphan them with
 		// no finalizer left to retry the cleanup.
-		if err = DeleteOwnerReferencesForResources(ctx, client, cr, SplunkSearchHead); err != nil {
+		if err = k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkSearchHead); err != nil {
 			return reconcile.Result{}, err
 		}
 		terminating, deletionErr := k8sops.CheckForDeletion(ctx, cr, client)
@@ -158,26 +159,26 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 // involved — so a Noah SearchHeadCluster has no functional need for a
 // deployer at all — this is unconditional, with no spec field controlling
 // it. This is scoped to the Noah reconcile path only; the
-// Cluster-Manager-path reconciler (searchheadcluster.go) always deploys a
-// real deployer, unaffected by any of this.
+// Cluster-Manager-path reconciler (applySearchHeadCluster, searchheadcluster.go)
+// always deploys a real deployer, unaffected by any of this.
 func applySearchHeadClusterNoah(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, runtime *configworkflow.NoahRuntime) (enterpriseApi.Phase, enterpriseApi.Phase, *appsv1.StatefulSet, error) {
 	const deployerPhase = enterpriseApi.PhaseReady // no deployer is ever deployed; see doc comment above.
 
 	noahSpec := runtime.Spec()
 
 	services := []struct {
-		instanceType InstanceType
+		instanceType splcommon.InstanceType
 		headless     bool
 	}{
-		{instanceType: SplunkSearchHead, headless: true},
-		{instanceType: SplunkSearchHead, headless: false},
+		{instanceType: splcommon.SplunkSearchHead, headless: true},
+		{instanceType: splcommon.SplunkSearchHead, headless: false},
 	}
 	for _, service := range services {
-		if err := k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, service.instanceType, service.headless)); err != nil {
+		if err := k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, service.instanceType, service.headless)); err != nil {
 			return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("apply Noah %s service (headless=%t): %w", service.instanceType, service.headless, err)
 		}
 	}
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
+	namespaceScopedSecret, err := k8sops.ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkSearchHead)
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("apply Noah SearchHeadCluster Splunk config: %w", err)
 	}
@@ -243,7 +244,12 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 			return enterpriseApi.PhaseError, deployerPhase, nil, validationErr
 		}
 	}
-	searchHeadManager := newSearchHeadClusterPodManager(client, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	searchHeadManager := shcworkflow.NewPodManager(client, cr, namespaceScopedSecret, splclient.NewSplunkClient, shcworkflow.Operations{
+		ApplyStatefulSet:             k8sops.ApplyStatefulSet,
+		CheckPodsForTerminalFailures: k8sops.CheckPodsForTerminalFailures,
+		UpdateStatefulSetPods:        k8sops.UpdateStatefulSetPods,
+		ApplySecret:                  k8sops.ApplySecret,
+	})
 	searchHeadPhase, err := searchHeadManager.Update(ctx, client, searchHeadStatefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, searchHeadStatefulSet, fmt.Errorf("apply Noah search-head StatefulSet: %w", err)

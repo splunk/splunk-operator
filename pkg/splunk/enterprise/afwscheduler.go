@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1786,7 +1786,7 @@ func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.
 			shcPlaybookContext.podExecClient.SetTargetPodName(ctx, targetPodname)
 		}()
 
-		err = setProbeLevelOnCRPods(ctx, shcPlaybookContext.cr, *shcSts.Spec.Replicas, shcPlaybookContext.podExecClient, probeLevel)
+		err = splutil.SetProbeLevelOnCRPods(ctx, shcPlaybookContext.cr, *shcSts.Spec.Replicas, shcPlaybookContext.podExecClient, probeLevel)
 		if err != nil {
 			scopedLog.ErrorContext(ctx, "unable to set the Liveness probe level", "error", err)
 			return err
@@ -1999,7 +1999,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 				continue
 			}
 
-			err = setProbeLevelOnCRPods(ctx, &idxcCR, *idxcSts.Spec.Replicas, idxcPlaybookContext.podExecClient, probeLevel)
+			err = splutil.SetProbeLevelOnCRPods(ctx, &idxcCR, *idxcSts.Spec.Replicas, idxcPlaybookContext.podExecClient, probeLevel)
 			if err != nil {
 				scopedLog.ErrorContext(ctx, "unable to set the Liveness probe level", "error", err)
 				return err

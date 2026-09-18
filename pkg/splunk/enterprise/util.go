@@ -411,32 +411,6 @@ func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplu
 	}
 }
 
-// getSearchHeadExtraEnv returns extra environment variables used by search head clusters
-func getSearchHeadEnv(cr *enterpriseApi.SearchHeadCluster) []corev1.EnvVar {
-
-	// get search head env variables with deployer
-	env := getSearchHeadExtraEnv(cr, cr.Spec.Replicas)
-	env = append(env, corev1.EnvVar{
-		Name:  "SPLUNK_DEPLOYER_URL",
-		Value: splcommon.GetSplunkServiceName(SplunkDeployer, cr.GetName(), false),
-	})
-
-	return env
-}
-
-// getSearchHeadExtraEnv returns extra environment variables used by search head clusters
-func getSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_SEARCH_HEAD_URL",
-			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), replicas, false),
-		}, {
-			Name:  "SPLUNK_SEARCH_HEAD_CAPTAIN_URL",
-			Value: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false),
-		},
-	}
-}
-
 // GetSmartstoreRemoteVolumeSecrets is used to retrieve S3 access key and secrete keys.
 func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) (string, string, string, error) {
 	// Get event publisher from context
@@ -1105,7 +1079,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	}
 
 	// Look for searchHeadClusters still holding references to the ClusterManager
-	shcList, err := getSearchHeadClusterList(ctx, c, cmCr, listOpts)
+	shcList, err := k8sops.GetSearchHeadClusterList(ctx, c, cmCr, listOpts)
 	if err != nil {
 		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
 			scopedLog.ErrorContext(ctx, "couldn't retrieve SearchHeadCluster list", "error", err)
@@ -1398,34 +1372,6 @@ func markAppsStatusToComplete(ctx context.Context, client splcommon.ControllerCl
 	// ToDo: Caller of this API also needs to set "IsDeploymentInProgress = false" once after completing this function call for all the app sources
 
 	return err
-}
-
-// setupAppsStagingVolume creates the necessary volume on the Splunk pods, for the operator to copy all app packages in the appSources configured and make them locally available to the Splunk instance.
-func setupAppsStagingVolume(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, podTemplateSpec *corev1.PodTemplateSpec, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) {
-
-	// Create shared volume and init containers for App Framework
-	if len(appFrameworkConfig.AppSources) > 0 {
-		// Create volume to on Splunk container to contain apps copied from Splunk Operator pod
-		emptyVolumeSource := corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		}
-
-		initVol := corev1.Volume{
-			Name:         appVolumeMntName,
-			VolumeSource: emptyVolumeSource,
-		}
-
-		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, initVol)
-
-		// Add apps staging mount to Splunk container
-		initVolumeSpec := corev1.VolumeMount{
-			Name:      appVolumeMntName,
-			MountPath: fmt.Sprintf("/%s/", appVolumeMntName),
-		}
-
-		// This assumes the Splunk instance container is Containers[0], which I *believe* is valid
-		podTemplateSpec.Spec.Containers[0].VolumeMounts = append(podTemplateSpec.Spec.Containers[0].VolumeMounts, initVolumeSpec)
-	}
 }
 
 // isAppAlreadyDownloaded checks if the app is already present on the operator pod
@@ -2476,76 +2422,6 @@ func ReadFile(ctx context.Context, fileLocation string) (string, error) {
 	return string(byteString), nil
 }
 
-// setProbeLevelOnSplunkPod  set K8_OPERATOR_LIVENESS_LEVEL in k8_liveness_driver.sh script on splunk pod. Set probeLevel to 0 to unset K8_OPERATOR_LIVENESS_LEVEL.
-func setProbeLevelOnSplunkPod(ctx context.Context, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
-	var err error
-	var stdOut string
-	var command string
-
-	scopedLog := logging.FromContext(ctx).With("func", "setProbeLevelOnSplunkPod", "podName", podExecClient.GetTargetPodName(), "probeLevel", probeLevel)
-	switch probeLevel {
-	case livenessProbeLevelDefault:
-		command = fmt.Sprintf("[[ -f %s ]] && > %s", GetLivenessDriverFilePath(), GetLivenessDriverFilePath())
-
-	case livenessProbeLevelOne:
-		command = fmt.Sprintf("mkdir -p %s; echo \"export %s=%d\" > %s", GetLivenessDriverFileDir(), livenessProbeLevelName, probeLevel, GetLivenessDriverFilePath())
-
-	default:
-		return fmt.Errorf("invalid probe Level %d", probeLevel)
-	}
-	streamOptions := splutil.NewStreamOptionsObject(command)
-	podExecClient.SetTargetPodName(ctx, podExecClient.GetTargetPodName())
-	splutil.ResetStringReader(streamOptions, command)
-	stdOut, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-	if err != nil {
-		err = fmt.Errorf("unable to run command %s. stdout: %s, err: %s", command, stdOut, err)
-		scopedLog.ErrorContext(ctx, "failed to set probe level", "Command", command, "error", err)
-		return err
-	}
-
-	scopedLog.InfoContext(ctx, "successfully set probe level on pod", "Command", command)
-	return err
-}
-
-// setProbeLevelOnCRPods set K8_OPERATOR_LIVENESS_LEVEL in k8_liveness_driver.sh script on all pods of CR,  Set probeLevel to 0 to unset K8_OPERATOR_LIVENESS_LEVEL.
-func setProbeLevelOnCRPods(ctx context.Context, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
-	var err error
-	// Run the command on each replica pod
-	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
-		podName := getApplicablePodNameForK8Probes(cr, int32(replicaIndex))
-		podExecClient.SetTargetPodName(ctx, podName)
-		err = setProbeLevelOnSplunkPod(ctx, podExecClient, probeLevel)
-		if err != nil {
-			return err
-		}
-	}
-	return err
-}
-
-// getApplicablePodNameForK8Probes gets the Pod name relevant for the CR under work
-func getApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) string {
-	var podType string
-	switch cr.GetObjectKind().GroupVersionKind().Kind {
-	case "Standalone":
-		podType = "standalone"
-	case "LicenseMaster":
-		podType = "license-master"
-	case "SearchHeadCluster":
-		podType = "search-head"
-	case "IndexerCluster":
-		podType = "indexer"
-	case "ClusterMaster":
-		podType = "cluster-master"
-	case "ClusterManager":
-		podType = "cluster-manager"
-	case "MonitoringConsole":
-		podType = "monitoring-console"
-	case "IngestorCluster":
-		podType = "ingestor"
-	}
-	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
-}
-
 // getCurrentImage gets the image of the statefulset, returns the image, and error if something goes wrong
 func getCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) (string, error) {
 	namespacedName := types.NamespacedName{
@@ -2666,8 +2542,4 @@ func ChangePhaseInfo(ctx context.Context, replicas int32, appSrc string, statuse
 
 func RemoveStaleEntriesFromAuxPhaseInfo(ctx context.Context, replicas int32, appSrc string, statuses map[string]enterpriseApi.AppSrcDeployInfo) {
 	removeStaleEntriesFromAuxPhaseInfo(ctx, replicas, appSrc, statuses)
-}
-
-func SetupAppsStagingVolume(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, podTemplate *corev1.PodTemplateSpec, conf *enterpriseApi.AppFrameworkSpec) {
-	setupAppsStagingVolume(ctx, client, cr, podTemplate, conf)
 }

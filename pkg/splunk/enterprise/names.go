@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,10 +71,6 @@ const (
 
 	// livenessDriverFile
 	livenessDriverFile = "k8_liveness_driver.sh"
-
-	// livenessProbeLevelName
-	// NOTE: Changing this value must also reflect in ../tools/k9_probes/ directory script files
-	livenessProbeLevelName = "K8_OPERATOR_LIVENESS_LEVEL"
 
 	// livenessProbeDriverPath
 	// NOTE: Changing this value must also reflect in ../tools/k9_probes/ directory script files
@@ -158,9 +154,6 @@ const (
 	protoHTTP  = "http"
 	protoHTTPS = "https"
 	protoTCP   = "tcp"
-
-	// Volume name for splunk containers to store apps temporarily
-	appVolumeMntName = "operator-staging"
 
 	// Mount location on splunk pod for the app package volume
 	appBktMnt = "/operator-staging/appframework/"

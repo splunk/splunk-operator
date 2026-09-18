@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -54,7 +55,7 @@ func TestGenerateConfigMap(t *testing.T) {
 
 	t.Run("base endpoints without poolers", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-configmap", cm.Name)
@@ -78,7 +79,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-pooler-ro", Namespace: "default"},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler).Build()
-		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-rw.default.svc.cluster.local", cm.Data[pgconninfo.KeyPoolerRWEndpoint])
@@ -92,7 +93,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ConfigMapRef: &corev1.LocalObjectReference{Name: "custom-configmap"},
 		}
 
-		cm, err := generateConfigMap(context.Background(), c, scheme, pg, cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(context.Background(), c, scheme, pg, cnpgCluster, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "custom-configmap", cm.Name)
@@ -106,17 +107,48 @@ func TestGenerateConfigMap(t *testing.T) {
 		cnpg := cnpgCluster.DeepCopy()
 		cnpg.Status.Certificates.ServerCASecret = "my-server-ca"
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(caSecret).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpg, "my-secret")
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpg, "my-secret", testEnvironmentNamer)
 		require.NoError(t, err)
 		assert.Equal(t, "my-server-ca/"+defaultServerCACertKey, cm.Data[configMapKeyServerCASecretRef])
 	})
 
 	t.Run("omits CA metadata when CNPG has no CA secret set", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret")
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", testEnvironmentNamer)
 		require.NoError(t, err)
 		assert.NotContains(t, cm.Data, configMapKeyServerCASecretRef)
 	})
+}
+
+func TestConfigMapModelPublishesAuthoritativeEndpointsWithoutRoutingService(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "default", UID: "cluster-uid"},
+	}
+	green := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: "default"},
+		Status: cnpgv1.ClusterStatus{
+			WriteService:   "primary-green-rw",
+			ReadService:    "primary-green-ro",
+			ReadyInstances: 2,
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	model := newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, &reconcileContracts{
+		CNPGCluster:      green,
+		Secret:           &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-secret", Namespace: "default"}},
+		EnvironmentNamer: testEnvironmentNamer,
+	})
+
+	require.NoError(t, model.Reconcile(t.Context()))
+	configMap := &corev1.ConfigMap{}
+	require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "primary-configmap", Namespace: "default"}, configMap))
+	assert.Equal(t, "primary-green-rw.default.svc.cluster.local", configMap.Data[pgconninfo.KeyClusterRWEndpoint])
+	assert.Equal(t, "primary-green-ro.default.svc.cluster.local", configMap.Data[pgconninfo.KeyClusterROEndpoint])
+
+	services := &corev1.ServiceList{}
+	require.NoError(t, c.List(t.Context(), services, client.InNamespace(cluster.Namespace)))
+	assert.Empty(t, services.Items)
 }
 
 func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t *testing.T) {
@@ -158,7 +190,7 @@ func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t
 		},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingCM).Build()
-	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}}
+	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}, EnvironmentNamer: testEnvironmentNamer}
 	model := newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts)
 
 	// Act
@@ -193,8 +225,14 @@ func TestConfigMapModel_CheckContracts(t *testing.T) {
 		assert.ErrorIs(t, model.CheckContracts(), errContractsNotReady)
 	})
 
-	t.Run("returns nil when both contracts are satisfied", func(t *testing.T) {
+	t.Run("returns errContractsNotReady when EnvironmentNamer is nil", func(t *testing.T) {
 		contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: secret}
+		model := newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts)
+		assert.ErrorIs(t, model.CheckContracts(), errContractsNotReady)
+	})
+
+	t.Run("returns nil when both contracts are satisfied", func(t *testing.T) {
+		contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: secret, EnvironmentNamer: testEnvironmentNamer}
 		model := newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts)
 		assert.NoError(t, model.CheckContracts())
 	})

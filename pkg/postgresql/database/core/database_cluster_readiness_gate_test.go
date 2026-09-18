@@ -22,10 +22,11 @@ import (
 	"testing"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
+	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -39,22 +40,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
-type clusterReadinessReaderFunc func(context.Context, string, string) (dbclusterreadiness.ResolvedClusterFacts, error)
+type clusterReadinessReaderFunc func(context.Context, string, string) (dbclusterinfo.ResolvedClusterFacts, error)
 
-func (f clusterReadinessReaderFunc) Read(ctx context.Context, namespace, name string) (dbclusterreadiness.ResolvedClusterFacts, error) {
+func (f clusterReadinessReaderFunc) Read(ctx context.Context, namespace, name string) (dbclusterinfo.ResolvedClusterFacts, error) {
 	return f(ctx, namespace, name)
 }
 
 func TestObserveClusterReadinessFacade(t *testing.T) {
 	transient := errors.New("apiserver unavailable")
-	readyFacts := dbclusterreadiness.ResolvedClusterFacts{
-		Name: "primary", Namespace: "dbs", Lifecycle: dbclusterreadiness.LifecycleReady,
-		Provider: &dbclusterreadiness.ProviderReference{Kind: dbclusterreadiness.ProviderCNPG, Name: "primary-cnpg", Namespace: "dbs"},
+	readyFacts := dbclusterinfo.ResolvedClusterFacts{
+		Name: "primary", Namespace: "dbs", Lifecycle: dbclusterinfo.LifecycleReady,
+		Cluster: testResolvedClusterCard("primary", "dbs", "primary-cnpg"),
 	}
 
 	tests := []struct {
 		name           string
-		facts          dbclusterreadiness.ResolvedClusterFacts
+		facts          dbclusterinfo.ResolvedClusterFacts
 		readErr        error
 		wasReady       bool
 		priorCondition *metav1.Condition
@@ -76,7 +77,7 @@ func TestObserveClusterReadinessFacade(t *testing.T) {
 		},
 		{
 			name:       "missing persists not found and waits",
-			readErr:    fmt.Errorf("read: %w", dbclusterreadiness.ErrClusterNotFound),
+			readErr:    fmt.Errorf("read: %w", dbclusterinfo.ErrClusterNotFound),
 			wantStop:   true,
 			wantResult: ctrl.Result{RequeueAfter: clusterNotFoundRetryDelay},
 			wantReason: reasonClusterNotFound,
@@ -86,7 +87,7 @@ func TestObserveClusterReadinessFacade(t *testing.T) {
 		},
 		{
 			name:       "provisioning persists ordinary wait",
-			facts:      dbclusterreadiness.ResolvedClusterFacts{Lifecycle: "Provisioning"},
+			facts:      dbclusterinfo.ResolvedClusterFacts{Lifecycle: "Provisioning"},
 			wantStop:   true,
 			wantResult: ctrl.Result{RequeueAfter: retryDelay},
 			wantReason: reasonClusterProvisioning,
@@ -96,7 +97,7 @@ func TestObserveClusterReadinessFacade(t *testing.T) {
 		},
 		{
 			name:  "existing provisioning condition suppresses duplicate warning",
-			facts: dbclusterreadiness.ResolvedClusterFacts{Lifecycle: "Provisioning"},
+			facts: dbclusterinfo.ResolvedClusterFacts{Lifecycle: "Provisioning"},
 			priorCondition: &metav1.Condition{
 				Type: string(clusterReady), Status: metav1.ConditionFalse, Reason: string(reasonClusterProvisioning),
 			},
@@ -108,7 +109,7 @@ func TestObserveClusterReadinessFacade(t *testing.T) {
 		},
 		{
 			name:       "recovery after ready persists recovery wait",
-			facts:      dbclusterreadiness.ResolvedClusterFacts{Lifecycle: "Pending", Recovery: dbclusterreadiness.RecoveryInProgress},
+			facts:      dbclusterinfo.ResolvedClusterFacts{Lifecycle: "Pending", Recovery: dbclusterinfo.RecoveryInProgress},
 			wasReady:   true,
 			wantStop:   true,
 			wantResult: ctrl.Result{RequeueAfter: retryDelay},
@@ -143,7 +144,7 @@ func TestObserveClusterReadinessFacade(t *testing.T) {
 			rc := &ReconcileContext{
 				Client:   client,
 				Recorder: recorder,
-				ClusterReader: clusterReadinessReaderFunc(func(_ context.Context, namespace, name string) (dbclusterreadiness.ResolvedClusterFacts, error) {
+				ClusterReader: clusterReadinessReaderFunc(func(_ context.Context, namespace, name string) (dbclusterinfo.ResolvedClusterFacts, error) {
 					assert.Equal(t, "dbs", namespace)
 					assert.Equal(t, "primary", name)
 					return tt.facts, tt.readErr
@@ -197,8 +198,8 @@ func TestObserveClusterReadinessPrefersTransientReadErrorOverStatusPersistenceEr
 	}
 	rc := &ReconcileContext{
 		Recorder: record.NewFakeRecorder(1),
-		ClusterReader: clusterReadinessReaderFunc(func(context.Context, string, string) (dbclusterreadiness.ResolvedClusterFacts, error) {
-			return dbclusterreadiness.ResolvedClusterFacts{}, readErr
+		ClusterReader: clusterReadinessReaderFunc(func(context.Context, string, string) (dbclusterinfo.ResolvedClusterFacts, error) {
+			return dbclusterinfo.ResolvedClusterFacts{}, readErr
 		}),
 	}
 
@@ -240,15 +241,11 @@ func TestPostgresDatabaseServiceDoesNotReadRawClusterAfterReadinessGate(t *testi
 	postgresDB := &platformv1alpha1.PostgresDatabase{}
 	require.NoError(t, c.Get(ctx, requestName, postgresDB))
 
-	facts := dbclusterreadiness.ResolvedClusterFacts{
+	facts := dbclusterinfo.ResolvedClusterFacts{
 		Name:      "primary-cluster",
 		Namespace: requestName.Namespace,
-		Lifecycle: dbclusterreadiness.LifecycleReady,
-		Provider: &dbclusterreadiness.ProviderReference{
-			Kind:      dbclusterreadiness.ProviderCNPG,
-			Name:      "primary-cnpg",
-			Namespace: requestName.Namespace,
-		},
+		Lifecycle: dbclusterinfo.LifecycleReady,
+		Cluster:   testResolvedClusterCard("primary-cluster", requestName.Namespace, "primary-cnpg"),
 		ManagedRolesStatus: &platformv1alpha1.ManagedRolesStatus{
 			Reconciled: []string{adminRoleName(databaseName), rwRoleName(databaseName)},
 			RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
@@ -271,7 +268,7 @@ func TestPostgresDatabaseServiceDoesNotReadRawClusterAfterReadinessGate(t *testi
 		Client:   c,
 		Scheme:   scheme,
 		Recorder: record.NewFakeRecorder(10),
-		ClusterReader: clusterReadinessReaderFunc(func(context.Context, string, string) (dbclusterreadiness.ResolvedClusterFacts, error) {
+		ClusterReader: clusterReadinessReaderFunc(func(context.Context, string, string) (dbclusterinfo.ResolvedClusterFacts, error) {
 			return facts, nil
 		}),
 		DatabaseProvisioner: &stubDatabaseProvisioner{},
@@ -290,4 +287,31 @@ func TestPostgresDatabaseServiceDoesNotReadRawClusterAfterReadinessGate(t *testi
 	configMap := &corev1.ConfigMap{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: configMapName(postgresDB.Name, databaseName), Namespace: requestName.Namespace}, configMap))
 	assert.Equal(t, "primary-cnpg-pooler-rw.dbs.svc.cluster.local", configMap.Data[pgconninfo.KeyPoolerRWEndpoint])
+}
+
+func testResolvedClusterCard(logicalName, namespace, authoritativeName string) *identitytypes.ClusterCard {
+	scope := identitytypes.NamingScopeConventional
+	if authoritativeName != logicalName {
+		scope = identitytypes.NamingScopeEnvironment
+	}
+	authoritative := identitytypes.Environment{
+		Identity: identitytypes.ObjectIdentity{
+			APIVersion: "postgresql.cnpg.io/v1",
+			Kind:       "Cluster",
+			Name:       authoritativeName,
+			Namespace:  namespace,
+		},
+		Role:  identitytypes.EnvironmentRoleAuthoritative,
+		Scope: scope,
+	}
+	return &identitytypes.ClusterCard{
+		Logical: identitytypes.ObjectIdentity{
+			APIVersion: "platform.splunk.com/v1alpha1",
+			Kind:       "PostgresCluster",
+			Name:       logicalName,
+			Namespace:  namespace,
+		},
+		Authoritative: authoritative,
+		Managed:       []identitytypes.Environment{authoritative},
+	}
 }

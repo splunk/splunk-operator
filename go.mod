@@ -3,7 +3,7 @@ module github.com/splunk/splunk-operator
 go 1.26.4
 
 require (
-	cloud.google.com/go/storage v1.67.1
+	cloud.google.com/go/storage v1.68.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.1
@@ -11,7 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.5
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.5
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.23.7
-	github.com/aws/aws-sdk-go-v2/service/kms v1.60.0
+	github.com/aws/aws-sdk-go-v2/service/kms v1.61.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.1
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.0
 	github.com/cert-manager/cert-manager v1.21.2
@@ -38,7 +38,7 @@ require (
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.56.0
 	golang.org/x/sync v0.23.0
-	google.golang.org/api v0.297.0
+	google.golang.org/api v0.298.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.37.0
 	k8s.io/apiextensions-apiserver v0.37.0
@@ -47,7 +47,7 @@ require (
 	k8s.io/component-base v0.37.0
 	k8s.io/kubectl v0.37.0
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
-	sigs.k8s.io/controller-runtime v0.25.0
+	sigs.k8s.io/controller-runtime v0.25.1
 	sigs.k8s.io/yaml v1.6.0
 )
 

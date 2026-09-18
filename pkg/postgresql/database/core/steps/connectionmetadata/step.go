@@ -106,7 +106,10 @@ func New(resolver EndpointResolver, publisher Publisher, input Input) *Step {
 func (s *Step) Name() string { return stepName }
 
 func (s *Step) Requires() []dbpipeline.ContractKey {
-	return []dbpipeline.ContractKey{dbpipeline.ContractDatabaseCredentialsReady}
+	return []dbpipeline.ContractKey{
+		dbpipeline.ContractDatabaseCredentialsReady,
+		dbpipeline.ContractDatabaseManagedRoleIntentPublished,
+	}
 }
 
 func (s *Step) Provides() []dbpipeline.ContractKey {

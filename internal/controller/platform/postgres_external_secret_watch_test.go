@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +31,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
@@ -91,14 +93,22 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 		watchManager, err = ctrl.NewManager(cfg, ctrl.Options{
 			Scheme:  clientgoscheme.Scheme,
 			Metrics: metricsserver.Options{BindAddress: "0"},
+			// This suite shares envtest with direct-reconcile specs that leave
+			// namespaces pending deletion. Limit the manager to the namespace
+			// owned by this scenario so those fixtures cannot be reconciled or
+			// trigger rate-limited missing-class retries.
+			Cache: cache.Options{
+				DefaultNamespaces: map[string]cache.Config{namespace: {}},
+			},
 		})
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect((&PostgresClusterReconciler{
-			Client:   watchManager.GetClient(),
-			Scheme:   watchManager.GetScheme(),
-			Recorder: record.NewFakeRecorder(1024),
-			Metrics:  &pgprometheus.NoopRecorder{},
+			Client:           watchManager.GetClient(),
+			Scheme:           watchManager.GetScheme(),
+			Recorder:         record.NewFakeRecorder(1024),
+			Metrics:          &pgprometheus.NoopRecorder{},
+			IdentityResolver: identityadapter.NewIdentityResolver(),
 		}).SetupWithManager(watchManager)).To(Succeed())
 
 		mgrCtx, mgrCancel = context.WithCancel(context.Background())

@@ -19,9 +19,9 @@ import (
 	"errors"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,7 +36,7 @@ type ReconcileContext struct {
 	Scheme                              *runtime.Scheme
 	Recorder                            record.EventRecorder
 	Metrics                             ports.Recorder
-	ClusterReader                       dbclusterreadiness.ClusterReader
+	ClusterReader                       dbclusterinfo.ClusterReader
 	DatabaseProvisioner                 DatabaseProvisioner
 	NewCustomMetricsAcknowledgementRepo func(*platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository
 }
@@ -86,13 +86,13 @@ const (
 	// DB reconcile phases
 	readyDBPhase        reconcileDBPhases = "Ready"
 	pendingDBPhase      reconcileDBPhases = "Pending"
-	provisioningDBPhase reconcileDBPhases = "Provisioning"
-	failedDBPhase       reconcileDBPhases = "Failed"
+	provisioningDBPhase reconcileDBPhases = reconcileDBPhases(reconciliationTypes.PhaseProvisioning)
+	failedDBPhase       reconcileDBPhases = reconcileDBPhases(reconciliationTypes.PhaseFailed)
 	deletingDBPhase     reconcileDBPhases = "Deleting"
 
 	// condition types
 	clusterReady       conditionTypes = "ClusterReady"
-	rolesReady         conditionTypes = "RolesReady"
+	rolesReady         conditionTypes = conditionTypes(reconciliationTypes.ConditionRolesReady)
 	databasesReady     conditionTypes = "DatabasesReady"
 	secretsReady       conditionTypes = "SecretsReady"
 	configMapsReady    conditionTypes = "ConfigMapsReady"
@@ -117,10 +117,10 @@ const (
 	reasonExternalSecretMissingData      conditionReasons = "ExternalSecretMissingData"
 	reasonExternalSecretMissingKeys      conditionReasons = "ExternalSecretMissingKeys"
 	reasonExternalSecretMissingLabel     conditionReasons = "ExternalSecretMissingReloadLabel"
-	reasonWaitingForCNPG                 conditionReasons = "WaitingForCNPG"
-	reasonRolesAvailable                 conditionReasons = "RolesAvailable"
-	reasonRoleConflict                   conditionReasons = "RoleConflict"
-	reasonRoleReconcileFailed            conditionReasons = "RoleReconcileFailed"
+	reasonWaitingForCNPG                 conditionReasons = conditionReasons(reconciliationTypes.ReasonWaitingForCNPG)
+	reasonRolesAvailable                 conditionReasons = conditionReasons(reconciliationTypes.ReasonRolesAvailable)
+	reasonRoleConflict                   conditionReasons = conditionReasons(reconciliationTypes.ReasonRoleConflict)
+	reasonRoleReconcileFailed            conditionReasons = conditionReasons(reconciliationTypes.ReasonRoleReconcileFailed)
 	reasonRoleCleanupWaiting             conditionReasons = "RoleCleanupWaitingForCluster"
 	reasonRoleCleanupBlocked             conditionReasons = "RoleCleanupBlocked"
 	reasonConfigMapsCreationFailed       conditionReasons = "ConfigMapsCreationFailed"
