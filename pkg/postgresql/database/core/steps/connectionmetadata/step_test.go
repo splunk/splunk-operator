@@ -91,9 +91,12 @@ func TestStepReconcileBuildsPublicationsInOrder(t *testing.T) {
 	assert.Equal(t, "All ConfigMaps provisioned for 2 databases", outcome.Message())
 }
 
-func TestStepRequiresCredentialsReady(t *testing.T) {
+func TestStepRequiresCredentialsAndManagedRoleIntent(t *testing.T) {
 	step := New(nil, nil, Input{})
-	assert.Equal(t, []dbpipeline.ContractKey{dbpipeline.ContractDatabaseCredentialsReady}, step.Requires())
+	assert.Equal(t, []dbpipeline.ContractKey{
+		dbpipeline.ContractDatabaseCredentialsReady,
+		dbpipeline.ContractDatabaseManagedRoleIntentPublished,
+	}, step.Requires())
 }
 
 func TestPipelineRejectsConnectionMetadataBeforeCredentialsProvider(t *testing.T) {
@@ -106,6 +109,21 @@ func TestPipelineRejectsConnectionMetadataBeforeCredentialsProvider(t *testing.T
 
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `requires contract "database.credentials.ready"`)
+}
+
+func TestPipelineRejectsConnectionMetadataBeforeManagedRoleIntentProvider(t *testing.T) {
+	step := New(nil, nil, Input{})
+
+	_, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{
+		&credentialsReadyProvider{ready: true},
+		step,
+	}, func(context.Context, reconciliationTypes.Outcome) error {
+		t.Fatal("status handler must not run for an invalid step order")
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `requires contract "database.managed-role-intent.published"`)
 }
 
 func TestStepClassifiesEndpointFailure(t *testing.T) {
@@ -180,6 +198,7 @@ func TestPipelineRequeuesConnectionMetadataConflictWithoutPublishingFailureStatu
 
 	outcome, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{
 		&credentialsReadyProvider{ready: true},
+		&roleIntentProvider{},
 		step,
 		downstream,
 	}, func(context.Context, reconciliationTypes.Outcome) error {
@@ -259,6 +278,7 @@ func TestStepProviderReadFailureDoesNotChangeConfigMapStatus(t *testing.T) {
 	statusCalls := 0
 	outcome, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{
 		&credentialsReadyProvider{ready: true},
+		&roleIntentProvider{},
 		step,
 		downstream,
 	}, func(context.Context, reconciliationTypes.Outcome) error {
@@ -306,8 +326,9 @@ func TestStepRunsBetweenCredentialsAndManagedRoleGate(t *testing.T) {
 	)
 	consumer := &managedRoleGate{}
 	provider := &credentialsReadyProvider{ready: true}
+	roleIntent := &roleIntentProvider{}
 
-	_, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{provider, step, consumer}, func(context.Context, reconciliationTypes.Outcome) error {
+	_, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{provider, roleIntent, step, consumer}, func(context.Context, reconciliationTypes.Outcome) error {
 		return nil
 	})
 
@@ -359,6 +380,7 @@ func TestStepDoesNotRunUntilCredentialsAreReady(t *testing.T) {
 
 	outcome, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{
 		&credentialsReadyProvider{ready: false},
+		&roleIntentProvider{},
 		step,
 	}, func(context.Context, reconciliationTypes.Outcome) error {
 		t.Fatal("status must not be persisted while the prerequisite is deferred")
@@ -373,6 +395,24 @@ func TestStepDoesNotRunUntilCredentialsAreReady(t *testing.T) {
 
 type credentialsReadyProvider struct {
 	ready bool
+}
+
+type roleIntentProvider struct{}
+
+func (p *roleIntentProvider) Name() string { return "managed-role-intent" }
+func (p *roleIntentProvider) Requires() []dbpipeline.ContractKey {
+	return []dbpipeline.ContractKey{dbpipeline.ContractDatabaseCredentialsReady}
+}
+func (p *roleIntentProvider) Provides() []dbpipeline.ContractKey {
+	return []dbpipeline.ContractKey{dbpipeline.ContractDatabaseManagedRoleIntentPublished}
+}
+func (p *roleIntentProvider) Observe(
+	_ context.Context,
+	contracts *dbpipeline.Contracts,
+	_ error,
+) (reconciliationTypes.Outcome, error) {
+	contracts.ManagedRoleIntentPublished = &dbpipeline.ManagedRoleIntentPublishedContract{}
+	return reconciliationTypes.Converged(), nil
 }
 
 func (p *credentialsReadyProvider) Name() string { return "credentials" }

@@ -28,6 +28,10 @@ type CNPGDatabasesReadyContract struct{}
 
 type CredentialsReadyContract struct{}
 
+type ManagedRoleIntentPublishedContract struct{}
+
+type ManagedRolesReadyContract struct{}
+
 type RWPrivilegesReadyContract struct{}
 
 type ConnectionMetadataReadyContract struct{}
@@ -36,10 +40,12 @@ type ConnectionMetadataReadyContract struct{}
 // steps. It is intentionally not a general data bus; nil fields mean those
 // facts are absent in this pass.
 type Contracts struct {
-	CredentialsReady        *CredentialsReadyContract
-	CNPGDatabasesReady      *CNPGDatabasesReadyContract
-	RWPrivilegesReady       *RWPrivilegesReadyContract
-	ConnectionMetadataReady *ConnectionMetadataReadyContract
+	CredentialsReady           *CredentialsReadyContract
+	ManagedRoleIntentPublished *ManagedRoleIntentPublishedContract
+	ManagedRolesReady          *ManagedRolesReadyContract
+	CNPGDatabasesReady         *CNPGDatabasesReadyContract
+	RWPrivilegesReady          *RWPrivilegesReadyContract
+	ConnectionMetadataReady    *ConnectionMetadataReadyContract
 
 	useCaseStepResults map[*useCaseStep]useCaseStepResult
 }
@@ -57,6 +63,10 @@ func (c *Contracts) Has(key ContractKey) bool {
 	switch key {
 	case ContractDatabaseCredentialsReady:
 		return c.CredentialsReady != nil
+	case ContractDatabaseManagedRoleIntentPublished:
+		return c.ManagedRoleIntentPublished != nil
+	case ContractDatabaseManagedRolesReady:
+		return c.ManagedRolesReady != nil
 	case ContractDatabaseCNPGDatabasesReady:
 		return c.CNPGDatabasesReady != nil
 	case ContractDatabaseRWPrivilegesReady:

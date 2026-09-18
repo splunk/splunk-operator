@@ -23,12 +23,16 @@ package test
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"testing"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
@@ -64,6 +68,122 @@ func GetMockS3SecretKeys(name string) corev1.Secret {
 		},
 	}
 	return s3Secret
+}
+
+// CreatePods creates or updates a pod and marks it as running for tests.
+func CreatePods(t *testing.T, ctx context.Context, client splcommon.ControllerClient, crtype, name, namespace, image string) {
+	stpod := &corev1.Pod{}
+	namespacesName := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	err := client.Get(ctx, namespacesName, stpod)
+	if err != nil && k8serrors.IsNotFound(err) {
+		// create pod
+		stpod = &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "splunk-operator",
+					"app.kubernetes.io/component":  crtype,
+					"app.kubernetes.io/name":       crtype,
+					"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-test-%s", crtype),
+					"app.kubernetes.io/instance":   fmt.Sprintf("splunk-test-%s", crtype),
+				},
+				Annotations: map[string]string{
+					"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
+					"traffic.sidecar.istio.io/includeInboundPorts":  "8000",
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "splunk",
+						Image: image,
+						Env: []corev1.EnvVar{
+							{
+								Name:  "test",
+								Value: "test",
+							},
+						},
+						Ports: []corev1.ContainerPort{
+							{
+								Name:          "http-splunkweb",
+								HostPort:      0,
+								ContainerPort: 8000,
+								Protocol:      "TCP",
+								HostIP:        "",
+							},
+							{
+								Name:          "https-splunkd",
+								HostPort:      0,
+								ContainerPort: 8089,
+								Protocol:      "TCP",
+								HostIP:        "",
+							},
+						},
+					},
+				},
+			},
+		}
+		// simulate create stateful set
+		err := client.Create(ctx, stpod)
+		if err != nil {
+			t.Errorf("Unexpected create pod failed %v", err)
+			debug.PrintStack()
+		}
+	} else if err != nil {
+		t.Errorf("Unexpected erro while get pod  %v", err)
+		debug.PrintStack()
+	}
+	if stpod.Spec.Containers[0].Image != image {
+		stpod.Spec.Containers[0].Image = image
+		err := client.Update(ctx, stpod)
+		if err != nil {
+			t.Errorf("Unexpected create pod failed %v", err)
+			debug.PrintStack()
+		}
+	}
+
+	// update statefulset
+	stpod.Status.Phase = corev1.PodRunning
+	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: image,
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = client.Status().Update(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+}
+
+// UpdateStatefulSetsInTest marks a StatefulSet as ready for tests.
+func UpdateStatefulSetsInTest(t *testing.T, ctx context.Context, client splcommon.ControllerClient, replicas int32, name, namespace string) {
+	stNamespacedName := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	statefulset := &appsv1.StatefulSet{}
+	err := client.Get(ctx, stNamespacedName, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected get cluster manager %v", err)
+		debug.PrintStack()
+	}
+	// update statefulset
+	statefulset.Status.ReadyReplicas = replicas
+	statefulset.Status.Replicas = replicas
+	statefulset.Status.CurrentReplicas = replicas
+	statefulset.Status.AvailableReplicas = replicas
+	err = client.Status().Update(ctx, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
 }
 
 // MockPodExecReturnContext stores the return values for each podExec command

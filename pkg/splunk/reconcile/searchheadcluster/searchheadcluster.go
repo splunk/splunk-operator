@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package searchheadcluster
 
 import (
 	"context"
@@ -28,24 +28,119 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	// TODO: Move the App Framework and common-spec helpers to allowed lower-level
+	// packages once all CRs have migrated from enterprise.
+	legacyenterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
-	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	// TODO: Remove this temporary dependency once all CRs have migrated from enterprise.
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/remotecommand"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// ApplySearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
-func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+const pauseRetryDelay = 30 * time.Second
+
+// apply owns the request-level SearchHeadCluster reconciliation boundary.
+func apply(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
+	logger := logging.FromContext(ctx).With("controller", "SearchHeadCluster", "name", namespacedName.Name, "namespace", namespacedName.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
+	ctx = logging.WithLogger(ctx, logger)
+
+	instance := &enterpriseApi.SearchHeadCluster{}
+	// Fetch the SearchHeadCluster
+	if err := client.Get(ctx, namespacedName, instance); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Request object not found, could have been deleted after
+			// reconcile request. Owned objects are automatically garbage
+			// collected. For additional cleanup logic use finalizers.
+			return reconcile.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		return reconcile.Result{}, fmt.Errorf("could not load search head cluster data: %w", err)
+	}
+
+	// If the reconciliation is paused, set the Paused condition and requeue
+	if instance.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true" {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
+		})
+		instance.Status.Conditions = result.Conditions
+		if err := client.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+	} else if condition := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); condition != nil && condition.Status == metav1.ConditionTrue {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
+		})
+		instance.Status.Conditions = result.Conditions
+		if err := client.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
+			return reconcile.Result{}, err
+		}
+	}
+
+	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
+	// Pass event recorder through context
+	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, recorder)
+	result, err := ApplySearchHeadCluster(ctx, client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
+	}
+
+	fresh := &enterpriseApi.SearchHeadCluster{}
+	if fetchErr := client.Get(ctx, namespacedName, fresh); fetchErr != nil {
+		if apierrors.IsNotFound(fetchErr) {
+			return result, nil
+		}
+		logger.WarnContext(ctx, "failed to refetch CR for stalled condition update", "error", fetchErr)
+		return result, fetchErr
+	}
+	oldConditions := append([]metav1.Condition(nil), fresh.Status.Conditions...)
+	if message, ok := splcommon.TerminalMessage(err); ok {
+		reason, _ := splcommon.TerminalReason(err)
+		fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, message, fresh.GetGeneration())
+	} else {
+		fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
+	}
+	eventPublisher, publisherErr := k8sops.NewK8EventPublisherWithRecorder(recorder, fresh)
+	if publisherErr != nil {
+		logger.WarnContext(ctx, "failed to create event publisher", "error", publisherErr)
+		return result, publisherErr
+	}
+	k8sops.EmitStalledTransitionEvents(ctx, eventPublisher, fresh.GetName(), oldConditions, fresh.Status.Conditions)
+	if updateErr := client.Status().Update(ctx, fresh); updateErr != nil {
+		logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
+		return result, updateErr
+	}
+	if _, ok := splcommon.TerminalMessage(err); ok {
+		return reconcile.Result{}, err
+	}
+	return result, err
+}
+
+// Apply is the request-level entry point used by the controller.
+var Apply = apply
+
+// Keep the existing SearchHeadCluster telemetry target unchanged after moving
+// the reconcile implementation out of enterprise.
+const numberOfDeployerReplicas = 1
+
+// applySearchHeadCluster reconciles the state for a Splunk Enterprise search head cluster.
+func applySearchHeadCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
 		Requeue:      true,
@@ -53,7 +148,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 	logger := logging.FromContext(ctx).With("func", "ApplySearchHeadCluster")
 
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "SearchHeadCluster"
 
@@ -83,14 +178,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// If needed, Migrate the app framework status
-	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
+	err = legacyenterprise.CheckAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
 	}
 
 	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
+	namespaceScopedSecret, err := k8sops.ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkSearchHead)
 	if err != nil {
 		eventPublisher.Warning(ctx, splcommon.EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
@@ -101,7 +196,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := legacyenterprise.InitAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			eventPublisher.Warning(ctx, splcommon.EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -130,7 +225,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), false)
+			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, resources.GetSearchHeadEnv(cr), false)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
@@ -141,14 +236,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkSearchHead)
+			err = legacyenterprise.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, splcommon.SplunkSearchHead)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkSearchHead)
+		k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkSearchHead)
 
 		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -164,21 +259,21 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// create or update a headless search head cluster service
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, true))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkSearchHead, true))
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head headless service")
 		return result, err
 	}
 
 	// create or update a regular search head cluster service
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, false))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkSearchHead, false))
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head service")
 		return result, err
 	}
 
 	// create or update a deployer service
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, false))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkDeployer, false))
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer service")
 		return result, err
@@ -224,13 +319,18 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getSearchHeadEnv(cr))
+	err = k8sops.ValidateMonitoringConsoleRef(ctx, client, statefulSet, resources.GetSearchHeadEnv(cr))
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
-	mgr := newSearchHeadClusterPodManager(client, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr := shcworkflow.NewPodManager(client, cr, namespaceScopedSecret, splclient.NewSplunkClient, shcworkflow.Operations{
+		ApplyStatefulSet:             k8sops.ApplyStatefulSet,
+		CheckPodsForTerminalFailures: k8sops.CheckPodsForTerminalFailures,
+		UpdateStatefulSetPods:        k8sops.UpdateStatefulSetPods,
+		ApplySecret:                  k8sops.ApplySecret,
+	})
 
 	// handle SHC upgrade process
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
@@ -243,11 +343,11 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 	var finalResult *reconcile.Result
 	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
-		finalResult = handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		finalResult = legacyenterprise.HandleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 	}
 
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
-		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), true)
+		_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, resources.GetSearchHeadEnv(cr), true)
 		if err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 			return result, err
@@ -257,7 +357,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkMonitoringConsole, cr.GetNamespace())}
 		err = k8sops.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
@@ -295,185 +395,15 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	return result, nil
 }
 
-// ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it
-func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
-	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, mgr.cr)
-
-	// Get namespace scoped secret
-	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
-	if err != nil {
-		return err
+// ApplySearchHeadCluster is the operation seam used by focused reconciliation
+// tests. Noah-backed SearchHeadClusters (spec.noahClusterRef set) have no
+// deployer and reconcile through a dedicated path; classic clusters are
+// unaffected.
+var ApplySearchHeadCluster = func(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+	if cr.Spec.NoahEnabled() {
+		return ApplySearchHeadClusterNoah(ctx, client, cr)
 	}
-
-	logger := logging.FromContext(ctx).With("func", "ApplyShcSecret", "desiredReplicas", replicas, "shcSecretChanged", mgr.cr.Status.ShcSecretChanged, "adminSecretChanged", mgr.cr.Status.AdminSecretChanged, "crStatusNamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "namespaceSecretResourceVersion", namespaceSecret.GetObjectMeta().GetResourceVersion())
-
-	// If namespace scoped secret revision is the same ignore
-	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
-		// First time, set resource version in CR
-		logger.InfoContext(ctx, "setting CrStatusNamespaceSecretResourceVersion for the first time")
-		mgr.cr.Status.NamespaceSecretResourceVersion = namespaceSecret.ObjectMeta.ResourceVersion
-		return nil
-	} else if mgr.cr.Status.NamespaceSecretResourceVersion == namespaceSecret.ObjectMeta.ResourceVersion {
-		// If resource version hasn't changed don't return
-		return nil
-	}
-
-	logger.InfoContext(ctx, "namespaced scoped secret revision has changed")
-
-	// Retrieve shc_secret password from secret data
-	nsShcSecret := string(namespaceSecret.Data["shc_secret"])
-
-	// Retrieve shc_secret password from secret data
-	nsAdminSecret := string(namespaceSecret.Data["password"])
-
-	// Loop over all sh pods and get individual pod's shc_secret
-	howManyPodsHaveSecretChanged := 0
-	for i := int32(0); i <= replicas-1; i++ {
-		// Get search head pod's name
-		shPodName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), i)
-
-		podLogger := logging.FromContext(ctx).With("func", "ApplyShcSecretPodLoop", "desiredReplicas", replicas, "shcSecretChanged", mgr.cr.Status.ShcSecretChanged, "adminSecretChanged", mgr.cr.Status.AdminSecretChanged, "namespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "pod", shPodName)
-
-		// Retrieve shc_secret password from Pod
-		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
-		if err != nil {
-			return fmt.Errorf("couldn't retrieve shc_secret from secret data, error: %s", err.Error())
-		}
-
-		// set the targetPodName here
-		podExecClient.SetTargetPodName(ctx, shPodName)
-
-		var streamOptions *remotecommand.StreamOptions = &remotecommand.StreamOptions{}
-
-		// Retrieve admin password from Pod
-		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "password")
-		if err != nil {
-			return fmt.Errorf("couldn't retrieve admin password from secret data, error: %s", err.Error())
-		}
-
-		// If shc secret is different from namespace scoped secret change it
-		if shcSecret != nsShcSecret {
-			podLogger.InfoContext(ctx, "shcSecret different from namespace scoped secret, changing shc secret")
-			// If shc secret already changed, skip the sync below, but still fall through
-			// to the independent admin-password check for this pod.
-			shcSecretAlreadyChanged := i < int32(len(mgr.cr.Status.ShcSecretChanged)) && mgr.cr.Status.ShcSecretChanged[i]
-			if !shcSecretAlreadyChanged {
-				// Change shc secret key
-				command := fmt.Sprintf("/opt/splunk/bin/splunk edit shcluster-config -auth admin:%s -secret %s", adminPwd, nsShcSecret)
-				streamOptions.Stdin = strings.NewReader(command)
-
-				_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-				if err != nil {
-					// Emit event for password sync failure
-					if eventPublisher != nil {
-						eventPublisher.Warning(ctx, splcommon.EventReasonPasswordSyncFailed,
-							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
-					}
-					return err
-				}
-				podLogger.InfoContext(ctx, "shcSecret changed")
-
-				howManyPodsHaveSecretChanged += 1
-
-				// Get client for Pod and restart splunk instance on pod
-				shClient := mgr.getClient(ctx, i)
-				err = shClient.RestartSplunk()
-				if err != nil {
-					// Emit event for password sync failure
-					if eventPublisher != nil {
-						eventPublisher.Warning(ctx, splcommon.EventReasonPasswordSyncFailed,
-							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
-					}
-					return err
-				}
-				podLogger.InfoContext(ctx, "restarted Splunk")
-
-				// Set the shc_secret changed flag to true
-				if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
-					mgr.cr.Status.ShcSecretChanged[i] = true
-				} else {
-					mgr.cr.Status.ShcSecretChanged = append(mgr.cr.Status.ShcSecretChanged, true)
-				}
-			}
-		}
-
-		// If admin secret is different from namespace scoped secret change it
-		if adminPwd != nsAdminSecret {
-			podLogger.InfoContext(ctx, "admin password different from namespace scoped secret, changing admin password")
-			// If admin password already changed, ignore
-			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
-				if mgr.cr.Status.AdminSecretChanged[i] {
-					continue
-				}
-			}
-
-			// Change admin password on splunk instance of pod
-			command := fmt.Sprintf("/opt/splunk/bin/splunk cmd splunkd rest --noauth POST /services/admin/users/admin 'password=%s'", nsAdminSecret)
-			streamOptions.Stdin = strings.NewReader(command)
-			_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-			if err != nil {
-				return err
-			}
-			podLogger.InfoContext(ctx, "admin password changed on the splunk instance of pod")
-
-			// Get client for Pod and restart splunk instance on pod
-			shClient := mgr.getClient(ctx, i)
-			err = shClient.RestartSplunk()
-			if err != nil {
-				return err
-			}
-			podLogger.InfoContext(ctx, "restarted Splunk")
-
-			// Set the adminSecretChanged changed flag to true
-			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
-				mgr.cr.Status.AdminSecretChanged[i] = true
-			} else {
-				podLogger.InfoContext(ctx, "appending to AdminSecretChanged")
-				mgr.cr.Status.AdminSecretChanged = append(mgr.cr.Status.AdminSecretChanged, true)
-			}
-
-			// Adding to map of secrets to be synced
-			podSecret, err := splutil.GetSecretFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace())
-			if err != nil {
-				return err
-			}
-			mgr.cr.Status.AdminPasswordChangedSecrets[podSecret.GetName()] = true
-			podLogger.InfoContext(ctx, "secret mounted on pod(to be changed) added to map")
-		}
-	}
-
-	/*
-		When admin password on the secret mounted on SHC pod is different from that on the namespace scoped
-		secret the operator updates the admin password on the Splunk Instance running on the Pod. At this point
-		the admin password on the secret mounted on SHC pod is different from the Splunk Instance running on it.
-		Since the operator utilizes the admin password retrieved from the secret mounted on a SHC pod to make
-		REST API calls to the Splunk instances running on SHC Pods, it results in unsuccessful authentication.
-		Update the admin password on secret mounted on SHC pod to ensure successful authentication.
-	*/
-	if len(mgr.cr.Status.AdminPasswordChangedSecrets) > 0 {
-
-		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
-			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), podSecretName)
-			if err != nil {
-				return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
-			}
-			podSecret.Data["password"] = []byte(nsAdminSecret)
-			_, err = k8sops.ApplySecret(ctx, mgr.c, podSecret)
-			if err != nil {
-				return err
-			}
-			logger.InfoContext(ctx, "admin password changed on the secret mounted on pod")
-		}
-	}
-
-	// Emit event for password sync completed
-	if eventPublisher != nil {
-		eventPublisher.Normal(ctx, splcommon.EventReasonPasswordSyncCompleted,
-			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
-	}
-
-	return nil
+	return applySearchHeadCluster(ctx, client, cr)
 }
 
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
@@ -485,13 +415,14 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	}
 
 	// get search head env variables with deployer
-	env := getSearchHeadEnv(cr)
+	env := resources.GetSearchHeadEnv(cr)
 
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env, certMounts, opts...)
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkSearchHead, cr.Spec.Replicas, env, opts...)
 	if err != nil {
 		return nil, err
 	}
+	certs.InjectCertMounts(&ss.Spec.Template, certMounts)
 
 	return ss, nil
 }
@@ -538,10 +469,11 @@ func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas), certMounts, opts...)
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkDeployer, 1, resources.GetSearchHeadExtraEnv(cr, cr.Spec.Replicas), opts...)
 	if err != nil {
 		return ss, err
 	}
+	certs.InjectCertMounts(&ss.Spec.Template, certMounts)
 
 	// CSPL-3562 - Set deployer resources if configured
 	err = setDeployerConfig(ctx, cr, &ss.Spec.Template)
@@ -550,7 +482,7 @@ func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// Setup App framework staging volume for apps
-	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	resources.SetupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, err
 }
@@ -562,26 +494,11 @@ func validateSearchHeadClusterSpec(ctx context.Context, c splcommon.ControllerCl
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false, cr.GetObjectKind().GroupVersionKind().Kind)
+		err := legacyenterprise.ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}
 	}
 
-	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
-}
-
-// helper function to get the list of SearchHeadCluster types in the current namespace
-func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.SearchHeadClusterList, error) {
-	logger := logging.FromContext(ctx).With("func", "getSearchHeadClusterList", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	objectList := enterpriseApi.SearchHeadClusterList{}
-
-	err := c.List(context.TODO(), &objectList, listOpts...)
-	if err != nil {
-		logger.ErrorContext(ctx, "SearchHeadCluster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
-		return objectList, err
-	}
-
-	return objectList, nil
+	return reconcileutil.ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }

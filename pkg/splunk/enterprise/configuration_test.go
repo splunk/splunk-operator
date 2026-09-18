@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -2092,7 +2092,7 @@ func TestUpdateSplunkPodTemplateLooksUpClusterManagerInRefNamespace(t *testing.T
 		},
 	}
 
-	sts, err := getSplunkStatefulSet(ctx, client, shc, &shc.Spec.CommonSplunkSpec, SplunkSearchHead, 1, getSearchHeadExtraEnv(shc, shc.Spec.Replicas), nil)
+	sts, err := getSplunkStatefulSet(ctx, client, shc, &shc.Spec.CommonSplunkSpec, SplunkSearchHead, 1, resources.GetSearchHeadExtraEnv(shc, shc.Spec.Replicas), nil)
 	require.NoError(t, err)
 
 	found := false

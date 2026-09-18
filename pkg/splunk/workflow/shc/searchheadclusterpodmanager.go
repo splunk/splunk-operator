@@ -1,4 +1,18 @@
-package enterprise
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package shc
 
 import (
 	"context"
@@ -11,7 +25,6 @@ import (
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,13 +33,41 @@ import (
 
 const defaultSearchHeadDetentionTimeoutSeconds = 3600
 
+// NewSplunkClientFunc is the factory signature used by the SearchHeadCluster pod manager.
+type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
+
+// EventPublisher publishes workflow events without coupling the workflow to a
+// Kubernetes event implementation.
+type EventPublisher interface {
+	Normal(context.Context, string, string)
+	Warning(context.Context, string, string)
+}
+
+// GetEventPublisher is retained as a seam for the existing SearchHeadCluster tests.
+var GetEventPublisher = func(ctx context.Context, _ splcommon.MetaObject) EventPublisher {
+	publisher, _ := ctx.Value(splcommon.EventPublisherKey).(EventPublisher)
+	return publisher
+}
+
+// Operations contains the Kubernetes operations required by the pod manager.
+// The reconcile package supplies the implementation so this workflow remains
+// independent of the Kubernetes operations package.
+type Operations struct {
+	ApplyStatefulSet             func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet) (enterpriseApi.Phase, error)
+	CheckPodsForTerminalFailures func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet) error
+	UpdateStatefulSetPods        func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet, splcommon.StatefulSetPodManager, int32) (enterpriseApi.Phase, error)
+	ApplySecret                  func(context.Context, splcommon.ControllerClient, *corev1.Secret) (*corev1.Secret, error)
+}
+
+var defaultOperations Operations
+
 // clearDetentionTimer zeroes the cluster-level detention timer fields if they belong to memberName.
 // Also resets the active search count gauges to zero so stale values don't persist in Prometheus.
-func (mgr *searchHeadClusterPodManager) clearDetentionTimer(memberName string) {
-	if mgr.cr.Status.DetainedMemberName == memberName {
-		mgr.cr.Status.DetentionStartTimestamp = 0
-		mgr.cr.Status.DetainedMemberName = ""
-		mgr.cr.Status.DetainedPodRevision = ""
+func (mgr *PodManager) clearDetentionTimer(memberName string) {
+	if mgr.CR.Status.DetainedMemberName == memberName {
+		mgr.CR.Status.DetentionStartTimestamp = 0
+		mgr.CR.Status.DetainedMemberName = ""
+		mgr.CR.Status.DetainedPodRevision = ""
 		metrics.ActiveHistoricalSearchCount.With(prometheus.Labels{
 			"sh_name": memberName,
 		}).Set(0)
@@ -36,47 +77,61 @@ func (mgr *searchHeadClusterPodManager) clearDetentionTimer(memberName string) {
 	}
 }
 
-// searchHeadClusterPodManager is used to manage the pods within a search head cluster
-type searchHeadClusterPodManager struct {
-	c               splcommon.ControllerClient
-	cr              *enterpriseApi.SearchHeadCluster
-	secrets         *corev1.Secret
-	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+// PodManager is used to manage the pods within a search head cluster.
+type PodManager struct {
+	Client          splcommon.ControllerClient
+	CR              *enterpriseApi.SearchHeadCluster
+	Secrets         *corev1.Secret
+	NewSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+	Operations      *Operations
 }
 
-// newSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
-var newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
-	return searchHeadClusterPodManager{
-		cr:              cr,
-		secrets:         secret,
-		newSplunkClient: newSplunkClient,
-		c:               client,
+// NewPodManager creates a pod manager. The variable is retained as a test seam.
+var NewPodManager = func(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, operations Operations) PodManager {
+	mgr := PodManager{
+		CR:              cr,
+		Secrets:         secret,
+		NewSplunkClient: newSplunkClient,
+		Client:          client,
+		Operations:      &operations,
 	}
+	return mgr
 }
 
-// Update for searchHeadClusterPodManager handles all updates for a statefulset of search heads
-func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
+func (mgr *PodManager) operationSet() Operations {
+	if mgr.Operations != nil {
+		return *mgr.Operations
+	}
+	return defaultOperations
+}
+
+// Update for PodManager handles all updates for a statefulset of search heads
+func (mgr *PodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	logger := logging.FromContext(ctx).With("func", "searchHeadClusterPodManager.Update")
 
 	// Assign client
-	if mgr.c == nil {
-		mgr.c = c
+	if mgr.Client == nil {
+		mgr.Client = c
 	}
 
 	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+	eventPublisher := GetEventPublisher(ctx, mgr.CR)
 
 	// Track last successful replica count to emit scale events after completion
-	previousReadyReplicas := mgr.cr.Status.ReadyReplicas
+	previousReadyReplicas := mgr.CR.Status.ReadyReplicas
 
+	ops := mgr.operationSet()
 	// update statefulset, if necessary
-	_, err := k8sops.ApplyStatefulSet(ctx, mgr.c, statefulSet)
+	if ops.ApplyStatefulSet == nil || ops.CheckPodsForTerminalFailures == nil || ops.UpdateStatefulSetPods == nil {
+		return enterpriseApi.PhaseError, fmt.Errorf("SHC StatefulSet operations are not configured")
+	}
+	_, err := ops.ApplyStatefulSet(ctx, mgr.Client, statefulSet)
 	if err != nil {
 		return enterpriseApi.PhaseError, err
 	}
 
 	// for now pass the targetPodName as empty since we are going to fill it in ApplyShcSecret
-	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
+	podExecClient := splutil.GetPodExecClient(mgr.Client, mgr.CR, "")
 
 	// Check if a recycle of shc pods is necessary(due to shc_secret mismatch with namespace scoped secret)
 	err = ApplyShcSecret(ctx, mgr, desiredReplicas, podExecClient)
@@ -85,9 +140,9 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	}
 
 	// update CR status with SHC information
-	err = mgr.updateStatus(ctx, statefulSet)
-	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
-		if termErr := k8sops.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
+	err = mgr.UpdateStatus(ctx, statefulSet)
+	if err != nil || mgr.CR.Status.ReadyReplicas == 0 || !mgr.CR.Status.Initialized || !mgr.CR.Status.CaptainReady {
+		if termErr := ops.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
 			logger.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
 			return enterpriseApi.PhaseError, termErr
 		}
@@ -97,32 +152,32 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 		// the transient phase from replica counts alone so callers don't see a
 		// false Pending for the whole election window; PrepareScaleDown/Recycle
 		// still won't run until CaptainReady returns true on a later reconcile.
-		if mgr.cr.Status.ReadyReplicas > desiredReplicas {
+		if mgr.CR.Status.ReadyReplicas > desiredReplicas {
 			return enterpriseApi.PhaseScalingDown, nil
 		}
-		if mgr.cr.Status.ReadyReplicas > 0 && mgr.cr.Status.ReadyReplicas < desiredReplicas {
+		if mgr.CR.Status.ReadyReplicas > 0 && mgr.CR.Status.ReadyReplicas < desiredReplicas {
 			return enterpriseApi.PhaseScalingUp, nil
 		}
 		return enterpriseApi.PhasePending, nil
 	}
 
 	// manage scaling and updates
-	phase, err := k8sops.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
+	phase, err := ops.UpdateStatefulSetPods(ctx, mgr.Client, statefulSet, mgr, desiredReplicas)
 	if err != nil {
 		return phase, err
 	}
 
 	// Emit scale events when phase is ready and ready replicas changed to match desired
 	if phase == enterpriseApi.PhaseReady {
-		if desiredReplicas > previousReadyReplicas && mgr.cr.Status.ReadyReplicas == desiredReplicas {
+		if desiredReplicas > previousReadyReplicas && mgr.CR.Status.ReadyReplicas == desiredReplicas {
 			if eventPublisher != nil {
 				eventPublisher.Normal(ctx, splcommon.EventReasonScaledUp,
-					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
+					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.CR.GetName(), previousReadyReplicas, desiredReplicas))
 			}
-		} else if desiredReplicas < previousReadyReplicas && mgr.cr.Status.ReadyReplicas == desiredReplicas {
+		} else if desiredReplicas < previousReadyReplicas && mgr.CR.Status.ReadyReplicas == desiredReplicas {
 			if eventPublisher != nil {
 				eventPublisher.Normal(ctx, splcommon.EventReasonScaledDown,
-					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReadyReplicas, desiredReplicas))
+					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.CR.GetName(), previousReadyReplicas, desiredReplicas))
 			}
 		}
 	}
@@ -130,8 +185,8 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	return phase, nil
 }
 
-// PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
-func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
+// PrepareScaleDown for PodManager prepares search head pod to be removed via scale down event; it returns true when ready
+func (mgr *PodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
 	logger := logging.FromContext(ctx).With("func", "PrepareScaleDown")
 	// start by quarantining the pod
 	result, err := mgr.PrepareRecycle(ctx, n)
@@ -140,10 +195,10 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 	}
 
 	// pod is quarantined; decommission it
-	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
+	memberName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkSearchHead, mgr.CR.GetName(), n)
 	logger.WarnContext(ctx, "member leaving SearchHeadCluster",
 		"member", memberName,
-		"remaining_count", len(mgr.cr.Status.Members)-1)
+		"remaining_count", len(mgr.CR.Status.Members)-1)
 
 	c := mgr.getClient(ctx, n)
 	err = c.RemoveSearchHeadClusterMember()
@@ -159,22 +214,22 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 	return true, nil
 }
 
-// DeferRecycle for searchHeadClusterPodManager implements
-// splcommon.StatefulSetRecycleOrderer: it reports true for the ordinal
-// currently holding the captain role, for as long as any other member still
-// needs to be recycled to updateRevision — so a rolling update recycles
-// every other member first and the captain last, regardless of which
-// ordinal happens to be captain or when that changes mid-rollout.
-func (mgr *searchHeadClusterPodManager) DeferRecycle(ctx context.Context, n int32, updateRevision string) (bool, error) {
-	if n < 0 || n >= int32(len(mgr.cr.Status.Members)) {
+// DeferRecycle for PodManager implements splcommon.StatefulSetRecycleOrderer:
+// it reports true for the ordinal currently holding the captain role, for as
+// long as any other member still needs to be recycled to updateRevision — so
+// a rolling update recycles every other member first and the captain last,
+// regardless of which ordinal happens to be captain or when that changes
+// mid-rollout.
+func (mgr *PodManager) DeferRecycle(ctx context.Context, n int32, updateRevision string) (bool, error) {
+	if n < 0 || n >= int32(len(mgr.CR.Status.Members)) {
 		return false, nil
 	}
-	member := mgr.cr.Status.Members[n]
-	isCaptain := isCaptainMember(mgr.cr.Status.Captain, member.Name)
+	member := mgr.CR.Status.Members[n]
+	isCaptain := isCaptainMember(mgr.CR.Status.Captain, member.Name)
 	alreadyStartedOwnRecycle := member.Status == "ManualDetention"
 
 	others := 0
-	for i, other := range mgr.cr.Status.Members {
+	for i, other := range mgr.CR.Status.Members {
 		if int32(i) == n {
 			continue
 		}
@@ -186,25 +241,25 @@ func (mgr *searchHeadClusterPodManager) DeferRecycle(ctx context.Context, n int3
 	return shouldDeferCaptainRecycle(isCaptain, alreadyStartedOwnRecycle, others), nil
 }
 
-// PrepareRecycle for searchHeadClusterPodManager prepares search head pod to be recycled for updates; it returns true when ready
-func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
+// PrepareRecycle for PodManager prepares search head pod to be recycled for updates; it returns true when ready
+func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
 	logger := logging.FromContext(ctx).With("func", "PrepareRecycle")
-	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
+	memberName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkSearchHead, mgr.CR.GetName(), n)
 
 	// Do not start recycling another member — including via scale-down, which
 	// calls this too — until the captain has held stable for a minimum
 	// settle duration. Without this, recycling the captain and then
 	// immediately recycling the next member could happen back-to-back with
 	// no confirmation the newly elected captain actually held.
-	if !captainStable(mgr.cr.Status.Captain, mgr.cr.Status.CaptainStableSince, time.Now()) {
+	if !captainStable(mgr.CR.Status.Captain, mgr.CR.Status.CaptainStableSince, time.Now()) {
 		logger.InfoContext(ctx, "waiting for captain to stabilize before recycling another member",
 			"memberName", memberName,
-			"captain", mgr.cr.Status.Captain,
-			"captainStableSince", mgr.cr.Status.CaptainStableSince)
+			"captain", mgr.CR.Status.Captain,
+			"captainStableSince", mgr.CR.Status.CaptainStableSince)
 		return false, nil
 	}
 
-	switch mgr.cr.Status.Members[n].Status {
+	switch mgr.CR.Status.Members[n].Status {
 	case "Up":
 		// Clear any stale timer from a prior recycle episode before starting a new one.
 		// This handles the case where a timeout-forced recycle left a non-zero timestamp
@@ -215,9 +270,9 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 		logger.InfoContext(ctx, "detaining SearchHeadCluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 
-		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
+		podExecClient := splutil.GetPodExecClient(mgr.Client, mgr.CR, splutil.GetApplicablePodNameForK8Probes(mgr.CR, n))
 
-		err := setProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne)
+		err := splutil.SetProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne)
 
 		if err != nil {
 			// During the Recycle, our reconcile loop is entered multiple times. If the Pod is already down,
@@ -234,13 +289,13 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 			return false, err
 		}
 
-		if isNewUpgradeWindow(mgr.cr.Status.UpgradeStartTimestamp, mgr.cr.Status.UpgradeEndTimestamp) {
+		if isNewUpgradeWindow(mgr.CR.Status.UpgradeStartTimestamp, mgr.CR.Status.UpgradeEndTimestamp) {
 			currentTime := time.Now().Unix()
-			mgr.cr.Status.UpgradeStartTimestamp = currentTime
+			mgr.CR.Status.UpgradeStartTimestamp = currentTime
 
 			metrics.UpgradeStartTime.Set(float64(currentTime))
 
-			mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgrading
+			mgr.CR.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgrading
 		}
 
 		return false, c.SetSearchHeadDetention(true)
@@ -248,33 +303,33 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 	case "ManualDetention":
 
 		metrics.ActiveHistoricalSearchCount.With(prometheus.Labels{
-			"sh_name": mgr.cr.Status.Members[n].Name,
-		}).Set(float64(mgr.cr.Status.Members[n].ActiveHistoricalSearchCount))
+			"sh_name": mgr.CR.Status.Members[n].Name,
+		}).Set(float64(mgr.CR.Status.Members[n].ActiveHistoricalSearchCount))
 
 		metrics.ActiveRealtimeSearchCount.With(prometheus.Labels{
-			"sh_name": mgr.cr.Status.Members[n].Name,
-		}).Set(float64(mgr.cr.Status.Members[n].ActiveRealtimeSearchCount))
+			"sh_name": mgr.CR.Status.Members[n].Name,
+		}).Set(float64(mgr.CR.Status.Members[n].ActiveRealtimeSearchCount))
 
-		timeout := effectiveDetentionTimeoutSeconds(mgr.cr.Spec.DetentionTimeoutSeconds)
+		timeout := effectiveDetentionTimeoutSeconds(mgr.CR.Spec.DetentionTimeoutSeconds)
 
 		now := time.Now()
 		window := nextDetentionWindow(
 			DetentionWindow{
-				StartTimestamp: mgr.cr.Status.DetentionStartTimestamp,
-				MemberName:     mgr.cr.Status.DetainedMemberName,
-				PodRevision:    mgr.cr.Status.DetainedPodRevision,
+				StartTimestamp: mgr.CR.Status.DetentionStartTimestamp,
+				MemberName:     mgr.CR.Status.DetainedMemberName,
+				PodRevision:    mgr.CR.Status.DetainedPodRevision,
 			},
 			memberName,
-			mgr.cr.Status.Members[n].PodRevision,
+			mgr.CR.Status.Members[n].PodRevision,
 			now,
 		)
-		mgr.cr.Status.DetentionStartTimestamp = window.StartTimestamp
-		mgr.cr.Status.DetainedMemberName = window.MemberName
-		mgr.cr.Status.DetainedPodRevision = window.PodRevision
+		mgr.CR.Status.DetentionStartTimestamp = window.StartTimestamp
+		mgr.CR.Status.DetainedMemberName = window.MemberName
+		mgr.CR.Status.DetainedPodRevision = window.PodRevision
 
 		activeSearches := activeSearchCount(
-			mgr.cr.Status.Members[n].ActiveHistoricalSearchCount,
-			mgr.cr.Status.Members[n].ActiveRealtimeSearchCount,
+			mgr.CR.Status.Members[n].ActiveHistoricalSearchCount,
+			mgr.CR.Status.Members[n].ActiveRealtimeSearchCount,
 		)
 		timeElapsed := now.Unix() - window.StartTimestamp
 
@@ -289,9 +344,9 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 				"memberName", memberName,
 				"elapsedSeconds", timeElapsed,
 				"timeoutSeconds", timeout,
-				"activeHistoricalSearchCount", mgr.cr.Status.Members[n].ActiveHistoricalSearchCount,
-				"activeRealtimeSearchCount", mgr.cr.Status.Members[n].ActiveRealtimeSearchCount)
-			eventPublisher := GetEventPublisher(ctx, mgr.cr)
+				"activeHistoricalSearchCount", mgr.CR.Status.Members[n].ActiveHistoricalSearchCount,
+				"activeRealtimeSearchCount", mgr.CR.Status.Members[n].ActiveRealtimeSearchCount)
+			eventPublisher := GetEventPublisher(ctx, mgr.CR)
 			if eventPublisher != nil {
 				eventPublisher.Warning(ctx, splcommon.EventReasonDetentionTimeoutForced,
 					fmt.Sprintf("Member %s forced recycle after %ds in detention with %d active searches",
@@ -317,15 +372,15 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 	}
 
 	// unhandled status
-	return false, fmt.Errorf("Status=%s", mgr.cr.Status.Members[n].Status)
+	return false, fmt.Errorf("Status=%s", mgr.CR.Status.Members[n].Status)
 }
 
-// FinishRecycle for searchHeadClusterPodManager completes recycle event for search head pod; it returns true when complete
-func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
+// FinishRecycle for PodManager completes recycle event for search head pod; it returns true when complete
+func (mgr *PodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
 	logger := logging.FromContext(ctx).With("func", "FinishRecycle")
-	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
+	memberName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkSearchHead, mgr.CR.GetName(), n)
 
-	switch mgr.cr.Status.Members[n].Status {
+	switch mgr.CR.Status.Members[n].Status {
 	case "Up":
 		// not in detention; clear any stale timer fields left by a timeout-forced recycle
 		mgr.clearDetentionTimer(memberName)
@@ -344,23 +399,23 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 	}
 
 	// unhandled status
-	return false, fmt.Errorf("Status=%s", mgr.cr.Status.Members[n].Status)
+	return false, fmt.Errorf("Status=%s", mgr.CR.Status.Members[n].Status)
 }
 
-func (mgr *searchHeadClusterPodManager) FinishUpgrade(ctx context.Context, n int32) error {
+func (mgr *PodManager) FinishUpgrade(ctx context.Context, n int32) error {
 	// check if shc is in an upgrade process
-	if mgr.cr.Status.UpgradePhase == enterpriseApi.UpgradePhaseUpgrading {
+	if mgr.CR.Status.UpgradePhase == enterpriseApi.UpgradePhaseUpgrading {
 		logger := logging.FromContext(ctx).With("func", "FinishUpgrade")
 		c := mgr.getClient(ctx, n)
 
 		// stop gathering metrics
 		currentTime := time.Now().Unix()
-		mgr.cr.Status.UpgradeEndTimestamp = currentTime
+		mgr.CR.Status.UpgradeEndTimestamp = currentTime
 
 		metrics.UpgradeEndTime.Set(float64(currentTime))
 
 		// revert upgrade state status
-		mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgraded
+		mgr.CR.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgraded
 
 		logger.InfoContext(ctx, "finalize Upgrade")
 		return c.FinalizeUpgrade()
@@ -369,55 +424,55 @@ func (mgr *searchHeadClusterPodManager) FinishUpgrade(ctx context.Context, n int
 	return nil
 }
 
-// getClient for searchHeadClusterPodManager returns a SplunkClient for the member n
-func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
+// getClient for PodManager returns a SplunkClient for the member n
+func (mgr *PodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
 	logger := logging.FromContext(ctx).With("func", "searchHeadClusterPodManager.getClient")
 	// Get Pod Name
-	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
+	memberName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkSearchHead, mgr.CR.GetName(), n)
 
 	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)))
+	fqdnName := splcommon.GetServiceFQDN(mgr.CR.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(splcommon.SplunkSearchHead, mgr.CR.GetName(), true)))
 
 	// Retrieve admin password from Pod
-	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.Client, memberName, mgr.CR.GetNamespace(), "password")
 	if err != nil {
 		logger.ErrorContext(ctx, "couldn't retrieve the admin password from Pod", "member", memberName, "error", err)
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
 // GetSearchHeadClusterMemberInfo used in mocking this function
-var GetSearchHeadClusterMemberInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadClusterMemberInfo, error) {
+var GetSearchHeadClusterMemberInfo = func(ctx context.Context, mgr *PodManager, n int32) (*splclient.SearchHeadClusterMemberInfo, error) {
 	c := mgr.getClient(ctx, n)
 	return c.GetSearchHeadClusterMemberInfo()
 }
 
 // GetSearchHeadCaptainInfo used in mocking this function
-var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
+var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *PodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
 	c := mgr.getClient(ctx, n)
 	return c.GetSearchHeadCaptainInfo()
 }
 
-// updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
-func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
+// updateStatus for PodManager uses the REST API to update the status for a SearcHead custom resource
+func (mgr *PodManager) UpdateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
 	// populate members status using REST API to get search head cluster member info
-	previousCaptain := mgr.cr.Status.Captain
-	previousCaptainReady := mgr.cr.Status.CaptainReady
-	previousCaptainStableSince := mgr.cr.Status.CaptainStableSince
-	previousMemberCount := int32(len(mgr.cr.Status.Members))
-	previousPodRevisions := make(map[string]string, len(mgr.cr.Status.Members))
-	for _, member := range mgr.cr.Status.Members {
+	previousCaptain := mgr.CR.Status.Captain
+	previousCaptainReady := mgr.CR.Status.CaptainReady
+	previousCaptainStableSince := mgr.CR.Status.CaptainStableSince
+	previousMemberCount := int32(len(mgr.CR.Status.Members))
+	previousPodRevisions := make(map[string]string, len(mgr.CR.Status.Members))
+	for _, member := range mgr.CR.Status.Members {
 		if member.PodRevision != "" {
 			previousPodRevisions[member.Name] = member.PodRevision
 		}
 	}
 
-	mgr.cr.Status.Captain = ""
-	mgr.cr.Status.CaptainReady = false
-	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
-	if mgr.cr.Status.ReadyReplicas == 0 {
+	mgr.CR.Status.Captain = ""
+	mgr.CR.Status.CaptainReady = false
+	mgr.CR.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
+	if mgr.CR.Status.ReadyReplicas == 0 {
 		return nil
 	}
 
@@ -425,7 +480,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 	gotCaptainInfo := false
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
+		memberName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkSearchHead, mgr.CR.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
 		memberInfo, err := GetSearchHeadClusterMemberInfo(ctx, mgr, n)
 		if err == nil {
@@ -443,8 +498,8 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 		// Preserve the last known non-empty revision when the pod read fails or the label is
 		// transiently absent; a transient miss must not reset the detention timer.
 		var pod corev1.Pod
-		podKey := client.ObjectKey{Namespace: mgr.cr.GetNamespace(), Name: memberName}
-		if podErr := mgr.c.Get(ctx, podKey, &pod); podErr == nil {
+		podKey := client.ObjectKey{Namespace: mgr.CR.GetNamespace(), Name: memberName}
+		if podErr := mgr.Client.Get(ctx, podKey, &pod); podErr == nil {
 			if rev := pod.GetLabels()["controller-revision-hash"]; rev != "" {
 				memberStatus.PodRevision = rev
 			} else {
@@ -458,13 +513,13 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			// try querying captain api; note that this should work on any node
 			captainInfo, err := GetSearchHeadCaptainInfo(ctx, mgr, n)
 			if err == nil {
-				mgr.cr.Status.Captain = captainInfo.Label
-				mgr.cr.Status.CaptainReady = captainInfo.ServiceReady
-				mgr.cr.Status.Initialized = captainInfo.Initialized
-				mgr.cr.Status.MinPeersJoined = captainInfo.MinPeersJoined
-				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
+				mgr.CR.Status.Captain = captainInfo.Label
+				mgr.CR.Status.CaptainReady = captainInfo.ServiceReady
+				mgr.CR.Status.Initialized = captainInfo.Initialized
+				mgr.CR.Status.MinPeersJoined = captainInfo.MinPeersJoined
+				mgr.CR.Status.MaintenanceMode = captainInfo.MaintenanceMode
 				gotCaptainInfo = true
-				mgr.cr.Status.CaptainStableSince = nextCaptainStableSince(
+				mgr.CR.Status.CaptainStableSince = nextCaptainStableSince(
 					previousCaptain, previousCaptainReady, previousCaptainStableSince,
 					captainInfo.Label, captainInfo.ServiceReady, time.Now())
 
@@ -474,26 +529,26 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 						"new_captain", captainInfo.Label)
 				}
 			} else {
-				mgr.cr.Status.CaptainReady = false
+				mgr.CR.Status.CaptainReady = false
 				shcLogger.ErrorContext(ctx, "captain election failed",
 					"member", memberName,
 					"error", err)
 			}
 		}
 
-		if n < int32(len(mgr.cr.Status.Members)) {
-			mgr.cr.Status.Members[n] = memberStatus
+		if n < int32(len(mgr.CR.Status.Members)) {
+			mgr.CR.Status.Members[n] = memberStatus
 		} else {
-			mgr.cr.Status.Members = append(mgr.cr.Status.Members, memberStatus)
+			mgr.CR.Status.Members = append(mgr.CR.Status.Members, memberStatus)
 		}
 	}
 
 	// truncate any extra members that we didn't check (leftover from scale down)
-	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Members)) {
-		mgr.cr.Status.Members = mgr.cr.Status.Members[:statefulSet.Status.Replicas]
+	if statefulSet.Status.Replicas < int32(len(mgr.CR.Status.Members)) {
+		mgr.CR.Status.Members = mgr.CR.Status.Members[:statefulSet.Status.Replicas]
 	}
 
-	newMemberCount := int32(len(mgr.cr.Status.Members))
+	newMemberCount := int32(len(mgr.CR.Status.Members))
 	if newMemberCount > previousMemberCount {
 		shcLogger.InfoContext(ctx, "member joined SearchHeadCluster",
 			"total_members", newMemberCount,
@@ -506,3 +561,5 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 	return nil
 }
+
+const livenessProbeLevelOne = 1

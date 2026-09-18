@@ -13,13 +13,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package clusterreadiness
+package credentials
 
 import "context"
 
-// ClusterReader reads the resolved cluster facts required by the database
-// readiness gate. Implementations belong to adapters; this port is owned by
-// its database consumer.
-type ClusterReader interface {
-	Read(context.Context, string, string) (ResolvedClusterFacts, error)
+// credentialStrategy owns the complete policy for one credential source. A
+// source can only reach the Kubernetes mutations explicitly used by its own
+// strategy.
+type credentialStrategy interface {
+	Reconcile(context.Context, Intent) Result
 }

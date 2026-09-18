@@ -19,29 +19,36 @@ import (
 	"fmt"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	clusteridentity "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/identity"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	corev1 "k8s.io/api/core/v1"
 )
 
-// contractKey identifies a shared object that one component produces and
-// another consumes. Keys are matched by validateComponentOrder to enforce
-// that every Requires entry is satisfied by an earlier Provides entry.
+// contractKey identifies a shared dependency consumed by a component. Keys are
+// matched by validateComponentOrder to enforce that every Requires entry is
+// satisfied by an earlier Provides entry or explicit root wiring.
 type contractKey string
 
 const (
-	contractSecret      contractKey = "Secret"
-	contractCNPGCluster contractKey = "CNPGCluster"
+	contractSecret           contractKey = "Secret"
+	contractCNPGCluster      contractKey = "CNPGCluster"
+	contractAuthority        contractKey = "Authority"
+	contractEnvironmentNamer contractKey = "EnvironmentNamer"
 )
 
-// reconcileContracts carries the live k8s objects that components publish for
-// downstream components to consume. A nil field means the producing component
-// has not yet run successfully this cycle.
+// reconcileContracts carries component-published Kubernetes objects and
+// reconciliation-wide dependencies supplied by the composition root. A nil
+// published object means its producing component has not run successfully this
+// cycle; root dependencies must be present before the component pipeline runs.
 type reconcileContracts struct {
-	CNPGCluster *cnpgv1.Cluster
-	Secret      *corev1.Secret
+	CNPGCluster      *cnpgv1.Cluster
+	Secret           *corev1.Secret
+	Authority        identitytypes.ClusterCard
+	EnvironmentNamer clusteridentity.EnvironmentNamer
 }
 
-// checkContractsFromRequirements is the single implementation of the nil-check
-// logic shared by every model's CheckContracts().
+// checkContractsFromRequirements is the single implementation of contract
+// validation shared by every model's CheckContracts().
 func checkContractsFromRequirements(requires []contractKey, contracts *reconcileContracts) bool {
 	for _, req := range requires {
 		switch req {
@@ -53,6 +60,14 @@ func checkContractsFromRequirements(requires []contractKey, contracts *reconcile
 			if contracts.CNPGCluster == nil {
 				return false
 			}
+		case contractAuthority:
+			if contracts.Authority.Authoritative.Identity.Name == "" {
+				return false
+			}
+		case contractEnvironmentNamer:
+			if contracts.EnvironmentNamer == nil {
+				return false
+			}
 		}
 	}
 	return true
@@ -62,8 +77,11 @@ func checkContractsFromRequirements(requires []contractKey, contracts *reconcile
 // satisfied by an earlier component's Provides keys. A failure here is a
 // programming error, not a transient condition — surface it loudly rather
 // than silently requeue-looping in production.
-func validateComponentOrder(components []component) error {
-	provided := map[contractKey]bool{}
+func validateComponentOrder(components []component, rootProvidedContracts []contractKey) error {
+	provided := make(map[contractKey]bool, len(rootProvidedContracts))
+	for _, contract := range rootProvidedContracts {
+		provided[contract] = true
+	}
 	for i, c := range components {
 		for _, req := range c.Requires() {
 			if !provided[req] {

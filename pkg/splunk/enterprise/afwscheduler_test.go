@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import (
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -2122,7 +2123,7 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 	}
 
 	srcPath := "/opt/splunk/operator/app1.tgz"
-	dstPath := fmt.Sprintf("/%s/xyz/app1.tgz", appVolumeMntName)
+	dstPath := fmt.Sprintf("/%s/xyz/app1.tgz", resources.AppVolumeMntName)
 
 	podExecCommands := []string{
 		"tar -xzf",
@@ -2659,7 +2660,7 @@ func TestSetLivenessProbeLevelForSHC(t *testing.T) {
 
 	c := spltest.NewMockClient()
 
-	targetPodName := getApplicablePodNameForK8Probes(cr, 0)
+	targetPodName := splutil.GetApplicablePodNameForK8Probes(cr, 0)
 
 	podExecCommands := []string{
 		"mkdir -p /tmp/splunk_operator_k8s/probes/; echo \"export K8_OPERATOR_LIVENESS_LEVEL=1\" > /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh",
@@ -2742,7 +2743,7 @@ func TestSetLivenessProbeLevelForIDXC(t *testing.T) {
 
 	c := spltest.NewMockClient()
 
-	targetPodName := getApplicablePodNameForK8Probes(cmCr, 0)
+	targetPodName := splutil.GetApplicablePodNameForK8Probes(cmCr, 0)
 
 	podExecCommands := []string{
 		"mkdir -p /tmp/splunk_operator_k8s/probes/; echo \"export K8_OPERATOR_LIVENESS_LEVEL=1\" > /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh",

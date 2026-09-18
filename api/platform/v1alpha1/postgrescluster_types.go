@@ -351,8 +351,9 @@ type PostgresClusterStatus struct {
 	// +optional
 	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
 
-	// ProvisionerRef contains reference to the provisioner resource managing this PostgresCluster.
-	// Right now, only CNPG is supported.
+	// ProvisionerRef identifies the CNPG Cluster managing this PostgresCluster.
+	// It is authoritative when present; an absent reference falls back to the matching cluster name.
+	// Its UID, when present, prevents a reused name from being treated as the same provider.
 	// +optional
 	ProvisionerRef *corev1.ObjectReference `json:"provisionerRef,omitempty"`
 

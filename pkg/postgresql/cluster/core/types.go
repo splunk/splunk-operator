@@ -16,12 +16,15 @@ limitations under the License.
 package core
 
 import (
+	"fmt"
 	"time"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
+	clusteridentity "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/identity"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,6 +55,35 @@ type ReconcileContext struct {
 	Recorder                record.EventRecorder
 	Metrics                 ports.Recorder
 	UseCaseRegistryProvider UseCaseRegistryProvider
+	ClusterCardResolver     clusteridentity.ClusterCardResolver
+	EnvironmentNamer        clusteridentity.EnvironmentNamer
+	ClusterInputFactory     ClusterInputFactory
+}
+
+// ClusterInputFactory translates a PostgresCluster API snapshot into neutral
+// identity facts at the primary-adapter boundary. It deliberately performs no
+// Kubernetes I/O; ClusterCardResolver then resolves those facts into the
+// card core consumes.
+type ClusterInputFactory func(*platformv1alpha1.PostgresCluster) (identitytypes.ClusterInput, error)
+
+func (rc *ReconcileContext) resolveClusterCard(cluster *platformv1alpha1.PostgresCluster) (identitytypes.ClusterCard, error) {
+	if cluster == nil {
+		return identitytypes.ClusterCard{}, fmt.Errorf("postgres cluster is required")
+	}
+	if rc == nil {
+		return identitytypes.ClusterCard{}, fmt.Errorf("reconcile context is required")
+	}
+	if rc.ClusterInputFactory == nil && rc.ClusterCardResolver == nil {
+		return conventionalClusterCard(cluster), nil
+	}
+	if rc.ClusterInputFactory == nil || rc.ClusterCardResolver == nil {
+		return identitytypes.ClusterCard{}, fmt.Errorf("cluster authority dependencies are incomplete")
+	}
+	input, err := rc.ClusterInputFactory(cluster)
+	if err != nil {
+		return identitytypes.ClusterCard{}, err
+	}
+	return rc.ClusterCardResolver.ResolveCluster(input)
 }
 
 // UseCaseRegistryProvider returns dumb per-use-case factories for one reconcile

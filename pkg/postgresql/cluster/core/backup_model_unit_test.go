@@ -24,6 +24,7 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -117,7 +118,7 @@ func noopHealthUpdater(_ *platformv1alpha1.PostgresClusterStatus, _ componentHea
 }
 
 // newTestBackupModel creates a backupModel with contracts.CNPGCluster set to cnpg (may be nil to test contracts-not-ready path).
-func newTestBackupModel(c client.Client, scheme *runtime.Scheme, events backupEmitter, updater healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, cnpg ...*cnpgv1.Cluster) *backupModel {
+func newTestBackupModel(_ client.Client, _ *runtime.Scheme, events backupEmitter, updater healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, cnpg ...*cnpgv1.Cluster) *backupModel {
 	return newTestBackupModelWithBackend(noopBackupBackend{}, events, updater, cluster, cfg, cnpg...)
 }
 
@@ -127,7 +128,7 @@ func newTestBackupModel(c client.Client, scheme *runtime.Scheme, events backupEm
 // verify that the model drives the port with the correct engine-agnostic spec/requests and
 // maps the observed ScheduleResult back into cluster status.
 func newTestBackupModelWithBackend(backend BackupBackend, events backupEmitter, updater healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, cnpg ...*cnpgv1.Cluster) *backupModel {
-	contracts := &reconcileContracts{}
+	contracts := &reconcileContracts{Authority: conventionalClusterCard(cluster), EnvironmentNamer: testEnvironmentNamer}
 	if len(cnpg) > 0 {
 		contracts.CNPGCluster = cnpg[0]
 	}
@@ -1184,6 +1185,32 @@ func TestBackupModel_Reconcile_DeletesAllNamesWhenDisabled(t *testing.T) {
 
 	assert.Empty(t, backend.ensured)
 	assert.ElementsMatch(t, []string{"c1-backup", "c1-backup-objectstore"}, backend.deletedNames())
+}
+
+func TestBackupModel_Reconcile_DeletesPriorEnvironmentNamesWhenDisabled(t *testing.T) {
+	cluster := newTestCluster("c1", "ns1")
+	cluster.Status.ProvisionerRef = &corev1.ObjectReference{Name: "c1-green", Namespace: cluster.Namespace}
+	cluster.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+			Blue:  &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "c1-blue"}},
+			Green: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "c1-green"}},
+		},
+	}}
+	backend := &spyBackupBackend{}
+	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, newTestMergedConfig(false, ""), newTestCNPGCluster("c1-green", "ns1"))
+	model.contracts.Authority = testClusterCard(cluster, "c1-green", "")
+	model.contracts.Authority.Managed = append(model.contracts.Authority.Managed,
+		testEnvironment(cluster, "c1", "", identitytypes.EnvironmentRoleRetained),
+		testEnvironment(cluster, "c1-blue", "", identitytypes.EnvironmentRoleRetained),
+	)
+
+	require.NoError(t, model.Reconcile(context.Background()))
+
+	assert.ElementsMatch(t, []string{
+		"c1-backup", "c1-backup-objectstore",
+		"c1-blue-backup", "c1-blue-backup-objectstore",
+		"c1-green-backup", "c1-green-backup-objectstore",
+	}, backend.deletedNames())
 }
 
 func TestBuildCNPGClusterSpec_BarmanDisabledOmitsPlugin(t *testing.T) {

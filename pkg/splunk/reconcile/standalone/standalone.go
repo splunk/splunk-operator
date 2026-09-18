@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -424,7 +424,7 @@ func GetStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	}
 
 	// Setup App framework staging volume for apps
-	enterprise.SetupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	resources.SetupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, nil
 }

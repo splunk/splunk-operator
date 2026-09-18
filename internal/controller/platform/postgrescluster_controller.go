@@ -33,6 +33,7 @@ import (
 	cnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	clusterk8s "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/k8s"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
+	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/predicates"
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
@@ -70,6 +71,9 @@ type PostgresClusterReconciler struct {
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 	Metrics  ports.Recorder
+	// IdentityResolver is shared with the PostgresDatabase reconciler so both
+	// controllers resolve the same PostgresCluster identity contract.
+	IdentityResolver *identityadapter.IdentityResolver
 }
 
 // +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
@@ -92,7 +96,16 @@ type PostgresClusterReconciler struct {
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := slog.Default().With("controller", "PostgresCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
-	rc := &clustercore.ReconcileContext{Client: r.Client, Scheme: r.Scheme, Recorder: r.Recorder, Metrics: r.Metrics, UseCaseRegistryProvider: r.useCaseRegistry}
+	rc := &clustercore.ReconcileContext{
+		Client:                  r.Client,
+		Scheme:                  r.Scheme,
+		Recorder:                r.Recorder,
+		Metrics:                 r.Metrics,
+		UseCaseRegistryProvider: r.useCaseRegistry,
+		ClusterCardResolver:     r.IdentityResolver,
+		EnvironmentNamer:        r.IdentityResolver,
+		ClusterInputFactory:     identityadapter.ClusterInputFromPostgresCluster,
+	}
 	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper,
 		cnpgadapter.NewBackupBackend(r.Client, r.Scheme),
 		newCustomMetricsFactory(r.Client, r.Scheme), cnpgadapter.NewRecoveryBackend())

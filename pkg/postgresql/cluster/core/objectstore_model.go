@@ -51,9 +51,10 @@ type objectStoreModel struct {
 	updateStatus healthStatusUpdater
 	cluster      *platformv1alpha1.PostgresCluster
 	mergedConfig *MergedConfig
+	contracts    *reconcileContracts
 }
 
-func newObjectStoreModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, mergedConfig *MergedConfig) *objectStoreModel {
+func newObjectStoreModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, mergedConfig *MergedConfig, contracts *reconcileContracts) *objectStoreModel {
 	return &objectStoreModel{
 		client:       c,
 		scheme:       scheme,
@@ -61,13 +62,21 @@ func newObjectStoreModel(c client.Client, scheme *runtime.Scheme, events eventEm
 		updateStatus: updateStatus,
 		cluster:      cluster,
 		mergedConfig: mergedConfig,
+		contracts:    contracts,
 	}
 }
 
-func (o *objectStoreModel) Name() string            { return pgcConstants.ComponentObjectStore }
-func (o *objectStoreModel) Requires() []contractKey { return nil }
+func (o *objectStoreModel) Name() string { return pgcConstants.ComponentObjectStore }
+func (o *objectStoreModel) Requires() []contractKey {
+	return []contractKey{contractAuthority, contractEnvironmentNamer}
+}
 func (o *objectStoreModel) Provides() []contractKey { return nil }
-func (o *objectStoreModel) CheckContracts() error   { return nil }
+func (o *objectStoreModel) CheckContracts() error {
+	if !checkContractsFromRequirements(o.Requires(), o.contracts) {
+		return errContractsNotReady
+	}
+	return nil
+}
 
 func (o *objectStoreModel) Reconcile(ctx context.Context) error {
 	cfg := managedObjectStoreCfg(o.mergedConfig)
@@ -103,7 +112,7 @@ func (o *objectStoreModel) computeHealth(reconcileErr error) (componentHealth, e
 }
 
 func (o *objectStoreModel) createOrUpdateObjectStore(ctx context.Context, cfg *platformv1alpha1.CNPGBarmanObjectStoreConfig) error {
-	name := objectStoreName(o.cluster.Name)
+	name := objectStoreName(o.contracts.EnvironmentNamer.AuthoritativeEnvironmentName(o.cluster.Name, o.contracts.Authority))
 	desired := o.buildObjectStore(name, cfg)
 
 	if err := ctrl.SetControllerReference(o.cluster, desired, o.scheme); err != nil {
@@ -144,7 +153,16 @@ func (o *objectStoreModel) createOrUpdateObjectStore(ctx context.Context, cfg *p
 }
 
 func (o *objectStoreModel) deleteObjectStore(ctx context.Context) error {
-	name := objectStoreName(o.cluster.Name)
+	for _, environmentName := range o.contracts.EnvironmentNamer.ManagedEnvironmentNames(o.contracts.Authority) {
+		if err := o.deleteObjectStoreForEnvironment(ctx, environmentName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *objectStoreModel) deleteObjectStoreForEnvironment(ctx context.Context, environmentName string) error {
+	name := objectStoreName(environmentName)
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(ObjectStoreGVK)
 	err := o.client.Get(ctx, types.NamespacedName{Name: name, Namespace: o.cluster.Namespace}, obj)

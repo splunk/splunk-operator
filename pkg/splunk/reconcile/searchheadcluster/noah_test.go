@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package searchheadcluster
 
 import (
 	"testing"
@@ -171,7 +171,7 @@ func TestApplySearchHeadClusterNoah_DeletionAbortsOnOwnerReferenceCleanupError(t
 // requeue as PhasePending rather than error — the CR may simply not have
 // been created yet.
 func TestApplySearchHeadClusterNoah_PendingWhenNoahClusterMissing(t *testing.T) {
-	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	client := spltest.NewMockClient()
 	cr := &enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test", Generation: 4},
@@ -208,7 +208,7 @@ func TestApplySearchHeadClusterNoah_PendingWhenNoahClusterMissing(t *testing.T) 
 }
 
 func TestApplySearchHeadClusterNoah_ReportsUnknownDependencyReadFailure(t *testing.T) {
-	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	client := spltest.NewMockClient()
 	cr := &enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "shc", Namespace: "test", Generation: 3},
@@ -241,7 +241,7 @@ func TestApplySearchHeadClusterNoah_ReportsUnknownDependencyReadFailure(t *testi
 }
 
 func TestApplySearchHeadClusterNoah_ReportsResolvedDependency(t *testing.T) {
-	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	client := spltest.NewMockClient()
 	client.AddObject(noahClusterForSHCTest("test", "noah", "noah-auth"))
 	client.AddObject(&corev1.Secret{

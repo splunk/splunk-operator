@@ -33,6 +33,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	// TODO: Remove this temporary dependency once all CRs have migrated from enterprise.
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -201,7 +202,7 @@ func getLicenseMasterStatefulSet(ctx context.Context, client splcommon.Controlle
 	}
 
 	// Setup App framework staging volume for apps
-	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	resources.SetupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, err
 }
@@ -216,7 +217,7 @@ func validateLicenseMasterSpec(ctx context.Context, c splcommon.ControllerClient
 		}
 	}
 
-	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+	return ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
 // helper function to get the list of LicenseMaster types in the current namespace

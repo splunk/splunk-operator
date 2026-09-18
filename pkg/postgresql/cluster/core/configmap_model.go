@@ -24,6 +24,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	clusteridentity "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/identity"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -52,20 +53,19 @@ func newConfigMapModel(c client.Client, scheme *runtime.Scheme, events eventEmit
 
 func (c *configMapModel) Name() string { return pgcConstants.ComponentConfigMap }
 func (c *configMapModel) Requires() []contractKey {
-	return []contractKey{contractCNPGCluster, contractSecret}
+	return []contractKey{contractCNPGCluster, contractSecret, contractEnvironmentNamer}
 }
 func (c *configMapModel) Provides() []contractKey { return nil }
 
 func (c *configMapModel) CheckContracts() error {
-	correct := checkContractsFromRequirements(c.Requires(), c.contracts)
-	if !correct {
+	if !checkContractsFromRequirements(c.Requires(), c.contracts) {
 		return errContractsNotReady
 	}
 	return nil
 }
 
 func (c *configMapModel) Reconcile(ctx context.Context) error {
-	desiredCM, err := generateConfigMap(ctx, c.client, c.scheme, c.cluster, c.contracts.CNPGCluster, c.contracts.Secret.Name)
+	desiredCM, err := generateConfigMap(ctx, c.client, c.scheme, c.cluster, c.contracts.CNPGCluster, c.contracts.Secret.Name, c.contracts.EnvironmentNamer)
 	if err != nil {
 		return newReconcileFailure(reasonConfigMapFailed, err)
 	}
@@ -170,17 +170,17 @@ func caMetadataForConfigMap(
 }
 
 // generateConfigMap builds a ConfigMap with connection details for the PostgresCluster.
-func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string) (*corev1.ConfigMap, error) {
+func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string, environmentNamer clusteridentity.EnvironmentNamer) (*corev1.ConfigMap, error) {
 	cmName := fmt.Sprintf("%s%s", cluster.Name, defaultConfigMapSuffix)
 	if cluster.Status.Resources != nil && cluster.Status.Resources.ConfigMapRef != nil {
 		cmName = cluster.Status.Resources.ConfigMapRef.Name
 	}
 
-	rwExists, err := poolerExists(ctx, c, cluster, readWriteEndpoint)
+	rwExists, err := poolerExistsForEnvironment(ctx, c, cluster, cnpgCluster, readWriteEndpoint, environmentNamer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check RW pooler existence: %w", err)
 	}
-	roExists, err := poolerExists(ctx, c, cluster, readOnlyEndpoint)
+	roExists, err := poolerExistsForEnvironment(ctx, c, cluster, cnpgCluster, readOnlyEndpoint, environmentNamer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check RO pooler existence: %w", err)
 	}

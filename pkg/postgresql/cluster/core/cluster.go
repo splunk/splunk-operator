@@ -31,6 +31,7 @@ import (
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	monitoring "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -66,6 +67,10 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	}
 	logger = logger.With("postgresCluster", postgresCluster.Name)
 	ctx = logging.WithLogger(ctx, logger)
+	authority, err := rc.resolveClusterCard(postgresCluster)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("resolving authoritative CNPG environment: %w", err)
+	}
 
 	currentPhase := func() string {
 		if postgresCluster.Status.Phase == nil {
@@ -113,7 +118,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	}
 
 	// Finalizer handling must come before any other processing.
-	if err := handleFinalizer(ctx, rc, postgresCluster); err != nil {
+	if err := handleFinalizer(ctx, rc, postgresCluster, authority, backupBackend); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.InfoContext(ctx, "PostgresCluster already deleted, skipping finalizer update")
 			return ctrl.Result{}, nil
@@ -126,6 +131,12 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	if postgresCluster.GetDeletionTimestamp() != nil {
 		logger.InfoContext(ctx, "deletion cleanup complete, finalizer removed")
 		return ctrl.Result{}, nil
+	}
+	if err := validateAuthoritativeCNPGEnvironment(ctx, c, authority); err != nil {
+		rc.emitWarning(postgresCluster, EventClusterCreateFailed, fmt.Sprintf("authoritative CNPG environment is invalid for PostgresCluster %s — check operator logs", postgresCluster.Name))
+		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterGetFailed,
+			fmt.Sprintf("Failed to validate authoritative CNPG environment: %v", err), failedClusterPhase)
+		return ctrl.Result{}, errors.Join(fmt.Errorf("validating authoritative CNPG environment: %w", err), statusErr)
 	}
 
 	finalizerAdded := false
@@ -170,11 +181,14 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, errors.Join(fmt.Errorf("failed to fetch PostgresClusterClass %s: %w", postgresCluster.Spec.Class, err), statusErr)
 	}
 
+	if rc.EnvironmentNamer == nil {
+		return ctrl.Result{}, fmt.Errorf("environment namer is required")
+	}
 	customMetricsModel, err := customMetricsFactory(clusterClass.Spec.Provisioner, monitoring.Target{
 		Namespace:    postgresCluster.Namespace,
 		FeatureName:  postgresCluster.Name,
 		FeatureUID:   string(postgresCluster.UID),
-		ProviderName: postgresCluster.Name,
+		ProviderName: rc.EnvironmentNamer.AuthoritativeEnvironmentName(postgresCluster.Name, authority),
 	})
 	if err != nil {
 		rc.emitWarning(postgresCluster, EventConfigMergeFailed, fmt.Sprintf("unsupported provisioner for PostgresCluster %s — check operator logs", postgresCluster.Name))
@@ -214,10 +228,10 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		logger.InfoContext(ctx, "superuser secret name derived", "name", postgresSecretName)
 	}
 
-	contracts := &reconcileContracts{}
+	contracts := &reconcileContracts{Authority: authority, EnvironmentNamer: rc.EnvironmentNamer}
 	components := []component{
 		newSecretModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, postgresSecretName, contracts),
-		newObjectStoreModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, mergedConfig),
+		newObjectStoreModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, mergedConfig, contracts),
 		newClusterModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, contracts),
 		newCustomMetricsModel(customMetricsModel, rc, updateComponentHealthStatus, postgresCluster, contracts),
 		newManagedRolesModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, contracts, newRoleSweeper),
@@ -225,7 +239,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		newBackupModel(backupBackend, rc, updateComponentHealthStatus, postgresCluster, mergedConfig, contracts),
 		newConfigMapModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, contracts),
 	}
-	if err := validateComponentOrder(components); err != nil {
+	if err := validateComponentOrder(components, []contractKey{contractAuthority, contractEnvironmentNamer}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("invalid component wiring: %w", err)
 	}
 
@@ -621,9 +635,9 @@ func deleteCNPGCluster(ctx context.Context, c client.Client, cnpgCluster *cnpgv1
 	return nil
 }
 
-// handleFinalizer processes deletion cleanup: removes poolers, then deletes or orphans the CNPG Cluster
-// based on ClusterDeletionPolicy, then removes the finalizer.
-func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platformv1alpha1.PostgresCluster) error {
+// handleFinalizer executes the role-aware cleanup plan for every environment
+// the resolved card manages, then removes the PostgresCluster finalizer.
+func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platformv1alpha1.PostgresCluster, authority identitytypes.ClusterCard, backupBackend BackupBackend) error {
 	c := rc.Client
 	scheme := rc.Scheme
 	logger := logging.FromContext(ctx).With("func", "handleFinalizer")
@@ -635,42 +649,68 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platfor
 		logger.InfoContext(ctx, "finalizer not present on PostgresCluster, skipping finalizer logic")
 		return nil
 	}
-
-	cnpgCluster := &cnpgv1.Cluster{}
-	err := c.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cnpgCluster)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			cnpgCluster = nil
-			logger.InfoContext(ctx, "CNPG cluster not found during cleanup")
-		} else {
-			return fmt.Errorf("fetching CNPG cluster: %w", err)
-		}
+	if rc.EnvironmentNamer == nil {
+		return fmt.Errorf("environment namer is required")
 	}
-	logger.InfoContext(ctx, "finalizer cleanup started")
 
 	policy := ""
 	if cluster.Spec.ClusterDeletionPolicy != nil {
 		policy = *cluster.Spec.ClusterDeletionPolicy
 	}
+	planned, err := finalizationPlan(policy, authority)
+	if err != nil {
+		return err
+	}
 
-	if err := deleteConnectionPoolers(ctx, c, cluster); err != nil {
-		return fmt.Errorf("deleting connection poolers: %w", err)
+	cnpgClusters, err := managedCNPGClusters(ctx, c, cluster, authority)
+	if err != nil {
+		return fmt.Errorf("fetching CNPG clusters: %w", err)
+	}
+	logger.InfoContext(ctx, "finalizer cleanup started")
+	observed := make(map[string]*cnpgv1.Cluster, len(cnpgClusters))
+	for _, cnpgCluster := range cnpgClusters {
+		observed[cnpgCluster.Name] = cnpgCluster
+	}
+
+	for _, action := range planned {
+		environment := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{
+			Name:      action.Environment.Identity.Name,
+			Namespace: action.Environment.Identity.Namespace,
+		}}
+		if err := deleteConnectionPoolersForEnvironment(ctx, c, cluster, environment, rc.EnvironmentNamer); err != nil {
+			return fmt.Errorf("deleting connection poolers for environment %q: %w", environment.Name, err)
+		}
+		if err := deleteScheduledBackupsForEnvironment(ctx, backupBackend, cluster, environment.Name); err != nil {
+			return fmt.Errorf("deleting scheduled backups for environment %q: %w", environment.Name, err)
+		}
 	}
 
 	switch policy {
 	case clusterDeletionPolicyDelete:
 		logger.InfoContext(ctx, "ClusterDeletionPolicy 'Delete', CNPG Cluster deletion started")
-		if cnpgCluster != nil {
+		for _, action := range planned {
+			if action.Action != finalizationActionDelete {
+				return fmt.Errorf("unexpected finalization action %q for environment %q", action.Action, action.Environment.Identity.Name)
+			}
+			cnpgCluster := observed[action.Environment.Identity.Name]
 			if err := deleteCNPGCluster(ctx, c, cnpgCluster); err != nil {
 				return fmt.Errorf("deleting CNPG Cluster: %w", err)
 			}
-		} else {
+		}
+		if len(cnpgClusters) == 0 {
 			logger.InfoContext(ctx, "CNPG Cluster not found, skipping deletion")
 		}
 
 	case clusterDeletionPolicyRetain:
 		logger.InfoContext(ctx, "ClusterDeletionPolicy 'Retain', orphaning CNPG Cluster")
-		if cnpgCluster != nil {
+		for _, action := range planned {
+			if action.Action != finalizationActionRetain {
+				return fmt.Errorf("unexpected finalization action %q for environment %q", action.Action, action.Environment.Identity.Name)
+			}
+			cnpgCluster := observed[action.Environment.Identity.Name]
+			if cnpgCluster == nil {
+				continue
+			}
 			originalCNPG := cnpgCluster.DeepCopy()
 			refRemoved, err := removeOwnerRef(scheme, cluster, cnpgCluster)
 			if err != nil {
@@ -718,8 +758,6 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platfor
 			}
 		}
 
-	default:
-		return fmt.Errorf("unknown ClusterDeletionPolicy %q: must be %q or %q", policy, clusterDeletionPolicyDelete, clusterDeletionPolicyRetain)
 	}
 
 	controllerutil.RemoveFinalizer(cluster, PostgresClusterFinalizerName)
@@ -732,6 +770,21 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platfor
 	}
 	rc.emitNormal(cluster, EventCleanupComplete, fmt.Sprintf("cleanup complete for PostgresCluster %s (policy: %s)", cluster.Name, policy))
 	logger.InfoContext(ctx, "finalizer removed, cleanup complete")
+	return nil
+}
+
+// deleteScheduledBackupsForEnvironment removes both operator-owned backup
+// schedules for one environment. The backend applies the logical-cluster
+// ownership guard, so a same-named foreign schedule is preserved.
+func deleteScheduledBackupsForEnvironment(ctx context.Context, backend BackupBackend, cluster *platformv1alpha1.PostgresCluster, environmentName string) error {
+	if backend == nil {
+		return fmt.Errorf("backup backend is required")
+	}
+	for _, name := range []string{scheduledBackupName(environmentName), objectStoreBackupName(environmentName)} {
+		if _, err := backend.DeleteScheduled(ctx, cluster, name, cluster.Namespace); err != nil {
+			return fmt.Errorf("deleting ScheduledBackup %q: %w", name, err)
+		}
+	}
 	return nil
 }
 

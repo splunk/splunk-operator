@@ -28,15 +28,15 @@ var ReconcileCounters = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Help: "The number of times reconciled by this controller",
 }, []string{LabelNamespace, LabelName, LabelKind})
 
-var ReconcileErrorCounter = prometheus.NewCounter(prometheus.CounterOpts{
+var ReconcileErrorCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "splunk_operator_reconcile_error_total",
 	Help: "The number of times the operator has failed to reconcile",
-})
+}, []string{LabelNamespace, LabelName, LabelKind})
 
 var ActionFailureCounters = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "splunk_operator_error_total",
 	Help: "The number of times operator has entered an error state",
-}, []string{LabelErrorType})
+}, []string{LabelNamespace, LabelName, LabelKind, LabelErrorType})
 
 var ApiTotalTimeMetricEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "splunk_operator_module_duration_in_milliseconds",

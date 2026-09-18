@@ -47,6 +47,7 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
+	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
@@ -421,10 +422,11 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		}
 		fakeRecorder = record.NewFakeRecorder(100)
 		reconciler = &PostgresClusterReconciler{
-			Client:   k8sClient,
-			Scheme:   k8sClient.Scheme(),
-			Recorder: fakeRecorder,
-			Metrics:  &pgprometheus.NoopRecorder{},
+			Client:           k8sClient,
+			Scheme:           k8sClient.Scheme(),
+			Recorder:         fakeRecorder,
+			Metrics:          &pgprometheus.NoopRecorder{},
+			IdentityResolver: identityadapter.NewIdentityResolver(),
 		}
 		req = reconcile.Request{NamespacedName: types.NamespacedName{Name: clusterName, Namespace: namespace}}
 	})

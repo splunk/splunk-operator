@@ -20,6 +20,7 @@ import (
 	"errors"
 
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 )
 
 const (
@@ -45,18 +46,18 @@ const (
 // Result is the authoritative readiness decision. Events are intentionally not
 // part of it because their transition policy belongs to the database facade.
 type Result struct {
-	Facts   ResolvedClusterFacts
+	Facts   dbclusterinfo.ResolvedClusterFacts
 	Outcome reconciliationTypes.Outcome
 }
 
 // Gate observes one referenced cluster. It does not mutate Kubernetes objects
 // and intentionally has no Reconcile method.
 type Gate struct {
-	reader ClusterReader
+	reader dbclusterinfo.ClusterReader
 }
 
 // New creates an observation-only database cluster readiness gate.
-func New(reader ClusterReader) Gate {
+func New(reader dbclusterinfo.ClusterReader) Gate {
 	return Gate{reader: reader}
 }
 
@@ -68,13 +69,13 @@ func (g Gate) Observe(ctx context.Context, input Input) Result {
 			reasonClusterReaderNotConfigured,
 			messageClusterReaderNotConfigured,
 			phasePending,
-			ErrClusterReaderNotConfigured,
+			dbclusterinfo.ErrClusterReaderNotConfigured,
 		)}
 	}
 
 	facts, err := g.reader.Read(ctx, input.Namespace, input.Name)
 	if err != nil {
-		if errors.Is(err, ErrClusterNotFound) {
+		if errors.Is(err, dbclusterinfo.ErrClusterNotFound) {
 			return Result{Outcome: reconciliationTypes.Waiting(
 				conditionClusterReady,
 				reasonClusterNotFound,
@@ -92,8 +93,8 @@ func (g Gate) Observe(ctx context.Context, input Input) Result {
 		)}
 	}
 
-	if facts.Lifecycle != LifecycleReady || facts.Provider == nil {
-		if facts.Recovery == RecoveryInProgress && (input.WasReady || input.PreviousClusterReadyReason == reasonClusterRecovery) {
+	if facts.Lifecycle != dbclusterinfo.LifecycleReady || facts.Cluster == nil {
+		if facts.Recovery == dbclusterinfo.RecoveryInProgress && (input.WasReady || input.PreviousClusterReadyReason == reasonClusterRecovery) {
 			return Result{Facts: facts, Outcome: reconciliationTypes.Waiting(
 				conditionClusterReady,
 				reasonClusterRecovery,

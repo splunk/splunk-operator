@@ -172,8 +172,9 @@ func persistCustomMetricsStatus(
 	outcome dbmetrics.Outcome,
 	status metav1.ConditionStatus,
 	phase reconcileDBPhases,
+	environmentName string,
 ) error {
-	if !applyCustomMetricsStatus(rc, postgresDB, outcome, status, phase) {
+	if !applyCustomMetricsStatus(rc, postgresDB, outcome, status, phase, environmentName) {
 		return nil
 	}
 	return rc.Client.Status().Update(ctx, postgresDB)
@@ -185,9 +186,10 @@ func applyCustomMetricsStatus(
 	outcome dbmetrics.Outcome,
 	status metav1.ConditionStatus,
 	phase reconcileDBPhases,
+	environmentName string,
 ) bool {
 	before := postgresDB.Status.DeepCopy()
-	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB, true, rolesExist)
+	postgresDB.Status.Databases = populateDatabaseStatusForEnvironment(postgresDB, environmentName, true, rolesExist)
 	reason := conditionReasons(outcome.Reason)
 	if reason == "" {
 		reason = reasonCustomMetricsFailed

@@ -21,6 +21,7 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -29,10 +30,12 @@ import (
 type ClusterSnapshot struct {
 	Name      string
 	Namespace string
+	UID       types.UID
 
 	Phase          *string
 	Conditions     []metav1.Condition
 	ProvisionerRef *corev1.ObjectReference
+	MajorUpgrades  []platformv1alpha1.PostgresMajorUpgradeStatus
 
 	ManagedRolesStatus     *platformv1alpha1.ManagedRolesStatus
 	ConnectionPoolerStatus *platformv1alpha1.ConnectionPoolerStatus
@@ -61,9 +64,11 @@ func (r ClusterReader) Read(ctx context.Context, namespace, name string) (Cluste
 	return ClusterSnapshot{
 		Name:                   cluster.Name,
 		Namespace:              cluster.Namespace,
+		UID:                    cluster.UID,
 		Phase:                  status.Phase,
 		Conditions:             status.Conditions,
 		ProvisionerRef:         status.ProvisionerRef,
+		MajorUpgrades:          status.PostgresMajorUpgradeStatus,
 		ManagedRolesStatus:     status.ManagedRolesStatus,
 		ConnectionPoolerStatus: status.ConnectionPoolerStatus,
 		Resources:              status.Resources,

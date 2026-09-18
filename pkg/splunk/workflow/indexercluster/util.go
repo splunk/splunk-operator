@@ -23,7 +23,6 @@ import (
 	"strconv"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -146,9 +145,8 @@ func (mgr *PodManager) decommission(ctx context.Context, n int32, enforceCounts 
 	peerName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIndexer, mgr.CR.GetName(), n)
 	switch mgr.CR.Status.Peers[n].Status {
 	case "Up":
-		podExecClient := splutil.GetPodExecClient(mgr.Client, mgr.CR, applicableProbePodName(mgr.CR, n))
-		err := setProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne)
-		if err != nil {
+		podExecClient := splutil.GetPodExecClient(mgr.Client, mgr.CR, splutil.GetApplicablePodNameForK8Probes(mgr.CR, n))
+		if err := splutil.SetIndexerProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne); err != nil {
 			// Don't return error here. We may be reconciling several times, and the actual Pod status is down, but
 			// not yet reflecting on the Cluster Manager, in which case, the podExec fails, though the decommission is
 			// going fine.
@@ -362,35 +360,4 @@ func siteRepFactorOriginCount(siteRepFactor string) int32 {
 	return int32(siteRF)
 }
 
-const (
-	livenessProbeLevelDefault = iota
-	livenessProbeLevelOne
-	livenessProbeLevelName = "K8_OPERATOR_LIVENESS_LEVEL"
-)
-
-func setProbeLevelOnSplunkPod(ctx context.Context, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
-	var command string
-	switch probeLevel {
-	case livenessProbeLevelDefault:
-		command = fmt.Sprintf("[[ -f %s ]] && > %s", splutil.GetLivenessDriverFilePath(), splutil.GetLivenessDriverFilePath())
-	case livenessProbeLevelOne:
-		command = fmt.Sprintf("mkdir -p %s; echo \"export %s=%d\" > %s", splutil.GetLivenessDriverFileDir(), livenessProbeLevelName, probeLevel, splutil.GetLivenessDriverFilePath())
-	default:
-		return fmt.Errorf("invalid probe Level %d", probeLevel)
-	}
-	logger := logging.FromContext(ctx).With("func", "setProbeLevelOnSplunkPod", "podName", podExecClient.GetTargetPodName(), "probeLevel", probeLevel)
-	streamOptions := splutil.NewStreamOptionsObject(command)
-	podExecClient.SetTargetPodName(ctx, podExecClient.GetTargetPodName())
-	splutil.ResetStringReader(streamOptions, command)
-	stdout, _, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-	if err != nil {
-		err = fmt.Errorf("unable to run command %s. stdout: %s, err: %s", command, stdout, err)
-		logger.ErrorContext(ctx, "failed to set probe level", "command", command, "error", err)
-		return err
-	}
-	return nil
-}
-
-func applicableProbePodName(cr splcommon.MetaObject, ordinalIdx int32) string {
-	return fmt.Sprintf("splunk-%s-indexer-%d", cr.GetName(), ordinalIdx)
-}
+const livenessProbeLevelOne = 1

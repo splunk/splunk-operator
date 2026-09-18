@@ -19,6 +19,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"slices"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -28,7 +29,9 @@ import (
 	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -190,17 +193,18 @@ func PostgresDatabaseService(
 		if !requiresClosedDatabaseFinalization(postgresDB.Spec.Databases) {
 			return ctrl.Result{}, nil
 		}
-		cluster, err := fetchCluster(ctx, c, postgresDB)
-		if errors.IsNotFound(err) {
+		clusterCard, err := readReferencedClusterCard(ctx, rc, postgresDB)
+		if stderrors.Is(err, dbclusterinfo.ErrClusterNotFound) {
 			return ctrl.Result{RequeueAfter: clusterNotFoundRetryDelay}, nil
 		}
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("fetching cluster while restoring requested closed database state: %w", err)
 		}
-		if cluster.Status.ProvisionerRef == nil {
-			return ctrl.Result{RequeueAfter: retryDelay}, nil
+		authoritative := clusterCard.Authoritative
+		if err := validateAuthoritativeProviderUID(ctx, c, authoritative); err != nil {
+			return ctrl.Result{}, fmt.Errorf("validating provider while restoring requested closed database state: %w", err)
 		}
-		closed, err := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, cluster.Status.ProvisionerRef.Name)
+		closed, err := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, authoritative.Identity.Name, cnpgDatabaseEnvironmentName(authoritative))
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -224,16 +228,24 @@ func PostgresDatabaseService(
 	if stop {
 		return result, err
 	}
-	if clusterFacts.Provider == nil {
-		return ctrl.Result{}, fmt.Errorf("cluster readiness gate converged without provider facts")
+	if clusterFacts.Cluster == nil {
+		return ctrl.Result{}, fmt.Errorf("cluster readiness gate converged without cluster identity facts")
 	}
+	authoritativeEnvironment := clusterFacts.Cluster.Authoritative
+	providerClusterName := authoritativeEnvironment.Identity.Name
+	providerClusterNamespace := authoritativeEnvironment.Identity.Namespace
+	providerClusterUID := authoritativeEnvironment.Identity.UID
+	databaseEnvironmentName := cnpgDatabaseEnvironmentName(authoritativeEnvironment)
 
 	cnpgCluster := &cnpgv1.Cluster{}
 	if err := c.Get(ctx, types.NamespacedName{
-		Name:      clusterFacts.Provider.Name,
-		Namespace: clusterFacts.Provider.Namespace,
+		Name:      providerClusterName,
+		Namespace: providerClusterNamespace,
 	}, cnpgCluster); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to fetch CNPG Cluster %s: %w", clusterFacts.Provider.Name, err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch CNPG Cluster %s: %w", providerClusterName, err)
+	}
+	if providerClusterUID != "" && cnpgCluster.UID != providerClusterUID {
+		return ctrl.Result{}, fmt.Errorf("CNPG Cluster %s/%s UID %q does not match resolved provider identity UID %q", providerClusterNamespace, providerClusterName, cnpgCluster.UID, providerClusterUID)
 	}
 
 	// Phase: CredentialProvisioning — secrets must exist before roles are patched.
@@ -306,7 +318,7 @@ func PostgresDatabaseService(
 		return ctrl.Result{}, err
 	}
 	// Publish credential-ready roles for cluster-side role reconciliation.
-	if err := persistDatabaseInfos(ctx, c, postgresDB, false, rolesExist); err != nil {
+	if err := persistDatabaseInfos(ctx, c, postgresDB, false, rolesExist, databaseEnvironmentName); err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictSecretsStatus, "publishing credential-ready role status"); ok {
 			return result, conflictErr
 		}
@@ -413,7 +425,7 @@ func PostgresDatabaseService(
 	}
 
 	// Phase: DatabaseProvisioning
-	provisioningResult, err := reconcileDatabaseProvisioning(ctx, rc.DatabaseProvisioner, postgresDB, clusterFacts.Provider.Name)
+	provisioningResult, err := reconcileDatabaseProvisioning(ctx, rc.DatabaseProvisioner, postgresDB, providerClusterName, databaseEnvironmentName)
 	if err != nil {
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCNPGDatabasesReconcile, "reconciling CNPG databases"); ok {
 			return result, conflictErr
@@ -542,7 +554,7 @@ func PostgresDatabaseService(
 					}
 					return ctrl.Result{}, stderrors.Join(err, wrappedStatusErr)
 				}
-				closed, closeErr := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, clusterFacts.Provider.Name)
+				closed, closeErr := reconcileRequestedClosedState(ctx, rc.DatabaseProvisioner, postgresDB, providerClusterName, databaseEnvironmentName)
 				if closeErr != nil {
 					return ctrl.Result{}, closeErr
 				}
@@ -575,7 +587,7 @@ func PostgresDatabaseService(
 	applyStatus(postgresDB, privilegesReady, metav1.ConditionTrue, reasonPrivilegesGranted, privilegesMsg, readyDBPhase)
 	if finalizeClosedDatabaseAfterPrivileges {
 		if err := persistDatabaseBootstrapCompletion(
-			ctx, c, postgresDB, databasesToGrant, provisioningResult.databaseUIDs,
+			ctx, c, postgresDB, databasesToGrant, provisioningResult.databaseUIDs, databaseEnvironmentName,
 		); err != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictPrivilegesStatus, "persisting database privilege bootstrap completion"); ok {
 				return result, conflictErr
@@ -584,7 +596,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	}
-	recordDatabaseBootstrapCompletion(postgresDB, databasesToGrant, provisioningResult.databaseUIDs)
+	recordDatabaseBootstrapCompletion(postgresDB, databasesToGrant, provisioningResult.databaseUIDs, databaseEnvironmentName)
 	if awaitingPrivilegeBootstrap {
 		message := fmt.Sprintf("All %d databases ready", len(postgresDB.Spec.Databases))
 		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, databasesReady, EventDatabasesReady, message)
@@ -599,7 +611,7 @@ func PostgresDatabaseService(
 	switch metricsOutcome.State {
 	case dbmetrics.GateFailed:
 		rc.emitWarnOnceBeforeWait(postgresDB, postgresDB.Status.Conditions, customMetricsReady, EventCustomMetricsFailed, metricsOutcome.Message)
-		if err := persistCustomMetricsStatus(ctx, rc, postgresDB, metricsOutcome, metav1.ConditionFalse, failedDBPhase); err != nil {
+		if err := persistCustomMetricsStatus(ctx, rc, postgresDB, metricsOutcome, metav1.ConditionFalse, failedDBPhase, databaseEnvironmentName); err != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCustomMetricsStatus, "persisting custom metrics failure"); ok {
 				return result, conflictErr
 			}
@@ -607,7 +619,7 @@ func PostgresDatabaseService(
 		}
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	case dbmetrics.GatePending:
-		if err := persistCustomMetricsStatus(ctx, rc, postgresDB, metricsOutcome, metav1.ConditionUnknown, provisioningDBPhase); err != nil {
+		if err := persistCustomMetricsStatus(ctx, rc, postgresDB, metricsOutcome, metav1.ConditionUnknown, provisioningDBPhase, databaseEnvironmentName); err != nil {
 			if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictCustomMetricsStatus, "persisting custom metrics pending status"); ok {
 				return result, conflictErr
 			}
@@ -616,13 +628,13 @@ func PostgresDatabaseService(
 		return ctrl.Result{RequeueAfter: retryDelay}, nil
 	default:
 		rc.emitOnConditionTransition(postgresDB, postgresDB.Status.Conditions, customMetricsReady, EventCustomMetricsReady, metricsOutcome.Message)
-		applyCustomMetricsStatus(rc, postgresDB, metricsOutcome, metav1.ConditionTrue, readyDBPhase)
+		applyCustomMetricsStatus(rc, postgresDB, metricsOutcome, metav1.ConditionTrue, readyDBPhase, databaseEnvironmentName)
 	}
 
 	if !wasReady {
 		rc.emitNormal(postgresDB, EventPostgresDatabaseReady, fmt.Sprintf("PostgresDatabase %s is ready", postgresDB.Name))
 	}
-	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB, true, rolesExist)
+	postgresDB.Status.Databases = populateDatabaseStatusForEnvironment(postgresDB, databaseEnvironmentName, true, rolesExist)
 	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 
 	if err := c.Status().Update(ctx, postgresDB); err != nil {
@@ -715,6 +727,38 @@ func fetchCluster(ctx context.Context, c client.Client, postgresDB *platformv1al
 	return cluster, nil
 }
 
+func readReferencedClusterCard(ctx context.Context, rc *ReconcileContext, postgresDB *platformv1alpha1.PostgresDatabase) (*identitytypes.ClusterCard, error) {
+	if rc.ClusterReader == nil {
+		return nil, dbclusterinfo.ErrClusterReaderNotConfigured
+	}
+	facts, err := rc.ClusterReader.Read(ctx, postgresDB.Namespace, postgresDB.Spec.ClusterRef.Name)
+	if err != nil {
+		return nil, err
+	}
+	if facts.Cluster == nil {
+		return nil, fmt.Errorf("cluster reader returned no cluster identity")
+	}
+	return facts.Cluster, nil
+}
+
+func validateAuthoritativeProviderUID(ctx context.Context, c client.Reader, authoritative identitytypes.Environment) error {
+	if authoritative.Identity.UID == "" {
+		return nil
+	}
+
+	provider := &cnpgv1.Cluster{}
+	if err := c.Get(ctx, types.NamespacedName{
+		Name:      authoritative.Identity.Name,
+		Namespace: authoritative.Identity.Namespace,
+	}, provider); err != nil {
+		return fmt.Errorf("fetching CNPG Cluster %s/%s: %w", authoritative.Identity.Namespace, authoritative.Identity.Name, err)
+	}
+	if provider.UID != authoritative.Identity.UID {
+		return fmt.Errorf("CNPG Cluster %s/%s UID %q does not match resolved provider identity UID %q", authoritative.Identity.Namespace, authoritative.Identity.Name, provider.UID, authoritative.Identity.UID)
+	}
+	return nil
+}
+
 // observeClusterReadiness applies the pure cluster readiness decision at the
 // facade boundary, where condition transitions, events, and status persistence
 // remain owned by PostgresDatabase reconciliation.
@@ -724,7 +768,7 @@ func observeClusterReadiness(
 	postgresDB *platformv1alpha1.PostgresDatabase,
 	wasReady bool,
 	updateStatus func(conditionTypes, metav1.ConditionStatus, conditionReasons, string, reconcileDBPhases) error,
-) (dbclusterreadiness.ResolvedClusterFacts, ctrl.Result, error, bool) {
+) (dbclusterinfo.ResolvedClusterFacts, ctrl.Result, error, bool) {
 	previous := meta.FindStatusCondition(postgresDB.Status.Conditions, string(clusterReady))
 	previousReason := ""
 	if previous != nil {
@@ -985,14 +1029,28 @@ func buildDeletionPlan(databases []platformv1alpha1.DatabaseDefinition) deletion
 func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *platformv1alpha1.PostgresDatabase) error {
 	logger := logging.FromContext(ctx)
 	c := rc.Client
+	cluster, err := fetchCluster(ctx, c, postgresDB)
+	if errors.IsNotFound(err) {
+		cluster = nil
+	} else if err != nil {
+		return fmt.Errorf("getting PostgresCluster for database cleanup: %w", err)
+	}
+	var clusterCard *identitytypes.ClusterCard
+	if cluster != nil {
+		clusterCard, err = readReferencedClusterCard(ctx, rc, postgresDB)
+		if err != nil {
+			return fmt.Errorf("resolving PostgresCluster identity for database cleanup: %w", err)
+		}
+	}
+	environmentNames := databaseEnvironmentNames(clusterCard)
 	plan := buildDeletionPlan(postgresDB.Spec.Databases)
-	if err := orphanRetainedResources(ctx, c, postgresDB, plan.retained); err != nil {
+	if err := orphanRetainedResources(ctx, c, postgresDB, plan.retained, environmentNames...); err != nil {
 		return err
 	}
-	if err := deleteRemovedResources(ctx, c, postgresDB, plan.deleted); err != nil {
+	if err := deleteRemovedResources(ctx, c, postgresDB, plan.deleted, environmentNames...); err != nil {
 		return err
 	}
-	if err := cleanupManagedRoles(ctx, rc, postgresDB, plan); err != nil {
+	if err := cleanupManagedRoles(ctx, rc, postgresDB, cluster, plan); err != nil {
 		return err
 	}
 	controllerutil.RemoveFinalizer(postgresDB, postgresDatabaseFinalizerName)
@@ -1007,8 +1065,8 @@ func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *platf
 	return nil
 }
 
-func orphanRetainedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, retained []platformv1alpha1.DatabaseDefinition) error {
-	if err := orphanCNPGDatabases(ctx, c, postgresDB, retained); err != nil {
+func orphanRetainedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, retained []platformv1alpha1.DatabaseDefinition, environmentNames ...string) error {
+	if err := orphanCNPGDatabases(ctx, c, postgresDB, retained, environmentNames...); err != nil {
 		return err
 	}
 	if err := orphanConfigMaps(ctx, c, postgresDB, retained); err != nil {
@@ -1017,8 +1075,8 @@ func orphanRetainedResources(ctx context.Context, c client.Client, postgresDB *p
 	return orphanSecrets(ctx, c, postgresDB, retained)
 }
 
-func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, deleted []platformv1alpha1.DatabaseDefinition) error {
-	if err := deleteCNPGDatabases(ctx, c, postgresDB, deleted); err != nil {
+func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, deleted []platformv1alpha1.DatabaseDefinition, environmentNames ...string) error {
+	if err := deleteCNPGDatabases(ctx, c, postgresDB, deleted, environmentNames...); err != nil {
 		return err
 	}
 	if err := deleteConfigMaps(ctx, c, postgresDB, deleted); err != nil {
@@ -1028,7 +1086,7 @@ func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *pl
 }
 
 // cleanupManagedRoles publishes drop intent and retains the finalizer until the cluster stops owning deleted roles.
-func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *platformv1alpha1.PostgresDatabase, plan deletionPlan) error {
+func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *platformv1alpha1.PostgresDatabase, cluster *platformv1alpha1.PostgresCluster, plan deletionPlan) error {
 	c := rc.Client
 	logger := logging.FromContext(ctx)
 	if len(plan.deleted) == 0 {
@@ -1036,11 +1094,7 @@ func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *
 		postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 		return c.Status().Update(ctx, postgresDB)
 	}
-	cluster := &platformv1alpha1.PostgresCluster{}
-	if err := c.Get(ctx, types.NamespacedName{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}, cluster); err != nil {
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("getting PostgresCluster for role cleanup: %w", err)
-		}
+	if cluster == nil {
 		logger.InfoContext(ctx, "PostgresCluster already deleted, skipping managed roles cleanup")
 		return nil
 	}
@@ -1076,17 +1130,13 @@ func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *
 	return nil
 }
 
-func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
+func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition, environmentNames ...string) error {
 	logger := logging.FromContext(ctx)
-	for _, dbSpec := range databases {
-		name := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
-		db := &cnpgv1.Database{}
-		if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: postgresDB.Namespace}, db); err != nil {
-			if errors.IsNotFound(err) {
-				continue
-			}
-			return fmt.Errorf("getting CNPG Database %s for orphaning: %w", name, err)
-		}
+	owned, err := ownedCNPGDatabases(ctx, c, postgresDB, databases)
+	if err != nil {
+		return err
+	}
+	for _, db := range owned {
 		if db.Annotations[annotationRetainedFrom] == postgresDB.Name {
 			continue
 		}
@@ -1096,9 +1146,35 @@ func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platf
 		}
 		db.Annotations[annotationRetainedFrom] = postgresDB.Name
 		if err := c.Update(ctx, db); err != nil {
-			return fmt.Errorf("orphaning CNPG Database %s: %w", name, err)
+			return fmt.Errorf("orphaning CNPG Database %s: %w", db.Name, err)
 		}
-		logger.InfoContext(ctx, "CNPG Database orphaned", "name", name)
+		logger.InfoContext(ctx, "CNPG Database orphaned", "name", db.Name)
+	}
+	for _, dbSpec := range databases {
+		for _, name := range cnpgDatabaseNamesForCleanup(postgresDB, dbSpec.Name, environmentNames...) {
+			db := &cnpgv1.Database{}
+			if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: postgresDB.Namespace}, db); err != nil {
+				if errors.IsNotFound(err) {
+					continue
+				}
+				return fmt.Errorf("getting CNPG Database %s for orphaning: %w", name, err)
+			}
+			if !metav1.IsControlledBy(db, postgresDB) {
+				continue
+			}
+			if db.Annotations[annotationRetainedFrom] == postgresDB.Name {
+				continue
+			}
+			stripOwnerReference(db, postgresDB.UID)
+			if db.Annotations == nil {
+				db.Annotations = make(map[string]string)
+			}
+			db.Annotations[annotationRetainedFrom] = postgresDB.Name
+			if err := c.Update(ctx, db); err != nil {
+				return fmt.Errorf("orphaning CNPG Database %s: %w", name, err)
+			}
+			logger.InfoContext(ctx, "CNPG Database orphaned", "name", name)
+		}
 	}
 	return nil
 }
@@ -1163,20 +1239,56 @@ func orphanSecrets(ctx context.Context, c client.Client, postgresDB *platformv1a
 	return nil
 }
 
-func deleteCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
+func deleteCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition, environmentNames ...string) error {
 	logger := logging.FromContext(ctx)
+	owned, err := ownedCNPGDatabases(ctx, c, postgresDB, databases)
+	if err != nil {
+		return err
+	}
+	for _, db := range owned {
+		if err := c.Delete(ctx, db); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("deleting CNPG Database %s: %w", db.Name, err)
+		}
+		logger.InfoContext(ctx, "CNPG Database deleted", "name", db.Name)
+	}
 	for _, dbSpec := range databases {
-		name := cnpgDatabaseName(postgresDB.Name, dbSpec.Name)
-		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: postgresDB.Namespace}}
-		if err := c.Delete(ctx, db); err != nil {
-			if errors.IsNotFound(err) {
+		for _, name := range cnpgDatabaseNamesForCleanup(postgresDB, dbSpec.Name, environmentNames...) {
+			db := &cnpgv1.Database{}
+			if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: postgresDB.Namespace}, db); err != nil {
+				if errors.IsNotFound(err) {
+					continue
+				}
+				return fmt.Errorf("getting CNPG Database %s for deletion: %w", name, err)
+			}
+			if !metav1.IsControlledBy(db, postgresDB) {
 				continue
 			}
-			return fmt.Errorf("deleting CNPG Database %s: %w", name, err)
+			if err := c.Delete(ctx, db); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("deleting CNPG Database %s: %w", name, err)
+			}
+			logger.InfoContext(ctx, "CNPG Database deleted", "name", name)
 		}
-		logger.InfoContext(ctx, "CNPG Database deleted", "name", name)
 	}
 	return nil
+}
+
+func ownedCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) ([]*cnpgv1.Database, error) {
+	databaseNames := make(map[string]struct{}, len(databases))
+	for _, database := range databases {
+		databaseNames[database.Name] = struct{}{}
+	}
+	var list cnpgv1.DatabaseList
+	if err := c.List(ctx, &list, client.InNamespace(postgresDB.Namespace)); err != nil {
+		return nil, fmt.Errorf("listing CNPG Databases for cleanup: %w", err)
+	}
+	owned := make([]*cnpgv1.Database, 0)
+	for i := range list.Items {
+		database := &list.Items[i]
+		if _, found := databaseNames[database.Spec.Name]; found && metav1.IsControlledBy(database, postgresDB) {
+			owned = append(owned, database)
+		}
+	}
+	return owned, nil
 }
 
 func deleteConfigMaps(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
@@ -1509,9 +1621,9 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 	return nil
 }
 
-func persistDatabaseInfos(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, ready bool, exists bool) error {
+func persistDatabaseInfos(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, ready bool, exists bool, providerClusterName string) error {
 	before := postgresDB.Status.DeepCopy()
-	postgresDB.Status.Databases = populateDatabaseStatus(postgresDB, ready, exists)
+	postgresDB.Status.Databases = populateDatabaseStatusForEnvironment(postgresDB, providerClusterName, ready, exists)
 	postgresDB.Status.ObservedGeneration = &postgresDB.Generation
 	if equality.Semantic.DeepEqual(*before, postgresDB.Status) {
 		return nil
@@ -1538,6 +1650,10 @@ func persistDatabaseMessages(ctx context.Context, c client.Client, postgresDB *p
 }
 
 func populateDatabaseStatus(postgresDB *platformv1alpha1.PostgresDatabase, flags ...bool) []platformv1alpha1.DatabaseInfo {
+	return populateDatabaseStatusForEnvironment(postgresDB, "", flags...)
+}
+
+func populateDatabaseStatusForEnvironment(postgresDB *platformv1alpha1.PostgresDatabase, providerClusterName string, flags ...bool) []platformv1alpha1.DatabaseInfo {
 	ready := true
 	exists := true
 	includeRoles := false
@@ -1548,7 +1664,7 @@ func populateDatabaseStatus(postgresDB *platformv1alpha1.PostgresDatabase, flags
 	if len(flags) > 1 {
 		exists = flags[1]
 	}
-	statuses := populateDatabaseStatusForDefinitions(postgresDB, postgresDB.Spec.Databases, ready, exists, includeRoles)
+	statuses := populateDatabaseStatusForDefinitionsForEnvironment(postgresDB, postgresDB.Spec.Databases, ready, exists, includeRoles, providerClusterName)
 	if includeRoles {
 		statuses = append(statuses, removedDatabaseTombstones(postgresDB)...)
 	}
@@ -1593,6 +1709,17 @@ func populateDatabaseStatusForDefinitions(postgresDB *platformv1alpha1.PostgresD
 	if len(includeRoles) > 0 {
 		publishRoles = includeRoles[0]
 	}
+	return populateDatabaseStatusForDefinitionsForEnvironment(postgresDB, definitions, ready, exists, publishRoles, "")
+}
+
+func populateDatabaseStatusForDefinitionsForEnvironment(
+	postgresDB *platformv1alpha1.PostgresDatabase,
+	definitions []platformv1alpha1.DatabaseDefinition,
+	ready bool,
+	exists bool,
+	publishRoles bool,
+	providerClusterName string,
+) []platformv1alpha1.DatabaseInfo {
 	existingProvisioned := make(map[string]bool, len(postgresDB.Status.Databases))
 	existingMessage := make(map[string]string, len(postgresDB.Status.Databases))
 	existingUID := make(map[string]types.UID, len(postgresDB.Status.Databases))
@@ -1617,7 +1744,7 @@ func populateDatabaseStatusForDefinitions(postgresDB *platformv1alpha1.PostgresD
 		// DatabaseRef is the sticky bootstrap marker. Ready alone is transient and must not
 		// decide whether one-time privileges need to run again.
 		if ready || (exists && existingProvisioned[dbSpec.Name]) {
-			info.DatabaseRef = &corev1.LocalObjectReference{Name: cnpgDatabaseName(postgresDB.Name, dbSpec.Name)}
+			info.DatabaseRef = &corev1.LocalObjectReference{Name: cnpgDatabaseResourceName(postgresDB, dbSpec.Name, providerClusterName)}
 			info.DatabaseUID = existingUID[dbSpec.Name]
 		}
 		// Preserve any existing not-ready message; persistDatabaseMessages owns setting and clearing it.
@@ -1677,6 +1804,64 @@ func rwRoleName(dbName string) string    { return dbName + "_rw" }
 func cnpgDatabaseName(postgresDBName, dbName string) string {
 	return fmt.Sprintf("%s-%s", postgresDBName, dbName)
 }
+
+func cnpgDatabaseResourceName(postgresDB *platformv1alpha1.PostgresDatabase, dbName, providerClusterName string) string {
+	if providerClusterName == "" || providerClusterName == postgresDB.Spec.ClusterRef.Name {
+		return cnpgDatabaseName(postgresDB.Name, dbName)
+	}
+	return fmt.Sprintf("%s-%s-%s", postgresDB.Name, providerClusterName, dbName)
+}
+
+func cnpgDatabaseEnvironmentName(environment identitytypes.Environment) string {
+	if environment.Scope != identitytypes.NamingScopeEnvironment {
+		return ""
+	}
+	return environment.Identity.Name
+}
+
+func cnpgDatabaseNameFromStatus(postgresDB *platformv1alpha1.PostgresDatabase, databaseName string) string {
+	for _, database := range postgresDB.Status.Databases {
+		if database.Name == databaseName && database.DatabaseRef != nil && database.DatabaseRef.Name != "" {
+			return database.DatabaseRef.Name
+		}
+	}
+	return cnpgDatabaseName(postgresDB.Name, databaseName)
+}
+
+func cnpgDatabaseNamesForCleanup(postgresDB *platformv1alpha1.PostgresDatabase, databaseName string, environmentNames ...string) []string {
+	names := make([]string, 0, len(environmentNames)+1)
+	seen := make(map[string]struct{}, len(environmentNames)+1)
+	add := func(name string) {
+		if name == "" {
+			return
+		}
+		if _, found := seen[name]; found {
+			return
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	add(cnpgDatabaseNameFromStatus(postgresDB, databaseName))
+	for _, environmentName := range environmentNames {
+		add(cnpgDatabaseResourceName(postgresDB, databaseName, environmentName))
+	}
+	return names
+}
+
+func databaseEnvironmentNames(cluster *identitytypes.ClusterCard) []string {
+	if cluster == nil {
+		return nil
+	}
+	names := make([]string, 0, len(cluster.Managed))
+	for _, environment := range cluster.Managed {
+		name := cnpgDatabaseEnvironmentName(environment)
+		if !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 func roleSecretName(postgresDBName, dbName, role string) string {
 	return fmt.Sprintf("%s-%s-%s", postgresDBName, dbName, role)
 }

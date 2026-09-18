@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -28,8 +29,22 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func objectStoreContracts(authority identitytypes.ClusterCard) *reconcileContracts {
+	return &reconcileContracts{Authority: authority, EnvironmentNamer: testEnvironmentNamer}
+}
+
+func TestObjectStoreModelCheckContracts(t *testing.T) {
+	cluster := newTestCluster("c1", "ns1")
+	model := newObjectStoreModel(nil, nil, noopEventEmitter{}, nil, cluster, nil, &reconcileContracts{})
+	assert.ErrorIs(t, model.CheckContracts(), errContractsNotReady)
+
+	model.contracts = objectStoreContracts(conventionalClusterCard(cluster))
+	assert.NoError(t, model.CheckContracts())
+}
 
 func TestObjectStoreModel_Reconcile_DeletesWhenBackupDisabled(t *testing.T) {
 	scheme := newTestScheme()
@@ -43,7 +58,7 @@ func TestObjectStoreModel_Reconcile_DeletesWhenBackupDisabled(t *testing.T) {
 	require.NoError(t, ctrl.SetControllerReference(cluster, existing, scheme))
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg)
+	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(conventionalClusterCard(cluster)))
 
 	reconcileErr := model.Reconcile(context.Background())
 	health, err := model.Observe(context.Background(), reconcileErr)
@@ -57,12 +72,48 @@ func TestObjectStoreModel_Reconcile_DeletesWhenBackupDisabled(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(err), "ObjectStore must be removed when backup is disabled")
 }
 
+func TestObjectStoreModel_Reconcile_DeletesManagedObjectStoresWhenBackupDisabled(t *testing.T) {
+	scheme := newTestScheme()
+	cluster := newTestCluster("c1", "ns1")
+	cfg := newTestMergedConfigBarman("0 2 * * *")
+	cfg.Spec.Backup.Enabled = ptr.To(false)
+
+	var objectStores []client.Object
+	for _, name := range []string{"c1", "c1-green"} {
+		existing := &unstructured.Unstructured{}
+		existing.SetGroupVersionKind(ObjectStoreGVK)
+		existing.SetName(objectStoreName(name))
+		existing.SetNamespace(cluster.Namespace)
+		require.NoError(t, ctrl.SetControllerReference(cluster, existing, scheme))
+		objectStores = append(objectStores, existing)
+	}
+
+	authority := identitytypes.ClusterCard{
+		Logical:       conventionalClusterCard(cluster).Logical,
+		Authoritative: testEnvironment(cluster, "c1-green", "", identitytypes.EnvironmentRoleAuthoritative),
+		Managed: []identitytypes.Environment{
+			testEnvironment(cluster, "c1-green", "", identitytypes.EnvironmentRoleAuthoritative),
+			testEnvironment(cluster, "c1", "", identitytypes.EnvironmentRoleRetained),
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objectStores...).Build()
+	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(authority))
+
+	require.NoError(t, model.Reconcile(context.Background()))
+	for _, name := range []string{"c1", "c1-green"} {
+		got := &unstructured.Unstructured{}
+		got.SetGroupVersionKind(ObjectStoreGVK)
+		err := c.Get(context.Background(), types.NamespacedName{Name: objectStoreName(name), Namespace: cluster.Namespace}, got)
+		assert.True(t, apierrors.IsNotFound(err), "ObjectStore for %s must be removed when backup is disabled", name)
+	}
+}
+
 func TestObjectStoreModel_Reconcile_CreatesWhenBackupEnabled(t *testing.T) {
 	scheme := newTestScheme()
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfigBarman("0 2 * * *")
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
-	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg)
+	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(conventionalClusterCard(cluster)))
 
 	reconcileErr := model.Reconcile(context.Background())
 	health, err := model.Observe(context.Background(), reconcileErr)
@@ -101,7 +152,7 @@ func TestObjectStoreModel_Reconcile_DoesNotDeleteForeignObjectStore(t *testing.T
 	existing := foreignObjectStore(cluster)
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg)
+	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(conventionalClusterCard(cluster)))
 
 	require.NoError(t, model.Reconcile(context.Background()))
 
@@ -118,7 +169,7 @@ func TestObjectStoreModel_Reconcile_DoesNotMutateForeignObjectStore(t *testing.T
 	existing := foreignObjectStore(cluster)
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
-	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg)
+	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(conventionalClusterCard(cluster)))
 
 	err := model.Reconcile(context.Background())
 	require.Error(t, err, "reconcile must fail rather than mutate a foreign ObjectStore")

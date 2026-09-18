@@ -25,7 +25,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
-	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
+	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -63,7 +63,7 @@ func buildFreshDatabaseObjects(requestName types.NamespacedName, dbName string) 
 	postgresCluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: requestName.Namespace},
 		Status: platformv1alpha1.PostgresClusterStatus{
-			Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
+			Phase: strPtr(string(dbclusterinfo.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{
 				APIVersion: cnpgv1.SchemeGroupVersion.String(), Kind: "Cluster",
 				Name: "primary-cnpg", Namespace: requestName.Namespace,
@@ -99,7 +99,7 @@ func buildFreshDatabaseObjects(requestName types.NamespacedName, dbName string) 
 
 	cnpgDatabase := &cnpgv1.Database{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       cnpgDatabaseName(postgresDB.Name, dbName),
+			Name:       cnpgDatabaseResourceName(postgresDB, dbName, "primary-cnpg"),
 			Namespace:  requestName.Namespace,
 			UID:        types.UID("cnpg-database-uid"),
 			Generation: 1,
