@@ -1960,4 +1960,3 @@ func TestUpdateStatusRestartsCaptainStableClockAfterZeroReadyReplicasRecovers(t 
 		t.Errorf("expected CaptainStableSince to restart to approximately now after recovering from zero ready replicas, not inherit the stale pre-outage %d, got %d", stableSince, cr.Status.CaptainStableSince)
 	}
 }
-
