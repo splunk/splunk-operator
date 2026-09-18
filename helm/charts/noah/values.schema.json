@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "const": 1,
+      "description": "Pinned to 1: migrations run in an init container, so multiple replicas race the migration lock and all but one show Init:Error on a fresh install."
+    },
+    "noah": {
+      "type": "object",
+      "properties": {
+        "autoCreateTenants": {
+          "type": "boolean",
+          "const": true,
+          "description": "This development chart registers active tenants on their first request."
+        },
+        "expectedPods": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "NOAH_EXPECTED_NUMBER_OF_PODS. Sources disagree on whether this counts Noah server pods or indexer replicas; see values.yaml."
+        },
+        "cacheWarmScaleInTimeout": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(ms|s|m|h)$",
+          "description": "A positive duration such as 30s, 5m or 1h that enables cache-warm scale-in behavior."
+        },
+        "tenantConfig": {
+          "type": "object",
+          "description": "Optional per-tenant configuration written to data/config.yaml."
+        }
+      },
+      "required": ["autoCreateTenants", "cacheWarmScaleInTimeout", "expectedPods", "tenantConfig"]
+    },
+    "postgresql": {
+      "type": "object",
+      "properties": {
+        "auth": {
+          "type": "object",
+          "properties": {
+            "database": {"type": "string", "minLength": 1},
+            "username": {"type": "string", "minLength": 1},
+            "password": {
+              "type": "string",
+              "description": "Empty means the chart generates one on first install and then reuses the release Secret's value."
+            }
+          },
+          "required": ["database", "username", "password"]
+        }
+      },
+      "required": ["auth"]
+    },
+    "minio": {
+      "type": "object",
+      "properties": {
+        "auth": {
+          "type": "object",
+          "properties": {
+            "rootUser": {"type": "string", "minLength": 3},
+            "rootPassword": {
+              "type": "string",
+              "description": "Empty means the chart generates one on first install and then reuses the release Secret's value."
+            }
+          },
+          "required": ["rootUser", "rootPassword"]
+        },
+        "bucket": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 63,
+          "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+        }
+      },
+      "required": ["auth", "bucket"]
+    }
+  },
+  "required": ["replicaCount", "noah", "postgresql", "minio"]
+}

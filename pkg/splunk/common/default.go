@@ -48,7 +48,7 @@ type ConfFileValue struct {
 	// Directory is the app-local directory where the .conf file is written.
 	// Defaults to $SPLUNK_HOME/etc/system/local when omitted.
 	// SOK sets this to $SPLUNK_HOME/etc/apps/100-sok/local to isolate managed config.
-	Directory string `yaml:"directory"`
+	Directory string `yaml:"directory,omitempty"`
 	// Stanzas holds the stanza names and their field values. Keys are stanza
 	// names (e.g. "remote_queue://smartbus").
 	Stanzas ConfFileStanzas `yaml:"content"`

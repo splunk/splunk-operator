@@ -223,13 +223,36 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	}
 
 	// readyReplicas == replicas
+	if finisher, ok := mgr.(splcommon.StatefulSetScaleDownFinisher); ok {
+		complete, err := finisher.FinishScaleDown(ctx, replicas)
+		if err != nil {
+			scopedLog.ErrorContext(ctx, "unable to finish StatefulSet scale down", "ordinal", replicas, "error", err)
+			return enterpriseApi.PhaseError, err
+		}
+		if !complete {
+			return enterpriseApi.PhaseScalingDown, nil
+		}
+	}
 
-	// check for scaling up
-	if readyReplicas < desiredReplicas {
-		// scale up StatefulSet to match desiredReplicas
-		scopedLog.InfoContext(ctx, "scaling replicas up", "replicas", desiredReplicas)
-		*statefulSet.Spec.Replicas = desiredReplicas
-		return enterpriseApi.PhaseScalingUp, splutil.UpdateResource(ctx, c, statefulSet)
+	// Check for scaling up. Managers may optionally restrict the next replica
+	// target; managers without a planner retain the existing unrestricted
+	// behavior.
+	if replicas < desiredReplicas {
+		var planner splcommon.StatefulSetScaleOutPlanner
+		if candidate, ok := mgr.(splcommon.StatefulSetScaleOutPlanner); ok {
+			planner = candidate
+		}
+		plan, err := ScaleOutStatefulSet(ctx, c, statefulSet, planner, desiredReplicas)
+		if err != nil {
+			return enterpriseApi.PhaseError, err
+		}
+		if plan.TargetReplicas > replicas {
+			scopedLog.InfoContext(ctx, "scaling replicas up", "replicas", plan.TargetReplicas)
+			return enterpriseApi.PhaseScalingUp, nil
+		}
+		if !plan.Complete {
+			return enterpriseApi.PhaseScalingUp, nil
+		}
 	}
 
 	// check for scaling down
@@ -256,23 +279,29 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			return enterpriseApi.PhaseError, err
 		}
 
-		// delete PVCs used by the pod so that a future scale up will have clean state
-		for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
-			namespacedName := types.NamespacedName{
-				Namespace: vol.ObjectMeta.Namespace,
-				Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
-			}
-			var pvc corev1.PersistentVolumeClaim
-			err := c.Get(ctx, namespacedName, &pvc)
-			if err != nil {
-				scopedLog.ErrorContext(ctx, "unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name, "error", err)
-				return enterpriseApi.PhaseError, err
-			}
-			scopedLog.InfoContext(ctx, "deleting PVC", "pvcName", pvc.ObjectMeta.Name)
-			err = c.Delete(ctx, &pvc)
-			if err != nil {
-				scopedLog.ErrorContext(ctx, "unable to delete PVC", "pvcName", pvc.ObjectMeta.Name, "error", err)
-				return enterpriseApi.PhaseError, err
+		retainPVCs := false
+		if policy, ok := mgr.(splcommon.StatefulSetScaleDownPVCPolicy); ok {
+			retainPVCs = policy.RetainPVCsOnScaleDown()
+		}
+		if !retainPVCs {
+			// delete PVCs used by the pod so that a future scale up will have clean state
+			for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
+				namespacedName := types.NamespacedName{
+					Namespace: vol.ObjectMeta.Namespace,
+					Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
+				}
+				var pvc corev1.PersistentVolumeClaim
+				err := c.Get(ctx, namespacedName, &pvc)
+				if err != nil {
+					scopedLog.ErrorContext(ctx, "unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name, "error", err)
+					return enterpriseApi.PhaseError, err
+				}
+				scopedLog.InfoContext(ctx, "deleting PVC", "pvcName", pvc.ObjectMeta.Name)
+				err = c.Delete(ctx, &pvc)
+				if err != nil {
+					scopedLog.ErrorContext(ctx, "unable to delete PVC", "pvcName", pvc.ObjectMeta.Name, "error", err)
+					return enterpriseApi.PhaseError, err
+				}
 			}
 		}
 
@@ -283,6 +312,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	// readyReplicas == desiredReplicas
 
 	// check existing pods for desired updates
+	deferredOrdinal := false
 	for n := readyReplicas - 1; n >= 0; n-- {
 		// get Pod
 		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
@@ -303,7 +333,31 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		}
 
 		// terminate pod if it has pending updates; k8s will start a new one with revised template
-		if statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"] {
+		needsRecycle := statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"]
+		if needsRecycle {
+			if orderer, ok := mgr.(splcommon.StatefulSetRecycleOrderer); ok {
+				deferred, err := orderer.DeferRecycle(ctx, n, statefulSet.Status.UpdateRevision)
+				if err != nil {
+					scopedLog.ErrorContext(ctx, "unable to determine recycle order for Pod", "podName", podName, "error", err)
+					return enterpriseApi.PhaseError, err
+				}
+				if deferred {
+					// This ordinal is intentionally left for a later pass (e.g. it
+					// currently holds a role — such as SHC captain — that must not
+					// be touched until every other member has already been
+					// recycled). Skip straight to the next ordinal instead of
+					// falling through to FinishRecycle below: for a manager like
+					// SHC, FinishRecycle can have side effects (e.g. releasing
+					// ManualDetention) or itself return not-complete, either of
+					// which would touch or block on a pod that was deliberately
+					// left untouched this pass.
+					scopedLog.InfoContext(ctx, "deferring recycle of Pod to a later pass", "podName", podName)
+					deferredOrdinal = true
+					continue
+				}
+			}
+		}
+		if needsRecycle {
 			// pod needs to be updated; first, prepare it to be recycled
 			ready, err := mgr.PrepareRecycle(ctx, n)
 			if err != nil {
@@ -342,6 +396,18 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		}
 	}
 
+	if deferredOrdinal {
+		// At least one ordinal (e.g. the SHC captain) was deliberately left
+		// unresolved this pass via DeferRecycle, possibly including ordinal 0
+		// — the last one this loop checks. Falling through from here would
+		// report Ready/finalize the upgrade even though that ordinal was
+		// skipped, not actually recycled. Wait for a later reconcile instead,
+		// by which point either it is no longer deferrable (every other
+		// member is settled) or something else in this pass will need to
+		// resolve first anyway.
+		return enterpriseApi.PhaseUpdating, nil
+	}
+
 	// Remove unwanted owner references
 	err = splutil.RemoveUnwantedSecrets(ctx, c, statefulSet.GetName(), statefulSet.GetNamespace())
 	if err != nil {
@@ -362,6 +428,85 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	scopedLog.InfoContext(ctx, "statefulset - Phase Ready")
 
 	return enterpriseApi.PhaseReady, nil
+}
+
+// ScaleOutStatefulSet applies the next safe scale-out target selected by
+// planner. A nil planner preserves the classic behavior of scaling directly to
+// the requested replica count.
+func ScaleOutStatefulSet(
+	ctx context.Context,
+	c splcommon.ControllerClient,
+	statefulSet *appsv1.StatefulSet,
+	planner splcommon.StatefulSetScaleOutPlanner,
+	requestedReplicas int32,
+) (splcommon.ScaleOutPlan, error) {
+	if statefulSet == nil {
+		return splcommon.ScaleOutPlan{}, fmt.Errorf("StatefulSet is nil")
+	}
+	if statefulSet.Spec.Replicas == nil {
+		return splcommon.ScaleOutPlan{}, fmt.Errorf("StatefulSet %s/%s has no replica count", statefulSet.Namespace, statefulSet.Name)
+	}
+
+	appliedReplicas := *statefulSet.Spec.Replicas
+	plan := splcommon.ScaleOutPlan{
+		Complete:       appliedReplicas == requestedReplicas,
+		TargetReplicas: requestedReplicas,
+	}
+	if planner != nil {
+		var err error
+		plan, err = planner.NextReplicas(ctx, appliedReplicas, requestedReplicas)
+		if err != nil {
+			return splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}, err
+		}
+	}
+	if err := validateStatefulSetScaleOutPlan(plan, appliedReplicas, requestedReplicas); err != nil {
+		return splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}, err
+	}
+	if plan.TargetReplicas == appliedReplicas {
+		return plan, nil
+	}
+
+	revised := statefulSet.DeepCopy()
+	revised.Spec.Replicas = &plan.TargetReplicas
+	if err := splutil.UpdateResource(ctx, c, revised); err != nil {
+		return splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}, fmt.Errorf(
+			"scale StatefulSet %s/%s from %d to %d replicas: %w",
+			statefulSet.Namespace,
+			statefulSet.Name,
+			appliedReplicas,
+			plan.TargetReplicas,
+			err,
+		)
+	}
+	*statefulSet = *revised
+	return plan, nil
+}
+
+func validateStatefulSetScaleOutPlan(plan splcommon.ScaleOutPlan, appliedReplicas, requestedReplicas int32) error {
+	if appliedReplicas < 0 {
+		return fmt.Errorf("applied replicas must not be negative: %d", appliedReplicas)
+	}
+	if requestedReplicas < 0 {
+		return fmt.Errorf("requested replicas must not be negative: %d", requestedReplicas)
+	}
+	if appliedReplicas > requestedReplicas {
+		return fmt.Errorf("scale-out cannot reduce replicas from %d to %d", appliedReplicas, requestedReplicas)
+	}
+	if plan.TargetReplicas < appliedReplicas {
+		return fmt.Errorf("scale-out planner cannot reduce replicas from %d to %d", appliedReplicas, plan.TargetReplicas)
+	}
+	if plan.TargetReplicas > requestedReplicas {
+		return fmt.Errorf("scale-out planner target %d exceeds requested replicas %d", plan.TargetReplicas, requestedReplicas)
+	}
+	if plan.Complete && (appliedReplicas != requestedReplicas || plan.TargetReplicas != appliedReplicas) {
+		return fmt.Errorf(
+			"scale-out planner cannot report completion at %d applied replicas with target %d when %d are requested",
+			appliedReplicas,
+			plan.TargetReplicas,
+			requestedReplicas,
+		)
+	}
+	return nil
 }
 
 // SetStatefulSetOwnerRef sets owner references for statefulset

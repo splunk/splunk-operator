@@ -56,6 +56,28 @@ func differentEntries() []common.ConfFileEntry {
 	}
 }
 
+func noahEntries() []common.ConfFileEntry {
+	return []common.ConfFileEntry{
+		{
+			ConfFileName: "server",
+			Value: common.ConfFileValue{
+				Stanzas: common.ConfFileStanzas{
+					"noahService": {
+						"disabled": "false",
+						"tenant":   "example",
+					},
+				},
+			},
+		},
+	}
+}
+
+type dictionaryDefaults struct {
+	Splunk struct {
+		Conf map[string]common.ConfFileValue `yaml:"conf"`
+	} `yaml:"splunk"`
+}
+
 func makeStatefulSet() *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-ss", Namespace: "ns"},
@@ -103,6 +125,14 @@ func TestDefaultsConfigMapName_ChangesWithEntries(t *testing.T) {
 	assert.NotEqual(t, name1, name2)
 }
 
+func TestDefaultsConfigMapName_ChangesWithConfFormat(t *testing.T) {
+	arrayName, err := resources.DefaultsConfigMapName("IndexerCluster", "cr", noahEntries())
+	require.NoError(t, err)
+	dictionaryName, err := resources.DefaultsConfigMapName("IndexerCluster", "cr", noahEntries(), resources.WithDictionaryConf())
+	require.NoError(t, err)
+	assert.NotEqual(t, arrayName, dictionaryName)
+}
+
 func TestDefaultsConfigMapName_Format(t *testing.T) {
 	name, err := resources.DefaultsConfigMapName("IndexerCluster", "my-indexer", someEntries())
 	require.NoError(t, err)
@@ -140,6 +170,37 @@ func TestNewDefaultsConfigMap_YAMLRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, d.Splunk.Conf, 1)
 	assert.Equal(t, "outputs", d.Splunk.Conf[0].ConfFileName)
+}
+
+func TestNewDefaultsConfigMap_DictionaryYAMLRoundTrip(t *testing.T) {
+	cm, err := resources.NewDefaultsConfigMap(
+		fakeCR("ns", "IndexerCluster", "cr"),
+		noahEntries(),
+		nil,
+		resources.WithDictionaryConf(),
+	)
+	require.NoError(t, err)
+
+	var defaults dictionaryDefaults
+	require.NoError(t, yaml.Unmarshal([]byte(cm.Data["conf-defaults.yml"]), &defaults))
+	require.Contains(t, defaults.Splunk.Conf, "server")
+	server := defaults.Splunk.Conf["server"]
+	assert.Empty(t, server.Directory)
+	assert.Equal(t, "false", server.Stanzas["noahService"]["disabled"])
+	assert.Equal(t, "example", server.Stanzas["noahService"]["tenant"])
+	assert.NotContains(t, cm.Data["conf-defaults.yml"], "- key: server")
+	assert.NotContains(t, cm.Data["conf-defaults.yml"], "directory:")
+}
+
+func TestNewDefaultsConfigMap_DictionaryRejectsDuplicateConfFiles(t *testing.T) {
+	entries := append(noahEntries(), noahEntries()...)
+	_, err := resources.NewDefaultsConfigMap(
+		fakeCR("ns", "IndexerCluster", "cr"),
+		entries,
+		nil,
+		resources.WithDictionaryConf(),
+	)
+	require.ErrorContains(t, err, `dictionary splunk.conf cannot contain duplicate file "server"`)
 }
 
 func TestNewDefaultsConfigMap_Labels(t *testing.T) {

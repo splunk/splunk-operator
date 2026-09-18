@@ -15,7 +15,7 @@
 
 /*
 Package indexercluster implements multi-step IndexerCluster workflows: peer
-decommission, rebalance wait, scale-down sequencing, and secret synchronization.
+incarnation, decommission, rebalance, scaling, and secret synchronization.
 
 This is intentionally a domain-specific workflow package. It accepts the
 IndexerCluster API type and owns only the state transitions and Splunk API

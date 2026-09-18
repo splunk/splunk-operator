@@ -395,11 +395,19 @@ func applySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	return result, nil
 }
 
-// ApplySearchHeadCluster is the operation seam used by focused reconciliation tests.
-var ApplySearchHeadCluster = applySearchHeadCluster
+// ApplySearchHeadCluster is the operation seam used by focused reconciliation
+// tests. Noah-backed SearchHeadClusters (spec.noahClusterRef set) have no
+// deployer and reconcile through a dedicated path; classic clusters are
+// unaffected.
+var ApplySearchHeadCluster = func(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+	if cr.Spec.NoahEnabled() {
+		return ApplySearchHeadClusterNoah(ctx, client, cr)
+	}
+	return applySearchHeadCluster(ctx, client, cr)
+}
 
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
-func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
+func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
 	if err != nil {
@@ -410,7 +418,7 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	env := resources.GetSearchHeadEnv(cr)
 
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkSearchHead, cr.Spec.Replicas, env)
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkSearchHead, cr.Spec.Replicas, env, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +460,7 @@ func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster,
 }
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
-func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
+func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 	// Uses the same SAN set as getSearchHeadStatefulSet (SH + deployer), not
 	// autoDNSNamesDeployer alone: this runs first, and EnsureCertificate is
 	// create-only, so whichever call creates the cert first fixes its SANs
@@ -461,7 +469,7 @@ func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
-	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkDeployer, 1, resources.GetSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkDeployer, 1, resources.GetSearchHeadExtraEnv(cr, cr.Spec.Replicas), opts...)
 	if err != nil {
 		return ss, err
 	}

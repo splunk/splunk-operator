@@ -35,6 +35,9 @@ const (
 	SearchHeadClusterPausedAnnotation = "searchheadcluster.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="!has(self.noahClusterRef) || ((!has(self.clusterManagerRef) || !has(self.clusterManagerRef.name) || self.clusterManagerRef.name == \"\") && (!has(self.clusterMasterRef) || !has(self.clusterMasterRef.name) || self.clusterMasterRef.name == \"\"))",message="noahClusterRef is mutually exclusive with clusterManagerRef and clusterMasterRef"
+// +kubebuilder:validation:XValidation:rule="has(self.noahClusterRef) == has(oldSelf.noahClusterRef)",message="noahClusterRef cannot be added or removed after creation"
+// +kubebuilder:validation:XValidation:rule="!has(self.noahClusterRef) || self.noahClusterRef.name == oldSelf.noahClusterRef.name",message="noahClusterRef.name is immutable once created"
 // SearchHeadClusterSpec defines the desired state of a Splunk Enterprise search head cluster
 type SearchHeadClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
@@ -43,6 +46,12 @@ type SearchHeadClusterSpec struct {
 	// +optional
 	// +kubebuilder:default=3
 	Replicas int32 `json:"replicas,omitempty"`
+
+	// NoahClusterRef selects the Noah configuration used by this SearchHeadCluster.
+	// The referenced NoahCluster must be in the same namespace.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="has(self.name) && self.name != ''",message="noahClusterRef.name must not be empty"
+	NoahClusterRef *corev1.LocalObjectReference `json:"noahClusterRef,omitempty"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
@@ -58,6 +67,11 @@ type SearchHeadClusterSpec struct {
 	// immediately against the already-running timer. Defaults to 3600 (1 hour).
 	// +optional
 	DetentionTimeoutSeconds int32 `json:"detentionTimeoutSeconds,omitempty"`
+}
+
+// NoahEnabled reports whether this spec selects Noah mode.
+func (s *SearchHeadClusterSpec) NoahEnabled() bool {
+	return s != nil && s.NoahClusterRef != nil
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -130,6 +144,15 @@ type SearchHeadClusterStatus struct {
 
 	// true if the search head cluster is in maintenance mode
 	MaintenanceMode bool `json:"maintenanceMode"`
+
+	// Unix timestamp from which the current Captain label has been observed
+	// continuously (same label, ready) across reconciles. Resets whenever the
+	// captain label changes or reports not-ready. A rolling update will not
+	// recycle another member until this has held stable for a minimum
+	// settle duration, so that recycling the captain and immediately
+	// recycling the next member can never happen back-to-back with no
+	// confirmation the newly elected captain actually held.
+	CaptainStableSince int64 `json:"captainStableSince,omitempty"`
 
 	// Indicates when the shc_secret has been changed for a peer
 	ShcSecretChanged []bool `json:"shcSecretChangedFlag"`

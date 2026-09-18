@@ -57,24 +57,28 @@ func ValidateIndexerClusterCreate(obj *enterpriseApi.IndexerCluster) field.Error
 		}
 	}
 
-	// clusterManagerRef is required (clusterMasterRef accepted for backwards compatibility)
-	if obj.Spec.ClusterManagerRef.Name == "" && obj.Spec.ClusterMasterRef.Name == "" {
-		allErrs = append(allErrs, field.Required(
-			field.NewPath("spec").Child("clusterManagerRef").Child("name"),
-			"IndexerCluster must reference a ClusterManager via clusterManagerRef"))
-	}
+	// Noah reference content and mutual exclusivity are enforced by CRD CEL validation.
+	// The webhook only needs to avoid applying classic-mode requirements to Noah mode.
+	if !obj.Spec.NoahEnabled() {
+		// clusterManagerRef is required (clusterMasterRef accepted for backwards compatibility)
+		if obj.Spec.ClusterManagerRef.Name == "" && obj.Spec.ClusterMasterRef.Name == "" {
+			allErrs = append(allErrs, field.Required(
+				field.NewPath("spec").Child("clusterManagerRef").Child("name"),
+				"IndexerCluster must reference a ClusterManager via clusterManagerRef"))
+		}
 
-	// Cross-namespace ClusterManagerRef is not allowed: the ClusterManager and its
-	// IndexerCluster must reside in the same namespace for multisite replication to work.
-	effectiveCMRef := obj.Spec.ClusterManagerRef
-	if effectiveCMRef.Name == "" {
-		effectiveCMRef = obj.Spec.ClusterMasterRef
-	}
-	if effectiveCMRef.Namespace != "" && effectiveCMRef.Namespace != obj.Namespace {
-		allErrs = append(allErrs, field.Invalid(
-			field.NewPath("spec").Child("clusterManagerRef").Child("namespace"),
-			effectiveCMRef.Namespace,
-			"clusterManagerRef.namespace must match the IndexerCluster namespace; cross-namespace references are not supported"))
+		// Cross-namespace ClusterManagerRef is not allowed: the ClusterManager and its
+		// IndexerCluster must reside in the same namespace for multisite replication to work.
+		effectiveCMRef := obj.Spec.ClusterManagerRef
+		if effectiveCMRef.Name == "" {
+			effectiveCMRef = obj.Spec.ClusterMasterRef
+		}
+		if effectiveCMRef.Namespace != "" && effectiveCMRef.Namespace != obj.Namespace {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec").Child("clusterManagerRef").Child("namespace"),
+				effectiveCMRef.Namespace,
+				"clusterManagerRef.namespace must match the IndexerCluster namespace; cross-namespace references are not supported"))
+		}
 	}
 
 	// Validate common spec

@@ -38,6 +38,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -248,6 +249,67 @@ func TestGetSplunkService(t *testing.T) {
 
 	test(SplunkSearchHead, false, loadFixture(t, "splunk_search_head_service.json"))
 	test(SplunkSearchHead, true, loadFixture(t, "splunk_search_head_headless.json"))
+}
+
+func TestGetSplunkServiceNoahIndexer(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: enterpriseApi.GroupVersion.String(),
+			Kind:       "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+			UID:       types.UID("indexer-cluster-uid"),
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+		},
+	}
+	wantSelector := getSplunkLabels(cr.Name, SplunkIndexer, cr.Spec.NoahClusterRef.Name)
+	wantPorts := splcommon.SortServicePorts(getSplunkServicePorts(SplunkIndexer))
+
+	for _, headless := range []bool{true, false} {
+		t.Run(fmt.Sprintf("headless=%t", headless), func(t *testing.T) {
+			service := getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, headless)
+
+			require.Equal(t, splcommon.GetSplunkServiceName(SplunkIndexer, cr.Name, headless), service.Name)
+			require.Equal(t, wantSelector, service.Spec.Selector)
+			require.Equal(t, wantPorts, service.Spec.Ports)
+			require.Equal(t, headless, service.Spec.PublishNotReadyAddresses)
+			if headless {
+				require.Equal(t, corev1.ClusterIPNone, service.Spec.ClusterIP)
+			}
+
+			require.Len(t, service.OwnerReferences, 1)
+			require.Equal(t, cr.UID, service.OwnerReferences[0].UID)
+			require.NotNil(t, service.OwnerReferences[0].Controller)
+			require.True(t, *service.OwnerReferences[0].Controller)
+		})
+	}
+}
+
+func TestGetSplunkServiceNoahIndexerGroupsSitesByNoahCluster(t *testing.T) {
+	serviceFor := func(name string) *corev1.Service {
+		cr := &enterpriseApi.IndexerCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"},
+			Spec: enterpriseApi.IndexerClusterSpec{
+				NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
+			},
+		}
+		return getSplunkService(t.Context(), cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false)
+	}
+
+	site1 := serviceFor("site1")
+	site2 := serviceFor("site2")
+	partOfLabel := splcommon.GetLabelTypes()["partof"]
+	instanceLabel := splcommon.GetLabelTypes()["instance"]
+
+	require.Equal(t, "splunk-noah-indexer", site1.Spec.Selector[partOfLabel])
+	require.Equal(t, site1.Spec.Selector[partOfLabel], site2.Spec.Selector[partOfLabel])
+	require.Equal(t, "splunk-site1-indexer", site1.Spec.Selector[instanceLabel])
+	require.Equal(t, "splunk-site2-indexer", site2.Spec.Selector[instanceLabel])
 }
 
 func TestGetSplunkDefaults(t *testing.T) {

@@ -294,12 +294,13 @@ setup/helm:
 	@if [ ! -x "${CI_BIN_DIR}/helm" ]; then \
 		set -e; \
 		normalized_version="v$${HELM_VERSION#v}"; \
-		tmp_archive="/tmp/helm-$${normalized_version}-linux-amd64.tar.gz"; \
-		curl -fsSL -o "$$tmp_archive" "https://get.helm.sh/helm-$${normalized_version}-linux-amd64.tar.gz"; \
-		tar -xzf "$$tmp_archive" -C /tmp linux-amd64/helm; \
-		mv /tmp/linux-amd64/helm "${CI_BIN_DIR}/helm"; \
+		platform="$(shell go env GOHOSTOS)-$(shell go env GOHOSTARCH)"; \
+		tmp_archive="/tmp/helm-$${normalized_version}-$${platform}.tar.gz"; \
+		curl -fsSL -o "$$tmp_archive" "https://get.helm.sh/helm-$${normalized_version}-$${platform}.tar.gz"; \
+		tar -xzf "$$tmp_archive" -C /tmp "$${platform}/helm"; \
+		mv "/tmp/$${platform}/helm" "${CI_BIN_DIR}/helm"; \
 		chmod +x "${CI_BIN_DIR}/helm"; \
-		rm -rf /tmp/linux-amd64 "$$tmp_archive"; \
+		rm -rf "/tmp/$${platform}" "$$tmp_archive"; \
 	fi
 
 .PHONY: setup/kuttl
@@ -682,3 +683,5 @@ build-installer: manifests generate kustomize
 	mkdir -p dist
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
+
+include tools/noah-local-dev/noah.mk

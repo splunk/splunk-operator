@@ -88,7 +88,9 @@ func apply(ctx context.Context, client splcommon.ControllerClient, namespacedNam
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, recorder)
 	var result reconcile.Result
 	var err error
-	if instance.Spec.ClusterManagerRef.Name != "" {
+	if instance.Spec.NoahEnabled() {
+		result, err = applyNoahIndexerCluster(ctx, client, instance)
+	} else if instance.Spec.ClusterManagerRef.Name != "" {
 		result, err = ApplyIndexerClusterManager(ctx, client, instance)
 	} else {
 		result, err = ApplyIndexerCluster(ctx, client, instance)

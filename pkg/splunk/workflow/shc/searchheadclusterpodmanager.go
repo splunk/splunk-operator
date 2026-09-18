@@ -214,10 +214,50 @@ func (mgr *PodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, err
 	return true, nil
 }
 
+// DeferRecycle for PodManager implements splcommon.StatefulSetRecycleOrderer:
+// it reports true for the ordinal currently holding the captain role, for as
+// long as any other member still needs to be recycled to updateRevision — so
+// a rolling update recycles every other member first and the captain last,
+// regardless of which ordinal happens to be captain or when that changes
+// mid-rollout.
+func (mgr *PodManager) DeferRecycle(ctx context.Context, n int32, updateRevision string) (bool, error) {
+	if n < 0 || n >= int32(len(mgr.CR.Status.Members)) {
+		return false, nil
+	}
+	member := mgr.CR.Status.Members[n]
+	isCaptain := isCaptainMember(mgr.CR.Status.Captain, member.Name)
+	alreadyStartedOwnRecycle := member.Status == "ManualDetention"
+
+	others := 0
+	for i, other := range mgr.CR.Status.Members {
+		if int32(i) == n {
+			continue
+		}
+		if memberNeedsRecycle(other.PodRevision, updateRevision, other.Status) {
+			others++
+		}
+	}
+
+	return shouldDeferCaptainRecycle(isCaptain, alreadyStartedOwnRecycle, others), nil
+}
+
 // PrepareRecycle for PodManager prepares search head pod to be recycled for updates; it returns true when ready
 func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
 	logger := logging.FromContext(ctx).With("func", "PrepareRecycle")
 	memberName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkSearchHead, mgr.CR.GetName(), n)
+
+	// Do not start recycling another member — including via scale-down, which
+	// calls this too — until the captain has held stable for a minimum
+	// settle duration. Without this, recycling the captain and then
+	// immediately recycling the next member could happen back-to-back with
+	// no confirmation the newly elected captain actually held.
+	if !captainStable(mgr.CR.Status.Captain, mgr.CR.Status.CaptainStableSince, time.Now()) {
+		logger.InfoContext(ctx, "waiting for captain to stabilize before recycling another member",
+			"memberName", memberName,
+			"captain", mgr.CR.Status.Captain,
+			"captainStableSince", mgr.CR.Status.CaptainStableSince)
+		return false, nil
+	}
 
 	switch mgr.CR.Status.Members[n].Status {
 	case "Up":
@@ -249,10 +289,7 @@ func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error
 			return false, err
 		}
 
-		start := mgr.CR.Status.UpgradeStartTimestamp
-		end := mgr.CR.Status.UpgradeEndTimestamp
-
-		if end >= start {
+		if isNewUpgradeWindow(mgr.CR.Status.UpgradeStartTimestamp, mgr.CR.Status.UpgradeEndTimestamp) {
 			currentTime := time.Now().Unix()
 			mgr.CR.Status.UpgradeStartTimestamp = currentTime
 
@@ -273,35 +310,28 @@ func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error
 			"sh_name": mgr.CR.Status.Members[n].Name,
 		}).Set(float64(mgr.CR.Status.Members[n].ActiveRealtimeSearchCount))
 
-		timeout := int64(mgr.CR.Spec.DetentionTimeoutSeconds)
-		if timeout <= 0 {
-			timeout = defaultSearchHeadDetentionTimeoutSeconds
-		}
+		timeout := effectiveDetentionTimeoutSeconds(mgr.CR.Spec.DetentionTimeoutSeconds)
 
-		// Initialize the timer when first observed or member changed.
-		// Only reset the timer when a previously recorded non-empty revision changes; this
-		// identifies a genuine replacement pod. If DetainedPodRevision was empty (revision
-		// not yet observed) and currentRevision is now non-empty, that is the first successful
-		// label read for the same pod; record the revision without moving the timestamp.
-		currentRevision := mgr.CR.Status.Members[n].PodRevision
-		revisionChanged := mgr.CR.Status.DetainedPodRevision != "" &&
-			currentRevision != "" &&
-			mgr.CR.Status.DetainedPodRevision != currentRevision
-		startNewDetentionWindow := mgr.CR.Status.DetentionStartTimestamp == 0 ||
-			mgr.CR.Status.DetainedMemberName != memberName ||
-			revisionChanged
-		if startNewDetentionWindow {
-			mgr.CR.Status.DetentionStartTimestamp = time.Now().Unix()
-			mgr.CR.Status.DetainedMemberName = memberName
-			mgr.CR.Status.DetainedPodRevision = currentRevision
-		} else if currentRevision != "" {
-			// Record the first observed revision without moving an already-running timer.
-			mgr.CR.Status.DetainedPodRevision = currentRevision
-		}
+		now := time.Now()
+		window := nextDetentionWindow(
+			DetentionWindow{
+				StartTimestamp: mgr.CR.Status.DetentionStartTimestamp,
+				MemberName:     mgr.CR.Status.DetainedMemberName,
+				PodRevision:    mgr.CR.Status.DetainedPodRevision,
+			},
+			memberName,
+			mgr.CR.Status.Members[n].PodRevision,
+			now,
+		)
+		mgr.CR.Status.DetentionStartTimestamp = window.StartTimestamp
+		mgr.CR.Status.DetainedMemberName = window.MemberName
+		mgr.CR.Status.DetainedPodRevision = window.PodRevision
 
-		activeSearches := mgr.CR.Status.Members[n].ActiveHistoricalSearchCount +
-			mgr.CR.Status.Members[n].ActiveRealtimeSearchCount
-		timeElapsed := time.Now().Unix() - mgr.CR.Status.DetentionStartTimestamp
+		activeSearches := activeSearchCount(
+			mgr.CR.Status.Members[n].ActiveHistoricalSearchCount,
+			mgr.CR.Status.Members[n].ActiveRealtimeSearchCount,
+		)
+		timeElapsed := now.Unix() - window.StartTimestamp
 
 		if activeSearches <= 0 {
 			logger.InfoContext(ctx, "detention complete", "memberName", memberName)
@@ -309,7 +339,7 @@ func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error
 			return true, nil
 		}
 
-		if timeElapsed >= timeout {
+		if detentionTimedOut(window, timeout, now) {
 			logger.WarnContext(ctx, "detention timeout exceeded; forcing recycle",
 				"memberName", memberName,
 				"elapsedSeconds", timeElapsed,
@@ -429,6 +459,8 @@ var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *PodManager, n int3
 func (mgr *PodManager) UpdateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
 	// populate members status using REST API to get search head cluster member info
 	previousCaptain := mgr.CR.Status.Captain
+	previousCaptainReady := mgr.CR.Status.CaptainReady
+	previousCaptainStableSince := mgr.CR.Status.CaptainStableSince
 	previousMemberCount := int32(len(mgr.CR.Status.Members))
 	previousPodRevisions := make(map[string]string, len(mgr.CR.Status.Members))
 	for _, member := range mgr.CR.Status.Members {
@@ -487,6 +519,9 @@ func (mgr *PodManager) UpdateStatus(ctx context.Context, statefulSet *appsv1.Sta
 				mgr.CR.Status.MinPeersJoined = captainInfo.MinPeersJoined
 				mgr.CR.Status.MaintenanceMode = captainInfo.MaintenanceMode
 				gotCaptainInfo = true
+				mgr.CR.Status.CaptainStableSince = nextCaptainStableSince(
+					previousCaptain, previousCaptainReady, previousCaptainStableSince,
+					captainInfo.Label, captainInfo.ServiceReady, time.Now())
 
 				if previousCaptain != "" && previousCaptain != captainInfo.Label {
 					shcLogger.InfoContext(ctx, "captain election completed",

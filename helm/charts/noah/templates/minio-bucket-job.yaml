@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-create-bucket" (include "noah.minioName" . | trunc 49 | trimSuffix "-") }}
+  labels:
+    {{- include "noah.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio-bucket
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "10"
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "noah.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: minio-bucket
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "noah.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: create-bucket
+          image: "{{ .Values.minio.clientImage.repository }}:{{ .Values.minio.clientImage.tag }}"
+          imagePullPolicy: {{ .Values.minio.clientImage.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              until mc alias set local "http://{{ include "noah.minioName" . }}:{{ .Values.minio.service.port }}" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                sleep 2
+              done
+              mc mb --ignore-existing "local/{{ .Values.minio.bucket }}"
+          env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "noah.minioSecretName" . }}
+                  key: accessKey
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "noah.minioSecretName" . }}
+                  key: secretKey
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

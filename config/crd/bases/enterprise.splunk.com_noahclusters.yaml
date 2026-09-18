@@ -1,0 +1,154 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: noahclusters.enterprise.splunk.com
+spec:
+  group: enterprise.splunk.com
+  names:
+    kind: NoahCluster
+    listKind: NoahClusterList
+    plural: noahclusters
+    shortNames:
+    - noah
+    singular: noahcluster
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Noah service endpoint
+      jsonPath: .spec.endpoint
+      name: Endpoint
+      type: string
+    - description: Noah tenant identifier
+      jsonPath: .spec.tenant
+      name: Tenant
+      type: string
+    - description: Cache-warm scale-out enabled
+      jsonPath: .spec.cacheWarmScaleOutEnabled
+      name: CacheWarm
+      type: boolean
+    - description: Age of noah cluster resource
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v4
+    schema:
+      openAPIV3Schema:
+        description: |-
+          NoahCluster is shared, configuration-only connection detail for Splunk
+          workloads that use Noah. Because several resources (e.g. IndexerClusters and SearchHeadClusters)
+          can reference the same NoahCluster with differing health, no single controller can maintain a status
+          consistently for all of them. Operational state is reported on each referencing workload instead.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NoahClusterSpec defines the desired state of NoahCluster
+            properties:
+              authSecretRef:
+                description: |-
+                  AuthSecretRef names the Secret holding the Noah pass4SymmKey under the
+                  "pass4SymmKey" key. It is a local reference, so the Secret must be in the
+                  same namespace as this NoahCluster.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: authSecretRef.name must not be empty
+                  rule: has(self.name) && self.name != ''
+                - message: authSecretRef.name must be a valid DNS-1123 subdomain
+                  rule: '!has(self.name) || self.name == '''' || self.name.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'')'
+              cacheWarmScaleOutEnabled:
+                default: true
+                description: |-
+                  CacheWarmScaleOutEnabled controls whether scale-out waits for each new peer to become up
+                  before adding the next ordinal. When false, scale-out advances after peer registration.
+                  Final readiness always requires every peer to be up.
+                type: boolean
+              cacheWarmScaleOutTimeoutSeconds:
+                default: 3600
+                description: |-
+                  CacheWarmScaleOutTimeoutSeconds is the maximum time to wait for a peer to become up when
+                  cache-warm coordination is enabled. Zero disables the timeout.
+                format: int32
+                minimum: 0
+                type: integer
+              endpoint:
+                description: |-
+                  Endpoint is the base URL of the Noah service. It must be an absolute http or https URL naming a host,
+                  with no credentials, path, query, or fragment. A single trailing "/" is accepted and normalised away.
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: endpoint must be a valid URL
+                  rule: isURL(self)
+                - message: endpoint scheme must be http or https
+                  rule: isURL(self) && (url(self).getScheme() == 'http' || url(self).getScheme()
+                    == 'https')
+                - message: endpoint must include a host
+                  rule: isURL(self) && url(self).getHostname() != ''
+                - message: endpoint must not contain credentials
+                  rule: '!self.contains(''@'')'
+                - message: endpoint must not contain a path
+                  rule: isURL(self) && (url(self).getEscapedPath() == '' || url(self).getEscapedPath()
+                    == '/')
+                - message: endpoint must not contain a query
+                  rule: '!self.contains(''?'')'
+                - message: endpoint must not contain a fragment
+                  rule: '!self.contains(''#'')'
+              tenant:
+                description: |-
+                  Tenant scopes peer membership and bucket maps to one logical Splunk
+                  deployment, preventing workloads from registering in or reading another
+                  tenant. There is no default: every installation chooses an explicit,
+                  stable value agreed with Noah.
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: tenant must not have leading or trailing whitespace
+                  rule: self.trim() == self
+            required:
+            - authSecretRef
+            - endpoint
+            - tenant
+            type: object
+            x-kubernetes-validations:
+            - message: endpoint is immutable once created
+              rule: self.endpoint == oldSelf.endpoint
+            - message: tenant is immutable once created
+              rule: self.tenant == oldSelf.tenant
+          status:
+            description: |-
+              NoahClusterStatus is intentionally empty. NoahCluster is configuration-only;
+              operational state is reported by each referencing workload.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

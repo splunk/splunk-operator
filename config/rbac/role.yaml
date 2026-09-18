@@ -140,6 +140,14 @@ rules:
   - patch
   - update
 - apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - noahclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - platform.splunk.com
   resources:
   - postgresclusterclasses

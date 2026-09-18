@@ -72,6 +72,8 @@ func enterpriseObjCopier(dst, src *client.Object) bool {
 		*dstP.(*enterpriseApi.SearchHeadCluster) = *srcP.(*enterpriseApi.SearchHeadCluster)
 	case *enterpriseApi.MonitoringConsole:
 		*dstP.(*enterpriseApi.MonitoringConsole) = *srcP.(*enterpriseApi.MonitoringConsole)
+	case *enterpriseApi.NoahCluster:
+		*dstP.(*enterpriseApi.NoahCluster) = *srcP.(*enterpriseApi.NoahCluster)
 	default:
 		return false
 	}

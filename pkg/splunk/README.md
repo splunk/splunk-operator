@@ -11,7 +11,7 @@ pkg/splunk/
 ├── client/           1:1 external-API wrappers (Splunk REST, storage SDKs)
 ├── common/           Types, interfaces, constants — no business logic
 ├── enterprise/       LEGACY — shrinks over time, eventually deleted
-├── reconcile/        Per-CR orchestration (one sub-package per CRD)
+├── reconcile/        Shared reconciliation policy and per-CR orchestration
 ├── workflow/         Multi-step, CR-agnostic state-change workflows
 ├── splunkconfig/     Splunk configuration builders — pure functions, no I/O, no K8s types
 ├── resources/        K8s object builders — pure functions, no I/O
@@ -61,14 +61,16 @@ Packages may also import the CRD types they operate on from `api/<group>/<versio
 | `splunkconfig/` | Splunk conf builders (pure functions) | `common/`, `util/` |
 | `resources/` | K8s object builders (pure functions) | `common/`, `util/` |
 | `k8sops/` | K8s API CRUD, diff/merge, finalizers | `common/`, `util/`, `resources/` |
-| `workflow/<domain>/` | Multi-step stateful workflows | `common/`, `util/`, `client/` |
+| `workflow/<domain>/` | Multi-step stateful workflows and shared dependency resolution | `common/`, `util/`, `client/`, `resources/` |
+| `reconcile/` | Reconciliation policy shared by multiple CRDs | `common/`, `util/`, `resources/`, `k8sops/`, `client/`, `workflow/` |
 | `reconcile/<cr>/` | Per-CR orchestration loop | `common/`, `util/`, `resources/`, `k8sops/`, `client/`, `workflow/` |
 
 ## Package Details
 
-### `reconcile/<cr>/`
+### `reconcile/` and `reconcile/<cr>/`
 
-One sub-package per Custom Resource type. Each owns a thin orchestration loop:
+The root package owns reconciliation policy shared by multiple Custom Resource
+types. Each CR-specific sub-package owns a thin orchestration loop:
 
 1. Read the CR and current cluster state
 2. Build desired K8s objects via `resources/`
@@ -89,10 +91,29 @@ CRD types.
 |---|---|
 | `appframework/` | Bundle discovery, staging, scheduling, push |
 | `bootstrap/` | First-time init, admin secret seeding |
+| `config/` | Configuration dependency resolution, immutable defaults delivery, garbage collection |
 | `indexercluster/` | Peer decommission, rebalance wait, scale-down |
 | `shc/` | Captain election, member join/drain |
 | `telapp/` | SOK telemetry collection and sending |
 | `upgrade/` | Rolling upgrade sequencing, version gating |
+
+`workflow/config` owns shared Kubernetes-backed configuration dependency
+resolution, including resolving a same-namespace NoahCluster and its credential
+Secret. It may validate connection inputs and construct an authenticated client
+without making a Noah network request.
+
+The resolved credential remains sensitive even when returned as a defensive
+copy. Callers may use it only for Noah client construction or Secret-backed
+workload provisioning; it must never enter ConfigMaps, status, events, logs, or
+command arguments.
+
+Noah HTTP calls, HMAC signing, response parsing, and protocol errors remain in
+`client/noah`.
+Indexer-specific membership and lifecycle decisions belong in
+`workflow/indexercluster`; SHC-specific lifecycle decisions belong in
+`workflow/shc`. Kubernetes object construction belongs in `resources`, while
+Kubernetes mutation, status, conditions, events, and requeue decisions remain
+with reconciliation.
 
 ### `resources/`
 
@@ -113,6 +134,7 @@ parsed result. No scheduling, no multi-step logic, no K8s client I/O.
 | Sub-package | Scope |
 |---|---|
 | `splunk/` | Splunk REST API (cluster, searchhead, indexer, license) |
+| `noah/` | Noah membership, bucket-map, and lifecycle API |
 | `storage/{aws,azure,gcp,minio}/` | Object storage SDKs |
 | `queue/` | Queue / pub-sub (future) |
 
@@ -130,8 +152,12 @@ package is deleted.
 
 | I'm writing... | Target package |
 |---|---|
+| Reconciliation policy shared by multiple CRDs | `reconcile/` |
 | A new CRD reconciler | `reconcile/<cr>/` |
 | A multi-step operation (upgrade, decommission, etc.) | `workflow/<domain>/` |
+| Noah configuration dependency resolution | `workflow/config/` |
+| An IndexerCluster- or SHC-specific Noah lifecycle decision | `workflow/indexercluster/` or `workflow/shc/` |
+| A Noah HTTP/HMAC operation or protocol type | `client/noah/` |
 | A Splunk configuration builder (role conf, queue stanzas) | `splunkconfig/` |
 | A K8s object builder (StatefulSet, Service, etc.) | `resources/` |
 | A Splunk REST API call | `client/splunk/` |

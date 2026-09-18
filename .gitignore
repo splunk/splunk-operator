@@ -147,3 +147,6 @@ AGENTS.override.md
 .env.local
 .env.*.local
 test/postgrescontrollers/*.log
+
+# Noah local development state (Kraken deployment ID, port-forward PID/log)
+.noah-local-dev/

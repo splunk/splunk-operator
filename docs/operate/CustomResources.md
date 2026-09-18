@@ -263,6 +263,28 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 | Key      | Type    | Description                                                  |
 | -------- | ------- | ------------------------------------------------------------ |
 | replicas | integer | The number of search heads cluster members (minimum of 3, which is the default) |
+| noahClusterRef | [LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#localobjectreference-v1-core) | Selects Noah coordination by name. The referenced `NoahCluster` must be in the same namespace. This field is mutually exclusive with `clusterManagerRef` and the deprecated `clusterMasterRef`. |
+
+To select Noah coordination instead of the classic architecture:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: example
+spec:
+  replicas: 3
+  noahClusterRef:
+    name: noah
+```
+
+The presence of `noahClusterRef` selects Noah mode. An empty reference or a
+configuration that also names a Cluster Manager is rejected. The controller
+validates the referenced `NoahCluster` and authentication Secret before
+creating workloads, then configures and reconciles the deployer and search-head
+members using the existing SearchHeadCluster lifecycle. Search heads and the
+deployer are not managed as Noah indexer peers. Noah support is intended for
+functional development and validation and is not yet production hardened.
 
 ### Search Head Deployer Resource
 
@@ -404,10 +426,40 @@ metadata:
   name: example
 spec:
   replicas: 3
-  clusterManagerRef: 
+  clusterManagerRef:
     name: example-cm
 ```
-Note:  `clusterManagerRef` is required field in case of IndexerCluster resource since it will be used to connect the IndexerCluster to ClusterManager resource.
+
+`clusterManagerRef` is required for a classic IndexerCluster. To select Noah
+coordination instead, omit the classic reference and set `noahClusterRef`:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+spec:
+  replicas: 3
+  noahClusterRef:
+    name: noah
+```
+
+`noahClusterRef` is a same-namespace reference and cannot be combined with
+`clusterManagerRef` or the deprecated `clusterMasterRef`. An empty reference is
+also rejected. The controller validates the referenced `NoahCluster` and
+authentication Secret before creating workloads. It coordinates initial peer
+registration, one-at-a-time scale-out and rollout, and reports Ready only when
+the expected Kubernetes Pods are ready and their current Noah peer
+incarnations are active and up.
+
+Noah IndexerCluster scale-in is development-only. It removes the highest
+ordinal, retains its PVC, unregisters the peer after the Pod disappears, and
+waits for an active bucket map that excludes the removed peer before continuing.
+It does not perform safe Noah decommissioning or prove bucket ownership transfer
+before reducing the StatefulSet. Pod rollout also has no explicit endpoint
+withdrawal step, and deleting the custom resource does not safely decommission
+its Noah peers. These lifecycle paths are not suitable for production workloads
+until those safety contracts are implemented.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
@@ -416,6 +468,7 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | Key        | Type    | Required | Description                                           |
 | ---------- | ------- | -------- | ----------------------------------------------------- |
 | replicas   | integer | Yes | The number of indexer peers. Must be at least 3 |
+| noahClusterRef | [LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#localobjectreference-v1-core) | No | Selects Noah coordination by name. The referenced `NoahCluster` must be in the same namespace. |
 | queueRef   | corev1.ObjectReference | No | Message queue reference. Set together with `objectStorageRef` to enable index-only mode |
 | objectStorageRef   | corev1.ObjectReference | No | Object storage reference. Set together with `queueRef` |
 
