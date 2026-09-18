@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,6 +46,7 @@ import (
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -1785,7 +1786,7 @@ func TestCopyFileToPod(t *testing.T) {
 	c.AddObject(pod)
 
 	fileOnOperator := "/tmp/"
-	fileOnStandalonePod := fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
+	fileOnStandalonePod := fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", resources.AppVolumeMntName)
 
 	podExecClient := splutil.GetPodExecClient(c, pod, pod.GetName())
 	// Test to detect invalid source file name
@@ -1820,7 +1821,7 @@ func TestCopyFileToPod(t *testing.T) {
 	}
 
 	// Test to detect relative destination file path
-	fileOnStandalonePod = fmt.Sprintf("%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
+	fileOnStandalonePod = fmt.Sprintf("%s/appframework/splunkFwdApps/COPYING", resources.AppVolumeMntName)
 	_, _, err = CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, podExecClient)
 	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for dest path") {
 		t.Errorf("Unable to reject relative destination path")
@@ -1842,7 +1843,7 @@ func TestCopyFileToPod(t *testing.T) {
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
 
 	// If Pod destination path is directory, source file name is used, and should not cause an error
-	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/", appVolumeMntName)
+	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/", resources.AppVolumeMntName)
 
 	// This should cause an error since stdOut != 0
 	_, _, err = CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
@@ -1855,7 +1856,7 @@ func TestCopyFileToPod(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to accept the directory as destination path")
 	}
-	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
+	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", resources.AppVolumeMntName)
 
 	// Proper source and destination paths should not return an error
 	_, _, err = CopyFileToPod(ctx, c, pod.GetNamespace(), fileOnOperator, fileOnStandalonePod, mockPodExecClient)
@@ -2004,7 +2005,7 @@ func TestCheckIfFileExistsOnPod(t *testing.T) {
 	// Add object
 	c.AddObject(pod)
 
-	filePathOnPod := fmt.Sprintf("/%s/appframework/splunkFwdApps/testApp.tgz", appVolumeMntName)
+	filePathOnPod := fmt.Sprintf("/%s/appframework/splunkFwdApps/testApp.tgz", resources.AppVolumeMntName)
 
 	podExecCommands := []string{
 		"test -f",
@@ -2944,49 +2945,49 @@ func TestGetApplicablePodNameForK8Probes(t *testing.T) {
 	podID := int32(0)
 
 	expectedPodName := "splunk-stack1-cluster-master-0"
-	returnedPodName := getApplicablePodNameForK8Probes(&cr, podID)
+	returnedPodName := splutil.GetApplicablePodNameForK8Probes(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
 	cr.TypeMeta.Kind = "Standalone"
 	expectedPodName = "splunk-stack1-standalone-0"
-	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	returnedPodName = splutil.GetApplicablePodNameForK8Probes(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
 	cr.TypeMeta.Kind = "IndexerCluster"
 	expectedPodName = "splunk-stack1-indexer-0"
-	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	returnedPodName = splutil.GetApplicablePodNameForK8Probes(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
 	cr.TypeMeta.Kind = "SearchHeadCluster"
 	expectedPodName = "splunk-stack1-search-head-0"
-	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	returnedPodName = splutil.GetApplicablePodNameForK8Probes(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
 	cr.TypeMeta.Kind = "MonitoringConsole"
 	expectedPodName = "splunk-stack1-monitoring-console-0"
-	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	returnedPodName = splutil.GetApplicablePodNameForK8Probes(&cr, podID)
 	if expectedPodName != returnedPodName {
-		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", "", getApplicablePodNameForK8Probes(&cr, 0))
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", "", splutil.GetApplicablePodNameForK8Probes(&cr, 0))
 	}
 
 	cr.TypeMeta.Kind = "LicenseMaster"
 	expectedPodName = "splunk-stack1-license-master-0"
-	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	returnedPodName = splutil.GetApplicablePodNameForK8Probes(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
 	cr.TypeMeta.Kind = "IngestorCluster"
 	expectedPodName = "splunk-stack1-ingestor-0"
-	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	returnedPodName = splutil.GetApplicablePodNameForK8Probes(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
@@ -3195,7 +3196,7 @@ func TestGetSearchHeadEnv(t *testing.T) {
 			Replicas: 2,
 		},
 	}
-	envVar := getSearchHeadEnv(&cr)
+	envVar := resources.GetSearchHeadEnv(&cr)
 	if envVar == nil {
 		t.Errorf("Expected a valid return value")
 	}

@@ -16,5 +16,8 @@
 /*
 Package shc implements multi-step search head cluster workflows: captain
 election, member join/drain, and rolling restart coordination.
+
+// TODO: Once all CRs have migrated from enterprise, revisit this boundary and
+// make the workflow CR-agnostic if needed.
 */
 package shc

@@ -21,19 +21,23 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
-type eventPublisher interface {
+// EventPublisher is the event surface used by upgrade validation.
+type EventPublisher interface {
 	Normal(context.Context, string, string)
 	Warning(context.Context, string, string)
 }
 
-type noopEventPublisher struct{}
+type noOpEventPublisher struct{}
 
-func (noopEventPublisher) Normal(context.Context, string, string)  {}
-func (noopEventPublisher) Warning(context.Context, string, string) {}
+func (noOpEventPublisher) Normal(context.Context, string, string)  {}
+func (noOpEventPublisher) Warning(context.Context, string, string) {}
 
-func getEventPublisher(ctx context.Context) eventPublisher {
-	if publisher, ok := ctx.Value(splcommon.EventPublisherKey).(eventPublisher); ok && publisher != nil {
+// GetEventPublisher reads the publisher supplied by the reconcile-facing
+// adapter. The no-op fallback preserves the previous behavior when validation
+// is called without an event recorder.
+var GetEventPublisher = func(ctx context.Context, _ splcommon.MetaObject) EventPublisher {
+	if publisher, ok := ctx.Value(splcommon.EventPublisherKey).(EventPublisher); ok && publisher != nil {
 		return publisher
 	}
-	return noopEventPublisher{}
+	return noOpEventPublisher{}
 }

@@ -1633,8 +1633,8 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	// create pods for license manager
 	lm.Status.TelAppInstalled = true
 	lm.Spec.Image = "splunk2"
-	createPods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
-	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
+	spltest.CreatePods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
+	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
 	// now the statefulset image in spec is updated to splunk2
 	ApplyLicenseManager(ctx, client, &lm)
 
@@ -1735,8 +1735,8 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	}
 
 	// create pods for license manager
-	createPods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
-	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
+	spltest.CreatePods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
+	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
 	lm.Status.TelAppInstalled = true
 	// create license manager statefulset
 	_, err = ApplyLicenseManager(ctx, client, lm)

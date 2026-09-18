@@ -31,6 +31,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+// AppVolumeMntName is the volume name for splunk containers to store apps temporarily.
+const AppVolumeMntName = "operator-staging"
+
 func prepareConfigMap(name, namespace string, data map[string]string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}, Data: data}
 }
@@ -51,6 +54,33 @@ func SetupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, image, imagePul
 		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("0.25"), corev1.ResourceMemory: resource.MustParse("128Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("512Mi")}},
 		SecurityContext: &corev1.SecurityContext{RunAsUser: &runAsUser, RunAsNonRoot: &runAsNonRoot, AllowPrivilegeEscalation: boolPtr(false), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}, Add: []corev1.Capability{"NET_BIND_SERVICE"}}, Privileged: &privileged, SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
 	})
+}
+
+// SetupAppsStagingVolume creates the necessary volume on the Splunk pods, for the operator to copy all app packages in the appSources configured and make them locally available to the Splunk instance.
+func SetupAppsStagingVolume(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, podTemplateSpec *corev1.PodTemplateSpec, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) {
+	// Create shared volume and init containers for App Framework
+	if len(appFrameworkConfig.AppSources) > 0 {
+		// Create volume to on Splunk container to contain apps copied from Splunk Operator pod
+		emptyVolumeSource := corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+
+		initVol := corev1.Volume{
+			Name:         AppVolumeMntName,
+			VolumeSource: emptyVolumeSource,
+		}
+
+		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, initVol)
+
+		// Add apps staging mount to Splunk container
+		initVolumeSpec := corev1.VolumeMount{
+			Name:      AppVolumeMntName,
+			MountPath: fmt.Sprintf("/%s/", AppVolumeMntName),
+		}
+
+		// This assumes the Splunk instance container is Containers[0], which I *believe* is valid
+		podTemplateSpec.Spec.Containers[0].VolumeMounts = append(podTemplateSpec.Spec.Containers[0].VolumeMounts, initVolumeSpec)
+	}
 }
 
 func boolPtr(value bool) *bool { return &value }
@@ -185,6 +215,30 @@ func GetSplunkService(_ context.Context, cr splcommon.MetaObject, spec *enterpri
 	}
 	service.SetOwnerReferences(append(service.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 	return service
+}
+
+// GetSearchHeadEnv returns environment variables used by SearchHeadCluster
+// search heads, including the deployer service URL.
+func GetSearchHeadEnv(cr *enterpriseApi.SearchHeadCluster) []corev1.EnvVar {
+	env := GetSearchHeadExtraEnv(cr, cr.Spec.Replicas)
+	env = append(env, corev1.EnvVar{
+		Name:  "SPLUNK_DEPLOYER_URL",
+		Value: splcommon.GetSplunkServiceName(splcommon.SplunkDeployer, cr.GetName(), false),
+	})
+	return env
+}
+
+// GetSearchHeadExtraEnv returns environment variables used by SearchHeadCluster deployers.
+func GetSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_SEARCH_HEAD_URL",
+			Value: splutil.GetSplunkStatefulsetUrls(cr.GetNamespace(), splcommon.SplunkSearchHead, cr.GetName(), replicas, false),
+		}, {
+			Name:  "SPLUNK_SEARCH_HEAD_CAPTAIN_URL",
+			Value: splutil.GetSplunkStatefulsetURL(cr.GetNamespace(), splcommon.SplunkSearchHead, cr.GetName(), 0, false),
+		},
+	}
 }
 
 // SetVolumeDefaults sets default modes for Secret and ConfigMap volumes.
