@@ -39,12 +39,13 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
 	dbcnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/cnpg"
-	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
+	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -207,6 +208,69 @@ func testClient(t *testing.T, scheme *runtime.Scheme, objs ...client.Object) cli
 		WithObjects(objs...)
 
 	return builder.Build()
+}
+
+func TestValidateAuthoritativeProviderUID(t *testing.T) {
+	scheme := testScheme(t)
+	provider := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: "dbs", UID: "replacement-uid"}}
+	c := testClient(t, scheme, provider)
+	authoritative := identitytypes.Environment{Identity: identitytypes.ObjectIdentity{
+		Name:      provider.Name,
+		Namespace: provider.Namespace,
+		UID:       "recorded-uid",
+	}}
+
+	err := validateAuthoritativeProviderUID(context.Background(), c, authoritative)
+
+	require.ErrorContains(t, err, "UID \"replacement-uid\" does not match resolved provider identity UID \"recorded-uid\"")
+}
+
+func TestPostgresDatabaseServiceRejectsStaleProviderUIDBeforeClosingDatabases(t *testing.T) {
+	scheme := testScheme(t)
+	ctx := context.Background()
+	closed := false
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "payments",
+			Namespace:  "dbs",
+			Generation: 1,
+			Finalizers: []string{postgresDatabaseFinalizerName},
+		},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "primary"},
+			Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "payments", AllowConnections: &closed}},
+		},
+		Status: platformv1alpha1.PostgresDatabaseStatus{
+			Phase:                strPtr(string(failedDBPhase)),
+			ObservedGeneration:   int64Ptr(1),
+			ReconcileFailureType: reconcileFailurePrivileges,
+			Conditions: []metav1.Condition{{
+				Type:               string(privilegesReady),
+				Status:             metav1.ConditionFalse,
+				Reason:             string(reasonPrivilegesTerminalFailure),
+				ObservedGeneration: 1,
+			}},
+		},
+	}
+	provider := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: postgresDB.Namespace, UID: "replacement-uid"}}
+	c := testClient(t, scheme, postgresDB, provider)
+	card := testResolvedClusterCard("primary", postgresDB.Namespace, provider.Name)
+	card.Authoritative.Identity.UID = "recorded-uid"
+	card.Managed[0].Identity.UID = "recorded-uid"
+	provisioner := &stubDatabaseProvisioner{}
+
+	_, err := PostgresDatabaseService(ctx, &ReconcileContext{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(1),
+		ClusterReader: clusterReadinessReaderFunc(func(context.Context, string, string) (dbclusterinfo.ResolvedClusterFacts, error) {
+			return dbclusterinfo.ResolvedClusterFacts{Cluster: card}, nil
+		}),
+		DatabaseProvisioner: provisioner,
+	}, postgresDB.DeepCopy(), nil)
+
+	require.ErrorContains(t, err, "UID \"replacement-uid\" does not match resolved provider identity UID \"recorded-uid\"")
+	assert.Empty(t, provisioner.desired)
 }
 
 func postgresDatabaseConflict(name string) error {
@@ -511,7 +575,7 @@ func TestPostgresDatabaseServiceTerminalOnMissingExternalSecret(t *testing.T) {
 		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
 		Status: platformv1alpha1.PostgresClusterStatus{
-			Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
+			Phase: strPtr(string(dbclusterinfo.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{
 				APIVersion: cnpgv1.SchemeGroupVersion.String(),
 				Kind:       "Cluster",
@@ -693,7 +757,7 @@ func TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransie
 		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: ns},
 		Status: platformv1alpha1.PostgresClusterStatus{
-			Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
+			Phase: strPtr(string(dbclusterinfo.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{
 				APIVersion: cnpgv1.SchemeGroupVersion.String(),
 				Kind:       "Cluster",
@@ -873,7 +937,7 @@ func TestRoleNameOverridesPropagateToDatabaseModels(t *testing.T) {
 	assert.Equal(t, []string{"tenant_owner", "tenant_rw"}, getDesiredRoles(postgresDB))
 	assert.Equal(t, "payments", databaseForRole(postgresDB, "tenant_owner"))
 	assert.Equal(t, "payments", databaseForRole(postgresDB, "tenant_rw"))
-	desired := desiredDatabasesForProvisioning(postgresDB, nil)
+	desired := desiredDatabasesForProvisioning(postgresDB, nil, "")
 	require.Len(t, desired, 1)
 	assert.Equal(t, "tenant_owner", desired[0].Owner)
 
@@ -1527,6 +1591,7 @@ func TestPersistCustomMetricsStatus(t *testing.T) {
 				tst.outcome,
 				tst.conditionStatus,
 				tst.phase,
+				"",
 			)
 
 			require.NoError(t, err)
@@ -1546,6 +1611,33 @@ func TestPersistCustomMetricsStatus(t *testing.T) {
 			assert.Equal(t, got.Generation, condition.ObservedGeneration)
 		})
 	}
+}
+
+func TestPersistCustomMetricsStatusKeepsEnvironmentScopedDatabaseRef(t *testing.T) {
+	scheme := testScheme(t)
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "database-owner", Namespace: "dbs", Generation: 3},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "primary"},
+			Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "orders"}},
+		},
+	}
+	c := testClient(t, scheme, postgresDB)
+	require.NoError(t, persistCustomMetricsStatus(
+		t.Context(),
+		&ReconcileContext{Client: c},
+		postgresDB,
+		dbmetrics.Outcome{Reason: "Pending", Message: "waiting"},
+		metav1.ConditionUnknown,
+		provisioningDBPhase,
+		"primary-green",
+	))
+
+	persisted := &platformv1alpha1.PostgresDatabase{}
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(postgresDB), persisted))
+	require.Len(t, persisted.Status.Databases, 1)
+	require.NotNil(t, persisted.Status.Databases[0].DatabaseRef)
+	assert.Equal(t, "database-owner-primary-green-orders", persisted.Status.Databases[0].DatabaseRef.Name)
 }
 
 func TestReconcileCustomMetricsGatePropagatesAcknowledgementRepositoryError(t *testing.T) {
@@ -1767,7 +1859,7 @@ func TestReconcileDatabaseProvisioningClassifiesExactObservation(t *testing.T) {
 				applyResult: dbtypes.ApplyResult{Expected: expected},
 				observation: tst.observation,
 			}
-			got, err := reconcileDatabaseProvisioning(t.Context(), provisioner, postgresDB, providerClusterName)
+			got, err := reconcileDatabaseProvisioning(t.Context(), provisioner, postgresDB, providerClusterName, "")
 			require.NoError(t, err)
 			assert.Equal(t, tst.wantNotReady, got.notReady)
 			assert.Equal(t, tst.wantReasons, got.reasons)
@@ -1791,7 +1883,7 @@ func TestDesiredDatabasesForProvisioningMapsOptionsAndEffectiveOwner(t *testing.
 		}}},
 	}
 
-	desired := desiredDatabasesForProvisioning(postgresDB, nil)
+	desired := desiredDatabasesForProvisioning(postgresDB, nil, "")
 
 	require.Len(t, desired, 1)
 	assert.Equal(t, "primary-payments", desired[0].ResourceName)
@@ -1829,7 +1921,7 @@ func TestDesiredDatabasesForProvisioningStagesOnlyNewClosedDatabases(t *testing.
 		}}},
 	}
 
-	desired := desiredDatabasesForProvisioning(postgresDB, map[string]bool{"established": true})
+	desired := desiredDatabasesForProvisioning(postgresDB, map[string]bool{"established": true}, "")
 
 	require.Len(t, desired, 2)
 	require.NotNil(t, desired[0].Mutable.AllowConnections)
@@ -1886,6 +1978,7 @@ func TestPersistDatabaseBootstrapCompletionMarksOnlyNewEntries(t *testing.T) {
 		t.Context(), c, persisted,
 		[]platformv1alpha1.DatabaseDefinition{postgresDB.Spec.Databases[1]},
 		map[string]types.UID{"newdb": "newdb-uid"},
+		"green",
 	))
 
 	require.Len(t, persisted.Status.Databases, 2)
@@ -1895,7 +1988,7 @@ func TestPersistDatabaseBootstrapCompletionMarksOnlyNewEntries(t *testing.T) {
 	assert.False(t, persisted.Status.Databases[1].Ready)
 	assert.Equal(t, reasonCNPGDatabaseApplying, persisted.Status.Databases[1].Message)
 	require.NotNil(t, persisted.Status.Databases[1].DatabaseRef)
-	assert.Equal(t, "primary-newdb", persisted.Status.Databases[1].DatabaseRef.Name)
+	assert.Equal(t, "primary-green-newdb", persisted.Status.Databases[1].DatabaseRef.Name)
 	assert.Equal(t, types.UID("newdb-uid"), persisted.Status.Databases[1].DatabaseUID)
 	require.NotNil(t, persisted.Status.ObservedGeneration)
 	assert.Equal(t, int64(3), *persisted.Status.ObservedGeneration)
@@ -2021,7 +2114,7 @@ func TestOrphanResourceHelpers(t *testing.T) {
 				Name:      "primary-payments",
 				Namespace: "dbs",
 				OwnerReferences: []metav1.OwnerReference{
-					{UID: postgresDB.UID, Name: postgresDB.Name},
+					{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)},
 					{UID: types.UID("other"), Name: "other"},
 				},
 			},
@@ -2035,6 +2128,88 @@ func TestOrphanResourceHelpers(t *testing.T) {
 		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
 		require.Len(t, updated.OwnerReferences, 1)
 		assert.Equal(t, types.UID("other"), updated.OwnerReferences[0].UID)
+	})
+
+	t.Run("orphanCNPGDatabases uses the active environment name", func(t *testing.T) {
+		db := &cnpgv1.Database{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "primary-green-payments",
+				Namespace:       "dbs",
+				OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)}},
+			},
+		}
+		c := testClient(t, scheme, db)
+
+		require.NoError(t, orphanCNPGDatabases(context.Background(), c, postgresDB, databases, "green"))
+		updated := &cnpgv1.Database{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
+		assert.Empty(t, updated.OwnerReferences)
+		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
+	})
+
+	t.Run("orphanCNPGDatabases checks the recorded and every known environment name", func(t *testing.T) {
+		scopedPostgresDB := postgresDB.DeepCopy()
+		scopedPostgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{
+			Name:        "payments",
+			DatabaseRef: &corev1.LocalObjectReference{Name: "primary-green-payments"},
+		}}
+		blue := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+			Name:            "primary-blue-payments",
+			Namespace:       "dbs",
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+		}}
+		green := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+			Name:            "primary-green-payments",
+			Namespace:       "dbs",
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+		}}
+		c := testClient(t, scheme, blue, green)
+
+		require.NoError(t, orphanCNPGDatabases(context.Background(), c, scopedPostgresDB, databases, "blue", "green"))
+		for _, name := range []string{blue.Name, green.Name} {
+			updated := &cnpgv1.Database{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: name, Namespace: "dbs"}, updated))
+			assert.Empty(t, updated.OwnerReferences)
+			assert.Equal(t, scopedPostgresDB.Name, updated.Annotations[annotationRetainedFrom])
+		}
+	})
+
+	t.Run("orphanCNPGDatabases leaves a foreign historical name untouched", func(t *testing.T) {
+		foreign := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary-green-payments",
+			Namespace: "dbs",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: ptr.To(true),
+			}},
+		}}
+		c := testClient(t, scheme, foreign)
+
+		require.NoError(t, orphanCNPGDatabases(context.Background(), c, postgresDB, databases, "green"))
+		updated := &cnpgv1.Database{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: foreign.Name, Namespace: foreign.Namespace}, updated))
+		assert.Equal(t, foreign.OwnerReferences, updated.OwnerReferences)
+		assert.NotContains(t, updated.Annotations, annotationRetainedFrom)
+	})
+
+	t.Run("orphanCNPGDatabases finds owned scoped resources without cluster status", func(t *testing.T) {
+		controller := true
+		db := &cnpgv1.Database{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-retired-payments",
+				Namespace: "dbs",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: postgresDB.Name, UID: postgresDB.UID, Controller: &controller,
+				}},
+			},
+			Spec: cnpgv1.DatabaseSpec{Name: "payments"},
+		}
+		c := testClient(t, scheme, db)
+
+		require.NoError(t, orphanCNPGDatabases(context.Background(), c, postgresDB, databases))
+		updated := &cnpgv1.Database{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
+		assert.Empty(t, updated.OwnerReferences)
+		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
 	})
 
 	t.Run("orphanConfigMaps skips not found", func(t *testing.T) {
@@ -2095,14 +2270,88 @@ func TestOrphanResourceHelpers(t *testing.T) {
 func TestDeleteResourceHelpers(t *testing.T) {
 	scheme := testScheme(t)
 	postgresDB := &platformv1alpha1.PostgresDatabase{
-		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", UID: "postgresdb-uid"},
 	}
 	databases := []platformv1alpha1.DatabaseDefinition{{Name: "payments"}}
 
 	t.Run("deleteCNPGDatabases removes existing object", func(t *testing.T) {
-		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs"}}
+		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+			Name: "primary-payments", Namespace: "dbs",
+			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)}},
+		}}
 		c := testClient(t, scheme, db)
 		require.NoError(t, deleteCNPGDatabases(context.Background(), c, postgresDB, databases))
+	})
+
+	t.Run("deleteCNPGDatabases uses the active environment name", func(t *testing.T) {
+		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+			Name: "primary-green-payments", Namespace: "dbs",
+			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)}},
+		}}
+		c := testClient(t, scheme, db)
+		require.NoError(t, deleteCNPGDatabases(context.Background(), c, postgresDB, databases, "green"))
+		err := c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, &cnpgv1.Database{})
+		assert.True(t, apierrors.IsNotFound(err))
+	})
+
+	t.Run("deleteCNPGDatabases checks the recorded and every known environment name", func(t *testing.T) {
+		scopedPostgresDB := postgresDB.DeepCopy()
+		scopedPostgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{
+			Name:        "payments",
+			DatabaseRef: &corev1.LocalObjectReference{Name: "primary-green-payments"},
+		}}
+		blue := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+			Name: "primary-blue-payments", Namespace: "dbs",
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+		}}
+		green := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+			Name: "primary-green-payments", Namespace: "dbs",
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+		}}
+		c := testClient(t, scheme, blue, green)
+
+		require.NoError(t, deleteCNPGDatabases(context.Background(), c, scopedPostgresDB, databases, "blue", "green"))
+		for _, name := range []string{blue.Name, green.Name} {
+			err := c.Get(context.Background(), types.NamespacedName{Name: name, Namespace: "dbs"}, &cnpgv1.Database{})
+			assert.True(t, apierrors.IsNotFound(err))
+		}
+	})
+
+	t.Run("deleteCNPGDatabases leaves a foreign historical name untouched", func(t *testing.T) {
+		foreign := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary-green-payments",
+			Namespace: "dbs",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: ptr.To(true),
+			}},
+		}}
+		c := testClient(t, scheme, foreign)
+
+		require.NoError(t, deleteCNPGDatabases(context.Background(), c, postgresDB, databases, "green"))
+		updated := &cnpgv1.Database{}
+		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: foreign.Name, Namespace: foreign.Namespace}, updated))
+		assert.Equal(t, foreign.OwnerReferences, updated.OwnerReferences)
+	})
+
+	t.Run("deleteCNPGDatabases finds owned scoped resources without cluster status", func(t *testing.T) {
+		owner := postgresDB.DeepCopy()
+		owner.UID = "postgresdb-uid"
+		controller := true
+		db := &cnpgv1.Database{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-retired-payments",
+				Namespace: "dbs",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: owner.Name, UID: owner.UID, Controller: &controller,
+				}},
+			},
+			Spec: cnpgv1.DatabaseSpec{Name: "payments"},
+		}
+		c := testClient(t, scheme, db)
+
+		require.NoError(t, deleteCNPGDatabases(context.Background(), c, owner, databases))
+		err := c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, &cnpgv1.Database{})
+		assert.True(t, apierrors.IsNotFound(err))
 	})
 
 	t.Run("deleteConfigMaps ignores missing objects", func(t *testing.T) {
@@ -2139,6 +2388,18 @@ func TestDeleteResourceHelpers(t *testing.T) {
 		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: external.Name, Namespace: external.Namespace}, survivor),
 			"external secret must survive PostgresDatabase deletion")
 	})
+}
+
+func TestDatabaseEnvironmentNamesUsesResolvedCard(t *testing.T) {
+	card := &identitytypes.ClusterCard{Managed: []identitytypes.Environment{
+		{Identity: identitytypes.ObjectIdentity{Name: "primary"}, Role: identitytypes.EnvironmentRoleRetained, Scope: identitytypes.NamingScopeConventional},
+		{Identity: identitytypes.ObjectIdentity{Name: "primary-green"}, Role: identitytypes.EnvironmentRoleAuthoritative, Scope: identitytypes.NamingScopeEnvironment},
+		{Identity: identitytypes.ObjectIdentity{Name: "primary-next"}, Role: identitytypes.EnvironmentRoleCandidate, Scope: identitytypes.NamingScopeEnvironment},
+	}}
+
+	names := databaseEnvironmentNames(card)
+
+	assert.Equal(t, []string{"", "primary-green", "primary-next"}, names)
 }
 
 func TestGeneratePassword(t *testing.T) {
@@ -3526,7 +3787,7 @@ func TestReconcileReplacesRecoveredMessageWhilePrivilegeBootstrapFails(t *testin
 		TypeMeta:   metav1.TypeMeta{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-cluster", Namespace: requestName.Namespace},
 		Status: platformv1alpha1.PostgresClusterStatus{
-			Phase:          strPtr(string(dbclusterreadiness.LifecycleReady)),
+			Phase:          strPtr(string(dbclusterinfo.LifecycleReady)),
 			ProvisionerRef: &corev1.ObjectReference{APIVersion: cnpgv1.SchemeGroupVersion.String(), Kind: "Cluster", Name: "primary-cnpg", Namespace: requestName.Namespace},
 			Resources: &platformv1alpha1.PostgresClusterResources{
 				SuperUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "primary-superuser"}, Key: secretKeyPassword},
@@ -3546,7 +3807,7 @@ func TestReconcileReplacesRecoveredMessageWhilePrivilegeBootstrapFails(t *testin
 	// CNPG database has recovered, but database readiness must remain false until
 	// privilege bootstrap has also completed.
 	cnpgDB := &cnpgv1.Database{
-		ObjectMeta: metav1.ObjectMeta{Name: cnpgDatabaseName(requestName.Name, "payments"), Namespace: requestName.Namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: cnpgDatabaseResourceName(postgresDB, "payments", "primary-cnpg"), Namespace: requestName.Namespace},
 		Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
 	}
 	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: requestName.Name, UID: postgresDB.UID, Controller: boolPtr(true), BlockOwnerDeletion: boolPtr(true)}
@@ -3599,6 +3860,30 @@ func TestNamingHelpers(t *testing.T) {
 			assert.Equal(t, tst.want, tst.got)
 		})
 	}
+}
+
+func TestCNPGDatabaseResourceNameScopesBlueGreenEnvironments(t *testing.T) {
+	postgresDB := &platformv1alpha1.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "postgres"},
+		Spec: platformv1alpha1.PostgresDatabaseSpec{
+			ClusterRef: corev1.LocalObjectReference{Name: "primary"},
+		},
+	}
+
+	assert.Equal(t, "orders-payments", cnpgDatabaseResourceName(postgresDB, "payments", ""))
+	assert.Equal(t, "orders-payments", cnpgDatabaseResourceName(postgresDB, "payments", "primary"))
+	assert.Equal(t, "orders-green-payments", cnpgDatabaseResourceName(postgresDB, "payments", "green"))
+}
+
+func TestCNPGDatabaseEnvironmentNameUsesExplicitScope(t *testing.T) {
+	assert.Empty(t, cnpgDatabaseEnvironmentName(identitytypes.Environment{
+		Identity: identitytypes.ObjectIdentity{Name: "orders-cnpg"},
+		Scope:    identitytypes.NamingScopeConventional,
+	}))
+	assert.Equal(t, "orders-green", cnpgDatabaseEnvironmentName(identitytypes.Environment{
+		Identity: identitytypes.ObjectIdentity{Name: "orders-green"},
+		Scope:    identitytypes.NamingScopeEnvironment,
+	}))
 }
 
 func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.T) {
@@ -3771,7 +4056,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 				Namespace: requestName.Namespace,
 			},
 			Status: platformv1alpha1.PostgresClusterStatus{
-				Phase: strPtr(string(dbclusterreadiness.LifecycleReady)),
+				Phase: strPtr(string(dbclusterinfo.LifecycleReady)),
 				ProvisionerRef: &corev1.ObjectReference{
 					APIVersion: cnpgv1.SchemeGroupVersion.String(),
 					Kind:       "Cluster",
@@ -3874,7 +4159,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			objects = append(objects,
 				&cnpgv1.Database{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      cnpgDatabaseName(requestName.Name, dbDef.Name),
+						Name:      cnpgDatabaseResourceName(postgresDB, dbDef.Name, "primary-cnpg"),
 						Namespace: requestName.Namespace,
 						UID:       providerDatabaseUID(dbDef.Name),
 					},
@@ -3957,7 +4242,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		assert.Equal(t, metav1.ConditionFalse, condition.Status)
 
 		providerDatabase := &cnpgv1.Database{}
-		providerKey := types.NamespacedName{Name: cnpgDatabaseName(requestName.Name, "payments"), Namespace: requestName.Namespace}
+		providerKey := types.NamespacedName{Name: cnpgDatabaseResourceName(updated, "payments", "primary-cnpg"), Namespace: requestName.Namespace}
 		require.NoError(t, c.Get(ctx, providerKey, providerDatabase))
 		require.NotNil(t, providerDatabase.Spec.AllowConnections)
 		assert.True(t, *providerDatabase.Spec.AllowConnections)
@@ -3995,7 +4280,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			statusDatabases: []platformv1alpha1.DatabaseInfo{{
 				Name:        "established",
 				Ready:       true,
-				DatabaseRef: &corev1.LocalObjectReference{Name: "primary-established"},
+				DatabaseRef: &corev1.LocalObjectReference{Name: "primary-primary-cnpg-established"},
 				Roles: []platformv1alpha1.DatabaseRoleInfo{
 					{Name: "established_admin", Exists: true},
 					{Name: "established_rw", Exists: true},
@@ -4022,14 +4307,14 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 
 		established := &cnpgv1.Database{}
 		require.NoError(t, c.Get(ctx, types.NamespacedName{
-			Name: cnpgDatabaseName(requestName.Name, "established"), Namespace: requestName.Namespace,
+			Name: cnpgDatabaseResourceName(updated, "established", "primary-cnpg"), Namespace: requestName.Namespace,
 		}, established))
 		require.NotNil(t, established.Spec.AllowConnections)
 		assert.False(t, *established.Spec.AllowConnections)
 
 		newDatabase := &cnpgv1.Database{}
 		require.NoError(t, c.Get(ctx, types.NamespacedName{
-			Name: cnpgDatabaseName(requestName.Name, "newdb"), Namespace: requestName.Namespace,
+			Name: cnpgDatabaseResourceName(updated, "newdb", "primary-cnpg"), Namespace: requestName.Namespace,
 		}, newDatabase))
 		require.NotNil(t, newDatabase.Spec.AllowConnections)
 		assert.True(t, *newDatabase.Spec.AllowConnections)
@@ -4516,7 +4801,7 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 			if tst.wantProviderAllowsConnections != nil {
 				providerDatabase := &cnpgv1.Database{}
 				require.NoError(t, c.Get(ctx, types.NamespacedName{
-					Name: cnpgDatabaseName(requestName.Name, tst.databases[0].Name), Namespace: requestName.Namespace,
+					Name: cnpgDatabaseResourceName(updated, tst.databases[0].Name, "primary-cnpg"), Namespace: requestName.Namespace,
 				}, providerDatabase))
 				require.NotNil(t, providerDatabase.Spec.AllowConnections)
 				assert.Equal(t, *tst.wantProviderAllowsConnections, *providerDatabase.Spec.AllowConnections)
@@ -4701,10 +4986,10 @@ func TestCleanupManagedRolesPublishesAbsentRolesAndWaitsForClusterDrop(t *testin
 			"app_rw":    {Name: "orders", UID: "db-uid"},
 		}}},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).WithObjects(postgresDB).Build()
 	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
-	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}})
+	err := cleanupManagedRoles(ctx, rc, postgresDB, cluster, deletionPlan{deleted: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}})
 	require.ErrorIs(t, err, errRoleCleanupPending)
 
 	updated := &platformv1alpha1.PostgresDatabase{}
@@ -4754,10 +5039,10 @@ func TestCleanupManagedRolesBlockedDeletionFlipsReadyToFalse(t *testing.T) {
 			"app_rw":    {Name: "orders", UID: "db-uid"},
 		}}},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).WithObjects(postgresDB).Build()
 	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
-	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}})
+	err := cleanupManagedRoles(ctx, rc, postgresDB, cluster, deletionPlan{deleted: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}})
 	require.ErrorIs(t, err, errRoleCleanupPending)
 
 	updated := &platformv1alpha1.PostgresDatabase{}
@@ -4776,10 +5061,10 @@ func TestCleanupManagedRolesReleasesWhenClusterNoLongerOwnsRoles(t *testing.T) {
 		Spec:       platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}, Databases: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}},
 	}
 	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"}, Status: platformv1alpha1.PostgresClusterStatus{ManagedRolesStatus: &platformv1alpha1.ManagedRolesStatus{}}}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).WithObjects(postgresDB, cluster).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).WithObjects(postgresDB).Build()
 	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
-	err := cleanupManagedRoles(ctx, rc, postgresDB, deletionPlan{deleted: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}})
+	err := cleanupManagedRoles(ctx, rc, postgresDB, cluster, deletionPlan{deleted: []platformv1alpha1.DatabaseDefinition{{Name: "app"}}})
 	require.NoError(t, err)
 
 	updated := &platformv1alpha1.PostgresDatabase{}

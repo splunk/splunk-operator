@@ -26,6 +26,7 @@ import (
 	dbmetricsadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter/custom_metrics"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
+	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/predicates"
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
@@ -56,6 +57,9 @@ type PostgresDatabaseReconciler struct {
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 	Metrics  ports.Recorder
+	// IdentityResolver is shared with the PostgresCluster reconciler so both
+	// controllers derive provider identity from one resolver contract.
+	IdentityResolver *identityadapter.IdentityResolver
 }
 
 const (
@@ -97,7 +101,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		Scheme:              r.Scheme,
 		Recorder:            r.Recorder,
 		Metrics:             r.Metrics,
-		ClusterReader:       dbadapter.NewClusterReader(r.Client),
+		ClusterReader:       dbadapter.NewClusterReader(r.Client, r.IdentityResolver),
 		DatabaseProvisioner: dbcnpgadapter.NewDatabaseProvisioner(r.Client, r.Scheme),
 		NewCustomMetricsAcknowledgementRepo: func(status *platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository {
 			return dbmetricsadapter.NewAcknowledgementRepository(status)
@@ -212,6 +216,12 @@ func postgresClusterForDatabasePredicator() predicate.Predicate {
 				return true
 			}
 			if !equality.Semantic.DeepEqual(oldCluster.Status.CustomMetricsStatus, newCluster.Status.CustomMetricsStatus) {
+				return true
+			}
+			if !equality.Semantic.DeepEqual(oldCluster.Status.ProvisionerRef, newCluster.Status.ProvisionerRef) {
+				return true
+			}
+			if !equality.Semantic.DeepEqual(oldCluster.Status.PostgresMajorUpgradeStatus, newCluster.Status.PostgresMajorUpgradeStatus) {
 				return true
 			}
 			return roUnavailable(oldCluster.Status.ReadyInstances) != roUnavailable(newCluster.Status.ReadyInstances)

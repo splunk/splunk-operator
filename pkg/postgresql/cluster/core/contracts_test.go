@@ -58,7 +58,7 @@ func TestValidateComponentOrder(t *testing.T) {
 			stub("cluster", []contractKey{contractSecret}, []contractKey{contractCNPGCluster}),
 			stub("roles", []contractKey{contractCNPGCluster, contractSecret}, nil),
 		}
-		assert.NoError(t, validateComponentOrder(components))
+		assert.NoError(t, validateComponentOrder(components, nil))
 	})
 
 	t.Run("no dependencies passes", func(t *testing.T) {
@@ -67,7 +67,25 @@ func TestValidateComponentOrder(t *testing.T) {
 			stub("a", nil, nil),
 			stub("b", nil, nil),
 		}
-		assert.NoError(t, validateComponentOrder(components))
+		assert.NoError(t, validateComponentOrder(components, nil))
+	})
+
+	t.Run("root-provided requirement passes", func(t *testing.T) {
+		t.Parallel()
+		components := []component{
+			stub("configmap", []contractKey{contractEnvironmentNamer}, nil),
+		}
+		assert.NoError(t, validateComponentOrder(components, []contractKey{contractEnvironmentNamer}))
+	})
+
+	t.Run("root-provided requirement must be declared", func(t *testing.T) {
+		t.Parallel()
+		components := []component{
+			stub("configmap", []contractKey{contractEnvironmentNamer}, nil),
+		}
+		err := validateComponentOrder(components, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), string(contractEnvironmentNamer))
 	})
 
 	t.Run("requires before provides fails", func(t *testing.T) {
@@ -76,7 +94,7 @@ func TestValidateComponentOrder(t *testing.T) {
 			stub("cluster", []contractKey{contractSecret}, []contractKey{contractCNPGCluster}),
 			stub("secret", nil, []contractKey{contractSecret}),
 		}
-		err := validateComponentOrder(components)
+		err := validateComponentOrder(components, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), string(contractSecret))
 		assert.Contains(t, err.Error(), "cluster")
@@ -87,7 +105,7 @@ func TestValidateComponentOrder(t *testing.T) {
 		components := []component{
 			stub("roles", []contractKey{contractCNPGCluster}, nil),
 		}
-		err := validateComponentOrder(components)
+		err := validateComponentOrder(components, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), string(contractCNPGCluster))
 	})
@@ -103,16 +121,17 @@ func TestValidateComponentOrder(t *testing.T) {
 		}
 		mergedConfig := &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}, CNPG: &platformv1alpha1.CNPGConfig{}}
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		contracts := &reconcileContracts{}
+		contracts := &reconcileContracts{Authority: conventionalClusterCard(cluster), EnvironmentNamer: testEnvironmentNamer}
 		components := []component{
 			newSecretModel(c, scheme, noopEventEmitter{}, nil, cluster, "pg1-secret", contracts),
+			newObjectStoreModel(c, scheme, noopEventEmitter{}, nil, cluster, mergedConfig, contracts),
 			newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts),
 			newManagedRolesModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts, nil),
 			newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts),
 			newBackupModel(noopBackupBackend{}, noopEventEmitter{}, nil, cluster, mergedConfig, contracts),
 			newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts),
 		}
-		assert.NoError(t, validateComponentOrder(components))
+		assert.NoError(t, validateComponentOrder(components, []contractKey{contractAuthority, contractEnvironmentNamer}))
 	})
 }
 
@@ -155,6 +174,30 @@ func TestCheckContractsFromRequirements(t *testing.T) {
 		{
 			name:      "CNPGCluster required but nil",
 			requires:  []contractKey{contractCNPGCluster},
+			contracts: &reconcileContracts{},
+			want:      false,
+		},
+		{
+			name:      "EnvironmentNamer required and present",
+			requires:  []contractKey{contractEnvironmentNamer},
+			contracts: &reconcileContracts{EnvironmentNamer: testEnvironmentNamer},
+			want:      true,
+		},
+		{
+			name:      "EnvironmentNamer required but nil",
+			requires:  []contractKey{contractEnvironmentNamer},
+			contracts: &reconcileContracts{},
+			want:      false,
+		},
+		{
+			name:      "Authority required and present",
+			requires:  []contractKey{contractAuthority},
+			contracts: &reconcileContracts{Authority: conventionalClusterCard(&platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}})},
+			want:      true,
+		},
+		{
+			name:      "Authority required but absent",
+			requires:  []contractKey{contractAuthority},
 			contracts: &reconcileContracts{},
 			want:      false,
 		},

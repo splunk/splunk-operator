@@ -131,14 +131,14 @@ func (b *backupModel) activeBackupProviders() []backupProvider {
 	if b.mergedConfig.CNPG.Backup.VolumeSnapshot != nil {
 		providers = append(providers, backupProvider{
 			kind:   providerVolumeSnapshot,
-			sbName: scheduledBackupName(b.cluster.Name),
+			sbName: scheduledBackupName(b.contracts.EnvironmentNamer.EnvironmentName(b.cluster.Name, b.contracts.CNPGCluster.Name)),
 			method: backuptypes.BackupMethodVolumeSnapshot,
 		})
 	}
 	if b.mergedConfig.CNPG.Backup.BarmanObjectStore != nil {
 		providers = append(providers, backupProvider{
 			kind:       providerObjectStore,
-			sbName:     objectStoreBackupName(b.cluster.Name),
+			sbName:     objectStoreBackupName(b.contracts.EnvironmentNamer.EnvironmentName(b.cluster.Name, b.contracts.CNPGCluster.Name)),
 			method:     backuptypes.BackupMethodPlugin,
 			pluginName: barmanCloudPluginName,
 		})
@@ -146,13 +146,21 @@ func (b *backupModel) activeBackupProviders() []backupProvider {
 	return providers
 }
 
-// allScheduledBackupNames lists every ScheduledBackup name the model may own, so the reconcile
-// can garbage-collect the ones whose provider is no longer configured.
+// allScheduledBackupNames lists current and retained-environment ScheduledBackups for cleanup.
 func (b *backupModel) allScheduledBackupNames() []string {
-	return []string{
-		scheduledBackupName(b.cluster.Name),
-		objectStoreBackupName(b.cluster.Name),
+	environments := append([]string{b.contracts.EnvironmentNamer.EnvironmentName(b.cluster.Name, b.contracts.CNPGCluster.Name)}, b.contracts.EnvironmentNamer.ManagedEnvironmentNames(b.contracts.Authority)...)
+	names := make([]string, 0, len(environments)*2)
+	seen := make(map[string]struct{}, len(environments)*2)
+	for _, environment := range environments {
+		for _, name := range []string{scheduledBackupName(environment), objectStoreBackupName(environment)} {
+			if _, found := seen[name]; found {
+				continue
+			}
+			seen[name] = struct{}{}
+			names = append(names, name)
+		}
 	}
+	return names
 }
 
 // backupConfigured reports whether the class defines a backup provider
@@ -164,8 +172,10 @@ func (b *backupModel) backupConfigured() bool {
 			b.mergedConfig.CNPG.Backup.BarmanObjectStore != nil)
 }
 
-func (b *backupModel) Name() string            { return pgcConstants.ComponentBackup }
-func (b *backupModel) Requires() []contractKey { return []contractKey{contractCNPGCluster} }
+func (b *backupModel) Name() string { return pgcConstants.ComponentBackup }
+func (b *backupModel) Requires() []contractKey {
+	return []contractKey{contractCNPGCluster, contractAuthority, contractEnvironmentNamer}
+}
 func (b *backupModel) Provides() []contractKey { return nil }
 
 func (b *backupModel) CheckContracts() error {

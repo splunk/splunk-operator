@@ -13,13 +13,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package clusterreadiness
 
-import "context"
+// Package identity defines database-core identity dependencies.
+package identity
 
-// ClusterReader reads the resolved cluster facts required by the database
-// readiness gate. Implementations belong to adapters; this port is owned by
-// its database consumer.
-type ClusterReader interface {
-	Read(context.Context, string, string) (ResolvedClusterFacts, error)
+import identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
+
+// ClusterCardResolver resolves the provider identities for the referenced
+// PostgresCluster.
+type ClusterCardResolver interface {
+	ResolveCluster(identitytypes.ClusterInput) (identitytypes.ClusterCard, error)
 }

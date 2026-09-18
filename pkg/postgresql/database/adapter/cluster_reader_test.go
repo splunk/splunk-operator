@@ -21,8 +21,9 @@ import (
 	"testing"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
+	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
+	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -65,11 +66,11 @@ func TestClusterReaderTranslatesFacts(t *testing.T) {
 
 	facts, err := NewClusterReader(fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()).Read(t.Context(), "dbs", "primary")
 	require.NoError(t, err)
-	assert.Equal(t, dbclusterreadiness.LifecycleReady, facts.Lifecycle)
-	require.NotNil(t, facts.Provider)
-	assert.Equal(t, dbclusterreadiness.ProviderCNPG, facts.Provider.Kind)
-	assert.Equal(t, "primary-cnpg", facts.Provider.Name)
-	assert.Equal(t, dbclusterreadiness.RecoveryInProgress, facts.Recovery)
+	assert.Equal(t, dbclusterinfo.LifecycleReady, facts.Lifecycle)
+	require.NotNil(t, facts.Cluster)
+	assert.Equal(t, "primary-cnpg", facts.Cluster.Authoritative.Identity.Name)
+	assert.Equal(t, "dbs", facts.Cluster.Authoritative.Identity.Namespace)
+	assert.Equal(t, dbclusterinfo.RecoveryInProgress, facts.Recovery)
 	require.NotNil(t, facts.ManagedRolesStatus)
 	assert.Equal(t, []string{"orders_admin"}, facts.ManagedRolesStatus.Reconciled)
 	require.NotNil(t, facts.ConnectionPoolerStatus)
@@ -80,6 +81,68 @@ func TestClusterReaderTranslatesFacts(t *testing.T) {
 	assert.Equal(t, "orders", facts.CustomMetricsStatus.DatabaseContributions[0].DatabaseName)
 }
 
+func TestClusterReaderMarksBlueGreenEnvironmentScopedClusterCard(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	ready := "Ready"
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Phase:          &ready,
+			ProvisionerRef: &corev1.ObjectReference{Name: "primary-green", Namespace: "dbs"},
+			PostgresMajorUpgradeStatus: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+				BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+					Green: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "primary-green"}},
+				},
+			}},
+		},
+	}
+
+	facts, err := NewClusterReader(fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()).Read(t.Context(), "dbs", "primary")
+	require.NoError(t, err)
+	require.NotNil(t, facts.Cluster)
+	assert.Equal(t, "primary-green", facts.Cluster.Authoritative.Identity.Name)
+	assert.Equal(t, identitytypes.NamingScopeEnvironment, facts.Cluster.Authoritative.Scope)
+}
+
+func TestClusterReaderMarksUnrecordedNonconventionalProviderScoped(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	ready := "Ready"
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Phase:          &ready,
+			ProvisionerRef: &corev1.ObjectReference{Name: "alternate-provider", Namespace: "dbs"},
+		},
+	}
+
+	facts, err := NewClusterReader(fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()).Read(t.Context(), "dbs", "primary")
+	require.NoError(t, err)
+	require.NotNil(t, facts.Cluster)
+	assert.Equal(t, "alternate-provider", facts.Cluster.Authoritative.Identity.Name)
+	assert.Equal(t, identitytypes.NamingScopeEnvironment, facts.Cluster.Authoritative.Scope)
+}
+
+func TestClusterReaderDefaultsProviderNamespace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	ready := "Ready"
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Phase:          &ready,
+			ProvisionerRef: &corev1.ObjectReference{Name: "primary-cnpg"},
+		},
+	}
+
+	facts, err := NewClusterReader(fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()).Read(t.Context(), "dbs", "primary")
+
+	require.NoError(t, err)
+	require.NotNil(t, facts.Cluster)
+	assert.Equal(t, "dbs", facts.Cluster.Authoritative.Identity.Namespace)
+}
+
 func TestClusterReaderClassifiesRecoveryConditions(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
@@ -87,32 +150,32 @@ func TestClusterReaderClassifiesRecoveryConditions(t *testing.T) {
 	tests := []struct {
 		name       string
 		conditions []metav1.Condition
-		want       dbclusterreadiness.Recovery
+		want       dbclusterinfo.Recovery
 	}{
 		{
 			name: "no cluster ready condition is not recovery",
-			want: dbclusterreadiness.RecoveryNone,
+			want: dbclusterinfo.RecoveryNone,
 		},
 		{
 			name: "unrelated cluster ready reason is not recovery",
 			conditions: []metav1.Condition{{
 				Type: pgcnpg.ClusterReadyCondition, Reason: "CNPGClusterProvisioning",
 			}},
-			want: dbclusterreadiness.RecoveryNone,
+			want: dbclusterinfo.RecoveryNone,
 		},
 		{
 			name: "recovery is in progress",
 			conditions: []metav1.Condition{{
 				Type: pgcnpg.ClusterReadyCondition, Reason: pgcnpg.ClusterReadyReasonRecovery,
 			}},
-			want: dbclusterreadiness.RecoveryInProgress,
+			want: dbclusterinfo.RecoveryInProgress,
 		},
 		{
 			name: "failover is in progress",
 			conditions: []metav1.Condition{{
 				Type: pgcnpg.ClusterReadyCondition, Reason: pgcnpg.ClusterReadyReasonFailingOver,
 			}},
-			want: dbclusterreadiness.RecoveryInProgress,
+			want: dbclusterinfo.RecoveryInProgress,
 		},
 	}
 
@@ -136,7 +199,7 @@ func TestClusterReaderMapsNotFoundAndPreservesTransientErrors(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		_, err := NewClusterReader(fake.NewClientBuilder().WithScheme(scheme).Build()).Read(t.Context(), "dbs", "missing")
-		assert.ErrorIs(t, err, dbclusterreadiness.ErrClusterNotFound)
+		assert.ErrorIs(t, err, dbclusterinfo.ErrClusterNotFound)
 		assert.True(t, apierrors.IsNotFound(err))
 	})
 
