@@ -279,30 +279,9 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			return enterpriseApi.PhaseError, err
 		}
 
-		retainPVCs := false
-		if policy, ok := mgr.(splcommon.StatefulSetScaleDownPVCPolicy); ok {
-			retainPVCs = policy.RetainPVCsOnScaleDown()
-		}
-		if !retainPVCs {
-			// delete PVCs used by the pod so that a future scale up will have clean state
-			for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
-				namespacedName := types.NamespacedName{
-					Namespace: vol.ObjectMeta.Namespace,
-					Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
-				}
-				var pvc corev1.PersistentVolumeClaim
-				err := c.Get(ctx, namespacedName, &pvc)
-				if err != nil {
-					scopedLog.ErrorContext(ctx, "unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name, "error", err)
-					return enterpriseApi.PhaseError, err
-				}
-				scopedLog.InfoContext(ctx, "deleting PVC", "pvcName", pvc.ObjectMeta.Name)
-				err = c.Delete(ctx, &pvc)
-				if err != nil {
-					scopedLog.ErrorContext(ctx, "unable to delete PVC", "pvcName", pvc.ObjectMeta.Name, "error", err)
-					return enterpriseApi.PhaseError, err
-				}
-			}
+		// delete PVCs used by the pod so that a future scale up will have clean state
+		if err := DeleteStatefulSetPodPVCs(ctx, c, statefulSet, podName); err != nil {
+			return enterpriseApi.PhaseError, err
 		}
 
 		return enterpriseApi.PhaseScalingDown, nil
@@ -428,6 +407,29 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	scopedLog.InfoContext(ctx, "statefulset - Phase Ready")
 
 	return enterpriseApi.PhaseReady, nil
+}
+
+// DeleteStatefulSetPodPVCs idempotently deletes PVCs owned by one StatefulSet Pod.
+func DeleteStatefulSetPodPVCs(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, podName string) error {
+	scopedLog := logging.FromContext(ctx).With("func", "DeleteStatefulSetPodPVCs", "podName", podName)
+	for _, volume := range statefulSet.Spec.VolumeClaimTemplates {
+		name := fmt.Sprintf("%s-%s", volume.Name, podName)
+		pvc := &corev1.PersistentVolumeClaim{}
+		err := c.Get(ctx, types.NamespacedName{Namespace: statefulSet.Namespace, Name: name}, pvc)
+		if k8serrors.IsNotFound(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("get PVC %s for deletion: %w", name, err)
+		}
+
+		scopedLog.InfoContext(ctx, "deleting PVC", "pvcName", name)
+		if err := c.Delete(ctx, pvc); err != nil && !k8serrors.IsNotFound(err) {
+			return fmt.Errorf("delete PVC %s: %w", name, err)
+		}
+	}
+
+	return nil
 }
 
 // ScaleOutStatefulSet applies the next safe scale-out target selected by
