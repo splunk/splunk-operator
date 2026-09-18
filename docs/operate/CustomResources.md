@@ -455,15 +455,19 @@ incarnations are active and up.
 Noah IndexerCluster scale-in removes the highest ordinal one at a time through
 normal Kubernetes graceful Pod termination. Before reducing the StatefulSet,
 the controller durably records the exact Pod incarnation being removed. It
-retains the PVC, unregisters the peer after the Pod disappears, and waits for
-an active bucket map that excludes the removed peer before continuing.
+deletes that ordinal's PVC using the classic IndexerCluster policy, unregisters
+the peer after the Pod disappears, and waits for an active bucket map that
+excludes the removed peer before continuing.
 
 Scale-in does not currently request Noah cache warming before termination. This
 can increase temporary cache loss, repair work, or stack impact compared with a
 future cache-warm scale-in, but it does not bypass Splunk's normal SIGTERM
 shutdown. Forced Pod deletion or expiry of the termination grace period is not
-equivalent to graceful scale-in. Deleting the custom resource also does not yet
-run this per-peer lifecycle before removing the workload.
+equivalent to graceful scale-in. Deleting the custom resource removes the
+workload through normal Kubernetes graceful termination without waiting for
+Noah peer or bucket-map cleanup. PVCs follow the classic deletion policy: they
+are retained unless the optional `enterprise.splunk.com/delete-pvc` finalizer
+is present.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),

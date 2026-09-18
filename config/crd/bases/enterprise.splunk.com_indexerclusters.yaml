@@ -9363,8 +9363,8 @@ spec:
                     description: Kind identifies the desired-state change being executed.
                     enum:
                     - Rollout
-                    - ScaleOut
                     - ScaleIn
+                    - ScaleOut
                     type: string
                   lastTransitionTime:
                     description: LastTransitionTime records the last durable checkpoint

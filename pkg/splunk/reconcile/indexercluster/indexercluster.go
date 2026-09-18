@@ -63,7 +63,7 @@ func apply(ctx context.Context, client splcommon.ControllerClient, namespacedNam
 		return reconcile.Result{}, fmt.Errorf("could not load indexer cluster data: %w", err)
 	}
 
-	if instance.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true" {
+	if instance.GetDeletionTimestamp() == nil && instance.GetAnnotations()[enterpriseApi.IndexerClusterPausedAnnotation] == "true" {
 		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
 		})

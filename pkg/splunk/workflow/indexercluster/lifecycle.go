@@ -127,9 +127,11 @@ func AdvanceLifecycle(current *enterpriseApi.IndexerClusterLifecycleStatus, obse
 	if err := validateLifecycle(lifecycle); err != nil {
 		return failLifecycle(lifecycle, observed.Now, err)
 	}
+
 	if observed.StatefulSetUID != "" && observed.StatefulSetUID != lifecycle.Target.StatefulSetUID {
 		return replanLifecycle()
 	}
+
 	if lifecycle.Checkpoint == enterpriseApi.IndexerClusterLifecycleFailed || lifecycle.Checkpoint == enterpriseApi.IndexerClusterLifecycleCompleted {
 		return LifecycleTransition{Lifecycle: lifecycle}
 	}
@@ -341,16 +343,16 @@ func validateLifecycle(lifecycle *enterpriseApi.IndexerClusterLifecycleStatus) e
 	}
 
 	switch lifecycle.Kind {
-	case enterpriseApi.IndexerClusterLifecycleScaleOut:
-		if err := validateScaleOutTarget(lifecycle.Target); err != nil {
-			return err
-		}
 	case enterpriseApi.IndexerClusterLifecycleRollout:
 		if err := validateRolloutTarget(lifecycle); err != nil {
 			return err
 		}
 	case enterpriseApi.IndexerClusterLifecycleScaleIn:
 		if err := validateScaleInTarget(lifecycle.Target); err != nil {
+			return err
+		}
+	case enterpriseApi.IndexerClusterLifecycleScaleOut:
+		if err := validateScaleOutTarget(lifecycle.Target); err != nil {
 			return err
 		}
 	default:
@@ -376,37 +378,13 @@ func validateLifecycle(lifecycle *enterpriseApi.IndexerClusterLifecycleStatus) e
 
 func lifecycleAction(kind enterpriseApi.IndexerClusterLifecycleKind) enterpriseApi.IndexerClusterLifecycleActionType {
 	switch kind {
-	case enterpriseApi.IndexerClusterLifecycleScaleOut, enterpriseApi.IndexerClusterLifecycleScaleIn:
-		return enterpriseApi.IndexerClusterLifecycleSetReplicas
 	case enterpriseApi.IndexerClusterLifecycleRollout:
 		return enterpriseApi.IndexerClusterLifecycleDeletePod
+	case enterpriseApi.IndexerClusterLifecycleScaleIn, enterpriseApi.IndexerClusterLifecycleScaleOut:
+		return enterpriseApi.IndexerClusterLifecycleSetReplicas
 	default:
 		return ""
 	}
-}
-
-func validateScaleInTarget(target enterpriseApi.IndexerClusterLifecycleTarget) error {
-	if target.SourceReplicas <= 0 || target.TargetReplicas != target.SourceReplicas-1 {
-		return fmt.Errorf(
-			"%w: scale-in target must reduce replicas by one from %d to %d",
-			ErrInvalidLifecycle,
-			target.SourceReplicas,
-			target.TargetReplicas,
-		)
-	}
-	if len(target.Peers) != 1 {
-		return fmt.Errorf("%w: scale-in must target exactly one peer", ErrInvalidLifecycle)
-	}
-
-	peer := target.Peers[0]
-	if peer.Ordinal != target.TargetReplicas || peer.PeerID == "" || peer.PodName == "" || peer.SourcePodUID == "" {
-		return fmt.Errorf("%w: scale-in peer has an incomplete or non-highest identity", ErrInvalidLifecycle)
-	}
-	if peer.TargetPodUID != "" {
-		return fmt.Errorf("%w: scale-in peer must not have a target Pod UID", ErrInvalidLifecycle)
-	}
-
-	return nil
 }
 
 func validateRolloutTarget(lifecycle *enterpriseApi.IndexerClusterLifecycleStatus) error {
@@ -438,6 +416,30 @@ func validateRolloutTarget(lifecycle *enterpriseApi.IndexerClusterLifecycleStatu
 	}
 	if peer.TargetPodUID != "" && peer.TargetPodUID == peer.SourcePodUID {
 		return fmt.Errorf("%w: rollout source and target Pod UIDs must differ", ErrInvalidLifecycle)
+	}
+
+	return nil
+}
+
+func validateScaleInTarget(target enterpriseApi.IndexerClusterLifecycleTarget) error {
+	if target.SourceReplicas <= 0 || target.TargetReplicas != target.SourceReplicas-1 {
+		return fmt.Errorf(
+			"%w: scale-in target must reduce replicas by one from %d to %d",
+			ErrInvalidLifecycle,
+			target.SourceReplicas,
+			target.TargetReplicas,
+		)
+	}
+	if len(target.Peers) != 1 {
+		return fmt.Errorf("%w: scale-in must target exactly one peer", ErrInvalidLifecycle)
+	}
+
+	peer := target.Peers[0]
+	if peer.Ordinal != target.TargetReplicas || peer.PeerID == "" || peer.PodName == "" || peer.SourcePodUID == "" {
+		return fmt.Errorf("%w: scale-in peer has an incomplete or non-highest identity", ErrInvalidLifecycle)
+	}
+	if peer.TargetPodUID != "" {
+		return fmt.Errorf("%w: scale-in peer must not have a target Pod UID", ErrInvalidLifecycle)
 	}
 
 	return nil

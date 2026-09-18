@@ -72,14 +72,6 @@ func (mgr *scaleDownFinishingPodManager) FinishScaleDown(_ context.Context, ordi
 	return mgr.complete, mgr.err
 }
 
-type retainingScaleDownPodManager struct {
-	DefaultStatefulSetPodManager
-}
-
-func (*retainingScaleDownPodManager) RetainPVCsOnScaleDown() bool {
-	return true
-}
-
 // deferringPodManager defers recycling any ordinal listed in deferOrdinals,
 // so tests can verify UpdateStatefulSetPods tries a lower ordinal instead of
 // stopping at the first stale one it finds.
@@ -337,46 +329,31 @@ func TestUpdateStatefulSetPodsUsesOptionalScaleDownFinisher(t *testing.T) {
 	}
 }
 
-func TestUpdateStatefulSetPodsHonorsScaleDownPVCPolicy(t *testing.T) {
-	for _, test := range []struct {
-		name       string
-		manager    splcommon.StatefulSetPodManager
-		wantRetain bool
-	}{
-		{name: "default deletes PVC", manager: &DefaultStatefulSetPodManager{}},
-		{name: "opt in retains PVC", manager: &retainingScaleDownPodManager{}, wantRetain: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			replicas := int32(2)
-			statefulSet := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
-				Spec: appsv1.StatefulSetSpec{
-					Replicas: &replicas,
-					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
-						ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"},
-					}},
-				},
-				Status: appsv1.StatefulSetStatus{ReadyReplicas: replicas},
-			}
-			pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
-				Name: "pvc-etc-splunk-stack1-1", Namespace: "test",
-			}}
-			mockClient := spltest.NewMockClient()
-			mockClient.AddObjects([]client.Object{statefulSet, pvc})
-
-			phase, err := UpdateStatefulSetPods(t.Context(), mockClient, statefulSet.DeepCopy(), test.manager, 1)
-			require.NoError(t, err)
-			assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
-
-			storedPVC := &corev1.PersistentVolumeClaim{}
-			err = mockClient.Get(t.Context(), types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, storedPVC)
-			if test.wantRetain {
-				require.NoError(t, err)
-			} else {
-				require.True(t, k8serrors.IsNotFound(err), "expected PVC deletion, got %v", err)
-			}
-		})
+func TestUpdateStatefulSetPodsDeletesScaledDownPVC(t *testing.T) {
+	replicas := int32(2)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
+				ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"},
+			}},
+		},
+		Status: appsv1.StatefulSetStatus{ReadyReplicas: replicas},
 	}
+	pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
+		Name: "pvc-etc-splunk-stack1-1", Namespace: "test",
+	}}
+	mockClient := spltest.NewMockClient()
+	mockClient.AddObjects([]client.Object{statefulSet, pvc})
+
+	phase, err := UpdateStatefulSetPods(t.Context(), mockClient, statefulSet.DeepCopy(), &DefaultStatefulSetPodManager{}, 1)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+
+	err = mockClient.Get(t.Context(), types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, &corev1.PersistentVolumeClaim{})
+	require.True(t, k8serrors.IsNotFound(err), "expected PVC deletion, got %v", err)
+	require.NoError(t, DeleteStatefulSetPodPVCs(t.Context(), mockClient, statefulSet, "splunk-stack1-1"))
 }
 
 // A manager implementing StatefulSetRecycleOrderer can defer the

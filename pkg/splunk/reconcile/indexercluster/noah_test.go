@@ -1465,6 +1465,24 @@ func TestApplyNoahIndexerClusterReportsMissingDependency(t *testing.T) {
 	assert.Contains(t, condition.Message, "missing-noah")
 }
 
+func TestApplyNoahIndexerClusterDeletionDoesNotRequireNoahDependency(t *testing.T) {
+	fixture := newNoahIndexerScaleDownTestFixture(t)
+	noahCluster := &enterpriseApi.NoahCluster{}
+	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{
+		Name: "noah", Namespace: fixture.cr.Namespace,
+	}, noahCluster))
+	require.NoError(t, fixture.client.Delete(t.Context(), noahCluster))
+	now := metav1.Now()
+	fixture.cr.DeletionTimestamp = &now
+
+	result, err := applyNoahIndexerCluster(t.Context(), fixture.client, fixture.cr)
+	require.NoError(t, err)
+	assert.Zero(t, result.RequeueAfter)
+	assert.Equal(t, enterpriseApi.PhaseTerminating, fixture.cr.Status.Phase)
+	err = fixture.client.Get(t.Context(), fixture.statefulSetKey, &appsv1.StatefulSet{})
+	assert.True(t, k8serrors.IsNotFound(err))
+}
+
 func TestApplyNoahIndexerClusterPreservesPeerStatusOnUnknownDependencyReadFailure(t *testing.T) {
 	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
 	client := spltest.NewMockClient()
@@ -1556,9 +1574,10 @@ func TestNoahIndexerPodManagerScalesDownOneOrdinalAndWaitsForNoahCleanup(t *test
 
 	assert.Zero(t, fixture.unregisterCount())
 	assertPodExists(t, fixture.client, "splunk-main-indexer-2", fixture.cr.Namespace)
-	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{
+	err := fixture.client.Get(t.Context(), types.NamespacedName{
 		Name: "pvc-etc-splunk-main-indexer-2", Namespace: fixture.cr.Namespace,
-	}, &corev1.PersistentVolumeClaim{}))
+	}, &corev1.PersistentVolumeClaim{})
+	assert.True(t, k8serrors.IsNotFound(err), "Noah scale-in should use the classic PVC deletion policy")
 
 	phase, err := fixture.update(t)
 	require.NoError(t, err)
@@ -1573,10 +1592,6 @@ func TestNoahIndexerPodManagerScalesDownOneOrdinalAndWaitsForNoahCleanup(t *test
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
 	assert.Equal(t, 1, fixture.unregisterCount())
-	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{
-		Name: "pvc-etc-splunk-main-indexer-2", Namespace: fixture.cr.Namespace,
-	}, &corev1.PersistentVolumeClaim{}))
-
 	fixture.setPeerStatus(2, noahclient.PeerStatusDown)
 	phase, err = fixture.update(t)
 	require.NoError(t, err)
@@ -1602,9 +1617,10 @@ func TestNoahIndexerPodManagerScalesDownOneOrdinalAndWaitsForNoahCleanup(t *test
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseReady, phase)
 	assert.Equal(t, 5, fixture.unregisterCount())
-	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{
+	err = fixture.client.Get(t.Context(), types.NamespacedName{
 		Name: "pvc-etc-splunk-main-indexer-1", Namespace: fixture.cr.Namespace,
-	}, &corev1.PersistentVolumeClaim{}))
+	}, &corev1.PersistentVolumeClaim{})
+	assert.True(t, k8serrors.IsNotFound(err), "Noah scale-in should delete each removed ordinal's PVC")
 }
 
 func TestNoahIndexerPodManagerBlocksScaleDownUntilPeersAreReady(t *testing.T) {
@@ -1727,6 +1743,43 @@ func TestNoahIndexerPodManagerResumesScaleDownCleanupFromLifecycle(t *testing.T)
 	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
 	assert.Equal(t, int32(2), *statefulSet.Spec.Replicas, "bucket-map inclusion must block the next ordinal")
 	assert.Equal(t, 2, fixture.unregisterCount())
+}
+
+func TestNoahIndexerPodManagerRetriesScaleDownPVCCleanup(t *testing.T) {
+	fixture := newNoahIndexerScaleDownTestFixture(t)
+	fixture.cr.Spec.Replicas = 2
+
+	phase, err := fixture.update(t)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+	fixture.persistAndReloadCR(t)
+
+	fixture.client.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = assert.AnError
+	phase, err = fixture.update(t)
+	require.ErrorContains(t, err, "delete PVC")
+	assert.Equal(t, enterpriseApi.PhaseError, phase)
+	delete(fixture.client.InduceErrorKind, splcommon.MockClientInduceErrorDelete)
+
+	statefulSet := &appsv1.StatefulSet{}
+	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
+	assert.Equal(t, int32(2), *statefulSet.Spec.Replicas)
+	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{
+		Name: "pvc-etc-splunk-main-indexer-2", Namespace: fixture.cr.Namespace,
+	}, &corev1.PersistentVolumeClaim{}))
+
+	fixture.finishPodRemoval(t, 2, 2)
+	phase, err = fixture.update(t)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+	fixture.persistAndReloadCR(t)
+
+	phase, err = fixture.update(t)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+	err = fixture.client.Get(t.Context(), types.NamespacedName{
+		Name: "pvc-etc-splunk-main-indexer-2", Namespace: fixture.cr.Namespace,
+	}, &corev1.PersistentVolumeClaim{})
+	assert.True(t, k8serrors.IsNotFound(err), "expected retried PVC deletion, got %v", err)
 }
 
 func TestNoahIndexerPodManagerFinishesPendingScaleDownBeforeChangedScaleOut(t *testing.T) {
