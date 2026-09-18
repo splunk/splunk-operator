@@ -22,13 +22,11 @@ import (
 	"sort"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // getCurrentImage gets the image of the statefulset, returns the image, and error if something goes wrong.
@@ -47,21 +45,6 @@ func getCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr splco
 		return statefulSet.Spec.Template.Spec.Containers[0].Image, nil
 	}
 	return "", fmt.Errorf("unable to get image from statefulset of type %s", instanceType.ToString())
-}
-
-// getSearchHeadClusterList is the legacy helper used by the upgrade workflow.
-func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []runtime.ListOption) (enterpriseApi.SearchHeadClusterList, error) {
-	logger := logging.FromContext(ctx).With("func", "getSearchHeadClusterList", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	objectList := enterpriseApi.SearchHeadClusterList{}
-
-	err := c.List(context.TODO(), &objectList, listOpts...)
-	if err != nil {
-		logger.ErrorContext(ctx, "SearchHeadCluster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
-		return objectList, err
-	}
-
-	return objectList, nil
 }
 
 func getIndexerClusterSortedSiteList(ctx context.Context, c splcommon.ControllerClient, ref corev1.ObjectReference, indexerList enterpriseApi.IndexerClusterList) (enterpriseApi.IndexerClusterList, error) {

@@ -359,7 +359,7 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 		}
 	}
 
-	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+	return ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
 // ensureIngestorDefaults resolves the IngestorCluster's SmartBus queue/object-storage
@@ -431,7 +431,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// Setup App framework staging volume for apps
-	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	resources.SetupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, nil
 }

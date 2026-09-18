@@ -181,6 +181,95 @@ func GetLivenessDriverFilePath() string {
 
 func GetLivenessDriverFileDir() string { return livenessDriverLocation }
 
+const (
+	livenessProbeLevelDefault = iota
+	livenessProbeLevelOne
+	livenessProbeLevelName = "K8_OPERATOR_LIVENESS_LEVEL"
+)
+
+// SetProbeLevelOnSplunkPod sets K8_OPERATOR_LIVENESS_LEVEL in the
+// k8_liveness_driver.sh script on a Splunk pod.
+func SetProbeLevelOnSplunkPod(ctx context.Context, podExecClient PodExecClientImpl, probeLevel int) error {
+	return setProbeLevelOnSplunkPod(ctx, podExecClient, probeLevel, "Command", true)
+}
+
+// SetIndexerProbeLevelOnSplunkPod preserves the IndexerCluster probe logging
+// used by the former IndexerCluster-specific helper.
+func SetIndexerProbeLevelOnSplunkPod(ctx context.Context, podExecClient PodExecClientImpl, probeLevel int) error {
+	return setProbeLevelOnSplunkPod(ctx, podExecClient, probeLevel, "command", false)
+}
+
+func setProbeLevelOnSplunkPod(ctx context.Context, podExecClient PodExecClientImpl, probeLevel int, commandLogKey string, logSuccess bool) error {
+	var err error
+	var stdOut string
+	var command string
+
+	scopedLog := logging.FromContext(ctx).With("func", "setProbeLevelOnSplunkPod", "podName", podExecClient.GetTargetPodName(), "probeLevel", probeLevel)
+	switch probeLevel {
+	case livenessProbeLevelDefault:
+		command = fmt.Sprintf("[[ -f %s ]] && > %s", GetLivenessDriverFilePath(), GetLivenessDriverFilePath())
+
+	case livenessProbeLevelOne:
+		command = fmt.Sprintf("mkdir -p %s; echo \"export %s=%d\" > %s", GetLivenessDriverFileDir(), livenessProbeLevelName, probeLevel, GetLivenessDriverFilePath())
+
+	default:
+		return fmt.Errorf("invalid probe Level %d", probeLevel)
+	}
+	streamOptions := NewStreamOptionsObject(command)
+	podExecClient.SetTargetPodName(ctx, podExecClient.GetTargetPodName())
+	ResetStringReader(streamOptions, command)
+	stdOut, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+	if err != nil {
+		err = fmt.Errorf("unable to run command %s. stdout: %s, err: %s", command, stdOut, err)
+		scopedLog.ErrorContext(ctx, "failed to set probe level", commandLogKey, command, "error", err)
+		return err
+	}
+
+	if logSuccess {
+		scopedLog.InfoContext(ctx, "successfully set probe level on pod", commandLogKey, command)
+	}
+	return err
+}
+
+// SetProbeLevelOnCRPods sets K8_OPERATOR_LIVENESS_LEVEL in the
+// k8_liveness_driver.sh script on all pods of a CR.
+func SetProbeLevelOnCRPods(ctx context.Context, cr splcommon.MetaObject, replicas int32, podExecClient PodExecClientImpl, probeLevel int) error {
+	var err error
+	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
+		podName := GetApplicablePodNameForK8Probes(cr, int32(replicaIndex))
+		podExecClient.SetTargetPodName(ctx, podName)
+		err = SetProbeLevelOnSplunkPod(ctx, podExecClient, probeLevel)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// GetApplicablePodNameForK8Probes gets the pod name relevant for the CR under work.
+func GetApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) string {
+	var podType string
+	switch cr.GetObjectKind().GroupVersionKind().Kind {
+	case "Standalone":
+		podType = "standalone"
+	case "LicenseMaster":
+		podType = "license-master"
+	case "SearchHeadCluster":
+		podType = "search-head"
+	case "IndexerCluster":
+		podType = "indexer"
+	case "ClusterMaster":
+		podType = "cluster-master"
+	case "ClusterManager":
+		podType = "cluster-manager"
+	case "MonitoringConsole":
+		podType = "monitoring-console"
+	case "IngestorCluster":
+		podType = "ingestor"
+	}
+	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
+}
+
 // kubernetes logger used by splunk.reconcile package
 //var log = logf.Log.WithName("splunk.reconcile")
 

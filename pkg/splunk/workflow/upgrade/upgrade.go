@@ -13,6 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/*
+Package upgrade implements the shared upgrade-path validation workflow.
+
+// TODO: Once all CRs have migrated from enterprise, revisit this boundary and
+// make the workflow CR-agnostic if needed.
+*/
 package upgrade
 
 import (
@@ -50,7 +56,7 @@ func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr
 	logger := logging.FromContext(ctx).With("func", "UpgradePathValidation", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
-	eventPublisher := getEventPublisher(ctx)
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	kind := cr.GroupVersionKind().Kind
 	logger.InfoContext(ctx, "kind is set to", "kind", kind)
@@ -246,7 +252,7 @@ SearchHeadCluster:
 		opts := []runtime.ListOption{
 			runtime.InNamespace(cr.GetNamespace()),
 		}
-		searchHeadList, err := getSearchHeadClusterList(ctx, c, cr, opts)
+		searchHeadList, err := k8sops.GetSearchHeadClusterList(ctx, c, cr, opts)
 		if err != nil {
 			if err.Error() == "NotFound" {
 				goto MonitoringConsole
