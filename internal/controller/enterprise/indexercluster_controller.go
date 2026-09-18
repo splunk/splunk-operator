@@ -24,6 +24,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	indexercluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/indexercluster"
 	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
@@ -78,6 +79,55 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return indexercluster.Apply(ctx, r.Client, req.NamespacedName, r.Recorder)
 }
 
+// mapNoahClusterToIndexerClusters maps a NoahCluster event to the
+// same-namespace IndexerClusters that reference it.
+func (r *IndexerClusterReconciler) mapNoahClusterToIndexerClusters(ctx context.Context, obj client.Object) []reconcile.Request {
+	noahCluster, ok := obj.(*enterpriseApi.NoahCluster)
+	if !ok {
+		return nil
+	}
+
+	var indexerClusters enterpriseApi.IndexerClusterList
+	if err := r.Client.List(ctx, &indexerClusters, client.InNamespace(noahCluster.Namespace)); err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map NoahCluster to IndexerClusters", "error", err)
+		return nil
+	}
+	return noahReferenceRequests(indexerClusters.Items, map[string]struct{}{noahCluster.Name: {}}, indexerClusterNoahReference)
+}
+
+// mapNoahAuthSecretToIndexerClusters follows Secret -> NoahCluster ->
+// IndexerCluster references within one namespace.
+func (r *IndexerClusterReconciler) mapNoahAuthSecretToIndexerClusters(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+
+	matchingNoahClusters, err := noahClusterNamesForSecret(ctx, r.Client, secret)
+	if err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map Noah auth Secret to IndexerClusters", "error", err)
+		return nil
+	}
+	if len(matchingNoahClusters) == 0 {
+		return nil
+	}
+
+	var indexerClusters enterpriseApi.IndexerClusterList
+	if err := r.Client.List(ctx, &indexerClusters, client.InNamespace(secret.Namespace)); err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map Noah auth Secret to IndexerClusters", "error", err)
+		return nil
+	}
+	return noahReferenceRequests(indexerClusters.Items, matchingNoahClusters, indexerClusterNoahReference)
+}
+
+func indexerClusterNoahReference(indexerCluster *enterpriseApi.IndexerCluster) (types.NamespacedName, string) {
+	key := types.NamespacedName{Name: indexerCluster.Name, Namespace: indexerCluster.Namespace}
+	if indexerCluster.Spec.NoahClusterRef == nil {
+		return key, ""
+	}
+	return key, indexerCluster.Spec.NoahClusterRef.Name
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	bldr := ctrl.NewControllerManagedBy(mgr).
@@ -105,6 +155,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IndexerCluster{},
 			)).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.mapNoahAuthSecretToIndexerClusters),
+		).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				secret, ok := obj.(*corev1.Secret)
@@ -200,6 +253,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IndexerCluster{},
 			)).
+		Watches(&enterpriseApi.NoahCluster{},
+			handler.EnqueueRequestsFromMapFunc(r.mapNoahClusterToIndexerClusters),
+		).
 		Watches(&enterpriseApiV3.ClusterMaster{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),

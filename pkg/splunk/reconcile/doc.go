@@ -14,9 +14,10 @@
 // limitations under the License.
 
 /*
-Package reconcile contains per-CR orchestration sub-packages. Each sub-package
-owns the thin reconcile loop for a single Custom Resource type: it reads the CR,
-builds Kubernetes objects via resources/, applies them via k8sops/, delegates
+Package reconcile contains reconciliation policy shared by multiple Custom
+Resource types and per-CR orchestration sub-packages. Each sub-package owns the
+thin reconcile loop for a single Custom Resource type: it reads the CR, builds
+Kubernetes objects via resources/, applies them via k8sops/, delegates
 multi-step workflows to workflow/<domain>/, and writes status.
 
 Sub-packages must never import each other. Allowed imports from pkg/splunk/:

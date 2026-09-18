@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,6 +41,63 @@ import (
 // errTestPodManager is used for UT negative testing
 type errTestPodManager struct {
 	c splcommon.ControllerClient
+}
+
+type scaleOutPlannerFunc func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error)
+
+func (planner scaleOutPlannerFunc) NextReplicas(ctx context.Context, appliedReplicas, requestedReplicas int32) (splcommon.ScaleOutPlan, error) {
+	return planner(ctx, appliedReplicas, requestedReplicas)
+}
+
+type scaleOutPlanningPodManager struct {
+	DefaultStatefulSetPodManager
+	plan  splcommon.ScaleOutPlan
+	calls int
+}
+
+func (mgr *scaleOutPlanningPodManager) NextReplicas(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+	mgr.calls++
+	return mgr.plan, nil
+}
+
+type scaleDownFinishingPodManager struct {
+	DefaultStatefulSetPodManager
+	complete bool
+	err      error
+	ordinal  int32
+}
+
+func (mgr *scaleDownFinishingPodManager) FinishScaleDown(_ context.Context, ordinal int32) (bool, error) {
+	mgr.ordinal = ordinal
+	return mgr.complete, mgr.err
+}
+
+type retainingScaleDownPodManager struct {
+	DefaultStatefulSetPodManager
+}
+
+func (*retainingScaleDownPodManager) RetainPVCsOnScaleDown() bool {
+	return true
+}
+
+// deferringPodManager defers recycling any ordinal listed in deferOrdinals,
+// so tests can verify UpdateStatefulSetPods tries a lower ordinal instead of
+// stopping at the first stale one it finds.
+type deferringPodManager struct {
+	DefaultStatefulSetPodManager
+	deferOrdinals      map[int32]bool
+	calls              []int32
+	finishUpgradeCalls int
+}
+
+func (mgr *deferringPodManager) DeferRecycle(ctx context.Context, n int32, updateRevision string) (bool, error) {
+	mgr.calls = append(mgr.calls, n)
+	return mgr.deferOrdinals[n], nil
+}
+
+func (mgr *deferringPodManager) FinishUpgrade(ctx context.Context, n int32) error {
+	mgr.finishUpgradeCalls++
+	return mgr.DefaultStatefulSetPodManager.FinishUpgrade(ctx, n)
 }
 
 // Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
@@ -143,6 +202,327 @@ func updateStatefulSetPodsTester(t *testing.T, mgr splcommon.StatefulSetPodManag
 	c.AddObjects(initObjects)
 	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
 	return phase, err
+}
+
+func TestScaleOutStatefulSet(t *testing.T) {
+	tests := []struct {
+		name      string
+		applied   int32
+		requested int32
+		planner   splcommon.StatefulSetScaleOutPlanner
+		want      splcommon.ScaleOutPlan
+	}{
+		{
+			name:      "defaults to unrestricted scale-out",
+			applied:   1,
+			requested: 3,
+			want:      splcommon.ScaleOutPlan{TargetReplicas: 3},
+		},
+		{
+			name:      "uses planner-selected next replica",
+			applied:   1,
+			requested: 3,
+			planner: scaleOutPlannerFunc(func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+				return splcommon.ScaleOutPlan{TargetReplicas: 2}, nil
+			}),
+			want: splcommon.ScaleOutPlan{TargetReplicas: 2},
+		},
+		{
+			name:      "allows planner to wait",
+			applied:   1,
+			requested: 3,
+			planner: scaleOutPlannerFunc(func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+				return splcommon.ScaleOutPlan{TargetReplicas: 1}, nil
+			}),
+			want: splcommon.ScaleOutPlan{TargetReplicas: 1},
+		},
+		{
+			name:      "reports completion at the requested count",
+			applied:   3,
+			requested: 3,
+			planner: scaleOutPlannerFunc(func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+				return splcommon.ScaleOutPlan{Complete: true, TargetReplicas: 3}, nil
+			}),
+			want: splcommon.ScaleOutPlan{Complete: true, TargetReplicas: 3},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			statefulSet := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+				Spec:       appsv1.StatefulSetSpec{Replicas: &test.applied},
+			}
+			client := spltest.NewMockClient()
+			require.NoError(t, client.Create(t.Context(), statefulSet))
+
+			plan, err := ScaleOutStatefulSet(t.Context(), client, statefulSet, test.planner, test.requested)
+			require.NoError(t, err)
+			assert.Equal(t, test.want, plan)
+
+			stored := &appsv1.StatefulSet{}
+			require.NoError(t, client.Get(t.Context(), types.NamespacedName{Name: statefulSet.Name, Namespace: statefulSet.Namespace}, stored))
+			require.NotNil(t, stored.Spec.Replicas)
+			assert.Equal(t, test.want.TargetReplicas, *stored.Spec.Replicas)
+		})
+	}
+}
+
+func TestScaleOutStatefulSetRejectsUnsafePlan(t *testing.T) {
+	applied := int32(2)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &applied},
+	}
+	client := spltest.NewMockClient()
+	require.NoError(t, client.Create(t.Context(), statefulSet))
+	planner := scaleOutPlannerFunc(func(context.Context, int32, int32) (splcommon.ScaleOutPlan, error) {
+		return splcommon.ScaleOutPlan{TargetReplicas: 4}, nil
+	})
+
+	_, err := ScaleOutStatefulSet(t.Context(), client, statefulSet, planner, 3)
+	require.ErrorContains(t, err, "exceeds requested replicas")
+}
+
+func TestUpdateStatefulSetPodsUsesOptionalScaleOutPlanner(t *testing.T) {
+	applied := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &applied},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: applied},
+	}
+	mgr := &scaleOutPlanningPodManager{plan: splcommon.ScaleOutPlan{TargetReplicas: 2}}
+
+	phase, err := updateStatefulSetPodsTester(t, mgr, statefulSet, 3, statefulSet)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingUp, phase)
+	assert.Equal(t, 1, mgr.calls)
+	assert.Equal(t, int32(2), *statefulSet.Spec.Replicas)
+}
+
+func TestUpdateStatefulSetPodsUsesOptionalScaleDownFinisher(t *testing.T) {
+	replicas := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: replicas},
+	}
+
+	tests := []struct {
+		name      string
+		complete  bool
+		err       error
+		wantPhase enterpriseApi.Phase
+	}{
+		{name: "waits for completion", wantPhase: enterpriseApi.PhaseScalingDown},
+		{name: "propagates error", err: errors.New("finish failed"), wantPhase: enterpriseApi.PhaseError},
+		{name: "continues after completion", complete: true, wantPhase: enterpriseApi.PhaseScalingUp},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mgr := &scaleDownFinishingPodManager{complete: test.complete, err: test.err}
+			client := spltest.NewMockClient()
+			client.AddObject(statefulSet.DeepCopy())
+
+			phase, err := UpdateStatefulSetPods(t.Context(), client, statefulSet.DeepCopy(), mgr, 2)
+			if test.err != nil {
+				require.ErrorIs(t, err, test.err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, test.wantPhase, phase)
+			assert.Equal(t, int32(1), mgr.ordinal)
+		})
+	}
+}
+
+func TestUpdateStatefulSetPodsHonorsScaleDownPVCPolicy(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		manager    splcommon.StatefulSetPodManager
+		wantRetain bool
+	}{
+		{name: "default deletes PVC", manager: &DefaultStatefulSetPodManager{}},
+		{name: "opt in retains PVC", manager: &retainingScaleDownPodManager{}, wantRetain: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			replicas := int32(2)
+			statefulSet := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: &replicas,
+					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
+						ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"},
+					}},
+				},
+				Status: appsv1.StatefulSetStatus{ReadyReplicas: replicas},
+			}
+			pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
+				Name: "pvc-etc-splunk-stack1-1", Namespace: "test",
+			}}
+			mockClient := spltest.NewMockClient()
+			mockClient.AddObjects([]client.Object{statefulSet, pvc})
+
+			phase, err := UpdateStatefulSetPods(t.Context(), mockClient, statefulSet.DeepCopy(), test.manager, 1)
+			require.NoError(t, err)
+			assert.Equal(t, enterpriseApi.PhaseScalingDown, phase)
+
+			storedPVC := &corev1.PersistentVolumeClaim{}
+			err = mockClient.Get(t.Context(), types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, storedPVC)
+			if test.wantRetain {
+				require.NoError(t, err)
+			} else {
+				require.True(t, k8serrors.IsNotFound(err), "expected PVC deletion, got %v", err)
+			}
+		})
+	}
+}
+
+// A manager implementing StatefulSetRecycleOrderer can defer the
+// highest-ordinal stale pod and have the scan continue on to try a lower
+// ordinal instead of stopping — this is what lets a manager recycle every
+// other member before a specific one (e.g. SHC's captain).
+func TestUpdateStatefulSetPodsUsesOptionalRecycleOrderer(t *testing.T) {
+	replicas := int32(2)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: replicas, UpdateRevision: "v1"},
+	}
+	runningReady := func(name string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "test",
+				Labels:    map[string]string{"controller-revision-hash": "v0"},
+			},
+			Status: corev1.PodStatus{
+				Phase:             corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
+			},
+		}
+	}
+	pod0 := runningReady("splunk-stack1-0")
+	pod1 := runningReady("splunk-stack1-1")
+
+	mgr := &deferringPodManager{deferOrdinals: map[int32]bool{1: true}}
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, pod0, pod1})
+
+	phase, err := UpdateStatefulSetPods(context.TODO(), c, statefulSet, mgr, 2)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseUpdating, phase)
+
+	// Ordinal 1 (deferred) must have been asked about before the scan moved
+	// on to ordinal 0 — same descending order as always, just skippable.
+	assert.Equal(t, []int32{1, 0}, mgr.calls)
+
+	// Ordinal 0 must have actually been recycled (deleted); ordinal 1 must
+	// not have been touched at all.
+	require.Len(t, c.Calls["Delete"], 1)
+	require.NotNil(t, c.Calls["Delete"][0].Obj)
+	assert.Equal(t, "splunk-stack1-0", c.Calls["Delete"][0].Obj.GetName())
+}
+
+// Ordinal 0 is the last one this loop ever checks. Deferring it must not be
+// mistaken for "every ordinal resolved" — falling through from a deferred,
+// unresolved ordinal 0 would incorrectly report Ready/finalize the upgrade
+// even though that ordinal was skipped, not actually recycled.
+func TestUpdateStatefulSetPodsDoesNotReportReadyWhenLastOrdinalIsDeferred(t *testing.T) {
+	replicas := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: replicas, UpdateRevision: "v1"},
+	}
+	pod0 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels:    map[string]string{"controller-revision-hash": "v0"},
+		},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
+		},
+	}
+
+	mgr := &deferringPodManager{deferOrdinals: map[int32]bool{0: true}}
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, pod0})
+
+	phase, err := UpdateStatefulSetPods(context.TODO(), c, statefulSet, mgr, 1)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseUpdating, phase)
+	assert.Empty(t, c.Calls["Delete"], "a deferred ordinal must not be deleted")
+}
+
+// A deferred ordinal need not be the last one the loop checks to trigger a
+// premature Ready: it's enough for every ordinal *below* the deferred one to
+// already be on the current revision. The deferred (e.g. captain) ordinal
+// itself is still stale — it was only skipped, never actually recycled — so
+// the phase must stay Updating and FinishUpgrade must not run.
+func TestUpdateStatefulSetPodsDoesNotFinishUpgradeWhenDeferredOrdinalHasLowerCurrentPods(t *testing.T) {
+	replicas := int32(2)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: replicas, UpdateRevision: "v1"},
+	}
+	readyPod := func(name, revision string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "test",
+				Labels:    map[string]string{"controller-revision-hash": revision},
+			},
+			Status: corev1.PodStatus{
+				Phase:             corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
+			},
+		}
+	}
+	// Ordinal 1 (e.g. the captain): stale, but deferred.
+	pod1 := readyPod("splunk-stack1-1", "v0")
+	// Ordinal 0: already on the current revision per a fresh live read, even
+	// though DeferRecycle's own (cached-status-based) view of "others" is
+	// what caused ordinal 1 to be deferred in the first place.
+	pod0 := readyPod("splunk-stack1-0", "v1")
+
+	mgr := &deferringPodManager{deferOrdinals: map[int32]bool{1: true}}
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, pod0, pod1})
+
+	phase, err := UpdateStatefulSetPods(context.TODO(), c, statefulSet, mgr, 2)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseUpdating, phase)
+	assert.Empty(t, c.Calls["Delete"], "the stale, deferred ordinal must not be deleted this pass")
+	assert.Zero(t, mgr.finishUpgradeCalls, "FinishUpgrade must not run while a deferred ordinal remains unresolved")
+}
+
+func TestUpdateStatefulSetPodsSkipsScaleOutPlannerAtDesiredReplicas(t *testing.T) {
+	replicas := int32(1)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status:     appsv1.StatefulSetStatus{ReadyReplicas: replicas},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1-0", Namespace: "test"},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Ready: true,
+			}},
+		},
+	}
+	mgr := &scaleOutPlanningPodManager{plan: splcommon.ScaleOutPlan{TargetReplicas: replicas}}
+
+	phase, err := updateStatefulSetPodsTester(t, mgr, statefulSet, replicas, statefulSet, pod)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseReady, phase)
+	assert.Zero(t, mgr.calls)
 }
 
 func TestUpdateStatefulSetPods(t *testing.T) {

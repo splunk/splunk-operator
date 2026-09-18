@@ -211,8 +211,12 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
+	indexerCluster, isIndexerCluster := cr.(*enterpriseApi.IndexerCluster)
+	isNoahIndexerService := instanceType == SplunkIndexer && isIndexerCluster && indexerCluster.Spec.NoahEnabled()
 	if instanceType == SplunkIndexer {
-		if len(spec.ClusterManagerRef.Name) == 0 && len(spec.ClusterMasterRef.Name) == 0 {
+		if isNoahIndexerService {
+			partOfIdentifier = indexerCluster.Spec.NoahClusterRef.Name
+		} else if len(spec.ClusterManagerRef.Name) == 0 && len(spec.ClusterMasterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
 			// of multisite / multipart IndexerCluster can be used to resolve (headless) or load balance traffic to the indexers of all parts
 			partOfIdentifier = instanceIdentifier
@@ -247,7 +251,11 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	splcommon.AppendParentMeta(service.ObjectMeta.GetObjectMeta(), cr.GetObjectMeta())
 
 	if instanceType == SplunkDeployer || (instanceType == SplunkSearchHead && isHeadless) {
-		// required for SHC bootstrap process; use services with heads when readiness is desired
+		// Required for SHC bootstrap; use services with endpoints when readiness is desired.
+		service.Spec.PublishNotReadyAddresses = true
+	}
+	if isNoahIndexerService && isHeadless {
+		// Noah needs the stable pod DNS name before Splunk starts and the pod becomes ready.
 		service.Spec.PublishNotReadyAddresses = true
 	}
 
@@ -638,6 +646,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.ClusterMasterRef.Name)
 	if len(spec.ClusterManagerRef.Name) > 0 && len(spec.ClusterMasterRef.Name) == 0 {
 		selectLabels = getSplunkLabels(cr.GetName(), instanceType, spec.ClusterManagerRef.Name)
+	}
+	if indexerCluster, ok := cr.(*enterpriseApi.IndexerCluster); instanceType == SplunkIndexer && ok && indexerCluster.Spec.NoahEnabled() {
+		selectLabels = getSplunkLabels(cr.GetName(), instanceType, indexerCluster.Spec.NoahClusterRef.Name)
 	}
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
 

@@ -22,6 +22,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	searchheadcluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/searchheadcluster"
 	appsv1 "k8s.io/api/apps/v1"
@@ -80,6 +81,55 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return searchheadcluster.Apply(ctx, r.Client, req.NamespacedName, r.Recorder)
 }
 
+// mapNoahClusterToSearchHeadClusters maps a NoahCluster event to the
+// same-namespace SearchHeadClusters that reference it.
+func (r *SearchHeadClusterReconciler) mapNoahClusterToSearchHeadClusters(ctx context.Context, obj client.Object) []reconcile.Request {
+	noahCluster, ok := obj.(*enterpriseApi.NoahCluster)
+	if !ok {
+		return nil
+	}
+
+	var searchHeadClusters enterpriseApi.SearchHeadClusterList
+	if err := r.Client.List(ctx, &searchHeadClusters, client.InNamespace(noahCluster.Namespace)); err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map NoahCluster to SearchHeadClusters", "error", err)
+		return nil
+	}
+	return noahReferenceRequests(searchHeadClusters.Items, map[string]struct{}{noahCluster.Name: {}}, searchHeadClusterNoahReference)
+}
+
+// mapNoahAuthSecretToSearchHeadClusters follows Secret -> NoahCluster ->
+// SearchHeadCluster references within one namespace.
+func (r *SearchHeadClusterReconciler) mapNoahAuthSecretToSearchHeadClusters(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+
+	matchingNoahClusters, err := noahClusterNamesForSecret(ctx, r.Client, secret)
+	if err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map Noah auth Secret to SearchHeadClusters", "error", err)
+		return nil
+	}
+	if len(matchingNoahClusters) == 0 {
+		return nil
+	}
+
+	var searchHeadClusters enterpriseApi.SearchHeadClusterList
+	if err := r.Client.List(ctx, &searchHeadClusters, client.InNamespace(secret.Namespace)); err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map Noah auth Secret to SearchHeadClusters", "error", err)
+		return nil
+	}
+	return noahReferenceRequests(searchHeadClusters.Items, matchingNoahClusters, searchHeadClusterNoahReference)
+}
+
+func searchHeadClusterNoahReference(searchHeadCluster *enterpriseApi.SearchHeadCluster) (types.NamespacedName, string) {
+	key := types.NamespacedName{Name: searchHeadCluster.Name, Namespace: searchHeadCluster.Namespace}
+	if searchHeadCluster.Spec.NoahClusterRef == nil {
+		return key, ""
+	}
+	return key, searchHeadCluster.Spec.NoahClusterRef.Name
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	bldr := ctrl.NewControllerManagedBy(mgr).
@@ -105,6 +155,9 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.SearchHeadCluster{},
 			)).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.mapNoahAuthSecretToSearchHeadClusters),
+		).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
@@ -144,6 +197,9 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.SearchHeadCluster{},
 			)).
+		Watches(&enterpriseApi.NoahCluster{},
+			handler.EnqueueRequestsFromMapFunc(r.mapNoahClusterToSearchHeadClusters),
+		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		})

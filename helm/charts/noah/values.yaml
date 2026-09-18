@@ -1,0 +1,132 @@
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: docker.repo.splunkdev.net/noah/noah
+  tag: 0.0.1579
+  pullPolicy: IfNotPresent
+
+migrationImage:
+  repository: docker.repo.splunkdev.net/noah/noah-migration
+  tag: 0.0.1579
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  name: default
+
+nodeSelector:
+  workload: splunk
+
+tolerations:
+  - key: workload
+    operator: Equal
+    value: splunk
+    effect: NoSchedule
+
+service:
+  type: ClusterIP
+  port: 8443
+  metricsPort: 9249
+
+noah:
+  awsRegion: us-west-2
+  autoCreateTenants: true
+  cacheWarmScaleInTimeout: 5m
+  # NOAH_EXPECTED_NUMBER_OF_PODS. Sources disagree on what this counts: the
+  # chart README says Noah server pods (sharding Noah's rate limit), while the
+  # spike branch's skaffold.yaml bound it to the indexer replica count. Noah's
+  # source is not in this repo, so this is left at the Noah replica count as the
+  # reference had it. Confirm with the Noah team before relying on either.
+  expectedPods: 1
+  # Makes Noah accept unsigned requests. The operator has no mock path: it always
+  # signs with HMAC-SHA512 using the authSecretRef Secret, and indexers receive
+  # the same key through their init container. So true only widens what Noah
+  # accepts; it does not change what either client sends. Set false to prove
+  # signing works end to end.
+  authMock: true
+  maxOpenConnections: 20
+  maxIdleConnections: 10
+  tenantConfig: {}
+  extraEnv:
+    NOAH_CACHE_ENABLE_CACHE_FALLBACK_WHEN_DB_DOWN: "true"
+    NOAH_ENABLE_FREEZER_DAEMON: "false"
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+postgresql:
+  image:
+    repository: docker-hub.repo.splunkdev.net/postgres
+    tag: "15.10"
+    pullPolicy: IfNotPresent
+  auth:
+    database: noah_db
+    username: noah
+    # Left empty on purpose: no database credential is committed here. The chart
+    # generates one on first install and then reuses whatever the release Secret
+    # already holds. Set this in an untracked values file to pin a known value.
+    password: ""
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    storageClass: gp3-automode
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+redis:
+  image:
+    repository: docker-hub.repo.splunkdev.net/redis
+    tag: 7.2.3-alpine3.18
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+minio:
+  image:
+    repository: docker-hub.repo.splunkdev.net/minio/minio
+    tag: RELEASE.2025-09-07T16-13-09Z
+    pullPolicy: IfNotPresent
+  clientImage:
+    repository: docker-hub.repo.splunkdev.net/minio/mc
+    tag: RELEASE.2025-08-13T08-35-41Z
+    pullPolicy: IfNotPresent
+  auth:
+    rootUser: noah
+    # Generated on first install and preserved across upgrades. Set this in an
+    # untracked values file only when a known development credential is needed.
+    rootPassword: ""
+  bucket: noah-smartstore
+  service:
+    port: 9000
+  persistence:
+    enabled: true
+    storageClass: gp3-automode
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

@@ -1,0 +1,139 @@
+#!/bin/sh
+# Create (or reuse) a Kraken vCluster and configure local access to it.
+#
+# Prints the deployment ID on stdout. Any argument is treated as an existing
+# deployment ID to configure instead of creating a new one.
+#
+# Environment:
+#   NOAH_LOCAL_NAMESPACE          workload namespace to configure (required)
+#   NOAH_LOCAL_DEPLOYMENT_ID_FILE where to record a newly created deployment ID
+#                                 as soon as it exists, so a failure during the
+#                                 setup that follows cannot orphan the vCluster
+
+set -eu
+
+deployment_id=${1:-}
+deployment_id_file=${NOAH_LOCAL_DEPLOYMENT_ID_FILE:-}
+source_namespace=default
+# Exported so yq's strenv() can read it in the kubeconfig merge below.
+workload_namespace=${NOAH_LOCAL_NAMESPACE:-splunk-operator}
+export workload_namespace
+
+fail() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+for command_name in jq yq kubectl kraken; do
+    command -v "$command_name" >/dev/null 2>&1 ||
+        fail "$command_name is required but was not found on PATH."
+done
+
+script_dir=$(cd -- "$(dirname -- "$0")" && pwd)
+
+if test -z "$deployment_id"; then
+    deployment_id=$(
+        kraken create --file "$script_dir/kraken-request.yaml" --wait --json |
+            jq -er '.deployment.id'
+    ) || fail 'Failed to create the Kraken deployment.'
+
+    # Record the ID before the configuration below, which can fail and would
+    # otherwise leave a running vCluster that `make noah-local-destroy` cannot
+    # find. Reported to stderr so stdout stays just the ID.
+    if test -n "$deployment_id_file"; then
+        mkdir -p "$(dirname -- "$deployment_id_file")"
+        printf '%s\n' "$deployment_id" > "$deployment_id_file"
+        printf 'Created Kraken deployment %s (recorded in %s).\n' \
+            "$deployment_id" "$deployment_id_file" >&2
+    fi
+fi
+
+kubeconfig=$HOME/.kube/config
+if test -n "${KUBECONFIG:-}"; then
+    # KUBECONFIG can be a colon-separated list. kubectl writes to its first
+    # entry and, on a read, lets the first entry win any conflict, so edit that
+    # one: the kraken context we add there shadows any later file's copy.
+    kubeconfig=${KUBECONFIG%%:*}
+    test -n "$kubeconfig" ||
+        fail 'KUBECONFIG is set but its first entry is empty.'
+    case $KUBECONFIG in
+        *:*) printf 'KUBECONFIG lists several files; editing %s.\n' \
+            "$kubeconfig" >&2 ;;
+    esac
+fi
+
+# yq --inplace fails on a missing file, so seed a minimal kubeconfig first.
+if ! test -s "$kubeconfig"; then
+    mkdir -p "$(dirname -- "$kubeconfig")"
+    printf '%s\n' 'apiVersion: v1' 'kind: Config' 'clusters: []' 'users: []' \
+        'contexts: []' > "$kubeconfig"
+fi
+
+kraken_kubeconfig=$(kraken connection "$deployment_id" | jq -er '.kubeconfig') ||
+    fail "Failed to read the connection details for $deployment_id."
+
+# Renames Kraken's cluster and user, then replaces any previous kraken entries
+# so repeated runs do not accumulate duplicates. The spaces around `//` are
+# required: yq parses `.clusters//[]` as a path and silently returns nothing.
+# shellcheck disable=SC2016 # $kraken is a yq alias, not a shell variable.
+printf '%s\n' "$kraken_kubeconfig" |
+    yq eval --inplace '
+      (
+        load("/dev/stdin")
+        | .clusters[0].name = "kraken"
+        | .users[0].name = "kraken-super-admin"
+      ) as $kraken
+      | .clusters = (((.clusters // []) | map(select(.name != "kraken"))) + [$kraken.clusters[0]])
+      | .users = (((.users // []) | map(select(.name != "kraken-super-admin"))) + [$kraken.users[0]])
+      | .contexts = (((.contexts // []) | map(select(.name != "kraken"))) + [{
+          "context": {"cluster": "kraken", "user": "kraken-super-admin", "namespace": strenv(workload_namespace)},
+          "name": "kraken"
+        }])
+      | ."current-context" = "kraken"
+    ' "$kubeconfig"
+
+# Kraken issues a deployment-scoped Artifactory credential in the default
+# namespace. Copying it avoids pushing local docker credentials into the cluster.
+image_pull_secret=$(
+    kubectl --context kraken --namespace "$source_namespace" get secrets -o json |
+        jq -er '
+          [.items[]
+            | select(
+                .type == "kubernetes.io/dockerconfigjson"
+                and (.metadata.name | startswith("kraken-artifactory-creds-"))
+              )
+          ][0].metadata.name
+        '
+) || fail "No kraken-artifactory-creds-* secret found in $source_namespace."
+
+kubectl --context kraken --namespace "$source_namespace" \
+    get secret "$image_pull_secret" -o json |
+    jq --arg namespace "$workload_namespace" '
+      .metadata.namespace = $namespace
+      | del(
+          .metadata.creationTimestamp,
+          .metadata.resourceVersion,
+          .metadata.uid,
+          .metadata.managedFields
+        )
+    ' |
+    kubectl --context kraken --namespace "$workload_namespace" apply -f - >/dev/null
+
+service_account_patch=$(
+    kubectl --context kraken --namespace "$workload_namespace" \
+        get serviceaccount default -o json |
+        jq -cer --arg name "$image_pull_secret" '
+          {
+            imagePullSecrets: (
+              ((.imagePullSecrets // []) + [{"name": $name}])
+              | unique_by(.name)
+            )
+          }
+        '
+) || fail "Failed to read the default ServiceAccount in $workload_namespace."
+
+kubectl --context kraken --namespace "$workload_namespace" patch serviceaccount default \
+    --type merge \
+    --patch "$service_account_patch" >/dev/null
+
+printf '%s\n' "$deployment_id"

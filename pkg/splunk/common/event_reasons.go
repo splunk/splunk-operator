@@ -75,6 +75,9 @@ const (
 	EventReasonBundlePushFailed                EventReason = "BundlePushFailed"
 	EventReasonPodExecFailed                   EventReason = "PodExecFailed"
 	EventReasonScalingBlockedRF                EventReason = "ScalingBlockedRF"
+	EventReasonNoahConfigurationInvalid        EventReason = "NoahConfigurationInvalid"
+	EventReasonNoahOperationFailed             EventReason = "NoahOperationFailed"
+	EventReasonNoahCacheWarmTimeout            EventReason = "NoahCacheWarmTimeout"
 	EventReasonLicenseExpired                  EventReason = "LicenseExpired"
 
 	// Warning event reasons — upgrade
