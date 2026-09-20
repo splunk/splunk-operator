@@ -19,6 +19,7 @@ package v4
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 // default all fields to being optional
@@ -64,6 +65,176 @@ type IndexerClusterSpec struct {
 func (s *IndexerClusterSpec) NoahEnabled() bool {
 	return s != nil && s.NoahClusterRef != nil
 }
+
+// IndexerClusterLifecycleStatus records one restart-safe lifecycle operation.
+// It is controller-owned and also acts as the lock that prevents concurrent
+// IndexerCluster lifecycle actions.
+type IndexerClusterLifecycleStatus struct {
+	// Kind identifies the desired-state change being executed.
+	// +kubebuilder:validation:Required
+	Kind IndexerClusterLifecycleKind `json:"kind"`
+
+	// Checkpoint identifies the durable point reached by the operation.
+	// +kubebuilder:validation:Required
+	Checkpoint IndexerClusterLifecycleCheckpoint `json:"checkpoint"`
+
+	// Generation is the IndexerCluster generation that initiated the operation.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	Generation int64 `json:"generation"`
+
+	// Target identifies the exact StatefulSet incarnation, replica and revision
+	// boundaries, and peers covered by the operation.
+	// +kubebuilder:validation:Required
+	Target IndexerClusterLifecycleTarget `json:"target"`
+
+	// PendingAction is the action currently authorized for execution. It is
+	// cleared after its effect has been accepted.
+	// +optional
+	PendingAction *IndexerClusterLifecyclePendingAction `json:"pendingAction,omitempty"`
+
+	// StartedAt records when the operation was authorized.
+	// +kubebuilder:validation:Required
+	StartedAt metav1.Time `json:"startedAt"`
+
+	// LastTransitionTime records the last durable checkpoint or action change.
+	// +kubebuilder:validation:Required
+	LastTransitionTime metav1.Time `json:"lastTransitionTime"`
+
+	// CompletedAt records when all operation postconditions became true.
+	// +optional
+	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
+}
+
+// IndexerClusterLifecycleKind identifies the desired-state change being
+// executed by the IndexerCluster lifecycle controller.
+// +kubebuilder:validation:Enum=Rollout;ScaleOut;ScaleIn
+type IndexerClusterLifecycleKind string
+
+const (
+	// IndexerClusterLifecycleRollout replaces peers at a new StatefulSet
+	// revision.
+	IndexerClusterLifecycleRollout IndexerClusterLifecycleKind = "Rollout"
+	// IndexerClusterLifecycleScaleOut adds a contiguous batch of new ordinals.
+	IndexerClusterLifecycleScaleOut IndexerClusterLifecycleKind = "ScaleOut"
+	// IndexerClusterLifecycleScaleIn gracefully removes the highest ordinal.
+	IndexerClusterLifecycleScaleIn IndexerClusterLifecycleKind = "ScaleIn"
+)
+
+// IndexerClusterLifecycleCheckpoint identifies the durable point reached by a
+// lifecycle operation.
+// +kubebuilder:validation:Enum=ActionPending;WaitingForMembership;Completed;Failed
+type IndexerClusterLifecycleCheckpoint string
+
+const (
+	// IndexerClusterLifecycleActionPending means PendingAction is durably
+	// authorized for execution.
+	IndexerClusterLifecycleActionPending IndexerClusterLifecycleCheckpoint = "ActionPending"
+	// IndexerClusterLifecycleWaitingForMembership means Kubernetes has converged
+	// and the operation is waiting for membership-provider evidence.
+	IndexerClusterLifecycleWaitingForMembership IndexerClusterLifecycleCheckpoint = "WaitingForMembership"
+	// IndexerClusterLifecycleCompleted means all operation postconditions hold.
+	IndexerClusterLifecycleCompleted IndexerClusterLifecycleCheckpoint = "Completed"
+	// IndexerClusterLifecycleFailed means the operation cannot automatically
+	// progress.
+	IndexerClusterLifecycleFailed IndexerClusterLifecycleCheckpoint = "Failed"
+)
+
+// IndexerClusterLifecycleTarget identifies the exact workload and peers to
+// which a lifecycle operation applies.
+type IndexerClusterLifecycleTarget struct {
+	// StatefulSetUID identifies the exact StatefulSet incarnation targeted by
+	// the operation. A different live UID invalidates the operation instead of
+	// transferring its authorization to a replacement StatefulSet.
+	// +kubebuilder:validation:Required
+	StatefulSetUID k8stypes.UID `json:"statefulSetUID"`
+
+	// SourceReplicas is the StatefulSet replica count observed when the
+	// operation was authorized.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=0
+	SourceReplicas int32 `json:"sourceReplicas"`
+
+	// TargetReplicas is the StatefulSet replica count requested by a scaling
+	// action. It equals SourceReplicas for operations that do not scale.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=0
+	TargetReplicas int32 `json:"targetReplicas"`
+
+	// SourceRevision is the StatefulSet revision observed when the operation
+	// was planned.
+	// +optional
+	SourceRevision string `json:"sourceRevision,omitempty"`
+
+	// TargetRevision is the StatefulSet revision authorized when the operation
+	// was planned. A ready replacement at a newer live revision is also accepted.
+	// +optional
+	TargetRevision string `json:"targetRevision,omitempty"`
+
+	// Peers contains the exact peer identities covered by the operation. The
+	// operation's policy determines whether one action addresses one peer
+	// or a batch. The list is keyed by ordinal and its order is not significant.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=ordinal
+	Peers []IndexerClusterLifecyclePeerTarget `json:"peers"`
+}
+
+// IndexerClusterLifecyclePeerTarget identifies one indexer peer affected by a
+// lifecycle operation.
+type IndexerClusterLifecyclePeerTarget struct {
+	// Ordinal is the peer's StatefulSet ordinal.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=0
+	Ordinal int32 `json:"ordinal"`
+
+	// PeerID is the stable peer identifier expected from the membership
+	// provider for the ordinal.
+	// +kubebuilder:validation:Required
+	PeerID string `json:"peerID"`
+
+	// PodName is the Kubernetes Pod name expected for the ordinal.
+	// +kubebuilder:validation:Required
+	PodName string `json:"podName"`
+
+	// SourcePodUID is the immutable identity fence for the Pod incarnation
+	// against which a disruptive action is authorized. It is absent for a new
+	// scale-out peer.
+	// +optional
+	SourcePodUID k8stypes.UID `json:"sourcePodUID,omitempty"`
+
+	// TargetPodUID identifies the latest persisted new or replacement Pod
+	// incarnation that must satisfy the operation's postconditions. It is
+	// populated after that Pod is observed and is absent for a removed scale-in
+	// peer.
+	// +optional
+	TargetPodUID k8stypes.UID `json:"targetPodUID,omitempty"`
+}
+
+// IndexerClusterLifecyclePendingAction is the single action durably authorized
+// for execution. Its target and parameters come from the containing lifecycle
+// record.
+type IndexerClusterLifecyclePendingAction struct {
+	// Type identifies the external action authorized by this record. Its
+	// parameters and exact targets come from the containing lifecycle status.
+	// +kubebuilder:validation:Required
+	Type IndexerClusterLifecycleActionType `json:"type"`
+}
+
+// IndexerClusterLifecycleActionType identifies one externally meaningful
+// action authorized by a persisted lifecycle operation.
+// +kubebuilder:validation:Enum=SetReplicas;DeletePod
+type IndexerClusterLifecycleActionType string
+
+const (
+	// IndexerClusterLifecycleSetReplicas changes the target StatefulSet to
+	// TargetReplicas.
+	IndexerClusterLifecycleSetReplicas IndexerClusterLifecycleActionType = "SetReplicas"
+	// IndexerClusterLifecycleDeletePod deletes the exact source Pod selected for
+	// a rollout.
+	IndexerClusterLifecycleDeletePod IndexerClusterLifecycleActionType = "DeletePod"
+)
 
 // IndexerClusterMemberStatus is used to track the status of each indexer cluster peer.
 type IndexerClusterMemberStatus struct {
@@ -148,6 +319,11 @@ type IndexerClusterStatus struct {
 
 	// Auxiliary message describing CR status
 	Message string `json:"message"`
+
+	// Lifecycle records the active or retained terminal lifecycle operation. It
+	// is controller-owned and is absent when no operation is retained.
+	// +optional
+	Lifecycle *IndexerClusterLifecycleStatus `json:"lifecycle,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -21,11 +21,11 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strconv"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,14 +44,13 @@ import (
 )
 
 const (
-	pendingScaleDownOrdinalAnnotation          = "enterprise.splunk.com/pending-scale-down-ordinal"
 	noahIndexerPollInterval                    = 5 * time.Second
 	defaultNoahCacheWarmScaleOutTimeoutSeconds = int32(3600)
 )
 
 // applyNoahIndexerCluster reconciles the Kubernetes resources required to
 // start and roll out a Noah-selected IndexerCluster and verifies its expected
-// Noah peers. Scale-down is development-only and does not decommission peers.
+// Noah peers.
 func applyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (result reconcile.Result, err error) {
 	result = reconcile.Result{RequeueAfter: noahIndexerPollInterval}
 	previousPhase := cr.Status.Phase
@@ -152,8 +151,7 @@ func applyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 			}
 		}
 	default:
-		_, scaleDownPending := statefulSet.Annotations[pendingScaleDownOrdinalAnnotation]
-		outcome = waitForNoahIndexerWorkload(phase, previousPhase, appliedReplicas, scaleDownPending)
+		outcome = waitForNoahIndexerWorkload(phase, previousPhase, appliedReplicas, lifecycleIsScaleIn(cr.Status.Lifecycle))
 	}
 
 	setOutcome(outcome)
@@ -366,6 +364,7 @@ var (
 	_ splcommon.StatefulSetScaleOutPlanner    = (*noahIndexerPodManager)(nil)
 	_ splcommon.StatefulSetScaleDownFinisher  = (*noahIndexerPodManager)(nil)
 	_ splcommon.StatefulSetScaleDownPVCPolicy = (*noahIndexerPodManager)(nil)
+	_ splcommon.StatefulSetRecycleOrderer     = (*noahIndexerPodManager)(nil)
 )
 
 func newNoahIndexerPodManager(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, runtime *configworkflow.NoahRuntime) *noahIndexerPodManager {
@@ -397,7 +396,40 @@ func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.C
 	if err != nil {
 		return enterpriseApi.PhaseError, err
 	}
+
 	workloadPhase := noahIndexerWorkloadPhase(phase, statefulSet, appliedReplicas)
+	decision, err := mgr.reconcileLifecycle(appliedReplicas)
+	if err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+	lifecycle := mgr.cr.Status.Lifecycle
+	waitingForScaleOutMembership := lifecycle != nil &&
+		lifecycle.Kind == enterpriseApi.IndexerClusterLifecycleScaleOut &&
+		lifecycle.Checkpoint == enterpriseApi.IndexerClusterLifecycleWaitingForMembership
+
+	if decision.block || waitingForScaleOutMembership {
+		// A newer template revision belongs to the subsequent rollout. This
+		// operation only requires its exact replica batch to be ready.
+		if waitingForScaleOutMembership &&
+			phase == enterpriseApi.PhaseReady &&
+			appliedReplicas == lifecycle.Target.TargetReplicas &&
+			statefulSet.Status.ReadyReplicas == appliedReplicas {
+			return enterpriseApi.PhaseReady, nil
+		}
+
+		if statefulSet.Status.ReadyReplicas < appliedReplicas {
+			if err := k8sops.CheckPodsForTerminalFailures(ctx, mgr.client, statefulSet); err != nil {
+				return enterpriseApi.PhaseError, err
+			}
+		}
+
+		if decision.block {
+			return decision.phaseOverride, nil
+		}
+
+		return workloadPhase, nil
+	}
+
 	if phase != enterpriseApi.PhaseReady {
 		return workloadPhase, nil
 	}
@@ -411,36 +443,101 @@ func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.C
 		}
 		return workloadPhase, nil
 	}
-	_, scaleDownPending := statefulSet.Annotations[pendingScaleDownOrdinalAnnotation]
+
 	if appliedReplicas == desiredReplicas &&
 		noahIndexerStatefulSetConverged(statefulSet, appliedReplicas) &&
 		mgr.cr.Status.Phase != enterpriseApi.PhaseUpdating &&
-		!scaleDownPending {
+		mgr.cr.Status.Lifecycle == nil {
 		return enterpriseApi.PhaseReady, nil
 	}
-	return k8sops.UpdateStatefulSetPods(ctx, mgr.client, statefulSet, mgr, desiredReplicas)
+
+	if lifecycle := mgr.cr.Status.Lifecycle; lifecycle != nil {
+		desiredReplicas = lifecycle.Target.TargetReplicas
+	}
+
+	workloadPhase, err = k8sops.UpdateStatefulSetPods(ctx, mgr.client, statefulSet, mgr, desiredReplicas)
+	if err != nil {
+		return workloadPhase, err
+	}
+	if decision.phaseOverride != "" {
+		switch workloadPhase {
+		case enterpriseApi.PhasePending, enterpriseApi.PhaseScalingUp:
+			workloadPhase = decision.phaseOverride
+		}
+	}
+	return workloadPhase, nil
 }
 
+// NextReplicas plans or resumes one durable Noah scale-out batch.
 func (mgr *noahIndexerPodManager) NextReplicas(ctx context.Context, appliedReplicas, requestedReplicas int32) (splcommon.ScaleOutPlan, error) {
 	blocked := splcommon.ScaleOutPlan{TargetReplicas: appliedReplicas}
-	phase := enterpriseApi.Phase("")
-	if appliedReplicas < requestedReplicas {
-		phase = enterpriseApi.PhaseScalingUp
+	if appliedReplicas >= requestedReplicas {
+		blocked.Complete = true
+		return blocked, nil
 	}
 
-	observation, err := mgr.observePeers(ctx, appliedReplicas)
-	if err != nil {
-		return blocked, newNoahIndexerObservationError(err, phase)
+	lifecycle := mgr.cr.Status.Lifecycle
+	if lifecycle == nil {
+		membership, err := mgr.observePeers(ctx, appliedReplicas)
+		if err != nil {
+			return blocked, newNoahIndexerObservationError(err, enterpriseApi.PhaseScalingUp)
+		}
+
+		if membership.TimedOutPeerID != "" {
+			return blocked, &noahIndexerCacheWarmTimeoutError{peerID: membership.TimedOutPeerID}
+		}
+
+		plan := indexerworkflow.PlanNoahScaleOut(membership, appliedReplicas, requestedReplicas, mgr.cacheWarmEnabled)
+		if plan.TargetReplicas == appliedReplicas {
+			return plan, nil
+		}
+
+		lifecycle, err = mgr.newScaleOutLifecycle(appliedReplicas, plan.TargetReplicas)
+		if err != nil {
+			return blocked, err
+		}
+
+		mgr.cr.Status.Lifecycle = lifecycle
+
+		return blocked, nil
 	}
 
-	if observation.TimedOutPeerID != "" {
-		return blocked, &noahIndexerCacheWarmTimeoutError{peerID: observation.TimedOutPeerID}
+	if lifecycle.Kind != enterpriseApi.IndexerClusterLifecycleScaleOut ||
+		lifecycle.Checkpoint != enterpriseApi.IndexerClusterLifecycleActionPending ||
+		lifecycle.PendingAction == nil ||
+		lifecycle.PendingAction.Type != enterpriseApi.IndexerClusterLifecycleSetReplicas ||
+		lifecycle.Target.SourceReplicas != appliedReplicas ||
+		lifecycle.Target.TargetReplicas != requestedReplicas {
+		return blocked, nil
 	}
 
-	return indexerworkflow.PlanNoahScaleOut(observation, appliedReplicas, requestedReplicas, mgr.cacheWarmEnabled), nil
+	return splcommon.ScaleOutPlan{TargetReplicas: lifecycle.Target.TargetReplicas}, nil
 }
 
+// PrepareScaleDown persists or resumes graceful removal of one Noah peer.
 func (mgr *noahIndexerPodManager) PrepareScaleDown(ctx context.Context, ordinal int32) (bool, error) {
+	lifecycle := mgr.cr.Status.Lifecycle
+	if lifecycle != nil {
+		if !lifecycleAuthorizesScaleIn(lifecycle, ordinal) {
+			return false, nil
+		}
+
+		target := lifecycle.Target.Peers[0]
+		pod := &corev1.Pod{}
+		err := mgr.client.Get(ctx, types.NamespacedName{Namespace: mgr.statefulSet.Namespace, Name: target.PodName}, pod)
+		if k8serrors.IsNotFound(err) {
+			mgr.cr.Status.Lifecycle = nil
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("revalidate scale-in source Pod %s: %w", target.PodName, err)
+		}
+		if pod.UID != target.SourcePodUID {
+			mgr.cr.Status.Lifecycle = nil
+			return false, nil
+		}
+	}
+
 	appliedReplicas, err := noahIndexerStatefulSetReplicas(mgr.statefulSet)
 	if err != nil {
 		return false, err
@@ -454,44 +551,55 @@ func (mgr *noahIndexerPodManager) PrepareScaleDown(ctx context.Context, ordinal 
 		return false, nil
 	}
 
-	if mgr.statefulSet.Annotations == nil {
-		mgr.statefulSet.Annotations = map[string]string{}
+	if lifecycle != nil {
+		return true, nil
 	}
-	mgr.statefulSet.Annotations[pendingScaleDownOrdinalAnnotation] = strconv.FormatInt(int64(ordinal), 10)
 
-	return true, nil
+	lifecycle, err = mgr.newScaleInLifecycle(ctx, ordinal, appliedReplicas)
+	if err != nil {
+		return false, err
+	}
+	mgr.cr.Status.Lifecycle = lifecycle
+
+	return false, nil
 }
 
 // FinishScaleDown unregisters the removed peer and waits for Noah's latest
 // bucket map to exclude it before another lifecycle operation can begin.
-func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, _ int32) (bool, error) {
-	value, pending := mgr.statefulSet.Annotations[pendingScaleDownOrdinalAnnotation]
-	if !pending {
+func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, ordinal int32) (bool, error) {
+	lifecycle := mgr.cr.Status.Lifecycle
+	if !lifecycleIsScaleIn(lifecycle) {
+		return true, nil
+	}
+	if lifecycle.Checkpoint != enterpriseApi.IndexerClusterLifecycleWaitingForMembership {
 		return true, nil
 	}
 
-	parsedOrdinal, err := strconv.ParseInt(value, 10, 32)
-	if err != nil || parsedOrdinal < 0 {
-		return false, fmt.Errorf("invalid pending scale-down ordinal %q", value)
+	if len(lifecycle.Target.Peers) != 1 {
+		return false, fmt.Errorf("scale-in lifecycle must target exactly one peer")
 	}
-	ordinal := int32(parsedOrdinal)
 
-	podName := noahIndexerPodName(mgr.statefulSet, ordinal)
+	target := lifecycle.Target.Peers[0]
+	if ordinal != target.Ordinal {
+		return false, fmt.Errorf("scale-in finisher received ordinal %d, expected %d", ordinal, target.Ordinal)
+	}
+
 	pod := &corev1.Pod{}
-	err = mgr.client.Get(ctx, types.NamespacedName{Namespace: mgr.statefulSet.Namespace, Name: podName}, pod)
+	err := mgr.client.Get(ctx, types.NamespacedName{Namespace: mgr.statefulSet.Namespace, Name: target.PodName}, pod)
 	if err == nil {
+		if pod.UID != target.SourcePodUID {
+			return false, newNoahIndexerOperationError(
+				fmt.Errorf("removed Noah indexer Pod %s was replaced with UID %s", target.PodName, pod.UID),
+				enterpriseApi.PhaseScalingDown,
+			)
+		}
 		return false, nil
 	}
 	if !k8serrors.IsNotFound(err) {
 		return false, newNoahIndexerOperationError(
-			fmt.Errorf("get removed Noah indexer Pod %s: %w", podName, err),
+			fmt.Errorf("get removed Noah indexer Pod %s: %w", target.PodName, err),
 			enterpriseApi.PhaseScalingDown,
 		)
-	}
-
-	peerID, err := noahIndexerPeerID(mgr.statefulSet, ordinal)
-	if err != nil {
-		return false, newNoahIndexerOperationError(err, enterpriseApi.PhaseScalingDown)
 	}
 
 	noahClient, err := mgr.runtime.Client()
@@ -499,11 +607,11 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, _ int32) 
 		return false, newNoahIndexerOperationError(err, enterpriseApi.PhaseScalingDown)
 	}
 
-	if err := noahClient.UnregisterPeer(ctx, peerID); err != nil {
+	if err := noahClient.UnregisterPeer(ctx, target.PeerID); err != nil {
 		noahErr, ok := errors.AsType[*noah.Error](err)
 		if !ok || noahErr.Kind != noah.ErrorKindNotFound {
 			return false, newNoahIndexerOperationError(
-				fmt.Errorf("unregister Noah peer %s: %w", peerID, err),
+				fmt.Errorf("unregister Noah peer %s: %w", target.PeerID, err),
 				enterpriseApi.PhaseScalingDown,
 			)
 		}
@@ -517,27 +625,78 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, _ int32) 
 		)
 	}
 
-	remainingPeerIDs, err := noahIndexerPeerIDs(mgr.statefulSet, ordinal)
+	remainingPeerIDs, err := noahIndexerPeerIDs(mgr.statefulSet, lifecycle.Target.TargetReplicas)
 	if err != nil {
 		return false, err
 	}
 
-	if !indexerworkflow.NoahBucketMapConfirmsScaleDown(bucketMap, remainingPeerIDs, peerID) {
+	if !indexerworkflow.NoahBucketMapConfirmsScaleDown(bucketMap, remainingPeerIDs, target.PeerID) {
 		return false, nil
 	}
 
-	delete(mgr.statefulSet.Annotations, pendingScaleDownOrdinalAnnotation)
-	if err := splutil.UpdateResource(ctx, mgr.client, mgr.statefulSet); err != nil {
-		return false, fmt.Errorf("clear pending scale-down ordinal: %w", err)
-	}
-	return true, nil
+	_, err = mgr.applyLifecycleObservation(indexerworkflow.LifecycleObservation{
+		StatefulSetUID:            mgr.statefulSet.UID,
+		StatefulSetReplicas:       lifecycle.Target.TargetReplicas,
+		TargetPods:                map[int32]indexerworkflow.LifecyclePodObservation{},
+		Now:                       time.Now(),
+		SatisfiedTargetMembership: true,
+	})
+	return false, err
 }
 
+// RetainPVCsOnScaleDown preserves indexer storage during scale-in.
 func (*noahIndexerPodManager) RetainPVCsOnScaleDown() bool {
 	return true
 }
 
-func (mgr *noahIndexerPodManager) PrepareRecycle(ctx context.Context, _ int32) (bool, error) {
+// DeferRecycle serializes stale Pods behind the active rollout target.
+func (mgr *noahIndexerPodManager) DeferRecycle(_ context.Context, ordinal int32, _ string) (bool, error) {
+	lifecycle := mgr.cr.Status.Lifecycle
+	if lifecycle == nil || lifecycle.Kind != enterpriseApi.IndexerClusterLifecycleRollout {
+		return false, nil
+	}
+
+	if len(lifecycle.Target.Peers) != 1 {
+		return true, fmt.Errorf("rollout lifecycle must target exactly one peer")
+	}
+
+	return lifecycle.Target.Peers[0].Ordinal != ordinal, nil
+}
+
+// PrepareRecycle persists or resumes authorization to replace one Pod.
+func (mgr *noahIndexerPodManager) PrepareRecycle(ctx context.Context, ordinal int32) (bool, error) {
+	lifecycle := mgr.cr.Status.Lifecycle
+	if lifecycle != nil {
+		if !lifecycleTargetsRolloutOrdinal(lifecycle, ordinal) {
+			return false, nil
+		}
+
+		decision, err := mgr.observeRolloutLifecycle(ctx, lifecycle)
+		if err != nil {
+			return false, err
+		}
+		if decision.action == nil {
+			return false, nil
+		}
+		if decision.action.Type != enterpriseApi.IndexerClusterLifecycleDeletePod {
+			return false, fmt.Errorf("unsupported rollout action %q", decision.action.Type)
+		}
+
+		appliedReplicas, err := noahIndexerStatefulSetReplicas(mgr.statefulSet)
+		if err != nil {
+			return false, err
+		}
+		observation, err := mgr.observePeers(ctx, appliedReplicas)
+		if err != nil {
+			return false, newNoahIndexerObservationError(err, enterpriseApi.PhaseUpdating)
+		}
+		if !observation.AllReady {
+			return false, nil
+		}
+
+		return true, nil
+	}
+
 	appliedReplicas, err := noahIndexerStatefulSetReplicas(mgr.statefulSet)
 	if err != nil {
 		return false, err
@@ -547,43 +706,365 @@ func (mgr *noahIndexerPodManager) PrepareRecycle(ctx context.Context, _ int32) (
 	if err != nil {
 		return false, newNoahIndexerObservationError(err, enterpriseApi.PhaseUpdating)
 	}
+	if !observation.AllReady {
+		return false, nil
+	}
 
-	return observation.AllReady, nil
+	lifecycle, err = mgr.newRolloutLifecycle(ctx, ordinal)
+	if err != nil {
+		return false, err
+	}
+	mgr.cr.Status.Lifecycle = lifecycle
+
+	return false, nil
 }
 
-func (mgr *noahIndexerPodManager) FinishRecycle(ctx context.Context, _ int32) (bool, error) {
-	appliedReplicas, err := noahIndexerStatefulSetReplicas(mgr.statefulSet)
+// FinishRecycle advances the rollout while the replacement converges.
+func (mgr *noahIndexerPodManager) FinishRecycle(ctx context.Context, ordinal int32) (bool, error) {
+	lifecycle := mgr.cr.Status.Lifecycle
+	if lifecycle == nil {
+		return true, nil
+	}
+	if !lifecycleTargetsRolloutOrdinal(lifecycle, ordinal) {
+		return true, nil
+	}
+
+	_, err := mgr.observeRolloutLifecycle(ctx, lifecycle)
 	if err != nil {
 		return false, err
 	}
 
-	observation, err := mgr.observePeers(ctx, appliedReplicas)
-	if err != nil {
-		return false, newNoahIndexerObservationError(err, enterpriseApi.PhaseUpdating)
-	}
-
-	return observation.AllReady, nil
+	return false, nil
 }
 
+// FinishUpgrade completes the shared upgrade hook after durable rollout convergence.
 func (mgr *noahIndexerPodManager) FinishUpgrade(context.Context, int32) error {
 	return nil
 }
 
-func (mgr *noahIndexerPodManager) observeReady(ctx context.Context, appliedReplicas int32, previousPhase enterpriseApi.Phase, previousReplicas int32) (noahIndexerOutcome, error) {
-	plan, err := mgr.NextReplicas(ctx, appliedReplicas, mgr.cr.Spec.Replicas)
+type lifecycleDecision struct {
+	action        *enterpriseApi.IndexerClusterLifecyclePendingAction
+	block         bool
+	phaseOverride enterpriseApi.Phase
+}
+
+// reconcileLifecycle handles lifecycle state that must be resolved before the
+// generic StatefulSet engine may mutate the workload.
+func (mgr *noahIndexerPodManager) reconcileLifecycle(appliedReplicas int32) (lifecycleDecision, error) {
+	current := mgr.cr.Status.Lifecycle
+	if current == nil {
+		return lifecycleDecision{}, nil
+	}
+
+	observed := indexerworkflow.LifecycleObservation{
+		StatefulSetUID:      mgr.statefulSet.UID,
+		StatefulSetReplicas: appliedReplicas,
+		Now:                 time.Now(),
+	}
+	if mgr.statefulSet.UID != current.Target.StatefulSetUID {
+		return mgr.applyLifecycleObservation(observed)
+	}
+
+	if current.Checkpoint == enterpriseApi.IndexerClusterLifecycleCompleted {
+		mgr.cr.Status.Lifecycle = nil
+		return lifecycleDecision{block: true, phaseOverride: lifecyclePhase(current.Kind)}, nil
+	}
+	if current.Checkpoint == enterpriseApi.IndexerClusterLifecycleFailed {
+		return lifecycleDecision{block: true, phaseOverride: lifecyclePhase(current.Kind)}, fmt.Errorf("IndexerCluster lifecycle failed")
+	}
+
+	switch current.Kind {
+	case enterpriseApi.IndexerClusterLifecycleRollout:
+		if mgr.statefulSet.UID == current.Target.StatefulSetUID && appliedReplicas == current.Target.TargetReplicas {
+			return lifecycleDecision{phaseOverride: enterpriseApi.PhaseUpdating}, nil
+		}
+	case enterpriseApi.IndexerClusterLifecycleScaleIn:
+		if current.Checkpoint == enterpriseApi.IndexerClusterLifecycleWaitingForMembership &&
+			appliedReplicas == current.Target.TargetReplicas {
+			return lifecycleDecision{phaseOverride: enterpriseApi.PhaseScalingDown}, nil
+		}
+	case enterpriseApi.IndexerClusterLifecycleScaleOut:
+		if mgr.statefulSet.UID == current.Target.StatefulSetUID &&
+			current.Checkpoint == enterpriseApi.IndexerClusterLifecycleWaitingForMembership &&
+			appliedReplicas == current.Target.TargetReplicas {
+			return lifecycleDecision{phaseOverride: enterpriseApi.PhaseScalingUp}, nil
+		}
+	default:
+		return lifecycleDecision{block: true}, fmt.Errorf("unsupported IndexerCluster lifecycle kind %q", current.Kind)
+	}
+
+	return mgr.applyLifecycleObservation(observed)
+}
+
+func (mgr *noahIndexerPodManager) applyLifecycleObservation(observed indexerworkflow.LifecycleObservation) (lifecycleDecision, error) {
+	current := mgr.cr.Status.Lifecycle
+	if current == nil {
+		return lifecycleDecision{}, nil
+	}
+
+	decision := lifecycleDecision{phaseOverride: lifecyclePhase(current.Kind)}
+	transition := indexerworkflow.AdvanceLifecycle(current, observed)
+	if transition.Replan {
+		mgr.cr.Status.Lifecycle = nil
+		decision.block = true
+		return decision, nil
+	}
+	if transition.Lifecycle == nil {
+		decision.block = true
+		return decision, fmt.Errorf("lifecycle transition returned no state")
+	}
+
+	changed := !apiequality.Semantic.DeepEqual(current, transition.Lifecycle)
+	mgr.cr.Status.Lifecycle = transition.Lifecycle
+	if transition.Err != nil {
+		decision.block = true
+		return decision, transition.Err
+	}
+	if transition.Lifecycle.Checkpoint == enterpriseApi.IndexerClusterLifecycleFailed {
+		decision.block = true
+		return decision, fmt.Errorf("IndexerCluster lifecycle failed")
+	}
+	if changed {
+		decision.block = true
+		return decision, nil
+	}
+
+	decision.action = transition.Execute
+	decision.block = transition.Execute == nil
+	return decision, nil
+}
+
+func lifecyclePhase(kind enterpriseApi.IndexerClusterLifecycleKind) enterpriseApi.Phase {
+	switch kind {
+	case enterpriseApi.IndexerClusterLifecycleRollout:
+		return enterpriseApi.PhaseUpdating
+	case enterpriseApi.IndexerClusterLifecycleScaleIn:
+		return enterpriseApi.PhaseScalingDown
+	case enterpriseApi.IndexerClusterLifecycleScaleOut:
+		return enterpriseApi.PhaseScalingUp
+	default:
+		return enterpriseApi.PhaseError
+	}
+}
+
+func (mgr *noahIndexerPodManager) newRolloutLifecycle(ctx context.Context, ordinal int32) (*enterpriseApi.IndexerClusterLifecycleStatus, error) {
+	replicas, err := noahIndexerStatefulSetReplicas(mgr.statefulSet)
 	if err != nil {
-		return noahIndexerOutcome{}, err
+		return nil, err
 	}
-	if plan.TargetReplicas > appliedReplicas {
-		return noahIndexerOutcome{}, fmt.Errorf("Noah indexer pod manager reported Ready before applying replica target %d", plan.TargetReplicas)
+
+	peer, pod, err := mgr.newLifecycleSourcePeerTarget(ctx, ordinal)
+	if err != nil {
+		return nil, err
 	}
-	if !plan.Complete {
+
+	return indexerworkflow.NewRolloutLifecycle(mgr.cr.Generation, enterpriseApi.IndexerClusterLifecycleTarget{
+		StatefulSetUID: mgr.statefulSet.UID,
+		SourceReplicas: replicas,
+		TargetReplicas: replicas,
+		SourceRevision: pod.Labels["controller-revision-hash"],
+		TargetRevision: mgr.statefulSet.Status.UpdateRevision,
+		Peers:          []enterpriseApi.IndexerClusterLifecyclePeerTarget{peer},
+	}, time.Now())
+}
+
+func (mgr *noahIndexerPodManager) newScaleInLifecycle(ctx context.Context, ordinal, sourceReplicas int32) (*enterpriseApi.IndexerClusterLifecycleStatus, error) {
+	peer, _, err := mgr.newLifecycleSourcePeerTarget(ctx, ordinal)
+	if err != nil {
+		return nil, err
+	}
+
+	return indexerworkflow.NewScaleInLifecycle(mgr.cr.Generation, enterpriseApi.IndexerClusterLifecycleTarget{
+		StatefulSetUID: mgr.statefulSet.UID,
+		SourceReplicas: sourceReplicas,
+		TargetReplicas: ordinal,
+		Peers:          []enterpriseApi.IndexerClusterLifecyclePeerTarget{peer},
+	}, time.Now())
+}
+
+func (mgr *noahIndexerPodManager) newScaleOutLifecycle(sourceReplicas, targetReplicas int32) (*enterpriseApi.IndexerClusterLifecycleStatus, error) {
+	peers := make([]enterpriseApi.IndexerClusterLifecyclePeerTarget, 0, targetReplicas-sourceReplicas)
+	for ordinal := sourceReplicas; ordinal < targetReplicas; ordinal++ {
+		peer, err := mgr.newLifecyclePeerTarget(ordinal)
+		if err != nil {
+			return nil, err
+		}
+		peers = append(peers, peer)
+	}
+
+	return indexerworkflow.NewScaleOutLifecycle(mgr.cr.Generation, enterpriseApi.IndexerClusterLifecycleTarget{
+		StatefulSetUID: mgr.statefulSet.UID,
+		SourceReplicas: sourceReplicas,
+		TargetReplicas: targetReplicas,
+		Peers:          peers,
+	}, time.Now())
+}
+
+func (mgr *noahIndexerPodManager) newLifecycleSourcePeerTarget(ctx context.Context, ordinal int32) (enterpriseApi.IndexerClusterLifecyclePeerTarget, *corev1.Pod, error) {
+	peer, err := mgr.newLifecyclePeerTarget(ordinal)
+	if err != nil {
+		return enterpriseApi.IndexerClusterLifecyclePeerTarget{}, nil, err
+	}
+
+	pod := &corev1.Pod{}
+	if err := mgr.client.Get(ctx, types.NamespacedName{Namespace: mgr.statefulSet.Namespace, Name: peer.PodName}, pod); err != nil {
+		return enterpriseApi.IndexerClusterLifecyclePeerTarget{}, nil, fmt.Errorf("get lifecycle source Pod %s: %w", peer.PodName, err)
+	}
+	peer.SourcePodUID = pod.UID
+
+	return peer, pod, nil
+}
+
+func (mgr *noahIndexerPodManager) newLifecyclePeerTarget(ordinal int32) (enterpriseApi.IndexerClusterLifecyclePeerTarget, error) {
+	peerID, err := noahIndexerPeerID(mgr.statefulSet, ordinal)
+	if err != nil {
+		return enterpriseApi.IndexerClusterLifecyclePeerTarget{}, err
+	}
+	return enterpriseApi.IndexerClusterLifecyclePeerTarget{
+		Ordinal: ordinal,
+		PeerID:  peerID,
+		PodName: noahIndexerPodName(mgr.statefulSet, ordinal),
+	}, nil
+}
+
+func lifecycleIsScaleIn(lifecycle *enterpriseApi.IndexerClusterLifecycleStatus) bool {
+	return lifecycle != nil && lifecycle.Kind == enterpriseApi.IndexerClusterLifecycleScaleIn
+}
+
+func lifecycleAuthorizesScaleIn(lifecycle *enterpriseApi.IndexerClusterLifecycleStatus, ordinal int32) bool {
+	return lifecycleIsScaleIn(lifecycle) &&
+		lifecycle.Checkpoint == enterpriseApi.IndexerClusterLifecycleActionPending &&
+		lifecycle.PendingAction != nil &&
+		lifecycle.PendingAction.Type == enterpriseApi.IndexerClusterLifecycleSetReplicas &&
+		lifecycle.Target.SourceReplicas == ordinal+1 &&
+		lifecycle.Target.TargetReplicas == ordinal &&
+		len(lifecycle.Target.Peers) == 1 &&
+		lifecycle.Target.Peers[0].Ordinal == ordinal
+}
+
+func (mgr *noahIndexerPodManager) observeLifecycleTargetPods(ctx context.Context, peers []enterpriseApi.IndexerClusterLifecyclePeerTarget) (map[int32]indexerworkflow.LifecyclePodObservation, error) {
+	pods := make(map[int32]indexerworkflow.LifecyclePodObservation, len(peers))
+	for _, peer := range peers {
+		pod := &corev1.Pod{}
+		key := types.NamespacedName{Namespace: mgr.statefulSet.Namespace, Name: peer.PodName}
+		if err := mgr.client.Get(ctx, key, pod); err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return nil, fmt.Errorf("get target Noah indexer Pod %s: %w", key, err)
+		}
+
+		pods[peer.Ordinal] = indexerworkflow.LifecyclePodObservation{
+			UID:      pod.UID,
+			Revision: pod.Labels["controller-revision-hash"],
+			Ready: pod.Status.Phase == corev1.PodRunning && slices.ContainsFunc(pod.Status.Conditions, func(condition corev1.PodCondition) bool {
+				return condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue
+			}),
+		}
+	}
+
+	return pods, nil
+}
+
+func (mgr *noahIndexerPodManager) observeRolloutLifecycle(ctx context.Context, lifecycle *enterpriseApi.IndexerClusterLifecycleStatus) (lifecycleDecision, error) {
+	targetPods, err := mgr.observeLifecycleTargetPods(ctx, lifecycle.Target.Peers)
+	if err != nil {
+		return lifecycleDecision{}, err
+	}
+
+	membershipSatisfied := false
+	if lifecycle.Checkpoint == enterpriseApi.IndexerClusterLifecycleWaitingForMembership {
+		observation, err := mgr.observePeers(ctx, lifecycle.Target.TargetReplicas)
+		if err != nil {
+			return lifecycleDecision{}, newNoahIndexerObservationError(err, enterpriseApi.PhaseUpdating)
+		}
+		membershipSatisfied = observation.AllReady
+	}
+
+	lifecycleObservation, err := mgr.lifecycleObservation(targetPods, membershipSatisfied)
+	if err != nil {
+		return lifecycleDecision{}, err
+	}
+
+	return mgr.applyLifecycleObservation(lifecycleObservation)
+}
+
+func (mgr *noahIndexerPodManager) lifecycleObservation(targetPods map[int32]indexerworkflow.LifecyclePodObservation, membershipSatisfied bool) (indexerworkflow.LifecycleObservation, error) {
+	replicas, err := noahIndexerStatefulSetReplicas(mgr.statefulSet)
+	if err != nil {
+		return indexerworkflow.LifecycleObservation{}, err
+	}
+
+	return indexerworkflow.LifecycleObservation{
+		StatefulSetUID:            mgr.statefulSet.UID,
+		StatefulSetReplicas:       replicas,
+		StatefulSetUpdateRevision: mgr.statefulSet.Status.UpdateRevision,
+		TargetPods:                targetPods,
+		Now:                       time.Now(),
+		SatisfiedTargetMembership: membershipSatisfied,
+	}, nil
+}
+
+func lifecycleTargetsRolloutOrdinal(lifecycle *enterpriseApi.IndexerClusterLifecycleStatus, ordinal int32) bool {
+	return lifecycle.Kind == enterpriseApi.IndexerClusterLifecycleRollout &&
+		len(lifecycle.Target.Peers) == 1 &&
+		lifecycle.Target.Peers[0].Ordinal == ordinal
+}
+
+func (mgr *noahIndexerPodManager) observeReady(ctx context.Context, appliedReplicas int32, previousPhase enterpriseApi.Phase, previousReplicas int32) (noahIndexerOutcome, error) {
+	observation, err := mgr.observePeers(ctx, appliedReplicas)
+	if err != nil {
+		return noahIndexerOutcome{}, newNoahIndexerObservationError(err, previousPhase)
+	}
+
+	if observation.TimedOutPeerID != "" {
+		return noahIndexerOutcome{}, &noahIndexerCacheWarmTimeoutError{peerID: observation.TimedOutPeerID}
+	}
+
+	if lifecycle := mgr.cr.Status.Lifecycle; lifecycle != nil &&
+		lifecycle.Kind == enterpriseApi.IndexerClusterLifecycleScaleOut &&
+		lifecycle.Checkpoint == enterpriseApi.IndexerClusterLifecycleWaitingForMembership {
+		targetPods, err := mgr.observeLifecycleTargetPods(ctx, lifecycle.Target.Peers)
+		if err != nil {
+			return noahIndexerOutcome{}, err
+		}
+
+		membershipSatisfied := observation.AllReady
+		if !mgr.cacheWarmEnabled {
+			membershipSatisfied = observation.AllRegistered
+		}
+
+		if _, err := mgr.applyLifecycleObservation(indexerworkflow.LifecycleObservation{
+			StatefulSetUID:            mgr.statefulSet.UID,
+			StatefulSetReplicas:       appliedReplicas,
+			TargetPods:                targetPods,
+			Now:                       time.Now(),
+			SatisfiedTargetMembership: membershipSatisfied,
+		}); err != nil {
+			return noahIndexerOutcome{}, err
+		}
+
+		return noahIndexerOutcome{
+			phase:        enterpriseApi.PhaseScalingUp,
+			phaseMessage: "Completing durable scale-out",
+			condition: newNoahPeersReadyCondition(
+				metav1.ConditionFalse,
+				enterpriseApi.ReasonNoahPeersNotReady,
+				"Waiting for the scale-out lifecycle to complete",
+			),
+			requeueAfter: noahIndexerPollInterval,
+		}, nil
+	}
+
+	if !observation.AllReady {
 		phase := enterpriseApi.PhasePending
 		phaseMessage := "Waiting for expected Noah peers"
+
 		if previousPhase == enterpriseApi.PhaseScalingUp || previousReplicas < appliedReplicas || appliedReplicas < mgr.cr.Spec.Replicas {
 			phase = enterpriseApi.PhaseScalingUp
 			phaseMessage = fmt.Sprintf("Waiting for %d applied replicas to become ready before continuing scale-out", appliedReplicas)
 		}
+
 		return noahIndexerOutcome{
 			phase:        phase,
 			phaseMessage: phaseMessage,
@@ -680,7 +1161,7 @@ type noahIndexerOutcome struct {
 	requeueAfter time.Duration
 }
 
-func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, appliedReplicas int32, scaleDownPending bool) noahIndexerOutcome {
+func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, appliedReplicas int32, scaleInPending bool) noahIndexerOutcome {
 	if phase == enterpriseApi.PhasePending {
 		phase = noahIndexerLifecyclePhase(previousPhase)
 	}
@@ -689,9 +1170,9 @@ func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, applie
 	conditionMessage := "Waiting for the indexer workload before observing Noah peers"
 	switch phase {
 	case enterpriseApi.PhaseScalingDown:
-		phaseMessage = "Scaling down without Noah decommission; development use only"
-		if scaleDownPending {
-			phaseMessage = "Waiting for Noah scale-down cleanup; development use only"
+		phaseMessage = "Gracefully scaling down the indexer workload"
+		if scaleInPending {
+			phaseMessage = "Waiting for graceful Noah scale-in cleanup"
 			conditionMessage = "Waiting for removed-peer cleanup and active bucket-map confirmation"
 		}
 	case enterpriseApi.PhaseUpdating:
