@@ -1,0 +1,213 @@
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package appframework
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	appsv1 "k8s.io/api/apps/v1"
+)
+
+const (
+	// max. reconcile requeue schedule time(Seconds)
+	maxRecDuration time.Duration = 1<<63 - 1
+
+	// Current App framework version
+	currentAfwVersion = enterpriseApi.AfwPhase3
+
+	// Max. of parallel installs for a given Pod
+	maxParallelInstallsPerPod = 1
+
+	// Max. number of retries to update the CR Status
+	maxRetryCountForCRStatusUpdate = 10
+)
+
+// InstanceType is a type alias preserved for backward compatibility.
+// New code should use splcommon.InstanceType directly.
+type InstanceType = splcommon.InstanceType
+
+const (
+	SplunkStandalone        = splcommon.SplunkStandalone
+	SplunkClusterMaster     = splcommon.SplunkClusterMaster
+	SplunkClusterManager    = splcommon.SplunkClusterManager
+	SplunkSearchHead        = splcommon.SplunkSearchHead
+	SplunkIndexer           = splcommon.SplunkIndexer
+	SplunkIngestor          = splcommon.SplunkIngestor
+	SplunkQueue             = splcommon.SplunkQueue
+	SplunkObjectStorage     = splcommon.SplunkObjectStorage
+	SplunkDeployer          = splcommon.SplunkDeployer
+	SplunkLicenseMaster     = splcommon.SplunkLicenseMaster
+	SplunkLicenseManager    = splcommon.SplunkLicenseManager
+	SplunkMonitoringConsole = splcommon.SplunkMonitoringConsole
+
+	// TmpAppDownloadDir is the Operator directory for app framework, when there is no explicit volume specified
+	TmpAppDownloadDir string = "/tmp/appframework/"
+)
+
+type commonResourceTracker struct {
+	// mutex to serialize the access to commonResourceTracker
+	mutex sync.Mutex
+
+	// map of resource name:mutex, so that we can serialize get/create/update to common resources such as secrets/configMaps
+	mutexMap map[string]*sync.Mutex
+}
+
+type globalResourceTracker struct {
+	storage *storageTracker
+
+	commonResourceTracker *commonResourceTracker
+}
+
+type storageTracker struct {
+	// represents the available disk space on operator pod
+	availableDiskSpace int64
+
+	// resolvedAppDownloadVolume is the actual path used for app downloads: either
+	// splcommon.AppDownloadVolume, or TmpAppDownloadDir when that volume isn't mounted
+	resolvedAppDownloadVolume string
+
+	// mutex to serialize the access
+	mutex sync.Mutex
+}
+
+// PipelineWorker represents execution context used to run an app pkg worker thread
+type PipelineWorker struct {
+	//  to the AppSource Spec entry
+	appSrcName string
+
+	// Reference to the App Framework Config
+	afwConfig *enterpriseApi.AppFrameworkSpec
+
+	// Reference to the App context from the CR status
+	appDeployInfo *enterpriseApi.AppDeploymentInfo
+
+	// Used for pod copy and install
+	targetPodName string
+
+	// runtime client
+	client splcommon.ControllerClient
+
+	// cr meta object
+	cr splcommon.MetaObject
+
+	// statefulset to know replicaset details
+	sts *appsv1.StatefulSet
+
+	// isActive indicates if a worker is assigned
+	isActive bool
+
+	// waiter reference to inform the caller
+	waiter *sync.WaitGroup
+
+	// indicates a fan out worker
+	fanOut bool
+
+	// Optional injected pod exec client for testing (avoids real network I/O)
+	// If nil, runPodCopyWorker will create a real client
+	podExecClient splutil.PodExecClientImpl
+}
+
+// PipelinePhase represents one phase in the overall installation pipeline
+type PipelinePhase struct {
+	mutex        sync.Mutex
+	q            []*PipelineWorker
+	msgChannel   chan *PipelineWorker
+	workerWaiter sync.WaitGroup
+}
+
+// AppInstallPipeline defines the pipeline for the installation activity
+type AppInstallPipeline struct {
+	// Pipeline Phases: Download, Pod Copy and Install
+	pplnPhases map[enterpriseApi.AppPhaseType]*PipelinePhase
+
+	// Used by the scheduler to wait for all the Phases to complete
+	phaseWaiter sync.WaitGroup
+
+	// Used by yield logic
+	sigTerm chan struct{}
+
+	// Reference to app deploy context
+	appDeployContext *enterpriseApi.AppDeploymentContext
+
+	// Scheduler entry time
+	afwEntryTime int64
+
+	// additional context used for bundle push logic
+	// runtime client
+	client splcommon.ControllerClient
+
+	// cr meta object
+	cr splcommon.MetaObject
+
+	// statefulset to know replicaset details
+	sts *appsv1.StatefulSet
+}
+
+// PlaybookImpl is an interface to implement individual playbooks
+type PlaybookImpl interface {
+	runPlaybook(ctx context.Context) error
+}
+
+// blank assignment to implement PlaybookImpl
+var _ PlaybookImpl = &localScopePlaybookContext{}
+
+var _ PlaybookImpl = &IdxcPlaybookContext{}
+
+var _ PlaybookImpl = &SHCPlaybookContext{}
+
+var _ PlaybookImpl = &premiumAppScopePlaybookContext{}
+
+// IdxcPlaybookContext is used to implement playbook to push bundle to indexer cluster peers
+type IdxcPlaybookContext struct {
+	client        splcommon.ControllerClient
+	cr            splcommon.MetaObject
+	afwPipeline   *AppInstallPipeline
+	targetPodName string
+	podExecClient splutil.PodExecClientImpl
+}
+
+// SHCPlaybookContext is used to implement playbook to push bundle to SHC members
+type SHCPlaybookContext struct {
+	client               splcommon.ControllerClient
+	cr                   splcommon.MetaObject
+	afwPipeline          *AppInstallPipeline
+	targetPodName        string
+	searchHeadCaptainURL string
+	podExecClient        splutil.PodExecClientImpl
+}
+
+// premiumAppScopePlaybookContext is used to implement playbook to run special commands for premium apps installation
+type premiumAppScopePlaybookContext struct {
+	localCtx    *localScopePlaybookContext
+	client      splcommon.ControllerClient
+	appSrcSpec  *enterpriseApi.AppSourceSpec
+	cr          splcommon.MetaObject
+	afwPipeline *AppInstallPipeline
+}
+
+type localScopePlaybookContext struct {
+	worker *PipelineWorker
+
+	// semaphore to track only one app install at any time for a given replicaset pod
+	sem           chan struct{}
+	podExecClient splutil.PodExecClientImpl
+}

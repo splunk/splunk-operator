@@ -17,5 +17,10 @@
 Package appframework implements the App Framework workflow: bundle discovery,
 staging, scheduling, and push to Splunk pods via the REST API.
 Migrated from enterprise/afwscheduler.go and related files.
+
+// TODO: This workflow currently retains direct Kubernetes operations for the
+// transitional enterprise callers. Once all CRs have migrated from enterprise,
+// move these operations and CR-specific state behind reconcile-owned adapters
+// and make this workflow fully CR-agnostic.
 */
 package appframework

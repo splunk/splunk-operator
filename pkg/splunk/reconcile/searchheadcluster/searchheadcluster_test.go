@@ -48,6 +48,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 )
@@ -434,14 +435,14 @@ func TestApplySearchHeadClusterDeployerPodTerminalFailure(t *testing.T) {
 	// checkPodsForTerminalFailures returns a TerminalError on the next reconcile.
 	deployerPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetPodName(SplunkDeployer, cr.GetName(), 0),
+			Name:      splutil.GetSplunkStatefulsetPodName(SplunkDeployer, cr.GetName(), 0),
 			Namespace: cr.GetNamespace(),
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "splunk-operator",
 				"app.kubernetes.io/component":  "search-head",
 				"app.kubernetes.io/name":       "deployer",
 				"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-search-head", cr.GetName()),
-				"app.kubernetes.io/instance":   GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
+				"app.kubernetes.io/instance":   splutil.GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
 			},
 		},
 		Status: corev1.PodStatus{
@@ -536,7 +537,7 @@ func TestApplySearchHeadClusterUpgradePathSoftWait(t *testing.T) {
 	// fake client doesn't populate CreationTimestamp on Create, so set it
 	// explicitly to make pass 2 exercise UpgradePathValidation.
 	deployerStatefulSetName := types.NamespacedName{
-		Name:      GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
+		Name:      splutil.GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
 		Namespace: cr.GetNamespace(),
 	}
 	deployerStatefulSet := &appsv1.StatefulSet{}
@@ -553,7 +554,7 @@ func TestApplySearchHeadClusterUpgradePathSoftWait(t *testing.T) {
 	// instead of the hard image-mismatch error branch.
 	lmStatefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkLicenseManager, lm.GetName()),
+			Name:      splutil.GetSplunkStatefulsetName(SplunkLicenseManager, lm.GetName()),
 			Namespace: lm.GetNamespace(),
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -802,7 +803,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				return cl
 			},
 			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
-				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
+				c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
 		}
@@ -925,7 +926,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 			// Get the mock client
-			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
+			c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
 		},
 	}

@@ -49,6 +49,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 )
 
 func init() {
@@ -140,17 +141,17 @@ func TestGetRemoteStorageClient(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splstorage.NewMockAWSS3Client)
 
 	// Cover no secret key, empty GetInitFunc case
-	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)
+	appframework.GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)
 
 	fn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		return spltest.MockAWSS3Client{}
 	}
-	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)
+	appframework.GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)
 
 	// With secretRef
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
-	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
+	appframework.GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
 
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
 	secret := corev1.Secret{
@@ -163,17 +164,17 @@ func TestGetRemoteStorageClient(t *testing.T) {
 		},
 	}
 	c.Create(ctx, &secret)
-	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
+	appframework.GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
 
 	secret.Data["s3_access_key"] = []byte("")
 	c.Update(ctx, &secret)
-	_, err := GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
+	_, err := appframework.GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
 	if err == nil {
 		t.Errorf("Expeceted error")
 	}
 
 	cm.Spec.AppFrameworkConfig.VolList[1].Provider = "azure"
-	_, err = GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
+	_, err = appframework.GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
 	if err == nil {
 		t.Errorf("Expeceted error")
 	}
@@ -1261,16 +1262,16 @@ func TestHasAppRepoCheckTimerExpired(t *testing.T) {
 		LastAppInfoCheckTime: 0,
 	}
 
-	if !HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
+	if !appframework.HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 
 	appInfoContext.AppsRepoStatusPollInterval = 60
 
 	// Case 2. We just checked the apps status
-	SetLastAppInfoCheckTime(ctx, appInfoContext)
+	appframework.SetLastAppInfoCheckTime(ctx, appInfoContext)
 
-	if HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
+	if appframework.HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned false since we just checked the apps status")
 	}
 
@@ -1278,7 +1279,7 @@ func TestHasAppRepoCheckTimerExpired(t *testing.T) {
 	// We do this by setting some random past timestamp.
 	appInfoContext.LastAppInfoCheckTime = 1591464060
 
-	if !HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
+	if !appframework.HasAppRepoCheckTimerExpired(ctx, appInfoContext) {
 		t.Errorf("ShouldCheckAppStatus should have returned true")
 	}
 }
@@ -1343,7 +1344,7 @@ func getAppSrcDeployInfoCountByStateAndStatus(appSrc string, appSrcDeployStatus 
 func TestSetLastAppInfoCheckTime(t *testing.T) {
 	ctx := context.TODO()
 	appInfoStatus := &enterpriseApi.AppDeploymentContext{}
-	SetLastAppInfoCheckTime(ctx, appInfoStatus)
+	appframework.SetLastAppInfoCheckTime(ctx, appInfoStatus)
 
 	if appInfoStatus.LastAppInfoCheckTime != time.Now().Unix() {
 		t.Errorf("LastAppInfoCheckTime should have been set to current time")
@@ -1354,7 +1355,7 @@ func TestGetNextRequeueTime(t *testing.T) {
 	ctx := context.TODO()
 	appFrameworkContext := enterpriseApi.AppDeploymentContext{}
 	appFrameworkContext.AppsRepoStatusPollInterval = 60
-	nextRequeueTime := GetNextRequeueTime(ctx, appFrameworkContext.AppsRepoStatusPollInterval, (time.Now().Unix() - int64(40)))
+	nextRequeueTime := appframework.GetNextRequeueTime(ctx, appFrameworkContext.AppsRepoStatusPollInterval, (time.Now().Unix() - int64(40)))
 	if nextRequeueTime > time.Second*20 {
 		t.Errorf("Got wrong next requeue time")
 	}
@@ -1628,7 +1629,7 @@ func TestUpdateOrRemoveEntryFromConfigMapLocked(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	// To test the failure scenario, do not add the configMap to the client yet
-	err := UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, SplunkStandalone)
+	err := appframework.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, appframework.SplunkStandalone)
 	if err == nil {
 		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should have returned error as there is no configMap yet")
 	}
@@ -1649,7 +1650,7 @@ refCount: 1`
 	client.AddObject(configMap)
 
 	// To test the failure scenario, do not add the standalone cr to the list yet
-	err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, SplunkStandalone)
+	err = appframework.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, appframework.SplunkStandalone)
 	if err == nil {
 		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should have returned error as there are no owner references in the configMap")
 	}
@@ -1671,7 +1672,7 @@ refCount: 1`
 	}
 
 	// We should have decremented the refCount to 1
-	err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand2, SplunkStandalone)
+	err = appframework.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand2, appframework.SplunkStandalone)
 	if err != nil {
 		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should not have returned error")
 	}
@@ -1689,7 +1690,7 @@ refCount: 1`
 	}
 
 	// Now since there is only 1 standalone left, we should be removing the entry from the configMap
-	err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, SplunkStandalone)
+	err = appframework.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, &stand1, appframework.SplunkStandalone)
 	if err != nil {
 		t.Errorf("UpdateOrRemoveEntryFromConfigMapLocked should not have returned error")
 	}
@@ -3506,7 +3507,7 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 	}
 
 	// Call GetRemoteStorageClient — should fail at getClient and emit AppRepositoryConnectionFailed
-	_, err := GetRemoteStorageClient(ctx, client, cr, &enterpriseApi.AppFrameworkSpec{}, vol, "apps", nil)
+	_, err := appframework.GetRemoteStorageClient(ctx, client, cr, &enterpriseApi.AppFrameworkSpec{}, vol, "apps", nil)
 	if err == nil {
 		t.Errorf("Expected error from GetRemoteStorageClient when getClient fails")
 	}
@@ -3842,7 +3843,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				return cl
 			},
 			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
-				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
+				c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
 		}
@@ -3966,7 +3967,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 			// Get the mock client
-			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
+			c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
 		},
 	}

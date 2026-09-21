@@ -47,10 +47,10 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
-	storageaws "github.com/splunk/splunk-operator/pkg/splunk/client/storage/aws"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 
 	// Used to move files between pods
 	_ "unsafe"
@@ -75,12 +75,6 @@ func initGlobalResourceTracker() {
 
 	// initialize the resource tracker
 	initCommonResourceTracker()
-}
-
-// InitGlobalResourceTracker resets the shared resource tracker for callers that
-// exercise the legacy app framework from another package.
-func InitGlobalResourceTracker() {
-	initGlobalResourceTracker()
 }
 
 func initCommonResourceTracker() {
@@ -154,104 +148,6 @@ func getResolvedAppDownloadVolume() string {
 	return operatorResourceTracker.storage.resolvedAppDownloadVolume
 }
 
-// GetRemoteStorageClient returns the corresponding RemoteDataClient
-func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
-
-	scopedLog := logging.FromContext(ctx).With("func", "GetRemoteStorageClient", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, cr)
-
-	remoteDataClient := splstorage.SplunkRemoteDataClient{}
-	//use the provider name to get the corresponding function pointer
-	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
-	getClient := getClientWrapper.GetRemoteDataClientFuncPtr(ctx)
-
-	appSecretRef := vol.SecretRef
-	var accessKeyID string
-	var secretAccessKey string
-	var sessionToken string
-	if appSecretRef == "" {
-		// No secretRef means we should try to use the credentials available in the pod already via kube2iam or something similar
-		scopedLog.InfoContext(ctx, "no secrectRef provided.  Attempt to access remote storage client without access/secret keys")
-		accessKeyID = ""
-		secretAccessKey = ""
-	} else {
-		// Get credentials through the secretRef
-		remoteDataClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), appSecretRef)
-		if err != nil {
-			// Emit event for missing secret
-			if k8serrors.IsNotFound(err) {
-				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, splcommon.EventReasonSecretMissing,
-						fmt.Sprintf("Required secret '%s' not found in namespace '%s'. Create secret to proceed.", appSecretRef, cr.GetNamespace()))
-				}
-			}
-
-			return remoteDataClient, err
-		}
-
-		// Get access keys
-		if vol.Provider == "azure" {
-			accessKeyID = string(remoteDataClientSecret.Data["azure_sa_name"])
-			secretAccessKey = string(remoteDataClientSecret.Data["azure_sa_secret_key"])
-		} else if vol.Provider == "gcp" {
-			accessKeyID = "key.json"
-			secretAccessKey = string(remoteDataClientSecret.Data[accessKeyID])
-		} else {
-			accessKeyID = string(remoteDataClientSecret.Data["s3_access_key"])
-			secretAccessKey = string(remoteDataClientSecret.Data["s3_secret_key"])
-			sessionToken = string(remoteDataClientSecret.Data["s3_session_token"])
-		}
-
-		// Do we need to handle if IAM_ROLE is set in the secret as well?
-		if accessKeyID == "" {
-			err = fmt.Errorf("accessKey missing")
-			return remoteDataClient, err
-		}
-		if secretAccessKey == "" {
-			err = fmt.Errorf("s3 Secret Key is missing")
-			return remoteDataClient, err
-		}
-	}
-	if vol.Provider == "aws" && sessionToken != "" {
-		ctx = storageaws.WithSessionToken(ctx, sessionToken)
-	}
-
-	// Get the bucket name form the "path" field
-	bucket := strings.Split(vol.Path, "/")[0]
-
-	//Get the prefix from the "path" field
-	basePrefix := strings.TrimPrefix(vol.Path, bucket+"/")
-	// if vol.Path contains just the bucket name(i.e without ending "/"), TrimPrefix returns the vol.Path
-	// So, just reset the basePrefix to null
-	if basePrefix == bucket {
-		basePrefix = ""
-	}
-
-	// Join takes care of merging two paths and returns a clean result
-	// Ex. ("a/b" + "c"),  ("a/b/" + "c"),  ("a/b/" + "/c"),  ("a/b/" + "/c"), ("a/b//", + "c/././") ("a/b/../b", + "c/../c") all are joined as "a/b/c"
-	prefix := filepath.Join(basePrefix, location) + "/"
-
-	scopedLog.InfoContext(ctx, "creating the client", "volume", vol.Name, "bucket", bucket, "bucketPath", prefix)
-
-	var err error
-
-	remoteDataClient.Client, err = getClient(ctx, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Region, vol.Endpoint, fn)
-
-	if err != nil {
-		scopedLog.ErrorContext(ctx, "failed to get the S3 client", "error", err)
-		// Emit event when operator cannot connect to the remote app repository
-		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, splcommon.EventReasonAppRepoConnFailed,
-				fmt.Sprintf("Failed to connect to app repository '%s': %s. Check credentials and network.", vol.Name, err.Error()))
-		}
-		return remoteDataClient, err
-	}
-
-	return remoteDataClient, nil
-}
-
 // ApplySplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
 func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, instanceType InstanceType) (*corev1.Secret, error) {
 	var err error
@@ -277,64 +173,12 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 			return nil, err
 		}
 	}
-	err = ReconcileCRSpecificConfigMap(ctx, client, cr, instanceType)
+	err = appframework.ReconcileCRSpecificConfigMap(ctx, client, cr)
 	if err != nil {
 		return nil, err
 	}
 
 	return namespaceScopedSecret, nil
-}
-
-// ReconcileCRSpecificConfigMap reconciles CR Specific config map exists and contains the ManualUpdate field set to "off"
-func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
-
-	scopedLog := logging.FromContext(ctx).With("func", "ReconcileCRSpecificConfigMap", "name", cr.GetName(), "namespace", cr.GetNamespace())
-	a := cr.GetObjectKind()
-	b := a.GroupVersionKind()
-	c := b.Kind
-	d := KindToInstanceString(c)
-
-	configMapName := fmt.Sprintf(perCrConfigMapNameStr, d, cr.GetName())
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-
-	configMap, err := k8sops.GetConfigMap(ctx, client, namespacedName)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			// Create a new config map if it doesn't exist
-			configMap = &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      configMapName,
-					Namespace: cr.GetNamespace(),
-				},
-				Data: map[string]string{
-					"manualUpdate": "off",
-				},
-			}
-			configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
-			err = client.Create(ctx, configMap)
-			if err != nil {
-				scopedLog.ErrorContext(ctx, "failed to create config map", "error", err)
-				return err
-			}
-			scopedLog.InfoContext(ctx, "created new config map with ManualUpdate set to 'on'")
-			return nil
-		}
-		scopedLog.ErrorContext(ctx, "failed to get config map", "error", err)
-		return err
-	}
-
-	// Check if the ManualUpdate field exists
-	if _, exists := configMap.Data["manualUpdate"]; !exists {
-		configMap.Data["manualUpdate"] = "off"
-		err = client.Update(ctx, configMap)
-		if err != nil {
-			scopedLog.ErrorContext(ctx, "failed to update config map with manualUpdate field", "error", err)
-			return err
-		}
-		scopedLog.InfoContext(ctx, "updated config map with manualUpdate set to 'on'")
-	}
-
-	return nil
 }
 
 // getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
@@ -619,7 +463,7 @@ func getRemoteDataClientMgr(ctx context.Context, client splcommon.ControllerClie
 		vol:                 &vol,
 		location:            appSrc.Location,
 		initFn:              initFunc,
-		getRemoteDataClient: GetRemoteStorageClient,
+		getRemoteDataClient: appframework.GetRemoteStorageClient,
 	}
 	return remoteDataClientMgr, nil
 }
@@ -934,58 +778,6 @@ var GetAppsList = func(ctx context.Context, RemoteDataClientMgr RemoteDataClient
 	return remoteDataListResponse, err
 }
 
-// GetAppListFromRemoteBucket gets the list of apps from remote storage.
-func GetAppListFromRemoteBucket(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (map[string]splcommon.RemoteDataListResponse, error) {
-
-	scopedLog := logging.FromContext(ctx).With("func", "GetAppListFromRemoteBucket", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	sourceToAppListMap := make(map[string]splcommon.RemoteDataListResponse)
-
-	scopedLog.InfoContext(ctx, "getting the list of apps from remote storage")
-
-	var remoteDataListResponse splcommon.RemoteDataListResponse
-	var vol enterpriseApi.VolumeSpec
-	var err error
-	var allSuccess bool = true
-
-	for _, appSource := range appFrameworkRef.AppSources {
-		vol, err = splutil.GetAppSrcVolume(ctx, appSource, appFrameworkRef)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		remoteDataClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
-		initFunc := remoteDataClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-		remoteDataClientMgr := RemoteDataClientManager{
-			client:              client,
-			cr:                  cr,
-			appFrameworkRef:     appFrameworkRef,
-			vol:                 &vol,
-			location:            appSource.Location,
-			initFn:              initFunc,
-			getRemoteDataClient: GetRemoteStorageClient,
-		}
-
-		// Now, get the apps list from remote storage
-		remoteDataListResponse, err = GetAppsList(ctx, remoteDataClientMgr)
-		if err != nil {
-			// move on to the next appSource if we are not able to get apps list
-			scopedLog.ErrorContext(ctx, "unable to get apps list", "appSource", appSource.Name, "error", err)
-			allSuccess = false
-			continue
-		}
-
-		sourceToAppListMap[appSource.Name] = remoteDataListResponse
-	}
-
-	if !allSuccess {
-		err = fmt.Errorf("unable to get apps list from remote storage list for all the apps")
-	}
-
-	return sourceToAppListMap, err
-}
-
 // checkIfAnAppIsActiveOnRemoteStore checks if the App is listed as part of the AppSrc listing
 func checkIfAnAppIsActiveOnRemoteStore(appName string, list []*splcommon.RemoteObject) bool {
 	for i := range list {
@@ -1211,7 +1003,7 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 
 	// Check if the appSource is still valid in the config
 	for appSrc := range remoteObjListingMap {
-		if !CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) {
+		if !appframework.CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) {
 			err = fmt.Errorf("app source: %s no more exists, this should never happen", appSrc)
 			return appsModified, err
 		}
@@ -1220,7 +1012,7 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 	// 1. Check if the AppSrc is deleted in latest config, OR missing with the remote listing.
 	for appSrc, appSrcDeploymentInfo := range appDeployContext.AppsSrcDeployStatus {
 		// If the AppSrc is missing mark all the corresponding apps for deletion
-		if !CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) ||
+		if !appframework.CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) ||
 			!checkIfAppSrcExistsWithRemoteListing(appSrc, remoteObjListingMap) {
 			scopedLog.InfoContext(ctx, "app change: App source is missing in config or remote listing, deleting/disabling all the apps", "appSource", appSrc)
 			curAppDeployList := appSrcDeploymentInfo.AppDeploymentInfoList
@@ -1251,7 +1043,7 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 		}
 
 		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
-		appsModified = AddOrUpdateAppSrcDeploymentInfoList(ctx, &appSrcDeploymentInfo, remoteDataListResponse.Objects)
+		appsModified = appframework.AddOrUpdateAppSrcDeploymentInfoList(ctx, &appSrcDeploymentInfo, remoteDataListResponse.Objects)
 		scope := getAppSrcScope(ctx, appFrameworkConfig, appSrc)
 		// if some apps were modified or added, and we have cluster scoped apps,
 		// then set the bundle push state to Pending
@@ -1279,78 +1071,6 @@ func isAppExtensionValid(receivedKey string) bool {
 	return false
 }
 
-// AddOrUpdateAppSrcDeploymentInfoList  modifies the App deployment status as perceived from the remote object listing
-func AddOrUpdateAppSrcDeploymentInfoList(ctx context.Context, appSrcDeploymentInfo *enterpriseApi.AppSrcDeployInfo, remoteS3ObjList []*splcommon.RemoteObject) bool {
-
-	scopedLog := logging.FromContext(ctx).With("func", "AddOrUpdateAppSrcDeploymentInfoList", "listLength", len(remoteS3ObjList))
-
-	var found bool
-	var appName string
-	var newAppInfoList []enterpriseApi.AppDeploymentInfo
-	var appChangesDetected bool
-	var appDeployInfo enterpriseApi.AppDeploymentInfo
-
-	for _, remoteObj := range remoteS3ObjList {
-		receivedKey := *remoteObj.Key
-		if !isAppExtensionValid(receivedKey) {
-			scopedLog.ErrorContext(ctx, "app name Parsing: Ignoring the key with invalid extension", "receivedKey", receivedKey)
-			continue
-		}
-
-		nameAt := strings.LastIndex(receivedKey, "/")
-		appName = receivedKey[nameAt+1:]
-
-		// Now update App status as seen in the remote listing
-		found = false
-		appList := appSrcDeploymentInfo.AppDeploymentInfoList
-		for idx := range appList {
-			if appList[idx].AppName == appName {
-				found = true
-				if appList[idx].ObjectHash != *remoteObj.Etag || appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
-					scopedLog.InfoContext(ctx, "app change detected.  Marking for an update", "appName", appName)
-					appList[idx].ObjectHash = *remoteObj.Etag
-					appList[idx].IsUpdate = true
-					appList[idx].DeployStatus = enterpriseApi.DeployStatusPending
-					appList[idx].PhaseInfo.Phase = enterpriseApi.PhaseDownload
-					appList[idx].PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
-					appList[idx].PhaseInfo.FailCount = 0
-					appList[idx].AuxPhaseInfo = nil
-
-					// Make the state active for an app that was deleted earlier, and got activated again
-					if appList[idx].RepoState == enterpriseApi.RepoStateDeleted {
-						scopedLog.InfoContext(ctx, "app change.  Enabling the App that was previously disabled/deleted", "appName", appName)
-						appList[idx].RepoState = enterpriseApi.RepoStateActive
-					}
-					appChangesDetected = true
-				}
-
-				// Found the App and finished the needed work. we can break here
-				break
-			}
-		}
-
-		// Update our local list if it is a new app
-		if !found {
-			scopedLog.InfoContext(ctx, "new App found", "appName", appName)
-			appDeployInfo.AppName = appName
-			appDeployInfo.ObjectHash = *remoteObj.Etag
-			appDeployInfo.RepoState = enterpriseApi.RepoStateActive
-			appDeployInfo.DeployStatus = enterpriseApi.DeployStatusPending
-			appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseDownload
-			appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgDownloadPending
-
-			// Add it to a separate list so that we don't loop through the newly added entries
-			newAppInfoList = append(newAppInfoList, appDeployInfo)
-			appChangesDetected = true
-		}
-	}
-
-	// Add the newly discovered Apps to the App source group
-	appSrcDeploymentInfo.AppDeploymentInfoList = append(appSrcDeploymentInfo.AppDeploymentInfoList, newAppInfoList...)
-
-	return appChangesDetected
-}
-
 // markAppsStatusToComplete sets the required status for a given state.
 // Gets called from glue logic based on how we want to hand-off to init/side car, and look for the return status
 // For now, two possible cases:
@@ -1364,8 +1084,8 @@ func markAppsStatusToComplete(ctx context.Context, client splcommon.ControllerCl
 
 	// ToDo: Passing appSrcDeploymentStatus is redundant, but this function will go away in phase-3, so ok for now.
 	for appSrc := range appSrcDeploymentStatus {
-		changeAppSrcDeployInfoStatus(ctx, appSrc, appSrcDeploymentStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
-		changeAppSrcDeployInfoStatus(ctx, appSrc, appSrcDeploymentStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
+		appframework.ChangeAppSrcDeployInfoStatus(ctx, appSrc, appSrcDeploymentStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
+		appframework.ChangeAppSrcDeployInfoStatus(ctx, appSrc, appSrcDeploymentStatus, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusPending, enterpriseApi.DeployStatusComplete)
 	}
 
 	scopedLog.InfoContext(ctx, "marked the App deployment status to complete")
@@ -1403,51 +1123,6 @@ func isAppAlreadyDownloaded(ctx context.Context, downloadWorker *PipelineWorker)
 	return true
 }
 
-// SetLastAppInfoCheckTime sets the last check time to current time
-func SetLastAppInfoCheckTime(ctx context.Context, appInfoStatus *enterpriseApi.AppDeploymentContext) {
-
-	scopedLog := logging.FromContext(ctx).With("func", "SetLastAppInfoCheckTime")
-	currentEpoch := time.Now().Unix()
-
-	scopedLog.InfoContext(ctx, "setting the LastAppInfoCheckTime to current time", "current epoch time", currentEpoch)
-
-	appInfoStatus.LastAppInfoCheckTime = currentEpoch
-}
-
-// HasAppRepoCheckTimerExpired checks if the polling interval has expired
-func HasAppRepoCheckTimerExpired(ctx context.Context, appInfoContext *enterpriseApi.AppDeploymentContext) bool {
-
-	scopedLog := logging.FromContext(ctx).With("func", "HasAppRepoCheckTimerExpired")
-	currentEpoch := time.Now().Unix()
-
-	isTimerExpired := appInfoContext.LastAppInfoCheckTime+appInfoContext.AppsRepoStatusPollInterval <= currentEpoch
-	if isTimerExpired {
-		scopedLog.InfoContext(ctx, "app repo polling interval timer has expired", "LastAppInfoCheckTime", strconv.FormatInt(appInfoContext.LastAppInfoCheckTime, 10), "current epoch time", strconv.FormatInt(currentEpoch, 10))
-	}
-
-	return isTimerExpired
-}
-
-// GetNextRequeueTime gets the next reconcile requeue time based on the appRepoPollInterval.
-// There can be some time elapsed between when we first set lastAppInfoCheckTime and when the CR is in Ready state.
-// Hence we need to subtract the delta time elapsed from the actual polling interval,
-// so that the next reconcile would happen at the right time.
-func GetNextRequeueTime(ctx context.Context, appRepoPollInterval, lastCheckTime int64) time.Duration {
-
-	scopedLog := logging.FromContext(ctx).With("func", "GetNextRequeueTime")
-	currentEpoch := time.Now().Unix()
-
-	var nextRequeueTimeInSec int64
-	nextRequeueTimeInSec = appRepoPollInterval - (currentEpoch - lastCheckTime)
-	if nextRequeueTimeInSec < 0 {
-		nextRequeueTimeInSec = 5
-	}
-
-	scopedLog.InfoContext(ctx, "getting next requeue time", "LastAppInfoCheckTime", lastCheckTime, "Current Epoch time", currentEpoch, "nextRequeueTimeInSec", nextRequeueTimeInSec)
-
-	return time.Second * (time.Duration(nextRequeueTimeInSec))
-}
-
 // isAppRepoPollingEnabled checks whether automatic polling for apps repo changes
 // is enabled or not. If the value is 0, then we fallback to on-demand polling of apps
 // repo changes.
@@ -1475,21 +1150,7 @@ func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerCl
 			return true
 		}
 	} else {
-		return HasAppRepoCheckTimerExpired(ctx, appStatusContext)
-	}
-	return false
-}
-
-func IsManualUpdateSetInCRConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
-
-	scopedLog := logging.FromContext(ctx).With("func", "shouldCheckAppRepoStatusPerCR")
-
-	configMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
-	scopedLog.InfoContext(ctx, "checking if per CR specific configmap contains manualUpdate settings")
-	if getManualUpdatePerCrStatus(ctx, client, cr, configMapName) == "on" {
-		scopedLog.InfoContext(ctx, "CR specific configmap contains manualUpdate set to on", "configMapName", configMapName)
-		//*turnOffManualChecking = true
-		return true
+		return appframework.HasAppRepoCheckTimerExpired(ctx, appStatusContext)
 	}
 	return false
 }
@@ -1622,7 +1283,7 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 
 	//check if the apps need to be downloaded from remote storage
 	if shouldCheckAppRepoStatus(ctx, client, cr, appStatusContext, kind, &turnOffManualChecking) ||
-		IsManualUpdateSetInCRConfig(ctx, client, cr, appStatusContext, kind, &turnOffManualChecking) ||
+		appframework.IsManualUpdateSetInCRConfig(ctx, client, cr, appStatusContext, kind, &turnOffManualChecking) ||
 		!reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
 
 		if appStatusContext.IsDeploymentInProgress {
@@ -1635,7 +1296,7 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 
 		scopedLog.InfoContext(ctx, "checking status of apps on remote storage")
 
-		sourceToAppsList, err = GetAppListFromRemoteBucket(ctx, client, cr, appFrameworkConf)
+		sourceToAppsList, err = appframework.GetAppListFromRemoteBucket(ctx, client, cr, appFrameworkConf)
 		// TODO: gaurav, we need to handle this case better in Phase-3. There can be a possibility
 		// where if an appSource is missing in remote store, we mark it for deletion. But if it comes up
 		// next time, we will recycle the pod to install the app. We need to find a way to reduce the pod recycles.
@@ -1669,7 +1330,7 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 
 		// Set the last check time, irrespective of the polling type. This way, it is easy to switch
 		// in between the manual and automatic polling
-		SetLastAppInfoCheckTime(ctx, appStatusContext)
+		appframework.SetLastAppInfoCheckTime(ctx, appStatusContext)
 
 		if !isAppRepoPollingEnabled(appStatusContext) {
 			err = updateManualAppUpdateConfigMapLocked(ctx, client, cr, appStatusContext, kind, turnOffManualChecking)
@@ -1725,54 +1386,6 @@ func getNumOfOwnerRefsKind(configMap *corev1.ConfigMap, kind string) int {
 		}
 	}
 	return numOfObjects
-}
-
-// UpdateOrRemoveEntryFromConfigMapLocked removes/updates the entry for the CR type from the manual app update configMap
-func UpdateOrRemoveEntryFromConfigMapLocked(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
-
-	scopedLog := logging.FromContext(ctx).With("func", "UpdateOrRemoveEntryFromConfigMapLocked", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-
-	mux := getResourceMutex(configMapName)
-	mux.Lock()
-	defer mux.Unlock()
-	configMap, err := k8sops.GetConfigMap(ctx, c, namespacedName)
-	if err != nil {
-		scopedLog.ErrorContext(ctx, "unable to get config map", "name", namespacedName.Name, "error", err)
-		return err
-	}
-
-	kind := cr.GetObjectKind().GroupVersionKind().Kind
-
-	numOfObjects := getNumOfOwnerRefsKind(configMap, kind)
-	if numOfObjects == 0 {
-		err = fmt.Errorf("error getting objects for this type: %s", instanceType.ToString())
-		return err
-	}
-
-	// if this is the last of its kind, remove its entry from the config map
-	if numOfObjects == 1 {
-		delete(configMap.Data, kind)
-	} else {
-		// just decrement the refCount in the configMap
-		numOfObjects--
-
-		configMapData := fmt.Sprintf(`status: %s
-refCount: %d`, getManualUpdateStatus(ctx, c, cr, configMapName), numOfObjects)
-
-		configMap.Data[kind] = configMapData
-	}
-
-	// Update configMap now
-	err = splutil.UpdateResource(ctx, c, configMap)
-	if err != nil {
-		scopedLog.ErrorContext(ctx, "unable to update configMap", "name", namespacedName.Name, "error", err)
-		return err
-	}
-
-	return nil
 }
 
 // RemoveConfigMapOwnerRef removes the owner references for the configMap
@@ -2069,36 +1682,6 @@ func updateReconcileRequeueTime(ctx context.Context, result *reconcile.Result, r
 	}
 }
 
-// handleAppFrameworkActivity handles any pending app framework activity
-func handleAppFrameworkActivity(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appDeployContext *enterpriseApi.AppDeploymentContext, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) *reconcile.Result {
-
-	scopedLog := logging.FromContext(ctx).With("func", "afwSchedulerEntry", "name", cr.GetName(), "namespace", cr.GetNamespace())
-	finalResult := &reconcile.Result{
-		Requeue:      false,
-		RequeueAfter: maxRecDuration,
-	}
-
-	clearAppContextIfSourcesRemoved(appFrameworkConfig, appDeployContext)
-
-	// Consider the polling interval for next reconcile
-	if isAppRepoPollingEnabled(appDeployContext) {
-		requeueAfter := GetNextRequeueTime(ctx, appDeployContext.AppsRepoStatusPollInterval, appDeployContext.LastAppInfoCheckTime)
-		updateReconcileRequeueTime(ctx, finalResult, requeueAfter, true)
-	}
-
-	if appDeployContext.AppsSrcDeployStatus != nil {
-		requeue, err := afwSchedulerEntry(ctx, client, cr, appDeployContext, appFrameworkConfig)
-		if err != nil {
-			scopedLog.ErrorContext(ctx, "app framework returned error", "error", err)
-		}
-		if requeue {
-			updateReconcileRequeueTime(ctx, finalResult, time.Second*5, true)
-		}
-	}
-
-	return finalResult
-}
-
 // clearAppContextIfSourcesRemoved clears stale app deploy status when all AppSources have
 // been removed from spec. Without this, the scheduler loops every ~5s from stale
 // AppsSrcDeployStatus while /operator-staging is not mounted (no volume injected when
@@ -2122,7 +1705,7 @@ func checkAndMigrateAppDeployStatus(ctx context.Context, client splcommon.Contro
 	// If needed, Migrate the app framework status
 	if isAppFrameworkMigrationNeeded(afwStatusContext) {
 		// Spec validation updates the status with some of the defaults, which may not be there in older app framework versions
-		err := ValidateAppFrameworkSpec(ctx, afwConf, afwStatusContext, isLocalScope, cr.GetObjectKind().GroupVersionKind().Kind)
+		err := appframework.ValidateAppFrameworkSpec(ctx, afwConf, afwStatusContext, isLocalScope, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}
@@ -2512,34 +2095,8 @@ func ApplyIngestorPodDisruptionBudget(ctx context.Context, c splcommon.Controlle
 		cr.GetName(), cr.GetNamespace())
 }
 
-// The migration facade keeps legacy reconcilers source-compatible while the
-// implementation is consumed from the layered workflow packages.
-func CheckAndMigrateAppDeployStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, status *enterpriseApi.AppDeploymentContext, conf *enterpriseApi.AppFrameworkSpec, localScope bool) error {
-	return checkAndMigrateAppDeployStatus(ctx, client, cr, status, conf, localScope)
-}
-
-func InitAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, conf *enterpriseApi.AppFrameworkSpec, status *enterpriseApi.AppDeploymentContext) error {
-	return initAndCheckAppInfoStatus(ctx, client, cr, conf, status)
-}
-
-func HandleAppFrameworkActivity(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, status *enterpriseApi.AppDeploymentContext, conf *enterpriseApi.AppFrameworkSpec) *reconcile.Result {
-	return handleAppFrameworkActivity(ctx, client, cr, status, conf)
-}
-
 // MonitoringConsoleEnv is retained for compatibility with callers of the legacy helper location.
 // Deprecated: use the standalone reconciler's Monitoring Console environment construction.
 func MonitoringConsoleEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
 	return getStandaloneExtraEnv(cr, replicas)
-}
-
-func ChangeAppSrcDeployInfoStatus(ctx context.Context, appSrc string, statuses map[string]enterpriseApi.AppSrcDeployInfo, repoState enterpriseApi.AppRepoState, oldStatus enterpriseApi.AppDeploymentStatus, newStatus enterpriseApi.AppDeploymentStatus) {
-	changeAppSrcDeployInfoStatus(ctx, appSrc, statuses, repoState, oldStatus, newStatus)
-}
-
-func ChangePhaseInfo(ctx context.Context, replicas int32, appSrc string, statuses map[string]enterpriseApi.AppSrcDeployInfo) {
-	changePhaseInfo(ctx, replicas, appSrc, statuses)
-}
-
-func RemoveStaleEntriesFromAuxPhaseInfo(ctx context.Context, replicas int32, appSrc string, statuses map[string]enterpriseApi.AppSrcDeployInfo) {
-	removeStaleEntriesFromAuxPhaseInfo(ctx, replicas, appSrc, statuses)
 }

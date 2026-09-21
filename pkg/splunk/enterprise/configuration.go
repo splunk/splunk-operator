@@ -19,7 +19,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,6 +44,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
@@ -1401,46 +1401,6 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 	return false
 }
 
-// ApplyManualAppUpdateConfigMap applies the manual app update config map
-func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string) (*corev1.ConfigMap, error) {
-
-	logger := logging.FromContext(ctx).With("func", "ApplyManualAppUpdateConfigMap")
-
-	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-
-	var configMap *corev1.ConfigMap
-	var err error
-	var newConfigMap bool
-	configMap, err = k8sops.GetConfigMap(ctx, client, namespacedName)
-	if err != nil {
-		configMap = k8sops.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
-		newConfigMap = true
-	}
-
-	configMap.Data = crKindMap
-
-	// set this CR as owner reference for the configMap
-	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
-
-	if newConfigMap {
-		logger.InfoContext(ctx, "creating manual app update configMap")
-		err = splutil.CreateResource(ctx, client, configMap)
-		if err != nil {
-			logger.ErrorContext(ctx, "unable to create the configMap", "name", configMapName, "error", err)
-			return configMap, err
-		}
-	} else {
-		logger.InfoContext(ctx, "updating manual app update configMap")
-		err = splutil.UpdateResource(ctx, client, configMap)
-		if err != nil {
-			logger.ErrorContext(ctx, "unable to update the configMap", "name", configMapName, "error", err)
-			return configMap, err
-		}
-	}
-	return configMap, nil
-}
-
 // getManualUpdateStatus extracts the status field from the configMap data
 func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
 	logger := logging.FromContext(ctx).With("func", "getManualUpdateStatus")
@@ -1552,7 +1512,7 @@ refCount: %d`, status, numOfObjects+1)
 	crKindMap[kind] = configMapData
 
 	// Create/update the configMap to store the values of manual trigger per CR kind.
-	configMap, err = ApplyManualAppUpdateConfigMap(ctx, client, cr, crKindMap)
+	configMap, err = appframework.ApplyManualAppUpdateConfigMap(ctx, client, cr, crKindMap)
 	if err != nil {
 		logger.ErrorContext(ctx, "create/update configMap for app update failed", "error", err)
 		return configMap, err
@@ -1612,201 +1572,6 @@ func getAppSrcSpec(appSources []enterpriseApi.AppSourceSpec, appSrcName string) 
 
 	err = fmt.Errorf("unable to find app source spec for app source: %s", appSrcName)
 	return nil, err
-}
-
-// CheckIfAppSrcExistsInConfig returns if the given appSource is available in the configuration or not
-func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName string) bool {
-	for _, appSrc := range appFrameworkConf.AppSources {
-		if appSrc.Name == appSrcName {
-			return true
-		}
-	}
-	return false
-}
-
-// isAppSourceScopeValid checks for valid app source
-func isAppSourceScopeValid(scope string) bool {
-	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopePremiumApps || scope == enterpriseApi.ScopeClusterWithPreConfig
-}
-
-// validateSplunkAppSources validates the App source config in App Framework spec
-func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localOrPremScope bool, crKind string) error {
-
-	duplicateAppSourceStorageChecker := make(map[string]map[string]bool)
-	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
-	duplicateAppSourceStorageChecker[enterpriseApi.ScopePremiumApps] = make(map[string]bool)
-
-	// CSPL-2574 - Assign just in case invalid scope is passed through!
-	duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
-	duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
-
-	duplicateAppSourceNameChecker := make(map[string]bool)
-
-	var vol string
-
-	// Make sure that all the App Sources are provided with the mandatory config values.
-	for i, appSrc := range appFramework.AppSources {
-		if appSrc.Name == "" {
-			return fmt.Errorf("app Source name is missing for AppSource at: %d", i)
-		}
-
-		if _, ok := duplicateAppSourceNameChecker[appSrc.Name]; ok {
-			return fmt.Errorf("multiple app sources with the name %s is not allowed", appSrc.Name)
-		}
-		duplicateAppSourceNameChecker[appSrc.Name] = true
-
-		if appSrc.Location == "" {
-			return fmt.Errorf("app Source location is missing for AppSource: %s", appSrc.Name)
-		}
-
-		if appSrc.VolName != "" {
-			_, err := splutil.CheckIfVolumeExists(appFramework.VolList, appSrc.VolName)
-			if err != nil {
-				return fmt.Errorf("invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
-			}
-			vol = appSrc.VolName
-		} else {
-			if appFramework.Defaults.VolName == "" {
-				return fmt.Errorf("volumeName is missing for App Source: %s", appSrc.Name)
-			}
-			vol = appFramework.Defaults.VolName
-		}
-
-		var scope string
-		if appSrc.Scope != "" {
-			if localOrPremScope && !(appSrc.Scope == enterpriseApi.ScopeLocal || appSrc.Scope == enterpriseApi.ScopePremiumApps) {
-				return fmt.Errorf("invalid scope for App Source: %s. Valid scopes are %s or %s for this kind of CR", appSrc.Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopePremiumApps)
-			}
-
-			if !isAppSourceScopeValid(appSrc.Scope) {
-				return fmt.Errorf("scope for App Source: %s should be either %s or %s or %s", appSrc.Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopeCluster, enterpriseApi.ScopePremiumApps)
-			}
-
-			// Check for premium apps properties
-			if appSrc.Scope == enterpriseApi.ScopePremiumApps || appFramework.Defaults.Scope == enterpriseApi.ScopePremiumApps {
-				err := validatePremiumAppsInputs(appSrc, crKind)
-				if err != nil {
-					return err
-				}
-			}
-			scope = appSrc.Scope
-		} else {
-			if appFramework.Defaults.Scope == "" {
-				return fmt.Errorf("app Source scope is missing for: %s", appSrc.Name)
-			}
-
-			scope = appFramework.Defaults.Scope
-		}
-
-		if _, ok := duplicateAppSourceStorageChecker[scope][vol+appSrc.Location]; ok {
-			return fmt.Errorf("duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
-		}
-		duplicateAppSourceStorageChecker[scope][vol+appSrc.Location] = true
-	}
-
-	if localOrPremScope && appFramework.Defaults.Scope != "" &&
-		(appFramework.Defaults.Scope != enterpriseApi.ScopeLocal && appFramework.Defaults.Scope != enterpriseApi.ScopePremiumApps) {
-		return fmt.Errorf("invalid scope for defaults config. Only local scope is supported for this kind of CR")
-	}
-
-	if appFramework.Defaults.Scope != "" && !isAppSourceScopeValid(appFramework.Defaults.Scope) {
-		return fmt.Errorf("scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
-	}
-
-	if appFramework.Defaults.VolName != "" {
-		_, err := splutil.CheckIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
-		if err != nil {
-			return fmt.Errorf("invalid Volume Name for Defaults. Error: %s", err)
-		}
-	}
-
-	return nil
-}
-
-// validatePremiumAppsInputs validates premium app source spec
-func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec, crKind string) error {
-
-	if appSrc.AppSourceDefaultSpec.PremiumAppsProps.Type != enterpriseApi.PremiumAppsTypeEs {
-		return fmt.Errorf("invalid PremiumAppsProps. Valid value is %s", enterpriseApi.PremiumAppsTypeEs)
-	}
-
-	// Check sslEnablement in ES defaults
-	sslEnablementValue := appSrc.AppSourceDefaultSpec.PremiumAppsProps.EsDefaults.SslEnablement
-	if sslEnablementValue != "" && !(sslEnablementValue == enterpriseApi.SslEnablementAuto ||
-		sslEnablementValue == enterpriseApi.SslEnablementIgnore ||
-		sslEnablementValue == enterpriseApi.SslEnablementStrict) {
-		return fmt.Errorf("invalid sslEnablement. Valid values are %s or %s or %s", enterpriseApi.SslEnablementAuto,
-			enterpriseApi.SslEnablementIgnore, enterpriseApi.SslEnablementStrict)
-	}
-
-	// SHC ES app cannot use ssl_enablement auto, product doesn't support it
-	if crKind == "SearchHeadCluster" {
-		if appSrc.PremiumAppsProps.Type == enterpriseApi.PremiumAppsTypeEs {
-			if appSrc.AppSourceDefaultSpec.PremiumAppsProps.EsDefaults.SslEnablement == enterpriseApi.SslEnablementAuto {
-				return fmt.Errorf("scope for app source: %s search head cluster cannot have an ES app installed with ssl_enablement auto", appSrc.Name)
-			}
-		}
-	}
-	return nil
-}
-
-// isAppFrameworkConfigured checks and returns true if App Framework is configured
-// App Repo config without any App sources will not cause any App Framework activity
-func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool {
-	return !(appFramework == nil || appFramework.AppSources == nil)
-}
-
-// ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool, crKind string) error {
-	var err error
-	if !isAppFrameworkConfigured(appFramework) {
-		return nil
-	}
-
-	logger := logging.FromContext(ctx).With("func", "ValidateAppFrameworkSpec")
-
-	logger.InfoContext(ctx, "configCheck", "scope", localScope)
-
-	// Set the value in status field to be same as that in spec.
-	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
-	appContext.AppsStatusMaxConcurrentAppDownloads = appFramework.MaxConcurrentAppDownloads
-
-	if appContext.AppsRepoStatusPollInterval <= 0 {
-		logger.ErrorContext(ctx, "appsRepoPollIntervalSeconds is not configured. Disabling polling of apps repo changes, defaulting to manual updates", "error", err)
-		appContext.AppsRepoStatusPollInterval = 0
-	} else if appFramework.AppsRepoPollInterval < splcommon.MinAppsRepoPollInterval {
-		logger.ErrorContext(ctx, "configured appsRepoPollIntervalSeconds is too small", "error", err, "configuredValue", appFramework.AppsRepoPollInterval, "defaultMinSeconds", splcommon.MinAppsRepoPollInterval)
-		appContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval
-	} else if appFramework.AppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
-		logger.ErrorContext(ctx, "configured appsRepoPollIntervalSeconds is too large", "error", err, "configuredValue", appFramework.AppsRepoPollInterval, "defaultMaxSeconds", splcommon.MaxAppsRepoPollInterval)
-		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
-	}
-
-	if appContext.AppsStatusMaxConcurrentAppDownloads <= 0 {
-		logger.InfoContext(ctx, "invalid value of maxConcurrentAppDownloads", "configuredValue", appContext.AppsStatusMaxConcurrentAppDownloads, "defaultValue", splcommon.DefaultMaxConcurrentAppDownloads)
-		appContext.AppsStatusMaxConcurrentAppDownloads = splcommon.DefaultMaxConcurrentAppDownloads
-	}
-
-	// check whether the temporary volume to download apps is mounted or not on the operator pod;
-	// use the resolved path (which may have fallen back to TmpAppDownloadDir) rather than the
-	// configured const, since a missing mount is expected to fall back, not fail validation.
-	appDownloadVolume := getResolvedAppDownloadVolume()
-	if _, err := os.Stat(appDownloadVolume); errors.Is(err, os.ErrNotExist) {
-		logger.ErrorContext(ctx, "volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod", "error", err, "volumePath", appDownloadVolume)
-		return err
-	}
-
-	err = validateRemoteVolumeSpec(ctx, appFramework.VolList, true)
-	if err != nil {
-		return err
-	}
-
-	err = validateSplunkAppSources(appFramework, localScope, crKind)
-	if err == nil {
-		logger.InfoContext(ctx, "app framework configuration is valid")
-	}
-
-	return err
 }
 
 // validateRemoteVolumeSpec validates the Remote storage volume spec

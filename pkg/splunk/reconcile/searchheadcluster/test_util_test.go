@@ -27,11 +27,9 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	legacyenterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	"github.com/stretchr/testify/require"
@@ -80,10 +78,6 @@ func (m *RemoteDataClientManager) GetAppsList(ctx context.Context) (splcommon.Re
 	return c.Client.GetAppsList(ctx)
 }
 
-func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
-	return legacyenterprise.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
-}
-
 var GetAppsList = func(ctx context.Context, manager RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
 	return manager.GetAppsList(ctx)
 }
@@ -112,14 +106,6 @@ func loadFixture(t *testing.T, filename string) string {
 		return ""
 	}
 	return compactJSON.String()
-}
-
-func GetSplunkStatefulsetName(instanceType splcommon.InstanceType, identifier string) string {
-	return splutil.GetSplunkStatefulsetName(instanceType, identifier)
-}
-
-func GetSplunkStatefulsetPodName(instanceType splcommon.InstanceType, identifier string, index int32) string {
-	return splutil.GetSplunkStatefulsetPodName(instanceType, identifier, index)
 }
 
 func newTestEventPublisher(recorder record.EventRecorder) *k8sops.K8EventPublisher {

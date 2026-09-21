@@ -1,5 +1,18 @@
 // Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package standalone
 
 import (
@@ -19,10 +32,10 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -897,7 +910,7 @@ func TestGetStandaloneList(t *testing.T) {
 	var err error
 
 	// Invalid scenario since we haven't added standalone to the list yet
-	_, err = getStandaloneList(ctx, client, &standalone, listOpts)
+	_, err = k8sops.GetStandaloneList(ctx, client, &standalone, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
 	}
@@ -907,7 +920,7 @@ func TestGetStandaloneList(t *testing.T) {
 
 	client.ListObj = standaloneList
 
-	objList, err := getStandaloneList(ctx, client, &standalone, listOpts)
+	objList, err := k8sops.GetStandaloneList(ctx, client, &standalone, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
@@ -925,7 +938,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	enterprise.GetAppsList = func(ctx context.Context, remoteDataClientMgr enterprise.RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
+	appframework.GetAppsList = func(ctx context.Context, remoteDataClientMgr appframework.RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splcommon.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
@@ -1047,7 +1060,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	// Initialize the global resource tracker to allow app framework to run
-	enterprise.InitGlobalResourceTracker()
+	appframework.InitGlobalResourceTracker()
 
 	// Create temporary directory for app framework operations
 	newpath := filepath.Join("/tmp", "appframework")
@@ -1061,13 +1074,13 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	}
 	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
-	// Mock enterprise.GetAppsList to return empty list (no apps to download)
-	savedGetAppsList := enterprise.GetAppsList
-	enterprise.GetAppsList = func(ctx context.Context, remoteDataClientMgr enterprise.RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
+	// Mock appframework.GetAppsList to return empty list (no apps to download)
+	savedGetAppsList := appframework.GetAppsList
+	appframework.GetAppsList = func(ctx context.Context, remoteDataClientMgr appframework.RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splcommon.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
-	defer func() { enterprise.GetAppsList = savedGetAppsList }()
+	defer func() { appframework.GetAppsList = savedGetAppsList }()
 
 	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
 	savedGetPodExecClient := splutil.GetPodExecClient
