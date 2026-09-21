@@ -465,6 +465,12 @@ shutdown. Forced Pod deletion or expiry of the termination grace period is not
 equivalent to graceful scale-in. Deleting the custom resource also does not yet
 run this per-peer lifecycle before removing the workload.
 
+For both classic and Noah IndexerClusters, SOK creates a PodDisruptionBudget
+with `maxUnavailable: 1`. It limits concurrent voluntary disruptions, such as
+node drains, to one indexer Pod. It does not govern Pods deleted directly by
+SOK during rollout or scale-in; those operations are serialized by the
+IndexerCluster lifecycle workflow.
+
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
 the `IndexerCluster` resource provides the following `Spec` configuration parameters:

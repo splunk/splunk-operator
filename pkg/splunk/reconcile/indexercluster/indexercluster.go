@@ -86,6 +86,13 @@ func apply(ctx context.Context, client splcommon.ControllerClient, namespacedNam
 
 	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
 	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, recorder)
+
+	if instance.GetDeletionTimestamp() == nil {
+		if err := applyPodDisruptionBudget(ctx, client, instance); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	var result reconcile.Result
 	var err error
 	if instance.Spec.NoahEnabled() {
