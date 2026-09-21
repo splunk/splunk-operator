@@ -22,6 +22,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -112,7 +113,7 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 
 	deployerStatefulSet := &appsv1.StatefulSet{}
 	err = client.Get(ctx, types.NamespacedName{
-		Name:      GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
+		Name:      splutil.GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
 		Namespace: cr.GetNamespace(),
 	}, deployerStatefulSet)
 	assert.Error(t, err, "Noah must never create a deployer StatefulSet")
