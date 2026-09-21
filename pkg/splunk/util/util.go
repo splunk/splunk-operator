@@ -124,6 +124,11 @@ func GetSplunkManualAppUpdateConfigMapName(namespace string) string {
 	return fmt.Sprintf("splunk-%s-manual-app-update", namespace)
 }
 
+// GetSplunkPerCRConfigMapName returns the ConfigMap name for a Splunk CR.
+func GetSplunkPerCRConfigMapName(instanceType, identifier string) string {
+	return fmt.Sprintf(perCrConfigMapNameTemplateStr, instanceType, identifier)
+}
+
 // GetSplunkStatefulsetUrls returns the URLs for all pods in a Splunk StatefulSet.
 func GetSplunkStatefulsetUrls(namespace string, instanceType splcommon.InstanceType, identifier string, replicas int32, hostnameOnly bool) string {
 	urls := make([]string, replicas)

@@ -25,12 +25,11 @@ import (
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	// TODO: Remove this legacy dependency once all CRs have migrated from enterprise.
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,7 +39,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -175,7 +173,7 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	// If needed, Migrate the app framework status
-	err = enterprise.CheckAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	err = appframework.CheckAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
@@ -203,7 +201,7 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := enterprise.InitAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := appframework.InitAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -242,7 +240,7 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = enterprise.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, splcommon.SplunkStandalone)
+			err = appframework.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, splcommon.SplunkStandalone)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err
@@ -299,14 +297,14 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			cr.Status.AppContext.IsDeploymentInProgress = true
 
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
-				enterprise.ChangeAppSrcDeployInfoStatus(ctx, appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
-				enterprise.ChangePhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
+				appframework.ChangeAppSrcDeployInfoStatus(ctx, appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
+				appframework.ChangePhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
 
 		// if we are scaling down, just delete the state auxPhaseInfo entries
 		case enterpriseApi.StatefulSetScalingDown:
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
-				enterprise.RemoveStaleEntriesFromAuxPhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
+				appframework.RemoveStaleEntriesFromAuxPhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
 		default:
 			// nothing to be done
@@ -379,7 +377,7 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
 
-		finalResult := enterprise.HandleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		finalResult := appframework.HandleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 
 		// Add a splunk operator telemetry app
@@ -446,7 +444,7 @@ func ValidateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := enterprise.ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true, cr.GetObjectKind().GroupVersionKind().Kind)
+		err := appframework.ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}
@@ -457,18 +455,4 @@ func ValidateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 
 func monitoringConsoleEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
 	return []corev1.EnvVar{{Name: "SPLUNK_STANDALONE_URL", Value: splutil.GetSplunkStatefulsetUrls(cr.GetNamespace(), splcommon.SplunkStandalone, cr.GetName(), replicas, false)}}
-}
-
-// helper function to get the list of Standalone types in the current namespace
-func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.StandaloneList, error) {
-	logger := logging.FromContext(ctx).With("func", "getStandaloneList")
-	objectList := enterpriseApi.StandaloneList{}
-
-	err := c.List(context.TODO(), &objectList, listOpts...)
-	if err != nil {
-		logger.ErrorContext(ctx, "Standalone types not found in namespace", "namespace", cr.GetNamespace(), "error", err)
-		return objectList, err
-	}
-
-	return objectList, nil
 }

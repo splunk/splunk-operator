@@ -13,14 +13,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package appframework implements the App Framework workflow: bundle discovery,
-staging, scheduling, and push to Splunk pods via the REST API.
-Migrated from enterprise/afwscheduler.go and related files.
+package common
 
-// TODO: This workflow currently retains direct Kubernetes operations for the
-// transitional enterprise callers. Once all CRs have migrated from enterprise,
-// move these operations and CR-specific state behind reconcile-owned adapters
-// and make this workflow fully CR-agnostic.
-*/
-package appframework
+import "context"
+
+// EventPublisher is the event surface used by workflows.
+type EventPublisher interface {
+	Normal(context.Context, string, string)
+	Warning(context.Context, string, string)
+}
+
+// GetEventPublisher returns the event publisher supplied through context.
+func GetEventPublisher(ctx context.Context) EventPublisher {
+	publisher, _ := ctx.Value(EventPublisherKey).(EventPublisher)
+	return publisher
+}
