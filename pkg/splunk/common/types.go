@@ -71,12 +71,6 @@ type StatefulSetScaleDownFinisher interface {
 	FinishScaleDown(context.Context, int32) (bool, error)
 }
 
-// StatefulSetScaleDownPVCPolicy optionally retains PVCs during scale-down.
-// Managers that do not implement it preserve the existing delete behavior.
-type StatefulSetScaleDownPVCPolicy interface {
-	RetainPVCsOnScaleDown() bool
-}
-
 // StatefulSetRecycleOrderer optionally lets a manager defer recycling a
 // specific ordinal during a rolling update, so the generic loop tries a
 // lower ordinal instead this reconcile rather than stopping. Managers that

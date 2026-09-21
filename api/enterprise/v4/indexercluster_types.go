@@ -108,17 +108,17 @@ type IndexerClusterLifecycleStatus struct {
 
 // IndexerClusterLifecycleKind identifies the desired-state change being
 // executed by the IndexerCluster lifecycle controller.
-// +kubebuilder:validation:Enum=Rollout;ScaleOut;ScaleIn
+// +kubebuilder:validation:Enum=Rollout;ScaleIn;ScaleOut
 type IndexerClusterLifecycleKind string
 
 const (
 	// IndexerClusterLifecycleRollout replaces peers at a new StatefulSet
 	// revision.
 	IndexerClusterLifecycleRollout IndexerClusterLifecycleKind = "Rollout"
-	// IndexerClusterLifecycleScaleOut adds a contiguous batch of new ordinals.
-	IndexerClusterLifecycleScaleOut IndexerClusterLifecycleKind = "ScaleOut"
 	// IndexerClusterLifecycleScaleIn gracefully removes the highest ordinal.
 	IndexerClusterLifecycleScaleIn IndexerClusterLifecycleKind = "ScaleIn"
+	// IndexerClusterLifecycleScaleOut adds a contiguous batch of new ordinals.
+	IndexerClusterLifecycleScaleOut IndexerClusterLifecycleKind = "ScaleOut"
 )
 
 // IndexerClusterLifecycleCheckpoint identifies the durable point reached by a

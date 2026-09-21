@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -49,6 +50,17 @@ func AnnotationChangedPredicate() predicate.Predicate {
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// Evaluates to false if the object has been confirmed deleted.
 			return !e.DeleteStateUnknown
+		},
+	}
+}
+
+// DeletionTimestampChangedPredicate detects deletion requests, which do not change object generation.
+func DeletionTimestampChangedPredicate[T client.Object]() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldObject, oldOK := e.ObjectOld.(T)
+			newObject, newOK := e.ObjectNew.(T)
+			return oldOK && newOK && !reflect.DeepEqual(oldObject.GetDeletionTimestamp(), newObject.GetDeletionTimestamp())
 		},
 	}
 }
