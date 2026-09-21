@@ -49,17 +49,20 @@ func TestNewScaleOutLifecycle(t *testing.T) {
 
 func TestLifecycleJSONRoundTrip(t *testing.T) {
 	now := time.Date(2026, time.September, 17, 1, 0, 0, 0, time.UTC)
-	scaleOut, err := NewScaleOutLifecycle(7, scaleOutTarget(3, 6), now)
-	require.NoError(t, err)
 	rollout, err := NewRolloutLifecycle(7, rolloutTarget(), now)
+	require.NoError(t, err)
+	scaleIn, err := NewScaleInLifecycle(7, scaleInTarget(4, 3), now)
+	require.NoError(t, err)
+	scaleOut, err := NewScaleOutLifecycle(7, scaleOutTarget(3, 6), now)
 	require.NoError(t, err)
 
 	tests := []struct {
 		name      string
 		lifecycle *enterpriseApi.IndexerClusterLifecycleStatus
 	}{
-		{name: "scale out", lifecycle: scaleOut},
 		{name: "rollout", lifecycle: rollout},
+		{name: "scale in", lifecycle: scaleIn},
+		{name: "scale out", lifecycle: scaleOut},
 	}
 
 	for _, test := range tests {

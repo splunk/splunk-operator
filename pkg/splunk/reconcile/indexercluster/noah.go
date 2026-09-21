@@ -29,6 +29,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -70,6 +71,30 @@ func applyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 	}
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 	defer updateCRStatus(ctx, client, cr, &err)
+	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
+
+	if cr.GetDeletionTimestamp() != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource deletion is in progress")
+
+		if cleanupErr := rclient.IgnoreNotFound(k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkIndexer)); cleanupErr != nil {
+			return result, cleanupErr
+		}
+
+		statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkIndexer, cr.Name),
+			Namespace: cr.Namespace,
+		}}
+		if deletionErr := rclient.IgnoreNotFound(client.Delete(ctx, statefulSet)); deletionErr != nil {
+			return result, deletionErr
+		}
+
+		_, deletionErr := k8sops.CheckForDeletion(ctx, cr, client)
+		if deletionErr == nil {
+			result.RequeueAfter = 0
+		}
+
+		return result, deletionErr
+	}
 
 	if cr.Spec.NoahClusterRef == nil || cr.Spec.NoahClusterRef.Name == "" {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Noah Cluster reference is required")
@@ -90,22 +115,6 @@ func applyNoahIndexerCluster(ctx context.Context, client splcommon.ControllerCli
 			"Noah IndexerCluster spec validation failed",
 			err,
 		)
-	}
-
-	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
-
-	if cr.GetDeletionTimestamp() != nil {
-		if cleanupErr := k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkIndexer); cleanupErr != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Failed to clean up owned resources")
-			return result, cleanupErr
-		}
-		terminating, deletionErr := k8sops.CheckForDeletion(ctx, cr, client)
-		if terminating && deletionErr != nil {
-			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource deletion is in progress")
-		} else {
-			result.RequeueAfter = 0
-		}
-		return result, deletionErr
 	}
 
 	dependency := reconcileutil.ResolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
@@ -360,11 +369,10 @@ type noahIndexerPodManager struct {
 }
 
 var (
-	_ splcommon.StatefulSetPodManager         = (*noahIndexerPodManager)(nil)
-	_ splcommon.StatefulSetScaleOutPlanner    = (*noahIndexerPodManager)(nil)
-	_ splcommon.StatefulSetScaleDownFinisher  = (*noahIndexerPodManager)(nil)
-	_ splcommon.StatefulSetScaleDownPVCPolicy = (*noahIndexerPodManager)(nil)
-	_ splcommon.StatefulSetRecycleOrderer     = (*noahIndexerPodManager)(nil)
+	_ splcommon.StatefulSetPodManager        = (*noahIndexerPodManager)(nil)
+	_ splcommon.StatefulSetScaleOutPlanner   = (*noahIndexerPodManager)(nil)
+	_ splcommon.StatefulSetScaleDownFinisher = (*noahIndexerPodManager)(nil)
+	_ splcommon.StatefulSetRecycleOrderer    = (*noahIndexerPodManager)(nil)
 )
 
 func newNoahIndexerPodManager(client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, runtime *configworkflow.NoahRuntime) *noahIndexerPodManager {
@@ -564,8 +572,8 @@ func (mgr *noahIndexerPodManager) PrepareScaleDown(ctx context.Context, ordinal 
 	return false, nil
 }
 
-// FinishScaleDown unregisters the removed peer and waits for Noah's latest
-// bucket map to exclude it before another lifecycle operation can begin.
+// FinishScaleDown deletes the removed Pod's PVCs, unregisters its peer, and
+// waits for Noah's latest bucket map to exclude it.
 func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, ordinal int32) (bool, error) {
 	lifecycle := mgr.cr.Status.Lifecycle
 	if !lifecycleIsScaleIn(lifecycle) {
@@ -598,6 +606,12 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, ordinal i
 	if !k8serrors.IsNotFound(err) {
 		return false, newNoahIndexerOperationError(
 			fmt.Errorf("get removed Noah indexer Pod %s: %w", target.PodName, err),
+			enterpriseApi.PhaseScalingDown,
+		)
+	}
+	if err := k8sops.DeleteStatefulSetPodPVCs(ctx, mgr.client, mgr.statefulSet, target.PodName); err != nil {
+		return false, newNoahIndexerOperationError(
+			fmt.Errorf("delete PVCs for removed Noah indexer Pod %s: %w", target.PodName, err),
 			enterpriseApi.PhaseScalingDown,
 		)
 	}
@@ -642,11 +656,6 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, ordinal i
 		SatisfiedTargetMembership: true,
 	})
 	return false, err
-}
-
-// RetainPVCsOnScaleDown preserves indexer storage during scale-in.
-func (*noahIndexerPodManager) RetainPVCsOnScaleDown() bool {
-	return true
 }
 
 // DeferRecycle serializes stale Pods behind the active rollout target.

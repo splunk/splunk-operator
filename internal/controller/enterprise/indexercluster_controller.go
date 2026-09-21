@@ -133,6 +133,7 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.IndexerCluster{}).
 		WithEventFilter(predicate.Or(
+			common.DeletionTimestampChangedPredicate[*enterpriseApi.IndexerCluster](),
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
