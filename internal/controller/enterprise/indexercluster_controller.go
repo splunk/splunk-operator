@@ -30,6 +30,7 @@ import (
 	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -63,6 +64,7 @@ type IndexerClusterReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -145,6 +147,12 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.ClusterMasterChangedPredicate(),
 		)).
 		Watches(&appsv1.StatefulSet{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&enterpriseApi.IndexerCluster{},
+			)).
+		Watches(&policyv1.PodDisruptionBudget{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
