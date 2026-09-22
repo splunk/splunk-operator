@@ -1367,6 +1367,16 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
 	require.NotNil(t, env[resources.PodNameEnvName].ValueFrom)
 	require.NotNil(t, env[resources.PodNamespaceEnvName].ValueFrom)
+	require.NotNil(t, created.Spec.Template.Spec.Containers[0].Lifecycle)
+	require.NotNil(t, created.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	assert.Equal(t, int64(900), *created.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	require.NotNil(t, created.Spec.Template.Spec.Containers[0].Lifecycle.PreStop)
+	require.NotNil(t, created.Spec.Template.Spec.Containers[0].Lifecycle.PreStop.Exec)
+	assert.Equal(t, []string{
+		"/bin/sh",
+		"-c",
+		`touch "$SPLUNK_HOME/var/run/splunk/decommission_for_cache_warming"`,
+	}, created.Spec.Template.Spec.Containers[0].Lifecycle.PreStop.Exec.Command)
 
 	for _, initContainer := range created.Spec.Template.Spec.InitContainers {
 		assert.NotEqual(t, "init-etc", initContainer.Name)

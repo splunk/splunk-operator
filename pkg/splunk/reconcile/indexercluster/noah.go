@@ -215,6 +215,7 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 		defaultsSecret.AsStatefulSetOption(),
 		withNoahIndexerLabels(cr.Name, cr.Spec.NoahClusterRef.Name),
 		resources.WithNoahPodIdentity(os.Getenv(resources.ClusterDomainEnvName)),
+		resources.WithNoahCacheWarmDecommission(),
 	)
 	if err != nil {
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("build Noah indexer StatefulSet: %w", err)
