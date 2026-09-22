@@ -843,26 +843,19 @@ func (mgr *indexerClusterPodManager) workflowManager() *indexerworkflow.PodManag
 }
 
 func (mgr *indexerClusterPodManager) UpdateWorkflow(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
-
-	var err error
-
-	// Get event publisher from context
 	eventPublisher := k8sops.GetEventPublisher(ctx, mgr.cr)
 
 	// Track previous ready replicas for scaling events
 	previousReadyReplicas := mgr.cr.Status.ReadyReplicas
-
-	// Assign client
 	if mgr.c == nil {
 		mgr.c = c
 	}
 	// update statefulset, if necessary
 	if mgr.cr.Status.ClusterManagerPhase != enterpriseApi.PhaseReady && mgr.cr.Status.ClusterMasterPhase != enterpriseApi.PhaseReady {
-		mgr.log.InfoContext(ctx, "ClusterManager is not ready yet", "error", err)
-		return enterpriseApi.PhaseError, err
+		logging.FromContext(ctx).InfoContext(ctx, "ClusterManager is not ready yet")
+		return enterpriseApi.PhaseError, nil
 	}
-	_, err = k8sops.ApplyStatefulSet(ctx, mgr.c, statefulSet)
-	if err != nil {
+	if _, err := k8sops.ApplyStatefulSet(ctx, mgr.c, statefulSet); err != nil {
 		return enterpriseApi.PhaseError, err
 	}
 
@@ -931,7 +924,6 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 
 	logger := slog.With("func", "ApplyIdxcSecret", "name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 	logger.InfoContext(ctx, "applying idxc secret to indexers", "desiredReplicas", replicas, "idxcSecretChanged", mgr.cr.Status.IndexerSecretChanged, "crStatusNamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "namespaceSecretResourceVersion", namespaceSecret.GetObjectMeta().GetResourceVersion())
-
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
 		// First time, set resource version in CR
@@ -939,7 +931,6 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 		logger.DebugContext(ctx, "setting CrStatusNamespaceSecretResourceVersion for the first time")
 		return nil
 	} else if mgr.cr.Status.NamespaceSecretResourceVersion == namespaceSecret.ObjectMeta.ResourceVersion {
-		// If resource version hasn't changed don't return
 		return nil
 	}
 
@@ -954,16 +945,13 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 
 	// Loop over all indexer pods and get individual pod's idxc password
 	howManyPodsHaveSecretChanged := 0
-	for i := int32(0); i <= replicas-1; i++ {
+	for i := int32(0); i < replicas; i++ {
 		// Get Indexer's name
 		indexerPodName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIndexer, mgr.cr.GetName(), i)
 		pod := &corev1.Pod{}
 
-		// Check if pod exists before updating secrets
-		namespacedName := types.NamespacedName{Namespace: mgr.cr.GetNamespace(), Name: indexerPodName}
-		logger.DebugContext(ctx, "check if pod is created before updating its secrets")
-		err := mgr.c.Get(ctx, namespacedName, pod)
-		if err != nil {
+		// Check if pod is created before updating its secrets
+		if err := mgr.c.Get(ctx, types.NamespacedName{Namespace: mgr.cr.GetNamespace(), Name: indexerPodName}, pod); err != nil {
 			logger.WarnContext(ctx, "peer doesn't exists", "peerName", indexerPodName)
 			continue
 		}
@@ -974,8 +962,8 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			return fmt.Errorf(splcommon.PodSecretNotFoundError, indexerPodName)
 		}
 		// Retrieve idxc_secret token
-		if indIdxcSecretByte, ok := podSecret.Data[splcommon.IdxcSecret]; ok {
-			indIdxcSecret = string(indIdxcSecretByte)
+		if value, ok := podSecret.Data[splcommon.IdxcSecret]; ok {
+			indIdxcSecret = string(value)
 		} else {
 			return fmt.Errorf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret)
 		}
@@ -984,28 +972,17 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			continue
 		}
 		logger.InfoContext(ctx, "IDXC Secret is different from namespace scoped secret")
-
-		// Enable maintenance mode
 		if len(mgr.cr.Status.IndexerSecretChanged) == 0 && !mgr.cr.Status.MaintenanceMode {
-			var managerIdxcName string
-			var cmPodName string
-			if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
-				managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
-				cmPodName = fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
-			} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
-				managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
-				cmPodName = fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
-			} else {
+			managerName, podName := managerReference(mgr.cr)
+			if managerName == "" {
 				return errors.New("empty cluster manager reference")
 			}
-			podExecClient.SetTargetPodName(ctx, cmPodName)
-			err = SetClusterMaintenanceMode(ctx, mgr.c, mgr.cr, true, cmPodName, podExecClient)
-			if err != nil {
+			podExecClient.SetTargetPodName(ctx, podName)
+			if err := SetClusterMaintenanceMode(ctx, mgr.c, mgr.cr, true, podName, podExecClient); err != nil {
 				return err
 			}
 			logger.InfoContext(ctx, "set CM in maintenance mode")
 		}
-
 		// If idxc secret already changed, ignore
 		if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) && mgr.cr.Status.IndexerSecretChanged[i] {
 			continue
@@ -1013,8 +990,6 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 
 		// Get client for indexer Pod
 		idxcClient := mgr.getClient(ctx, i)
-
-		// Change idxc secret key
 		if err := idxcClient.SetIdxcSecret(nsIdxcSecret); err != nil {
 			// Emit event for password sync failure
 			if eventPublisher != nil {
@@ -1024,8 +999,6 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			return err
 		}
 		logger.InfoContext(ctx, "changed idxc secret")
-
-		howManyPodsHaveSecretChanged += 1
 
 		// Restart splunk instance on pod
 		if err := idxcClient.RestartSplunk(); err != nil {
@@ -1039,13 +1012,14 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 
 		// Keep a track of all the secrets on pods to change their idxc secret below
 		mgr.cr.Status.IdxcPasswordChangedSecrets[podSecret.GetName()] = true
-
-		// Set the idxc_secret changed flag to true
 		if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) {
 			mgr.cr.Status.IndexerSecretChanged[i] = true
 		} else {
 			mgr.cr.Status.IndexerSecretChanged = append(mgr.cr.Status.IndexerSecretChanged, true)
 		}
+
+		// Set the idxc_secret changed flag to true
+		howManyPodsHaveSecretChanged++
 	}
 
 	/*
@@ -1079,14 +1053,24 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 		mgr.cr.Status.IdxcPasswordChangedSecrets[podSecretName] = false
 	}
 
-	// Emit event for password sync completed
 	if eventPublisher != nil {
+		// Emit event for password sync completed
 		eventPublisher.Normal(ctx, "PasswordSyncCompleted", fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
 	}
 
 	// Log configuration push completion
 	logger.InfoContext(ctx, "configuration push completed", "successCount", howManyPodsHaveSecretChanged, "duration", time.Since(pushStartTime))
 	return nil
+}
+
+func managerReference(cr *enterpriseApi.IndexerCluster) (string, string) {
+	if cr.Spec.ClusterManagerRef.Name != "" {
+		return cr.Spec.ClusterManagerRef.Name, fmt.Sprintf("splunk-%s-cluster-manager-0", cr.Spec.ClusterManagerRef.Name)
+	}
+	if cr.Spec.ClusterMasterRef.Name != "" {
+		return cr.Spec.ClusterMasterRef.Name, fmt.Sprintf("splunk-%s-cluster-master-0", cr.Spec.ClusterMasterRef.Name)
+	}
+	return "", ""
 }
 
 // PrepareScaleDown prepares an indexer pod for removal through the workflow package.

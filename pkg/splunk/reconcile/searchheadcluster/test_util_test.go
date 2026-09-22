@@ -25,11 +25,13 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	"github.com/stretchr/testify/require"
@@ -82,6 +84,8 @@ var GetAppsList = func(ctx context.Context, manager RemoteDataClientManager) (sp
 	return manager.GetAppsList(ctx)
 }
 
+var GetEventPublisher = k8sops.GetEventPublisher
+
 func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType splcommon.InstanceType, replicas int32, extraEnv []corev1.EnvVar, certMounts *certs.CertMountConfig, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 	statefulSet, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, spec, instanceType, replicas, extraEnv, opts...)
 	if err != nil {
@@ -89,6 +93,21 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	}
 	certs.InjectCertMounts(&statefulSet.Spec.Template, certMounts)
 	return statefulSet, nil
+}
+
+// helper function to get the list of SearchHeadCluster types in the current namespace
+func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.SearchHeadClusterList, error) {
+	logger := logging.FromContext(ctx).With("func", "getSearchHeadClusterList", "name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	objectList := enterpriseApi.SearchHeadClusterList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	if err != nil {
+		logger.ErrorContext(ctx, "SearchHeadCluster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
+		return objectList, err
+	}
+
+	return objectList, nil
 }
 
 func loadFixture(t *testing.T, filename string) string {
@@ -106,6 +125,14 @@ func loadFixture(t *testing.T, filename string) string {
 		return ""
 	}
 	return compactJSON.String()
+}
+
+func GetSplunkStatefulsetName(instanceType splcommon.InstanceType, identifier string) string {
+	return splutil.GetSplunkStatefulsetName(instanceType, identifier)
+}
+
+func GetSplunkStatefulsetPodName(instanceType splcommon.InstanceType, identifier string, index int32) string {
+	return splutil.GetSplunkStatefulsetPodName(instanceType, identifier, index)
 }
 
 func newTestEventPublisher(recorder record.EventRecorder) *k8sops.K8EventPublisher {
