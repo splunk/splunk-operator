@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package licensemanager
 
 import (
 	"context"
@@ -40,6 +40,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
@@ -50,6 +51,25 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 )
+
+func newFakeClientBuilder(scheme *pkgruntime.Scheme) *fake.ClientBuilder {
+	return fake.NewClientBuilder().WithScheme(scheme)
+}
+
+func init() {
+	splutil.GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/readinessProbe.sh")
+		return fileLocation
+	}
+	splutil.GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/livenessProbe.sh")
+		return fileLocation
+	}
+	splutil.GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/startupProbe.sh")
+		return fileLocation
+	}
+}
 
 func TestApplyLicenseManager(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
@@ -162,10 +182,10 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateLicenseManagerSpec(ctx, c, &cr); err != nil {
+			if err := ValidateLicenseManagerSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateLicenseManagerSpec() returned error: %v", err)
 			}
-			return getLicenseManagerStatefulSet(ctx, c, &cr)
+			return GetLicenseManagerStatefulSet(ctx, c, &cr)
 		}
 		configTester(t, "getLicenseManagerStatefulSet()", f, want)
 	}
@@ -287,14 +307,6 @@ func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 	client.AddObject(&s3Secret)
 	configmap := spltest.GetMockPerCRConfigMap("splunk-license-manager-stack1-configmap")
 	client.AddObject(&configmap)
-
-	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
-	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
-	}
 
 	_, err = ApplyLicenseManager(ctx, client, &cr)
 
@@ -723,14 +735,6 @@ func TestApplyLicenseManagerDeletion(t *testing.T) {
 	}
 	c.ListObj = &pvclist
 
-	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
-	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
-	}
-
 	_, err = ApplyLicenseManager(ctx, c, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager should not have returned error here.")
@@ -750,7 +754,7 @@ func TestLicenseManagerList(t *testing.T) {
 
 	var numOfObjects int
 	// Invalid scenario since we haven't added license master to the list yet
-	_, err := getLicenseManagerList(ctx, client, &lm, listOpts)
+	_, err := k8sops.GetLicenseManagerList(ctx, client, &lm, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
 	}
@@ -760,7 +764,7 @@ func TestLicenseManagerList(t *testing.T) {
 
 	client.ListObj = lmList
 
-	objList, err := getLicenseManagerList(ctx, client, &lm, listOpts)
+	objList, err := k8sops.GetLicenseManagerList(ctx, client, &lm, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
@@ -840,19 +844,11 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// Initialize GlobalResourceTracker to enable app framework
-	initGlobalResourceTracker()
+	appframework.InitGlobalResourceTracker()
 
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	_ = os.MkdirAll(newpath, os.ModePerm)
-
-	// adding getapplist to fix test case
-	savedGetAppsList := GetAppsList
-	defer func() { GetAppsList = savedGetAppsList }()
-	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
-		RemoteDataListResponse := splcommon.RemoteDataListResponse{}
-		return RemoteDataListResponse, nil
-	}
 
 	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
 	savedGetPodExecClient := splutil.GetPodExecClient
@@ -1216,7 +1212,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
+	_, err = k8sops.ApplyStatefulSet(ctx, c, cstatefulset)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1290,7 +1286,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager, nil)
+	_, err = k8sops.ApplyStatefulSet(ctx, c, cstatefulset)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1476,7 +1472,10 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 
 			c := spltest.NewMockClient()
 			fakeRecorder := record.NewFakeRecorder(10)
-			eventPublisher := &K8EventPublisher{recorder: fakeRecorder, instance: &lm}
+			eventPublisher, err := k8sops.NewK8EventPublisherWithRecorder(fakeRecorder, &lm)
+			if err != nil {
+				t.Fatalf("failed to create event publisher: %v", err)
+			}
 			ctx := context.WithValue(context.TODO(), splcommon.EventPublisherKey, eventPublisher)
 
 			statefulSet := &appsv1.StatefulSet{
@@ -1519,16 +1518,16 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 					"https://splunk-test-license-manager-0.splunk-test-license-manager-headless.test.svc.cluster.local:8089/services/licenser/licenses?output_mode=json", nil)
 				mockHTTPClient.AddHandler(wantRequest, tc.mockHTTPStatus, tc.mockHTTPBody, tc.mockHTTPErr)
 
-				origFunc := newSplunkClientFunc
-				newSplunkClientFunc = func(managementURI, username, password string) *splclient.SplunkClient {
+				origFunc := NewSplunkClientFunc
+				NewSplunkClientFunc = func(managementURI, username, password string) *splclient.SplunkClient {
 					client := splclient.NewSplunkClient(managementURI, username, password)
 					client.Client = mockHTTPClient
 					return client
 				}
-				defer func() { newSplunkClientFunc = origFunc }()
+				defer func() { NewSplunkClientFunc = origFunc }()
 			}
 
-			err := checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet)
+			err = CheckLicenseRelatedPodFailures(ctx, c, &lm, statefulSet)
 
 			if tc.expectError {
 				assert.Error(t, err, "Expected an error but got none")

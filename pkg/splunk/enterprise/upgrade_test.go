@@ -28,6 +28,7 @@ import (
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	indexercluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/indexercluster"
+	reconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemanager"
 	searchheadcluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/searchheadcluster"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -285,7 +286,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	// create license manager statefulset
-	_, err = enterprise.ApplyLicenseManager(ctx, client, &lm)
+	_, err = reconcile.ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager should not have returned error; err=%v", err)
 	}
@@ -295,7 +296,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
 	lm.Status.TelAppInstalled = true
 	// create license manager statefulset
-	_, err = enterprise.ApplyLicenseManager(ctx, client, &lm)
+	_, err = reconcile.ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager should not have returned error; err=%v", err)
 	}
@@ -545,13 +546,13 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	lm.Status.TelAppInstalled = true
-	_, err = enterprise.ApplyLicenseManager(ctx, client, &lm)
+	_, err = reconcile.ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager after update should not have returned error; err=%v", err)
 	}
 
 	lm.Status.TelAppInstalled = true
-	_, err = enterprise.ApplyLicenseManager(ctx, client, &lm)
+	_, err = reconcile.ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager after update should not have returned error; err=%v", err)
 	}
@@ -604,7 +605,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	shc.Status.TelAppInstalled = true
 
 	lm.Status.TelAppInstalled = true
-	_, err = enterprise.ApplyLicenseManager(ctx, client, &lm)
+	_, err = reconcile.ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager after update should not have returned error; err=%v", err)
 	}

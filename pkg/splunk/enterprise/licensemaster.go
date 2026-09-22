@@ -171,7 +171,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
-			err := telapp.AddTelApp(ctx, podExecClient, numberOfLicenseMasterReplicas, cr)
+			err := telapp.AddTelApp(ctx, podExecClient, splcommon.NumberOfLicenseManagerReplicas, cr)
 			if err != nil {
 				return result, err
 			}
