@@ -14,6 +14,8 @@
 package scssanity
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -42,12 +44,12 @@ var _ = Describe("SCS pre-upgrade baseline capture", Ordered, Label("tier:scs-sa
 		kubeClient := testcaseEnvInstance.GetKubeClient()
 
 		var err error
-		ingestor, err = discoverIngestor(ctx, kubeClient, ingestorName, ingestorNamespace, operatorNamespace)
+		ingestor, err = discoverIngestorCluster(ctx, kubeClient, ingestorName, ingestorNamespace, operatorNamespace)
 		Expect(err).To(Succeed(), "failed to discover target IngestorCluster")
 		ingestorNS = ingestor.GetNamespace()
 		ingestorPod = ingestorPodName(ingestor)
 
-		ingestor, err = waitIngestorReady(ctx, kubeClient, ingestor.GetName(), ingestorNS, testenv.MediumTimeout, testenv.PollInterval)
+		ingestor, err = waitIngestorReady(ctx, kubeClient, ingestor.GetName(), ingestorNS, testenv.ShortTimeout, testenv.PollInterval)
 		Expect(err).To(Succeed(), "IngestorCluster %s/%s did not reach a steady Ready phase", ingestorNS, ingestorName)
 	})
 
@@ -61,7 +63,7 @@ var _ = Describe("SCS pre-upgrade baseline capture", Ordered, Label("tier:scs-sa
 		// Use the same ACK-only path as the post-upgrade phase (assertHECIngest) rather than the
 		// tenant's real HEC token: this probe must never inject sanity markers into customer-facing
 		// tenant data on a shared SCS tenant.
-		Expect(assertHECIngest(ctx, deployment, ingestorPod, ingestorNS, "before-"+testenv.RandomDNSName(8), testenv.MediumTimeout, testenv.PollInterval)).
+		Expect(assertHECIngest(ctx, deployment, ingestorPod, ingestorNS, "before-"+testenv.RandomDNSName(8), testenv.ShortTimeout, testenv.PollInterval)).
 			To(Succeed(), "pre-upgrade HEC ingest gate failed on pod %s", ingestorPod)
 
 		baseline := tenantBaseline{
@@ -89,10 +91,16 @@ var _ = Describe("SCS post-upgrade operator health", Ordered, Label("tier:scs-sa
 	It("operator rollout is healthy", func(ctx SpecContext) {
 		kubeClient := testcaseEnvInstance.GetKubeClient()
 
-		Expect(operatorDeploymentHealthy(ctx, kubeClient, operatorNamespace, operatorName, targetOperatorImg)).
+		// Retried rather than sampled once: these run immediately after the Helm upgrade, while the
+		// rollout and the leader-election handover are still settling.
+		Expect(retryUntil(ctx, testenv.PhaseTransitionTimeout, testenv.PollInterval, func(ctx context.Context) error {
+			return operatorDeploymentHealthy(ctx, kubeClient, operatorNamespace, operatorName, targetOperatorImg)
+		})).
 			To(Succeed(), "operator Deployment %s/%s is not fully healthy", operatorNamespace, operatorName)
 
-		Expect(operatorLeaderElected(ctx, kubeClient, operatorNamespace)).
+		Expect(retryUntil(ctx, testenv.PhaseTransitionTimeout, testenv.PollInterval, func(ctx context.Context) error {
+			return operatorLeaderElected(ctx, kubeClient, operatorNamespace)
+		})).
 			To(Succeed(), "operator has no active leader in %s", operatorNamespace)
 	})
 })
@@ -107,18 +115,18 @@ var _ = Describe("SCS deployment sanity", Ordered, Label("tier:scs-sanity", "pha
 		kubeClient := testcaseEnvInstance.GetKubeClient()
 
 		var err error
-		ingestor, err = discoverIngestor(ctx, kubeClient, ingestorName, ingestorNamespace, operatorNamespace)
+		ingestor, err = discoverIngestorCluster(ctx, kubeClient, ingestorName, ingestorNamespace, operatorNamespace)
 		Expect(err).To(Succeed(), "failed to discover target IngestorCluster")
 		ingestorNS = ingestor.GetNamespace()
 		ingestorPod = ingestorPodName(ingestor)
 
-		ingestor, err = waitIngestorReady(ctx, kubeClient, ingestor.GetName(), ingestorNS, testenv.MediumTimeout, testenv.PollInterval)
+		ingestor, err = waitIngestorReady(ctx, kubeClient, ingestor.GetName(), ingestorNS, testenv.ShortTimeout, testenv.PollInterval)
 		Expect(err).To(Succeed(), "IngestorCluster %s/%s did not reach a steady Ready phase", ingestorNS, ingestorName)
 	})
 
 	It("HEC ingest on the ingestor pod is accepted and reflected in its own _internal metrics", func(ctx SpecContext) {
 		Expect(ingestor).NotTo(BeNil(), "IngestorCluster was not discovered by the previous spec")
-		Expect(assertHECIngest(ctx, deployment, ingestorPod, ingestorNS, testenv.RandomDNSName(12), testenv.MediumTimeout, testenv.PollInterval)).
+		Expect(assertHECIngest(ctx, deployment, ingestorPod, ingestorNS, testenv.RandomDNSName(12), testenv.ShortTimeout, testenv.PollInterval)).
 			To(Succeed(), "post-upgrade HEC ingest gate failed on pod %s", ingestorPod)
 	})
 
@@ -142,7 +150,7 @@ var _ = Describe("SCS deployment sanity", Ordered, Label("tier:scs-sanity", "pha
 
 		// Data-path: a fresh marker event must still be accepted post-upgrade, proving ingest
 		// continuity across the SOK image swap (not just that the pod is still Running).
-		Expect(assertHECIngest(ctx, deployment, ingestorPod, ingestorNS, "after-"+testenv.RandomDNSName(8), testenv.MediumTimeout, testenv.PollInterval)).
+		Expect(assertHECIngest(ctx, deployment, ingestorPod, ingestorNS, "after-"+testenv.RandomDNSName(8), testenv.ShortTimeout, testenv.PollInterval)).
 			To(Succeed(), "post-upgrade non-disruption HEC ingest gate failed on pod %s", ingestorPod)
 	})
 })
