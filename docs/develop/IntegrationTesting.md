@@ -117,6 +117,7 @@ graph TD
 **TestEnv** (`test/testenv/testenv.go`)
 - Created once per suite in `BeforeSuite`
 - Builds a controller-runtime manager with a cached Kubernetes client
+- Blocks until the manager's informer cache has synced before returning, so a suite that reads immediately (e.g. one that attaches to an already-running environment instead of provisioning its own resources first) doesn't race the cache
 - Configures the client to work with Splunk CRD types (v3 and v4)
 - Does **not** create namespaces — that happens per-spec in `TestCaseEnv`
 

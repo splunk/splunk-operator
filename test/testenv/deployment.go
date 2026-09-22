@@ -356,14 +356,17 @@ func newPodExecExecutor(restConfig *rest.Config, execURL *url.URL) (remotecomman
 
 // PodExecCommand execute a shell command in the specified pod
 func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []string, stdin string, tty bool) (string, string, error) {
-	return d.PodExecCommandInNamespace(ctx, podName, d.testenv.namespace, cmd, stdin, tty)
+	return d.PodExecCommandInNamespace(ctx, podName, d.testenv.namespace, "", cmd, stdin, tty)
 }
 
 // PodExecCommandInNamespace executes a shell command in the specified pod within the given
 // namespace, rather than the Deployment's own testenv namespace. Needed when attaching to an
 // existing environment (see AttachToExistingEnv) where the target pod (e.g. a tenant
 // IngestorCluster pod) lives in a different namespace than the operator/testenv.
-func (d *Deployment) PodExecCommandInNamespace(ctx context.Context, podName string, namespace string, cmd []string, stdin string, tty bool) (string, string, error) {
+// PodExecCommandInNamespace execs cmd in a pod. container may be empty on a single-container pod,
+// but is mandatory when the pod has sidecars — a real SCS tenant ingestor runs skynet-uf and
+// otc-container alongside splunk, and the API server rejects an exec that names no container.
+func (d *Deployment) PodExecCommandInNamespace(ctx context.Context, podName string, namespace string, container string, cmd []string, stdin string, tty bool) (string, string, error) {
 	pod := &corev1.Pod{}
 	key := client.ObjectKey{Name: podName, Namespace: namespace}
 	if err := d.testenv.GetKubeClient().Get(ctx, key, pod); err != nil {
@@ -381,11 +384,12 @@ func (d *Deployment) PodExecCommandInNamespace(ctx context.Context, podName stri
 	}
 	execReq := restClient.Post().Resource("pods").Name(podName).Namespace(namespace).SubResource("exec")
 	option := &corev1.PodExecOptions{
-		Command: cmd,
-		Stdin:   true,
-		Stdout:  true,
-		Stderr:  true,
-		TTY:     tty,
+		Command:   cmd,
+		Container: container,
+		Stdin:     true,
+		Stdout:    true,
+		Stderr:    true,
+		TTY:       tty,
 	}
 	if stdin == "" {
 		option.Stdin = false

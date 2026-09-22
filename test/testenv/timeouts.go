@@ -174,7 +174,7 @@ const (
 	ShortSuiteTimeout = 30 * time.Minute
 
 	// MediumSuiteTimeout for moderate suites:
-	// smoke, s1appfw, indingsep.
+	// smoke, s1appfw, indingsep, scs_sanity.
 	MediumSuiteTimeout = 120 * time.Minute
 
 	// MediumLongSuiteTimeout for mid-heavy suites:
