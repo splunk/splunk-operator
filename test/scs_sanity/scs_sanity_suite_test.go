@@ -51,7 +51,9 @@ func TestSCSSanity(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
-	sc.Timeout = testenv.ShortSuiteTimeout
+	// Must exceed the sum of the per-operation budgets one invocation can spend, or the suite
+	// aborts before any of them can report its own failure.
+	sc.Timeout = testenv.MediumSuiteTimeout
 
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }

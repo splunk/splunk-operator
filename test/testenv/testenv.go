@@ -16,6 +16,7 @@
 package testenv
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -63,6 +64,10 @@ const (
 
 	// ConsistentDuration is use to check a state is stable
 	ConsistentDuration = 2000 * time.Millisecond
+
+	// cacheSyncTimeout bounds how long NewTestEnv waits for the controller-runtime
+	// manager's informer cache to sync before handing back a cache-backed client.
+	cacheSyncTimeout = 2 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
@@ -344,6 +349,17 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		err := kubeManager.Start(signals.SetupSignalHandler())
 		gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Error starting kube manager")
 	}()
+
+	// Block until the informer cache has synced before handing back the cache-backed
+	// client. Suites that provision namespaces/operators/CRs right after NewTestEnv
+	// incidentally give the cache time to warm before their first read; a read-only
+	// suite that attaches to an already-running environment (e.g. scs-sanity) reads
+	// immediately and otherwise races the cache, failing with ErrCacheNotStarted.
+	syncCtx, cancel := context.WithTimeout(context.Background(), cacheSyncTimeout)
+	defer cancel()
+	if !kubeManager.GetCache().WaitForCacheSync(syncCtx) {
+		return nil, fmt.Errorf("timed out waiting for kube cache to sync after %s", cacheSyncTimeout)
+	}
 
 	return testenv, nil
 }

@@ -22,6 +22,20 @@ between two separate invocations of the precompiled ginkgo binary:
   an existing tenant was present before the upgrade (`RELEASE_PRESENT=true`): re-checks
   CR readiness and HEC ingest, then diffs against the baseline file for disruption.
 
-Env-var contract (set by `scs-sanity-gate.sh`, with `SCS_INGESTOR_NAME`/
-`SCS_INGESTOR_NAMESPACE` as optional discovery overrides): `SCS_OPERATOR_NAMESPACE`,
+Env-var contract (set by `scs-sanity-gate.sh`): `SCS_OPERATOR_NAMESPACE`,
 `TARGET_OPERATOR_IMAGE`, `SCS_SANITY_BASELINE_FILE`.
+
+The tenant is chosen per environment, so pointing the gate at a different long-lived
+stack is a CI variable change rather than a code change:
+
+```
+SCS_SANITY_TENANT_PLAY=<namespace>/<name>
+SCS_SANITY_TENANT_STAGE=<namespace>/<name>
+SCS_SANITY_TENANT_PROD=<namespace>/<name>
+```
+
+`scs-deploy-loki.sh` picks the one matching `LOKI_ENVIRONMENT` and exports it as the
+`SCS_INGESTOR_NAMESPACE`/`SCS_INGESTOR_NAME` discovery overrides, which pins the suite to
+one known tenant instead of relying on the label-selector search resolving to exactly one
+match. The HEC probe writes a uniquely-tagged event through a dedicated ACK-enabled token
+routed at `_internal`, so it never lands in a customer-facing index.

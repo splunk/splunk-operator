@@ -117,6 +117,14 @@ func parseHECResponse(curlOutput string) (*hecResponse, error) {
 // index rather than main: the ingestor role disables the ruleset/typing pipeline stages for all
 // local indexing (pkg/splunk/splunkconfig/smartbus.go), so an event posted here is
 // HEC-acknowledged but never durably indexed anywhere — it can't land in a customer-facing index.
+// splunkContainerName is the container the probes exec into; a real tenant ingestor pod also runs
+// skynet-uf and otc-container sidecars.
+//
+// HEC itself is plaintext: the operator writes hec_enableSSL: 0 into every tenant's splunk-secrets
+// default.yml (pkg/splunk/util/secrets.go), so 8088 speaks HTTP even on a tenant with server and
+// input TLS certs. Only the management port (8089) is TLS, which is why the calls below differ.
+const splunkContainerName = "splunk"
+
 const (
 	scsSanityAckTokenName = "sok_scs_sanity_ack"
 	scsSanityAckIndex     = "_internal"
@@ -172,7 +180,7 @@ func ensureAckHECToken(ctx context.Context, dep *testenv.Deployment, podName, na
 		"https://localhost:8089/servicesNS/nobody/splunk_httpinput/data/inputs/http/http%%3A%%2F%%2F%s",
 		scsSanityAckTokenName,
 	))
-	stdout, _, err := dep.PodExecCommandInNamespace(ctx, podName, namespace, []string{"/bin/sh"}, checkStdin, false)
+	stdout, _, err := dep.PodExecCommandInNamespace(ctx, podName, namespace, splunkContainerName, []string{"/bin/sh"}, checkStdin, false)
 	if err != nil {
 		return fmt.Errorf("failed to exec HEC token lookup on pod %s: %w", podName, err)
 	}
@@ -185,7 +193,7 @@ func ensureAckHECToken(ctx context.Context, dep *testenv.Deployment, podName, na
 		"https://localhost:8089/services/data/inputs/http -d name=%s -d useACK=1 -d index=%s -d token=%s",
 		scsSanityAckTokenName, scsSanityAckIndex, tokenValue,
 	))
-	stdout, _, err = dep.PodExecCommandInNamespace(ctx, podName, namespace, []string{"/bin/sh"}, createStdin, false)
+	stdout, _, err = dep.PodExecCommandInNamespace(ctx, podName, namespace, splunkContainerName, []string{"/bin/sh"}, createStdin, false)
 	if err != nil {
 		return fmt.Errorf("failed to exec HEC token provisioning on pod %s: %w", podName, err)
 	}
@@ -206,12 +214,12 @@ func postHECEventWithChannel(ctx context.Context, dep *testenv.Deployment, podNa
 	}
 
 	stdin := fmt.Sprintf(
-		`curl -sik -H 'Authorization: Splunk %s' `+
-			`'https://localhost:8088/services/collector/event?channel=%s' `+
+		`curl -si -H 'Authorization: Splunk %s' `+
+			`'http://localhost:8088/services/collector/event?channel=%s' `+
 			`-d '{"event":"scs-sanity marker=%s","sourcetype":"scs:sanity:ack"}'`,
 		tokenValue, channel, marker,
 	)
-	stdout, _, err := dep.PodExecCommandInNamespace(ctx, podName, namespace, []string{"/bin/sh"}, stdin, false)
+	stdout, _, err := dep.PodExecCommandInNamespace(ctx, podName, namespace, splunkContainerName, []string{"/bin/sh"}, stdin, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exec HEC ACK-channel POST on pod %s: %w", podName, err)
 	}
@@ -236,11 +244,11 @@ func pollHECAckOnce(ctx context.Context, dep *testenv.Deployment, podName, names
 	}
 
 	stdin := fmt.Sprintf(
-		`curl -sk -H 'Authorization: Splunk %s' `+
-			`'https://localhost:8088/services/collector/ack?channel=%s' -d '{"acks":[%d]}'`,
+		`curl -s -H 'Authorization: Splunk %s' `+
+			`'http://localhost:8088/services/collector/ack?channel=%s' -d '{"acks":[%d]}'`,
 		tokenValue, channel, ackID,
 	)
-	stdout, _, err := dep.PodExecCommandInNamespace(ctx, podName, namespace, []string{"/bin/sh"}, stdin, false)
+	stdout, _, err := dep.PodExecCommandInNamespace(ctx, podName, namespace, splunkContainerName, []string{"/bin/sh"}, stdin, false)
 	if err != nil {
 		return false, fmt.Errorf("failed to exec HEC ack poll on pod %s: %w", podName, err)
 	}
@@ -254,14 +262,44 @@ func pollHECAckOnce(ctx context.Context, dep *testenv.Deployment, podName, names
 // operatorDeploymentHealthy fetches the operator Deployment and reports whether its rollout is
 // fully healthy: all replicas ready, and (when targetImage is non-empty) the manager container
 // running that exact image.
+// retryUntil polls check until it succeeds, surfacing check's own last error on timeout rather than
+// a generic deadline-exceeded. Operator health right after a Helm upgrade is eventually-consistent,
+// so a single sample is racy: the Deployment reports the rollout complete before the incoming pod
+// has acquired the leader-election lease, and the outgoing pod's lease stays stale for up to its
+// full duration in the meantime.
+func retryUntil(ctx context.Context, timeout, pollInterval time.Duration, check func(context.Context) error) error {
+	var lastErr error
+	waitErr := wait.PollUntilContextTimeout(ctx, pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		lastErr = check(ctx)
+		return lastErr == nil, nil
+	})
+	if waitErr != nil && lastErr != nil {
+		return lastErr
+	}
+	return waitErr
+}
+
 func operatorDeploymentHealthy(ctx context.Context, kubeClient client.Client, namespace, name, targetImage string) error {
 	dep := &appsv1.Deployment{}
 	if err := kubeClient.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, dep); err != nil {
 		return fmt.Errorf("failed to get operator Deployment %s/%s: %w", namespace, name, err)
 	}
+	// ObservedGeneration/UpdatedReplicas guard against sampling mid-rollout, when ReadyReplicas can
+	// still equal Replicas while the outgoing pods are counted and the new spec is not yet observed.
+	if dep.Status.ObservedGeneration < dep.Generation {
+		return fmt.Errorf("operator Deployment %s/%s rollout not observed yet: observedGeneration=%d generation=%d",
+			namespace, name, dep.Status.ObservedGeneration, dep.Generation)
+	}
 	if dep.Status.ReadyReplicas != dep.Status.Replicas || dep.Status.Replicas == 0 {
 		return fmt.Errorf("operator Deployment %s/%s not fully ready: readyReplicas=%d replicas=%d",
 			namespace, name, dep.Status.ReadyReplicas, dep.Status.Replicas)
+	}
+	if dep.Status.UpdatedReplicas != dep.Status.Replicas {
+		return fmt.Errorf("operator Deployment %s/%s still has stale replicas: updatedReplicas=%d replicas=%d",
+			namespace, name, dep.Status.UpdatedReplicas, dep.Status.Replicas)
+	}
+	if dep.Status.UnavailableReplicas != 0 {
+		return fmt.Errorf("operator Deployment %s/%s has %d unavailable replicas", namespace, name, dep.Status.UnavailableReplicas)
 	}
 	if targetImage == "" {
 		return nil
@@ -378,17 +416,6 @@ func readTenantBaseline(path string) (*tenantBaseline, error) {
 		return nil, fmt.Errorf("failed to unmarshal tenant baseline from %s: %w", path, err)
 	}
 	return &baseline, nil
-}
-
-// discoverIngestor resolves the target IngestorCluster/pod, returning the discovered CR (and its
-// pod/namespace, via ingestorPodName/GetNamespace on the result) rather than reaching into
-// package-level state — callers in scs_sanity_test.go decide how the result is threaded across
-// specs and assert on the returned error themselves. Both the pre-upgrade and post-upgrade
-// phases call this independently — they are separate ginkgo invocations (see
-// gitlab-ci/scs-sanity-gate.sh) with a real Helm upgrade in between, so nothing about the
-// discovered tenant can be assumed to already be in memory.
-func discoverIngestor(ctx context.Context, kubeClient client.Client, name, namespace, fallbackNamespace string) (*enterpriseApi.IngestorCluster, error) {
-	return discoverIngestorCluster(ctx, kubeClient, name, namespace, fallbackNamespace)
 }
 
 // waitIngestorReady blocks until the named IngestorCluster reaches a steady Ready phase,
