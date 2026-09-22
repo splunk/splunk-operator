@@ -15,6 +15,7 @@
 package indexercluster
 
 import (
+	"maps"
 	"slices"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 // expected for one IndexerCluster ordinal.
 type ExpectedNoahPeer struct {
 	ID        string
+	PodName   string
 	StartedAt time.Time
 }
 
@@ -39,9 +41,33 @@ type NoahCacheWarmPolicy struct {
 // NoahMembership summarizes the exact relationship between the expected
 // IndexerCluster peers and Noah's observed peer records.
 type NoahMembership struct {
-	AllRegistered  bool
-	AllReady       bool
-	TimedOutPeerID string
+	Peers             []NoahPeerMembership
+	UnexpectedPeerIDs []string
+	AllRegistered     bool
+	AllReady          bool
+	TimedOutPeerID    string
+}
+
+// NoahPeerClassification describes how Noah's records relate to one expected
+// IndexerCluster peer.
+type NoahPeerClassification string
+
+const (
+	NoahPeerCurrent       NoahPeerClassification = "Current"
+	NoahPeerMissing       NoahPeerClassification = "Missing"
+	NoahPeerStale         NoahPeerClassification = "Stale"
+	NoahPeerDuplicate     NoahPeerClassification = "Duplicate"
+	NoahPeerContradictory NoahPeerClassification = "Contradictory"
+	NoahPeerInvalid       NoahPeerClassification = "Invalid"
+)
+
+// NoahPeerMembership classifies Noah's observations for one expected peer.
+type NoahPeerMembership struct {
+	Expected       ExpectedNoahPeer
+	Classification NoahPeerClassification
+	Status         noah.PeerStatus
+	Registered     bool
+	Ready          bool
 }
 
 // MatchesNoahPeerIncarnation reports whether an observed Noah peer contains
@@ -62,63 +88,92 @@ func MatchesNoahPeerIncarnation(expected ExpectedNoahPeer, observed noah.Peer) b
 // records are ignored. Each expected peer must have exactly one current record,
 // so duplicates and contradictory current records fail closed.
 func EvaluateNoahMembership(expected []ExpectedNoahPeer, observed []noah.Peer, policy NoahCacheWarmPolicy, now time.Time) NoahMembership {
-	type peerState struct {
-		matches    int
-		registered int
-		ready      int
-		timedOut   bool
-	}
-
-	expectedByID := make(map[string]ExpectedNoahPeer, len(expected))
-	validExpectedSet := len(expected) > 0
+	expectedCounts := make(map[string]int, len(expected))
 	for _, peer := range expected {
-		if peer.ID == "" || peer.StartedAt.IsZero() {
-			validExpectedSet = false
-		}
-		if _, duplicate := expectedByID[peer.ID]; duplicate {
-			validExpectedSet = false
-		}
-		expectedByID[peer.ID] = peer
+		expectedCounts[peer.ID]++
 	}
 
-	states := make(map[string]peerState, len(expected))
+	observedByID := make(map[string][]noah.Peer, len(observed))
+	unexpectedIDs := make(map[string]struct{})
 	for _, peer := range observed {
-		expectedPeer, found := expectedByID[peer.ID]
-		if !found || !MatchesNoahPeerIncarnation(expectedPeer, peer) {
+		observedByID[peer.ID] = append(observedByID[peer.ID], peer)
+		if expectedCounts[peer.ID] == 0 {
+			unexpectedIDs[peer.ID] = struct{}{}
+		}
+	}
+
+	result := NoahMembership{
+		Peers:             make([]NoahPeerMembership, 0, len(expected)),
+		UnexpectedPeerIDs: slices.Sorted(maps.Keys(unexpectedIDs)),
+		AllRegistered:     true,
+		AllReady:          true,
+	}
+
+	for _, expectedPeer := range expected {
+		peerMembership := NoahPeerMembership{Expected: expectedPeer}
+		if expectedPeer.ID == "" || expectedPeer.StartedAt.IsZero() || expectedCounts[expectedPeer.ID] != 1 {
+			peerMembership.Classification = NoahPeerInvalid
+			result.AllRegistered = false
+			result.AllReady = false
+			result.Peers = append(result.Peers, peerMembership)
 			continue
 		}
 
-		state := states[peer.ID]
-		state.matches++
-		if noahPeerRegistered(peer.Status) {
-			state.registered++
+		matches := make([]noah.Peer, 0, len(observedByID[expectedPeer.ID]))
+		for _, peer := range observedByID[expectedPeer.ID] {
+			if MatchesNoahPeerIncarnation(expectedPeer, peer) {
+				matches = append(matches, peer)
+			}
 		}
-		if peer.Status == noah.PeerStatusUp {
-			state.ready++
-		} else if policy.Required && policy.Timeout > 0 && !now.Before(time.Unix(peer.Data.StartTime, 0).Add(policy.Timeout)) {
-			state.timedOut = true
-		}
-		states[peer.ID] = state
-	}
 
-	result := NoahMembership{AllRegistered: validExpectedSet, AllReady: validExpectedSet}
-	for _, expectedPeer := range expected {
-		state := states[expectedPeer.ID]
-		if state.matches != 1 || state.registered != 1 {
+		switch len(matches) {
+		case 0:
+			peerMembership.Classification = NoahPeerMissing
+			if len(observedByID[expectedPeer.ID]) > 0 {
+				peerMembership.Classification = NoahPeerStale
+			}
+		case 1:
+			peerMembership.Classification = NoahPeerCurrent
+			peerMembership.Status = matches[0].Status
+			peerMembership.Registered = noahPeerRegistered(matches[0].Status)
+			peerMembership.Ready = matches[0].Status == noah.PeerStatusUp
+		default:
+			peerMembership.Classification = NoahPeerDuplicate
+			for _, peer := range matches[1:] {
+				if peer.Status != matches[0].Status {
+					peerMembership.Classification = NoahPeerContradictory
+					break
+				}
+			}
+		}
+
+		if !peerMembership.Registered {
 			result.AllRegistered = false
 		}
-		if state.matches != 1 || state.ready != 1 {
+		if !peerMembership.Ready {
 			result.AllReady = false
 		}
 
-		timedOut := state.timedOut
-		if state.matches == 0 && policy.Required && policy.Timeout > 0 {
-			timedOut = !now.Before(expectedPeer.StartedAt.Add(policy.Timeout))
+		timedOut := false
+		if policy.Required && policy.Timeout > 0 {
+			if len(matches) == 0 {
+				timedOut = !now.Before(expectedPeer.StartedAt.Add(policy.Timeout))
+			} else {
+				for _, peer := range matches {
+					if peer.Status != noah.PeerStatusUp && !now.Before(time.Unix(peer.Data.StartTime, 0).Add(policy.Timeout)) {
+						timedOut = true
+						break
+					}
+				}
+			}
 		}
 		if timedOut && (result.TimedOutPeerID == "" || expectedPeer.ID < result.TimedOutPeerID) {
 			result.TimedOutPeerID = expectedPeer.ID
 		}
+
+		result.Peers = append(result.Peers, peerMembership)
 	}
+
 	return result
 }
 
