@@ -150,6 +150,33 @@ func TestWithNoahPodIdentity_NoSplunkContainerIsNoop(t *testing.T) {
 	assert.Equal(t, want, statefulSet)
 }
 
+func TestWithNoahCacheWarmDecommission(t *testing.T) {
+	statefulSet := makeNoahStatefulSet()
+	postStart := &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: []string{"existing"}}}
+	statefulSet.Spec.Template.Spec.Containers[0].Lifecycle = &corev1.Lifecycle{PostStart: postStart}
+	wantSidecar := statefulSet.Spec.Template.Spec.Containers[1].DeepCopy()
+
+	option := resources.WithNoahCacheWarmDecommission()
+	option(statefulSet)
+	want := statefulSet.DeepCopy()
+	option(statefulSet)
+
+	splunk := statefulSet.Spec.Template.Spec.Containers[0]
+	require.NotNil(t, statefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	assert.Equal(t, int64(900), *statefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	require.NotNil(t, splunk.Lifecycle)
+	assert.Equal(t, postStart, splunk.Lifecycle.PostStart)
+	require.NotNil(t, splunk.Lifecycle.PreStop)
+	require.NotNil(t, splunk.Lifecycle.PreStop.Exec)
+	assert.Equal(t, []string{
+		"/bin/sh",
+		"-c",
+		`touch "$SPLUNK_HOME/var/run/splunk/decommission_for_cache_warming"`,
+	}, splunk.Lifecycle.PreStop.Exec.Command)
+	assert.Equal(t, wantSidecar, &statefulSet.Spec.Template.Spec.Containers[1])
+	assert.Equal(t, want, statefulSet)
+}
+
 func envByName(env []corev1.EnvVar) map[string]corev1.EnvVar {
 	result := make(map[string]corev1.EnvVar, len(env))
 	for _, item := range env {

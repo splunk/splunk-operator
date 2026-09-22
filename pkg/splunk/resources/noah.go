@@ -26,6 +26,9 @@ const (
 	ClusterDomainEnvName       = "CLUSTER_DOMAIN"
 	PodNameEnvName             = "POD_NAME"
 	PodNamespaceEnvName        = "POD_NAMESPACE"
+
+	noahCacheWarmDecommissionCommand  = `touch "$SPLUNK_HOME/var/run/splunk/decommission_for_cache_warming"`
+	noahTerminationGracePeriodSeconds = int64(15 * 60)
 )
 
 // WithNoahPodIdentity supplies the StatefulSet identity inputs consumed by the
@@ -66,6 +69,27 @@ func WithNoahPodIdentity(clusterDomain string) StatefulSetOption {
 				continue
 			}
 			container.Env = upsertEnvVars(container.Env, identityEnv)
+		}
+	}
+}
+
+// WithNoahCacheWarmDecommission arms Splunk's cache-warm decommission before
+// Kubernetes starts normal container termination.
+func WithNoahCacheWarmDecommission() StatefulSetOption {
+	return func(statefulSet *appsv1.StatefulSet) {
+		statefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds = new(noahTerminationGracePeriodSeconds)
+
+		for i := range statefulSet.Spec.Template.Spec.Containers {
+			container := &statefulSet.Spec.Template.Spec.Containers[i]
+			if container.Name != "splunk" {
+				continue
+			}
+			if container.Lifecycle == nil {
+				container.Lifecycle = &corev1.Lifecycle{}
+			}
+			container.Lifecycle.PreStop = &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/bin/sh", "-c", noahCacheWarmDecommissionCommand}},
+			}
 		}
 	}
 }
