@@ -47,28 +47,25 @@ func noahClusterForSHCTest(namespace, name, authSecretName string) *enterpriseAp
 
 // applySearchHeadClusterNoah never creates a deployer — this is unconditional,
 // with no spec field controlling it. The search-head StatefulSet is still
-// identity-aware — SPLUNK_NOAH_ENABLED,
-// the headless service name, and the cluster domain are all present — and
-// still gets SPLUNK_DEPLOYER_URL despite there being no deployer, repointed
-// at 127.0.0.1 instead of the (nonexistent) deployer's: splunk-ansible's
-// splunk_search_head role gates running `splunk init shcluster-config` (the
-// command that actually enables search head clustering) on that variable
-// being merely non-empty, never on it being reachable
-// (roles/splunk_search_head/tasks/main.yml checks 'deployer_url' in splunk
-// and splunk.deployer_url). Omitting the env var entirely left the search
-// head permanently unclustered — a real regression an earlier version of
-// this change introduced while over-applying a Codex review finding.
-// Pointing it at a Kubernetes Service — the deleted deployer's, or even the
-// search head's own — is not viable either: search_head_clustering.yml
-// opens with a wait_for_splunk_instance check against deployer_url that
-// burns a fixed ~6.5-minute retries*delay budget regardless of how the
-// connection fails, and a not-yet-ready pod's own Service has zero ready
-// endpoints (Kubernetes only routes to pods that already passed their own
-// readiness probe), so both exceeded the pod's startup-probe deadline and
-// restarted the container in a loop that never finished provisioning
-// (live-verified 2026-09-10). 127.0.0.1 resolves that check almost
-// instantly instead, since it talks to the already-running local splunkd
-// directly, sidestepping Service routing entirely.
+// identity-aware — SPLUNK_NOAH_ENABLED, the headless service name, and the
+// cluster domain are all present — but SPLUNK_DEPLOYER_URL, which
+// getSearchHeadEnv unconditionally points at the (nonexistent, for Noah)
+// deployer's Service, is dropped entirely rather than repointed anywhere.
+//
+// This used to require a 127.0.0.1 workaround: splunk-ansible's
+// splunk_search_head role gated running `splunk init shcluster-config` (the
+// command that actually enables search head clustering) on deployer_url
+// being merely non-empty — never on it being reachable — so omitting the
+// env var entirely left the search head permanently unclustered, and
+// pointing it at a real Kubernetes Service (the deleted deployer's, or even
+// the search head's own) burned a fixed ~6.5-minute wait_for_splunk_instance
+// retry budget and restart-looped (live-verified 2026-09-10), since a
+// not-yet-ready pod's own Service has zero ready endpoints. splunk-ansible
+// no longer has that requirement (feature/support-no-deployer,
+// github.com/splunk/splunk-ansible/pull/940): splunk_search_head_cluster
+// alone now gates SHC bootstrap, and the deployer-specific steps inside it
+// skip cleanly when deployer_url is unset — so the env var can now be
+// dropped outright instead of worked around.
 func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T) {
 	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
 
@@ -127,8 +124,9 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
 	require.NotNil(t, env[resources.PodNameEnvName].ValueFrom, "identity must survive Pod IP changes via the downward API, not a literal IP")
 	require.NotNil(t, env[resources.PodNamespaceEnvName].ValueFrom)
-	assert.Equal(t, "127.0.0.1", env["SPLUNK_DEPLOYER_URL"].Value,
-		"SPLUNK_DEPLOYER_URL must point at the local splunkd, not a Kubernetes Service (the deleted deployer's or even the search-head's own), so splunk-ansible's bootstrap check resolves instantly instead of hitting zero ready endpoints and burning its full retry budget")
+	_, hasDeployerURL := env["SPLUNK_DEPLOYER_URL"]
+	assert.False(t, hasDeployerURL,
+		"SPLUNK_DEPLOYER_URL must be dropped entirely now that splunk-ansible no longer requires it to bootstrap shcluster-config, rather than pointed at a placeholder like 127.0.0.1")
 }
 
 // A failure while removing owner references during deletion must abort

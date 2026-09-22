@@ -211,25 +211,27 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("build Noah search-head StatefulSet: %w", err)
 	}
-	// TEMPORARY: getSearchHeadEnv unconditionally points SPLUNK_DEPLOYER_URL
-	// at the deployer's Service; overwrite it in place to 127.0.0.1 instead.
-	// Omitting it entirely leaves the search head permanently unclustered,
-	// and pointing it at any Kubernetes Service (the deployer's or even the
-	// search head's own) triggers a ~6.5-minute bootstrap stall and restart
-	// loop (both live-verified 2026-09-10); 127.0.0.1 avoids both by
-	// resolving against the already-running local splunkd. Remove this once
-	// splunk-ansible no longer needs a reachable deployer_url to bootstrap
-	// shcluster-config.
+	// getSearchHeadEnv unconditionally points SPLUNK_DEPLOYER_URL at the
+	// deployer's Service, which doesn't exist for Noah (no deployer). Drop
+	// it entirely instead of pointing it anywhere: splunk-ansible no longer
+	// requires a reachable (or even present) deployer_url to bootstrap
+	// shcluster-config (splunk-ansible feature/support-no-deployer,
+	// github.com/splunk/splunk-ansible/pull/940) — splunk_search_head_cluster
+	// alone now gates SHC bootstrap, and the deployer-specific steps inside
+	// it (conf_deploy_fetch_url, the two deployer reachability waits) skip
+	// cleanly when deployer_url is unset.
 	for i := range searchHeadStatefulSet.Spec.Template.Spec.Containers {
 		container := &searchHeadStatefulSet.Spec.Template.Spec.Containers[i]
 		if container.Name != "splunk" {
 			continue
 		}
-		for j := range container.Env {
-			if container.Env[j].Name == "SPLUNK_DEPLOYER_URL" {
-				container.Env[j].Value = "127.0.0.1"
+		env := container.Env[:0]
+		for _, e := range container.Env {
+			if e.Name != "SPLUNK_DEPLOYER_URL" {
+				env = append(env, e)
 			}
 		}
+		container.Env = env
 	}
 	// With no deployer, there is no deployer StatefulSet CreationTimestamp to
 	// gate the classic path's upgrade-path validation, so key the same "only
