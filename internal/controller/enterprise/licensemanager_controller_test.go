@@ -1,3 +1,18 @@
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package controller
 
 import (
@@ -8,8 +23,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	ctrlreconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,20 +39,25 @@ import (
 
 	"github.com/pkg/errors"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	reconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemanager"
 )
+
+var defaultLicenseManagerApply = reconcile.Apply
+var defaultLicenseManagerApplyLicenseManager = reconcile.ApplyLicenseManager
 
 var _ = Describe("LicenseManager Controller", Label("integration"), func() {
 
 	AfterEach(func() {
-
+		reconcile.Apply = defaultLicenseManagerApply
+		reconcile.ApplyLicenseManager = defaultLicenseManagerApplyLicenseManager
 	})
 
 	Context("LicenseManager Management", func() {
 
 		It("Get LicenseManager custom resource should failed", func() {
 			namespace := "ns-splunk-lm-1"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
-				return reconcile.Result{}, nil
+			reconcile.Apply = func(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (ctrlreconcile.Result, error) {
+				return ctrlreconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
@@ -50,8 +69,8 @@ var _ = Describe("LicenseManager Controller", Label("integration"), func() {
 
 		It("Create LicenseManager custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-lm-2"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
-				return reconcile.Result{}, nil
+			reconcile.Apply = func(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (ctrlreconcile.Result, error) {
+				return ctrlreconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
@@ -69,8 +88,8 @@ var _ = Describe("LicenseManager Controller", Label("integration"), func() {
 
 		It("Create LicenseManager custom resource should succeeded", func() {
 			namespace := "ns-splunk-lm-3"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
-				return reconcile.Result{}, nil
+			reconcile.Apply = func(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (ctrlreconcile.Result, error) {
+				return ctrlreconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
@@ -82,8 +101,8 @@ var _ = Describe("LicenseManager Controller", Label("integration"), func() {
 
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-lm-4"
-			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
-				return reconcile.Result{}, nil
+			reconcile.ApplyLicenseManager = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.LicenseManager) (ctrlreconcile.Result, error) {
+				return ctrlreconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
@@ -94,7 +113,7 @@ var _ = Describe("LicenseManager Controller", Label("integration"), func() {
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
-			request := reconcile.Request{
+			request := ctrlreconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      "test",
 					Namespace: namespace,
@@ -148,22 +167,22 @@ var _ = Describe("LicenseManager Controller", Label("integration"), func() {
 			ssSpec := testutils.NewLicenseManager("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 
-			ApplyLicenseManager = func(ctx context.Context, cl client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
-				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
+			reconcile.ApplyLicenseManager = func(ctx context.Context, cl splcommon.ControllerClient, instance *enterpriseApi.LicenseManager) (ctrlreconcile.Result, error) {
+				return ctrlreconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
 			}
 
-			request := reconcile.Request{
+			request := ctrlreconcile.Request{
 				NamespacedName: types.NamespacedName{Name: "test", Namespace: namespace},
 			}
 
 			// First reconcile: Stalled=False → Stalled=True — Stalled event expected
 			_, err := reconciler.Reconcile(ctx, request)
-			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Expect(errors.Is(err, ctrlreconcile.TerminalError(nil))).To(BeTrue())
 			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + splcommon.EventReasonStalled + ` `)))
 
 			// Second reconcile: Stalled=True → Stalled=True — Warning fires on every stalled reconcile
 			_, err = reconciler.Reconcile(ctx, request)
-			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Expect(errors.Is(err, ctrlreconcile.TerminalError(nil))).To(BeTrue())
 			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + splcommon.EventReasonStalled + ` `)))
 		})
 

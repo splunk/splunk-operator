@@ -182,9 +182,6 @@ const (
 	// Number of Deployer replicas
 	numberOfDeployerReplicas = 1
 
-	// Number of Licensemaster replicas
-	numberOfLicenseMasterReplicas = 1
-
 	managerConfigMapTemplateStr = "%smanager-config"
 )
 

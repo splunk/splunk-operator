@@ -43,6 +43,7 @@ import (
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	lmreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemanager"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
@@ -1542,6 +1543,22 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 	mockPodExecClient.CheckPodExecCommands(t, "CheckIfsmartstoreConfigMapUpdatedToPod")
 }
 
+func createLicenseManagerStatefulSetForTest(t *testing.T, ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) {
+	t.Helper()
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("splunk-%s-license-manager", cr.GetName()),
+			Namespace: cr.GetNamespace(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: cr.Spec.Image}}}},
+		},
+	}
+	if err := client.Create(ctx, statefulSet); err != nil {
+		t.Fatalf("failed to create LicenseManager StatefulSet: %v", err)
+	}
+}
+
 func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
@@ -1606,10 +1623,8 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	}
 
 	client.Create(ctx, &lm)
-	_, err := ApplyLicenseManager(ctx, client, &lm)
-	if err != nil {
-		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
-	}
+	createLicenseManagerStatefulSetForTest(t, ctx, client, &lm)
+	var err error
 	namespacedName := types.NamespacedName{
 		Name:      "test",
 		Namespace: "test",
@@ -1637,10 +1652,14 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	spltest.CreatePods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
 	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
 	// now the statefulset image in spec is updated to splunk2
-	ApplyLicenseManager(ctx, client, &lm)
-
-	// should be status ready now
-	ApplyLicenseManager(ctx, client, &lm)
+	statefulSet := &appsv1.StatefulSet{}
+	if err := client.Get(ctx, types.NamespacedName{Name: "splunk-test-license-manager", Namespace: "test"}, statefulSet); err != nil {
+		t.Fatalf("failed to get LicenseManager StatefulSet: %v", err)
+	}
+	statefulSet.Spec.Template.Spec.Containers[0].Image = lm.Spec.Image
+	if err := client.Update(ctx, statefulSet); err != nil {
+		t.Fatalf("failed to update LicenseManager StatefulSet: %v", err)
+	}
 
 	clusterManager := &enterpriseApi.ClusterManager{}
 	namespacedName = types.NamespacedName{
@@ -1721,10 +1740,8 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 
 	// Create the instances
 	client.Create(ctx, lm)
-	_, err := ApplyLicenseManager(ctx, client, lm)
-	if err != nil {
-		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
-	}
+	createLicenseManagerStatefulSetForTest(t, ctx, client, lm)
+	var err error
 
 	namespacedName := types.NamespacedName{
 		Name:      lm.Name,
@@ -1739,12 +1756,6 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	spltest.CreatePods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
 	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
 	lm.Status.TelAppInstalled = true
-	// create license manager statefulset
-	_, err = ApplyLicenseManager(ctx, client, lm)
-	if err != nil {
-		t.Errorf("ApplyLicenseManager should not have returned error; err=%v", err)
-	}
-
 	err = client.Get(ctx, namespacedName, lm)
 	if err != nil {
 		t.Errorf("changeLicenseManagerAnnotations should not have returned error=%v", err)
@@ -1769,7 +1780,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
 
-	err = changeClusterManagerAnnotations(ctx, client, lm)
+	err = lmreconcile.ChangeClusterManagerAnnotations(ctx, client, lm)
 	if err != nil {
 		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
 	}

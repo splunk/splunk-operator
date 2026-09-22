@@ -887,7 +887,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	}
 
 	// Look for LicenseManagers still holding references to the ClusterManager
-	lmList, err := getLicenseManagerList(ctx, c, cmCr, listOpts)
+	lmList, err := k8sops.GetLicenseManagerList(ctx, c, cmCr, listOpts)
 	if err != nil {
 		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
 			scopedLog.ErrorContext(ctx, "couldn't retrieve LicenseManager list", "error", err)
