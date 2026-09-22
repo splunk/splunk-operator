@@ -63,7 +63,7 @@ func TestNoahSearchHeadConf(t *testing.T) {
 	}, map[string]string(server.Value.Stanzas["noahService"]))
 	assert.NotContains(t, server.Value.Stanzas["noahService"], "usePeers",
 		"search head relies on usePeers' documented default (true), not an explicit override")
-	assert.Equal(t, map[string]string{"disabled": "true"}, map[string]string(server.Value.Stanzas["teleport_supervisor"]))
+	assert.NotContains(t, server.Value.Stanzas, "teleport_supervisor")
 	assert.NotContains(t, server.Value.Stanzas["noahService"], "pass4SymmKey")
 }
 

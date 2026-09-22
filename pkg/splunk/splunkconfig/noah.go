@@ -83,9 +83,6 @@ func NoahSearchHeadConf(serviceURL, tenant string) []common.ConfFileEntry {
 						"heartbeatPeriod":        "0",
 						"pass4SymmKey_minLength": "10",
 					},
-					"teleport_supervisor": {
-						"disabled": "true",
-					},
 				},
 			},
 		},
