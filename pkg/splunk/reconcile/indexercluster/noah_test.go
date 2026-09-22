@@ -47,6 +47,7 @@ import (
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
+	indexerworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/indexercluster"
 )
 
 const acceptedGeneralTerms = "--accept-sgt-current-at-splunk-com"
@@ -1565,6 +1566,82 @@ func TestApplyNoahIndexerClusterDependencyLossClearsStalePeersReady(t *testing.T
 	dependency := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved)
 	require.NotNil(t, dependency)
 	assert.Equal(t, string(enterpriseApi.ReasonNoahDependencyMissing), dependency.Reason)
+}
+
+func TestNoahIndexerPodManagerProjectsPeerStatus(t *testing.T) {
+	fixture := newNoahIndexerScaleDownTestFixture(t)
+	fixture.setPeerStatus(1, noahclient.PeerStatusWarming)
+	fixture.mutex.Lock()
+	fixture.peers = fixture.peers[:2]
+	fixture.mutex.Unlock()
+
+	statefulSet := &appsv1.StatefulSet{}
+	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
+	mgr := newNoahIndexerPodManagerForTest(t, fixture.client, fixture.cr)
+	mgr.statefulSet = statefulSet
+
+	_, err := mgr.observePeers(t.Context(), 3)
+	require.NoError(t, err)
+	assert.Equal(t, []enterpriseApi.IndexerClusterMemberStatus{
+		{
+			ID:         fixture.peerID(0),
+			Name:       "splunk-main-indexer-0",
+			Status:     "Up",
+			Searchable: true,
+		},
+		{
+			ID:     fixture.peerID(1),
+			Name:   "splunk-main-indexer-1",
+			Status: "Warming",
+		},
+		{
+			Name:   "splunk-main-indexer-2",
+			Status: "Missing",
+		},
+	}, fixture.cr.Status.Peers)
+}
+
+func TestNoahIndexerPodManagerRetainsLastPeerObservationWhileWorkloadIsNotReady(t *testing.T) {
+	fixture := newNoahIndexerScaleDownTestFixture(t)
+	want := []enterpriseApi.IndexerClusterMemberStatus{
+		{ID: fixture.peerID(0), Name: "splunk-main-indexer-0", Status: "Up", Searchable: true},
+		{ID: fixture.peerID(1), Name: "splunk-main-indexer-1", Status: "Up", Searchable: true},
+		{ID: fixture.peerID(2), Name: "splunk-main-indexer-2", Status: "Up", Searchable: true},
+	}
+	fixture.cr.Status.Peers = want
+
+	statefulSet := &appsv1.StatefulSet{}
+	require.NoError(t, fixture.client.Get(t.Context(), fixture.statefulSetKey, statefulSet))
+	statefulSet.Status.ReadyReplicas--
+	require.NoError(t, fixture.client.Update(t.Context(), statefulSet))
+
+	mgr := newNoahIndexerPodManagerForTest(t, fixture.client, fixture.cr)
+	phase, err := mgr.Update(t.Context(), fixture.client, statefulSet, 3)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingUp, phase)
+	assert.Equal(t, want, fixture.cr.Status.Peers)
+}
+
+func TestNoahIndexerPeerStatus(t *testing.T) {
+	tests := []struct {
+		name string
+		peer indexerworkflow.NoahPeerMembership
+		want string
+	}{
+		{name: "missing", peer: indexerworkflow.NoahPeerMembership{Classification: indexerworkflow.NoahPeerMissing}, want: "Missing"},
+		{name: "stale", peer: indexerworkflow.NoahPeerMembership{Classification: indexerworkflow.NoahPeerStale}, want: "Stale"},
+		{name: "duplicate", peer: indexerworkflow.NoahPeerMembership{Classification: indexerworkflow.NoahPeerDuplicate}, want: "Duplicate"},
+		{name: "contradictory", peer: indexerworkflow.NoahPeerMembership{Classification: indexerworkflow.NoahPeerContradictory}, want: "Contradictory"},
+		{name: "up", peer: indexerworkflow.NoahPeerMembership{Classification: indexerworkflow.NoahPeerCurrent, Status: noahclient.PeerStatusUp}, want: "Up"},
+		{name: "warming", peer: indexerworkflow.NoahPeerMembership{Classification: indexerworkflow.NoahPeerCurrent, Status: noahclient.PeerStatusWarming}, want: "Warming"},
+		{name: "unknown", peer: indexerworkflow.NoahPeerMembership{Classification: indexerworkflow.NoahPeerCurrent}, want: "Unknown"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, noahIndexerPeerStatus(test.peer))
+		})
+	}
 }
 
 func TestNoahIndexerPodManagerScalesDownOneOrdinalAndWaitsForNoahCleanup(t *testing.T) {

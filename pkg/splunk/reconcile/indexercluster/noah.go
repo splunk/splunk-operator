@@ -1120,7 +1120,55 @@ func (mgr *noahIndexerPodManager) observePeers(ctx context.Context, replicas int
 		Timeout:  mgr.cacheWarmTimeout,
 	}, time.Now())
 
+	// Peer status is the last successful complete Noah observation. Workload
+	// waits and observation failures retain the previous snapshot.
+	mgr.cr.Status.Peers = noahIndexerPeerStatuses(observation)
+
 	return observation, nil
+}
+
+func noahIndexerPeerStatuses(membership indexerworkflow.NoahMembership) []enterpriseApi.IndexerClusterMemberStatus {
+	statuses := make([]enterpriseApi.IndexerClusterMemberStatus, 0, len(membership.Peers))
+	for _, peer := range membership.Peers {
+		status := enterpriseApi.IndexerClusterMemberStatus{
+			Name:   peer.Expected.PodName,
+			Status: noahIndexerPeerStatus(peer),
+		}
+		if peer.Classification == indexerworkflow.NoahPeerCurrent {
+			status.ID = peer.Expected.ID
+			status.Searchable = peer.Ready
+		}
+		statuses = append(statuses, status)
+	}
+
+	return statuses
+}
+
+func noahIndexerPeerStatus(peer indexerworkflow.NoahPeerMembership) string {
+	if peer.Classification != indexerworkflow.NoahPeerCurrent {
+		return string(peer.Classification)
+	}
+
+	switch peer.Status {
+	case noah.PeerStatusStarted:
+		return "Started"
+	case noah.PeerStatusWarming:
+		return "Warming"
+	case noah.PeerStatusWarmed:
+		return "Warmed"
+	case noah.PeerStatusUp:
+		return "Up"
+	case noah.PeerStatusDown:
+		return "Down"
+	case noah.PeerStatusDecommissionReady:
+		return "DecommissionReady"
+	case noah.PeerStatusDecommissioning:
+		return "Decommissioning"
+	case noah.PeerStatusDecommissioned:
+		return "Decommissioned"
+	default:
+		return "Unknown"
+	}
 }
 
 // validateNoahIndexerUpgradePath preserves the common LicenseManager upgrade
@@ -1386,6 +1434,7 @@ func currentNoahIndexerPeerIncarnations(ctx context.Context, client splcommon.Co
 		}
 		expectedPeers = append(expectedPeers, indexerworkflow.ExpectedNoahPeer{
 			ID:        peerID,
+			PodName:   podName,
 			StartedAt: time.Unix(status.State.Running.StartedAt.Unix(), 0),
 		})
 	}
