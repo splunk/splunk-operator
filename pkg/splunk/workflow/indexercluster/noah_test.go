@@ -163,9 +163,10 @@ func TestEvaluateNoahMembership(t *testing.T) {
 			observed: append(up, peer("peer-1", noah.PeerStatusDown)),
 		},
 		{
-			name:     "empty expected set is not converged",
+			name:     "empty expected set is converged",
 			expected: nil,
 			observed: up,
+			want:     NoahMembership{AllRegistered: true, AllReady: true},
 		},
 		{
 			name: "duplicate expected identity is invalid",
@@ -179,9 +180,75 @@ func TestEvaluateNoahMembership(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.want, EvaluateNoahMembership(test.expected, test.observed, NoahCacheWarmPolicy{}, startedAt))
+			got := EvaluateNoahMembership(test.expected, test.observed, NoahCacheWarmPolicy{}, startedAt)
+			assert.Equal(t, test.want.AllRegistered, got.AllRegistered)
+			assert.Equal(t, test.want.AllReady, got.AllReady)
+			assert.Equal(t, test.want.TimedOutPeerID, got.TimedOutPeerID)
 		})
 	}
+}
+
+func TestEvaluateNoahMembershipClassifiesExpectedPeers(t *testing.T) {
+	startedAt := time.Unix(1_700_000_000, 0)
+	expected := []ExpectedNoahPeer{
+		{ID: "current", PodName: "indexer-0", StartedAt: startedAt},
+		{ID: "missing", PodName: "indexer-1", StartedAt: startedAt},
+		{ID: "stale", PodName: "indexer-2", StartedAt: startedAt},
+		{ID: "duplicate", PodName: "indexer-3", StartedAt: startedAt},
+		{ID: "contradictory", PodName: "indexer-4", StartedAt: startedAt},
+		{ID: "invalid", PodName: "indexer-5"},
+	}
+	peer := func(id string, status noah.PeerStatus) noah.Peer {
+		return noah.Peer{
+			ID:            id,
+			Status:        status,
+			Data:          noah.PeerData{StartTime: startedAt.Unix()},
+			LastHeartbeat: startedAt.Unix() + 1,
+		}
+	}
+	observed := []noah.Peer{
+		peer("current", noah.PeerStatusUp),
+		{ID: "stale", Status: noah.PeerStatusUp, Data: noah.PeerData{StartTime: startedAt.Unix() - 1}, LastHeartbeat: startedAt.Unix()},
+		peer("duplicate", noah.PeerStatusUp),
+		peer("duplicate", noah.PeerStatusUp),
+		peer("contradictory", noah.PeerStatusUp),
+		peer("contradictory", noah.PeerStatusDown),
+		peer("foreign-b", noah.PeerStatusUp),
+		peer("foreign-a", noah.PeerStatusUp),
+		peer("foreign-b", noah.PeerStatusDown),
+	}
+
+	got := EvaluateNoahMembership(expected, observed, NoahCacheWarmPolicy{}, startedAt)
+	classifications := make([]NoahPeerClassification, 0, len(got.Peers))
+	for _, peer := range got.Peers {
+		classifications = append(classifications, peer.Classification)
+	}
+
+	assert.Equal(t, []NoahPeerClassification{
+		NoahPeerCurrent,
+		NoahPeerMissing,
+		NoahPeerStale,
+		NoahPeerDuplicate,
+		NoahPeerContradictory,
+		NoahPeerInvalid,
+	}, classifications)
+	if assert.NotEmpty(t, got.Peers) {
+		assert.Equal(t, noah.PeerStatusUp, got.Peers[0].Status)
+		assert.True(t, got.Peers[0].Registered)
+		assert.True(t, got.Peers[0].Ready)
+	}
+	assert.Equal(t, []string{"foreign-a", "foreign-b"}, got.UnexpectedPeerIDs)
+	assert.False(t, got.AllRegistered)
+	assert.False(t, got.AllReady)
+}
+
+func TestEvaluateNoahMembershipAcceptsExplicitZero(t *testing.T) {
+	got := EvaluateNoahMembership(nil, []noah.Peer{{ID: "unrelated"}}, NoahCacheWarmPolicy{}, time.Now())
+
+	assert.Empty(t, got.Peers)
+	assert.Equal(t, []string{"unrelated"}, got.UnexpectedPeerIDs)
+	assert.True(t, got.AllRegistered)
+	assert.True(t, got.AllReady)
 }
 
 func TestEvaluateNoahMembershipRegistrationStatuses(t *testing.T) {
@@ -212,7 +279,9 @@ func TestEvaluateNoahMembershipRegistrationStatuses(t *testing.T) {
 				Data:          noah.PeerData{StartTime: startedAt.Unix()},
 				LastHeartbeat: startedAt.Unix() + 1,
 			}}
-			assert.Equal(t, NoahMembership{AllRegistered: test.registered, AllReady: test.ready}, EvaluateNoahMembership(expected, observed, NoahCacheWarmPolicy{}, startedAt))
+			got := EvaluateNoahMembership(expected, observed, NoahCacheWarmPolicy{}, startedAt)
+			assert.Equal(t, test.registered, got.AllRegistered)
+			assert.Equal(t, test.ready, got.AllReady)
 		})
 	}
 }
