@@ -32,7 +32,9 @@
   ],
   "ignoreDeps": [
     "docker.io/splunk/universalforwarder",
-    "docker.io/splunk/splunk"
+    "docker.io/splunk/splunk",
+    "docker.repo.splunkdev.net/noah/noah",
+    "docker.repo.splunkdev.net/noah/noah-migration"
   ],
   "customManagers": [
     {
