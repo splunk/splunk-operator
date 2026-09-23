@@ -204,7 +204,7 @@ func applyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = appframework.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, splcommon.SplunkLicenseManager)
+			err = appframework.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, appframework.SplunkLicenseManager)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err

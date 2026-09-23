@@ -58,19 +58,6 @@ func TestIndexerClusterEventPublisher(t *testing.T) {
 	k8sevent.Warning(context.TODO(), "testing", "warning message")
 }
 
-func TestMonitoringConsoleEventPublisher(t *testing.T) {
-	recorder := record.NewFakeRecorder(10)
-
-	cm := enterpriseApi.MonitoringConsole{}
-	k8sevent, err := newK8EventPublisher(recorder, &cm)
-	if err != nil {
-		t.Errorf("Unexpected error while creating new event publisher %v", err)
-	}
-
-	k8sevent.Normal(context.TODO(), "testing", "normal message")
-	k8sevent.Warning(context.TODO(), "testing", "warning message")
-}
-
 func TestSearchHeadClusterEventPublisher(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 

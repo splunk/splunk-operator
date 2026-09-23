@@ -104,7 +104,7 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// If the reconciliation is paused, requeue
 	if instance.GetAnnotations()[enterpriseApiV3.ClusterMasterPausedAnnotation] == "true" {
-		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, nil
 	}
 
 	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())

@@ -113,7 +113,7 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			err = statusErr
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, err
+		return ctrl.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, err
 	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
 		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),

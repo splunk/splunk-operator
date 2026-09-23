@@ -15,6 +15,5 @@
 
 /*
 Package monitoringconsole owns the reconcile loop for the MonitoringConsole CR.
-Migrated from enterprise.ApplyMonitoringConsole().
 */
 package monitoringconsole
