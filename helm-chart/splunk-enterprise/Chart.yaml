@@ -35,6 +35,12 @@ maintainers:
     email: kkoziol@splunk.com
   - name: Jakub Buczak
     email: jbuczak@splunk.com
+  - name: Minjie Qiu
+    email: mqiu@splunk.com
+  - name: Qing Wang
+    email: qingw@splunk.com
+  - name: Gabriel Mendoza
+    email: gabrielm@splunk.com
 dependencies:
 - name: splunk-operator
   version: "3.2.0"
