@@ -189,10 +189,11 @@ noah-local-fixtures: ## Create prerequisite Secrets and apply the sample C3 cust
 		apply -f "$(NOAH_LOCAL_FIXTURES)"
 
 .PHONY: noah-local-smoke
-noah-local-smoke: ## Verify Noah health, then index on every C3 peer and search through the SHC.
+noah-local-smoke: noah-local-port-forward ## Verify Noah health, then index on every C3 peer, roll buckets, search through the SHC, and bootstrap main.
 	KUBE_CONTEXT="$(NOAH_LOCAL_CONTEXT)" \
 	NAMESPACE="$(NOAH_LOCAL_NAMESPACE)" \
 	C3_NAME="$(NOAH_LOCAL_C3_NAME)" \
+	NOAH_LOCAL_PORT="$(NOAH_LOCAL_PORT)" \
 		$(NOAH_LOCAL_DIR)/smoke-test
 
 .PHONY: noah-local-port-forward
