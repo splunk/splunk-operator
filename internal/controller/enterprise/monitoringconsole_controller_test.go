@@ -7,7 +7,6 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -25,19 +24,24 @@ import (
 
 	"github.com/pkg/errors"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	monitoringconsole "github.com/splunk/splunk-operator/pkg/splunk/reconcile/monitoringconsole"
 )
+
+var defaultMonitoringConsoleApply = monitoringconsole.Apply
+var defaultMonitoringConsoleApplyMonitoringConsole = monitoringconsole.ApplyMonitoringConsole
 
 var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 
 	AfterEach(func() {
-
+		monitoringconsole.Apply = defaultMonitoringConsoleApply
+		monitoringconsole.ApplyMonitoringConsole = defaultMonitoringConsoleApplyMonitoringConsole
 	})
 
 	Context("MonitoringConsole Management", func() {
 
 		It("Get MonitoringConsole custom resource should failed", func() {
 			namespace := "ns-splunk-mc-1"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+			monitoringconsole.ApplyMonitoringConsole = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -50,7 +54,7 @@ var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 
 		It("Create MonitoringConsole custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-mc-2"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+			monitoringconsole.ApplyMonitoringConsole = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -69,7 +73,7 @@ var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 
 		It("Create MonitoringConsole custom resource should succeeded", func() {
 			namespace := "ns-splunk-mc-3"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+			monitoringconsole.ApplyMonitoringConsole = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -82,7 +86,7 @@ var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-mc-4"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+			monitoringconsole.ApplyMonitoringConsole = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -148,7 +152,7 @@ var _ = Describe("MonitoringConsole Controller", Label("integration"), func() {
 			ssSpec := testutils.NewMonitoringConsole("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 
-			ApplyMonitoringConsole = func(ctx context.Context, cl client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+			monitoringconsole.ApplyMonitoringConsole = func(ctx context.Context, cl splcommon.ControllerClient, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
 			}
 

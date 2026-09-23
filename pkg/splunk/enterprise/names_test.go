@@ -81,14 +81,6 @@ func TestGetSplunkDefaultsName(t *testing.T) {
 	}
 }
 
-func TestGetSplunkMonitoringconsoleConfigMapName(t *testing.T) {
-	got := GetSplunkMonitoringconsoleConfigMapName("t1", SplunkMonitoringConsole)
-	want := "splunk-t1-monitoring-console"
-	if got != want {
-		t.Errorf("GetSplunkMonitoringconsoleConfigMapName(\"%s\",\"%s\") = %s; want %s", "t1", SplunkMonitoringConsole, got, want)
-	}
-}
-
 func TestGetSplunkStatefulsetUrls(t *testing.T) {
 	test := func(want string, namespace string, instanceType InstanceType, identifier string, replicas int32, hostnameOnly bool) {
 		got := GetSplunkStatefulsetUrls(namespace, instanceType, identifier, replicas, hostnameOnly)

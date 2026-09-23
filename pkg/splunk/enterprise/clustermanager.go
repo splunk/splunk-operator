@@ -157,7 +157,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
+			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
@@ -213,7 +213,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
+	err = k8sops.ValidateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
@@ -245,7 +245,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 	//Update MC configmap
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
-		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
+		_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
 		if err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 			return result, err
@@ -494,6 +494,65 @@ func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	}
 
 	return numOfObjects, nil
+}
+
+// changeMonitoringConsoleAnnotations updates the MonitoringConsole image annotation
+// when the referenced ClusterManager image changes.
+func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
+	logger := logging.FromContext(ctx).With("func", "changeMonitoringConsoleAnnotations", "name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher := GetEventPublisher(ctx, cr)
+
+	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
+	if len(cr.Spec.MonitoringConsoleRef.Name) > 0 {
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.MonitoringConsoleRef.Name}
+		err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	} else {
+		// List out all the MonitoringConsole instances in the namespace
+		opts := []rclient.ListOption{
+			rclient.InNamespace(cr.GetNamespace()),
+		}
+		objectList, err := k8sops.GetMonitoringConsoleList(ctx, client, cr, opts)
+		if err != nil {
+			if err.Error() == "NotFound" {
+				return nil
+			}
+			return err
+		}
+		if len(objectList.Items) == 0 {
+			return nil
+		}
+
+		// check if instance has the required ClusterManagerRef
+		for _, mc := range objectList.Items {
+			if mc.Spec.ClusterManagerRef.Name == cr.GetName() {
+				monitoringConsoleInstance = &mc
+				break
+			}
+		}
+
+		if len(monitoringConsoleInstance.GetName()) == 0 {
+			return nil
+		}
+	}
+
+	image, err := getCurrentImage(ctx, client, cr, SplunkClusterManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, splcommon.EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
+		logger.ErrorContext(ctx, "get ClusterManager Image failed with", "error", err)
+		return err
+	}
+	if err = changeAnnotations(ctx, client, image, monitoringConsoleInstance); err != nil {
+		eventPublisher.Warning(ctx, splcommon.EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not update annotations. Reason %v", err))
+		logger.ErrorContext(ctx, "MonitoringConsole types update after changing annotations failed with", "error", err)
+		return err
+	}
+	return nil
 }
 
 // GetCMMultisiteEnvVarsCall checks if cluster is multisite and returns appropriate environment variables

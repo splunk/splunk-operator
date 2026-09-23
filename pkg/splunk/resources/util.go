@@ -248,6 +248,15 @@ func GetSearchHeadExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 	}
 }
 
+// GetStandaloneExtraEnv returns environment variables used by Standalone
+// instances that are referenced by a MonitoringConsole.
+func GetStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
+	return []corev1.EnvVar{{
+		Name:  "SPLUNK_STANDALONE_URL",
+		Value: splutil.GetSplunkStatefulsetUrls(cr.GetNamespace(), splcommon.SplunkStandalone, cr.GetName(), replicas, false),
+	}}
+}
+
 // SetVolumeDefaults sets default modes for Secret and ConfigMap volumes.
 func SetVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 	if spec.Volumes == nil {

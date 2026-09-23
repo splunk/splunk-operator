@@ -61,6 +61,19 @@ func TestGetSplunkServiceForNoahIndexer(t *testing.T) {
 	assert.True(t, headless.Spec.PublishNotReadyAddresses)
 }
 
+func TestGetStandaloneExtraEnv(t *testing.T) {
+	cr := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{Name: "stack1", Namespace: "test"},
+	}
+
+	env := resources.GetStandaloneExtraEnv(cr, 2)
+
+	require.Equal(t, []corev1.EnvVar{{
+		Name:  "SPLUNK_STANDALONE_URL",
+		Value: splutil.GetSplunkStatefulsetUrls("test", splcommon.SplunkStandalone, "stack1", 2, false),
+	}}, env)
+}
+
 func TestGetSplunkDefaults(t *testing.T) {
 	defaults := resources.GetSplunkDefaults("stack1", "test", splcommon.SplunkIndexer, "defaults_string")
 

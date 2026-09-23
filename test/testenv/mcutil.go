@@ -23,7 +23,8 @@ import (
 	"time"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -117,7 +118,7 @@ func GetPodIP(ns string, podName string) string {
 
 // GetMCConfigMap gets config map for give Monitoring Console Name
 func GetMCConfigMap(ctx context.Context, deployment *Deployment, ns string, mcName string) (*corev1.ConfigMap, error) {
-	mcConfigMapName := enterprise.GetSplunkMonitoringconsoleConfigMapName(mcName, enterprise.SplunkMonitoringConsole)
+	mcConfigMapName := splutil.GetSplunkMonitoringconsoleConfigMapName(mcName, splcommon.SplunkMonitoringConsole)
 	mcConfigMap, err := GetConfigMap(ctx, deployment, ns, mcConfigMapName)
 	if err != nil {
 		logf.Log.Error(err, "Failed to get Monitoring Console Config Map")

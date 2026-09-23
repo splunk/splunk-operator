@@ -246,8 +246,8 @@ func TestApplyPaused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply() returned error: %v", err)
 	}
-	if !result.Requeue || result.RequeueAfter != pauseRetryDelay {
-		t.Fatalf("Apply() result = %+v; want requeue after %s", result, pauseRetryDelay)
+	if !result.Requeue || result.RequeueAfter != splcommon.PauseRetryDelay {
+		t.Fatalf("Apply() result = %+v; want requeue after %s", result, splcommon.PauseRetryDelay)
 	}
 
 	updated := &enterpriseApi.Standalone{}

@@ -139,7 +139,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			extraEnv, _ := VerifyCMasterisMultisite(ctx, cr, namespaceScopedSecret)
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
+			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				return result, err
 			}
@@ -189,7 +189,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	extraEnv, err := VerifyCMasterisMultisite(ctx, cr, namespaceScopedSecret)
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
+	err = k8sops.ValidateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
 		return result, err
 	}
@@ -203,7 +203,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 
 	//Update MC configmap
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
-		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
+		_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
 		if err != nil {
 			return result, err
 		}

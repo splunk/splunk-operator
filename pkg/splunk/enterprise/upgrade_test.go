@@ -29,6 +29,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	indexercluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/indexercluster"
 	reconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemanager"
+	monitoringconsole "github.com/splunk/splunk-operator/pkg/splunk/reconcile/monitoringconsole"
 	searchheadcluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/searchheadcluster"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -273,7 +274,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplyIndexerClusterManagershould not have returned error; err=%v", err)
 	}
 
-	_, err = enterprise.ApplyMonitoringConsole(ctx, client, &mc)
+	_, err = monitoringconsole.ApplyMonitoringConsole(ctx, client, &mc)
 	// license manager statefulset is not created so if its NotFound error we are good
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
@@ -314,7 +315,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplyIndexerClusterManagershould not have returned error; err=%v", err)
 	}
 
-	_, err = enterprise.ApplyMonitoringConsole(ctx, client, &mc)
+	_, err = monitoringconsole.ApplyMonitoringConsole(ctx, client, &mc)
 	// cluster manager statefulset is not created so if its NotFound error we are good
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
@@ -453,7 +454,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	// mointoring console statefulset is created here
-	_, err = enterprise.ApplyMonitoringConsole(ctx, client, &mc)
+	_, err = monitoringconsole.ApplyMonitoringConsole(ctx, client, &mc)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
 	}
@@ -461,7 +462,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	spltest.CreatePods(t, ctx, client, "monitoring-console", fmt.Sprintf("splunk-%s-monitoring-console-0", lm.Name), lm.Namespace, lm.Spec.Image)
 	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-monitoring-console", lm.Name), lm.Namespace)
 	// mointoring console statefulset is created here
-	_, err = enterprise.ApplyMonitoringConsole(ctx, client, &mc)
+	_, err = monitoringconsole.ApplyMonitoringConsole(ctx, client, &mc)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
 	}
@@ -562,7 +563,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
-	_, err = enterprise.ApplyMonitoringConsole(ctx, client, &mc)
+	_, err = monitoringconsole.ApplyMonitoringConsole(ctx, client, &mc)
 	if err != nil {
 		t.Errorf("applyMonitoringConsole after update should not have returned error; err=%v", err)
 	}
@@ -622,12 +623,12 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
 
-	_, err = enterprise.ApplyMonitoringConsole(ctx, client, &mc)
+	_, err = monitoringconsole.ApplyMonitoringConsole(ctx, client, &mc)
 	if err != nil {
 		t.Errorf("applyMonitoringConsole after update should not have returned error; err=%v", err)
 	}
 
-	_, err = enterprise.ApplyMonitoringConsole(ctx, client, &mc)
+	_, err = monitoringconsole.ApplyMonitoringConsole(ctx, client, &mc)
 	if err != nil {
 		t.Errorf("applyMonitoringConsole after update should not have returned error; err=%v", err)
 	}

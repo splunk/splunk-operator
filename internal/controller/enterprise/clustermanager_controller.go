@@ -114,7 +114,7 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, nil
 	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
 		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),

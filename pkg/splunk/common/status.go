@@ -22,6 +22,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// PauseRetryDelay is the delay used when reconciliation is paused.
+const PauseRetryDelay = 30 * time.Second
+
 // PhaseAndConditions holds both the phase and derived conditions for a Splunk CR status update.
 // This struct ensures that Phase and Conditions are always updated atomically.
 type PhaseAndConditions struct {
