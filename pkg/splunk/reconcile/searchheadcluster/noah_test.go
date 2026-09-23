@@ -120,10 +120,12 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 		env[item.Name] = item
 	}
 	assert.Equal(t, "true", env[resources.NoahEnabledEnvName].Value, "search-head must have Noah pod identity")
-	assert.Equal(t, searchHeadStatefulSet.Spec.ServiceName, env[resources.NoahHeadlessServiceEnvName].Value, "advertised identity must derive from the search-head's own headless service, not Pod IP")
+	assert.Equal(t, searchHeadStatefulSet.Spec.ServiceName, env[resources.HeadlessServiceEnvName].Value, "stable identity must derive from the search head's own headless service, not Pod IP")
 	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
 	require.NotNil(t, env[resources.PodNameEnvName].ValueFrom, "identity must survive Pod IP changes via the downward API, not a literal IP")
 	require.NotNil(t, env[resources.PodNamespaceEnvName].ValueFrom)
+	_, hasAdvertisedAddress := env[resources.NoahAdvertisedAddressEnvName]
+	assert.False(t, hasAdvertisedAddress, "search heads do not advertise an indexer management address")
 	_, hasDeployerURL := env["SPLUNK_DEPLOYER_URL"]
 	assert.False(t, hasDeployerURL,
 		"SPLUNK_DEPLOYER_URL must be dropped entirely now that splunk-ansible no longer requires it to bootstrap shcluster-config, rather than pointed at a placeholder like 127.0.0.1")
