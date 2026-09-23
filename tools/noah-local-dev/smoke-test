@@ -7,6 +7,7 @@ namespace=${NAMESPACE:-splunk-operator}
 cluster=${C3_NAME:-c3}
 marker="noah-c3-smoke-$(date +%s)"
 search_head="splunk-${cluster}-search-head-0"
+noah_api_url=${NOAH_API_URL:-http://127.0.0.1:${NOAH_LOCAL_PORT:-8443}}
 
 search() {
   query=$1
@@ -32,10 +33,89 @@ check_noah_peers() {
     ' >/dev/null
 }
 
-printf 'Testing C3 with marker %s\n' "$marker"
+noah_request() {
+  method=$1
+  endpoint=$2
+  payload=${3:-}
+  if [ -n "$payload" ]; then
+    curl --fail --silent --show-error \
+      -X "$method" \
+      -H 'Content-Type: application/json' \
+      -H 'x-splunk-lm-nonce: noah-local-smoke' \
+      -H 'x-splunk-lm-timestamp: noah-local-smoke' \
+      -H 'x-splunk-digest: noah-local-smoke' \
+      --data "$payload" \
+      "$noah_api_url/axolotl/noah/$endpoint"
+  else
+    curl --fail --silent --show-error \
+      -X "$method" \
+      -H 'x-splunk-lm-nonce: noah-local-smoke' \
+      -H 'x-splunk-lm-timestamp: noah-local-smoke' \
+      -H 'x-splunk-digest: noah-local-smoke' \
+      "$noah_api_url/axolotl/noah/$endpoint"
+  fi
+}
+
+require_equal() {
+  actual=$1
+  expected=$2
+  description=$3
+  if [ "$actual" != "$expected" ]; then
+    printf 'FAIL: %s (expected %s, got %s).\n' \
+      "$description" "$expected" "${actual:-empty}" >&2
+    exit 1
+  fi
+}
+
+require_at_least() {
+  actual=$1
+  minimum=$2
+  description=$3
+  if [ -z "$actual" ] || [ "$actual" -lt "$minimum" ]; then
+    printf 'FAIL: %s (expected at least %s, got %s).\n' \
+      "$description" "$minimum" "${actual:-empty}" >&2
+    exit 1
+  fi
+}
+
+require_json_array() {
+  response=$1
+  description=$2
+  if ! printf '%s\n' "$response" | jq -e 'type == "array"' >/dev/null; then
+    printf 'FAIL: %s did not return a JSON array.\n' "$description" >&2
+    exit 1
+  fi
+}
+
+require_bucket_map() {
+  response=$1
+  description=$2
+  if ! printf '%s\n' "$response" | jq -e 'type == "object" and (.id | type == "number") and (.status | type == "string") and (.peerIDs | type == "array") and (.peerIDs | all(.[]; type == "string"))' >/dev/null; then
+    printf 'FAIL: %s is not one valid bucket map.\n' "$description" >&2
+    exit 1
+  fi
+}
+
+require_operations() {
+  response=$1
+  description=$2
+  require_json_array "$response" "$description"
+  if ! printf '%s\n' "$response" | jq -e 'all(.[]; type == "object" and (.id | type == "number"))' >/dev/null; then
+    printf 'FAIL: %s contains an invalid operation.\n' "$description" >&2
+    exit 1
+  fi
+}
+
+printf 'Testing Noah on C3 %s\n' "$cluster"
 
 replicas=$(kubectl --context "$context" --namespace "$namespace" \
   get indexercluster "$cluster" -o jsonpath='{.spec.replicas}')
+
+repair_operations=$(noah_request GET 'v1/operations?operationStatus=pending&operationType=repair')
+require_operations "$repair_operations" 'list pending repair operations'
+repair_operation_count=$(printf '%s\n' "$repair_operations" | jq 'length')
+require_equal "$repair_operation_count" 0 'pending repair operations'
+printf '%s\n' 'Pending repair operations: none.'
 
 ordinal=0
 while [ "$ordinal" -lt "$replicas" ]; do
@@ -59,22 +139,132 @@ attempt=0
 events=0
 observed=0
 while [ "$attempt" -lt 36 ]; do
-  if result=$(search "index=main sourcetype=noah_c3_smoke earliest=-15m \"$marker\" | stats count AS events dc(ordinal) AS ordinals"); then
+  if result=$(search \
+    "index=main sourcetype=noah_c3_smoke earliest=-15m \"$marker\" | stats count AS events dc(ordinal) AS ordinals"); then
     events=$(printf '%s\n' "$result" | awk -F, 'NR == 2 { gsub(/"/, "", $1); print $1 }')
     observed=$(printf '%s\n' "$result" | awk -F, 'NR == 2 { gsub(/"/, "", $2); print $2 }')
   fi
   if [ "$events" = "$replicas" ] && [ "$observed" = "$replicas" ] && check_noah_peers; then
-    search "index=main sourcetype=noah_c3_smoke earliest=-15m \"$marker\" | stats count by ordinal splunk_server | sort ordinal"
-    printf 'PASS: Noah control-plane health and all %s indexed markers verified.\n' "$replicas"
-    exit 0
+    break
   fi
-
   attempt=$((attempt + 1))
-  printf 'Waiting for smoke checks (%s/36): generated=%s/%s, ordinals=%s/%s\n' \
-    "$attempt" "$events" "$replicas" "$observed" "$replicas" >&2
   sleep 5
 done
+if [ "$events" != "$replicas" ] || [ "$observed" != "$replicas" ]; then
+  printf 'FAIL: found %s events from %s of %s ordinals; Noah peers did not fully converge.\n' \
+    "$events" "$observed" "$replicas" >&2
+  exit 1
+fi
+if ! check_noah_peers; then
+  printf '%s\n' 'FAIL: IndexerCluster has not reported generation-current Noah peers ready.' >&2
+  exit 1
+fi
+printf 'Indexed and found one marker on each of %s peer(s).\n' "$replicas"
 
-printf 'FAIL: found %s events from %s of %s ordinals; Noah peers did not fully converge.\n' \
-  "$events" "$observed" "$replicas" >&2
-exit 1
+peers=$(noah_request GET v1/peers)
+require_json_array "$peers" 'list peers'
+if ! printf '%s\n' "$peers" | jq -e 'all(.[]; (.id | type == "string") and (.id | length > 0) and (.status | IN("up", "down", "started", "warming", "warmed", "decommission-ready", "decommissioning", "decommissioned")))' >/dev/null; then
+  printf '%s\n' 'FAIL: list peers response contains an invalid peer.' >&2
+  exit 1
+fi
+down_peers=$(printf '%s\n' "$peers" | jq '[.[] | select(.status == "down")] | length')
+up_peers=$(printf '%s\n' "$peers" | jq '[.[] | select(.status == "up")] | length')
+require_equal "$down_peers" 0 'down Noah peers'
+require_equal "$up_peers" "$replicas" 'up Noah peers'
+printf 'Noah peers: %s up, %s down.\n' "$up_peers" "$down_peers"
+
+bucket_map=$(noah_request GET v1/bucketMaps/latest)
+require_bucket_map "$bucket_map" 'latest bucket map response'
+bucket_map_id=$(printf '%s\n' "$bucket_map" | jq -er '.id')
+map_peer_count=$(printf '%s\n' "$bucket_map" | jq '.peerIDs | length')
+require_equal "$map_peer_count" "$up_peers" 'latest bucket map and up Noah peer counts'
+require_equal "$map_peer_count" "$replicas" 'latest bucket map peer count'
+map_peer_ids=$(printf '%s\n' "$bucket_map" | jq -c '.peerIDs | sort')
+up_peer_ids=$(printf '%s\n' "$peers" | jq -c '[.[] | select(.status == "up") | .id] | sort')
+require_equal "$map_peer_ids" "$up_peer_ids" 'latest bucket map and up Noah peer IDs'
+printf 'Latest bucket map: %s (%s peer(s)).\n' "$bucket_map_id" "$map_peer_count"
+
+peer_bucket_attempt=0
+up_peer_id_list=$(printf '%s\n' "$peers" | jq -r '.[] | select(.status == "up") | .id')
+while [ "$peer_bucket_attempt" -lt 36 ]; do
+  missing_peer=
+  for peer_id in $up_peer_id_list; do
+    if ! peer_buckets=$(noah_request GET "v1/peers/${peer_id}/${bucket_map_id}/buckets?limit=1" 2>/dev/null); then
+      missing_peer=$peer_id
+      break
+    fi
+    if ! printf '%s\n' "$peer_buckets" | jq -e 'type == "object" and (.buckets | type == "array")' >/dev/null; then
+      printf 'FAIL: get peer buckets response for %s is invalid.\n' "$peer_id" >&2
+      exit 1
+    fi
+    peer_bucket_count=$(printf '%s\n' "$peer_buckets" | jq '.buckets | length')
+    if [ "$peer_bucket_count" -lt 1 ]; then
+      missing_peer=$peer_id
+      break
+    fi
+  done
+  if [ -z "$missing_peer" ]; then
+    break
+  fi
+  peer_bucket_attempt=$((peer_bucket_attempt + 1))
+  sleep 5
+done
+if [ -n "$missing_peer" ]; then
+  printf 'FAIL: no buckets reported for Noah peer %s in bucket map %s.\n' \
+    "$missing_peer" "$bucket_map_id" >&2
+  exit 1
+fi
+printf 'Peer bucket checks passed for %s peer(s).\n' "$up_peers"
+
+bucket_map_before_bootstrap=$(noah_request GET v1/bucketMaps/latest)
+require_bucket_map "$bucket_map_before_bootstrap" 'latest bucket map before bootstrap response'
+map_before_bootstrap=$(printf '%s\n' "$bucket_map_before_bootstrap" | jq -er '.id')
+completed_bootstraps=$(noah_request GET 'v1/operations?operationStatus=completed&operationType=bootstrap')
+require_operations "$completed_bootstraps" 'list completed bootstrap operations'
+completed_before=$(printf '%s\n' "$completed_bootstraps" | jq 'length')
+printf '%s\n' 'Bootstrapping main...'
+noah_request POST v1/indexes/bootstrap '{"indexes":["main"],"type":"warm"}' >/dev/null
+
+bootstrap_attempt=0
+outstanding_bootstraps=0
+completed_after=$completed_before
+while [ "$bootstrap_attempt" -lt 36 ]; do
+  bootstrap_operations=$(noah_request GET 'v1/operations?operationType=bootstrap')
+  require_operations "$bootstrap_operations" 'list bootstrap operations'
+  pending_bootstraps=$(noah_request GET 'v1/operations?operationStatus=pending&operationType=bootstrap')
+  require_operations "$pending_bootstraps" 'list pending bootstrap operations'
+  outstanding_bootstraps=$(printf '%s\n' "$pending_bootstraps" | jq 'length')
+  completed_bootstraps=$(noah_request GET 'v1/operations?operationStatus=completed&operationType=bootstrap')
+  require_operations "$completed_bootstraps" 'list completed bootstrap operations'
+  completed_after=$(printf '%s\n' "$completed_bootstraps" | jq 'length')
+  if [ "$outstanding_bootstraps" = 0 ] && [ "$completed_after" -gt "$completed_before" ]; then
+    break
+  fi
+  bootstrap_attempt=$((bootstrap_attempt + 1))
+  sleep 5
+done
+require_equal "$outstanding_bootstraps" 0 'outstanding bootstrap operations'
+require_at_least "$completed_after" "$((completed_before + 1))" 'completed bootstrap operations'
+printf '%s\n' 'Bootstrap of main completed.'
+
+bucket_map_attempt=0
+map_after_bootstrap=$map_before_bootstrap
+while [ "$bucket_map_attempt" -lt 36 ]; do
+  bucket_map_after_bootstrap=$(noah_request GET v1/bucketMaps/latest)
+  require_bucket_map "$bucket_map_after_bootstrap" 'latest bucket map after bootstrap response'
+  map_after_bootstrap=$(printf '%s\n' "$bucket_map_after_bootstrap" | jq -er '.id')
+  if [ "$map_after_bootstrap" != "$map_before_bootstrap" ]; then
+    break
+  fi
+  bucket_map_attempt=$((bucket_map_attempt + 1))
+  sleep 5
+done
+if [ "$map_after_bootstrap" = "$map_before_bootstrap" ]; then
+  printf 'FAIL: bootstrap did not create a new bucket map (still %s).\n' \
+    "$map_after_bootstrap" >&2
+  exit 1
+fi
+printf 'Latest bucket map after bootstrap: %s.\n' "$map_after_bootstrap"
+
+printf 'PASS: searched all %s indexed markers through Noah and completed the requested Noah checks.\n' \
+  "$replicas"

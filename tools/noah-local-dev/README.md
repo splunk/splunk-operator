@@ -7,7 +7,7 @@ workflow is also available for operator development.
 
 Prerequisites:
 
-- `jq`, `yq`, `kubectl`, `helm`, `openssl` and `kraken` on `PATH`. For Helm,
+- `curl`, `jq`, `yq`, `kubectl`, `helm`, `openssl` and `kraken` on `PATH`. For Helm,
   either use your own install or:
 
   ```console
@@ -88,7 +88,7 @@ the targets under **Noah Local Development**. They are defined in
 | `noah-local-operator-deploy`   | install or upgrade a staged operator image in the vCluster                                                               |
 | `noah-local-fixtures`          | create prerequisite Secrets, apply [`fixtures/c3.yaml`](fixtures/c3.yaml)                                                |
 | `noah-local-port-forward`      | forward the Noah service to localhost                                                                                    |
-| `noah-local-smoke`             | verify Noah peer readiness, then index on every peer and search through the SHC                                          |
+| `noah-local-smoke`             | verify Noah peer readiness, index on every peer, roll buckets, search events, and bootstrap `main`                                |
 | `noah-local-destroy`           | terminate the vCluster                                                                                                   |
 | `noah-local-stop-port-forward` | stop the forward                                                                                                         |
 | `noah-local-deployment-id`     | print the saved deployment ID                                                                                            |
@@ -110,13 +110,15 @@ data remains accessible. As with the PostgreSQL password, set
 `minio.auth.rootPassword` in an untracked values file if a known development
 credential is required.
 
-Once the operator has reconciled the C3 deployment, verify generation-current
-Noah peer readiness, indexing, SmartStore bucket rolls, and distributed search
-of generated events with:
+Once the operator has reconciled the C3 deployment, run:
 
 ```console
 make noah-local-smoke
 ```
+
+The local chart uses mock authentication. The smoke test starts or reuses the
+Noah port-forward, verifies peers and repairs, indexes and rolls `main`, then
+checks the bucket map and warm bootstrap. It does not restart indexers.
 
 The local operator cannot reach the SearchHeadCluster management endpoints
 without additional ingress, so the smoke test does not wait for CR phase
