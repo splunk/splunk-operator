@@ -15,6 +15,5 @@
 
 /*
 Package licensemanager owns the reconcile loop for the LicenseManager CR.
-Migrated from enterprise.ApplyLicenseManager().
 */
 package licensemanager

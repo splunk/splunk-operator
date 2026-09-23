@@ -43,6 +43,22 @@ func TestK8EventPublisher(t *testing.T) {
 	assert.Contains(t, <-recorder.Events, "WarningReason")
 }
 
+func TestMonitoringConsoleEventPublisher(t *testing.T) {
+	recorder := record.NewFakeRecorder(2)
+	publisher, err := NewK8EventPublisherWithRecorder(recorder, &enterpriseApi.MonitoringConsole{})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	publisher.Normal(ctx, "NormalReason", "normal message")
+	publisher.Warning(ctx, "WarningReason", "warning message")
+
+	assert.Eventually(t, func() bool {
+		return len(recorder.Events) == 2
+	}, time.Second, time.Millisecond)
+	assert.Contains(t, <-recorder.Events, "NormalReason")
+	assert.Contains(t, <-recorder.Events, "WarningReason")
+}
+
 func TestEmitStalledTransitionEvents(t *testing.T) {
 	recorder := record.NewFakeRecorder(2)
 	publisher, err := NewK8EventPublisherWithRecorder(recorder, &enterpriseApi.Standalone{})

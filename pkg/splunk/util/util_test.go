@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,6 +39,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
+
+func TestGetSplunkMonitoringconsoleConfigMapName(t *testing.T) {
+	got := GetSplunkMonitoringconsoleConfigMapName("t1", splcommon.SplunkMonitoringConsole)
+	want := "splunk-t1-monitoring-console"
+	if got != want {
+		t.Errorf("GetSplunkMonitoringconsoleConfigMapName(\"%s\",\"%s\") = %s; want %s", "t1", splcommon.SplunkMonitoringConsole, got, want)
+	}
+}
 
 // Faking APIs
 

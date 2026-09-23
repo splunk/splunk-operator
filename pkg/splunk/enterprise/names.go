@@ -91,9 +91,6 @@ const (
 	// identifier used for S3 secret key
 	s3SecretKey = "s3_secret_key"
 
-	//identifier for monitoring console configMap revision
-	monitoringConsoleConfigRev = "monitoringConsoleConfigRev"
-
 	// identifier to track the smartstore config rev. on Pod
 	smartStoreConfigRev = "SmartStoreConfigRev"
 
@@ -224,11 +221,6 @@ func GetSplunkStatefulsetPodName(instanceType InstanceType, identifier string, i
 // GetSplunkDefaultsName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
 func GetSplunkDefaultsName(identifier string, instanceType InstanceType) string {
 	return fmt.Sprintf(defaultsTemplateStr, identifier, instanceType.ToKind())
-}
-
-// GetSplunkMonitoringconsoleConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
-func GetSplunkMonitoringconsoleConfigMapName(identifier string, instanceType InstanceType) string {
-	return fmt.Sprintf(statefulSetTemplateStr, identifier, instanceType.ToKind())
 }
 
 // GetSplunkSmartstoreConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.

@@ -20,6 +20,8 @@ import (
 	"sort"
 	"strings"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -27,8 +29,21 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// GetMonitoringConsoleList returns MonitoringConsoles in the current namespace.
+func GetMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.MonitoringConsoleList, error) {
+	logger := logging.FromContext(ctx).With("func", "getMonitoringConsoleList", "name", cr.GetName(), "namespace", cr.GetNamespace())
+	objectList := enterpriseApi.MonitoringConsoleList{}
+	if err := c.List(ctx, &objectList, listOpts...); err != nil {
+		logger.ErrorContext(ctx, "MonitoringConsole types not found in namespace", "error", err, "namespace", cr.GetNamespace())
+		return objectList, err
+	}
+	return objectList, nil
+}
+
+// ValidateMonitoringConsoleRef validates changes to the MonitoringConsole reference.
 func ValidateMonitoringConsoleRef(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.StatefulSet, serviceURLs []corev1.EnvVar) error {
 	var err error
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
@@ -75,6 +90,7 @@ func ValidateMonitoringConsoleRef(ctx context.Context, c splcommon.ControllerCli
 	return nil
 }
 
+// ApplyMonitoringConsoleEnvConfigMap creates or updates a ConfigMap for MonitoringConsole pod environment variables.
 func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.ControllerClient, namespace string, crName string, monitoringConsoleRef string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
@@ -89,9 +105,9 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 			revised.Data = make(map[string]string)
 		}
 		if addNewURLs {
-			AddMonitoringConsoleURLs(revised, crName, newURLs)
+			AddURLsConfigMap(revised, crName, newURLs)
 		} else {
-			DeleteMonitoringConsoleURLs(revised, crName, newURLs, true)
+			DeleteURLsConfigMap(revised, crName, newURLs, true)
 		}
 		if !reflect.DeepEqual(revised.Data, current.Data) {
 			current.Data = revised.Data
@@ -179,99 +195,89 @@ func crOwnsURL(curr, crPrefix, crName string) bool {
 	return strings.Contains(curr, crPrefix)
 }
 
-// AddMonitoringConsoleURLs adds server peers to a Monitoring Console ConfigMap.
-func AddMonitoringConsoleURLs(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar) {
+// AddURLsConfigMap for adding new server peers to the monitoring console or scaling up
+func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar) {
 	for _, url := range newURLs {
-		if _, ok := revised.Data[url.Name]; !ok {
+		_, ok := revised.Data[url.Name]
+		if !ok {
 			revised.Data[url.Name] = url.Value
-			continue
-		}
-
-		newInstanceURLs := strings.Split(url.Value, ",")
-		crPrefix := crPodNamePrefix(url.Value)
-		currentURLs := strings.Split(revised.Data[url.Name], ",")
-		currentCRCount := 0
-		// 1. Count CR-owned URLs currently present in the configmap for this key.
-		//    We compare counts (not string lengths) because string-length comparison
-		//    is unreliable: it depends on whether new entries are a subset of current,
-		//    and could never detect scale-down (where current has MORE CR URLs than new).
-		for _, currentURL := range currentURLs {
-			if crOwnsURL(currentURL, crPrefix, crName) {
-				currentCRCount++
+		} else {
+			newInsURLs := strings.Split(url.Value, ",")
+			crPrefix := crPodNamePrefix(url.Value)
+			// 1. Count CR-owned URLs currently present in the configmap for this key.
+			//    We compare counts (not string lengths) because string-length comparison
+			//    is unreliable: it depends on whether new entries are a subset of current,
+			//    and could never detect scale-down (where current has MORE CR URLs than new).
+			currentURLs := strings.Split(revised.Data[url.Name], ",")
+			currentCRCount := 0
+			for _, curr := range currentURLs {
+				if crOwnsURL(curr, crPrefix, crName) {
+					currentCRCount++
+				}
 			}
-		}
+			newCount := len(newInsURLs)
 
-		if currentCRCount == len(newInstanceURLs) {
 			// 2. Same count: ensure all new entries are present (otherwise it's a rename/no-op),
 			//    nothing to add or remove.
-			allPresent := true
-			for _, newEntry := range newInstanceURLs {
-				if !strings.Contains(revised.Data[url.Name], newEntry) {
-					allPresent = false
-					break
+			if currentCRCount == newCount {
+				allPresent := true
+				for _, newEntry := range newInsURLs {
+					if !strings.Contains(revised.Data[url.Name], newEntry) {
+						allPresent = false
+						break
+					}
+				}
+				if allPresent {
+					continue
 				}
 			}
-			if allPresent {
-				continue
-			}
-		}
 
-		if currentCRCount < len(newInstanceURLs) {
-			// 3. scaling UP
-			for _, newEntry := range newInstanceURLs {
-				if !strings.Contains(revised.Data[url.Name], newEntry) {
-					revised.Data[url.Name] = strings.Join([]string{revised.Data[url.Name], newEntry}, ",")
+			if currentCRCount < newCount { // 3. scaling UP
+				for _, newEntry := range newInsURLs {
+					if !strings.Contains(revised.Data[url.Name], newEntry) {
+						str := []string{revised.Data[url.Name], newEntry}
+						revised.Data[url.Name] = strings.Join(str, ",")
+					}
 				}
+			} else { // 4. scaling DOWN (currentCRCount > newCount)
+				DeleteURLsConfigMap(revised, crName, newURLs, false)
 			}
-			continue
 		}
-
-		// 4. scaling DOWN (currentCRCount > newCount)
-		DeleteMonitoringConsoleURLs(revised, crName, newURLs, false)
 	}
 }
 
-// AddURLsConfigMap is retained for compatibility with callers of the legacy helper name.
-// Deprecated: use AddMonitoringConsoleURLs.
-func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar) {
-	AddMonitoringConsoleURLs(revised, crName, newURLs)
-}
-
-// DeleteMonitoringConsoleURLs removes server peers from a Monitoring Console ConfigMap.
-func DeleteMonitoringConsoleURLs(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
+// DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
+func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
 	for _, url := range newURLs {
 		crPrefix := crPodNamePrefix(url.Value)
 		currentURLs := strings.Split(revised.Data[url.Name], ",")
 		sort.Strings(currentURLs)
-		for _, currentURL := range currentURLs {
-			// scale DOWN
-			if crOwnsURL(currentURL, crPrefix, crName) && !strings.Contains(url.Value, currentURL) && !deleteCR {
-				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], currentURL, "")
-			} else if crOwnsURL(currentURL, crPrefix, crName) && deleteCR {
+		for _, curr := range currentURLs {
+			//scale DOWN
+			if crOwnsURL(curr, crPrefix, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
+				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
+			} else if crOwnsURL(curr, crPrefix, crName) && deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
 			}
-			// if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
+			//if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
 			if url.Name == "SPLUNK_SITE" && deleteCR {
 				delete(revised.Data, "SPLUNK_SITE")
 			}
 			if strings.HasPrefix(revised.Data[url.Name], ",") {
-				revised.Data[url.Name] = strings.TrimPrefix(revised.Data[url.Name], ",")
+				str := revised.Data[url.Name]
+				revised.Data[url.Name] = strings.TrimPrefix(str, ",")
 			}
 			if strings.HasSuffix(revised.Data[url.Name], ",") {
-				revised.Data[url.Name] = strings.TrimSuffix(revised.Data[url.Name], ",")
+				str := revised.Data[url.Name]
+				revised.Data[url.Name] = strings.TrimSuffix(str, ",")
 			}
 			if strings.Contains(revised.Data[url.Name], ",,") {
-				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], ",,", ",")
+				str := revised.Data[url.Name]
+				revised.Data[url.Name] = strings.ReplaceAll(str, ",,", ",")
 			}
 			if revised.Data[url.Name] == "" {
 				delete(revised.Data, url.Name)
 			}
 		}
 	}
-}
-
-// DeleteURLsConfigMap is retained for compatibility with callers of the legacy helper name.
-// Deprecated: use DeleteMonitoringConsoleURLs.
-func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
-	DeleteMonitoringConsoleURLs(revised, crName, newURLs, deleteCR)
 }

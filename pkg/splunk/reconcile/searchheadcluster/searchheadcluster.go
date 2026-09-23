@@ -48,8 +48,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const pauseRetryDelay = 30 * time.Second
-
 // apply owns the request-level SearchHeadCluster reconciliation boundary.
 func apply(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
 	logger := logging.FromContext(ctx).With("controller", "SearchHeadCluster", "name", namespacedName.Name, "namespace", namespacedName.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
@@ -78,7 +76,7 @@ func apply(ctx context.Context, client splcommon.ControllerClient, namespacedNam
 			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
 			return reconcile.Result{}, err
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, nil
 	} else if condition := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); condition != nil && condition.Status == metav1.ConditionTrue {
 		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
