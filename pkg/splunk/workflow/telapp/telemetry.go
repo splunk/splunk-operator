@@ -22,7 +22,7 @@ import (
 const (
 	requeAfterInSeconds = 21600 // Send telemetry once every 6 hour
 	defaultTestMode     = "false"
-	defaultTestVersion  = "3.1.0"
+	defaultTestVersion  = "3.2.0"
 
 	telStatusKey     = "status"
 	telDeploymentKey = "deployment"

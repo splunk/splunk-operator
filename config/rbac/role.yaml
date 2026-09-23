@@ -146,6 +146,7 @@ rules:
   - update
 - apiGroups:
   - enterprise.splunk.com
+  - platform.splunk.com
   resources:
   - postgresclusterclasses
   verbs:
@@ -154,6 +155,7 @@ rules:
   - watch
 - apiGroups:
   - enterprise.splunk.com
+  - platform.splunk.com
   resources:
   - postgresdatabases/status
   verbs:
@@ -162,6 +164,34 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - postgresclusters
+  - postgresdatabases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - postgresclusters/finalizers
+  - postgresdatabases/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - platform.splunk.com
+  resources:
+  - postgresclusters/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - policy
   resources:
