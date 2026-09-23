@@ -14,6 +14,12 @@ maintainers:
     email: kkoziol@splunk.com
   - name: Jakub Buczak
     email: jbuczak@splunk.com
+  - name: Minjie Qiu
+    email: mqiu@splunk.com
+  - name: Qing Wang
+    email: qingw@splunk.com
+  - name: Gabriel Mendoza
+    email: gabrielm@splunk.com
 # A chart can be either an 'application' or a 'library' chart.
 #
 # Application charts are a collection of templates that can be packaged into versioned archives
