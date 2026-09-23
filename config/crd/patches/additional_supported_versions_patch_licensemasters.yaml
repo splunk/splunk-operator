@@ -1,9 +1,14 @@
+# v1 and v2 are retired. They are kept in spec.versions, rather than deleted, so
+# the API server keeps a schema for any object still recorded under them and
+# status.storedVersions can be cleaned up; served: false is what actually stops
+# them being reachable.
 - op: add
   path: "/spec/versions/-"
   value:
     name: v1
-    served: true
+    served: false
     storage: false
+    deprecated: true
     schema:
       openAPIV3Schema:
         type: object
@@ -15,8 +20,9 @@
   path: "/spec/versions/-"
   value:
     name: v2
-    served: true
+    served: false
     storage: false
+    deprecated: true
     schema:
       openAPIV3Schema:
         type: object
