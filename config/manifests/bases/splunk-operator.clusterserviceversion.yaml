@@ -12,7 +12,7 @@ metadata:
       administrative workflows using Kubernetes best practices.
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.22"}]'
     repository: https://github.com/splunk/splunk-operator
-  name: splunk-operator.v3.1.0
+  name: splunk-operator.v3.2.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -38,7 +38,9 @@ spec:
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
       version: v3
-    - description: IngestorCluster is the Schema for the ingestorclusters API
+    - description: 'IngestorCluster is the Schema for the ingestorclusters API. NOTE:
+        IngestorCluster is part of the index and ingestion separation feature, which
+        is currently in Preview and not recommended for production use.'
       displayName: Ingestor Cluster
       kind: IngestorCluster
       name: ingestorclusters.enterprise.splunk.com
@@ -63,7 +65,9 @@ spec:
       kind: MonitoringConsole
       name: monitoringconsoles.enterprise.splunk.com
       version: v3
-    - description: ObjectStorage is the Schema for the objectstorages API
+    - description: 'ObjectStorage is the Schema for the objectstorages API. NOTE:
+        ObjectStorage is part of the index and ingestion separation feature, which
+        is currently in Preview and not recommended for production use.'
       displayName: Object Storage
       kind: ObjectStorage
       name: objectstorages.enterprise.splunk.com
@@ -85,7 +89,9 @@ spec:
       kind: PostgresDatabase
       name: postgresdatabases.enterprise.splunk.com
       version: v4
-    - description: Queue is the Schema for the queues API
+    - description: 'Queue is the Schema for the queues API. NOTE: Queue is part of
+        the index and ingestion separation feature, which is currently in Preview
+        and not recommended for production use.'
       displayName: Queue
       kind: Queue
       name: queues.enterprise.splunk.com
@@ -147,9 +153,9 @@ spec:
   - email: support@splunk.com
     name: Splunk Operator Maintainers
   maturity: stable
-  minKubeVersion: 1.27.0
+  minKubeVersion: 1.32.0
   provider:
     name: Splunk Inc.
     url: www.splunk.com
-  replaces: splunk-operator.v3.0.0
-  version: 3.1.0
+  replaces: splunk-operator.v3.1.0
+  version: 3.2.0
