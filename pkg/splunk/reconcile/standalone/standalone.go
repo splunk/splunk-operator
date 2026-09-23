@@ -43,8 +43,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const pauseRetryDelay = time.Second * 30
-
 // apply owns the Standalone reconcile loop for one controller-runtime request.
 func apply(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
 	logger := logging.FromContext(ctx).With("controller", "Standalone", "name", namespacedName.Name, "namespace", namespacedName.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
@@ -68,7 +66,7 @@ func apply(ctx context.Context, client splcommon.ControllerClient, namespacedNam
 			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
 			return reconcile.Result{}, err
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, nil
 	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
 		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
@@ -228,7 +226,7 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, monitoringConsoleEnv(cr, cr.Spec.Replicas), false)
+			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, resources.GetStandaloneExtraEnv(cr, cr.Spec.Replicas), false)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
@@ -320,7 +318,7 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = k8sops.ValidateMonitoringConsoleRef(ctx, client, statefulSet, monitoringConsoleEnv(cr, cr.Spec.Replicas))
+	err = k8sops.ValidateMonitoringConsoleRef(ctx, client, statefulSet, resources.GetStandaloneExtraEnv(cr, cr.Spec.Replicas))
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
@@ -359,7 +357,7 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
-		_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, monitoringConsoleEnv(cr, cr.Spec.Replicas), true)
+		_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, resources.GetStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
 		if err != nil {
 			eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
@@ -451,8 +449,4 @@ func ValidateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 	}
 
 	return reconcileutil.ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
-}
-
-func monitoringConsoleEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
-	return []corev1.EnvVar{{Name: "SPLUNK_STANDALONE_URL", Value: splutil.GetSplunkStatefulsetUrls(cr.GetNamespace(), splcommon.SplunkStandalone, cr.GetName(), replicas, false)}}
 }

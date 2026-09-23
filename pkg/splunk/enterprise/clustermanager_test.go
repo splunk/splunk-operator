@@ -44,6 +44,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	lmreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemanager"
+	monitoringconsole "github.com/splunk/splunk-operator/pkg/splunk/reconcile/monitoringconsole"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
@@ -2132,5 +2133,102 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
+	}
+}
+
+func TestClusterManagerUpdatesMonitoringConsoleAnnotations(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	builder := newFakeClientBuilder(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.Standalone{}).
+		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	// define CM and MC
+	cm := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+	mc := &enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+	cm.Spec.Image = "splunk/splunk:latest"
+	// Create the instances
+	if err := client.Create(ctx, cm); err != nil {
+		t.Fatalf("failed to create ClusterManager: %v", err)
+	}
+	_, err := ApplyClusterManager(ctx, client, cm, nil)
+	if err != nil {
+		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
+	}
+	namespacedName := types.NamespacedName{
+		Name:      cm.Name,
+		Namespace: cm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, cm)
+	if err != nil {
+		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
+	}
+	cm.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, cm)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+	if err := client.Create(ctx, mc); err != nil {
+		t.Fatalf("failed to create MonitoringConsole: %v", err)
+	}
+	_, err = monitoringconsole.ApplyMonitoringConsole(ctx, client, mc)
+	if err != nil {
+		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
+	}
+	err = changeMonitoringConsoleAnnotations(ctx, client, cm)
+	if err != nil {
+		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
+	}
+	monitoringConsole := &enterpriseApi.MonitoringConsole{}
+	namespacedName = types.NamespacedName{
+		Name:      cm.Name,
+		Namespace: cm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, monitoringConsole)
+	if err != nil {
+		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
+	}
+	annotations := monitoringConsole.GetAnnotations()
+	if annotations["splunk/image-tag"] != cm.Spec.Image {
+		t.Errorf("changeMonitoringConsoleAnnotations should have set the checkUpdateImage annotation field to the current image")
 	}
 }

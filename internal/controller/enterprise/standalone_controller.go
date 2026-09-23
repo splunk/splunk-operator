@@ -41,8 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
-const pauseRetryDelay = time.Second * 30
-
 // StandaloneReconciler reconciles a Standalone object
 type StandaloneReconciler struct {
 	client.Client

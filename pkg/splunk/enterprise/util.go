@@ -201,16 +201,6 @@ func getClusterManagerExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Comm
 	}
 }
 
-// getStandaloneExtraEnv returns extra environment variables used by monitoring console
-func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_STANDALONE_URL",
-			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkStandalone, cr.GetName(), replicas, false),
-		},
-	}
-}
-
 // getLicenseManagerURL returns URL of license manager
 func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseManagerRef.Name != "" {
@@ -903,7 +893,7 @@ func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClien
 	}
 
 	// Look for MonitoringConsole still holding references to the ClusterManager
-	mcList, err := getMonitoringConsoleList(ctx, c, cmCr, listOpts)
+	mcList, err := k8sops.GetMonitoringConsoleList(ctx, c, cmCr, listOpts)
 	if err != nil {
 		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
 			scopedLog.ErrorContext(ctx, "couldn't retrieve MonitoringConsole list", "error", err)
@@ -1550,53 +1540,6 @@ func CopyFileToPod(ctx context.Context, c splcommon.ControllerClient, namespace 
 //go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
 //func cpMakeTar(srcPath, destPath string, writer io.Writer) error
 
-// validateMonitoringConsoleRef validates the changes in monitoringConsoleRef
-func validateMonitoringConsoleRef(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.StatefulSet, serviceURLs []corev1.EnvVar) error {
-	var err error
-	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
-	var current appsv1.StatefulSet
-
-	err = c.Get(context.TODO(), namespacedName, &current)
-	if err == nil {
-		currEnv := current.Spec.Template.Spec.Containers[0].Env
-		revEnv := revised.Spec.Template.Spec.Containers[0].Env
-
-		var cEnv, rEnv corev1.EnvVar
-
-		for _, cEnvTemp := range currEnv {
-			if cEnvTemp.Name == "SPLUNK_MONITORING_CONSOLE_REF" {
-				cEnv.Value = cEnvTemp.Value
-			}
-		}
-
-		for _, rEnvTemp := range revEnv {
-			if rEnvTemp.Name == "SPLUNK_MONITORING_CONSOLE_REF" {
-				rEnv.Value = rEnvTemp.Value
-			}
-		}
-
-		if cEnv.Value != "" && rEnv.Value != "" && cEnv.Value != rEnv.Value {
-			//1. if revised Spec has different mcRef defined
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), cEnv.Value, serviceURLs, false)
-			if err != nil {
-				return err
-			}
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), rEnv.Value, serviceURLs, true)
-			if err != nil {
-				return err
-			}
-		} else if cEnv.Value != "" && rEnv.Value == "" {
-			//2. if revised Spec doesn't have mcRef defined
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, c, current.ObjectMeta.GetNamespace(), current.ObjectMeta.GetName(), cEnv.Value, serviceURLs, false)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	//if the sts doesn't exists no need for any change
-	return nil
-}
-
 // setInstallStateForClusterScopedApps sets the install state for cluster scoped apps
 func setInstallStateForClusterScopedApps(ctx context.Context, appDeployContext *enterpriseApi.AppDeploymentContext) {
 
@@ -2093,10 +2036,4 @@ func ApplyIngestorPodDisruptionBudget(ctx context.Context, c splcommon.Controlle
 	}
 	return fmt.Errorf("PodDisruptionBudget for IngestorCluster %q exists in namespace %q but is not owned by this CR",
 		cr.GetName(), cr.GetNamespace())
-}
-
-// MonitoringConsoleEnv is retained for compatibility with callers of the legacy helper location.
-// Deprecated: use the standalone reconciler's Monitoring Console environment construction.
-func MonitoringConsoleEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
-	return getStandaloneExtraEnv(cr, replicas)
 }

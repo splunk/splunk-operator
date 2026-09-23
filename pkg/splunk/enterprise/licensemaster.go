@@ -97,7 +97,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), false)
+			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), false)
 			if err != nil {
 				return result, err
 			}
@@ -140,7 +140,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
+	err = k8sops.ValidateMonitoringConsoleRef(ctx, client, statefulSet, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec))
 	if err != nil {
 		return result, err
 	}
@@ -153,7 +153,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	cr.Status.Phase = phase
 
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
-		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), true)
+		_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), true)
 		if err != nil {
 			return result, err
 		}

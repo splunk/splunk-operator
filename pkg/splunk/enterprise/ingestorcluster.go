@@ -132,7 +132,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), false)
+			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), false)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailed", "Apply of monitoring console config map failed. Check operator logs for details.")
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
@@ -242,7 +242,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 
 	// Make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, make([]corev1.EnvVar, 0))
+	err = k8sops.ValidateMonitoringConsoleRef(ctx, client, statefulSet, make([]corev1.EnvVar, 0))
 	if err != nil {
 		eventPublisher.Warning(ctx, "MonitoringConsoleRefValidationFailed", "Monitoring console reference validation failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
@@ -286,7 +286,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			logger.ErrorContext(ctx, "delete of reference to automated MC failed", "error", err.Error())
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), true)
+			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), true)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailed", "Apply of monitoring console environment config map failed. Check operator logs for details.")
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
