@@ -349,6 +349,9 @@ type IndexerCluster struct {
 	Status IndexerClusterStatus `json:"status,omitempty"`
 }
 
+// Hub marks v4 as the conversion hub for IndexerCluster
+func (*IndexerCluster) Hub() {}
+
 //+kubebuilder:object:root=true
 
 // IndexerClusterList contains a list of IndexerCluster

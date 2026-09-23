@@ -39,6 +39,8 @@ pkg/splunk/enterprise/events.go
 #Exceptions for dual support of cluster manager
 api/enterprise/v3/clustermaster_types.go
 api/enterprise/v3/indexercluster_types.go
+api/enterprise/v3/indexercluster_conversion.go
+api/enterprise/v3/conversion_test.go
 api/enterprise/v3/clustermanager_types.go
 config/crd/patches/cainjection_in_clustermasters.yaml
 config/crd/patches/webhook_in_clustermasters.yaml
