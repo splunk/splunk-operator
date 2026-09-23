@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -1364,8 +1365,21 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 		env[item.Name] = item
 	}
 	assert.Equal(t, "true", env[resources.NoahEnabledEnvName].Value)
-	assert.Equal(t, created.Spec.ServiceName, env[resources.NoahHeadlessServiceEnvName].Value)
+	assert.Equal(t, created.Spec.ServiceName, env[resources.HeadlessServiceEnvName].Value)
 	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
+	assert.Equal(t,
+		"https://$(POD_NAME).splunk-main-indexer-headless.$(POD_NAMESPACE).svc.corp.example:8089",
+		env[resources.NoahAdvertisedAddressEnvName].Value,
+	)
+	peerID, err := noahIndexerPeerID(created, 2)
+	require.NoError(t, err)
+	advertisedAddress := strings.NewReplacer(
+		"$(POD_NAME)", fmt.Sprintf("%s-2", created.Name),
+		"$(POD_NAMESPACE)", created.Namespace,
+	).Replace(env[resources.NoahAdvertisedAddressEnvName].Value)
+	parsedAddress, err := url.Parse(advertisedAddress)
+	require.NoError(t, err)
+	assert.Equal(t, parsedAddress.Hostname(), peerID)
 	require.NotNil(t, env[resources.PodNameEnvName].ValueFrom)
 	require.NotNil(t, env[resources.PodNamespaceEnvName].ValueFrom)
 	require.NotNil(t, created.Spec.Template.Spec.Containers[0].Lifecycle)
@@ -1384,7 +1398,6 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	}
 	assert.Contains(t, env["SPLUNK_DEFAULTS_URL"].Value, resources.SecretMountPath())
 }
-
 func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testing.T) {
 	ctx := t.Context()
 	client := spltest.NewMockClient()
