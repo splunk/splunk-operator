@@ -86,6 +86,17 @@ func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, er
 	return result, nil
 }
 
+// GetServiceURI returns the fully qualified domain name for a Kubernetes service as URI.
+func GetServiceURI(namespace string, name string) string {
+	var scheme string = "https"
+	if os.Getenv("SPLUNKD_SSL_ENABLE") == "false" {
+		scheme = "http"
+	}
+	return fmt.Sprintf(
+		"%s://%s:8089", scheme, GetServiceFQDN(namespace, name),
+	)
+}
+
 // GetServiceFQDN returns the fully qualified domain name for a Kubernetes service.
 func GetServiceFQDN(namespace string, name string) string {
 	clusterDomain := os.Getenv("CLUSTER_DOMAIN")
