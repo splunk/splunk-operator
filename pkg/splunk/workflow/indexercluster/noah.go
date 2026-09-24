@@ -31,8 +31,8 @@ type ExpectedNoahPeer struct {
 	StartedAt time.Time
 }
 
-// NoahCacheWarmPolicy controls whether membership evaluation reports peers
-// that have failed to become ready before the cache-warm deadline.
+// NoahCacheWarmPolicy controls whether registered peers may satisfy the
+// scale-out gate after failing to become ready before the cache-warm deadline.
 type NoahCacheWarmPolicy struct {
 	Required bool
 	Timeout  time.Duration
@@ -41,11 +41,18 @@ type NoahCacheWarmPolicy struct {
 // NoahMembership summarizes the exact relationship between the expected
 // IndexerCluster peers and Noah's observed peer records.
 type NoahMembership struct {
-	Peers             []NoahPeerMembership
-	UnexpectedPeerIDs []string
-	AllRegistered     bool
-	AllReady          bool
-	TimedOutPeerID    string
+	Peers              []NoahPeerMembership
+	UnexpectedPeerIDs  []string
+	AllRegistered      bool
+	AllReady           bool
+	AllReadyOrTimedOut bool
+	TimedOutPeerIDs    []string
+}
+
+// SatisfiesScaleOut reports whether every expected peer satisfies the selected
+// scale-out policy.
+func (membership NoahMembership) SatisfiesScaleOut(cacheWarm bool) bool {
+	return membership.AllRegistered && (!cacheWarm || membership.AllReadyOrTimedOut)
 }
 
 // NoahPeerClassification describes how Noah's records relate to one expected
@@ -84,9 +91,9 @@ func MatchesNoahPeerIncarnation(expected ExpectedNoahPeer, observed noah.Peer) b
 }
 
 // EvaluateNoahMembership evaluates registration, readiness, and cache-warm
-// timeout from one classification of the observed peers. Foreign and stale
-// records are ignored. Each expected peer must have exactly one current record,
-// so duplicates and contradictory current records fail closed.
+// timeout from one classification of the observed peers. Foreign records are
+// ignored. Each expected peer must have exactly one current record, so missing,
+// stale, duplicate, and contradictory records fail closed.
 func EvaluateNoahMembership(expected []ExpectedNoahPeer, observed []noah.Peer, policy NoahCacheWarmPolicy, now time.Time) NoahMembership {
 	expectedCounts := make(map[string]int, len(expected))
 	for _, peer := range expected {
@@ -103,10 +110,11 @@ func EvaluateNoahMembership(expected []ExpectedNoahPeer, observed []noah.Peer, p
 	}
 
 	result := NoahMembership{
-		Peers:             make([]NoahPeerMembership, 0, len(expected)),
-		UnexpectedPeerIDs: slices.Sorted(maps.Keys(unexpectedIDs)),
-		AllRegistered:     true,
-		AllReady:          true,
+		Peers:              make([]NoahPeerMembership, 0, len(expected)),
+		UnexpectedPeerIDs:  slices.Sorted(maps.Keys(unexpectedIDs)),
+		AllRegistered:      true,
+		AllReady:           true,
+		AllReadyOrTimedOut: true,
 	}
 
 	for _, expectedPeer := range expected {
@@ -115,6 +123,7 @@ func EvaluateNoahMembership(expected []ExpectedNoahPeer, observed []noah.Peer, p
 			peerMembership.Classification = NoahPeerInvalid
 			result.AllRegistered = false
 			result.AllReady = false
+			result.AllReadyOrTimedOut = false
 			result.Peers = append(result.Peers, peerMembership)
 			continue
 		}
@@ -154,26 +163,21 @@ func EvaluateNoahMembership(expected []ExpectedNoahPeer, observed []noah.Peer, p
 			result.AllReady = false
 		}
 
-		timedOut := false
-		if policy.Required && policy.Timeout > 0 {
-			if len(matches) == 0 {
-				timedOut = !now.Before(expectedPeer.StartedAt.Add(policy.Timeout))
-			} else {
-				for _, peer := range matches {
-					if peer.Status != noah.PeerStatusUp && !now.Before(time.Unix(peer.Data.StartTime, 0).Add(policy.Timeout)) {
-						timedOut = true
-						break
-					}
-				}
-			}
-		}
-		if timedOut && (result.TimedOutPeerID == "" || expectedPeer.ID < result.TimedOutPeerID) {
-			result.TimedOutPeerID = expectedPeer.ID
+		timedOut := policy.Required && policy.Timeout > 0 &&
+			len(matches) == 1 &&
+			peerMembership.Registered &&
+			!peerMembership.Ready &&
+			!now.Before(time.Unix(matches[0].Data.StartTime, 0).Add(policy.Timeout))
+		if timedOut {
+			result.TimedOutPeerIDs = append(result.TimedOutPeerIDs, expectedPeer.ID)
+		} else if !peerMembership.Ready {
+			result.AllReadyOrTimedOut = false
 		}
 
 		result.Peers = append(result.Peers, peerMembership)
 	}
 
+	slices.Sort(result.TimedOutPeerIDs)
 	return result
 }
 
@@ -205,20 +209,15 @@ func NoahPeerInactive(peers []noah.Peer, peerID string) bool {
 // PlanNoahScaleOut returns the next safe replica target. Scale-out advances by
 // at most one ordinal after all applied peers satisfy the selected gate. Final
 // convergence always requires every applied peer to be ready in Noah.
-func PlanNoahScaleOut(membership NoahMembership, appliedReplicas, requestedReplicas int32, requireReady bool) common.ScaleOutPlan {
-	registered := membership.AllRegistered && membership.TimedOutPeerID == ""
+func PlanNoahScaleOut(membership NoahMembership, appliedReplicas, requestedReplicas int32, cacheWarm bool) common.ScaleOutPlan {
+	registered := membership.AllRegistered
 	ready := registered && membership.AllReady
 	plan := common.ScaleOutPlan{
 		Complete:       ready && appliedReplicas == requestedReplicas,
 		TargetReplicas: appliedReplicas,
 	}
 
-	canAdvance := registered
-	if requireReady {
-		canAdvance = ready
-	}
-
-	if canAdvance && appliedReplicas < requestedReplicas {
+	if membership.SatisfiesScaleOut(cacheWarm) && appliedReplicas < requestedReplicas {
 		plan.TargetReplicas++
 	}
 

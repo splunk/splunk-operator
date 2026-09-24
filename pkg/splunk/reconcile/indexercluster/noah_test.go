@@ -212,13 +212,17 @@ func (fixture *noahIndexerScaleOutTestFixture) podManager(t *testing.T) *noahInd
 }
 
 func (fixture *noahIndexerScaleOutTestFixture) update(t *testing.T) (enterpriseApi.Phase, error) {
+	return fixture.updateWithContext(t, t.Context())
+}
+
+func (fixture *noahIndexerScaleOutTestFixture) updateWithContext(t *testing.T, ctx context.Context) (enterpriseApi.Phase, error) {
 	t.Helper()
 	statefulSet := &appsv1.StatefulSet{}
-	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{
+	require.NoError(t, fixture.client.Get(ctx, types.NamespacedName{
 		Name: fixture.statefulSet.Name, Namespace: fixture.statefulSet.Namespace,
 	}, statefulSet))
 	return newNoahIndexerPodManagerForTest(t, fixture.client, fixture.cr).Update(
-		t.Context(), fixture.client, statefulSet, fixture.cr.Spec.Replicas,
+		ctx, fixture.client, statefulSet, fixture.cr.Spec.Replicas,
 	)
 }
 
@@ -2281,46 +2285,81 @@ func TestNoahIndexerPodManagerPropagatesScaleOutUpdateError(t *testing.T) {
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
 }
 
-func TestNoahIndexerCacheWarmTimeoutStopsRequeueAndAllowsReevaluation(t *testing.T) {
+func TestNoahIndexerCacheWarmTimeoutContinuesOneScaleOutBatch(t *testing.T) {
 	timeoutSeconds := int32(60)
 	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{
 		peerStatus:     noahclient.PeerStatusWarming,
 		peerStart:      time.Now().Add(-2 * time.Minute).Unix(),
 		timeoutSeconds: &timeoutSeconds,
 	})
+	recorder := &mockEventRecorder{}
+	ctx := context.WithValue(t.Context(), splcommon.EventPublisherKey, newTestEventPublisher(recorder))
 
-	phase, err := fixture.update(t)
-	require.Error(t, err)
-	assert.Equal(t, enterpriseApi.PhaseError, phase)
-	outcome, outcomeErr, handled := noahIndexerOutcomeFromError(err, "")
-	require.True(t, handled)
-	err = outcomeErr
-	message, terminal := splcommon.TerminalMessage(err)
-	require.True(t, terminal)
-	assert.Contains(t, message, "Cache warming timed out")
-	reason, _ := splcommon.TerminalReason(err)
-	assert.Equal(t, splcommon.EventReasonNoahCacheWarmTimeout, reason)
-	assert.Equal(t, enterpriseApi.PhaseError, outcome.phase)
-	assert.Zero(t, outcome.requeueAfter)
-	assert.Equal(t, string(enterpriseApi.ReasonNoahCacheWarmTimeout), outcome.condition.Reason)
-
-	noahCluster := &enterpriseApi.NoahCluster{}
-	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{Name: "noah", Namespace: fixture.cr.Namespace}, noahCluster))
-	cacheWarmDisabled := false
-	noahCluster.Spec.CacheWarmScaleOutEnabled = &cacheWarmDisabled
-	require.NoError(t, fixture.client.Update(t.Context(), noahCluster))
-
-	phase, err = fixture.update(t)
+	phase, err := fixture.updateWithContext(t, ctx)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingUp, phase)
+	require.NotNil(t, fixture.cr.Status.Lifecycle)
 	assert.Equal(t, enterpriseApi.IndexerClusterLifecycleActionPending, fixture.cr.Status.Lifecycle.Checkpoint)
-	phase, err = fixture.update(t)
+	require.Len(t, recorder.events, 1)
+	assert.Equal(t, "Warning", recorder.events[0].eventType)
+	assert.Equal(t, string(splcommon.EventReasonNoahCacheWarmTimeout), recorder.events[0].reason)
+	assert.Contains(t, recorder.events[0].message, "continuing scale-out to 2 replicas")
+
+	phase, err = fixture.updateWithContext(t, ctx)
 	require.NoError(t, err)
 	assert.Equal(t, enterpriseApi.PhaseScalingUp, phase)
+	assert.Len(t, recorder.events, 1, "a persisted lifecycle must not emit the timeout warning again")
 	stored := &appsv1.StatefulSet{}
 	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{Name: fixture.statefulSet.Name, Namespace: fixture.statefulSet.Namespace}, stored))
 	require.NotNil(t, stored.Spec.Replicas)
 	assert.Equal(t, int32(2), *stored.Spec.Replicas)
+}
+
+func TestNoahIndexerCacheWarmTimeoutDoesNotSatisfyReadiness(t *testing.T) {
+	timeoutSeconds := int32(60)
+	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{
+		peerStatus:     noahclient.PeerStatusWarming,
+		peerStart:      time.Now().Add(-2 * time.Minute).Unix(),
+		timeoutSeconds: &timeoutSeconds,
+	})
+	mgr := fixture.podManager(t)
+
+	outcome, err := mgr.observeReady(t.Context(), 1, enterpriseApi.PhaseScalingUp, 0)
+
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseScalingUp, outcome.phase)
+	assert.Equal(t, metav1.ConditionFalse, outcome.condition.Status)
+	assert.Equal(t, noahIndexerPollInterval, outcome.requeueAfter)
+}
+
+func TestNoahIndexerCacheWarmTimeoutCompletesMembershipWait(t *testing.T) {
+	timeoutSeconds := int32(60)
+	fixture := newNoahIndexerScaleOutTestFixture(t, noahIndexerScaleOutTestOptions{
+		peerStatus:     noahclient.PeerStatusUp,
+		timeoutSeconds: &timeoutSeconds,
+	})
+	fixture.advanceToMembershipWait(t)
+	statefulSet := fixture.makeTargetReady(t, "revision-1", "revision-1")
+
+	peerStart := time.Now().Add(-2 * time.Minute)
+	targetPod := &corev1.Pod{}
+	require.NoError(t, fixture.client.Get(t.Context(), types.NamespacedName{
+		Name: "splunk-main-indexer-1", Namespace: fixture.cr.Namespace,
+	}, targetPod))
+	targetPod.Status.ContainerStatuses[0].State.Running.StartedAt = metav1.NewTime(peerStart.Add(-time.Second))
+	require.NoError(t, fixture.client.Update(t.Context(), targetPod))
+	fixture.mutex.Lock()
+	fixture.peers[1].Status = noahclient.PeerStatusWarming
+	fixture.peers[1].Data.StartTime = peerStart.Unix()
+	fixture.peers[1].LastHeartbeat = peerStart.Unix() + 1
+	fixture.mutex.Unlock()
+
+	fixture.observeScaleOutReady(t, statefulSet)
+	outcome := fixture.observeScaleOutReady(t, statefulSet)
+
+	assert.Equal(t, enterpriseApi.PhaseScalingUp, outcome.phase)
+	require.NotNil(t, fixture.cr.Status.Lifecycle)
+	assert.Equal(t, enterpriseApi.IndexerClusterLifecycleCompleted, fixture.cr.Status.Lifecycle.Checkpoint)
 }
 
 func TestWaitForNoahIndexerWorkloadPreservesUpdatingForPendingTemplateRevision(t *testing.T) {
