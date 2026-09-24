@@ -71,6 +71,7 @@ func TestClientClassifiesAndRedactsHTTPFailures(t *testing.T) {
 		{statusCode: http.StatusForbidden, kind: ErrorKindForbidden},
 		{statusCode: http.StatusNotFound, kind: ErrorKindNotFound},
 		{statusCode: http.StatusConflict, kind: ErrorKindConflict},
+		{statusCode: http.StatusFailedDependency, kind: ErrorKindFailedDependency, retryable: true},
 		{statusCode: http.StatusTooManyRequests, kind: ErrorKindRateLimited, retryable: true},
 		{statusCode: http.StatusServiceUnavailable, kind: ErrorKindUnavailable, retryable: true},
 	}

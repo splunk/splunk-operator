@@ -15,6 +15,7 @@
 package noah
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha512"
@@ -29,25 +30,30 @@ import (
 )
 
 const (
-	hmacV2NonceHeader     = "x-splunk-lm-nonce"
-	hmacV2TimestampHeader = "x-splunk-lm-timestamp"
-	hmacV2DigestHeader    = "x-splunk-digest"
-	hmacV2NonceCharacters = "abcdefghijklmnopqrstuvwxyz1234567890"
+	hmacNonceHeader           = "x-splunk-lm-nonce"
+	hmacTimestampHeader       = "x-splunk-lm-timestamp"
+	hmacDigestHeader          = "x-splunk-digest"
+	hmacDigestKeyParamsHeader = "x-splunk-digest-key-params"
+	hmacNonceCharacters       = "abcdefghijklmnopqrstuvwxyz1234567890"
+	hmacNonceBytes            = 32
+	hmacV3SaltBytes           = 16
+	hmacV3Iterations          = 1000
+	hmacKeyBytes              = 64
 )
 
-type hmacV2Authenticator struct {
-	generatedKey []byte
+type hmacV3Authenticator struct {
+	pass4SymmKey []byte
 	now          func() time.Time
 	random       io.Reader
 }
 
-// NewHMACV2Authenticator creates the request authenticator used by Noah's
-// administrative API. It retains only the key derived from pass4SymmKey.
-func NewHMACV2Authenticator(pass4SymmKey []byte) (Authenticator, error) {
-	return newHMACV2Authenticator(pass4SymmKey, time.Now, rand.Reader)
+// NewHMACV3Authenticator creates the v3 request authenticator used by Noah's
+// administrative API.
+func NewHMACV3Authenticator(pass4SymmKey []byte) (Authenticator, error) {
+	return newHMACV3Authenticator(pass4SymmKey, time.Now, rand.Reader)
 }
 
-func newHMACV2Authenticator(pass4SymmKey []byte, now func() time.Time, random io.Reader) (*hmacV2Authenticator, error) {
+func newHMACV3Authenticator(pass4SymmKey []byte, now func() time.Time, random io.Reader) (*hmacV3Authenticator, error) {
 	if len(pass4SymmKey) == 0 {
 		return nil, fmt.Errorf("pass4SymmKey is empty")
 	}
@@ -58,26 +64,30 @@ func newHMACV2Authenticator(pass4SymmKey []byte, now func() time.Time, random io
 		return nil, fmt.Errorf("random source is nil")
 	}
 
-	derivedKey := pbkdf2.Key(pass4SymmKey, nil, 100_000, 64, sha512.New)
-	return &hmacV2Authenticator{
-		generatedKey: []byte(base64.StdEncoding.EncodeToString(derivedKey)),
+	return &hmacV3Authenticator{
+		pass4SymmKey: bytes.Clone(pass4SymmKey),
 		now:          now,
 		random:       random,
 	}, nil
 }
 
-func (auth *hmacV2Authenticator) Authenticate(request *http.Request, body []byte) error {
+func (auth *hmacV3Authenticator) Authenticate(request *http.Request, body []byte) error {
 	if request == nil {
 		return fmt.Errorf("request is nil")
 	}
 
-	randomBytes := make([]byte, 32)
+	randomBytes := make([]byte, hmacNonceBytes)
 	if _, err := io.ReadFull(auth.random, randomBytes); err != nil {
 		return fmt.Errorf("generate nonce: %w", err)
 	}
 	nonce := make([]byte, len(randomBytes))
 	for index, value := range randomBytes {
-		nonce[index] = hmacV2NonceCharacters[int(value)%len(hmacV2NonceCharacters)]
+		nonce[index] = hmacNonceCharacters[int(value)%len(hmacNonceCharacters)]
+	}
+
+	salt := make([]byte, hmacV3SaltBytes)
+	if _, err := io.ReadFull(auth.random, salt); err != nil {
+		return fmt.Errorf("generate digest salt: %w", err)
 	}
 
 	timestamp := fmt.Sprintf("%d", auth.now().Unix())
@@ -88,11 +98,17 @@ func (auth *hmacV2Authenticator) Authenticate(request *http.Request, body []byte
 		request.URL.Path,
 		strings.TrimSpace(string(body)),
 	}, "\x00")
-	digest := hmac.New(sha512.New, auth.generatedKey)
+	derivedKey := pbkdf2.Key(auth.pass4SymmKey, salt, hmacV3Iterations, hmacKeyBytes, sha512.New)
+	digest := hmac.New(sha512.New, derivedKey)
 	_, _ = digest.Write([]byte(serialized))
 
-	request.Header.Set(hmacV2NonceHeader, string(nonce))
-	request.Header.Set(hmacV2TimestampHeader, timestamp)
-	request.Header.Set(hmacV2DigestHeader, "v2,"+base64.StdEncoding.EncodeToString(digest.Sum(nil)))
+	request.Header.Set(hmacNonceHeader, string(nonce))
+	request.Header.Set(hmacTimestampHeader, timestamp)
+	request.Header.Set(hmacDigestHeader, "v3,"+base64.StdEncoding.EncodeToString(digest.Sum(nil)))
+	request.Header.Set(hmacDigestKeyParamsHeader, fmt.Sprintf(
+		"v3,@salt=%s@iterCount=%d",
+		base64.StdEncoding.EncodeToString(salt),
+		hmacV3Iterations,
+	))
 	return nil
 }
