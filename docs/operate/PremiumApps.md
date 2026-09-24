@@ -236,7 +236,7 @@ spec:
         region: us-west-2
         secretRef: splunk-s3-secret
 ---
-apiVersion: enterprise.splunk.com/v2
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: idc-es
