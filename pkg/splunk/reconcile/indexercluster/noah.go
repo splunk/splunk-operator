@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	"github.com/splunk/splunk-operator/pkg/splunk/client/noah"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
@@ -492,10 +494,6 @@ func (mgr *noahIndexerPodManager) NextReplicas(ctx context.Context, appliedRepli
 			return blocked, newNoahIndexerObservationError(err, enterpriseApi.PhaseScalingUp)
 		}
 
-		if membership.TimedOutPeerID != "" {
-			return blocked, &noahIndexerCacheWarmTimeoutError{peerID: membership.TimedOutPeerID}
-		}
-
 		plan := indexerworkflow.PlanNoahScaleOut(membership, appliedReplicas, requestedReplicas, mgr.cacheWarmEnabled)
 		if plan.TargetReplicas == appliedReplicas {
 			return plan, nil
@@ -507,6 +505,20 @@ func (mgr *noahIndexerPodManager) NextReplicas(ctx context.Context, appliedRepli
 		}
 
 		mgr.cr.Status.Lifecycle = lifecycle
+		if len(membership.TimedOutPeerIDs) > 0 {
+			message := fmt.Sprintf(
+				"Cache-warm wait expired for Noah peers %s; continuing scale-out to %d replicas",
+				strings.Join(membership.TimedOutPeerIDs, ", "),
+				plan.TargetReplicas,
+			)
+			logging.FromContext(ctx).WarnContext(ctx, message,
+				"peerIDs", membership.TimedOutPeerIDs,
+				"timeout", mgr.cacheWarmTimeout,
+				"appliedReplicas", appliedReplicas,
+				"targetReplicas", plan.TargetReplicas,
+			)
+			k8sops.GetEventPublisher(ctx, mgr.cr).Warning(ctx, splcommon.EventReasonNoahCacheWarmTimeout, message)
+		}
 
 		return blocked, nil
 	}
@@ -1022,10 +1034,6 @@ func (mgr *noahIndexerPodManager) observeReady(ctx context.Context, appliedRepli
 		return noahIndexerOutcome{}, newNoahIndexerObservationError(err, previousPhase)
 	}
 
-	if observation.TimedOutPeerID != "" {
-		return noahIndexerOutcome{}, &noahIndexerCacheWarmTimeoutError{peerID: observation.TimedOutPeerID}
-	}
-
 	if lifecycle := mgr.cr.Status.Lifecycle; lifecycle != nil &&
 		lifecycle.Kind == enterpriseApi.IndexerClusterLifecycleScaleOut &&
 		lifecycle.Checkpoint == enterpriseApi.IndexerClusterLifecycleWaitingForMembership {
@@ -1034,17 +1042,12 @@ func (mgr *noahIndexerPodManager) observeReady(ctx context.Context, appliedRepli
 			return noahIndexerOutcome{}, err
 		}
 
-		membershipSatisfied := observation.AllReady
-		if !mgr.cacheWarmEnabled {
-			membershipSatisfied = observation.AllRegistered
-		}
-
 		if _, err := mgr.applyLifecycleObservation(indexerworkflow.LifecycleObservation{
 			StatefulSetUID:            mgr.statefulSet.UID,
 			StatefulSetReplicas:       appliedReplicas,
 			TargetPods:                targetPods,
 			Now:                       time.Now(),
-			SatisfiedTargetMembership: membershipSatisfied,
+			SatisfiedTargetMembership: observation.SatisfiesScaleOut(mgr.cacheWarmEnabled),
 		}); err != nil {
 			return noahIndexerOutcome{}, err
 		}
@@ -1249,19 +1252,6 @@ func waitForNoahIndexerWorkload(phase, previousPhase enterpriseApi.Phase, applie
 }
 
 func noahIndexerOutcomeFromError(err error, fallbackPhase enterpriseApi.Phase) (noahIndexerOutcome, error, bool) {
-	if cacheWarmTimeoutErr, ok := errors.AsType[*noahIndexerCacheWarmTimeoutError](err); ok {
-		message := cacheWarmTimeoutErr.Error()
-		return noahIndexerOutcome{
-			phase:        enterpriseApi.PhaseError,
-			phaseMessage: message,
-			condition: newNoahPeersReadyCondition(
-				metav1.ConditionFalse,
-				enterpriseApi.ReasonNoahCacheWarmTimeout,
-				message,
-			),
-		}, splcommon.NewTerminalError(splcommon.EventReasonNoahCacheWarmTimeout, message, cacheWarmTimeoutErr), true
-	}
-
 	if lifecycleErr, ok := errors.AsType[*noahIndexerLifecycleError](err); ok {
 		phase := lifecycleErr.phase
 		if phase == "" {
@@ -1351,14 +1341,6 @@ func noahIndexerLifecyclePhase(phase enterpriseApi.Phase) enterpriseApi.Phase {
 	default:
 		return enterpriseApi.PhasePending
 	}
-}
-
-type noahIndexerCacheWarmTimeoutError struct {
-	peerID string
-}
-
-func (err *noahIndexerCacheWarmTimeoutError) Error() string {
-	return fmt.Sprintf("Cache warming timed out for Noah peer %s", err.peerID)
 }
 
 type noahIndexerLifecycleError struct {
