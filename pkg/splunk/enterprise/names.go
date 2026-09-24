@@ -35,9 +35,6 @@ const (
 	// identifier, instanceType, index (ex: 0, 1, 2, ...)
 	statefulSetPodTemplateStr = "splunk-%s-%s-%d"
 
-	// identifier, instanceType, "headless" or "service"
-	serviceTemplateStr = "splunk-%s-%s-%s"
-
 	// identifier
 	defaultsTemplateStr = "splunk-%s-%s-defaults"
 
@@ -106,15 +103,28 @@ const (
 
 	manualAppUpdateCMStr = "splunk-%s-manual-app-update"
 
-	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:`cat /mnt/splunk-secrets/password` --answer-yes -push-default-apps true &> %s &"
+	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:%s --answer-yes -push-default-apps true &> %s &"
 
 	shcBundlePushCompleteStr = "Bundle has been pushed successfully to all the cluster members.\n"
 
 	shcBundlePushStatusCheckFile = "/operator-staging/appframework/.shcluster_bundle_status.txt"
 
-	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:`cat /mnt/splunk-secrets/password` --skip-validation --answer-yes"
+	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:%s --skip-validation --answer-yes"
 
-	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:`cat /mnt/splunk-secrets/password`"
+	// splunkFIPSProviderBannerStr is the line written to stderr by the Splunk CLI at
+	// startup on FIPS-enabled clusters.  Because the bundle push command redirects all
+	// output (&>) to the status file, this banner can appear in the file before the
+	// actual push result.
+	splunkFIPSProviderBannerStr = "FIPS provider enabled."
+
+	// splunkSSLCertWarnStr is the prefix of SSL certificate-related warnings emitted
+	// by the Splunk CLI to stderr.  On FIPS-enabled clusters these appear alongside the
+	// FIPS banner and must be treated as informational.  On non-FIPS clusters an SSL
+	// warning without a FIPS banner indicates a silent failure and should not suppress
+	// error detection.
+	splunkSSLCertWarnStr = "WARNING: Server Certificate"
+
+	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:%s"
 
 	idxcBundleAlreadyPresentStr = "No new bundle will be pushed. The cluster manager and peers already have this bundle"
 
@@ -197,7 +207,7 @@ version = 1.0.0
 `
 
 	telAppDefMetaConfString = `[]
-access = read : [ * ], write : [ admin ] 
+access = read : [ * ], write : [ admin ]
 `
 
 	// Command to create telemetry app on non SHC scenarios
@@ -207,15 +217,7 @@ access = read : [ * ], write : [ admin ]
 	createTelAppShcString = "mkdir -p %s/app_tel_for_sok/default/; mkdir -p %s/app_tel_for_sok/metadata/; printf '%%s' \"%s\" > %s/app_tel_for_sok/default/app.conf; printf '%%s' \"%s\" > %s/app_tel_for_sok/metadata/default.meta"
 
 	// Command to reload app configuration
-	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
-
-	// Name of the telemetry configmap: <namePrefix>-manager-telemetry
-	telConfigMapTemplateStr = "%smanager-telemetry"
-
-	// Name of the telemetry app: app_tel_for_sok
-	telAppNameStr     = "app_tel_for_sok"
-	telSOKVersionKey  = "version"
-	telLicenseInfoKey = "license_info"
+	telAppReloadString = "curl -k -u admin:%s https://localhost:8089/services/apps/local/_reload"
 
 	managerConfigMapTemplateStr = "%smanager-config"
 )
@@ -224,6 +226,17 @@ const (
 	livenessProbeLevelDefault int = iota
 	livenessProbeLevelOne
 )
+
+// shellQuote wraps s in single quotes for safe shell interpolation.
+// Embedded single quotes are escaped using the sequence: quote, backslash, quote, quote.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// redactSplunkAuth replaces adminPwd in cmd with **** for safe logging.
+func redactSplunkAuth(cmd, adminPwd string) string {
+	return strings.ReplaceAll(cmd, adminPwd, "****")
+}
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
 func GetSplunkDeploymentName(instanceType InstanceType, identifier string) string {
@@ -238,19 +251,6 @@ func GetSplunkStatefulsetName(instanceType InstanceType, identifier string) stri
 // GetSplunkStatefulsetPodName uses a template to name a specific pod within a Kubernetes StatefulSet for Splunk instances.
 func GetSplunkStatefulsetPodName(instanceType InstanceType, identifier string, index int32) string {
 	return fmt.Sprintf(statefulSetPodTemplateStr, identifier, instanceType, index)
-}
-
-// GetSplunkServiceName uses a template to name a Kubernetes Service for Splunk instances.
-func GetSplunkServiceName(instanceType InstanceType, identifier string, isHeadless bool) string {
-	var result string
-
-	if isHeadless {
-		result = fmt.Sprintf(serviceTemplateStr, identifier, instanceType, "headless")
-	} else {
-		result = fmt.Sprintf(serviceTemplateStr, identifier, instanceType, "service")
-	}
-
-	return result
 }
 
 // GetSplunkDefaultsName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
@@ -294,7 +294,7 @@ func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identi
 		fmt.Sprintf(
 			"%s.%s",
 			podName,
-			GetSplunkServiceName(instanceType, identifier, true),
+			splcommon.GetSplunkServiceName(instanceType, identifier, true),
 		))
 }
 
@@ -372,11 +372,6 @@ func GetLivenessDriverFileDir() string {
 // GetStartupScriptName returns the name of startup probe script on pod
 func GetStartupScriptName() string {
 	return startupScriptName
-}
-
-// GetTelemetryConfigMapName returns the name of telemetry configmap
-func GetTelemetryConfigMapName(namePrefix string) string {
-	return fmt.Sprintf(telConfigMapTemplateStr, namePrefix)
 }
 
 // GetManagerConfigMapName returns the name of manager configmap

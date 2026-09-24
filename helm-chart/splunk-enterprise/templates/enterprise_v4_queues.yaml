@@ -29,9 +29,14 @@ spec:
     {{- if .authRegion }}
     authRegion: {{ .authRegion | quote }}
     {{- end }}
-    {{- if .volumes }}
-    volumes:
-{{ toYaml .volumes | nindent 4 }}
+    {{- if .secretKeyRef }}
+    secretKeyRef:
+      awsAccessKey:
+        name: {{ .secretKeyRef.awsAccessKey.name | quote }}
+        key: {{ .secretKeyRef.awsAccessKey.key | quote }}
+      awsSecretKey:
+        name: {{ .secretKeyRef.awsSecretKey.name | quote }}
+        key: {{ .secretKeyRef.awsSecretKey.key | quote }}
     {{- end }}
   {{- end }}
 {{- end }}

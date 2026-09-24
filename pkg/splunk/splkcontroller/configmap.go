@@ -17,7 +17,10 @@ package splkcontroller
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"reflect"
+	"sort"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,15 +29,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ApplyConfigMap creates or updates a Kubernetes ConfigMap
 func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, configMap *corev1.ConfigMap) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyConfigMap").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "ApplyConfigMap",
 		"name", configMap.GetObjectMeta().GetName(),
 		"namespace", configMap.GetObjectMeta().GetNamespace())
 
@@ -53,14 +55,14 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 		// from the data on the configMap passed as an argument to this function
 		dataDifferent := false
 		if !reflect.DeepEqual(configMap.Data, current.Data) {
-			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
+			scopedLog.InfoContext(ctx, "updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.Data = configMap.Data
 			updateNeeded = true
 			dataDifferent = true
 			configMap = &current
 		}
 		if !reflect.DeepEqual(configMap.GetOwnerReferences(), current.GetOwnerReferences()) {
-			scopedLog.Info("Updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
+			scopedLog.InfoContext(ctx, "updating existing ConfigMap", "ResourceVerison", current.GetResourceVersion())
 			current.OwnerReferences = configMap.OwnerReferences
 			updateNeeded = true
 			configMap = &current
@@ -77,7 +79,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 				}
 			}
 		} else {
-			scopedLog.Info("No changes for ConfigMap")
+			scopedLog.InfoContext(ctx, "no changes for ConfigMap")
 		}
 
 	} else if k8serrors.IsNotFound(err) {
@@ -87,7 +89,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			retryCount := 0
 			gerr := client.Get(ctx, namespacedName, &current)
 			for ; gerr != nil; gerr = client.Get(ctx, namespacedName, &current) {
-				scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr.Error())
+				scopedLog.ErrorContext(ctx, "newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr)
 				time.Sleep(10 * time.Microsecond)
 				retryCount++
 				if retryCount > 20 {
@@ -118,6 +120,66 @@ func GetConfigMapResourceVersion(ctx context.Context, client splcommon.Controlle
 		return "", err
 	}
 	return configMap.ResourceVersion, nil
+}
+
+// GetConfigMapDataHash returns a short SHA256 hex digest of a ConfigMap's content.
+// Unlike ResourceVersion, this only changes when the mounted content itself changes, preventing
+// spurious pod rolls from metadata-only updates (label/annotation changes on the ConfigMap).
+//
+// items mirrors ConfigMapVolumeSource.Items: when non-empty only the listed keys are hashed,
+// matching the subset of files that will actually be visible in the mounted volume.
+func GetConfigMapDataHash(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, items []corev1.KeyToPath) (string, error) {
+	configMap, err := GetConfigMap(ctx, client, namespacedName)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+
+	// Build the set of keys to hash. When items is non-empty, only those keys are mounted
+	// in the container; hashing others would cause spurious pod rolls on unrelated edits.
+	var stringKeys []string
+	if len(items) > 0 {
+		for _, item := range items {
+			stringKeys = append(stringKeys, item.Key)
+		}
+	} else {
+		for k := range configMap.Data {
+			stringKeys = append(stringKeys, k)
+		}
+	}
+	// Sort for deterministic output regardless of map/slice iteration order.
+	sort.Strings(stringKeys)
+	for _, k := range stringKeys {
+		if v, ok := configMap.Data[k]; ok {
+			// Length-delimited framing: type marker + key length + key + value length + value.
+			// Prevents ambiguous collisions from values containing "=" or "\n" — e.g.
+			// {"a":"x\nb=y"} and {"a":"x","b":"y"} are distinct with this encoding.
+			fmt.Fprintf(h, "S %d %s %d\n", len(k), k, len(v))
+			h.Write([]byte(v))
+		}
+		if v, ok := configMap.BinaryData[k]; ok {
+			fmt.Fprintf(h, "B %d %s %d\n", len(k), k, len(v))
+			h.Write(v)
+		}
+	}
+
+	// When all keys are hashed (no Items filter), also include any BinaryData keys not
+	// already covered above.
+	if len(items) == 0 {
+		binaryKeys := make([]string, 0, len(configMap.BinaryData))
+		for k := range configMap.BinaryData {
+			if _, alreadyInData := configMap.Data[k]; !alreadyInData {
+				binaryKeys = append(binaryKeys, k)
+			}
+		}
+		sort.Strings(binaryKeys)
+		for _, k := range binaryKeys {
+			fmt.Fprintf(h, "B %d %s %d\n", len(k), k, len(configMap.BinaryData[k]))
+			h.Write(configMap.BinaryData[k])
+		}
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil))[:16], nil
 }
 
 // GetMCConfigMap gets the MC ConfigMap resource required for that MC

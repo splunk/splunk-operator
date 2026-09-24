@@ -15,14 +15,16 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"testing"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -34,7 +36,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func init() {
@@ -276,10 +278,12 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	}
 	newURLsAdded = false
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
+	// Scale-down case: current has two CR-owned URLs (test-a,test-b), new keeps only test-b.
+	// The stale "test-a" entry must be removed -> Update is expected.
 	env = []corev1.EnvVar{
 		{Name: "A", Value: "test-b"},
 	}
-	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -388,6 +392,51 @@ func TestAddURLsConfigMapMultipleEnvVars(t *testing.T) {
 		}
 	})
 
+	t.Run("Scale down removes stale CR URL", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_STANDALONE_URL": "splunk-test-cr-standalone-0,splunk-test-cr-standalone-1",
+			},
+		}
+
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_STANDALONE_URL", Value: "splunk-test-cr-standalone-0"},
+		}
+
+		AddURLsConfigMap(configMap, "test-cr", newURLs)
+
+		got := configMap.Data["SPLUNK_STANDALONE_URL"]
+		want := "splunk-test-cr-standalone-0"
+		if got != want {
+			t.Errorf("Stale peer not removed on scale-down. Got: %q, Want: %q", got, want)
+		}
+	})
+
+	t.Run("Scale down preserves URLs from other CRs", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_STANDALONE_URL": "splunk-test-cr-standalone-0,splunk-test-cr-standalone-1,splunk-other-cr-standalone-0",
+			},
+		}
+
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_STANDALONE_URL", Value: "splunk-test-cr-standalone-0"},
+		}
+
+		AddURLsConfigMap(configMap, "test-cr", newURLs)
+
+		got := configMap.Data["SPLUNK_STANDALONE_URL"]
+		if !strings.Contains(got, "splunk-test-cr-standalone-0") {
+			t.Errorf("Surviving CR URL missing. Got: %q", got)
+		}
+		if strings.Contains(got, "splunk-test-cr-standalone-1") {
+			t.Errorf("Stale CR URL not removed. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-other-cr-standalone-0") {
+			t.Errorf("Other CR URL was incorrectly removed. Got: %q", got)
+		}
+	})
+
 	t.Run("Empty ConfigMap with multiple URLs", func(t *testing.T) {
 		configMap := &corev1.ConfigMap{
 			Data: map[string]string{},
@@ -409,6 +458,87 @@ func TestAddURLsConfigMapMultipleEnvVars(t *testing.T) {
 			}
 		}
 	})
+
+	// Regression: reconciling a CR whose name is a prefix of another's must
+	// not evict the longer-named CR's pod URLs ("search-head" vs "search-head-adhoc").
+	t.Run("CR name is prefix of another CR name does not evict peer", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_STANDALONE_URL": "splunk-search-head-adhoc-standalone-0",
+			},
+		}
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_STANDALONE_URL", Value: "splunk-search-head-standalone-0"},
+		}
+		AddURLsConfigMap(configMap, "search-head", newURLs)
+
+		got := configMap.Data["SPLUNK_STANDALONE_URL"]
+		if !strings.Contains(got, "splunk-search-head-adhoc-standalone-0") {
+			t.Errorf("adhoc CR URL was incorrectly evicted by prefix-named CR. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-search-head-standalone-0") {
+			t.Errorf("new CR URL was not added. Got: %q", got)
+		}
+
+		// Reverse direction: reconciling the longer-named CR must not touch the sibling.
+		adhocURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_STANDALONE_URL", Value: "splunk-search-head-adhoc-standalone-0"},
+		}
+		AddURLsConfigMap(configMap, "search-head-adhoc", adhocURLs)
+
+		got = configMap.Data["SPLUNK_STANDALONE_URL"]
+		if !strings.Contains(got, "splunk-search-head-adhoc-standalone-0") {
+			t.Errorf("adhoc CR URL missing after self-reconcile. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-search-head-standalone-0") {
+			t.Errorf("sibling CR URL was incorrectly evicted by adhoc reconcile. Got: %q", got)
+		}
+	})
+
+	// Regression: same prefix-name ambiguity for service URLs ("cm" vs "cm-extra").
+	t.Run("Service URL with prefix CR name does not evict sibling", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_CLUSTER_MANAGER_URL": "splunk-cm-extra-cluster-manager-service",
+			},
+		}
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_CLUSTER_MANAGER_URL", Value: "splunk-cm-cluster-manager-service"},
+		}
+		AddURLsConfigMap(configMap, "cm", newURLs)
+
+		got := configMap.Data["SPLUNK_CLUSTER_MANAGER_URL"]
+		if !strings.Contains(got, "splunk-cm-extra-cluster-manager-service") {
+			t.Errorf("sibling service URL was incorrectly evicted. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-cm-cluster-manager-service") {
+			t.Errorf("new service URL was not added. Got: %q", got)
+		}
+	})
+
+	// Regression: a sibling CR whose name embeds the shorter CR's kind segment
+	// ("cm" vs "cm-cluster-manager-extra") yields a URL that contains the
+	// shorter CR's derived prefix as a substring; ownership must compare
+	// derived prefixes for equality, not via substring.
+	t.Run("Sibling CR embedding shorter kind segment is not evicted", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_CLUSTER_MANAGER_URL": "splunk-cm-cluster-manager-extra-cluster-manager-service",
+			},
+		}
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_CLUSTER_MANAGER_URL", Value: "splunk-cm-cluster-manager-service"},
+		}
+		AddURLsConfigMap(configMap, "cm", newURLs)
+
+		got := configMap.Data["SPLUNK_CLUSTER_MANAGER_URL"]
+		if !strings.Contains(got, "splunk-cm-cluster-manager-extra-cluster-manager-service") {
+			t.Errorf("sibling CR URL was incorrectly evicted by prefix substring match. Got: %q", got)
+		}
+		if !strings.Contains(got, "splunk-cm-cluster-manager-service") {
+			t.Errorf("new CR URL was not added. Got: %q", got)
+		}
+	})
 }
 
 func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
@@ -425,6 +555,12 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
+	c.AddObject(&enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack2",
+			Namespace: "test",
+		},
+	})
 	test := func(want string) {
 		f := func() (interface{}, error) {
 			if err := validateMonitoringConsoleSpec(ctx, c, &cr); err != nil {
@@ -493,11 +629,9 @@ func TestMonitoringConsoleSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	c := spltest.NewMockClient()
 	// Attempt to apply the monitoring console spec
 	_, err := ApplyMonitoringConsole(ctx, c, &mc)
-	// Assert that an error is returned
-	if err == nil {
-		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
-	} else if err.Error() != "license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information" {
-		t.Errorf("Unexpected error message: %v", err)
+	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
 }
 func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
@@ -616,7 +750,7 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	if err != nil {
 		t.Error(err.Error())
 	}
-	splclient.RegisterRemoteDataClient(ctx, "aws")
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	Sizes := []int64{10, 20, 30}
@@ -663,14 +797,14 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	var vol enterpriseApi.VolumeSpec
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
-		vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+		vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-		getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
+		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 		remoteDataClientMgr := &RemoteDataClientManager{client: client,
 			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 			vol:      &vol,
@@ -680,7 +814,7 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
+			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
@@ -691,7 +825,7 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			continue
 		}
 		var mockResponse spltest.MockRemoteDataClient
-		mockResponse, err = splclient.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
+		mockResponse, err = splstorage.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -742,7 +876,7 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	if err != nil {
 		t.Error(err.Error())
 	}
-	splclient.RegisterRemoteDataClient(ctx, "aws")
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
 	Keys := []string{"admin_app.tgz"}
 	Sizes := []int64{10}
@@ -766,13 +900,13 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
 	var vol enterpriseApi.VolumeSpec
 	appSource := appFrameworkRef.AppSources[0]
-	vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
+	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 	remoteDataClientMgr := &RemoteDataClientManager{
 		client:          client,
 		cr:              &cr,
@@ -785,7 +919,7 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		},
 		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-			location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
+			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 			// Get the mock client
 			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
@@ -847,8 +981,7 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -909,7 +1042,7 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	c.Create(ctx, service)
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
-	// simulate create clustermanager instance before reconcilation
+	// simulate create clustermanager instance before reconciliation
 	c.Create(ctx, monitoringconsole)
 	_, err := ApplyMonitoringConsole(ctx, c, monitoringconsole)
 	if err != nil {
@@ -1136,8 +1269,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).

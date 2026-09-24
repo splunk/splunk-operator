@@ -10,6 +10,12 @@ image:
 splunk-operator:
   enabled: true
 
+# Deploy Splunk Universal Forwarder chart alongside splunk-enterprise
+# Disabled by default; enable with --set splunk-universalforwarder.enabled=true
+# When enabling, also set splunk-universalforwarder.splunkConfig.forwardServer or splunkConfig.deploymentServer
+splunk-universalforwarder:
+  enabled: false
+
 sva:
 
   # Single Server Deployment (S1)
@@ -82,6 +88,9 @@ clusterManager:
   # Deploy a cluster manager instance
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   # Specify the custom resource name
   name: "cm"
 
@@ -94,7 +103,8 @@ clusterManager:
 
   additionalAnnotations: {}
 
-
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   # Splunk Enterprise App repository
   # Specifies remote App location and scope for Splunk App management
@@ -267,6 +277,9 @@ indexerCluster:
 
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   name: "idxc"
 
   namespaceOverride: ""
@@ -274,6 +287,9 @@ indexerCluster:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   replicaCount: 1
 
@@ -358,6 +374,9 @@ searchHeadCluster:
 
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   name: "shc"
 
   namespaceOverride: ""
@@ -365,6 +384,9 @@ searchHeadCluster:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   replicaCount: 1
 
@@ -473,6 +495,9 @@ monitoringConsole:
 
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   name: "mc"
 
   namespaceOverride: ""
@@ -480,6 +505,9 @@ monitoringConsole:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   appRepo: {}
     # appsRepoPollIntervalSeconds:
@@ -577,6 +605,9 @@ licenseManager:
 
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   name: "lm"
 
   namespaceOverride: ""
@@ -584,6 +615,9 @@ licenseManager:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   appRepo: {}
     # appsRepoPollIntervalSeconds:
@@ -692,6 +726,9 @@ standalone:
 
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   name: "stdln"
 
   namespaceOverride: ""
@@ -699,6 +736,9 @@ standalone:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   replicaCount: 1
 
@@ -821,6 +861,9 @@ ingestorCluster:
 
   enabled: false
 
+  # Disable operator-provided CPU and memory request/limit defaults
+  disableResourceDefaults: false
+
   name: "ingestor"
 
   namespaceOverride: ""
@@ -828,6 +871,9 @@ ingestorCluster:
   additionalLabels: {}
 
   additionalAnnotations: {}
+
+  # Add annotations to Splunk instance pods. Can override default Istio traffic annotations.
+  podAnnotations: {}
 
   replicaCount: 3
 

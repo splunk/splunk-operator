@@ -17,12 +17,13 @@ package splkcontroller
 
 import (
 	"context"
+
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -96,9 +97,8 @@ type splunkReconciler struct {
 func (r splunkReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	instance := r.splctrl.GetInstance()
 	gvk := instance.GroupVersionKind()
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("Reconcile").WithValues("Group", gvk.Group, "Version", gvk.Version, "Kind", gvk.Kind, "Namespace", request.Namespace, "Name", request.Name)
-	scopedLog.Info("Reconciling custom resource")
+	scopedLog := logging.FromContext(ctx).With("func", "Reconcile", "Group", gvk.Group, "Version", gvk.Version, "Kind", gvk.Kind, "Namespace", request.Namespace, "Name", request.Name)
+	scopedLog.InfoContext(ctx, "reconciling custom resource")
 
 	// Fetch the custom resource instance
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
@@ -121,14 +121,14 @@ func (r splunkReconciler) Reconcile(ctx context.Context, request reconcile.Reque
 
 	// log what happens next
 	if err != nil {
-		scopedLog.Error(err, "Reconciliation requeued", "RequeueAfter", result.RequeueAfter)
+		scopedLog.ErrorContext(ctx, "reconciliation requeued", "requeueAfter", result.RequeueAfter, "error", err)
 		return result, nil
 	}
 	if result.Requeue {
-		scopedLog.Info("Reconciliation requeued", "RequeueAfter", result.RequeueAfter)
+		scopedLog.InfoContext(ctx, "reconciliation requeued", "requeueAfter", result.RequeueAfter)
 		return result, nil
 	}
 
-	scopedLog.Info("Reconciliation complete")
+	scopedLog.InfoContext(ctx, "reconciliation complete")
 	return reconcile.Result{}, nil
 }

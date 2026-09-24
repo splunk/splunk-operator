@@ -20,13 +20,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func init() {
@@ -53,7 +52,7 @@ func TestApplyObjectStorage(t *testing.T) {
 	_ = enterpriseApi.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := newFakeClientBuilder(scheme).Build()
 
 	// Object definitions
 	os := &enterpriseApi.ObjectStorage{

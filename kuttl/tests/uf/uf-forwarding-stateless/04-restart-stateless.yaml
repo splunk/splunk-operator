@@ -1,0 +1,6 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Delete the UF pod — Deployment recreates it; Splunk re-initialises from scratch
+  - command: bash -c "kubectl delete pod -n $NAMESPACE $(kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=splunk-universalforwarder -o jsonpath='{.items[0].metadata.name}') && echo Deleted-pod-waiting-for-replacement"
+    namespaced: true

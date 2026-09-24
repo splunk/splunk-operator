@@ -1,0 +1,27 @@
+Splunk Universal Forwarder has been deployed as a Deployment.
+
+VERIFY PODS
+  Check that {{ .Values.replicaCount }} forwarder pod(s) are running:
+
+  kubectl get pods -n {{ include "splunk-universalforwarder.namespace" . }} -o wide
+
+  You should see {{ .Values.replicaCount }} pod(s) in RUNNING state. If pods are Pending or
+  CrashLoopBackOff, check events with:
+  kubectl describe pods -n {{ include "splunk-universalforwarder.namespace" . }} -l app.kubernetes.io/name={{ include "splunk-universalforwarder.name" . }}
+
+FORWARDING CONFIGURATION
+  {{- if .Values.splunkConfig.forwardServer }}
+  Forwarding to indexer: {{ .Values.splunkConfig.forwardServer }}
+  {{- end }}
+  {{- if .Values.splunkConfig.deploymentServer }}
+  Managed by Deployment Server: {{ .Values.splunkConfig.deploymentServer }}
+  {{- end }}
+
+PASSWORD SECRET
+  The Splunk password is stored in a Kubernetes Secret:
+
+  kubectl get secret {{ include "splunk-universalforwarder.fullname" . }} -n {{ include "splunk-universalforwarder.namespace" . }}
+
+  IMPORTANT: The default password is "changeme". Change it before production
+  use by setting splunkConfig.password in your values override, or by
+  providing a pre-existing Secret via splunkConfig.existingSecret.

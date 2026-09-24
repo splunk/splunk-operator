@@ -19,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 func TestGetSplunkDeploymentName(t *testing.T) {
@@ -55,9 +57,9 @@ func TestGetSplunkStatefulsetPodName(t *testing.T) {
 
 func TestGetSplunkServiceName(t *testing.T) {
 	test := func(want string, instanceType InstanceType, identifier string, isHeadless bool) {
-		got := GetSplunkServiceName(instanceType, identifier, isHeadless)
+		got := splcommon.GetSplunkServiceName(instanceType, identifier, isHeadless)
 		if got != want {
-			t.Errorf("GetSplunkServiceName(\"%s\",\"%s\",%t) = %s; want %s",
+			t.Errorf("splcommon.GetSplunkServiceName(\"%s\",\"%s\",%t) = %s; want %s",
 				instanceType.ToString(), identifier, isHeadless, got, want)
 		}
 	}

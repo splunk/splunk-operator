@@ -30,19 +30,20 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	"github.com/splunk/splunk-operator/pkg/logging"
+
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -50,7 +51,6 @@ import (
 )
 
 func init() {
-	fmt.Printf("init is called here from test")
 	initGlobalResourceTracker()
 }
 
@@ -112,9 +112,9 @@ func TestGetRemoteStorageClient(t *testing.T) {
 		return nil
 	}
 
-	splclient.RegisterRemoteDataClient(ctx, "aws")
-	getClientWrapper := splclient.RemoteDataClientsMap["aws"]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
+	getClientWrapper := splstorage.RemoteDataClientsMap["aws"]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splstorage.NewMockAWSS3Client)
 
 	// Cover no secret key, empty GetInitFunc case
 	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)
@@ -385,7 +385,7 @@ func TestGetClusterMasterExtraEnv(t *testing.T) {
 	want := []corev1.EnvVar{
 		{
 			Name:  splcommon.ClusterManagerURL,
-			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
+			Value: splcommon.GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)
@@ -406,7 +406,7 @@ func TestGetClusterManagerExtraEnv(t *testing.T) {
 	want := []corev1.EnvVar{
 		{
 			Name:  splcommon.ClusterManagerURL,
-			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
+			Value: splcommon.GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)
@@ -641,8 +641,8 @@ func TestGetLocalAppFileName(t *testing.T) {
 }
 
 func TestCheckIfAnAppIsActiveOnRemoteStore(t *testing.T) {
-	var remoteObjList []*splclient.RemoteObject
-	var entry *splclient.RemoteObject
+	var remoteObjList []*splcommon.RemoteObject
+	var entry *splcommon.RemoteObject
 
 	tmpAppName := "xys.spl"
 	entry = allocateRemoteObject("d41d8cd98f00", tmpAppName, 2322, nil)
@@ -922,7 +922,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	var appDeployContext enterpriseApi.AppDeploymentContext
-	var remoteObjListMap map[string]splclient.RemoteDataListResponse
+	var remoteObjListMap map[string]splcommon.RemoteDataListResponse
 	var appFramworkConf enterpriseApi.AppFrameworkSpec = cr.Spec.AppFrameworkConfig
 	var err error
 
@@ -930,7 +930,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 	}
 
-	var RemoteDataListResponse splclient.RemoteDataListResponse
+	var RemoteDataListResponse splcommon.RemoteDataListResponse
 
 	// Test-1: Empty remoteObjectList Map should return an error
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
@@ -941,7 +941,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// Test-2: Valid remoteObjectList should not cause an error
 	startAppPathAndName := "bucketpath1/bpath2/locationpath1/lpath2/adminCategoryOne.tgz"
-	remoteObjListMap = make(map[string]splclient.RemoteDataListResponse)
+	remoteObjListMap = make(map[string]splcommon.RemoteDataListResponse)
 	// Prepare a RemoteDataListResponse
 	RemoteDataListResponse.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	// Set the app source with a matching one
@@ -1215,13 +1215,13 @@ func TestGetAvailableDiskSpaceShouldFail(t *testing.T) {
 	_ = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
-	size, _ := getAvailableDiskSpace(ctx)
+	size, _, _ := getAvailableDiskSpace(ctx)
 	if size == 0 {
 		t.Errorf("getAvailableDiskSpace should have returned a non-zero size.")
 	}
 }
 
-func TestIsAppExtentionValid(t *testing.T) {
+func TestIsAppExtensionValid(t *testing.T) {
 	if !isAppExtensionValid("testapp.spl") || !isAppExtensionValid("testapp.tgz") || !isAppExtensionValid("testapp.tar.gz") {
 		t.Errorf("failed to detect valid app extension")
 	}
@@ -1260,8 +1260,8 @@ func TestHasAppRepoCheckTimerExpired(t *testing.T) {
 	}
 }
 
-func allocateRemoteObject(etag string, key string, Size int64, lastModified *time.Time) *splclient.RemoteObject {
-	var remoteObj splclient.RemoteObject
+func allocateRemoteObject(etag string, key string, Size int64, lastModified *time.Time) *splcommon.RemoteObject {
+	var remoteObj splcommon.RemoteObject
 
 	remoteObj.Etag = &etag
 	remoteObj.Key = &key
@@ -1271,9 +1271,9 @@ func allocateRemoteObject(etag string, key string, Size int64, lastModified *tim
 	return &remoteObj
 }
 
-func createRemoteObjectList(etag string, key string, Size int64, lastModified *time.Time, count uint16) []*splclient.RemoteObject {
-	var remoteObjList []*splclient.RemoteObject
-	var remoteObj *splclient.RemoteObject
+func createRemoteObjectList(etag string, key string, Size int64, lastModified *time.Time, count uint16) []*splcommon.RemoteObject {
+	var remoteObjList []*splcommon.RemoteObject
+	var remoteObj *splcommon.RemoteObject
 
 	for i := 1; i <= int(count); i++ {
 		tag := strconv.Itoa(i)
@@ -1881,7 +1881,7 @@ func TestSetInstallSetForClusterScopedApps(t *testing.T) {
 				FailCount: 0,
 			},
 			ObjectHash: testHashes[index],
-			Size:       uint64(testSizes[index]),
+			Size:       int64(testSizes[index]),
 		}
 	}
 
@@ -2070,8 +2070,8 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 		t.Errorf("Expected appPkgLocal Path %s, but got %s", expectedAppPkgLocalPath, calculatedAppPkgLocalPath)
 	}
 
-	// When the explicit volume is set for the app framework, that path should be used for the app package location
-	splcommon.AppDownloadVolume = "/opt/splunk/appframework"
+	// When the resolved download volume differs from the temp fallback, that path should be used for the app package location
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = "/opt/splunk/appframework"
 	calculatedAppPkgLocalPath = getAppPackageLocalPath(ctx, worker)
 	expectedAppPkgLocalPath = "/opt/splunk/appframework/downloadedApps/test/ClusterMaster/stack1/local/appSrc1/testApp.spl_bcda23232a89"
 	if calculatedAppPkgLocalPath != expectedAppPkgLocalPath {
@@ -2090,9 +2090,8 @@ func TestInitGlobalResourceTracker(t *testing.T) {
 		t.Errorf("operatorResourceTracker or commonResourceTracker should have been initialized")
 	}
 
-	// When the volume exists, should not return an error
-	splcommon.AppDownloadVolume = "/"
-	initGlobalResourceTracker()
+	// Whether or not splcommon.AppDownloadVolume is mounted, initStorageTracker falls back to
+	// TmpAppDownloadDir, so availableDiskSpace should always resolve to a non-zero value.
 	if operatorResourceTracker.storage.availableDiskSpace == 0 {
 		t.Errorf("availableDiskSpace should not be 0")
 	}
@@ -2108,6 +2107,7 @@ func TestGetResourceMutex(t *testing.T) {
 }
 
 func TestUpdateStorageTracker(t *testing.T) {
+	defer initGlobalResourceTracker()
 	ctx := context.TODO()
 	// When the resource tracker is not initialized, should return an error
 	operatorResourceTracker = nil
@@ -2116,25 +2116,20 @@ func TestUpdateStorageTracker(t *testing.T) {
 		t.Errorf("When the operator resource tracker is not initialized, should return an error")
 	}
 
-	// When the volume is not configured, should return an error
-	splcommon.AppDownloadVolume = "/non-existingdir"
-	err = updateStorageTracker(ctx)
-	if err == nil {
-		t.Errorf("When the volume doesn't exist should return an error")
-	}
-
-	// When the volume exists, should not return an error
+	// When the storage tracker is initialized, should not return an error, regardless of
+	// whether splcommon.AppDownloadVolume is mounted, since getAvailableDiskSpace falls back
+	// to TmpAppDownloadDir instead of failing.
 	operatorResourceTracker = &globalResourceTracker{
 		storage: &storageTracker{},
 	}
-	splcommon.AppDownloadVolume = "/"
 	err = updateStorageTracker(ctx)
 	if err != nil {
-		t.Errorf("When the volume exists should not return an error. Error: %v", err)
+		t.Errorf("When the storage tracker is initialized should not return an error. Error: %v", err)
 	}
 }
 
-func TestIsPersistantVolConfigured(t *testing.T) {
+func TestIsPersistentVolConfigured(t *testing.T) {
+	defer initGlobalResourceTracker()
 	// when the resource tracker not initialized, should return false
 	operatorResourceTracker = nil
 	if isPersistentVolConfigured() {
@@ -2155,6 +2150,7 @@ func TestIsPersistantVolConfigured(t *testing.T) {
 }
 
 func TestReserveStorage(t *testing.T) {
+	defer initGlobalResourceTracker()
 	// when the resource tracker is not intiailzed, should return an error
 	operatorResourceTracker = nil
 
@@ -2183,6 +2179,7 @@ func TestReserveStorage(t *testing.T) {
 }
 
 func TestReleaseStorage(t *testing.T) {
+	defer initGlobalResourceTracker()
 	// When the resource tracker not initialized, should return an error
 	operatorResourceTracker = nil
 
@@ -2524,19 +2521,16 @@ func TestCheckAndMigrateAppDeployStatus(t *testing.T) {
 		t.Errorf("unable to apply statefulset")
 	}
 
-	defaultVol := splcommon.AppDownloadVolume
-	splcommon.AppDownloadVolume = "/tmp/testdir"
-	defer func() {
-		os.RemoveAll(splcommon.AppDownloadVolume)
-		splcommon.AppDownloadVolume = defaultVol
-	}()
+	// to pass the validation stage, add the directory to download apps
+	resolvedVolume := filepath.Join(t.TempDir(), "appdownload")
+	defer func(defaultVol string) {
+		operatorResourceTracker.storage.resolvedAppDownloadVolume = defaultVol
+	}(operatorResourceTracker.storage.resolvedAppDownloadVolume)
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = resolvedVolume
 
-	_, err = os.Stat(splcommon.AppDownloadVolume)
-	if os.IsNotExist(err) {
-		err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-		if err != nil {
-			t.Errorf("Unable to create the directory, error: %v", err)
-		}
+	err = os.MkdirAll(resolvedVolume, 0755)
+	if err != nil {
+		t.Errorf("Unable to create the directory, error: %v", err)
 	}
 
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, appDeployContext, appFrameworkConfig, true)
@@ -2598,8 +2592,7 @@ func TestUpdateReconcileRequeueTime(t *testing.T) {
 	//  to test the value
 	var result *reconcile.Result
 	ctx := context.TODO()
-	// set logger in context
-	ctx = log.IntoContext(ctx, log.Log)
+	ctx = logging.WithLogger(ctx, logging.FromContext(ctx))
 	rqTime := time.Duration(time.Second * 12)
 
 	// failure when result is nil
@@ -2626,8 +2619,7 @@ func TestUpdateCRStatus(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -2668,7 +2660,7 @@ func TestUpdateCRStatus(t *testing.T) {
 	updateCRStatus(ctx, c, standalone, nil)
 
 	// Creating a standalone, and updating the CR will cover the happy path
-	// simulate create standalone instance before reconcilation
+	// simulate create standalone instance before reconciliation
 	err := c.Create(ctx, standalone)
 	if err != nil {
 		t.Errorf("standalone CR creation failed.")
@@ -2690,8 +2682,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -2737,7 +2728,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err := fetchCurrentCRWithStatusUpdate(ctx, c, &stdln, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "Standalone" {
+	} else if _, ok := receivedCR.(*enterpriseApi.Standalone); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2782,7 +2773,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &lmCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "LicenseMaster" {
+	} else if _, ok := receivedCR.(*enterpriseApiV3.LicenseMaster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2816,7 +2807,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &mcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "MonitoringConsole" {
+	} else if _, ok := receivedCR.(*enterpriseApi.MonitoringConsole); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2850,7 +2841,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &cmCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "ClusterMaster" {
+	} else if _, ok := receivedCR.(*enterpriseApiV3.ClusterMaster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2886,7 +2877,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &idxcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "IndexerCluster" {
+	} else if _, ok := receivedCR.(*enterpriseApi.IndexerCluster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2922,7 +2913,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "SearchHeadCluster" {
+	} else if _, ok := receivedCR.(*enterpriseApi.SearchHeadCluster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 
@@ -2931,7 +2922,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, &err)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "SearchHeadCluster" {
+	} else if _, ok := receivedCR.(*enterpriseApi.SearchHeadCluster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	} else if receivedCR.(*enterpriseApi.SearchHeadCluster).Status.Message != "testerror" {
 		t.Errorf("Failed to update error message")
@@ -2970,7 +2961,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &ic, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
-	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "IngestorCluster" {
+	} else if _, ok := receivedCR.(*enterpriseApi.IngestorCluster); !ok {
 		t.Errorf("Failed to fetch the CR")
 	}
 }
@@ -3309,8 +3300,7 @@ func TestGetCurrentImage(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -3348,7 +3338,7 @@ func TestSecretMissingEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	client := newFakeClientBuilder(sch).Build()
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
@@ -3396,7 +3386,7 @@ func TestSecretInvalidEmptyAccessKeyEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	client := newFakeClientBuilder(sch).Build()
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
@@ -3455,7 +3445,7 @@ func TestSecretInvalidEmptySecretKeyEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	client := newFakeClientBuilder(sch).Build()
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
@@ -3514,7 +3504,7 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	client := newFakeClientBuilder(sch).Build()
 	ctx := context.TODO()
 
 	recorder := &mockEventRecorder{events: []mockEvent{}}
@@ -3529,8 +3519,8 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-s3-secret", Namespace: "test"},
 		Data: map[string][]byte{
-			"s3_access_key": []byte("AKIAIOSFODNN7EXAMPLE"),
-			"s3_secret_key": []byte("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+			"s3_access_key": []byte("abc"),
+			"s3_secret_key": []byte("123"),
 		},
 	}
 	if err := client.Create(ctx, secret); err != nil {
@@ -3539,15 +3529,15 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 
 	// Register a mock provider that always returns an error from getClient
 	mockProvider := "mock-failing-provider"
-	splclient.RemoteDataClientsMap[mockProvider] = splclient.GetRemoteDataClientWrapper{
-		GetRemoteDataClient: func(ctx context.Context, bucket, accessKeyID, secretAccessKey, prefix, startAfter, region, endpoint string, fn splclient.GetInitFunc) (splclient.RemoteDataClient, error) {
+	splstorage.RemoteDataClientsMap[mockProvider] = splstorage.GetRemoteDataClientWrapper{
+		GetRemoteDataClient: func(ctx context.Context, bucket, accessKeyID, secretAccessKey, prefix, startAfter, region, endpoint string, fn splcommon.GetInitFunc) (splcommon.RemoteDataClient, error) {
 			return nil, fmt.Errorf("mock connection timeout")
 		},
 		GetInitFunc: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			return nil
 		},
 	}
-	defer delete(splclient.RemoteDataClientsMap, mockProvider)
+	defer delete(splstorage.RemoteDataClientsMap, mockProvider)
 
 	vol := &enterpriseApi.VolumeSpec{
 		Name:      "test-vol",
@@ -3579,4 +3569,175 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 	if !found {
 		t.Errorf("Expected AppRepositoryConnectionFailed event to be published")
 	}
+}
+
+func TestApplyIngestorPodDisruptionBudget(t *testing.T) {
+	ctx := context.TODO()
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	utilruntime.Must(policyv1.AddToScheme(sch))
+
+	makeCR := func(replicas int32) *enterpriseApi.IngestorCluster {
+		return &enterpriseApi.IngestorCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "test",
+			},
+			Spec: enterpriseApi.IngestorClusterSpec{
+				Replicas: replicas,
+			},
+		}
+	}
+
+	pdbName := GetSplunkStatefulsetName(SplunkIngestor, "test")
+
+	// Create case: PDB does not exist yet
+	t.Run("create", func(t *testing.T) {
+		c := newFakeClientBuilder(sch).Build()
+		cr := makeCR(3)
+		if err := ApplyIngestorPodDisruptionBudget(ctx, c, cr); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var pdb policyv1.PodDisruptionBudget
+		if err := c.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: "test"}, &pdb); err != nil {
+			t.Fatalf("PDB not found after create: %v", err)
+		}
+		if pdb.Spec.MaxUnavailable == nil {
+			t.Fatal("MaxUnavailable is nil")
+		}
+		if pdb.Spec.MaxUnavailable.IntValue() != 1 {
+			t.Errorf("MaxUnavailable = %d; want 1", pdb.Spec.MaxUnavailable.IntValue())
+		}
+		wantInstance := "splunk-test-ingestor"
+		if got := pdb.Spec.Selector.MatchLabels["app.kubernetes.io/instance"]; got != wantInstance {
+			t.Errorf("spec selector instance = %q; want %q", got, wantInstance)
+		}
+		if got := pdb.Labels["app.kubernetes.io/managed-by"]; got != "splunk-operator" {
+			t.Errorf("metadata label managed-by = %q; want splunk-operator", got)
+		}
+		if got := pdb.Labels["app.kubernetes.io/instance"]; got != wantInstance {
+			t.Errorf("metadata label instance = %q; want %q", got, wantInstance)
+		}
+	})
+
+	// Conflict case: PDB with matching labels exists but is owned by a different CR
+	t.Run("error-when-owned-by-other-cr", func(t *testing.T) {
+		foreign := &policyv1.PodDisruptionBudget{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pdbName,
+				Namespace: "test",
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "splunk-operator",
+					"app.kubernetes.io/instance":   "splunk-test-ingestor",
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{UID: "some-other-uid"},
+				},
+			},
+		}
+		c := newFakeClientBuilder(sch).WithObjects(foreign).Build()
+		cr := makeCR(3)
+		if err := ApplyIngestorPodDisruptionBudget(ctx, c, cr); err == nil {
+			t.Fatal("expected error for PDB owned by different CR, got nil")
+		}
+	})
+
+	// Idempotent case: PDB already exists and is owned by this CR; must not be updated
+	t.Run("no-update-when-exists", func(t *testing.T) {
+		c := newFakeClientBuilder(sch).Build()
+		cr := makeCR(3)
+
+		// First call creates the PDB
+		if err := ApplyIngestorPodDisruptionBudget(ctx, c, cr); err != nil {
+			t.Fatalf("unexpected error on create: %v", err)
+		}
+
+		// Second call (different replica count) must be a no-op
+		cr2 := makeCR(5)
+		if err := ApplyIngestorPodDisruptionBudget(ctx, c, cr2); err != nil {
+			t.Fatalf("unexpected error on second call: %v", err)
+		}
+
+		// MaxUnavailable must still be 1
+		var pdb policyv1.PodDisruptionBudget
+		if err := c.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: "test"}, &pdb); err != nil {
+			t.Fatalf("PDB not found: %v", err)
+		}
+		if pdb.Spec.MaxUnavailable == nil || pdb.Spec.MaxUnavailable.IntValue() != 1 {
+			t.Errorf("MaxUnavailable changed after scale; want 1")
+		}
+	})
+}
+
+func TestClearAppContextIfSourcesRemoved(t *testing.T) {
+	makeDeployStatus := func() map[string]enterpriseApi.AppSrcDeployInfo {
+		return map[string]enterpriseApi.AppSrcDeployInfo{
+			"myAppSrc": {},
+		}
+	}
+
+	t.Run("spec empty and status non-nil clears context", func(t *testing.T) {
+		spec := &enterpriseApi.AppFrameworkSpec{AppSources: nil}
+		ctx := &enterpriseApi.AppDeploymentContext{
+			AppsSrcDeployStatus:                 makeDeployStatus(),
+			IsDeploymentInProgress:              true,
+			AppFrameworkConfig:                  enterpriseApi.AppFrameworkSpec{AppSources: []enterpriseApi.AppSourceSpec{{Name: "stale"}}},
+			LastAppInfoCheckTime:                12345,
+			AppsRepoStatusPollInterval:          60,
+			AppsStatusMaxConcurrentAppDownloads: 5,
+			BundlePushStatus:                    enterpriseApi.BundlePushTracker{RetryCount: 3},
+		}
+		got := clearAppContextIfSourcesRemoved(spec, ctx)
+		if !got {
+			t.Error("expected true (cleared), got false")
+		}
+		if ctx.AppsSrcDeployStatus != nil {
+			t.Error("AppsSrcDeployStatus should be nil after clear")
+		}
+		if ctx.IsDeploymentInProgress {
+			t.Error("IsDeploymentInProgress should be false after clear")
+		}
+		if len(ctx.AppFrameworkConfig.AppSources) != 0 {
+			t.Error("AppFrameworkConfig.AppSources should be empty after clear")
+		}
+		if ctx.LastAppInfoCheckTime != 0 {
+			t.Error("LastAppInfoCheckTime should be 0 after clear")
+		}
+		if ctx.AppsRepoStatusPollInterval != 0 {
+			t.Error("AppsRepoStatusPollInterval should be 0 after clear")
+		}
+		if ctx.AppsStatusMaxConcurrentAppDownloads != 0 {
+			t.Error("AppsStatusMaxConcurrentAppDownloads should be 0 after clear")
+		}
+		if ctx.BundlePushStatus.RetryCount != 0 {
+			t.Error("BundlePushStatus should be zeroed after clear")
+		}
+	})
+
+	t.Run("spec non-empty is a no-op", func(t *testing.T) {
+		spec := &enterpriseApi.AppFrameworkSpec{
+			AppSources: []enterpriseApi.AppSourceSpec{{Name: "active"}},
+		}
+		status := makeDeployStatus()
+		ctx := &enterpriseApi.AppDeploymentContext{AppsSrcDeployStatus: status}
+		got := clearAppContextIfSourcesRemoved(spec, ctx)
+		if got {
+			t.Error("expected false (no-op), got true")
+		}
+		if ctx.AppsSrcDeployStatus == nil {
+			t.Error("AppsSrcDeployStatus should be unchanged")
+		}
+	})
+
+	t.Run("spec empty and status already nil is a no-op", func(t *testing.T) {
+		spec := &enterpriseApi.AppFrameworkSpec{}
+		ctx := &enterpriseApi.AppDeploymentContext{AppsSrcDeployStatus: nil}
+		got := clearAppContextIfSourcesRemoved(spec, ctx)
+		if got {
+			t.Error("expected false (no-op), got true")
+		}
+	})
 }

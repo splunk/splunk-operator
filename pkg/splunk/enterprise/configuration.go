@@ -17,11 +17,14 @@ package enterprise
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -34,13 +37,20 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+)
+
+const (
+	splunkKVStoreDefaultTypeEnv = "SPLUNK_KVSTORE_DEFAULT_TYPE"
+	splunkKVStoreTypeLocal      = "local"
 )
 
 var defaultLivenessProbe corev1.Probe = corev1.Probe{
@@ -85,12 +95,19 @@ var defaultStartupProbe corev1.Probe = corev1.Probe{
 	},
 }
 
-const (
-	defaultRequestsCPU    = "0.1"
-	defaultRequestsMemory = "512Mi"
-	defaultLimitsCPU      = "4"
-	defaultLimitsMemory   = "8Gi"
-)
+// SplunkDefaultResources returns the default resource requests and limits for Splunk workloads.
+func SplunkDefaultResources() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultRequestsCPU),
+			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultRequestsMemory),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(splcommon.DefaultLimitsCPU),
+			corev1.ResourceMemory: resource.MustParse(splcommon.DefaultLimitsMemory),
+		},
+	}
+}
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
@@ -204,7 +221,7 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 		APIVersion: "v1",
 	}
 
-	service.ObjectMeta.Name = GetSplunkServiceName(instanceType, cr.GetName(), isHeadless)
+	service.ObjectMeta.Name = splcommon.GetSplunkServiceName(instanceType, cr.GetName(), isHeadless)
 	service.ObjectMeta.Namespace = cr.GetNamespace()
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
@@ -299,8 +316,8 @@ func ValidateImagePullPolicy(imagePullPolicy *string) error {
 	return nil
 }
 
-// ValidateResources checks resource requests and limits and sets defaults if not provided
-func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.ResourceRequirements) {
+// SetDefaultResources checks resource requests and limits and sets defaults if not provided
+func SetDefaultResources(resources *corev1.ResourceRequirements, defaults corev1.ResourceRequirements) {
 	// check for nil maps
 	if resources.Requests == nil {
 		resources.Requests = make(corev1.ResourceList)
@@ -334,6 +351,16 @@ func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.R
 	}
 }
 
+// EffectiveResources returns the resources the operator will apply for a spec.
+func EffectiveResources(spec enterpriseApi.Spec, defaults corev1.ResourceRequirements) corev1.ResourceRequirements {
+	resources := *spec.Resources.DeepCopy()
+	// Preserve legacy per-key defaults unless the user explicitly opts out.
+	if !spec.DisableResourceDefaults {
+		SetDefaultResources(&resources, defaults)
+	}
+	return resources
+}
+
 // ValidateSpec checks validity and makes default updates to a Spec, and returns error if something is wrong.
 func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequirements) error {
 	// make sure SchedulerName is not empty
@@ -344,8 +371,7 @@ func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequ
 	// set default values for service template
 	setServiceTemplateDefaults(spec)
 
-	// if not provided, set default resource requests and limits
-	ValidateResources(&spec.Resources, defaultResources)
+	spec.Resources = EffectiveResources(*spec, defaultResources)
 
 	return ValidateImagePullPolicy(&spec.ImagePullPolicy)
 }
@@ -370,17 +396,6 @@ func setServiceTemplateDefaults(spec *enterpriseApi.Spec) {
 func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, cr splcommon.MetaObject) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
 	spec.Image = GetSplunkImage(spec.Image)
-
-	defaultResources := corev1.ResourceRequirements{
-		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse(defaultRequestsCPU),
-			corev1.ResourceMemory: resource.MustParse(defaultRequestsMemory),
-		},
-		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse(defaultLimitsCPU),
-			corev1.ResourceMemory: resource.MustParse(defaultLimitsMemory),
-		},
-	}
 
 	err := validateLivenessProbe(ctx, cr, spec.LivenessProbe)
 	if err != nil {
@@ -416,15 +431,30 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 		return err
 	}
 
+	if err = validateKVStoreDefaultTypeExtraEnv(spec.ExtraEnv); err != nil {
+		return err
+	}
+
 	setVolumeDefaults(spec)
 
-	return ValidateSpec(&spec.Spec, defaultResources)
+	return ValidateSpec(&spec.Spec, SplunkDefaultResources())
+}
+
+func validateKVStoreDefaultTypeExtraEnv(extraEnv []corev1.EnvVar) error {
+	for _, env := range extraEnv {
+		if env.Name != splunkKVStoreDefaultTypeEnv {
+			continue
+		}
+		if env.Value != splunkKVStoreTypeLocal {
+			return fmt.Errorf("%s must be %q", splunkKVStoreDefaultTypeEnv, splunkKVStoreTypeLocal)
+		}
+	}
+	return nil
 }
 
 // ValidateImagePullSecrets sets default values for imagePullSecrets if not provided
 func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ValidateImagePullSecrets").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "ValidateImagePullSecrets")
 
 	// If no imagePullSecrets are configured
 	var nilImagePullSecrets []corev1.LocalObjectReference
@@ -435,9 +465,9 @@ func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient,
 
 	// If configured, validated if the secret/s exist
 	for _, secret := range spec.ImagePullSecrets {
-		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secret.Name)
+		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), secret.Name)
 		if err != nil {
-			scopedLog.Error(err, "Couldn't get secret in the imagePullSecrets config", "Secret", secret.Name)
+			logger.ErrorContext(ctx, "couldn't get secret in the imagePullSecrets config", "Secret", secret.Name, "error", err)
 		}
 	}
 
@@ -578,8 +608,7 @@ func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) err
 // addStorageVolumes adds storage volumes to the StatefulSet
 func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("addStorageVolumes").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "addStorageVolumes")
 
 	// configure storage for mount path /opt/splunk/etc
 	if spec.EtcVolumeStorageConfig.EphemeralStorage {
@@ -608,7 +637,7 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 	// Add Splunk Probe config map
 	probeConfigMap, err := getProbeConfigMap(ctx, client, cr)
 	if err != nil {
-		scopedLog.Error(err, "Unable to get probeConfigMap")
+		logger.ErrorContext(ctx, "unable to get probeConfigMap", "error", err)
 		return err
 	}
 	addProbeConfigMapVolume(probeConfigMap, statefulSet)
@@ -617,28 +646,27 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 
 func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getProbeConfigMap").WithValues("namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getProbeConfigMap")
 
 	configMapName := GetProbeConfigMapName(cr.GetNamespace())
 	configMapNamespace := cr.GetNamespace()
 	namespacedName := types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}
 
 	// Check if the config map already exists
-	scopedLog.Info("Checking for existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	logger.DebugContext(ctx, "checking for existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 	var configMap corev1.ConfigMap
 	err := client.Get(ctx, namespacedName, &configMap)
 
 	if err == nil {
-		scopedLog.Info("Retrieved existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+		logger.DebugContext(ctx, "retrieved existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 		return &configMap, nil
 	} else if !k8serrors.IsNotFound(err) {
-		scopedLog.Error(err, "Error retrieving config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+		logger.ErrorContext(ctx, "error retrieving config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace, "error", err)
 		return nil, err
 	}
 
 	// Existing config map not found, create one for the probes
-	scopedLog.Info("Creating new config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	logger.InfoContext(ctx, "creating new config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 	configMap = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
@@ -688,7 +716,7 @@ func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.St
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
-func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
+func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar, certMounts *certs.CertMountConfig, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
@@ -734,7 +762,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		Selector: &metav1.LabelSelector{
 			MatchLabels: selectLabels,
 		},
-		ServiceName:         GetSplunkServiceName(instanceType, cr.GetName(), true),
+		ServiceName:         splcommon.GetSplunkServiceName(instanceType, cr.GetName(), true),
 		Replicas:            &replicas,
 		PodManagementPolicy: appsv1.ParallelPodManagement,
 		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
@@ -781,6 +809,14 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 
 	// append labels and annotations from parent
 	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
+	if len(spec.PodAnnotations) > 0 {
+		if statefulSet.Spec.Template.Annotations == nil {
+			statefulSet.Spec.Template.Annotations = make(map[string]string)
+		}
+		for k, v := range spec.PodAnnotations {
+			statefulSet.Spec.Template.Annotations[k] = v
+		}
+	}
 
 	// retrieve the secret to upload to the statefulSet pod
 	statefulSetSecret, err := splutil.GetLatestVersionedSecret(ctx, client, cr, cr.GetNamespace(), statefulSet.GetName())
@@ -789,10 +825,16 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	}
 
 	// update statefulset's pod template with common splunk pod config
-	updateSplunkPodTemplateWithConfig(ctx, client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
+	if err = updateSplunkPodTemplateWithConfig(ctx, client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName()); err != nil {
+		return statefulSet, err
+	}
 
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+
+	certs.InjectCertMounts(&statefulSet.Spec.Template, certMounts)
+
+	resources.ApplyStatefulSetOptions(statefulSet, opts...)
 
 	return statefulSet, nil
 }
@@ -810,11 +852,55 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 	return configMap
 }
 
-// updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
-func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
+// TODO(SPL-307034): Move this check to `splunk-provision` - it should know which roles it support
+// This does not account for unsupported common features - like IPv6, multisite etc.
+func splunkProvisionSupportsRole(instanceType InstanceType) bool {
+	return instanceType == SplunkSearchHead || instanceType == SplunkDeployer
+}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("updateSplunkPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+// injectSplunkProvision adds the init container, shared volume, and mounts needed
+// to run splunk-provision instead of Ansible. SPLUNK_PROVISION_IMAGE must be set
+// in the operator Deployment env (see config/manager/manager.yaml).
+func injectSplunkProvision(splunkProvisionImage string, podTemplateSpec *corev1.PodTemplateSpec, extraEnv *[]corev1.EnvVar) {
+	podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, corev1.Volume{
+		Name:         "splunk-provision-bin",
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	})
+	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, corev1.Container{
+		Name:            "splunk-provision-init",
+		Image:           splunkProvisionImage,
+		ImagePullPolicy: corev1.PullAlways,
+		Command: []string{"bash", "-c",
+			"cp /opt/splunk-provision/splunk-provision /mnt/splunk-provision/splunk-provision && " +
+				"cp /opt/splunk-provision/entrypoint.sh /mnt/splunk-provision/entrypoint.sh && " +
+				"chmod 755 /mnt/splunk-provision/splunk-provision /mnt/splunk-provision/entrypoint.sh",
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "splunk-provision-bin", MountPath: "/mnt/splunk-provision"},
+		},
+	})
+	for idx := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(
+			podTemplateSpec.Spec.Containers[idx].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      "splunk-provision-bin",
+				MountPath: "/sbin/entrypoint.sh",
+				SubPath:   "entrypoint.sh",
+			},
+			corev1.VolumeMount{
+				Name:      "splunk-provision-bin",
+				MountPath: "/opt/splunk/bin/splunk-provision",
+				SubPath:   "splunk-provision",
+			},
+		)
+	}
+	*extraEnv = append([]corev1.EnvVar{{Name: "SPLUNK_NO_ANSIBLE", Value: "true"}}, *extraEnv...)
+}
+
+// updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
+func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) error {
+
+	logger := logging.FromContext(ctx).With("func", "updateSplunkPodTemplateWithConfig")
 	// Add custom ports to splunk containers
 	if spec.ServiceTemplate.Spec.Ports != nil {
 		for idx := range podTemplateSpec.Spec.Containers {
@@ -839,6 +925,20 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					MountPath: "/mnt/" + spec.Volumes[v].Name,
 				})
 			}
+		}
+	}
+
+	// TODO(SPL-306631): remove once the `splunk-provision` is available in the Splunk docker image
+	// TODO(SPL-306655): and once the `entrypoint.sh` has been modified in the Splunk docker image
+	crAnnotations := cr.GetAnnotations()
+	if strings.ToLower(crAnnotations[enterpriseApi.SplunkProvisionAnnotation]) == "true" &&
+		splunkProvisionSupportsRole(instanceType) {
+		splunkProvisionImage := os.Getenv("SPLUNK_PROVISION_IMAGE")
+		if splunkProvisionImage == "" || splunkProvisionImage == "SPLUNK_PROVISION_IMAGE_VALUE" {
+			logger.WarnContext(ctx, "skipping splunk-provision injection", "reason", "SPLUNK_PROVISION_IMAGE not set or unresolved placeholder")
+		} else {
+			logger.Info("injecting splunk-provision as volume via init-container")
+			injectSplunkProvision(splunkProvisionImage, podTemplateSpec, &extraEnv)
 		}
 	}
 
@@ -868,13 +968,76 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
-		// We will update the annotation for resource version in the pod template spec
-		// so that any change in the ConfigMap will lead to recycle of the pod.
-		configMapResourceVersion, err := splctrl.GetConfigMapResourceVersion(ctx, client, namespacedName)
+		// We stamp a content hash of configMap.Data (not ResourceVersion) so that
+		// owner-reference-only writes during bootstrap do not trigger pod restarts.
+		configMapObj, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 		if err == nil {
-			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configMapResourceVersion
+			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configDataHash(configMapObj.Data)
 		} else {
-			scopedLog.Error(err, "Updation of default configMap annotation failed")
+			logger.ErrorContext(ctx, "updation of default configMap annotation failed", "error", err)
+		}
+	}
+
+	// Stamp splcommon.ConfigMapRevAnnotationPrefix+<vol-name> annotation for each user-supplied
+	// ConfigMap volume using a content hash rather than ResourceVersion. ResourceVersion changes
+	// on any metadata update (labels, annotations) and would cause spurious pod rolls; the hash
+	// only changes when the mounted data itself changes.
+	// The annotation key uses the volume name (a valid DNS label, ≤63 chars) as the suffix,
+	// not the ConfigMap name, which can exceed Kubernetes' 63-char annotation-suffix limit.
+	// Projected volumes that reference ConfigMaps are handled via the Sources loop.
+	for _, vol := range spec.Volumes {
+		switch {
+		case vol.ConfigMap != nil:
+			cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: vol.ConfigMap.Name}
+			cm, err := splctrl.GetConfigMap(ctx, client, cmNS)
+			if err != nil {
+				logger.ErrorContext(ctx, "Failed to fetch ConfigMap for restart annotation", "volume", vol.Name, "error", err)
+				break
+			}
+			if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
+				// Consumer handles dynamic reload; skip the restart-triggering annotation.
+				break
+			}
+			hash, err := splctrl.GetConfigMapDataHash(ctx, client, cmNS, vol.ConfigMap.Items)
+			if err == nil {
+				podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+vol.Name] = hash
+			} else {
+				logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for annotation", "volume", vol.Name, "error", err)
+			}
+		case vol.Projected != nil:
+			for i, src := range vol.Projected.Sources {
+				if src.ConfigMap == nil {
+					continue
+				}
+				cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: src.ConfigMap.Name}
+				cm, err := splctrl.GetConfigMap(ctx, client, cmNS)
+				if err != nil {
+					logger.ErrorContext(ctx, "Failed to fetch projected ConfigMap for restart annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
+					continue
+				}
+				if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
+					continue
+				}
+				hash, err := splctrl.GetConfigMapDataHash(ctx, client, cmNS, src.ConfigMap.Items)
+				if err == nil {
+					// Build a collision-free annotation key suffix ≤63 chars.
+					// vol.Name is a DNS label (≤63 chars); appending ".<n>" can push past the
+					// Kubernetes annotation name-segment limit. When the combined length exceeds
+					// 63, replace vol.Name with "p.<8-hex-digest>" — the "p." prefix contains a
+					// dot, which is legal in annotation name segments but cannot appear in a
+					// Kubernetes DNS-label volume name, making hashed keys structurally distinct
+					// from any real short volume name and preventing false collisions.
+					idxStr := strconv.Itoa(i)
+					volNamePart := vol.Name
+					if len(volNamePart)+1+len(idxStr) > 63 {
+						sum := sha256.Sum256([]byte(vol.Name))
+						volNamePart = "p." + hex.EncodeToString(sum[:])[:8]
+					}
+					podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+volNamePart+"."+idxStr] = hash
+				} else {
+					logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for projected annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
+				}
+			}
 		}
 	}
 
@@ -896,10 +1059,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 		// 1. For Indexer cluster case, do not set the annotation on CM pod. smartstore config is
 		// propagated through the CM manager apps bundle push
-		// 2. In case of Standalone, reset the Pod, by updating the latest Resource version of the
-		// smartstore config map.
+		// 2. In case of Standalone, reset the Pod by updating the content hash of the
+		// smartstore config map so that only real data changes trigger a pod restart.
 		if instanceType == SplunkStandalone {
-			podTemplateSpec.ObjectMeta.Annotations[smartStoreConfigRev] = smartstoreConfigMap.ResourceVersion
+			podTemplateSpec.ObjectMeta.Annotations[smartStoreConfigRev] = configDataHash(smartstoreConfigMap.Data)
 		}
 	}
 
@@ -951,6 +1114,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
 		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
 		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+		{Name: "SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED", Value: "true"},
+	}
+	if instanceType != SplunkIngestor {
+		env = append(env, corev1.EnvVar{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal})
 	}
 
 	// update variables for licensing, if configured
@@ -961,7 +1128,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		})
 	}
 	if instanceType != SplunkLicenseManager && spec.LicenseManagerRef.Name != "" {
-		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
 		if spec.LicenseManagerRef.Namespace != "" {
 			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
 		}
@@ -970,7 +1137,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			Value: licenseManagerURL,
 		})
 	} else if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
-		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
 		if spec.LicenseMasterRef.Namespace != "" {
 			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
 		}
@@ -986,36 +1153,48 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		// This makes splunk-ansible configure indexer-discovery on cluster-manager
 		clusterManagerURL = "localhost"
 	} else if spec.ClusterManagerRef.Name != "" {
-		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterManagerRef.Name, false)
+		clusterManagerURL = splcommon.GetSplunkServiceName(SplunkClusterManager, spec.ClusterManagerRef.Name, false)
 		if spec.ClusterManagerRef.Namespace != "" {
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterManagerRef.Namespace, clusterManagerURL)
 		}
-		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
+		if spec.LicenseManagerRef.Name == "" && spec.LicenseMasterRef.Name == "" {
 			//Check if CM is connected to a LicenseManager
+			cmNamespace := cr.GetNamespace()
+			if spec.ClusterManagerRef.Namespace != "" {
+				cmNamespace = spec.ClusterManagerRef.Namespace
+			}
 			namespacedName := types.NamespacedName{
-				Namespace: cr.GetNamespace(),
+				Namespace: cmNamespace,
 				Name:      spec.ClusterManagerRef.Name,
 			}
 			managerIdxCluster := &enterpriseApi.ClusterManager{}
 			err := client.Get(ctx, namespacedName, managerIdxCluster)
 			if err != nil {
-				scopedLog.Error(err, "Unable to get ClusterManager")
+				// Return the error so the reconcile loop requeues rather than continuing
+				// with a zero-value CR (which would produce an incomplete env and cause a
+				// spurious pod restart on the next reconcile when the real value is found).
+				logger.ErrorContext(ctx, "unable to get ClusterManager; requeueing", "error", err)
+				return err
 			}
 
 			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
-				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
-				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
-					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
+				licenseManagerNamespace := managerIdxCluster.Spec.LicenseManagerRef.Namespace
+				if licenseManagerNamespace == "" {
+					licenseManagerNamespace = managerIdxCluster.GetNamespace()
 				}
+				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				licenseManagerURL = splcommon.GetServiceFQDN(licenseManagerNamespace, licenseManagerURL)
 				env = append(env, corev1.EnvVar{
 					Name:  splcommon.LicenseManagerURL,
 					Value: licenseManagerURL,
 				})
 			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
-				licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
-				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+				licenseMasterNamespace := managerIdxCluster.Spec.LicenseMasterRef.Namespace
+				if licenseMasterNamespace == "" {
+					licenseMasterNamespace = managerIdxCluster.GetNamespace()
 				}
+				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				licenseMasterURL = splcommon.GetServiceFQDN(licenseMasterNamespace, licenseMasterURL)
 				env = append(env, corev1.EnvVar{
 					Name:  splcommon.LicenseManagerURL,
 					Value: licenseMasterURL,
@@ -1023,36 +1202,48 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			}
 		}
 	} else if spec.ClusterMasterRef.Name != "" {
-		clusterManagerURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		clusterManagerURL = splcommon.GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
 		if spec.ClusterMasterRef.Namespace != "" {
 			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
 		}
-		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
+		if spec.LicenseManagerRef.Name == "" && spec.LicenseMasterRef.Name == "" {
 			//Check if CM is connected to a LicenseManager
+			cmNamespace := cr.GetNamespace()
+			if spec.ClusterMasterRef.Namespace != "" {
+				cmNamespace = spec.ClusterMasterRef.Namespace
+			}
 			namespacedName := types.NamespacedName{
-				Namespace: cr.GetNamespace(),
+				Namespace: cmNamespace,
 				Name:      spec.ClusterMasterRef.Name,
 			}
 			managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
 			err := client.Get(ctx, namespacedName, managerIdxCluster)
 			if err != nil {
-				scopedLog.Error(err, "Unable to get ClusterManager")
+				// Return the error so the reconcile loop requeues rather than continuing
+				// with a zero-value CR (which would produce an incomplete env and cause a
+				// spurious pod restart on the next reconcile when the real value is found).
+				logger.ErrorContext(ctx, "unable to get ClusterMaster; requeueing", "error", err)
+				return err
 			}
 
 			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
-				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
-				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
-					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
+				licenseManagerNamespace := managerIdxCluster.Spec.LicenseManagerRef.Namespace
+				if licenseManagerNamespace == "" {
+					licenseManagerNamespace = managerIdxCluster.GetNamespace()
 				}
+				licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				licenseManagerURL = splcommon.GetServiceFQDN(licenseManagerNamespace, licenseManagerURL)
 				env = append(env, corev1.EnvVar{
 					Name:  splcommon.LicenseManagerURL,
 					Value: licenseManagerURL,
 				})
 			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
-				licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
-				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+				licenseMasterNamespace := managerIdxCluster.Spec.LicenseMasterRef.Namespace
+				if licenseMasterNamespace == "" {
+					licenseMasterNamespace = managerIdxCluster.GetNamespace()
 				}
+				licenseMasterURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				licenseMasterURL = splcommon.GetServiceFQDN(licenseMasterNamespace, licenseMasterURL)
 				env = append(env, corev1.EnvVar{
 					Name:  splcommon.LicenseManagerURL,
 					Value: licenseMasterURL,
@@ -1117,6 +1308,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			},
 		}
 	}
+	return nil
 }
 
 func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
@@ -1133,28 +1325,25 @@ func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
 
 // getLivenessProbe the probe for checking the liveness of the Pod
 func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx)
 	livenessProbe := getProbeWithConfigUpdates(&defaultLivenessProbe, spec.LivenessProbe, spec.LivenessInitialDelaySeconds)
-	scopedLog.Info("LivenessProbe", "Configured", livenessProbe)
+	logger.DebugContext(ctx, "livenessProbe", "Configured", livenessProbe)
 	return livenessProbe
 }
 
 // getReadinessProbe the probe for checking the readiness of the Pod
 func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx)
 	readinessProbe := getProbeWithConfigUpdates(&defaultReadinessProbe, spec.ReadinessProbe, spec.ReadinessInitialDelaySeconds)
-	scopedLog.Info("ReadinessProbe", "Configured", readinessProbe)
+	logger.DebugContext(ctx, "readinessProbe", "Configured", readinessProbe)
 	return readinessProbe
 }
 
 // getStartupProbe the probe for checking the first start of splunk on the Pod
 func getStartupProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx)
 	startupProbe := getProbeWithConfigUpdates(&defaultStartupProbe, spec.StartupProbe, 0)
-	scopedLog.Info("StartupProbe", "Configured", startupProbe)
+	logger.DebugContext(ctx, "startupProbe", "Configured", startupProbe)
 	return startupProbe
 }
 
@@ -1255,13 +1444,12 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 		return false
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("AreRemoteVolumeKeysChanged").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "AreRemoteVolumeKeysChanged")
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
 		if volume.SecretRef != "" {
-			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), volume.SecretRef)
 			// Ideally, this should have been detected in Spec validation time
 			if err != nil {
 				*retError = fmt.Errorf("not able to access secret object = %s, reason: %s", volume.SecretRef, err)
@@ -1271,7 +1459,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			// Check if the secret version is already tracked, and if there is a change in it
 			if existingSecretVersion, ok := ResourceRev[volume.SecretRef]; ok {
 				if existingSecretVersion != namespaceScopedSecret.ResourceVersion {
-					scopedLog.Info("secret keys changed", "previous resource version", existingSecretVersion, "current version", namespaceScopedSecret.ResourceVersion)
+					logger.InfoContext(ctx, "secret keys changed", "previousResourceVersion", existingSecretVersion, "currentVersion", namespaceScopedSecret.ResourceVersion)
 					ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
 					return true
 				}
@@ -1281,7 +1469,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			// First time adding to track the secret resource version
 			ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
 		} else {
-			scopedLog.Info("no valid SecretRef for volume.  No secret to track.", "volumeName", volume.Name)
+			logger.DebugContext(ctx, "no valid SecretRef for volume. No secret to track", "volumeName", volume.Name)
 		}
 	}
 
@@ -1291,8 +1479,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 // ApplyManualAppUpdateConfigMap applies the manual app update config map
 func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string) (*corev1.ConfigMap, error) {
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "ApplyManualAppUpdateConfigMap")
 
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
@@ -1312,17 +1499,17 @@ func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.Control
 	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
 	if newConfigMap {
-		scopedLog.Info("creating manual app update configMap")
+		logger.InfoContext(ctx, "creating manual app update configMap")
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err != nil {
-			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
+			logger.ErrorContext(ctx, "unable to create the configMap", "name", configMapName, "error", err)
 			return configMap, err
 		}
 	} else {
-		scopedLog.Info("updating manual app update configMap")
+		logger.InfoContext(ctx, "updating manual app update configMap")
 		err = splutil.UpdateResource(ctx, client, configMap)
 		if err != nil {
-			scopedLog.Error(err, "unable to update the configMap", "name", configMapName)
+			logger.ErrorContext(ctx, "unable to update the configMap", "name", configMapName, "error", err)
 			return configMap, err
 		}
 	}
@@ -1331,8 +1518,7 @@ func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.Control
 
 // getManualUpdateStatus extracts the status field from the configMap data
 func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getManualUpdateStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getManualUpdateStatus")
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
@@ -1342,11 +1528,11 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 		data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
 		result = extractFieldFromConfigMapData(statusRegex, data)
 		if result == "on" {
-			scopedLog.Info("namespace configMap value is set to", "name", configMapName, "data", result)
+			logger.InfoContext(ctx, "namespace configMap value is set to", "name", configMapName, "data", result)
 			return result
 		}
 	} else {
-		scopedLog.Error(err, "Unable to get namespace specific configMap", "name", configMapName)
+		logger.ErrorContext(ctx, "unable to get namespace specific configMap", "name", configMapName, "error", err)
 	}
 
 	return "off"
@@ -1354,17 +1540,16 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 
 // getManualUpdatePerCrStatus extracts the status field from the configMap data
 func getManualUpdatePerCrStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getManualUpdatePerCrStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getManualUpdatePerCrStatus")
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
 	crconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
-		scopedLog.Info("custom configMap value is set to", "name", configMapName, "data", crconfigMap.Data)
+		logger.InfoContext(ctx, "custom configMap value is set to", "name", configMapName, "data", crconfigMap.Data)
 		data := crconfigMap.Data["manualUpdate"]
 		return data
 	} else {
-		scopedLog.Error(err, "unable to get custom specific configMap", "name", configMapName)
+		logger.ErrorContext(ctx, "unable to get custom specific configMap", "name", configMapName, "error", err)
 	}
 
 	return "off"
@@ -1372,13 +1557,12 @@ func getManualUpdatePerCrStatus(ctx context.Context, client splcommon.Controller
 
 // getManualUpdateRefCount extracts the refCount field from the configMap data
 func getManualUpdateRefCount(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) int {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getManualUpdateRefCount").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getManualUpdateRefCount")
 	var refCount int
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
-		scopedLog.Error(err, "unable to get the configMap", "name", configMapName)
+		logger.ErrorContext(ctx, "unable to get the configMap", "name", configMapName, "error", err)
 		return refCount
 	}
 
@@ -1391,8 +1575,7 @@ func getManualUpdateRefCount(ctx context.Context, client splcommon.ControllerCli
 
 // createOrUpdateAppUpdateConfigMap creates or updates the manual app update configMap
 func createOrUpdateAppUpdateConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("createOrUpdateAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "createOrUpdateAppUpdateConfigMap", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var crKindMap map[string]string
 	var configMapData, status string
@@ -1420,7 +1603,7 @@ func createOrUpdateAppUpdateConfigMap(ctx context.Context, client splcommon.Cont
 			}
 		}
 
-		scopedLog.Info("existing configMap data", "data", configMap.Data)
+		logger.InfoContext(ctx, "existing configMap data", "data", configMap.Data)
 		crKindMap = configMap.Data
 
 		// get the number of instance types of this kind
@@ -1446,7 +1629,7 @@ refCount: %d`, status, numOfObjects+1)
 	// Create/update the configMap to store the values of manual trigger per CR kind.
 	configMap, err = ApplyManualAppUpdateConfigMap(ctx, client, cr, crKindMap)
 	if err != nil {
-		scopedLog.Error(err, "create/update configMap for app update failed")
+		logger.ErrorContext(ctx, "create/update configMap for app update failed", "error", err)
 		return configMap, err
 	}
 
@@ -1470,8 +1653,8 @@ func initAppFrameWorkContext(ctx context.Context, client splcommon.ControllerCli
 	}
 
 	for _, vol := range appFrameworkConf.VolList {
-		if _, ok := splclient.RemoteDataClientsMap[vol.Provider]; !ok {
-			splclient.RegisterRemoteDataClient(ctx, vol.Provider)
+		if _, ok := splstorage.RemoteDataClientsMap[vol.Provider]; !ok {
+			splstorage.RegisterRemoteDataClient(ctx, vol.Provider)
 		}
 	}
 	return nil
@@ -1552,7 +1735,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 		}
 
 		if appSrc.VolName != "" {
-			_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appSrc.VolName)
+			_, err := splutil.CheckIfVolumeExists(appFramework.VolList, appSrc.VolName)
 			if err != nil {
 				return fmt.Errorf("invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
 			}
@@ -1606,7 +1789,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	}
 
 	if appFramework.Defaults.VolName != "" {
-		_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
+		_, err := splutil.CheckIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
 		if err != nil {
 			return fmt.Errorf("invalid Volume Name for Defaults. Error: %s", err)
 		}
@@ -1655,37 +1838,36 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 		return nil
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ValidateAppFrameworkSpec")
+	logger := logging.FromContext(ctx).With("func", "ValidateAppFrameworkSpec")
 
-	scopedLog.Info("configCheck", "scope", localScope)
+	logger.InfoContext(ctx, "configCheck", "scope", localScope)
 
 	// Set the value in status field to be same as that in spec.
 	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
 	appContext.AppsStatusMaxConcurrentAppDownloads = appFramework.MaxConcurrentAppDownloads
 
 	if appContext.AppsRepoStatusPollInterval <= 0 {
-		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured. Disabling polling of apps repo changes, defaulting to manual updates")
+		logger.ErrorContext(ctx, "appsRepoPollIntervalSeconds is not configured. Disabling polling of apps repo changes, defaulting to manual updates", "error", err)
 		appContext.AppsRepoStatusPollInterval = 0
 	} else if appFramework.AppsRepoPollInterval < splcommon.MinAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", splcommon.MinAppsRepoPollInterval)
+		logger.ErrorContext(ctx, "configured appsRepoPollIntervalSeconds is too small", "error", err, "configuredValue", appFramework.AppsRepoPollInterval, "defaultMinSeconds", splcommon.MinAppsRepoPollInterval)
 		appContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval
 	} else if appFramework.AppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
-		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", splcommon.MaxAppsRepoPollInterval, "seconds", nil)
+		logger.ErrorContext(ctx, "configured appsRepoPollIntervalSeconds is too large", "error", err, "configuredValue", appFramework.AppsRepoPollInterval, "defaultMaxSeconds", splcommon.MaxAppsRepoPollInterval)
 		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
 	}
 
 	if appContext.AppsStatusMaxConcurrentAppDownloads <= 0 {
-		scopedLog.Info("Invalid value of maxConcurrentAppDownloads", "configured value", appContext.AppsStatusMaxConcurrentAppDownloads, "Setting it to default value", splcommon.DefaultMaxConcurrentAppDownloads)
+		logger.InfoContext(ctx, "invalid value of maxConcurrentAppDownloads", "configuredValue", appContext.AppsStatusMaxConcurrentAppDownloads, "defaultValue", splcommon.DefaultMaxConcurrentAppDownloads)
 		appContext.AppsStatusMaxConcurrentAppDownloads = splcommon.DefaultMaxConcurrentAppDownloads
 	}
 
-	appDownloadVolume := splcommon.AppDownloadVolume
-	_, _ = os.Stat(appDownloadVolume)
-
-	// check whether the temporary volume to download apps is mounted or not on the operator pod
+	// check whether the temporary volume to download apps is mounted or not on the operator pod;
+	// use the resolved path (which may have fallen back to TmpAppDownloadDir) rather than the
+	// configured const, since a missing mount is expected to fall back, not fail validation.
+	appDownloadVolume := getResolvedAppDownloadVolume()
 	if _, err := os.Stat(appDownloadVolume); errors.Is(err, os.ErrNotExist) {
-		scopedLog.Error(err, "Volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod.", "volume path", appDownloadVolume)
+		logger.ErrorContext(ctx, "volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod", "error", err, "volumePath", appDownloadVolume)
 		return err
 	}
 
@@ -1696,7 +1878,7 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 
 	err = validateSplunkAppSources(appFramework, localScope, crKind)
 	if err == nil {
-		scopedLog.Info("App framework configuration is valid")
+		logger.InfoContext(ctx, "app framework configuration is valid")
 	}
 
 	return err
@@ -1707,8 +1889,7 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 
 	duplicateChecker := make(map[string]bool)
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validateRemoteVolumeSpec")
+	logger := logging.FromContext(ctx).With("func", "validateRemoteVolumeSpec")
 
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
@@ -1728,7 +1909,7 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 		}
 		// Make the secretRef optional if theyre using IAM roles
 		if volume.SecretRef == "" {
-			scopedLog.Info("No valid SecretRef for volume.", "volumeName", volume.Name)
+			logger.InfoContext(ctx, "no valid SecretRef for volume", "volumeName", volume.Name)
 		}
 
 		// provider is used in App framework to pick the S3 client(supported providers are aws and minio),
@@ -1789,7 +1970,7 @@ func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 		}
 
 		if index.VolName != "" {
-			_, err := splclient.CheckIfVolumeExists(smartstore.VolList, index.VolName)
+			_, err := splutil.CheckIfVolumeExists(smartstore.VolList, index.VolName)
 			if err != nil {
 				return fmt.Errorf("invalid configuration for index: %s. %s", index.Name, err)
 			}
@@ -1822,7 +2003,7 @@ func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi
 	defaults := smartstore.Defaults
 	// When volName is configured, bucket remote path should also be configured
 	if defaults.VolName != "" {
-		_, err = splclient.CheckIfVolumeExists(smartstore.VolList, defaults.VolName)
+		_, err = splutil.CheckIfVolumeExists(smartstore.VolList, defaults.VolName)
 		if err != nil {
 			return fmt.Errorf("invalid configuration for defaults volume. %s", err)
 		}
@@ -1836,8 +2017,7 @@ func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi
 func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
 	var volumesConf string
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetSmartstoreVolumesConfig")
+	logger := logging.FromContext(ctx).With("func", "GetSmartstoreVolumesConfig")
 
 	volumes := smartstore.VolList
 	for i := 0; i < len(volumes); i++ {
@@ -1857,7 +2037,7 @@ remote.s3.endpoint = %s
 remote.s3.auth_region = %s
 `, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint, volumes[i].Region)
 		} else {
-			scopedLog.Info("No valid secretRef configured.  Configure volume without access/secret keys", "volumeName", volumes[i].Name)
+			logger.InfoContext(ctx, "no valid secretRef configured.  Configure volume without access/secret keys", "volumeName", volumes[i].Name)
 			volumesConf = fmt.Sprintf(`%s
 [volume:%s]
 storageType = remote
@@ -2022,11 +2202,10 @@ func validateProbe(probe *enterpriseApi.Probe) error {
 // validateLivenessProbe validates the liveness probe config
 func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenessProbe *enterpriseApi.Probe) error {
 	var err error
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validateLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "validateLivenessProbe", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if livenessProbe == nil {
-		scopedLog.Info("empty liveness probe.")
+		logger.InfoContext(ctx, "empty liveness probe")
 		return err
 	}
 
@@ -2036,19 +2215,19 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 	}
 
 	if livenessProbe.InitialDelaySeconds != 0 && livenessProbe.InitialDelaySeconds < livenessProbeDefaultDelaySec {
-		scopedLog.Info("Liveness Probe: Configured  InitialDelaySeconds is too small, recommended default minimum will be used", "configured", livenessProbe.InitialDelaySeconds, "recommended minimum", livenessProbeDefaultDelaySec)
+		logger.InfoContext(ctx, "liveness Probe: Configured  InitialDelaySeconds is too small, recommended default minimum will be used", "configured", livenessProbe.InitialDelaySeconds, "recommendedMinimum", livenessProbeDefaultDelaySec)
 	}
 
 	if livenessProbe.TimeoutSeconds != 0 && livenessProbe.TimeoutSeconds < livenessProbeTimeoutSec {
-		scopedLog.Info("Liveness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.TimeoutSeconds, "recommended minimum", livenessProbeTimeoutSec)
+		logger.InfoContext(ctx, "liveness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.TimeoutSeconds, "recommendedMinimum", livenessProbeTimeoutSec)
 	}
 
 	if livenessProbe.PeriodSeconds != 0 && livenessProbe.PeriodSeconds < livenessProbePeriodSec {
-		scopedLog.Info("Liveness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.PeriodSeconds, "recommended minimum", livenessProbePeriodSec)
+		logger.InfoContext(ctx, "liveness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.PeriodSeconds, "recommendedMinimum", livenessProbePeriodSec)
 	}
 
 	if livenessProbe.FailureThreshold != 0 && livenessProbe.FailureThreshold < livenessProbeFailureThreshold {
-		scopedLog.Info("Liveness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", livenessProbe.FailureThreshold, "recommended minimum", livenessProbeFailureThreshold)
+		logger.InfoContext(ctx, "liveness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", livenessProbe.FailureThreshold, "recommendedMinimum", livenessProbeFailureThreshold)
 	}
 
 	return err
@@ -2057,11 +2236,10 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 // validateReadinessProbe validates the Readiness probe config
 func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readinessProbe *enterpriseApi.Probe) error {
 	var err error
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validateReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "validateReadinessProbe", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if readinessProbe == nil {
-		scopedLog.Info("empty readiness probe.")
+		logger.InfoContext(ctx, "empty readiness probe")
 		return err
 	}
 
@@ -2071,19 +2249,19 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 	}
 
 	if readinessProbe.InitialDelaySeconds != 0 && readinessProbe.InitialDelaySeconds < readinessProbeDefaultDelaySec {
-		scopedLog.Info("Readiness Probe: Configured InitialDelaySeconds is too small, recommended default minimum will be used", "configured", readinessProbe.InitialDelaySeconds, "recommended minimum", readinessProbeDefaultDelaySec)
+		logger.InfoContext(ctx, "readiness Probe: Configured InitialDelaySeconds is too small, recommended default minimum will be used", "configured", readinessProbe.InitialDelaySeconds, "recommendedMinimum", readinessProbeDefaultDelaySec)
 	}
 
 	if readinessProbe.TimeoutSeconds != 0 && readinessProbe.TimeoutSeconds < readinessProbeTimeoutSec {
-		scopedLog.Info("Readiness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.TimeoutSeconds, "recommended minimum", readinessProbeTimeoutSec)
+		logger.InfoContext(ctx, "readiness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.TimeoutSeconds, "recommendedMinimum", readinessProbeTimeoutSec)
 	}
 
 	if readinessProbe.PeriodSeconds != 0 && readinessProbe.PeriodSeconds < readinessProbePeriodSec {
-		scopedLog.Info("Readiness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.PeriodSeconds, "recommended minimum", readinessProbePeriodSec)
+		logger.InfoContext(ctx, "readiness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.PeriodSeconds, "recommendedMinimum", readinessProbePeriodSec)
 	}
 
 	if readinessProbe.FailureThreshold != 0 && readinessProbe.FailureThreshold < readinessProbeFailureThreshold {
-		scopedLog.Info("Readiness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", readinessProbe.FailureThreshold, "recommended minimum", readinessProbeFailureThreshold)
+		logger.InfoContext(ctx, "readiness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", readinessProbe.FailureThreshold, "recommendedMinimum", readinessProbeFailureThreshold)
 	}
 	return err
 }
@@ -2091,11 +2269,10 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 // validateStartupProbe validates the startup probe config
 func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupProbe *enterpriseApi.Probe) error {
 	var err error
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validateStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "validateStartupProbe", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if startupProbe == nil {
-		scopedLog.Info("empty startup probe.")
+		logger.InfoContext(ctx, "empty startup probe")
 		return err
 	}
 
@@ -2105,15 +2282,15 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 	}
 
 	if startupProbe.InitialDelaySeconds != 0 && startupProbe.InitialDelaySeconds < startupProbeDefaultDelaySec {
-		scopedLog.Info("Startup Probe: InitialDelaySeconds is too small, recommended default minimum will be used", "configured", startupProbe.InitialDelaySeconds, "recommended minimum", startupProbeDefaultDelaySec)
+		logger.InfoContext(ctx, "startup Probe: InitialDelaySeconds is too small, recommended default minimum will be used", "configured", startupProbe.InitialDelaySeconds, "recommendedMinimum", startupProbeDefaultDelaySec)
 	}
 
 	if startupProbe.TimeoutSeconds != 0 && startupProbe.TimeoutSeconds < startupProbeTimeoutSec {
-		scopedLog.Info("Startup Probe: TimeoutSeconds is too small, recommended default minimum will be used", "configured", startupProbe.TimeoutSeconds, "recommended minimum", startupProbeTimeoutSec)
+		logger.InfoContext(ctx, "startup Probe: TimeoutSeconds is too small, recommended default minimum will be used", "configured", startupProbe.TimeoutSeconds, "recommendedMinimum", startupProbeTimeoutSec)
 	}
 
 	if startupProbe.PeriodSeconds != 0 && startupProbe.PeriodSeconds < startupProbePeriodSec {
-		scopedLog.Info("Startup Probe: PeriodSeconds is too small, recommended default minimum will be used", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
+		logger.InfoContext(ctx, "startup Probe: PeriodSeconds is too small, recommended default minimum will be used", "configured", startupProbe.PeriodSeconds, "recommendedMinimum", startupProbePeriodSec)
 	}
 	return err
 }
@@ -2123,4 +2300,23 @@ func validateSplunkGeneralTerms() error {
 		return nil
 	}
 	return fmt.Errorf("license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information")
+}
+
+// configDataHash returns a deterministic SHA-256 hex digest of the ConfigMap
+// Data map. Keys are sorted before hashing so the result is stable regardless
+// of iteration order. Using the Data hash rather than ResourceVersion prevents
+// spurious pod restarts when a ConfigMap is updated (e.g. owner-reference
+// annotation during bootstrap) without changing its actual content.
+func configDataHash(data map[string]string) string {
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	h := sha256.New()
+	for _, k := range keys {
+		_, _ = fmt.Fprintf(h, "%d:%s%d:%s", len(k), k, len(data[k]), data[k])
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }

@@ -1,18 +1,21 @@
 # Setup defaults for build arguments
-ARG PLATFORMS=linux/amd64,linux/arm64
-
 ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
-ARG BASE_IMAGE_VERSION=8.10-1770223153
+ARG BASE_IMAGE_VERSION=8.10-1786322860
+ARG BUILDER_IMAGE=golang:1.26.5
+ARG GOTOOLCHAIN=auto
+ARG BUILDPLATFORM
 
 # Build the manager binary
-FROM golang:1.25.7 AS builder
+FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} AS builder
 
 WORKDIR /workspace
+ENV GOTOOLCHAIN=${GOTOOLCHAIN}
 
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-# Cache dependencies before building and copying source to reduce re-downloading
+# Buildx arm64 has hit Go toolchain crashes under QEMU emulation. Keep the
+# builder on the native build platform and cross-compile the target binary.
 RUN go mod download
 
 # Copy the go source
@@ -24,8 +27,16 @@ COPY tools/ tools/
 COPY hack hack/
 
 # Build
-# TARGETOS and TARGETARCH are provided(inferred) by buildx via the --platforms flag
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+# TARGETOS and TARGETARCH are provided by buildx via the --platform flag, but
+# they must be declared with ARG in this stage to be visible inside the RUN.
+# Without these declarations GOARCH expands to empty and Go falls back to the
+# builder's native arch, producing a binary that mismatches the image manifest.
+ARG TARGETOS
+ARG TARGETARCH
+# GOFIPS140=v1.0.0 links the CMVP-certified (Certificate #5247) Go Cryptographic
+# Module into the binary and enables FIPS 140-3 mode by default. See
+# https://go.dev/doc/security/fips140.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GOFIPS140=v1.0.0 go build -a -o manager cmd/main.go
 
 # Use BASE_IMAGE as the base image
 FROM ${BASE_IMAGE}:${BASE_IMAGE_VERSION}
@@ -63,6 +74,7 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
         microdnf update -y libstdc++ && \
         microdnf update -y libxml2 && \
         microdnf update -y libgcc && \
+        microdnf update -y gnutls && \
         microdnf clean all; \
     fi
 
@@ -70,7 +82,7 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
 LABEL name="splunk" \
       maintainer="support@splunk.com" \
       vendor="splunk" \
-      version="3.1.0" \
+      version="3.2.0" \
       release="1" \
       summary="Simplify the Deployment & Management of Splunk Products on Kubernetes" \
       description="The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk Administrators to deploy and operate Enterprise deployments in a Kubernetes infrastructure. Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you."

@@ -30,7 +30,7 @@ var (
 	gcpProjectID                 = os.Getenv("GCP_PROJECT_ID")
 	gcpRegion                    = os.Getenv("GCP_REGION")
 	testGCPBucket                = os.Getenv("TEST_BUCKET")
-	testIndexesGCPBucket         = os.Getenv("TEST_INDEXES_GCP_BUCKET")
+	testIndexesGCPBucket         = os.Getenv("TEST_INDEXES_S3_BUCKET")
 	enterpriseLicenseLocationGCP = os.Getenv("ENTERPRISE_LICENSE_LOCATION")
 )
 
@@ -120,9 +120,9 @@ func CheckPrefixExistsOnGCP(prefix string) bool {
 			logf.Log.Error(err, "Error listing objects in GCP bucket")
 			return false
 		}
-		logf.Log.Info("CHECKING OBJECT", "OBJECT", objAttrs.Name)
+		logf.Log.Info("CHECKING OBJECT", "object", objAttrs.Name)
 		if strings.Contains(objAttrs.Name, prefix) {
-			logf.Log.Info("Prefix found in bucket", "Prefix", prefix, "Object", objAttrs.Name)
+			logf.Log.Info("Prefix found in bucket", "prefix", prefix, "object", objAttrs.Name)
 			return true
 		}
 	}
@@ -146,12 +146,12 @@ func CreateBucketAndPathIfNotExist(bucketName, path string) error {
 		// Create the bucket
 		err = client.Client.Bucket(bucketName).Create(ctx, gcpProjectID, nil)
 		if err != nil {
-			logf.Log.Error(err, "Failed to create bucket", "Bucket Name", bucketName)
+			logf.Log.Error(err, "Failed to create bucket", "bucketName", bucketName)
 			return err
 		}
-		logf.Log.Info("Bucket created", "Bucket Name", bucketName)
+		logf.Log.Info("Bucket created", "bucketName", bucketName)
 	} else if err != nil {
-		logf.Log.Error(err, "Error checking bucket attributes", "Bucket Name", bucketName)
+		logf.Log.Error(err, "Error checking bucket attributes", "bucketName", bucketName)
 		return err
 	}
 
@@ -161,16 +161,16 @@ func CreateBucketAndPathIfNotExist(bucketName, path string) error {
 		// Create a zero-length object to represent the path
 		wc := client.Client.Bucket(bucketName).Object(path).NewWriter(ctx)
 		if _, err := wc.Write([]byte{}); err != nil {
-			logf.Log.Error(err, "Failed to create path", "Path", path)
+			logf.Log.Error(err, "Failed to create path", "path", path)
 			return err
 		}
 		if err := wc.Close(); err != nil {
-			logf.Log.Error(err, "Failed to finalize path creation", "Path", path)
+			logf.Log.Error(err, "Failed to finalize path creation", "path", path)
 			return err
 		}
-		logf.Log.Info("Path created", "Path", path)
+		logf.Log.Info("Path created", "path", path)
 	} else if err != nil {
-		logf.Log.Error(err, "Error checking path attributes", "Path", path)
+		logf.Log.Error(err, "Error checking path attributes", "path", path)
 		return err
 	}
 
@@ -209,7 +209,7 @@ func DownloadFileFromGCP(bucketName, objectName, gcpFilePath, downloadDir string
 	objectPath := filepath.Join(gcpFilePath, objectName)
 	rc, err := client.Client.Bucket(bucketName).Object(objectPath).NewReader(ctx)
 	if err != nil {
-		logf.Log.Error(err, "Failed to create reader for object", "Object", objectName)
+		logf.Log.Error(err, "Failed to create reader for object", "object", objectName)
 		return "", err
 	}
 	defer rc.Close()
@@ -217,14 +217,14 @@ func DownloadFileFromGCP(bucketName, objectName, gcpFilePath, downloadDir string
 	localPath := filepath.Join(downloadDir, objectName)
 	file, err := os.Create(localPath)
 	if err != nil {
-		logf.Log.Error(err, "Failed to create local file", "Filename", localPath)
+		logf.Log.Error(err, "Failed to create local file", "filename", localPath)
 		return "", err
 	}
 	defer file.Close()
 
 	written, err := io.Copy(file, rc)
 	if err != nil {
-		logf.Log.Error(err, "Failed to download object", "Object", objectName)
+		logf.Log.Error(err, "Failed to download object", "object", objectName)
 		return "", err
 	}
 
@@ -318,19 +318,23 @@ func DeleteFileOnGCP(bucketName, objectName string) error {
 	defer cancel()
 
 	err = client.Client.Bucket(bucketName).Object(objectName).Delete(ctx)
-	if err != nil && err != storage.ErrObjectNotExist {
-		logf.Log.Error(err, "Unable to delete object from bucket", "Object Name", objectName, "Bucket Name", bucketName)
+	if errors.Is(err, storage.ErrObjectNotExist) {
+		logf.Log.Info("File is already absent on GCP", "fileName", objectName, "bucket", bucketName)
+		return nil
+	}
+	if err != nil {
+		logf.Log.Error(err, "Unable to delete object from bucket", "objectName", objectName, "bucketName", bucketName)
 		return err
 	}
 
 	// Optionally, verify deletion
 	_, err = client.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
-	if err == storage.ErrObjectNotExist {
-		logf.Log.Info("Deleted file on GCP", "File Name", objectName, "Bucket", bucketName)
+	if errors.Is(err, storage.ErrObjectNotExist) {
+		logf.Log.Info("File is already absent on GCP", "fileName", objectName, "bucket", bucketName)
 		return nil
 	}
 	if err != nil {
-		logf.Log.Error(err, "Error verifying deletion of object", "Object Name", objectName, "Bucket Name", bucketName)
+		logf.Log.Error(err, "Error verifying deletion of object", "objectName", objectName, "bucketName", bucketName)
 		return err
 	}
 
@@ -342,12 +346,12 @@ func GetFilesInPathOnGCP(bucketName, path string) []string {
 	resp := GetFileListOnGCP(bucketName, path)
 	var files []string
 	for _, obj := range resp {
-		logf.Log.Info("CHECKING OBJECT", "OBJECT", obj.Name)
+		logf.Log.Info("CHECKING OBJECT", "object", obj.Name)
 		if strings.HasPrefix(obj.Name, path) {
 			filename := strings.TrimPrefix(obj.Name, path)
 			// This condition filters out directories as GCP returns objects with their full paths
 			if len(filename) > 1 && !strings.HasSuffix(filename, "/") {
-				logf.Log.Info("File found in bucket", "Path", path, "Object", obj.Name)
+				logf.Log.Info("File found in bucket", "path", path, "object", obj.Name)
 				files = append(files, filename)
 			}
 		}
@@ -358,10 +362,10 @@ func GetFilesInPathOnGCP(bucketName, path string) []string {
 // DownloadFilesFromGCP downloads a list of files from a GCP bucket to a local directory
 func DownloadFilesFromGCP(bucketName, gcpAppDir, downloadDir string, appList []string) error {
 	for _, key := range appList {
-		logf.Log.Info("Downloading file from GCP", "File name", key)
+		logf.Log.Info("Downloading file from GCP", "fileName", key)
 		_, err := DownloadFileFromGCP(bucketName, key, gcpAppDir, downloadDir)
 		if err != nil {
-			logf.Log.Error(err, "Unable to download file", "File Name", key)
+			logf.Log.Error(err, "Unable to download file", "fileName", key)
 			return err
 		}
 	}
@@ -372,29 +376,29 @@ func DownloadFilesFromGCP(bucketName, gcpAppDir, downloadDir string, appList []s
 func UploadFilesToGCP(bucketName, gcpTestDir string, appList []string, uploadDir string) ([]string, error) {
 	var uploadedFiles []string
 	for _, key := range appList {
-		logf.Log.Info("Uploading file to GCP", "File name", key)
-		logf.Log.Info("Using bucket", "Bucket", bucketName, "Path", gcpTestDir, "Upload Dir", uploadDir)
+		logf.Log.Info("Uploading file to GCP", "fileName", key)
+		logf.Log.Info("Using bucket", "bucket", bucketName, "path", gcpTestDir, "uploadDir", uploadDir)
 		fileLocation := filepath.Join(uploadDir, key)
 		fileBody, err := os.Open(fileLocation)
 		if err != nil {
-			logf.Log.Error(err, "Unable to open file", "File name", key)
+			logf.Log.Error(err, "Unable to open file", "fileName", key)
 			return nil, err
 		}
 		defer fileBody.Close()
 
 		objectPath, err := UploadFileToGCP(bucketName, key, gcpTestDir, fileBody)
 		if err != nil {
-			logf.Log.Error(err, "Unable to upload file", "File name", key)
+			logf.Log.Error(err, "Unable to upload file", "fileName", key)
 			return nil, err
 		}
-		logf.Log.Info("File uploaded to GCP", "File name", objectPath)
+		logf.Log.Info("File uploaded to GCP", "fileName", objectPath)
 		uploadedFiles = append(uploadedFiles, objectPath)
 	}
 	return uploadedFiles, nil
 }
 
 // DisableAppsToGCP untars apps, modifies their config files to disable them, re-tars, and uploads the disabled versions to GCP
-func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir string) ([]string, error) {
+func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir string) error {
 	// Create directories for untarred and disabled apps
 	untarredAppsMainFolder := filepath.Join(downloadDir, "untarred_apps")
 	disabledAppsFolder := filepath.Join(downloadDir, "disabled_apps")
@@ -402,13 +406,13 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 	err := os.MkdirAll(untarredAppsMainFolder, os.ModePerm)
 	if err != nil {
 		logf.Log.Error(err, "Unable to create directory for untarred apps")
-		return nil, err
+		return err
 	}
 
 	err = os.MkdirAll(disabledAppsFolder, os.ModePerm)
 	if err != nil {
 		logf.Log.Error(err, "Unable to create directory for disabled apps")
-		return nil, err
+		return err
 	}
 
 	for _, key := range appFileList {
@@ -418,7 +422,7 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 		err := os.MkdirAll(untarredCurrentAppFolder, os.ModePerm)
 		if err != nil {
 			logf.Log.Error(err, "Unable to create folder for current app", "App", key)
-			return nil, err
+			return err
 		}
 
 		// Untar the app
@@ -426,15 +430,21 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 		err = untarFile(tarfile, untarredCurrentAppFolder)
 		if err != nil {
 			logf.Log.Error(err, "Failed to untar app", "App", key)
-			return nil, err
+			return err
+		}
+
+		untarredAppRootFolder, err := findExtractedAppRoot(untarredCurrentAppFolder)
+		if err != nil {
+			logf.Log.Error(err, "Failed to locate untarred app root", "App", key)
+			return err
 		}
 
 		// Disable the app by modifying its config file
-		appConfFile := filepath.Join(untarredCurrentAppFolder, "default", "app.conf")
+		appConfFile := filepath.Join(untarredAppRootFolder, "default", "app.conf")
 		err = disableAppConfig(appConfFile)
 		if err != nil {
 			logf.Log.Error(err, "Failed to disable app config", "File", appConfFile)
-			return nil, err
+			return err
 		}
 
 		// Tar the disabled app
@@ -442,18 +452,56 @@ func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir strin
 		err = tarGzFolder(untarredCurrentAppFolder, tarDestination)
 		if err != nil {
 			logf.Log.Error(err, "Failed to tar disabled app", "App", key)
-			return nil, err
+			return err
 		}
 	}
 
 	// Upload disabled apps to GCP
-	uploadedFiles, err := UploadFilesToGCP(testIndexesGCPBucket, gcpTestDir, appFileList, disabledAppsFolder)
+	_, err = UploadFilesToGCP(testIndexesGCPBucket, gcpTestDir, appFileList, disabledAppsFolder)
 	if err != nil {
 		logf.Log.Error(err, "Failed to upload disabled apps to GCP")
-		return nil, err
+		return err
 	}
 
-	return uploadedFiles, nil
+	return nil
+}
+
+func findExtractedAppRoot(extractDir string) (string, error) {
+	rootAppConf := filepath.Join(extractDir, "default", "app.conf")
+	if _, err := os.Stat(rootAppConf); err == nil {
+		return extractDir, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	entries, err := os.ReadDir(extractDir)
+	if err != nil {
+		return "", err
+	}
+
+	var candidates []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		candidate := filepath.Join(extractDir, entry.Name())
+		appConfFile := filepath.Join(candidate, "default", "app.conf")
+		if _, err := os.Stat(appConfFile); err == nil {
+			candidates = append(candidates, candidate)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+	}
+
+	switch len(candidates) {
+	case 0:
+		return "", fmt.Errorf("no app root containing default/app.conf found under %s", extractDir)
+	case 1:
+		return candidates[0], nil
+	default:
+		return "", fmt.Errorf("multiple app roots containing default/app.conf found under %s: %s", extractDir, strings.Join(candidates, ", "))
+	}
 }
 
 // untarFile extracts a tar.gz file to the specified destination
@@ -474,6 +522,9 @@ func untarFile(src, dest string) error {
 
 	for {
 		header, err := tarReader.Next()
+		if errors.Is(err, io.EOF) {
+			break // End of archive
+		}
 		if err != nil {
 			return err
 		}
@@ -482,13 +533,6 @@ func untarFile(src, dest string) error {
 		targetPath := filepath.Join(dest, header.Name)
 		if !strings.HasPrefix(targetPath, filepath.Clean(dest)+string(os.PathSeparator)) {
 			return fmt.Errorf("invalid file path: %s", targetPath)
-		}
-
-		if err == io.EOF {
-			break // End of archive
-		}
-		if err != nil {
-			return err
 		}
 
 		targetPath = filepath.Join(dest, header.Name)

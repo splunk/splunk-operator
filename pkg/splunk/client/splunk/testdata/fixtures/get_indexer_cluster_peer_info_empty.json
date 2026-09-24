@@ -1,0 +1,16 @@
+{
+  "links": {},
+  "origin": "https://localhost:8089/services/cluster/slave/info",
+  "updated": "2020-03-18T01:28:18+00:00",
+  "generator": {
+    "build": "a7f645ddaf91",
+    "version": "8.0.2"
+  },
+  "entry": [],
+  "paging": {
+    "total": 1,
+    "perPage": 30,
+    "offset": 0
+  },
+  "messages": []
+}

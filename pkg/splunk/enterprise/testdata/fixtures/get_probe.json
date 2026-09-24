@@ -1,0 +1,12 @@
+{
+  "exec": {
+    "command": [
+      "grep",
+      "ready",
+      "file.txt"
+    ]
+  },
+  "initialDelaySeconds": 100,
+  "timeoutSeconds": 10,
+  "periodSeconds": 10
+}

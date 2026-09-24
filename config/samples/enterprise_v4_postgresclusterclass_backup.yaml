@@ -1,0 +1,46 @@
+---
+# PostgresClusterClass with volume snapshot backups enabled
+# Demonstrates automated backup configuration via CSI volume snapshots
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresClusterClass
+metadata:
+  name: postgresql-backup
+spec:
+  provisioner: postgresql.cnpg.io
+
+  config:
+    instances: 3
+    storage: 50Gi
+    postgresVersion: "18"
+
+    resources:
+      requests:
+        cpu: "1"
+        memory: "4Gi"
+      limits:
+        cpu: "2"
+        memory: "8Gi"
+
+    # Automated backup - daily at 2am
+    backup:
+      enabled: true
+      schedule: "0 2 * * *"
+
+  cnpg:
+    primaryUpdateMethod: switchover
+
+    # CNPG backup policy (platform-controlled, not overridable by clusters)
+    backup:
+      # Prefer standby for backups to avoid primary I/O impact
+      target: prefer-standby
+      volumeSnapshot:
+        # CSI VolumeSnapshotClass for data PVC
+        className: csi-hostpath-snapclass
+        # Optional: separate class for WAL PVC
+        # walClassName: csi-wal-snapclass
+        # Snapshot ownership:
+        # "none" - snapshots persist independently, require manual cleanup
+        # "cluster" - snapshots are garbage collected when the CNPG Cluster is deleted
+        snapshotOwnerReference: none
+        # Online (hot) snapshots
+        online: true

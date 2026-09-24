@@ -1,0 +1,25 @@
+suite: notes
+templates:
+  - templates/NOTES.txt
+tests:
+  - it: should show replicaCount in VERIFY PODS section
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      replicaCount: 2
+    asserts:
+      - matchRegexRaw:
+          pattern: "2 forwarder pod"
+
+  - it: should show forwardServer in FORWARDING CONFIGURATION section
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+    asserts:
+      - matchRegexRaw:
+          pattern: "indexer.example.com:9997"
+
+  - it: should show deploymentServer when set
+    set:
+      splunkConfig.deploymentServer: "ds.example.com:8089"
+    asserts:
+      - matchRegexRaw:
+          pattern: "ds.example.com:8089"

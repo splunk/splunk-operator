@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +14,12 @@
 // limitations under the License.
 
 /*
-Package controller is used to manipulate Kubernetes resources using its REST API.
-This package has no dependencies outside of the standard go and kubernetes libraries,
-and the splunk.common package.
+Package splkcontroller manipulates Kubernetes resources using its REST API.
+This package has no dependencies outside of the standard go and kubernetes
+libraries, and the splunk.common package.
+
+This package will be renamed to k8sops/ to reflect its actual scope (full K8s
+CRUD) and avoid confusion with the new reconcile/<cr>/ packages. See
+pkg/splunk/k8sops/doc.go for the target documentation.
 */
 package splkcontroller

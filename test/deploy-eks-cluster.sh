@@ -16,45 +16,129 @@ if [[ -z "${ECR_REPOSITORY}" ]]; then
 fi
 
 if [[ -z "${EKS_CLUSTER_K8_VERSION}" ]]; then
-  echo "EKS_CLUSTER_K8_VERSION not set. Changing to 1.26"
-  export EKS_CLUSTER_K8_VERSION="1.26"
+  echo "EKS_CLUSTER_K8_VERSION not set. Changing to 1.36"
+  export EKS_CLUSTER_K8_VERSION="1.36"
 fi
 
+# Wait for the aws-ebs-csi-driver addon to leave CREATING/UPDATING state before
+# attempting an update. EKS returns 409 ResourceInUseException when UpdateAddon
+# is called while the addon is still converging.
+function waitForEbsCsiAddonActive() {
+  local cluster="$1"
+  local max_wait=180
+  local interval=10
+  local elapsed=0
+  local status
+  while [ "${elapsed}" -lt "${max_wait}" ]; do
+    status=$(aws eks describe-addon \
+      --cluster-name "${cluster}" \
+      --addon-name aws-ebs-csi-driver \
+      --query "addon.status" --output text 2>/dev/null || echo "UNKNOWN")
+    case "${status}" in
+      ACTIVE) return 0 ;;
+      CREATE_FAILED|UPDATE_FAILED|DELETE_FAILED|DEGRADED)
+        echo "EBS CSI addon is in terminal failed state: ${status}" >&2
+        return 1
+        ;;
+    esac
+    echo "Waiting for EBS CSI addon to become ACTIVE (current: ${status}, ${elapsed}s elapsed)"
+    sleep "${interval}"
+    elapsed=$((elapsed + interval))
+  done
+  echo "Timed out waiting for EBS CSI addon to become ACTIVE after ${max_wait}s" >&2
+  return 1
+}
+
+function ebsCsiRoleName() {
+  local cluster_name="$1"
+  local safe_cluster_name hash body
+
+  safe_cluster_name=$(printf '%s' "${cluster_name}" | tr -c 'A-Za-z0-9+=,.@_-' '_')
+
+  # IAM role names are capped at 64 chars. "EBS_" is 4 chars, so the
+  # sanitized cluster name portion must fit in 60 chars. When it is longer,
+  # truncate to 53 chars and append a 6-char hash so the name stays unique.
+  if [ "${#safe_cluster_name}" -gt 60 ]; then
+    hash="$(printf '%s' "${safe_cluster_name}" | sha256sum | cut -c1-6)"
+    body="$(printf '%s' "${safe_cluster_name}" | cut -c1-53)"
+    body="$(printf '%s' "${body}" | sed 's/_$//')"
+    safe_cluster_name="${body}_${hash}"
+  fi
+
+  printf 'EBS_%s' "${safe_cluster_name}"
+}
+
+function clusterExists() {
+  local region="${AWS_DEFAULT_REGION:-us-west-2}"
+  aws eks describe-cluster --region "${region}" --name "${TEST_CLUSTER_NAME}" >/dev/null 2>&1
+}
+
+function deleteOidcProviderForCluster() {
+  local region="${AWS_DEFAULT_REGION:-us-west-2}"
+  local account_id oidc_issuer oidc_provider
+
+  if ! clusterExists; then
+    echo "Cluster ${TEST_CLUSTER_NAME} not found while deleting OIDC provider; skipping cluster-scoped OIDC cleanup"
+    return 0
+  fi
+
+  account_id=$(aws sts get-caller-identity --query "Account" --output text)
+  oidc_issuer=$(aws eks describe-cluster --region "${region}" --name "${TEST_CLUSTER_NAME}" --query "cluster.identity.oidc.issuer" --output text 2>/dev/null || true)
+  if [ -z "${oidc_issuer}" ] || [ "${oidc_issuer}" = "None" ]; then
+    echo "Cluster ${TEST_CLUSTER_NAME} does not have an OIDC issuer; skipping cluster-scoped OIDC cleanup"
+    return 0
+  fi
+
+  oidc_provider="${oidc_issuer#https://}"
+  aws iam delete-open-id-connect-provider --open-id-connect-provider-arn "arn:aws:iam::${account_id}:oidc-provider/${oidc_provider}" || true
+}
+
 function deleteCluster() {
+  local region="${AWS_DEFAULT_REGION:-us-west-2}"
   echo "Cleanup role, security-group, open-id ${TEST_CLUSTER_NAME}"
   account_id=$(aws sts get-caller-identity --query "Account" --output text)
-  rolename=$(echo ${TEST_CLUSTER_NAME} | awk -F- '{print "EBS_" $(NF-1) "_" $(NF)}')
-  
+  rolename=$(ebsCsiRoleName "${TEST_CLUSTER_NAME}") || return 1
+
   # Detach role policies
-  role_attached_policies=$(aws iam list-attached-role-policies --role-name ${rolename} --query 'AttachedPolicies[*].PolicyArn' --output text)
+  role_attached_policies=$(aws iam list-attached-role-policies --role-name ${rolename} --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null || true)
   for policy_arn in ${role_attached_policies}; do
     aws iam detach-role-policy --role-name ${rolename} --policy-arn ${policy_arn}
   done
 
   # Delete IAM role
-  aws iam delete-role --role-name ${rolename}
+  aws iam delete-role --role-name ${rolename} 2>/dev/null || true
 
   # Delete OIDC provider
-  oidc_id=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME} --query "cluster.identity.oidc.issuer" --output text | cut -d '/' -f 5)
-  aws iam delete-open-id-connect-provider --open-id-connect-provider-arn arn:aws:iam::${account_id}:oidc-provider/oidc.eks.us-west-2.amazonaws.com/id/${oidc_id}
+  deleteOidcProviderForCluster
 
   # Get security group ID
-  security_group_id=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME} --query "cluster.resourcesVpcConfig.securityGroupIds[0]" --output text)
+  security_group_id=$(aws eks describe-cluster --region "${region}" --name ${TEST_CLUSTER_NAME} --query "cluster.resourcesVpcConfig.securityGroupIds[0]" --output text 2>/dev/null || true)
 
   # Cleanup remaining PVCs on the EKS Cluster
   echo "Cleanup remaining PVC on the EKS Cluster ${TEST_CLUSTER_NAME}"
-  tools/cleanup.sh
+  if clusterExists; then
+    tools/cleanup.sh
+  fi
 
   # Get node group
-  NODE_GROUP=$(eksctl get nodegroup --cluster=${TEST_CLUSTER_NAME} | sed -n 4p | awk '{ print $2 }')
+  NODE_GROUP=""
+  if clusterExists; then
+    NODE_GROUP=$(eksctl get nodegroup --cluster=${TEST_CLUSTER_NAME} | sed -n 4p | awk '{ print $2 }')
+  fi
 
   # Delete the node group to ensure no EC2 instances are using the security group
-  echo "Deleting node group - ${NODE_GROUP}"
-  eksctl delete nodegroup --cluster=${TEST_CLUSTER_NAME} --name=${NODE_GROUP}
+  if [ -n "${NODE_GROUP}" ]; then
+    echo "Deleting node group - ${NODE_GROUP}"
+    eksctl delete nodegroup --cluster=${TEST_CLUSTER_NAME} --name=${NODE_GROUP}
+  fi
 
   # Delete cluster
-  echo "Deleting cluster - ${TEST_CLUSTER_NAME}"
-  eksctl delete cluster --name ${TEST_CLUSTER_NAME}
+  if clusterExists; then
+    echo "Deleting cluster - ${TEST_CLUSTER_NAME}"
+    eksctl delete cluster --name ${TEST_CLUSTER_NAME}
+  else
+    echo "Cluster ${TEST_CLUSTER_NAME} already absent; skipping cluster delete"
+  fi
 
   if [ $? -ne 0 ]; then
     echo "Unable to delete cluster - ${TEST_CLUSTER_NAME}"
@@ -63,8 +147,8 @@ function deleteCluster() {
 
   # Wait for the cluster resources to be fully released before deleting security group
   echo "Waiting for resources to be detached from security group - ${security_group_id}"
-  while true; do
-    ENIs=$(aws ec2 describe-network-interfaces --filters "Name=group-id,Values=${security_group_id}" --query "NetworkInterfaces[*].NetworkInterfaceId" --output text)
+  while [ -n "${security_group_id}" ] && [ "${security_group_id}" != "None" ]; do
+    ENIs=$(aws ec2 describe-network-interfaces --region "${region}" --filters "Name=group-id,Values=${security_group_id}" --query "NetworkInterfaces[*].NetworkInterfaceId" --output text)
     if [ -z "${ENIs}" ]; then
       break
     fi
@@ -73,17 +157,20 @@ function deleteCluster() {
   done
 
   # Delete security group
-  aws ec2 delete-security-group --group-id ${security_group_id}
+  if [ -n "${security_group_id}" ] && [ "${security_group_id}" != "None" ]; then
+    aws ec2 delete-security-group --region "${region}" --group-id ${security_group_id} || true
+  fi
 
   return 0
 }
 
 
 function createCluster() {
+  local region="${AWS_DEFAULT_REGION:-us-west-2}"
   # Deploy eksctl cluster if not deploy
   rc=$(which eksctl)
   if [ -z "$rc" ]; then
-    echo "eksctl is not installed or in the PATH. Please install eksctl from https://github.com/weaveworks/eksctl."
+    echo "eksctl is not installed or in the PATH. Please install eksctl from https://github.com/eksctl-io/eksctl."
     return 1
   fi
 
@@ -94,10 +181,17 @@ function createCluster() {
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"
       return 1
     fi
-    eksctl utils associate-iam-oidc-provider --cluster=${TEST_CLUSTER_NAME}  --approve
-    oidc_id=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME} --query "cluster.identity.oidc.issuer" --output text | cut -d '/' -f 5)
+    if ! eksctl utils associate-iam-oidc-provider --cluster=${TEST_CLUSTER_NAME} --approve; then
+      echo "Unable to associate IAM OIDC provider for ${TEST_CLUSTER_NAME}; deleting the cluster OIDC provider and retrying once"
+      deleteOidcProviderForCluster
+      if ! eksctl utils associate-iam-oidc-provider --cluster=${TEST_CLUSTER_NAME} --approve; then
+        echo "Unable to associate IAM OIDC provider after cleanup - ${TEST_CLUSTER_NAME}"
+        return 1
+      fi
+    fi
+    oidc_id=$(aws eks describe-cluster --region "${region}" --name ${TEST_CLUSTER_NAME} --query "cluster.identity.oidc.issuer" --output text | cut -d '/' -f 5)
     account_id=$(aws sts get-caller-identity --query "Account" --output text)
-    oidc_provider=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME}  --region "us-west-2" --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
+    oidc_provider=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME}  --region "${region}" --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
     namespace=kube-system
     service_account=ebs-csi-controller-sa
     kubectl create serviceaccount ${service_account} --namespace ${namespace}
@@ -119,12 +213,12 @@ function createCluster() {
         }
       ]
     }"  >aws-ebs-csi-driver-trust-policy.json
-    rolename=$(echo ${TEST_CLUSTER_NAME} | awk -F- '{print "EBS_" $(NF-1) "_" $(NF)}')
+    rolename=$(ebsCsiRoleName "${TEST_CLUSTER_NAME}") || return 1
+    echo "Creating IAM role ${rolename} for the EBS CSI driver"
     aws iam create-role --role-name ${rolename} --assume-role-policy-document file://aws-ebs-csi-driver-trust-policy.json --description "irsa role for ${TEST_CLUSTER_NAME}"
     aws iam attach-role-policy  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy  --role-name ${rolename}
     kubectl annotate serviceaccount -n ${namespace} ${service_account} eks.amazonaws.com/role-arn=arn:aws:iam::${account_id}:role/${rolename}
     eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
-    eksctl utils update-cluster-logging --cluster ${TEST_CLUSTER_NAME}
     # CSPL-2887 - Patch the default storage class to gp2
     kubectl patch storageclass gp2 -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
   else
@@ -133,8 +227,89 @@ function createCluster() {
     eksctl utils write-kubeconfig --cluster=${TEST_CLUSTER_NAME}
   fi
 
+  # Reconcile IRSA + EBS CSI driver addon every run. Doing this outside the
+  # "cluster just created" branch ensures a re-run can heal a cluster whose
+  # role / trust policy / addon got into a bad state, and uses a role name
+  # unique to this cluster (see ebsCsiRoleName) so concurrent pipelines do
+  # not clobber each other's trust policy.
+  eksctl utils associate-iam-oidc-provider --cluster=${TEST_CLUSTER_NAME} --approve
+  account_id=$(aws sts get-caller-identity --query "Account" --output text)
+  oidc_provider=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME} --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
+  namespace=kube-system
+  service_account=ebs-csi-controller-sa
+  kubectl get serviceaccount ${service_account} --namespace ${namespace} >/dev/null 2>&1 || \
+    kubectl create serviceaccount ${service_account} --namespace ${namespace}
+  echo "{
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [
+      {
+        \"Effect\": \"Allow\",
+        \"Principal\": {
+          \"Federated\": \"arn:aws:iam::${account_id}:oidc-provider/${oidc_provider}\"
+        },
+        \"Action\": \"sts:AssumeRoleWithWebIdentity\",
+        \"Condition\": {
+          \"StringEquals\": {
+            \"${oidc_provider}:aud\": \"sts.amazonaws.com\",
+            \"${oidc_provider}:sub\": \"system:serviceaccount:${namespace}:${service_account}\"
+          }
+        }
+      }
+    ]
+  }"  >aws-ebs-csi-driver-trust-policy.json
+  rolename=$(ebsCsiRoleName "${TEST_CLUSTER_NAME}") || return 1
+  if aws iam get-role --role-name "${rolename}" >/dev/null 2>&1; then
+    echo "IAM role ${rolename} already exists; refreshing trust policy for current cluster OIDC provider"
+    aws iam update-assume-role-policy --role-name "${rolename}" --policy-document file://aws-ebs-csi-driver-trust-policy.json
+  else
+    echo "Creating IAM role ${rolename} for the EBS CSI driver"
+    aws iam create-role --role-name "${rolename}" --assume-role-policy-document file://aws-ebs-csi-driver-trust-policy.json --description "irsa role for ${TEST_CLUSTER_NAME}"
+  fi
+  aws iam attach-role-policy --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy --role-name "${rolename}"
+  kubectl annotate serviceaccount -n ${namespace} ${service_account} eks.amazonaws.com/role-arn=arn:aws:iam::${account_id}:role/${rolename} --overwrite
+  # Wait for any in-progress addon operation to settle before update/create.
+  # An addon in CREATING state rejects UpdateAddon with HTTP 409.
+  # `aws eks wait addon-active` polls every 10s for up to ~10 minutes (60
+  # checks) and exits 0 only when the addon reaches ACTIVE — no fixed timeout
+  # to tune.  Skip the wait if the addon doesn't exist yet (NOT_FOUND is fine).
+  addon_current_status=$(aws eks describe-addon \
+    --cluster-name "${TEST_CLUSTER_NAME}" \
+    --addon-name aws-ebs-csi-driver \
+    --query "addon.status" --output text 2>/dev/null || echo "NOT_FOUND")
+  if [ "${addon_current_status}" != "NOT_FOUND" ] && [ "${addon_current_status}" != "ACTIVE" ]; then
+    echo "aws-ebs-csi-driver is in ${addon_current_status} state; waiting for ACTIVE before proceeding..."
+    if ! aws eks wait addon-active \
+      --cluster-name "${TEST_CLUSTER_NAME}" \
+      --addon-name aws-ebs-csi-driver; then
+      echo "aws-ebs-csi-driver did not reach ACTIVE within the wait period (status=${addon_current_status}); aborting to avoid HTTP 409" >&2
+      return 1
+    fi
+  fi
+
+  if eksctl get addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} >/dev/null 2>&1; then
+    # Wait for any in-progress create/update to finish before issuing a new
+    # update. EKS returns 409 ResourceInUseException when UpdateAddon is called
+    # while the addon is in CREATING or UPDATING state (races on fresh clusters).
+    waitForEbsCsiAddonActive "${TEST_CLUSTER_NAME}" || return 1
+    eksctl update addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
+  else
+    eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
+  fi
+
+  # Wait for the addon to reach ACTIVE before restarting the controller.
+  echo "Waiting for aws-ebs-csi-driver to become ACTIVE..."
+  if ! aws eks wait addon-active \
+    --cluster-name "${TEST_CLUSTER_NAME}" \
+    --addon-name aws-ebs-csi-driver; then
+    echo "aws-ebs-csi-driver did not become ACTIVE after create/update; cluster bootstrap may be degraded" >&2
+    return 1
+  fi
+
+  # Restart ebs-csi-controller so it picks up updated SA annotation / role.
+  kubectl -n ${namespace} rollout restart deployment ebs-csi-controller >/dev/null 2>&1 || true
+
   echo "Logging in to ECR"
-  rc=$(aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin "${ECR_REPOSITORY}"/splunk/splunk-operator)
+  rc=$(aws ecr get-login-password --region "${region}" | docker login --username AWS --password-stdin "${ECR_REPOSITORY}"/splunk/splunk-operator)
   if [ "$rc" != "Login Succeeded" ]; then
       echo "Unable to login to ECR - $rc"
       return 1

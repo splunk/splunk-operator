@@ -1,0 +1,11 @@
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresDatabase
+metadata:
+  name: test-invalid-policy
+  namespace: default
+spec:
+  clusterRef:
+    name: postgres-cluster
+  databases:
+    - name: kvstore
+      deletionPolicy: Archive  # INVALID! Only "Delete" or "Retain" allowed

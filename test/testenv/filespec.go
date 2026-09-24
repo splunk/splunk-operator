@@ -99,11 +99,6 @@ func (p remotePath) Join(elem pathSpec) remotePath {
 	return newRemotePath(path.Join(p.file, elem.String()))
 }
 
-func (p remotePath) StripShortcuts() remotePath {
-	p = p.Clean()
-	return newRemotePath(stripPathShortcuts(p.file))
-}
-
 func (p remotePath) StripSlashes() remotePath {
 	return newRemotePath(stripLeadingSlash(p.file))
 }
@@ -122,26 +117,4 @@ func stripTrailingSlash(file string) string {
 func stripLeadingSlash(file string) string {
 	// tar strips the leading '/' and '\' if it's there, so we will too
 	return strings.TrimLeft(file, `/\`)
-}
-
-// stripPathShortcuts removes any leading or trailing "../" from a given path
-func stripPathShortcuts(p string) string {
-	newPath := p
-	trimmed := strings.TrimPrefix(newPath, "../")
-
-	for trimmed != newPath {
-		newPath = trimmed
-		trimmed = strings.TrimPrefix(newPath, "../")
-	}
-
-	// trim leftover {".", ".."}
-	if newPath == "." || newPath == ".." {
-		newPath = ""
-	}
-
-	if len(newPath) > 0 && string(newPath[0]) == "/" {
-		return newPath[1:]
-	}
-
-	return newPath
 }

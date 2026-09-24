@@ -24,7 +24,7 @@ import (
 	"os"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"

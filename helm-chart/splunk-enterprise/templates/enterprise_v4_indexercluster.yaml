@@ -21,6 +21,7 @@ items:
 {{ toYaml . | indent 6 }}
   {{- end }}
   spec:
+    disableResourceDefaults: {{ $.Values.indexerCluster.disableResourceDefaults }}
   {{- if $.Values.indexerCluster.serviceAccount }}
     serviceAccount: {{ $.Values.indexerCluster.serviceAccount }}
   {{- end }}
@@ -74,6 +75,10 @@ items:
   {{- end }}
   {{- with $.Values.image.imagePullSecrets }}
     imagePullSecrets:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- with $.Values.indexerCluster.podAnnotations }}
+    podAnnotations:
 {{ toYaml . | indent 6 }}
   {{- end }}
   {{- with $.Values.indexerCluster.volumes }}

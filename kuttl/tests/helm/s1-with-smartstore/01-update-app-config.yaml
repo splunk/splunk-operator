@@ -4,18 +4,18 @@ kind: TestStep
 commands:
   - script: pwd
     background: false
-  - script: yq w -i s1_config.yaml "standalone.smartstore.defaults.volumeName" "helm-test-c3-with-apps-smartstore-$NAMESPACE"
+  - script: yq -i ".standalone.smartstore.defaults.volumeName = \"helm-test-c3-with-apps-smartstore-${NAMESPACE}\"" s1_config.yaml
     background: false
     skipLogOutput: true
-  - script: yq w -i s1_config.yaml "standalone.smartstore.indexes[0].volumeName" "helm-test-c3-with-apps-smartstore-$NAMESPACE"
+  - script: yq -i ".standalone.smartstore.indexes[0].volumeName = \"helm-test-c3-with-apps-smartstore-${NAMESPACE}\"" s1_config.yaml
     background: false
     skipLogOutput: true
-  - script: yq w -i s1_config.yaml "standalone.smartstore.indexes[1].volumeName" "helm-test-c3-with-apps-smartstore-$NAMESPACE"
+  - script: yq -i ".standalone.smartstore.indexes[1].volumeName = \"helm-test-c3-with-apps-smartstore-${NAMESPACE}\"" s1_config.yaml
     background: false
     skipLogOutput: true
-  - script: yq w -i s1_config.yaml "standalone.smartstore.volumes[0].name" "helm-test-c3-with-apps-smartstore-$NAMESPACE"
+  - script: yq -i ".standalone.smartstore.volumes[0].name = \"helm-test-c3-with-apps-smartstore-${NAMESPACE}\"" s1_config.yaml
     background: false
     skipLogOutput: true
-  - script: yq w -i s1_config.yaml "standalone.smartstore.volumes[0].path" "helm-test-c3-with-apps-smartstore-$NAMESPACE"/smartstore
+  - script: yq -i ".standalone.smartstore.volumes[0].path = \"helm-test-c3-with-apps-smartstore-${NAMESPACE}/smartstore\"" s1_config.yaml
     background: false
     skipLogOutput: true

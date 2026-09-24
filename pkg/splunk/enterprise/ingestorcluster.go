@@ -17,36 +17,43 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"reflect"
-	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/logging"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	splunkconfig "github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+const (
+	ingestorTerminationGracePeriodSeconds = int64(300)
 )
 
 // ApplyIngestorCluster reconciles the state of an IngestorCluster custom resource
 func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
 	var err error
 
-	// Unless modified, reconcile for this object will be requeued after 5 seconds
+	// Default requeue interval for the rolling eviction polling loop.
 	result := reconcile.Result{
 		Requeue:      true,
-		RequeueAfter: time.Second * 5,
+		RequeueAfter: time.Minute,
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyIngestorCluster")
+	logger := logging.FromContext(ctx).With("func", "ApplyIngestorCluster", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -57,28 +64,40 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	cr.Kind = "IngestorCluster"
 
-	// Validate and updates defaults for CR
-	err = validateIngestorClusterSpec(ctx, client, cr)
-	if err != nil {
-		eventPublisher.Warning(ctx, "validateIngestorClusterSpec", fmt.Sprintf("validate ingestor cluster spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate ingestor cluster spec")
-		return result, err
+	// Initialize phase and conditions (must be before validation so we can set error messages)
+	isPaused := cr.GetAnnotations()[enterpriseApi.IngestorClusterPausedAnnotation] == "true"
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
+		})
+		cr.Status.Phase = result.Phase
+		cr.Status.Conditions = result.Conditions
+		cr.Status.ObservedGeneration = cr.GetGeneration()
 	}
-
-	// Initialize phase
-	cr.Status.Phase = enterpriseApi.PhaseError
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
+
+	// Validate and updates defaults for CR
+	err = validateIngestorClusterSpec(ctx, client, cr)
+	if err != nil {
+		eventPublisher.Warning(ctx, "ValidateIngestorClusterSpecFailed", "Validate Ingestor Cluster spec failed. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Ingestor Cluster spec validation failed")
+		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Ingestor Cluster spec validation failed", err)
+	}
+
+	// Track previous ready replicas for scaling events
+	previousReadyReplicas := cr.Status.ReadyReplicas
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.CredentialSecretVersion = "0"
-		cr.Status.ServiceAccount = ""
+		logger.InfoContext(ctx, "scaling up ingestor cluster", "previousReplicas", cr.Status.Replicas, "newReplicas", cr.Spec.Replicas)
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	// If needed, migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
 	}
 
@@ -88,8 +107,9 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err = initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "AppInfoStatusInitializationFailed", "Init and check app info status failed. Check operator logs for details.")
 			cr.Status.AppContext.IsDeploymentInProgress = false
+			setPhaseAndConditions(enterpriseApi.PhaseError, "App framework initialization failed")
 			return result, err
 		}
 	}
@@ -97,11 +117,11 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-ingestor", cr.GetName())
 
 	// Create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
+	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		eventPublisher.Warning(ctx, "ApplySplunkConfigFailed", "Apply of general config failed. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// Check if deletion has been requested
@@ -109,7 +129,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), false)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailed", "Apply of monitoring console config map failed. Check operator logs for details.")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -120,6 +141,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkIngestor)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err
 			}
 		}
@@ -128,7 +150,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil {
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
 		}
@@ -138,14 +160,23 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Create or update a headless service for ingestor cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, true))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service for ingestor cluster failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Apply of headless service failed. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
 		return result, err
 	}
 
 	// Create or update a regular service for ingestor cluster
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, false))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update service for ingestor cluster failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "ApplyServiceFailed", "Apply of service failed. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
+		return result, err
+	}
+
+	// Create PodDisruptionBudget for ingestor cluster if it does not already exist
+	if err = ApplyIngestorPodDisruptionBudget(ctx, client, cr); err != nil {
+		eventPublisher.Warning(ctx, "ApplyPodDisruptionBudgetFailed", "Apply of PodDisruptionBudget failed. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create PodDisruptionBudget")
 		return result, err
 	}
 
@@ -160,6 +191,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to determine Scaling state")
 			return result, err
 		}
 
@@ -184,17 +216,31 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 	}
 
-	// Create or update statefulset for the ingestors
-	statefulSet, err := getIngestorStatefulSet(ctx, client, cr)
+	// Ensure the SOK defaults resources exist: a ConfigMap for structural SmartBus
+	// config and a Secret for the credentials (both mounted via SPLUNK_DEFAULTS_URL).
+	defaultsConfigMap, defaultsSecret, err := ensureIngestorDefaults(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "getIngestorStatefulSet", fmt.Sprintf("get ingestor stateful set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, splcommon.NewTerminalError(EventReasonResolveQueueObjectStorageFailed, "referenced Queue, ObjectStorage CR, or credential Secret not found", err)
+		}
+		return result, fmt.Errorf("ensure defaults: %w", err)
+	}
+
+	// Create or update statefulset for the ingestors
+	statefulSet, err := getIngestorStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption(), defaultsSecret.AsStatefulSetOption())
+	if err != nil {
+		eventPublisher.Warning(ctx, "GetIngestorStatefulSetFailed", "Get stateful set failed. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
 		return result, err
 	}
 
 	// Make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, make([]corev1.EnvVar, 0))
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "MonitoringConsoleRefValidationFailed", "Monitoring console reference validation failed. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
@@ -202,56 +248,43 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err != nil {
-		eventPublisher.Warning(ctx, "update", fmt.Sprintf("update stateful set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "UpdateStatefulSetFailed", "Stateful set update failed. Check operator logs for details.")
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 		return result, err
 	}
-	cr.Status.Phase = phase
+	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, statefulSet.Spec.Selector)
+	configworkflow.GarbageCollectSecrets(ctx, client, cr, defaultsSecret.Name, statefulSet.Spec.Selector)
+	setPhaseAndConditions(phase, "")
+
+	// Emit scaling events when phase is ready and ready replicas changed to match desired
+	if phase == enterpriseApi.PhaseReady {
+		desiredReplicas := cr.Spec.Replicas
+		if cr.Status.ReadyReplicas == desiredReplicas && previousReadyReplicas != desiredReplicas {
+			if desiredReplicas > previousReadyReplicas {
+				eventPublisher.Normal(ctx, "ScaledUp",
+					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReadyReplicas, desiredReplicas))
+			} else if desiredReplicas < previousReadyReplicas {
+				eventPublisher.Normal(ctx, "ScaledDown",
+					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReadyReplicas, desiredReplicas))
+			}
+		}
+	}
 
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		qosCfg, err := ResolveQueueAndObjectStorage(ctx, client, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef, cr.Spec.ServiceAccount)
-		if err != nil {
-			scopedLog.Error(err, "Failed to resolve Queue/ObjectStorage config")
-			return result, err
-		}
 
-		secretChanged := cr.Status.CredentialSecretVersion != qosCfg.Version
-		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
-
-		// If queue is updated
-		if secretChanged || serviceAccountChanged {
-			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-			err = mgr.updateIngestorConfFiles(ctx, cr, &qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey, client)
-			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
-				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
-				return result, err
-			}
-
-			for i := int32(0); i < cr.Spec.Replicas; i++ {
-				ingClient := mgr.getClient(ctx, i)
-				err = ingClient.RestartSplunk()
-				if err != nil {
-					return result, err
-				}
-				scopedLog.Info("Restarted splunk", "ingestor", i)
-			}
-
-			cr.Status.CredentialSecretVersion = qosCfg.Version
-			cr.Status.ServiceAccount = cr.Spec.ServiceAccount
-		}
-
-		// Upgrade fron automated MC to MC CRD
+		// Upgrade from automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteReferencesToAutomatedMCIfExists", fmt.Sprintf("delete reference to automated MC if exists failed %s", err.Error()))
-			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+			eventPublisher.Warning(ctx, EventReasonMonitoringConsoleCleanupFailed, fmt.Sprintf("Failed to clean up automated monitoring console for %s — check operator logs", cr.GetName()))
+			logger.ErrorContext(ctx, "delete of reference to automated MC failed", "error", err.Error())
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), true)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMapFailed", "Apply of monitoring console environment config map failed. Check operator logs for details.")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 				return result, err
 			}
 		}
@@ -264,6 +297,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err = addTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 
@@ -272,34 +306,29 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 	}
 
-	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
-	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
-	if !result.Requeue {
-		result.RequeueAfter = 0
+	// Poll each ingestor pod for restart_required and evict pods gated by PDB.
+	// Skip while app framework deployment is in progress: ansible's REST conf
+	// writes transiently set restart_required on pod startup, which would
+	// otherwise trigger unintended evictions during app download/install.
+	var evictResult reconcile.Result
+	if !cr.Status.AppContext.IsDeploymentInProgress {
+		evictResult, err = RunRollingEviction(ctx, client, cr, logger)
+		if err != nil {
+			eventPublisher.Warning(ctx, "RollingEvictionFailed", "Failed during rolling eviction. Check operator logs for details.")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed during rolling eviction")
+		}
 	}
 
-	return result, nil
-}
-
-// getClient for ingestorClusterPodManager returns a SplunkClient for the member n
-func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ingestorClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
-
-	// Get Pod Name
-	memberName := GetSplunkStatefulsetPodName(SplunkIngestor, mgr.cr.GetName(), n)
-
-	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, mgr.cr.GetName(), true)))
-
-	// Retrieve admin password from Pod
-	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
-	if err != nil {
-		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
+	// Always requeue to drive the rolling eviction polling loop, capped at 1 minute.
+	// Honour a shorter interval if eviction or the app-framework requested one.
+	if result.RequeueAfter == 0 || result.RequeueAfter > time.Minute {
+		result.RequeueAfter = time.Minute
+	}
+	if evictResult.RequeueAfter > 0 && evictResult.RequeueAfter < result.RequeueAfter {
+		result.RequeueAfter = evictResult.RequeueAfter
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return result, err
 }
 
 // validateIngestorClusterSpec checks validity and makes default updates to a IngestorClusterSpec and returns error if something is wrong
@@ -307,6 +336,15 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in the ingestor cluster
 	if cr.Spec.Replicas < 1 {
 		cr.Spec.Replicas = 1
+	}
+
+	// queueRef.name and objectStorageRef.name are required; empty names would cause the reconciler
+	// to silently skip queue/storage configuration without any error.
+	if cr.Spec.QueueRef.Name == "" {
+		return fmt.Errorf("IngestorCluster spec must reference a Queue via queueRef.name")
+	}
+	if cr.Spec.ObjectStorageRef.Name == "" {
+		return fmt.Errorf("IngestorCluster spec must reference an ObjectStorage via objectStorageRef.name")
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
@@ -319,11 +357,72 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
+// ensureIngestorDefaults resolves the IngestorCluster's SmartBus queue/object-storage
+// configuration once and ensures both SOK defaults resources exist:
+//   - a content-addressed ConfigMap holding the structural SmartBus config, and
+//   - a content-addressed Secret holding only the credentials (access_key/secret_key).
+//
+// Both are immutable and mounted into every container via SPLUNK_DEFAULTS_URL.
+// Returns a zero-value DefaultsConfigMap when smartbus is not configured, and a zero-value
+// DefaultsSecret when no static credentials were resolved (e.g. IRSA / workload identity,
+// where the Queue VolList is empty).
+func ensureIngestorDefaults(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
+	if cr.Spec.QueueRef.Name == "" {
+		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, nil
+	}
+
+	qosCfg, err := configworkflow.ResolveQueueAndObjectStorage(ctx, c, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef)
+	if err != nil {
+		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
+	}
+	builder, err := splunkconfig.NewSmartBusConfBuilder(&qosCfg.Queue, &qosCfg.OS)
+	if err != nil {
+		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
+	}
+
+	owner := splcommon.AsOwner(cr, true)
+
+	var configMap resources.DefaultsConfigMap
+	if entries := splunkconfig.IngestorConf(builder); len(entries) > 0 {
+		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, entries, &owner)
+		if err != nil {
+			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
+		}
+	}
+
+	var secret resources.DefaultsSecret
+	if entries := splunkconfig.IngestorCredentialsConf(builder, qosCfg.AccessKey, qosCfg.SecretKey); len(entries) > 0 {
+		secret, err = configworkflow.EnsureSecret(ctx, c, cr, entries, &owner)
+		if err != nil {
+			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
+		}
+	}
+
+	return configMap, secret, nil
+}
+
 // getIngestorStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise ingestors
-func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) (*appsv1.StatefulSet, error) {
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, cr.Spec.Replicas, []corev1.EnvVar{})
+func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNames(SplunkIngestor, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
+	if err != nil {
+		return nil, fmt.Errorf("reconcile certs: %w", err)
+	}
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, cr.Spec.Replicas, []corev1.EnvVar{}, certMounts, opts...)
 	if err != nil {
 		return nil, err
+	}
+
+	// Set graceful shutdown: preStop runs splunk stop before kubelet sends SIGTERM
+	gracePeriod := ingestorTerminationGracePeriodSeconds
+	ss.Spec.Template.Spec.TerminationGracePeriodSeconds = &gracePeriod
+	for i := range ss.Spec.Template.Spec.Containers {
+		ss.Spec.Template.Spec.Containers[i].Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk stop"},
+				},
+			},
+		}
 	}
 
 	// Setup App framework staging volume for apps
@@ -332,64 +431,15 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	return ss, nil
 }
 
-// updateIngestorConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
-func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s client.Client) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("updateIngestorConfFiles").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
-
-	// Only update config for pods that exist
-	readyReplicas := newCR.Status.Replicas
-
-	// List all pods for this IngestorCluster StatefulSet
-	var updateErr error
-	for n := 0; n < int(readyReplicas); n++ {
-		memberName := GetSplunkStatefulsetPodName(SplunkIngestor, newCR.GetName(), int32(n))
-		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, newCR.GetName(), true)))
-		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
-		if err != nil {
-			return err
-		}
-		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
-
-		queueInputs, pipelineInputs := getQueueAndPipelineInputsForIngestorConfFiles(queue, os, accessKey, secretKey)
-
-		for _, input := range queueInputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
-				updateErr = err
-			}
-		}
-
-		for _, input := range pipelineInputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
-				updateErr = err
-			}
-		}
-	}
-
-	return updateErr
-}
-
-// getQueueAndPipelineInputsForIngestorConfFiles returns a list of queue and pipeline inputs for ingestor pods conf files
-func getQueueAndPipelineInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (queueInputs, pipelineInputs [][]string) {
-	// Queue Inputs
-	queueInputs = getQueueAndObjectStorageInputsForIngestorConfFiles(queue, os, accessKey, secretKey)
-
-	// Pipeline inputs
-	pipelineInputs = getPipelineInputsForConfFile(false)
-
-	return
-}
-
 type ingestorClusterPodManager struct {
 	c               splcommon.ControllerClient
-	log             logr.Logger
+	log             *slog.Logger
 	cr              *enterpriseApi.IngestorCluster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
-// newIngestorClusterPodManager creates pod manager to handle unit test cases
-var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
+var newIngestorClusterPodManager = func(log *slog.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
 	return ingestorClusterPodManager{
 		log:             log,
 		cr:              cr,
@@ -399,72 +449,17 @@ var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.Inges
 	}
 }
 
-// getPipelineInputsForConfFile returns a list of pipeline inputs for conf file
-func getPipelineInputsForConfFile(isIndexer bool) (config [][]string) {
-	config = append(config,
-		[]string{"pipeline:remotequeueruleset", "disabled", "false"},
-		[]string{"pipeline:ruleset", "disabled", "true"},
-		[]string{"pipeline:remotequeuetyping", "disabled", "false"},
-		[]string{"pipeline:remotequeueoutput", "disabled", "false"},
-		[]string{"pipeline:typing", "disabled", "true"},
-	)
-	if !isIndexer {
-		config = append(config, []string{"pipeline:indexerPipe", "disabled", "true"})
+func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
+	logger := slog.With("func", "ingestorClusterPodManager.getClient", "name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+
+	memberName := GetSplunkStatefulsetPodName(SplunkIngestor, mgr.cr.GetName(), n)
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(SplunkIngestor, mgr.cr.GetName(), true)))
+
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
+	if err != nil {
+		logger.WarnContext(ctx, "couldn't retrieve the admin password from pod", "error", err)
 	}
 
-	return
-}
-
-// getQueueAndObjectStorageInputsForConfFiles returns a list of queue and object storage inputs for conf files
-func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (config [][]string) {
-	queueProvider := ""
-	authRegion := ""
-	endpoint := ""
-	dlq := ""
-	if queue.Provider == "sqs" {
-		queueProvider = "sqs_smartbus"
-	} else if queue.Provider == "sqs_cp" {
-		queueProvider = "sqs_smartbus_cp"
-	}
-	if queue.Provider == "sqs" || queue.Provider == "sqs_cp" {
-		authRegion = queue.SQS.AuthRegion
-		endpoint = queue.SQS.Endpoint
-		dlq = queue.SQS.DLQ
-	}
-
-	path := ""
-	osEndpoint := ""
-	osProvider := ""
-	if os.Provider == "s3" {
-		if queueProvider == "sqs_smartbus" {
-			osProvider = "sqs_smartbus"
-		} else if queueProvider == "sqs_smartbus_cp" {
-			osProvider = "sqs_smartbus_cp"
-		}
-		osEndpoint = os.S3.Endpoint
-		path = os.S3.Path
-		if !strings.HasPrefix(path, "s3://") {
-			path = "s3://" + path
-		}
-	}
-
-	config = append(config,
-		[]string{"remote_queue.type", queueProvider},
-		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), authRegion},
-		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), endpoint},
-		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), osEndpoint},
-		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), path},
-		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), dlq},
-		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", queueProvider), "s2s"},
-		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", queueProvider), "4"},
-		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", queueProvider), "max_count"},
-		[]string{fmt.Sprintf("remote_queue.%s.send_interval", queueProvider), "5s"},
-	)
-
-	if accessKey != "" && secretKey != "" {
-		config = append(config, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), accessKey})
-		config = append(config, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), secretKey})
-	}
-
-	return
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }

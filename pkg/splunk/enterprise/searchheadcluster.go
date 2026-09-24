@@ -23,18 +23,19 @@ import (
 	"strings"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	"github.com/splunk/splunk-operator/pkg/logging"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -45,16 +46,24 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
+	logger := logging.FromContext(ctx).With("func", "ApplySearchHeadCluster")
 
 	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "SearchHeadCluster"
 
 	var err error
-	// Initialize phase
-	cr.Status.Phase = enterpriseApi.PhaseError
+	// Initialize phase and conditions
+	isPaused := cr.GetAnnotations()[enterpriseApi.SearchHeadClusterPausedAnnotation] == "true"
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
+		})
+		cr.Status.Phase = result.Phase
+		cr.Status.Conditions = result.Conditions
+		cr.Status.ObservedGeneration = cr.GetGeneration()
+	}
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 
 	// Update the CR Status
@@ -63,23 +72,24 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// validate and updates defaults for CR
 	err = validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateSearchHeadClusterSpec", fmt.Sprintf("validate searchHeadCluster spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate searchHeadCluster spec")
-		return result, err
+		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Search Head Cluster spec validation failed")
+		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Search Head Cluster spec validation failed", err)
 	}
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
 	}
 
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// If the app framework is configured then do following things -
@@ -88,8 +98,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
+			setPhaseAndConditions(enterpriseApi.PhaseError, "App framework initialization failed")
 			return result, err
 		}
 	}
@@ -116,6 +127,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), false)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -126,6 +138,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkSearchHead)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err
 			}
 		}
@@ -134,13 +147,13 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 			cr.Status.DeployerPhase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
 		}
 		if err != nil {
-			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonDeleteFailed, fmt.Sprintf("Failed to delete custom resource %s — check operator logs", cr.GetName()))
 		}
 		return result, err
 	}
@@ -148,24 +161,28 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// create or update a headless search head cluster service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, true))
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head headless service")
 		return result, err
 	}
 
 	// create or update a regular search head cluster service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, false))
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head service")
 		return result, err
 	}
 
 	// create or update a deployer service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, false))
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer service")
 		return result, err
 	}
 
 	// create or update statefulset for the deployer
 	statefulSet, err := getDeployerStatefulSet(ctx, client, cr)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer StatefulSet")
 		return result, err
 	}
 
@@ -173,6 +190,15 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if !statefulSet.CreationTimestamp.IsZero() {
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if err != nil || !continueReconcile {
+			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
+			} else {
+				// waiting on a dependency (e.g. ClusterManager recycling) is not an error,
+				// so don't leave the earlier-staged PhaseError as the persisted status on
+				// either the SHC phase or the deployer phase staged at function entry
+				cr.Status.DeployerPhase = enterpriseApi.PhasePending
+				setPhaseAndConditions(enterpriseApi.PhasePending, "Waiting for upgrade path dependency to become ready")
+			}
 			return result, err
 		}
 	}
@@ -180,6 +206,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := deployerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Deployer pods")
 		return result, err
 	}
 	cr.Status.DeployerPhase = phase
@@ -187,24 +214,27 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// create or update statefulset for the search heads
 	statefulSet, err = getSearchHeadStatefulSet(ctx, client, cr)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head StatefulSet")
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getSearchHeadEnv(cr))
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
-	mgr := newSearchHeadClusterPodManager(client, scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr := newSearchHeadClusterPodManager(client, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
 	// handle SHC upgrade process
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Search Head pods")
 		return result, err
 	}
-	cr.Status.Phase = phase
+	setPhaseAndConditions(phase, "")
 
 	var finalResult *reconcile.Result
 	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
@@ -214,6 +244,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getSearchHeadEnv(cr), true)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 			return result, err
 		}
 	}
@@ -224,7 +255,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
 
 		// Reset secrets related status structs
@@ -238,6 +269,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, numberOfDeployerReplicas, cr)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 
@@ -269,13 +301,12 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		return err
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyShcSecret").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "CrStatusNamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "NamespaceSecretResourceVersion", namespaceSecret.GetObjectMeta().GetResourceVersion())
+	logger := logging.FromContext(ctx).With("func", "ApplyShcSecret", "desiredReplicas", replicas, "shcSecretChanged", mgr.cr.Status.ShcSecretChanged, "adminSecretChanged", mgr.cr.Status.AdminSecretChanged, "crStatusNamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "namespaceSecretResourceVersion", namespaceSecret.GetObjectMeta().GetResourceVersion())
 
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
 		// First time, set resource version in CR
-		scopedLog.Info("Setting CrStatusNamespaceSecretResourceVersion for the first time")
+		logger.InfoContext(ctx, "setting CrStatusNamespaceSecretResourceVersion for the first time")
 		mgr.cr.Status.NamespaceSecretResourceVersion = namespaceSecret.ObjectMeta.ResourceVersion
 		return nil
 	} else if mgr.cr.Status.NamespaceSecretResourceVersion == namespaceSecret.ObjectMeta.ResourceVersion {
@@ -283,7 +314,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		return nil
 	}
 
-	scopedLog.Info("Namespaced scoped secret revision has changed")
+	logger.InfoContext(ctx, "namespaced scoped secret revision has changed")
 
 	// Retrieve shc_secret password from secret data
 	nsShcSecret := string(namespaceSecret.Data["shc_secret"])
@@ -297,8 +328,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		// Get search head pod's name
 		shPodName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), i)
 
-		reqLogger := log.FromContext(ctx)
-		scopedLog := reqLogger.WithName("ApplyShcSecretPodLoop").WithValues("Desired replicas", replicas, "ShcSecretChanged", mgr.cr.Status.ShcSecretChanged, "AdminSecretChanged", mgr.cr.Status.AdminSecretChanged, "NamespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "pod", shPodName)
+		podLogger := logging.FromContext(ctx).With("func", "ApplyShcSecretPodLoop", "desiredReplicas", replicas, "shcSecretChanged", mgr.cr.Status.ShcSecretChanged, "adminSecretChanged", mgr.cr.Status.AdminSecretChanged, "namespaceSecretResourceVersion", mgr.cr.Status.NamespaceSecretResourceVersion, "pod", shPodName)
 
 		// Retrieve shc_secret password from Pod
 		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
@@ -319,55 +349,53 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 
 		// If shc secret is different from namespace scoped secret change it
 		if shcSecret != nsShcSecret {
-			scopedLog.Info("shcSecret different from namespace scoped secret, changing shc secret")
-			// If shc secret already changed, ignore
-			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
-				if mgr.cr.Status.ShcSecretChanged[i] {
-					continue
+			podLogger.InfoContext(ctx, "shcSecret different from namespace scoped secret, changing shc secret")
+			// If shc secret already changed, skip the sync below, but still fall through
+			// to the independent admin-password check for this pod.
+			shcSecretAlreadyChanged := i < int32(len(mgr.cr.Status.ShcSecretChanged)) && mgr.cr.Status.ShcSecretChanged[i]
+			if !shcSecretAlreadyChanged {
+				// Change shc secret key
+				command := fmt.Sprintf("/opt/splunk/bin/splunk edit shcluster-config -auth admin:%s -secret %s", adminPwd, nsShcSecret)
+				streamOptions.Stdin = strings.NewReader(command)
+
+				_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+				if err != nil {
+					// Emit event for password sync failure
+					if eventPublisher != nil {
+						eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
+							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
+					}
+					return err
 				}
-			}
+				podLogger.InfoContext(ctx, "shcSecret changed")
 
-			// Change shc secret key
-			command := fmt.Sprintf("/opt/splunk/bin/splunk edit shcluster-config -auth admin:%s -secret %s", adminPwd, nsShcSecret)
-			streamOptions.Stdin = strings.NewReader(command)
+				howManyPodsHaveSecretChanged += 1
 
-			_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-			if err != nil {
-				// Emit event for password sync failure
-				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, "PasswordSyncFailed",
-						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
+				// Get client for Pod and restart splunk instance on pod
+				shClient := mgr.getClient(ctx, i)
+				err = shClient.RestartSplunk()
+				if err != nil {
+					// Emit event for password sync failure
+					if eventPublisher != nil {
+						eventPublisher.Warning(ctx, EventReasonPasswordSyncFailed,
+							fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
+					}
+					return err
 				}
-				return err
-			}
-			scopedLog.Info("shcSecret changed")
+				podLogger.InfoContext(ctx, "restarted Splunk")
 
-			howManyPodsHaveSecretChanged += 1
-
-			// Get client for Pod and restart splunk instance on pod
-			shClient := mgr.getClient(ctx, i)
-			err = shClient.RestartSplunk()
-			if err != nil {
-				// Emit event for password sync failure
-				if eventPublisher != nil {
-					eventPublisher.Warning(ctx, "PasswordSyncFailed",
-						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", shPodName, err.Error()))
+				// Set the shc_secret changed flag to true
+				if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
+					mgr.cr.Status.ShcSecretChanged[i] = true
+				} else {
+					mgr.cr.Status.ShcSecretChanged = append(mgr.cr.Status.ShcSecretChanged, true)
 				}
-				return err
-			}
-			scopedLog.Info("Restarted Splunk")
-
-			// Set the shc_secret changed flag to true
-			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
-				mgr.cr.Status.ShcSecretChanged[i] = true
-			} else {
-				mgr.cr.Status.ShcSecretChanged = append(mgr.cr.Status.ShcSecretChanged, true)
 			}
 		}
 
 		// If admin secret is different from namespace scoped secret change it
 		if adminPwd != nsAdminSecret {
-			scopedLog.Info("admin password different from namespace scoped secret, changing admin password")
+			podLogger.InfoContext(ctx, "admin password different from namespace scoped secret, changing admin password")
 			// If admin password already changed, ignore
 			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
 				if mgr.cr.Status.AdminSecretChanged[i] {
@@ -382,7 +410,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			scopedLog.Info("admin password changed on the splunk instance of pod")
+			podLogger.InfoContext(ctx, "admin password changed on the splunk instance of pod")
 
 			// Get client for Pod and restart splunk instance on pod
 			shClient := mgr.getClient(ctx, i)
@@ -390,13 +418,13 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			scopedLog.Info("Restarted Splunk")
+			podLogger.InfoContext(ctx, "restarted Splunk")
 
 			// Set the adminSecretChanged changed flag to true
 			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
 				mgr.cr.Status.AdminSecretChanged[i] = true
 			} else {
-				scopedLog.Info("Appending to AdminSecretChanged")
+				podLogger.InfoContext(ctx, "appending to AdminSecretChanged")
 				mgr.cr.Status.AdminSecretChanged = append(mgr.cr.Status.AdminSecretChanged, true)
 			}
 
@@ -406,7 +434,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 				return err
 			}
 			mgr.cr.Status.AdminPasswordChangedSecrets[podSecret.GetName()] = true
-			scopedLog.Info("Secret mounted on pod(to be changed) added to map")
+			podLogger.InfoContext(ctx, "secret mounted on pod(to be changed) added to map")
 		}
 	}
 
@@ -421,7 +449,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 	if len(mgr.cr.Status.AdminPasswordChangedSecrets) > 0 {
 
 		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
-			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), mgr.cr.GetName(), podSecretName)
+			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), podSecretName)
 			if err != nil {
 				return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
 			}
@@ -430,13 +458,13 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			scopedLog.Info("admin password changed on the secret mounted on pod")
+			logger.InfoContext(ctx, "admin password changed on the secret mounted on pod")
 		}
 	}
 
 	// Emit event for password sync completed
 	if eventPublisher != nil {
-		eventPublisher.Normal(ctx, "PasswordSyncCompleted",
+		eventPublisher.Normal(ctx, EventReasonPasswordSyncCompleted,
 			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
 	}
 
@@ -446,11 +474,16 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
 func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
+	if err != nil {
+		return nil, fmt.Errorf("reconcile certs: %w", err)
+	}
+
 	// get search head env variables with deployer
 	env := getSearchHeadEnv(cr)
 
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env)
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env, certMounts)
 	if err != nil {
 		return nil, err
 	}
@@ -462,8 +495,7 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 // Use default otherwise
 // Make sure to set the resources ONLY for the deployer
 func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster, podTemplate *corev1.PodTemplateSpec) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("setDeployerConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "setDeployerConfig", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Break out if this is not a deployer
 	if !strings.Contains("deployer", podTemplate.Labels["app.kubernetes.io/name"]) {
@@ -473,19 +505,19 @@ func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster,
 	for i := range podTemplate.Spec.Containers {
 		if len(depRes.Requests) != 0 {
 			podTemplate.Spec.Containers[i].Resources.Requests = cr.Spec.DeployerResourceSpec.Requests
-			scopedLog.Info("Setting deployer resources requests", "requests", cr.Spec.DeployerResourceSpec.Requests)
+			logger.InfoContext(ctx, "setting deployer resources requests", "requests", cr.Spec.DeployerResourceSpec.Requests)
 		}
 
 		if len(depRes.Limits) != 0 {
 			podTemplate.Spec.Containers[i].Resources.Limits = cr.Spec.DeployerResourceSpec.Limits
-			scopedLog.Info("Setting deployer resources limits", "limits", cr.Spec.DeployerResourceSpec.Limits)
+			logger.InfoContext(ctx, "setting deployer resources limits", "limits", cr.Spec.DeployerResourceSpec.Limits)
 		}
 	}
 
 	// Add node affinity if configured
 	if cr.Spec.DeployerNodeAffinity != nil {
 		podTemplate.Spec.Affinity.NodeAffinity = cr.Spec.DeployerNodeAffinity
-		scopedLog.Info("Setting deployer node affinity", "nodeAffinity", cr.Spec.DeployerNodeAffinity)
+		logger.InfoContext(ctx, "setting deployer node affinity", "nodeAffinity", cr.Spec.DeployerNodeAffinity)
 	}
 
 	return nil
@@ -493,7 +525,15 @@ func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster,
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+	// Uses the same SAN set as getSearchHeadStatefulSet (SH + deployer), not
+	// autoDNSNamesDeployer alone: this runs first, and EnsureCertificate is
+	// create-only, so whichever call creates the cert first fixes its SANs
+	// for the shared secret's lifetime.
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNamesSearchHeadCluster(cr.GetName(), cr.GetNamespace())))
+	if err != nil {
+		return nil, fmt.Errorf("reconcile certs: %w", err)
+	}
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas), certMounts)
 	if err != nil {
 		return ss, err
 	}
@@ -528,14 +568,13 @@ func validateSearchHeadClusterSpec(ctx context.Context, c splcommon.ControllerCl
 
 // helper function to get the list of SearchHeadCluster types in the current namespace
 func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.SearchHeadClusterList, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getSearchHeadClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getSearchHeadClusterList", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	objectList := enterpriseApi.SearchHeadClusterList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		scopedLog.Error(err, "SearchHeadCluster types not found in namespace", "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "SearchHeadCluster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
 		return objectList, err
 	}
 

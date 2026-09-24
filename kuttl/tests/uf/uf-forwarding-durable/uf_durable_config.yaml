@@ -1,0 +1,8 @@
+replicaCount: 1
+
+storage:
+  emptyDir: false
+  storageClassName: uf-gp3
+
+updateStrategy:
+  type: Recreate

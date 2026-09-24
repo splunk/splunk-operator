@@ -1,11 +1,19 @@
+# Setup defaults for build arguments
+ARG BUILDER_IMAGE=golang:1.26.5
+ARG GOTOOLCHAIN=auto
+ARG BUILDPLATFORM
+
 # Build the manager binary
-FROM golang:1.25.7 AS builder
+FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} AS builder
 
 WORKDIR /workspace
+ENV GOTOOLCHAIN=${GOTOOLCHAIN}
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-# Cache dependencies before building to speed up future builds
+# Buildx arm64 has hit Go toolchain crashes under QEMU emulation. Keep the
+# builder on the native build platform and cross-compile the target binary.
 RUN go mod download
 
 # Copy the go source
@@ -18,7 +26,10 @@ COPY hack hack/
 
 # Build
 # TARGETOS and TARGETARCH are provided(inferred) by buildx via the --platforms flag
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+# GOFIPS140=v1.0.0 links the CMVP-certified (Certificate #5247) Go Cryptographic
+# Module into the binary and enables FIPS 140-3 mode by default. See
+# https://go.dev/doc/security/fips140.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOFIPS140=v1.0.0 go build -a -o manager cmd/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless

@@ -1,0 +1,116 @@
+/*
+Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package validation
+
+import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+)
+
+// validateSHCEsAutoSslNotAllowed rejects ES premium-app sources on SearchHeadCluster
+// that specify ssl_enablement: auto. The auto mode writes to web.conf on the SHC deployer
+// and is not supported; users must choose strict or ignore.
+func validateSHCEsAutoSslNotAllowed(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	for i, source := range appConfig.AppSources {
+		effectiveScope := source.Scope
+		if effectiveScope == "" {
+			effectiveScope = appConfig.Defaults.Scope
+		}
+		if effectiveScope != enterpriseApi.ScopePremiumApps {
+			continue
+		}
+		effectiveType := source.PremiumAppsProps.Type
+		if effectiveType == "" {
+			effectiveType = appConfig.Defaults.PremiumAppsProps.Type
+		}
+		if effectiveType != enterpriseApi.PremiumAppsTypeEs {
+			continue
+		}
+		effectiveSsl := source.PremiumAppsProps.EsDefaults.SslEnablement
+		if effectiveSsl == "" {
+			effectiveSsl = appConfig.Defaults.PremiumAppsProps.EsDefaults.SslEnablement
+		}
+		if effectiveSsl == enterpriseApi.SslEnablementAuto {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("appSources").Index(i).Child("premiumAppsProps").Child("esDefaults").Child("sslEnablement"),
+				effectiveSsl,
+				fmt.Sprintf("ssl_enablement %q is not supported for Enterprise Security apps on SearchHeadCluster; use %q or %q",
+					enterpriseApi.SslEnablementAuto, enterpriseApi.SslEnablementStrict, enterpriseApi.SslEnablementIgnore)))
+		}
+	}
+	return allErrs
+}
+
+// ValidateSearchHeadClusterCreate validates a SearchHeadCluster on CREATE
+func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate replicas - SearchHeadCluster requires minimum 3 replicas
+	if obj.Spec.Replicas < 3 {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec").Child("replicas"),
+			obj.Spec.Replicas,
+			"SearchHeadCluster requires at least 3 replicas"))
+	}
+
+	// Validate common spec
+	allErrs = append(allErrs, validateCommonSplunkSpec(&obj.Spec.CommonSplunkSpec, field.NewPath("spec"))...)
+
+	// Validate AppFramework only if user provided config
+	if len(obj.Spec.AppFrameworkConfig.VolList) > 0 || len(obj.Spec.AppFrameworkConfig.AppSources) > 0 {
+		appFldPath := field.NewPath("spec").Child("appRepo")
+		allErrs = append(allErrs, validateAppFramework(&obj.Spec.AppFrameworkConfig, appFldPath, false)...)
+		allErrs = append(allErrs, validateSHCEsAutoSslNotAllowed(&obj.Spec.AppFrameworkConfig, appFldPath)...)
+	}
+
+	return allErrs
+}
+
+// ValidateSearchHeadClusterCreateWithContext validates a SearchHeadCluster on CREATE with ValidationContext
+func ValidateSearchHeadClusterCreateWithContext(obj *enterpriseApi.SearchHeadCluster, vc *ValidationContext) field.ErrorList {
+	allErrs := ValidateSearchHeadClusterCreate(obj)
+	if len(obj.Spec.ImagePullSecrets) > 0 {
+		allErrs = append(allErrs, ValidateImagePullSecretsExistence(
+			obj.Spec.ImagePullSecrets, vc, field.NewPath("spec").Child("imagePullSecrets"))...)
+	}
+	return allErrs
+}
+
+// ValidateSearchHeadClusterUpdate validates a SearchHeadCluster on UPDATE
+// TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
+func ValidateSearchHeadClusterUpdate(obj, oldObj *enterpriseApi.SearchHeadCluster) field.ErrorList {
+	return ValidateSearchHeadClusterCreate(obj)
+}
+
+// ValidateSearchHeadClusterUpdateWithContext validates a SearchHeadCluster on UPDATE with ValidationContext
+func ValidateSearchHeadClusterUpdateWithContext(obj, oldObj *enterpriseApi.SearchHeadCluster, vc *ValidationContext) field.ErrorList {
+	return ValidateSearchHeadClusterCreateWithContext(obj, vc)
+}
+
+// GetSearchHeadClusterWarningsOnCreate returns warnings for SearchHeadCluster CREATE
+func GetSearchHeadClusterWarningsOnCreate(obj *enterpriseApi.SearchHeadCluster) []string {
+	return getCommonWarnings(&obj.Spec.CommonSplunkSpec)
+}
+
+// GetSearchHeadClusterWarningsOnUpdate returns warnings for SearchHeadCluster UPDATE
+func GetSearchHeadClusterWarningsOnUpdate(obj, oldObj *enterpriseApi.SearchHeadCluster) []string {
+	return GetSearchHeadClusterWarningsOnCreate(obj)
+}

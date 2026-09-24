@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +14,15 @@
 // limitations under the License.
 
 /*
-Package enterprise is used to manipulate manage configuration for Splunk Enterprise deployments.
+Package enterprise is LEGACY — it manages configuration for Splunk Enterprise
+deployments but is being incrementally decomposed into purpose-built packages:
+
+  - Per-CR reconcile logic       → reconcile/<cr>/
+  - Multi-step workflows         → workflow/<domain>/
+  - K8s object builders          → resources/
+  - Admission webhooks           → validation/
+
+New code should go into the target packages. This package shrinks over time and
+will be deleted once all logic has been migrated.
 */
 package enterprise

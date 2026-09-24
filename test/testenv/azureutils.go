@@ -10,17 +10,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -339,7 +338,7 @@ func (client *AzureBlobClient) DownloadFileFromAzure(ctx context.Context, downlo
 		return "", err
 	}
 
-	logf.Log.Info("Download from Azure successful:", "File", downloadRequest.RemoteFile)
+	logf.Log.Info("Download from Azure successful", "file", downloadRequest.RemoteFile)
 
 	return localFile.Name(), err
 }
@@ -355,7 +354,7 @@ func DownloadFilesFromAzure(ctx context.Context, endPoint, accountKey, accountNa
 		}
 		_, err := azureBlobClient.DownloadFileFromAzure(ctx, downloadRequest, endPoint, StorageAccountKey, StorageAccount)
 		if err != nil {
-			logf.Log.Error(err, "Unable to download file", "File Name", key)
+			logf.Log.Error(err, "Unable to download file", "fileName", key)
 			return err
 		}
 	}
@@ -375,7 +374,7 @@ func DownloadLicenseFromAzure(ctx context.Context, downloadDir string) (string, 
 	azureBlobClient := &AzureBlobClient{}
 	filename, err := azureBlobClient.DownloadFileFromAzure(ctx, downloadRequest, GetAzureEndpoint(ctx), StorageAccountKey, StorageAccount)
 	if err != nil {
-		logf.Log.Error(err, "Unable to download license file", "File", filename)
+		logf.Log.Error(err, "Unable to download license file", "file", filename)
 	}
 	return filename, err
 }
@@ -420,7 +419,7 @@ func UploadFileToAzure(ctx context.Context, accountName, accountKey, fileFullPat
 	defer respAppDownload.Body.Close()
 
 	fmt.Println("App upload", "Resp Status", respAppDownload.Status)
-	fmt.Println("File successfuly uploaded to Azure Storage Container: " + fileFullPath)
+	fmt.Println("File successfully uploaded to Azure Storage Container: " + fileFullPath)
 	return localFileName, err
 }
 
@@ -432,7 +431,7 @@ func UploadFilesToAzure(ctx context.Context, accountName, accountKey, uploadFrom
 		fileFullPath := "https://" + StorageAccount + ".blob.core.windows.net" + "/" + azureIndexesContainer + "/" + containerName + "/" + key
 		fileName, err := UploadFileToAzure(ctx, accountName, accountKey, fileFullPath, fileLocation)
 		if err != nil {
-			logf.Log.Error(err, "Unable to upload file", "File name", key)
+			logf.Log.Error(err, "Unable to upload file", "fileName", key)
 			return nil, err
 		}
 		uploadedFiles = append(uploadedFiles, fileName)
@@ -533,69 +532,56 @@ func (client *AzureBlobClient) DeleteFilesOnAzure(ctx context.Context, endPoint,
 }
 
 // DisableAppsOnAzure untar apps, modify their conf file to disable them, re-tar and upload the disabled version to Azure
-func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []string, containerName string) ([]string, error) {
+func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []string, containerName string) error {
 
 	// Create a folder named 'untarred_apps' to store untarred apps folders
-	untarredAppsMainFolder := downloadDir + "/untarred_apps"
-	cmd := exec.Command("mkdir", untarredAppsMainFolder)
-	cmd.Run()
+	untarredAppsMainFolder := filepath.Join(downloadDir, "untarred_apps")
+	if err := os.MkdirAll(untarredAppsMainFolder, 0755); err != nil {
+		return fmt.Errorf("create %s: %w", untarredAppsMainFolder, err)
+	}
 
 	// Create a folder named 'disabled_apps' to stored disabled apps tgz files
-	disabledAppsFolder := downloadDir + "/disabled_apps"
-	cmd = exec.Command("mkdir", disabledAppsFolder)
-	cmd.Run()
+	disabledAppsFolder := filepath.Join(downloadDir, "disabled_apps")
+	if err := os.MkdirAll(disabledAppsFolder, 0755); err != nil {
+		return fmt.Errorf("create %s: %w", disabledAppsFolder, err)
+	}
 
 	for _, key := range appFileList {
 		// Create a specific folder for each app in 'untarred_apps'
-		tarfile := downloadDir + "/" + key
-		lastInd := strings.LastIndex(key, ".")
-		untarredCurrentAppFolder := untarredAppsMainFolder + "/" + key[:lastInd]
-		cmd := exec.Command("mkdir", untarredCurrentAppFolder)
-		cmd.Run()
+		tarfile := filepath.Join(downloadDir, key)
+		appUniqueID := uuid.New().String()
+		untarredCurrentAppFolder := filepath.Join(untarredAppsMainFolder, key+"_"+appUniqueID)
+		if err := os.MkdirAll(untarredCurrentAppFolder, 0755); err != nil {
+			return fmt.Errorf("create %s: %w", untarredCurrentAppFolder, err)
+		}
 
 		// Untar the app
-		cmd = exec.Command("tar", "-xf", tarfile, "-C", untarredCurrentAppFolder)
-		cmd.Run()
+		if err := untarFile(tarfile, untarredCurrentAppFolder); err != nil {
+			return fmt.Errorf("untar %s into %s: %w", tarfile, untarredCurrentAppFolder, err)
+		}
 
 		// Disable the app
 		// - Get the name of the untarred app folder (as it could be different from the tgz file)
-		wildcardpath := untarredCurrentAppFolder + "/*/./"
-		bytepath, _ := exec.Command("/bin/sh", "-c", "cd "+wildcardpath+"; pwd").Output()
-		untarredAppRootFolder := string(bytepath)
-		untarredAppRootFolder = untarredAppRootFolder[:len(untarredAppRootFolder)-1] //removing \n at the end of folder path
+		untarredAppRootFolder, err := findExtractedAppRoot(untarredCurrentAppFolder)
+		if err != nil {
+			return fmt.Errorf("locate untarred app root under %s: %w", untarredCurrentAppFolder, err)
+		}
 
 		// - Edit /default/app.conf (add "state = disabled" in [install] stanza)
-		appConfFile := untarredAppRootFolder + "/default/app.conf"
-		input, err := os.ReadFile(appConfFile)
-		if err != nil {
-			log.Fatalln(err)
-			return nil, err
-		}
-		lines := strings.Split(string(input), "\n")
-		for i, line := range lines {
-			if strings.Contains(line, "[install]") {
-				lines[i] = "[install]\nstate = disabled"
-			}
-			if strings.Contains(line, "state = enabled") {
-				lines = append(lines[:i], lines[i+1:]...)
-			}
-		}
-		output := strings.Join(lines, "\n")
-		err = os.WriteFile(appConfFile, []byte(output), 0644)
-		if err != nil {
-			log.Fatalln(err)
+		appConfFile := filepath.Join(untarredAppRootFolder, "default", "app.conf")
+		if err := disableAppConfig(appConfFile); err != nil {
+			return err
 		}
 
 		// Tar disabled app folder
-		lastInd = strings.LastIndex(untarredAppRootFolder, "/")
-		appFolderName := untarredAppRootFolder[lastInd+1:]
-		tarDestination := disabledAppsFolder + "/" + key
-		cmd = exec.Command("tar", "-czf", tarDestination, "--directory", untarredCurrentAppFolder, appFolderName)
-		cmd.Run()
+		tarDestination := filepath.Join(disabledAppsFolder, key)
+		if err := tarGzFolder(untarredCurrentAppFolder, tarDestination); err != nil {
+			return fmt.Errorf("tar %s -> %s: %w", untarredCurrentAppFolder, tarDestination, err)
+		}
 	}
 
 	// Upload disabled apps to Azure
-	uploadedFiles, _ := UploadFilesToAzure(ctx, StorageAccount, StorageAccountKey, disabledAppsFolder, containerName, appFileList)
+	_, err := UploadFilesToAzure(ctx, StorageAccount, StorageAccountKey, disabledAppsFolder, containerName, appFileList)
 
-	return uploadedFiles, nil
+	return err
 }

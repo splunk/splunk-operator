@@ -91,7 +91,7 @@ const (
 	MaxAppsRepoPollInterval int64 = 60 * 60 * 24
 
 	// DefaultMaxConcurrentAppDownloads sets the default value for maximum concurrent app downloads
-	DefaultMaxConcurrentAppDownloads uint64 = 5
+	DefaultMaxConcurrentAppDownloads int64 = 5
 
 	// MockClientInduceErrorGet represents an error for get Api
 	MockClientInduceErrorGet = "mockClientGetError"
@@ -108,13 +108,17 @@ const (
 	// MockClientInduceErrorDelete represents an error for delete Api
 	MockClientInduceErrorDelete = "mockClientDeleteError"
 
+	// MockClientInduceErrorApply represents an error for apply Api (controller-runtime v0.22+ / k8s v0.34+)
+	MockClientInduceErrorApply = "mockClientApplyError"
+
 	// Rerr represents a random error strting
 	Rerr = "randomError"
 )
 
-// AppDownloadVolume is the mount volume on the operator pod to temporarily download apps
-// sgontla: ToDo: being a constant will be a blocker for the UT to pass. relaxing a bit. Find a better alternative
-var AppDownloadVolume string = "/opt/splunk/appframework/"
+// AppDownloadVolume is the default mount volume on the operator pod to temporarily download apps.
+// It is a const: the resolved path (which may fall back to a tmp dir when this volume isn't
+// mounted) is tracked per-process in operatorResourceTracker.storage, not by mutating this value.
+const AppDownloadVolume string = "/opt/splunk/appframework/"
 
 var EventPublisherKey contextKey = "eventPublisher"
 var EventRecorderKey contextKey = "eventRecorder"
@@ -131,7 +135,7 @@ func GetNamespaceScopedSecretName(namespace string) string {
 
 // GetSplunkSecretTokenTypes returns all types of Splunk secret tokens
 func GetSplunkSecretTokenTypes() []string {
-	return []string{"hec_token", "password", "pass4SymmKey", "idxc_secret", "shc_secret"}
+	return []string{"hec_token", "password", "pass4SymmKey", "splunk_secret", "idxc_secret", "shc_secret"}
 }
 
 // GetLabelTypes returns a map of label types to strings

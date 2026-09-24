@@ -21,13 +21,12 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // ApplySecret creates or updates a Kubernetes Secret, and returns active secrets if successful
@@ -37,8 +36,7 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 		return nil, errors.New(splcommon.InvalidSecretObjectError)
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplySecret").WithValues(
+	scopedLog := logging.FromContext(ctx).With("func", "ApplySecret",
 		"name", secret.GetObjectMeta().GetName(),
 		"namespace", secret.GetObjectMeta().GetNamespace())
 
@@ -47,7 +45,7 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 	namespacedName := types.NamespacedName{Namespace: secret.GetNamespace(), Name: secret.GetName()}
 	err := client.Get(ctx, namespacedName, &result)
 	if err == nil {
-		scopedLog.Info("Found existing Secret, update if needed")
+		scopedLog.InfoContext(ctx, "found existing Secret, update if needed")
 		if !reflect.DeepEqual(&result, secret) {
 			result = *secret
 			err = splutil.UpdateResource(ctx, client, &result)
@@ -57,7 +55,7 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 			secret = &result
 		}
 	} else if k8serrors.IsNotFound(err) {
-		scopedLog.Info("Didn't find secret, creating one")
+		scopedLog.InfoContext(ctx, "didn't find secret, creating one")
 		err = splutil.CreateResource(ctx, client, secret)
 		if err != nil {
 			return nil, err
@@ -65,7 +63,7 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 		gerr := client.Get(ctx, namespacedName, secret)
 		retryCount := 0
 		for ; gerr != nil; gerr = client.Get(ctx, namespacedName, secret) {
-			scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "secret", namespacedName.Name, "error", gerr.Error())
+			scopedLog.ErrorContext(ctx, "newly created resource still not in cache sleeping for 10 micro second", "secret", namespacedName.Name, "error", gerr)
 			time.Sleep(10 * time.Microsecond)
 
 			// Avoid infinite loop

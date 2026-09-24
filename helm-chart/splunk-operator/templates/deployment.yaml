@@ -48,6 +48,9 @@ spec:
           args:
             - --leader-elect
             - --pprof
+{{- if .Values.splunkOperator.featureGates }}
+            - --feature-gates={{ include "splunk-operator.featureGates" . }}
+{{- end }}
           command:
             - /manager
 {{- with .Values.splunkOperator.livenessProbe }}
@@ -78,7 +81,7 @@ spec:
             - name: SPLUNK_GENERAL_TERMS
               value: {{ .Values.splunkOperator.splunkGeneralTerms | default "" }}
 {{- with .Values.extraEnvs }}
-{{- toYaml . | trim | nindent 10 }}
+{{- toYaml . | trim | nindent 12 }}
 {{- end }}
           ports:
             {{- range .Values.splunkOperator.service.ports }}

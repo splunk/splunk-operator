@@ -21,16 +21,17 @@ import (
 	"reflect"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -43,8 +44,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		RequeueAfter: time.Second * 5,
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyStandalone")
+	logger := logging.FromContext(ctx).With("func", "ApplyStandalone")
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -54,8 +54,17 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	cr.Kind = "Standalone"
 
 	var err error
-	// Initialize phase
-	cr.Status.Phase = enterpriseApi.PhaseError
+	// Initialize phase and conditions
+	isPaused := cr.GetAnnotations()[enterpriseApi.StandalonePausedAnnotation] == "true"
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
+		})
+		cr.Status.Phase = result.Phase
+		cr.Status.Conditions = result.Conditions
+		cr.Status.ObservedGeneration = cr.GetGeneration()
+	}
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -64,8 +73,8 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	err = validateStandaloneSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate standalone spec")
-		return result, err
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Standalone spec validation failed")
+		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Standalone spec validation failed", err)
 	}
 
 	// updates status after function completes
@@ -74,6 +83,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
 	}
 
@@ -82,11 +92,13 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 		if err != nil {
 			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
+			setPhaseAndConditions(enterpriseApi.PhaseError, "SmartStore remote volume key validation failed")
 			return result, err
 		}
 
 		_, _, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply SmartStore ConfigMap")
 			return result, err
 		}
 
@@ -101,6 +113,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
+			setPhaseAndConditions(enterpriseApi.PhaseError, "App framework initialization failed")
 			return result, err
 		}
 	}
@@ -110,9 +123,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// Smart Store secrets get created manually and should not be managed by the Operator
@@ -126,6 +139,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), false)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
 				return result, err
 			}
 		}
@@ -136,6 +150,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkStandalone)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err
 			}
 		}
@@ -145,7 +160,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
 		}
@@ -156,6 +171,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, true))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update headless service failed %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
 		return result, err
 	}
 
@@ -163,6 +179,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update regular service failed %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
 		return result, err
 	}
 
@@ -177,6 +194,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to determine Scaling state")
 			return result, err
 		}
 		appStatusContext := cr.Status.AppContext
@@ -204,7 +222,8 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// create or update statefulset
 	statefulSet, err := getStandaloneStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "getStandaloneStatefulSet", fmt.Sprintf("get standalone status set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonStatefulSetFailed, fmt.Sprintf("get standalone status set failed %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
 		return result, err
 	}
 
@@ -212,34 +231,37 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
 		return result, err
 	}
 
-	// Track last successful replica count to emit scale events after completion
-	previousReplicas := cr.Status.Replicas
+	// Track previous ready replicas for scaling events
+	previousReadyReplicas := cr.Status.ReadyReplicas
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("update stateful set failed %s", err.Error()))
-
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 		return result, err
 	}
-	cr.Status.Phase = phase
+	setPhaseAndConditions(phase, "")
 
-	// Emit scale events only after a successful scale operation has completed
+	// Emit scale events when phase is ready and ready replicas changed to match desired
 	if phase == enterpriseApi.PhaseReady {
 		desiredReplicas := cr.Spec.Replicas
-		if desiredReplicas > previousReplicas && cr.Status.Replicas == desiredReplicas {
-			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, "ScaledUp",
-					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
-			}
-		} else if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
-			if eventPublisher != nil {
-				eventPublisher.Normal(ctx, "ScaledDown",
-					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+		if cr.Status.ReadyReplicas == desiredReplicas && previousReadyReplicas != desiredReplicas {
+			if desiredReplicas > previousReadyReplicas {
+				if eventPublisher != nil {
+					eventPublisher.Normal(ctx, "ScaledUp",
+						fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReadyReplicas, desiredReplicas))
+				}
+			} else if desiredReplicas < previousReadyReplicas {
+				if eventPublisher != nil {
+					eventPublisher.Normal(ctx, "ScaledDown",
+						fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReadyReplicas, desiredReplicas))
+				}
 			}
 		}
 	}
@@ -248,6 +270,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
 		if err != nil {
 			eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap")
 			return result, err
 		}
 	}
@@ -258,8 +281,8 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			eventPublisher.Warning(ctx, "DeleteReferencesToAutomatedMCIfExists", fmt.Sprintf("delete reference to automated MC if exists failed %s", err.Error()))
-			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+			eventPublisher.Warning(ctx, EventReasonMonitoringConsoleCleanupFailed, fmt.Sprintf("Failed to clean up automated monitoring console for %s — check operator logs", cr.GetName()))
+			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
@@ -270,6 +293,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
 			}
 
@@ -288,8 +312,12 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
 func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNames(SplunkStandalone, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
+	if err != nil {
+		return nil, fmt.Errorf("reconcile certs: %w", err)
+	}
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{}, certMounts)
 	if err != nil {
 		return nil, err
 	}
@@ -334,14 +362,12 @@ func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 
 // helper function to get the list of Standalone types in the current namespace
 func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.StandaloneList, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getStandaloneList")
-
+	logger := logging.FromContext(ctx).With("func", "getStandaloneList")
 	objectList := enterpriseApi.StandaloneList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		scopedLog.Error(err, "Standalone types not found in namespace", "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "Standalone types not found in namespace", "namespace", cr.GetNamespace(), "error", err)
 		return objectList, err
 	}
 

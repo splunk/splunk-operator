@@ -1,241 +1,94 @@
 # Splunk Operator - AI Agent Guide
 
-This guide helps AI coding assistants understand the Splunk Operator project structure, development workflow, and common operations.
+Kubernetes operator (Go, Operator SDK + controller-runtime) that manages Splunk
+Enterprise deployments. This file is routing-first: it tells you where to look
+and who to ask. Detailed docs live under `docs/` and `pkg/splunk/README.md`.
 
-## Project Overview
+When changing this guide, read [`AGENTS.maintenance.md`](AGENTS.maintenance.md).
 
-The Splunk Operator is a Kubernetes operator that manages Splunk Enterprise deployments. It is built using:
-- **Language**: Go (see GO_VERSION in .env)
-- **Framework**: Kubernetes Operator SDK with controller-runtime
-- **Test Framework**: Ginkgo/Gomega
-- **CRD API Versions**: v1, v1alpha2, v1alpha3, v1beta1, v2, v3, v4
+## Start Here - Where To Find Things
 
-## Repository Structure
+- **Architecture & reconcile flow**: [`docs/develop/Architecture.md`](docs/develop/Architecture.md)
+- **Package layout & import-layer rules**: [`pkg/splunk/README.md`](pkg/splunk/README.md) (each package has a `doc.go`)
+- **Local setup & prerequisites**: [`docs/develop/DevelopmentSetup.md`](docs/develop/DevelopmentSetup.md)
+- **Contributing workflow**: [`docs/develop/Contributing.md`](docs/develop/Contributing.md)
+- **Agent implementation & validation workflow**: [`DEVELOPMENT.md`](DEVELOPMENT.md)
+- **Testing strategy**: [`docs/develop/IntegrationTesting.md`](docs/develop/IntegrationTesting.md)
+- **Webhooks / feature gates**: [`docs/develop/WebhookDevelopment.md`](docs/develop/WebhookDevelopment.md), [`docs/develop/FeatureGates.md`](docs/develop/FeatureGates.md)
+- **Logging conventions**: [`docs/develop/LoggingAndEvents.md`](docs/develop/LoggingAndEvents.md)
+- **User-facing operation docs**: [`docs/operate/`](docs/operate/)
+- **CI & release automation**: [`.gitlab-ci.yml`](.gitlab-ci.yml), [`gitlab-ci/`](gitlab-ci/), and [`.github/workflows/`](.github/workflows/)
+- **Production ownership & operational links**: [`.service-manifests/splunk-operator-component.yaml`](.service-manifests/splunk-operator-component.yaml)
+- **Metrics, telemetry & monitoring hardening**: [`config/prometheus/`](config/prometheus/), [`config/network-policy/`](config/network-policy/), [`config/manager/controller_manager_telemetry.yaml`](config/manager/controller_manager_telemetry.yaml), [`pkg/splunk/workflow/telapp/`](pkg/splunk/workflow/telapp/), and [`docs/postgresql/PostgreSQLObservabilityDashboard.md`](docs/postgresql/PostgreSQLObservabilityDashboard.md)
+- **Full command list**: `make help`
 
-```
-├── api/                    # Custom Resource Definitions (CRDs) for all API versions
-│   ├── v4/                # Current stable API version
-│   └── v3/                # Previous API version
-├── cmd/                    # Main entry point for the operator
-├── config/                 # Kubernetes manifests and configuration
-│   ├── crd/               # CRD base files
-│   ├── samples/           # Example CR manifests
-│   ├── default/           # Default kustomize configurations
-│   └── rbac/              # RBAC configurations
-├── docs/                   # User-facing documentation
-├── helm-chart/            # Helm charts for operator and enterprise
-├── internal/              # Internal controller logic
-├── kuttl/                 # KUTTL test scenarios
-├── pkg/                   # Core business logic
-│   ├── splunk/
-│   │   ├── common/       # Common utilities
-│   │   ├── enterprise/   # Enterprise-specific logic
-│   │   ├── client/       # Splunk API client
-│   │   └── util/         # Utility functions
-├── test/                  # Integration tests
-│   ├── testenv/          # Test environment utilities
-│   └── */                # Test suites by feature
-└── tools/                 # Helper scripts and utilities
-```
+### Where code lives
 
-## Common Makefile Commands
+- **CRD API types**: `api/enterprise/<version>/` (current stable: `v4`)
+- **Controller / reconcile logic**: `internal/controller/`
+- **Business logic**: `pkg/splunk/` (see `pkg/splunk/README.md`)
+- **Entry point**: `cmd/main.go`
+- **Manifests / RBAC / samples**: `config/`
+- **Helm charts**: `helm-chart/`
+- **Integration tests**: `test/`; **KUTTL scenarios**: `kuttl/`
+- **Shared integration-test framework and template**: `test/testenv/` and `test/example/`
 
-### Development Commands
+Use these routes without assuming every task requires an edit. Research,
+review, design, and triage start from the owning source; implementation,
+generation, build, and test work continues in `DEVELOPMENT.md`.
 
-```bash
-# Display all available make targets with descriptions
-make help
+## Ownership & Escalation
 
-# Format code
-make fmt
+- **Code ownership** is defined in [`.gitlab/CODEOWNERS`](.gitlab/CODEOWNERS):
+  - Default owner: `@okta-groups/sg-cloud-sok-developer-platform`
+  - PostgreSQL surfaces (`pkg/postgresql/`, `*postgres*`): `@okta-groups/sg-cloud-pfm-cse`
+- **Source of truth**: GitLab (`cd.splunkdev.com/sok/splunk-operator`); GitHub is a read-only mirror.
+- **Work intake / review**: open an MR using [`.gitlab/merge_request_templates/Default.md`](.gitlab/merge_request_templates/Default.md); Jira epic/ticket fields are required.
 
-# Generate manifests (CRDs, RBAC, webhooks)
-make manifests
+## What To Do When Stuck Or Blocked
 
-# Generate DeepCopy methods
-make generate
-
-# Build the operator binary
-make build
-
-# Run unit tests
-make test
-
-# Build multi-platform images with buildx
-make docker-buildx IMG=<your-image> PLATFORMS=linux/amd64,linux/arm64
-```
-
-### Deployment Commands
-
-```bash
-# Install CRDs into cluster
-make install
-
-# Uninstall CRDs from cluster
-make uninstall
-
-# Deploy operator to cluster
-make deploy IMG=<your-image> NAMESPACE=<namespace> ENVIRONMENT=<env>
-
-# Undeploy operator from cluster
-make undeploy
-```
-
-### Documentation Commands
-
-```bash
-# Preview documentation locally (requires Ruby and bundler)
-make docs-preview
-# Access at http://localhost:4000/splunk-operator
-```
-
-## Development Workflow
-
-### 1. Making Code Changes
-
-When modifying the operator code, follow this workflow:
-
-```bash
-# 1. Create a feature branch from develop
-git checkout -b feature/your-feature develop
-
-# 2. Make your changes to the codebase
-#    - API changes: api/v4/*.go
-#    - Controller logic: internal/controller/*.go
-#    - Business logic: pkg/splunk/**/*.go
-
-# 3. If you modified API types, regenerate code
-make manifests generate
-
-# 4. Format and vet your code
-make fmt vet
-
-# 5. Run unit tests
-make test
-
-# 6. Build the operator
-make build
-```
-
-### 2. Testing Changes
-
-#### Unit Tests
-
-Unit tests are located alongside source files and use Ginkgo/Gomega:
-
-```bash
-# Run all unit tests with coverage
-make test
-
-# Run specific test packages directly
-# (see ENVTEST_K8S_VERSION in Makefile)
-KUBEBUILDER_ASSETS="$(shell setup-envtest use ${ENVTEST_K8S_VERSION} -p path)" \
-  ginkgo -v ./pkg/splunk/common
-```
-
-Test coverage includes:
-- `pkg/splunk/common` - Common utilities
-- `pkg/splunk/enterprise` - Enterprise logic
-- `pkg/splunk/client` - API client
-- `pkg/splunk/util` - Utilities
-- `internal/controller` - Controller reconciliation logic
-
-#### Integration Tests
-
-**Integration Test Structure:**
-- Each test suite has its own directory under `test/`
-- Suite file: `*_suite_test.go` - Creates TestEnv (namespace)
-- Spec files: `*_test.go` - Contains test cases (test case Contexts with It blocks)
-- Test utilities: `test/testenv/` - Helper functions for deployments
-
-**Test Categories:**
-- `test/smoke/` - Basic smoke tests
-- `test/licensemanager/` - License manager tests
-- `test/monitoring_console/` - Monitoring console tests
-- `test/appframework_aws/` - App Framework with AWS S3
-- `test/appframework_az/` - App Framework with Azure Blob
-- `test/appframework_gcp/` - App Framework with GCP Storage
-- `test/smartstore/` - SmartStore functionality
-- `test/secret/` - Secret management
-- `test/custom_resource_crud/` - CR CRUD operations
-
-#### KUTTL Tests
-
-KUTTL provides declarative end-to-end testing:
-
-```bash
-# KUTTL test scenarios are in kuttl/tests/
-# Run with kubectl-kuttl (if installed)
-kubectl kuttl test --config kuttl/kuttl-test-kind.yaml
-```
-
-### 3. Documentation Updates
-
-When making changes that affect users:
-
-```bash
-# 1. Update relevant documentation in docs/
-#    - GettingStarted.md - Installation and basic usage
-#    - Examples.md - Code examples
-#    - CustomResources.md - CR specifications
-#    - AppFramework.md - App Framework details
-#    - SmartStore.md - SmartStore configuration
-
-# 2. Preview documentation locally
-make docs-preview
-
-# 3. Update CONTRIBUTING.md if workflow changes
-```
-
-## Environment Variables
-
-Key environment variables used in development:
-
-```bash
-# Operator configuration
-NAMESPACE=splunk-operator                          # Target namespace
-WATCH_NAMESPACE=""                                 # Watch all namespaces (cluster-wide)
-ENVIRONMENT=default                                # Deployment environment
-
-# Splunk configuration
-SPLUNK_ENTERPRISE_IMAGE=(See SPLUNK_ENTERPRISE_RELEASE_IMAGE in .env)   # Splunk Enterprise image
-SPLUNK_GENERAL_TERMS=""                           # SGT acceptance (required)
-
-# Testing
-SPLUNK_OPERATOR_IMAGE=splunk/splunk-operator:latest
-CLUSTER_PROVIDER=kind                              # kind, eks, azure, gcp
-PRIVATE_REGISTRY=localhost:5000
-
-# Cloud provider credentials (for integration tests)
-TEST_S3_ACCESS_KEY_ID=...
-TEST_S3_SECRET_ACCESS_KEY=...
-STORAGE_ACCOUNT=...                                # Azure
-STORAGE_ACCOUNT_KEY=...                            # Azure
-GCP_SERVICE_ACCOUNT_KEY=...                        # GCP
-```
-
-## Debugging Tips
-
-### Local Development
-
-```bash
-# Watch CRDs being reconciled
-kubectl get pods -n splunk-operator -w
-
-# Check operator logs
-kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager -f
-
-# Describe a Custom Resource
-kubectl describe <cr-type> <cr-name> -n <namespace>
-```
+- **Ambiguous requirements**: check `docs/develop/` and `docs/operate/` first; if still unclear, ask the owning team (see CODEOWNERS) in the MR rather than guessing.
+- **Failing / flaky tests**: see [`docs/develop/IntegrationTesting.md`](docs/develop/IntegrationTesting.md).
+- **Generated-code drift** (CRDs, RBAC, DeepCopy): re-run `make manifests generate`; never hand-edit generated files.
+- **High-risk / human sign-off required** before proceeding: CRD schema or API-version changes, RBAC changes, cluster deploy/undeploy, and anything under `pkg/postgresql/`.
+- **Git operations**: Do not commit or push unless the user explicitly requests it. When requested, commit only task-related changes and push only the current feature branch. Never force-push, rewrite history, or include unrelated changes without explicit approval.
+- **Never**: introduce breaking changes to public CRD APIs without owner approval.
 
 ### Common Issues
 
-1. **CRD not found**: Run `make install` to install CRDs
-2. **Permission errors**: Check RBAC with `kubectl auth can-i --list`
-3. **Image pull errors**: Verify `IMG` variable and registry access
+- **CRD not found**: run `make install`
+- **Permission errors**: check `kubectl auth can-i --list`
+- **Image pull errors**: verify `IMG` and registry access
 
-## Additional Resources
-- [Operator SDK Documentation](https://sdk.operatorframework.io/)
-- [Kubernetes API Reference](https://kubernetes.io/docs/reference/)
-- [Splunk Enterprise Documentation](https://help.splunk.com/en)
+### Cluster and legal safety
+
+Before live Kubernetes work, inspect the full command call chain and verify the
+exact authorized context, namespace, and scope. Never infer acceptance of the
+Splunk General Terms or populate `SPLUNK_GENERAL_TERMS`; use only a value
+supplied by the user after they follow `docs/README.md`.
+
+## Build, Test & Validate
+
+Primary loop, run before every MR:
+
+```bash
+make fmt vet   # format + static checks
+make test      # unit tests (Ginkgo/Gomega, envtest) with coverage
+make build     # compile the operator binary
+```
+
+- **After changing API types** (`api/enterprise/**`): also run `make manifests generate`.
+- **Docs-only changes**: `make docs-preview` (no code build required).
+- Full target list: `make help`.
+- **Completion evidence**: state what changed, checks that passed, and checks
+  not run with their concrete missing prerequisites.
+
+## Environment
+
+- Go version is sourced from `.env` (`GO_VERSION`); the toolchain is pinned via `go.mod`.
+- Key variables are documented in [`docs/develop/DevelopmentSetup.md`](docs/develop/DevelopmentSetup.md): `NAMESPACE`, `WATCH_NAMESPACE`, `SPLUNK_GENERAL_TERMS` (required), and cloud test credentials.
+- Put secrets in `.env.local` (gitignored) - never commit credentials.
+
+## Reference
+
+- [Operator SDK](https://sdk.operatorframework.io/) · [Kubernetes API](https://kubernetes.io/docs/reference/) · [Splunk Enterprise](https://help.splunk.com/en)

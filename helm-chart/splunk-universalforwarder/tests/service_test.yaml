@@ -1,0 +1,95 @@
+suite: service
+templates:
+  - templates/service.yaml
+tests:
+  - it: should not render Service when service.enabled is false (default)
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render a Service when service.enabled is true
+    set:
+      service.enabled: true
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - isKind:
+          of: Service
+
+  - it: should expose 4 ports by default when service enabled
+    set:
+      service.enabled: true
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 514
+      - equal:
+          path: spec.ports[1].port
+          value: 601
+      - equal:
+          path: spec.ports[2].port
+          value: 9997
+      - equal:
+          path: spec.ports[3].port
+          value: 8088
+
+  - it: should expose hec port with name hec
+    set:
+      service.enabled: true
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - equal:
+          path: spec.ports[3].name
+          value: hec
+
+  - it: should use ClusterIP as default service type
+    set:
+      service.enabled: true
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: should use UDP for syslog-udp port
+    set:
+      service.enabled: true
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - equal:
+          path: spec.ports[0].protocol
+          value: UDP
+
+  - it: should render service annotations when set
+    set:
+      service.enabled: true
+      service.annotations:
+        service.beta.kubernetes.io/aws-load-balancer-type: nlb
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - equal:
+          path: metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-type"]
+          value: nlb
+
+  - it: should support custom ports list
+    set:
+      service.enabled: true
+      service.ports:
+        - name: custom
+          port: 1514
+          protocol: UDP
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 1514

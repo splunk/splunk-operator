@@ -25,24 +25,30 @@ fi
 rc=$(which ginkgo)
 if [ -z "$rc" ]; then
   echo "ginkgo is not installed or in the PATH. Installing..."
-  go get github.com/onsi/ginkgo/ginkgo/v2
-  go get github.com/onsi/gomega/...
-
-  go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
+  go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@$(go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)
 fi
 
 echo "Running test using number of nodes: ${NUM_NODES}"
 echo "Running test using these images: ${PRIVATE_SPLUNK_OPERATOR_IMAGE} and ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
 
 
-# Check if test focus is set
-if [[ -z "${TEST_FOCUS}" ]]; then
-  TEST_TO_RUN="${TEST_REGEX}"
-  echo "Test focus not set running smoke test by default :: ${TEST_TO_RUN}"
-else
-  TEST_TO_RUN="${TEST_FOCUS}"
-  echo "Running following test :: ${TEST_TO_RUN}"
+for legacy in TEST_FOCUS TEST_TO_SKIP TEST_REGEX SKIP_REGEX; do
+  if [[ -n "${!legacy:-}" ]]; then
+    echo "ERROR: ${legacy} is no longer supported. Use TEST_LABELS with a Ginkgo label-filter expression instead." >&2
+    exit 2
+  fi
+done
+
+if [[ -z "${TEST_LABELS:-}" ]]; then
+  echo "ERROR: TEST_LABELS is required. Example: TEST_LABELS=\"e2e-pr && c3\"." >&2
+  exit 2
 fi
+
+LABEL_FILTER="${TEST_LABELS}"
+echo "Running tests with --label-filter :: ${LABEL_FILTER}"
+
+# Used only for log lines and the JUnit report filename below.
+TEST_TO_RUN="${TEST_LABELS}"
 
 # Set variables
 export CLUSTER_PROVIDER="${CLUSTER_PROVIDER}"
@@ -124,6 +130,31 @@ case ${CLUSTER_PROVIDER} in
           export S3_REGION="${AWS_S3_REGION}"
         fi
         ;;
+    "kraken")
+        # Kraken provides a vCluster — KUBECONFIG is already set by the caller.
+        # AppFramework tests that need cloud storage should set TEST_BUCKET,
+        # TEST_INDEXES_S3_BUCKET, ENTERPRISE_LICENSE_LOCATION, and S3_REGION
+        # directly in the workflow via secrets/vars; defaults below are fallbacks.
+        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to default"
+          export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_S3_PATH}"
+        fi
+
+        if [[ -z "${TEST_BUCKET}" ]]; then
+          echo "Data bucket not set. Changing to default"
+          export TEST_BUCKET="${TEST_S3_BUCKET}"
+        fi
+
+        if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
+          echo "Test bucket not set. Changing to default"
+          export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
+        fi
+
+        if [[ -z "${S3_REGION}" ]]; then
+          echo "S3 Region not set. Changing to default"
+          export S3_REGION="${AWS_S3_REGION}"
+        fi
+        ;;
 esac
 
 
@@ -131,11 +162,6 @@ if [[ -z "${CLUSTER_NODES}" ]]; then
     echo "Test Cluster Nodes Not Set in Environment Variables. Changing to env.sh value"
     export CLUSTER_NODES="${NUM_NODES}"
 fi
-if [[ -z "${TEST_TO_SKIP}" ]]; then
-  echo "TEST_TO_SKIP not set. Changing to default"
-  export TEST_TO_SKIP="${SKIP_REGEX}"
-fi
-
 if [[ -z "${DEBUG}" ]]; then
   echo "DEBUG not set. Changing to default"
   export DEBUG="${DEBUG_RUN}"
@@ -145,13 +171,60 @@ fi
 echo "Setting telemetry test to true"
 kubectl patch configmap splunk-operator-manager-telemetry -n splunk-operator --type merge -p '{"data":{"status":"{\"test\":\"true\",\"lastTransmission\":\"\"}"}}'
 
-echo "Skipping following test :: ${TEST_TO_SKIP}"
-
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-REPORT_FILENAME="report-junit-${TIMESTAMP}${GITHUB_RUN_ID:+-${GITHUB_RUN_ID}}-${TEST_TO_RUN:-all}.xml"
+REPORT_LABEL=$(printf '%s' "${TEST_TO_RUN:-all}" | tr ' /,' '_' | tr -s '_' | tr -cd '[:alnum:]_.-')
+RUN_ID="${CI_PIPELINE_ID:-${CI_JOB_ID:-}}"
+REPORT_FILENAME="report-junit-${TIMESTAMP}${RUN_ID:+-${RUN_ID}}-${REPORT_LABEL:-all}.xml"
 
+# Suite-level timeouts are set programmatically via sc.Timeout in each suite's
+# TestBasic function (see test/testenv/timeouts.go). The --timeout flag below
+# acts only as a CLI-level safety net; per-suite sc.Timeout values take precedence.
 TEST_TIMEOUT="${TEST_TIMEOUT:-225m}"
 
-# Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
-echo "ginkgo --junit-report=${REPORT_FILENAME} -v --keep-going --trace -r --timeout=${TEST_TIMEOUT}  -nodes=${CLUSTER_NODES} --focus=\"${TEST_TO_RUN}\" --skip=\"${TEST_TO_SKIP}\" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}"
-ginkgo --junit-report=${REPORT_FILENAME} --output-dir=`pwd` -v --keep-going --trace -r --timeout=${TEST_TIMEOUT} -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE} -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
+ginkgo_cmd=(
+  ginkgo
+  run
+  "--junit-report=${REPORT_FILENAME}"
+  "--output-dir=$(pwd)"
+  -v
+  --keep-going
+  --trace
+  -r
+  "--timeout=${TEST_TIMEOUT}"
+  "-nodes=${CLUSTER_NODES}"
+  "--label-filter=${LABEL_FILTER}"
+  --output-interceptor-mode=none
+  --cover
+)
+
+# Smoke-tagged runs (tier:e2e-pr) should stop each suite at its first failure
+# instead of burning the remaining NodeTimeout budget on specs that share the
+# now-broken cluster state. TEST_LABELS is a Ginkgo label-filter expression, so
+# match tier:e2e-pr only as a positive token -- a plain substring check would
+# also fire on a negated override like "tier:e2e-full && !tier:e2e-pr". Strip
+# grouping parens first so a negated-and-grouped override such as
+# "!(tier:e2e-pr)" is still recognized by the negation check below.
+NORMALIZED_LABELS="${TEST_LABELS//[()]/}"
+if [[ "${NORMALIZED_LABELS}" =~ (^|[^![:alnum:]_])tier:e2e-pr($|[^[:alnum:]_]) ]] && \
+   [[ ! "${NORMALIZED_LABELS}" =~ !\ *tier:e2e-pr ]]; then
+  ginkgo_cmd+=(--fail-fast)
+fi
+
+ginkgo_cmd+=(
+  "${topdir}/test/"
+  --
+  "-commit-hash=${COMMIT_HASH}"
+  "-operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}"
+  "-splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+  "-cluster-wide=${CLUSTER_WIDE}"
+  "-job-id=${CI_JOB_ID:-}"
+)
+
+if [ -n "${JOB_SPLUNK_UPGRADE_IMAGE:-}" ]; then
+  private_splunk_upgrade_image="$(SPLUNK_ENTERPRISE_IMAGE="${JOB_SPLUNK_UPGRADE_IMAGE}" bash "${topdir}/test/get-private-registry-enterprise.sh")" || exit $?
+  ginkgo_cmd+=("-splunk-upgrade-image=${private_splunk_upgrade_image}")
+fi
+
+printf '%q ' "${ginkgo_cmd[@]}"
+echo
+"${ginkgo_cmd[@]}"

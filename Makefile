@@ -1,14 +1,12 @@
 # Default environment is default
-ENVIRONMENT ?= ${1}
-${ENVIRONMENT}:
-	ENVIRONMENT = default
+ENVIRONMENT ?= default
 
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 3.1.0
+VERSION ?= 3.2.0
 
 # SPLUNK_ENTERPRISE_IMAGE defines the splunk docker tag that is used as default image.
 SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk"
@@ -25,6 +23,10 @@ SPLUNK_GENERAL_TERMS ?= ""
 
 # NAMESPACE defines default namespace where operator will be installed
 NAMESPACE ?= "splunk-operator"
+
+# MANAGER_EXTRA_ARG allows passing a single additional flag to the operator manager container.
+# Example: make deploy IMG=... MANAGER_EXTRA_ARG="--feature-gates=PostgresController=true"
+MANAGER_EXTRA_ARG ?= ""
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -58,6 +60,11 @@ BUNDLE_IMG ?= ${IMAGE_TAG_BASE}-bundle:v${VERSION}
 
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
+
+# SPLUNK_PROVISION_IMG is the dedicated splunk-provision init image injected into
+# Splunk pods (see injectSplunkProvision in pkg/splunk/enterprise/configuration.go).
+# TODO(SPL-306631): remove once splunk-provision is available in the Splunk docker image.
+SPLUNK_PROVISION_IMG ?=
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 # Automatically derive the version from go.mod
 ENVTEST_VERSION := $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
@@ -76,7 +83,7 @@ endif
 SCANNER_DATE := `date +%Y-%m-%d`
 SCANNER_DATE_YEST := `TZ=GMT+24 +%Y:%m:%d`
 SCANNER_VERSION := v8
-SCANNER_LOCALIP := $(shell ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | awk '{print $1}' | head -n 1)
+SCANNER_LOCALIP := $(shell addr=$$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$$' | grep -v '^127\.' | head -n 1); if [ -n "$$addr" ]; then printf '%s' "$$addr"; else ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | awk '{print $$1}' | head -n 1; fi)
 ifeq ($(shell uname), Linux)
 	SCANNER_FILE = clair-scanner_linux_amd64
 else ifeq ($(shell uname), Darwin)
@@ -122,7 +129,7 @@ help: ## Display this help.
 
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	rm config/crd/bases/_.yaml
+	rm -f config/crd/bases/_.yaml
 
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -137,63 +144,182 @@ scheck: ## Run static check against code
 vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
+UNIT_TEST_PACKAGES ?= ./pkg/... ./internal/controller/...
+
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	REPORT_FILE="unit_test-$$(date +%Y%m%d-%H%M%S)$${GITHUB_RUN_ID:+-$$GITHUB_RUN_ID}.xml"; \
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
+	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-unit_test.xml}"; \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out $(UNIT_TEST_PACKAGES)
 
 
 ##@ Documentation
 
 docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bundler)
 	@echo "Installing dependencies locally..."
-	@cd docs && bundle install --path vendor/bundle
+	@cd docs && bundle config set --local path vendor/bundle && bundle install
 	@echo "Starting Jekyll server for documentation preview..."
 	@cd docs && bundle exec jekyll serve --livereload
 	@echo "Documentation available at http://localhost:4000/splunk-operator"
 
+##@ Helm
+
+HELM_OPERATOR_CHART = helm-chart/splunk-operator
+HELM_UF_CHART = helm-chart/splunk-universalforwarder
+HELM_ENTERPRISE_CHART = helm-chart/splunk-enterprise
+
+.PHONY: helm-lint
+helm-lint: ## Lint Helm charts
+	helm repo add jetstack https://charts.jetstack.io --force-update
+	helm dependency build $(HELM_OPERATOR_CHART)
+	helm lint $(HELM_OPERATOR_CHART)
+	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234! --set splunkConfig.splunkGeneralTerms=$(SPLUNK_GENERAL_TERMS)
+	@mkdir -p $(HELM_ENTERPRISE_CHART)/charts
+	@rm -f $(HELM_ENTERPRISE_CHART)/charts/splunk-operator-*.tgz $(HELM_ENTERPRISE_CHART)/charts/splunk-universalforwarder-*.tgz
+	helm package $(HELM_OPERATOR_CHART) --destination $(HELM_ENTERPRISE_CHART)/charts
+	helm package $(HELM_UF_CHART) --destination $(HELM_ENTERPRISE_CHART)/charts
+	helm lint $(HELM_ENTERPRISE_CHART)
+
+.PHONY: helm-test
+helm-test: setup/helm-unittest ## Run Helm chart unit tests
+	helm unittest $(HELM_OPERATOR_CHART)
+	helm unittest $(HELM_UF_CHART)
+
+.PHONY: helm-check
+helm-check: helm-lint helm-test ## Run Helm lint and unit tests
+
+.PHONY: helm-lint-uf
+helm-lint-uf: ## Lint the UF Helm chart
+	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234! --set splunkConfig.splunkGeneralTerms=$(SPLUNK_GENERAL_TERMS)
+
+.PHONY: helm-test-uf
+helm-test-uf: setup/helm-unittest ## Run UF Helm chart unit tests
+	helm unittest $(HELM_UF_CHART)
+
+.PHONY: helm-check-uf
+helm-check-uf: helm-lint-uf helm-test-uf ## Run UF Helm lint and unit tests
+
 ##@ Build
 
 build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+	GOFIPS140=v1.0.0 go build -o bin/manager cmd/main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
-
-docker-build: #test ## Build docker image with the manager.
-	docker build -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
 # Docker-buildx is used to build the image for multiple OS/platforms
 # IMG is a mandatory argument to specify the image name
-# Defaults:
-#   Build Platform: linux/amd64,linux/arm64
-#   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal
-#   Build Base OS Version: 8.10-1770223153
-# Pass only what is required, the rest will be defaulted
-# Setup defaults for build arguments
+# Pass only what is required, the rest will use the Dockerfile defaults
 PLATFORMS ?= linux/amd64,linux/arm64
-BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
-BASE_IMAGE_VERSION ?= 8.10-1770223153
+
+docker-build: #test ## Build docker image with the manager.
+	docker build -t ${IMG} .
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
-            echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
-            exit 1; \
-        fi; \
-        	docker buildx create --name project-v3-builder --use || true; \
-        	docker buildx use project-v3-builder; \
-        if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
-            DOCKERFILE="Dockerfile.distroless"; \
-        else \
-            DOCKERFILE="Dockerfile"; \
-        fi; \
-        docker buildx build --push --platform="${PLATFORMS}" \
-            --build-arg BASE_IMAGE="${BASE_IMAGE}" \
-            --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-            --tag "${IMG}" -f "$$DOCKERFILE" .; \
-        - docker buildx rm project-v3-builder || true
+	        echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
+	        exit 1; \
+	    fi; \
+	    docker buildx inspect project-v3-builder >/dev/null 2>&1 || docker buildx create --name project-v3-builder; \
+	    docker buildx use project-v3-builder; \
+	    if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
+	        DOCKERFILE="Dockerfile.distroless"; \
+	    else \
+	        DOCKERFILE="Dockerfile"; \
+	        if [ -n "${BUILDER_IMAGE}" ]; then \
+	            BUILDER_IMAGE_ARG="--build-arg BUILDER_IMAGE=${BUILDER_IMAGE}"; \
+	        else \
+	            BUILDER_IMAGE_ARG=""; \
+	        fi; \
+	    fi; \
+	    if [ -n "${BASE_IMAGE}" ]; then \
+	        BASE_IMAGE_ARG="--build-arg BASE_IMAGE=${BASE_IMAGE}"; \
+	    else \
+	        BASE_IMAGE_ARG=""; \
+	    fi; \
+	    if [ -n "${BASE_IMAGE_VERSION}" ]; then \
+	        BASE_IMAGE_VERSION_ARG="--build-arg BASE_IMAGE_VERSION=${BASE_IMAGE_VERSION}"; \
+	    else \
+	        BASE_IMAGE_VERSION_ARG=""; \
+	    fi; \
+	    docker buildx build --push \
+	        --platform="${PLATFORMS}" \
+	        $$BASE_IMAGE_ARG \
+	        $$BASE_IMAGE_VERSION_ARG \
+	        $$BUILDER_IMAGE_ARG \
+	        --tag "${IMG}" -f "$$DOCKERFILE" .
+
+.PHONY: setup/kubectl
+setup/kubectl:
+	@if [ -z "${KUBECTL_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: KUBECTL_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@if [ ! -x "${CI_BIN_DIR}/kubectl" ]; then \
+		curl -fsSL -o "${CI_BIN_DIR}/kubectl" "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"; \
+		chmod +x "${CI_BIN_DIR}/kubectl"; \
+	fi
+
+.PHONY: setup/eksctl
+setup/eksctl:
+	@if [ -z "${EKSCTL_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: EKSCTL_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@if [ ! -x "${CI_BIN_DIR}/eksctl" ]; then \
+		tmp_archive="/tmp/eksctl-${EKSCTL_VERSION}-amd64.tar.gz"; \
+		curl --fail --show-error --silent --location --retry 3 --retry-delay 2 -o "$$tmp_archive" "https://github.com/eksctl-io/eksctl/releases/download/${EKSCTL_VERSION}/eksctl_$$(uname -s)_amd64.tar.gz"; \
+		if ! tar -tzf "$$tmp_archive" eksctl >/dev/null 2>&1; then \
+			echo "Downloaded eksctl archive is invalid: $$tmp_archive" >&2; \
+			wc -c "$$tmp_archive" >&2 || true; \
+			sed -n '1,20p' "$$tmp_archive" >&2 || true; \
+			rm -f "$$tmp_archive"; \
+			exit 1; \
+		fi; \
+		tar -xzf "$$tmp_archive" -C "${CI_BIN_DIR}" eksctl; \
+		chmod +x "${CI_BIN_DIR}/eksctl"; \
+		rm -f "$$tmp_archive"; \
+	fi
+
+.PHONY: setup/helm
+setup/helm:
+	@if [ -z "${HELM_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: HELM_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@if [ ! -x "${CI_BIN_DIR}/helm" ]; then \
+		set -e; \
+		normalized_version="v$${HELM_VERSION#v}"; \
+		tmp_archive="/tmp/helm-$${normalized_version}-linux-amd64.tar.gz"; \
+		curl -fsSL -o "$$tmp_archive" "https://get.helm.sh/helm-$${normalized_version}-linux-amd64.tar.gz"; \
+		tar -xzf "$$tmp_archive" -C /tmp linux-amd64/helm; \
+		mv /tmp/linux-amd64/helm "${CI_BIN_DIR}/helm"; \
+		chmod +x "${CI_BIN_DIR}/helm"; \
+		rm -rf /tmp/linux-amd64 "$$tmp_archive"; \
+	fi
+
+.PHONY: setup/kuttl
+setup/kuttl:
+	@if [ -z "${KUTTL_VERSION}" ] || [ -z "${CI_BIN_DIR}" ]; then \
+		echo "Error: KUTTL_VERSION and CI_BIN_DIR are required"; \
+		exit 1; \
+	fi
+	@mkdir -p "${CI_BIN_DIR}"
+	@normalized_version="v$${KUTTL_VERSION#v}"; \
+	target="${CI_BIN_DIR}/kubectl-kuttl"; \
+	versioned="$${target}-$${normalized_version}"; \
+	[ -f "$$versioned" ] || { \
+		set -e; \
+		asset_url="https://github.com/kudobuilder/kuttl/releases/download/$${normalized_version}/kubectl-kuttl_$${normalized_version#v}_linux_x86_64"; \
+		echo "Downloading $$asset_url"; \
+		curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL -o "$$versioned" "$$asset_url"; \
+		chmod +x "$$versioned"; \
+	}; \
+	ln -sf "$$versioned" "$$target"
 
 
 
@@ -209,6 +335,8 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: SPLUNK_GENERAL_TERMS_VALUE/value: \"${SPLUNK_GENERAL_TERMS}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s|value: MANAGER_EXTRA_ARG_VALUE|value: \"${MANAGER_EXTRA_ARG}\"|g"  config/${ENVIRONMENT}/kustomization.yaml
+	@if [ -n "${SPLUNK_PROVISION_IMG}" ]; then $(SED) "s|SPLUNK_PROVISION_IMAGE_VALUE|${SPLUNK_PROVISION_IMG}|g"  config/${ENVIRONMENT}/kustomization.yaml; fi
 	$(SED) 's/\("sokVersion": \)"[^"]*"/\1"$(VERSION)"/' config/manager/controller_manager_telemetry.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl apply --server-side --force-conflicts -f -
@@ -216,6 +344,8 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: \"${SPLUNK_GENERAL_TERMS}\"/value: SPLUNK_GENERAL_TERMS_VALUE/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s|value: \"${MANAGER_EXTRA_ARG}\"|value: MANAGER_EXTRA_ARG_VALUE|g"  config/${ENVIRONMENT}/kustomization.yaml
+	@if [ -n "${SPLUNK_PROVISION_IMG}" ]; then $(SED) "s|${SPLUNK_PROVISION_IMG}|SPLUNK_PROVISION_IMAGE_VALUE|g"  config/${ENVIRONMENT}/kustomization.yaml; fi
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl delete -f -
@@ -229,6 +359,9 @@ $(LOCALBIN):
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
 GOLANGCI_LINT_VERSION ?= v2.1.0
+GOSEC_VERSION ?= v2.22.4
+GOVULNCHECK_VERSION ?= v1.1.4
+HELM_UNITTEST_VERSION ?= v1.0.3
 
 CONTROLLER_GEN = $(LOCALBIN)/controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -236,10 +369,9 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 	test -s $(LOCALBIN)/controller-gen || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_TOOLS_VERSION}
 
 KUSTOMIZE = $(LOCALBIN)/kustomize
-KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,${KUSTOMIZE_VERSION}) $(LOCALBIN)
+	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
 ENVTEST = $(LOCALBIN)/setup-envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
@@ -348,11 +480,24 @@ catalog-push: ## Push a catalog image.
 
 
 .PHONY: code/sec
-code/sec: $(GOBIN)/gosec ## Run gosec
-	gosec -severity medium --confidence medium -quiet ./...
+code/sec: setup/gosec ## Run gosec
+	$(LOCALBIN)/gosec -severity medium --confidence medium -quiet ./...
 
-$(GOBIN)/gosec:
-	go get -u github.com/securego/gosec/cmd/gosec
+.PHONY: setup/gosec
+setup/gosec: $(LOCALBIN)/gosec
+
+$(LOCALBIN)/gosec: $(LOCALBIN)
+	$(call go-install-tool,$(LOCALBIN)/gosec,github.com/securego/gosec/v2/cmd/gosec,$(GOSEC_VERSION))
+
+.PHONY: code/vulncheck
+code/vulncheck: setup/govulncheck ## Run govulncheck
+	$(LOCALBIN)/govulncheck ./...
+
+.PHONY: setup/govulncheck
+setup/govulncheck: $(LOCALBIN)/govulncheck
+
+$(LOCALBIN)/govulncheck: $(LOCALBIN)
+	$(call go-install-tool,$(LOCALBIN)/govulncheck,golang.org/x/vuln/cmd/govulncheck,$(GOVULNCHECK_VERSION))
 
 .PHONY: cluster-up
 cluster-up:
@@ -366,6 +511,61 @@ cluster-down:
 int-test:
 	@echo Run integration test
 	@test/run-tests.sh
+
+# ---------------------------------------------------------------------------
+# Label-driven test entry points
+# Underlying selection is `ginkgo --label-filter="$(TEST_LABELS)"`.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-unit
+test-unit: ## Run unit tests only (./pkg/splunk/...). No cluster required.
+	go test ./pkg/splunk/... -count=1
+
+.PHONY: test-integration
+test-integration: manifests generate fmt vet setup-envtest ## Run all controller envtest specs, including Postgres controllers.
+	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-integration_test.xml}"; \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" \
+	  ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going \
+	  --timeout=$${TEST_TIMEOUT:-30m} ./internal/controller/enterprise
+
+.PHONY: test-smoke
+test-smoke: ## Run in-cluster smoke tests (label=tier:e2e-pr && feature:basic). Requires deployed operator.
+	@TEST_LABELS='tier:e2e-pr && feature:basic' test/run-tests.sh
+
+.PHONY: test-e2e-pr
+test-e2e-pr: ## Run PR-gate e2e tests (label=tier:e2e-pr). Requires deployed operator.
+	@TEST_LABELS=tier:e2e-pr test/run-tests.sh
+
+.PHONY: test-e2e-full
+test-e2e-full: ## Run full nightly e2e tests (label=tier:e2e-full). Requires deployed operator.
+	@TEST_LABELS=tier:e2e-full test/run-tests.sh
+
+.PHONY: test-shc-detention
+test-shc-detention: setup/ginkgo ## Run SHC detention timeout e2e tests. Requires deployed operator, SPLUNK_IMG and SPLUNK_UPGRADE_IMG set.
+	$(shell go env GOPATH)/bin/ginkgo -v --label-filter="feature:detention" ./test/shc_detention -- \
+	  -operator-image=$(OPERATOR_IMG) \
+	  -splunk-image=$(SPLUNK_IMG) \
+	  -splunk-upgrade-image=$(SPLUNK_UPGRADE_IMG)
+
+.PHONY: helm-package
+helm-package:
+	@helm repo add jetstack https://charts.jetstack.io --force-update
+	@helm dependency build helm-chart/splunk-operator
+	@mkdir -p helm-chart/splunk-enterprise/charts
+	@rm -f helm-chart/splunk-enterprise/charts/splunk-operator-*.tgz
+	@helm package helm-chart/splunk-operator --destination .
+	@mv splunk-operator-*.tgz helm-chart/splunk-enterprise/charts/
+	@rm -f helm-chart/splunk-enterprise/charts/splunk-universalforwarder-*.tgz
+	@helm package helm-chart/splunk-universalforwarder --destination .
+	@mv splunk-universalforwarder-*.tgz helm-chart/splunk-enterprise/charts/
+
+.PHONY: helm-kuttl-test
+helm-kuttl-test:
+	@if [ -z "${KUTTL_CONFIG}" ]; then \
+		echo "Error: KUTTL_CONFIG is required"; \
+		exit 1; \
+	fi
+	@kubectl kuttl test --config "${KUTTL_CONFIG}" --report xml
 
 lang:
 	@echo Running bias language linter
@@ -462,10 +662,20 @@ cleanup:
 .PHONY: setup/ginkgo
 setup/ginkgo:
 	@echo Installing ginkgo
-	@go get github.com/onsi/ginkgo/v2
-	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
-	@echo Installing gomega
-	@go get github.com/onsi/gomega/...
+	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@$(shell go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)
+
+.PHONY: setup/helm-unittest
+setup/helm-unittest:
+	@if helm plugin list 2>/dev/null | grep -q unittest; then \
+		installed=$$(helm plugin list 2>/dev/null | awk '/unittest/{print $$2}'); \
+		expected=$$(echo "$(HELM_UNITTEST_VERSION)" | sed 's/^v//'); \
+		if [ "$$installed" != "$$expected" ]; then \
+			helm plugin uninstall unittest; \
+			helm plugin install https://github.com/helm-unittest/helm-unittest.git --version $(HELM_UNITTEST_VERSION); \
+		fi; \
+	else \
+		helm plugin install https://github.com/helm-unittest/helm-unittest.git --version $(HELM_UNITTEST_VERSION); \
+	fi
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize

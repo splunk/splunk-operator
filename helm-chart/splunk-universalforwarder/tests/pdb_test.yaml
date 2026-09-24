@@ -1,0 +1,40 @@
+suite: pdb
+templates:
+  - templates/pdb.yaml
+tests:
+  - it: should not render PodDisruptionBudget by default
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render PodDisruptionBudget when enabled
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      podDisruptionBudget.enabled: true
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+
+  - it: should set minAvailable from values
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: 2
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 2
+
+  - it: should select pods via selectorLabels
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      podDisruptionBudget.enabled: true
+    asserts:
+      - isNotEmpty:
+          path: spec.selector.matchLabels

@@ -21,19 +21,20 @@ import (
 	"reflect"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
 // ApplyLicenseMaster reconciles the state for the Splunk Enterprise license manager.
@@ -44,8 +45,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyLicenseMaster")
+	logger := logging.FromContext(ctx).With("func", "ApplyLicenseMaster")
 
 	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
@@ -61,8 +61,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	err = validateLicenseMasterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateLicenseMasterSpec", fmt.Sprintf("validate licensemaster spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate license master spec")
-		return result, err
+		return result, fmt.Errorf("validate license master spec: %w", err)
 	}
 
 	// If needed, Migrate the app framework status
@@ -86,9 +85,8 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseMaster)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// check if deletion has been requested
@@ -162,7 +160,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
-			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
 		}
 
 		// Add a splunk operator telemetry app
@@ -190,7 +188,11 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 
 // getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getLicenseMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster) (*appsv1.StatefulSet, error) {
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{})
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNames(SplunkLicenseMaster, cr.GetName(), cr.GetNamespace(), 1)))
+	if err != nil {
+		return nil, fmt.Errorf("reconcile certs: %w", err)
+	}
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{}, certMounts)
 	if err != nil {
 		return ss, err
 	}
@@ -216,8 +218,7 @@ func validateLicenseMasterSpec(ctx context.Context, c splcommon.ControllerClient
 
 // helper function to get the list of LicenseMaster types in the current namespace
 func getLicenseMasterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getLicenseMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getLicenseMasterList", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	objectList := enterpriseApiV3.LicenseMasterList{}
 
@@ -225,7 +226,7 @@ func getLicenseMasterList(ctx context.Context, c splcommon.ControllerClient, cr 
 	numOfObjects := len(objectList.Items)
 
 	if err != nil {
-		scopedLog.Error(err, "LicenseMaster types not found in namespace", "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "LicenseMaster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
 		return numOfObjects, err
 	}
 

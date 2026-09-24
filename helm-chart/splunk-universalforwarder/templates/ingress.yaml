@@ -1,0 +1,36 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "splunk-universalforwarder.fullname" . }}-ingress
+  namespace: {{ include "splunk-universalforwarder.namespace" . }}
+  labels:
+    {{- include "splunk-universalforwarder.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - {{- if .host }} host: {{ .host }}{{ end }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "splunk-universalforwarder.fullname" $ }}-svc
+                port:
+                  name: hec
+          {{- end }}
+    {{- end }}
+{{- end }}

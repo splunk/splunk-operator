@@ -2,6 +2,8 @@
 
 : "${SPLUNK_OPERATOR_IMAGE:=splunk/splunk-operator:latest}"
 : "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:latest}"
+# TODO(SPL-306631): remove once splunk-provision is available in the Splunk docker image.
+: "${SPLUNK_PROVISION_IMG:=}"
 : "${CLUSTER_PROVIDER:=eks}"
 : "${CLUSTER_NAME:=integration-test-cluster-eks}"
 : "${NUM_WORKERS:=3}"
@@ -13,7 +15,7 @@
 : "${EKS_INSTANCE_TYPE:=m5.2xlarge}"
 : "${VPC_PUBLIC_SUBNET_STRING:=}"
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
-: "${EKS_CLUSTER_K8_VERSION:=1.34}"
+: "${EKS_CLUSTER_K8_VERSION:=1.36}"
 # Below env variables required to run license master test cases
 : "${ENTERPRISE_LICENSE_S3_PATH:=test_licenses/}"
 : "${TEST_S3_BUCKET:=splk-test-data-bucket}"
@@ -48,11 +50,7 @@
 : "${GCP_MANAGED_ID_ENABLED:=}"
 # set when operator need to be installed clusterwide
 : "${CLUSTER_WIDE:=false}"
-# Below env variable can be used to set the test cases to be run. Defaults to smoke test
-# Acceptable input is a regex matching test names
-: "${TEST_REGEX:=smoke}"
-# Regex to skip Test Cases
-: "${SKIP_REGEX:=}"
+: "${TEST_LABELS:=tier:e2e-pr}"
 # Set to DEBUG_RUN:=True to skip tear down of test environment in case of test failure
 : "${DEBUG_RUN:=False}"
 # Type of deplyoment, manifest files or helm chart, possible values "manifest" or "helm"

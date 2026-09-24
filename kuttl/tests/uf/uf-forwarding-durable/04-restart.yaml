@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      POD=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/instance=splunk-uf-durable -o jsonpath='{.items[0].metadata.name}')
+      kubectl delete pod -n "$NAMESPACE" "$POD"
+      echo "deleted-$POD-waiting-for-replacement"

@@ -1,0 +1,257 @@
+package controller
+
+import (
+	"context"
+
+	"github.com/splunk/splunk-operator/internal/controller/testutils"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
+
+	"fmt"
+
+	"github.com/pkg/errors"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+)
+
+var _ = Describe("LicenseManager Controller", Label("integration"), func() {
+
+	AfterEach(func() {
+
+	})
+
+	Context("LicenseManager Management", func() {
+
+		It("Get LicenseManager custom resource should failed", func() {
+			namespace := "ns-splunk-lm-1"
+			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			// check when resource not found
+			_, err := GetLicenseManager("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("licensemanagers.enterprise.splunk.com \"test\" not found"))
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("Create LicenseManager custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-lm-2"
+			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			annotations := make(map[string]string)
+			annotations[enterpriseApi.LicenseManagerPausedAnnotation] = "true"
+			CreateLicenseManager("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			ssSpec, _ := GetLicenseManager("test", nsSpecs.Name)
+			annotations = map[string]string{}
+			ssSpec.Annotations = annotations
+			ssSpec.Status.Phase = "Ready"
+			UpdateLicenseManager(ssSpec, enterpriseApi.PhaseReady)
+			DeleteLicenseManager("test", nsSpecs.Name)
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("Create LicenseManager custom resource should succeeded", func() {
+			namespace := "ns-splunk-lm-3"
+			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			annotations := make(map[string]string)
+			CreateLicenseManager("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteLicenseManager("test", nsSpecs.Name)
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+
+		It("Cover Unused methods", func() {
+			namespace := "ns-splunk-lm-4"
+			ApplyLicenseManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.LicenseManager{})
+			c := builder.Build()
+			instance := LicenseManagerReconciler{
+				Client: c,
+				Scheme: scheme.Scheme,
+			}
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test",
+					Namespace: namespace,
+				},
+			}
+			// econcile for the first time err is resource not found
+			_, err := instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+			// create resource first and then reconcile for the first time
+			ssSpec := testutils.NewLicenseManager("test", namespace, "image")
+			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
+			// reconcile with updated annotations for pause
+			annotations := make(map[string]string)
+			annotations[enterpriseApi.LicenseManagerPausedAnnotation] = "true"
+			ssSpec.Annotations = annotations
+			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
+			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+			// verify Paused=True condition was written
+			Expect(c.Get(ctx, request.NamespacedName, ssSpec)).Should(Succeed())
+			pausedCond := meta.FindStatusCondition(ssSpec.Status.Conditions, string(enterpriseApi.ConditionPaused))
+			Expect(pausedCond).ToNot(BeNil())
+			Expect(pausedCond.Status).To(Equal(metav1.ConditionTrue))
+			// reconcile after removing annotations for pause
+			annotations = map[string]string{}
+			ssSpec.Annotations = annotations
+			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
+			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+			// verify Paused=False condition was written
+			Expect(c.Get(ctx, request.NamespacedName, ssSpec)).Should(Succeed())
+			pausedCond = meta.FindStatusCondition(ssSpec.Status.Conditions, string(enterpriseApi.ConditionPaused))
+			Expect(pausedCond).ToNot(BeNil())
+			Expect(pausedCond.Status).To(Equal(metav1.ConditionFalse))
+			ssSpec.DeletionTimestamp = &metav1.Time{}
+			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Reconcile emits Stalled Warning on every terminal failure reconcile", func() {
+			namespace := "ns-splunk-lm-stalled"
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder().WithStatusSubresource(&enterpriseApi.LicenseManager{})
+			c := builder.Build()
+			recorder := record.NewFakeRecorder(10)
+			reconciler := LicenseManagerReconciler{
+				Client:   c,
+				Scheme:   scheme.Scheme,
+				Recorder: recorder,
+			}
+			ssSpec := testutils.NewLicenseManager("test", namespace, "image")
+			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
+
+			ApplyLicenseManager = func(ctx context.Context, cl client.Client, instance *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
+			}
+
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "test", Namespace: namespace},
+			}
+
+			// First reconcile: Stalled=False → Stalled=True — Stalled event expected
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+
+			// Second reconcile: Stalled=True → Stalled=True — Warning fires on every stalled reconcile
+			_, err = reconciler.Reconcile(ctx, request)
+			Expect(errors.Is(err, reconcile.TerminalError(nil))).To(BeTrue())
+			Eventually(recorder.Events).Should(Receive(MatchRegexp(`^Warning ` + enterprise.EventReasonStalled + ` `)))
+		})
+
+	})
+})
+
+func GetLicenseManager(name string, namespace string) (*enterpriseApi.LicenseManager, error) {
+	key := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	By("Expecting LicenseManager custom resource to be created successfully")
+	ss := &enterpriseApi.LicenseManager{}
+	err := k8sClient.Get(context.Background(), key, ss)
+	if err != nil {
+		return nil, err
+	}
+	return ss, err
+}
+
+func CreateLicenseManager(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.LicenseManager {
+	key := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	ssSpec := testutils.NewLicenseManager(name, namespace, "image")
+	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
+
+	By("Expecting LicenseManager custom resource to be created successfully")
+	ss := &enterpriseApi.LicenseManager{}
+	Eventually(func() error {
+		if err := k8sClient.Get(context.Background(), key, ss); err != nil {
+			return err
+		}
+		if status != "" {
+			ss.Status.Phase = status
+			return k8sClient.Status().Update(context.Background(), ss)
+		}
+		return nil
+	}, timeout, interval).Should(Succeed())
+
+	return ss
+}
+
+func UpdateLicenseManager(instance *enterpriseApi.LicenseManager, status enterpriseApi.Phase) *enterpriseApi.LicenseManager {
+	key := types.NamespacedName{
+		Name:      instance.Name,
+		Namespace: instance.Namespace,
+	}
+
+	Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current := &enterpriseApi.LicenseManager{}
+		if err := k8sClient.Get(context.Background(), key, current); err != nil {
+			return err
+		}
+		ssSpec := testutils.NewLicenseManager(instance.Name, instance.Namespace, "image")
+		ssSpec.ResourceVersion = current.ResourceVersion
+		return k8sClient.Update(context.Background(), ssSpec)
+	})).Should(Succeed())
+
+	By("Expecting LicenseManager custom resource to be updated successfully")
+	ss := &enterpriseApi.LicenseManager{}
+	Eventually(func() error {
+		if err := k8sClient.Get(context.Background(), key, ss); err != nil {
+			return err
+		}
+		if status != "" {
+			ss.Status.Phase = status
+			return k8sClient.Status().Update(context.Background(), ss)
+		}
+		return nil
+	}, timeout, interval).Should(Succeed())
+
+	return ss
+}
+
+func DeleteLicenseManager(name string, namespace string) {
+	key := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+
+	By("Expecting LicenseManager Deleted successfully")
+	Eventually(func() error {
+		ssys := &enterpriseApi.LicenseManager{}
+		_ = k8sClient.Get(context.Background(), key, ssys)
+		err := k8sClient.Delete(context.Background(), ssys)
+		return err
+	}, timeout, interval).Should(Succeed())
+}

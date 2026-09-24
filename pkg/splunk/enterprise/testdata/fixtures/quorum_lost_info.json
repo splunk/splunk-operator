@@ -1,0 +1,27 @@
+{
+  "entry": [
+    {
+      "content": {
+        "initialized_flag": true,
+        "indexing_ready_flag": false,
+        "service_ready_flag": true,
+        "maintenance_mode": false,
+        "rolling_restart_flag": false,
+        "label": "splunk-manager1-cluster-manager-0",
+        "active_bundle": {
+          "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7571-1583870198.bundle",
+          "checksum": "ABC123",
+          "timestamp": 1583870198
+        },
+        "latest_bundle": {
+          "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7571-1583870198.bundle",
+          "checksum": "ABC123",
+          "timestamp": 1583870198
+        },
+        "multisite": "false",
+        "replication_factor": 3,
+        "site_replication_factor": "origin:2,total:3"
+      }
+    }
+  ]
+}

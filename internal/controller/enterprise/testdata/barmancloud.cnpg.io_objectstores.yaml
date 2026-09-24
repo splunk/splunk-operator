@@ -1,0 +1,36 @@
+# Minimal barman-cloud ObjectStore CRD for envtest.
+#
+# The real CRD ships with the barman-cloud CNPG plugin, which is not vendored
+# into this repo (the operator builds the ObjectStore spec as an unstructured
+# object — see pkg/postgresql/cluster/core/objectstore_model.go). This trimmed
+# definition only needs to register the GroupVersionKind so the API server
+# accepts the resource and the controller's owner watch can be set up; the spec
+# and status are left schemaless via x-kubernetes-preserve-unknown-fields.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: objectstores.barmancloud.cnpg.io
+spec:
+  group: barmancloud.cnpg.io
+  names:
+    kind: ObjectStore
+    listKind: ObjectStoreList
+    plural: objectstores
+    singular: objectstore
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}

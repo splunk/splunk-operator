@@ -14,6 +14,8 @@ footer_content: "Copyright &copy; Splunk, a Cisco company."
 markdown: kramdown
 kramdown:
   input: GFM
+mermaid:
+  version: "10.9.1"
 defaults:
   - scope:
       path: ""

@@ -23,8 +23,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"errors"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,9 +34,8 @@ import (
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -128,11 +129,11 @@ func TestApplyStandalone(t *testing.T) {
 	}
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
-	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+	reconcileFn := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcileFn, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -144,14 +145,14 @@ func TestApplyStandalone(t *testing.T) {
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 
-	// Negative testing
+	// Negative testing: spec validation failure is a terminal condition — returns nil (no requeue)
 	current.Spec.CommonSplunkSpec.LivenessInitialDelaySeconds = -1
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
 	_ = errors.New(splcommon.Rerr)
 	_, err := ApplyStandalone(ctx, c, &current)
-	if err == nil {
-		t.Errorf("Expected error")
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
 
 	// Smartstore spec
@@ -362,6 +363,12 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
 
 	cr.Spec.ClusterManagerRef.Name = "stack2"
+	_ = splutil.CreateResource(ctx, c, &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack2",
+			Namespace: "test",
+		},
+	})
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.SchedulerName = "custom-scheduler"
@@ -401,6 +408,93 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	test(loadFixture(t, "statefulset_stack1_standalone_with_service_account_2.json"))
 }
 
+func TestGetStandaloneStatefulSetPodAnnotationsOverrideIstioDefaults(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+			Annotations: map[string]string{
+				"custom.splunk.com/parent": "from-parent",
+			},
+		},
+	}
+	cr.Spec.PodAnnotations = map[string]string{
+		splcommon.IstioExcludeOutboundPortsAnnotation: "8089,8191,9997,15020",
+		splcommon.IstioIncludeInboundPortsAnnotation:  "8000,8088,15021",
+		"custom.splunk.com/pod":                       "from-pod-annotations",
+		"custom.splunk.com/parent":                    "overridden-by-pod-annotations",
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("Failed to create namespace scoped object: %v", err)
+	}
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() returned error: %v", err)
+	}
+
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	if err != nil {
+		t.Fatalf("getStandaloneStatefulSet() returned error: %v", err)
+	}
+
+	annotations := ss.Spec.Template.GetAnnotations()
+	want := map[string]string{
+		splcommon.IstioExcludeOutboundPortsAnnotation: "8089,8191,9997,15020",
+		splcommon.IstioIncludeInboundPortsAnnotation:  "8000,8088,15021",
+		"custom.splunk.com/pod":                       "from-pod-annotations",
+		"custom.splunk.com/parent":                    "overridden-by-pod-annotations",
+	}
+	for key, value := range want {
+		if annotations[key] != value {
+			t.Errorf("StatefulSet pod annotation %q = %q; want %q", key, annotations[key], value)
+		}
+	}
+}
+
+func TestGetStandaloneStatefulSetPodAnnotationsPreserveIstioDefaults(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	cr.Spec.PodAnnotations = map[string]string{
+		"custom.splunk.com/pod": "from-pod-annotations",
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("Failed to create namespace scoped object: %v", err)
+	}
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() returned error: %v", err)
+	}
+
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	if err != nil {
+		t.Fatalf("getStandaloneStatefulSet() returned error: %v", err)
+	}
+
+	annotations := ss.Spec.Template.GetAnnotations()
+	want := map[string]string{
+		splcommon.IstioExcludeOutboundPortsAnnotation: "8089,8191,9997",
+		splcommon.IstioIncludeInboundPortsAnnotation:  "8000,8088",
+		"custom.splunk.com/pod":                       "from-pod-annotations",
+	}
+	for key, value := range want {
+		if annotations[key] != value {
+			t.Errorf("StatefulSet pod annotation %q = %q; want %q", key, annotations[key], value)
+		}
+	}
+}
+
 func TestStandaloneSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Unset the SPLUNK_GENERAL_TERMS environment variable
 	os.Unsetenv("SPLUNK_GENERAL_TERMS")
@@ -423,11 +517,9 @@ func TestStandaloneSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Attempt to apply the standalone spec
 	_, err := ApplyStandalone(ctx, c, &standalone)
 
-	// Assert that an error is returned
-	if err == nil {
-		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
-	} else if err.Error() != "license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information" {
-		t.Errorf("Unexpected error message: %v", err)
+	// SPLUNK_GENERAL_TERMS unset is a stalled misconfiguration: reconciler returns terminal error (no requeue)
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
 }
 
@@ -711,7 +803,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	splclient.RegisterRemoteDataClient(ctx, "aws")
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
@@ -765,15 +857,15 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+		vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
 		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-		getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
+		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
 		remoteDataClientMgr := &RemoteDataClientManager{client: client,
 			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
@@ -784,7 +876,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
+			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
@@ -797,7 +889,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		}
 
 		var mockResponse spltest.MockRemoteDataClient
-		mockResponse, err = splclient.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
+		mockResponse, err = splstorage.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -855,7 +947,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	splclient.RegisterRemoteDataClient(ctx, "aws")
+	splstorage.RegisterRemoteDataClient(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
 	Keys := []string{"admin_app.tgz"}
@@ -886,14 +978,14 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	var vol enterpriseApi.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
-	vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
 	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
+	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
 	remoteDataClientMgr := &RemoteDataClientManager{
 		client:          client,
@@ -907,7 +999,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		},
 		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-			location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
+			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 			// Get the mock client
 			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
@@ -1115,8 +1207,8 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
-		RemoteDataListResponse := splclient.RemoteDataListResponse{}
+	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
+		RemoteDataListResponse := splcommon.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
 
@@ -1125,8 +1217,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -1223,7 +1314,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create standalone instance before reconcilation
+	// simulate create standalone instance before reconciliation
 	c.Create(ctx, standalone)
 
 	// call reconciliation
@@ -1254,8 +1345,8 @@ func TestStandaloneWithReadyState(t *testing.T) {
 
 	// Mock GetAppsList to return empty list (no apps to download)
 	savedGetAppsList := GetAppsList
-	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
-		RemoteDataListResponse := splclient.RemoteDataListResponse{}
+	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
+		RemoteDataListResponse := splcommon.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
 	defer func() { GetAppsList = savedGetAppsList }()
@@ -1285,8 +1376,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{})
@@ -1383,7 +1473,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create standalone instance before reconcilation
+	// simulate create standalone instance before reconciliation
 	c.Create(ctx, &standalone)
 
 	_, err = ApplyStandalone(ctx, c, &standalone)

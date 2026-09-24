@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 )
 
 // MockAzureBlobClient is used to store all the objects for an app source

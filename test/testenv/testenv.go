@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,13 +20,17 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
+	gomega "github.com/onsi/gomega"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
@@ -47,20 +51,17 @@ const (
 	defaultOperatorImage = "splunk/splunk-operator"
 	defaultSplunkImage   = "splunk/splunk:latest"
 
-	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 1000000
-
-	// PollInterval specifies the polling interval
+	// PollInterval specifies the polling interval for slow operations (waiting for full cluster readiness)
 	PollInterval = 5 * time.Second
+
+	// ShortPollInterval specifies the polling interval for fast-transitioning states
+	ShortPollInterval = 2 * time.Second
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 200 * time.Millisecond
 
 	// ConsistentDuration is use to check a state is stable
 	ConsistentDuration = 2000 * time.Millisecond
-
-	// DefaultTimeout is the max timeout before we failed.
-	DefaultTimeout = 2000 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
@@ -71,10 +72,10 @@ const (
 	// StandalonePod Template String for standalone pod
 	StandalonePod = "splunk-%s-standalone-%d"
 
-	// LicenseManagerPod Template String for standalone pod
+	// LicenseManagerPod Template String for License Manager pod
 	LicenseManagerPod = "splunk-%s-license-manager-%d"
 
-	// LicenseMasterPod Template String for standalone pod
+	// LicenseMasterPod Template String for License Master pod
 	LicenseMasterPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
 
 	// IngestorPod Template String for ingestor pod
@@ -124,25 +125,54 @@ const (
 	// ClusterMasterServiceName Cluster Master Service Template String
 	ClusterMasterServiceName = "splunk-%s-cluster-master-service"
 
-	// DeployerServiceName Cluster Manager Service Template String
+	// DeployerServiceName Deployer Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
 
 	// CRUpdateRetryCount if CR Update fails retry these many time
 	CRUpdateRetryCount = 10
+
+	// LogLineCount is the default number of log lines to ingest for test data
+	LogLineCount = 2000
+
+	// DefaultIngestIndex is the default index name used for test data ingestion
+	DefaultIngestIndex = "main"
 )
 
 var (
-	metricsHost              = "0.0.0.0"
-	metricsPort              = 8383
-	specifiedOperatorImage   = defaultOperatorImage
-	specifiedSplunkImage     = defaultSplunkImage
-	specifiedSkipTeardown    = false
-	specifiedLicenseFilePath = ""
-	specifiedCommitHash      = ""
+	metricsHost                 = "0.0.0.0"
+	metricsPort                 = 8383
+	specifiedOperatorImage      = defaultOperatorImage
+	specifiedSplunkImage        = defaultSplunkImage
+	specifiedSplunkUpgradeImage = ""
+	specifiedSkipTeardown       = false
+	specifiedLicenseFilePath    = ""
+	specifiedCommitHash         = ""
+	specifiedJobID              = ""
 	// SpecifiedTestTimeout exported test timeout time as this can be
 	// configured per test case if needed
 	SpecifiedTestTimeout       = defaultTestTimeout
 	installOperatorClusterWide = defaultOperatorInstallation
+)
+
+// Label keys applied to every test namespace at creation time.
+//
+// SokSmokeJobLabel (value = CI_JOB_ID) is used for bulk post-job namespace
+// cleanup on existing-cluster jobs (e.g. FIPS lane) where the cluster is not
+// torn down between runs:
+//
+//	kubectl delete ns -l sok-smoke-job=<CI_JOB_ID> --wait=false
+//
+// On ephemeral EKS jobs the entire cluster is deleted post-run, so this label
+// is informational only (useful for kubectl debugging during a live run).
+//
+// SokSmokeSuiteLabel (value = <testenv-name>-<CI_JOB_ID>, e.g. "4d9f-s1appfw-xyz-12345678")
+// is a finer-grained label that uniquely identifies a single suite instance
+// within a job.  Two parallel specs from different suites (S1 and C3) in the
+// same job get different SokSmokeSuiteLabel values, so a targeted suite
+// cleanup does not touch sibling suites.
+const (
+	SokSmokeJobLabel   = "sok-smoke-job"
+	SokSmokeSuiteLabel = "sok-smoke-suite"
 )
 
 // OperatorFSGroup is the fsGroup value for Splunk Operator
@@ -159,25 +189,27 @@ type cleanupFunc func() error
 
 // TestEnv represents a namespaced-isolated k8s cluster environment (aka virtual k8s cluster) to run tests against
 type TestEnv struct {
-	kubeAPIServer        string
-	name                 string
-	namespace            string
-	serviceAccountName   string
-	roleName             string
-	roleBindingName      string
-	operatorName         string
-	operatorImage        string
-	splunkImage          string
-	initialized          bool
-	SkipTeardown         bool
-	licenseFilePath      string
-	licenseCMName        string
-	s3IndexSecret        string
-	indexIngestSepSecret string
-	kubeClient           client.Client
-	Log                  logr.Logger
-	cleanupFuncs         []cleanupFunc
-	debug                string
+	kubeAPIServer              string
+	name                       string
+	namespace                  string
+	serviceAccountName         string
+	roleName                   string
+	roleBindingName            string
+	operatorName               string
+	operatorImage              string
+	splunkImage                string
+	splunkUpgradeImage         string
+	initialized                bool
+	SkipTeardown               bool
+	licenseFilePath            string
+	licenseCMName              string
+	s3IndexSecret              string
+	indexIngestSepSecret       string
+	kubeClient                 client.Client
+	Log                        logr.Logger
+	cleanupFuncs               []cleanupFunc
+	debug                      string
+	splunkProvisionAnnotations map[string]string
 }
 
 func init() {
@@ -198,7 +230,9 @@ func init() {
 	}
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
 	flag.IntVar(&SpecifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
+	flag.StringVar(&specifiedSplunkUpgradeImage, "splunk-upgrade-image", "", "Splunk Enterprise image to upgrade to for rolling update tests")
 	flag.StringVar(&specifiedCommitHash, "commit-hash", "", "commit hash string to use as part of the name")
+	flag.StringVar(&specifiedJobID, "job-id", os.Getenv("CI_JOB_ID"), "CI job ID used to label test namespaces for isolated post-job cleanup")
 	flag.StringVar(&installOperatorClusterWide, "cluster-wide", "true", "install operator clusterwide, if not install per test case")
 }
 
@@ -230,28 +264,48 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		return nil, fmt.Errorf("both %s and %s combined have exceeded 24 chars", name, commitHash)
 	}
 
+	var splunkProvisionAnnotations map[string]string
+	if strings.ToLower(os.Getenv("SPLUNK_PROVISION_ENABLED")) == "true" {
+		splunkProvisionAnnotations = map[string]string{
+			enterpriseApi.SplunkProvisionAnnotation: "true",
+		}
+
+	}
+
 	testenv := &TestEnv{
-		name:                 envName,
-		namespace:            envName,
-		serviceAccountName:   envName,
-		roleName:             envName,
-		roleBindingName:      envName,
-		operatorName:         "splunk-op-" + envName,
-		operatorImage:        operatorImage,
-		splunkImage:          splunkImage,
-		SkipTeardown:         specifiedSkipTeardown,
-		licenseCMName:        envName,
-		licenseFilePath:      licenseFilePath,
-		s3IndexSecret:        "splunk-s3-index-" + envName,
-		indexIngestSepSecret: "splunk--index-ingest-sep-" + name,
-		debug:                os.Getenv("DEBUG"),
+		name:                       envName,
+		namespace:                  envName,
+		serviceAccountName:         envName,
+		roleName:                   envName,
+		roleBindingName:            envName,
+		operatorName:               "splunk-op-" + envName,
+		operatorImage:              operatorImage,
+		splunkImage:                splunkImage,
+		splunkUpgradeImage:         specifiedSplunkUpgradeImage,
+		SkipTeardown:               specifiedSkipTeardown,
+		licenseCMName:              envName,
+		licenseFilePath:            licenseFilePath,
+		s3IndexSecret:              "splunk-s3-index-" + envName,
+		indexIngestSepSecret:       "splunk--index-ingest-sep-" + name,
+		debug:                      os.Getenv("DEBUG"),
+		splunkProvisionAnnotations: splunkProvisionAnnotations,
 	}
 
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)
 
 	// Scheme
-	enterpriseApi.SchemeBuilder.AddToScheme(scheme.Scheme)
-	enterpriseApiV3.SchemeBuilder.AddToScheme(scheme.Scheme)
+	if err := enterpriseApi.SchemeBuilder.AddToScheme(scheme.Scheme); err != nil {
+		return nil, err
+	}
+	if err := enterpriseApiV3.SchemeBuilder.AddToScheme(scheme.Scheme); err != nil {
+		return nil, err
+	}
+	if err := cmapi.AddToScheme(scheme.Scheme); err != nil {
+		return nil, err
+	}
+	if err := cnpgv1.AddToScheme(scheme.Scheme); err != nil {
+		return nil, err
+	}
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
@@ -286,9 +340,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	// use apireader instead of kubeclient when retrieving resources
 	go func() {
 		err := kubeManager.Start(signals.SetupSignalHandler())
-		if err != nil {
-			panic("Unable to start kube manager. Error: " + err.Error())
-		}
+		gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Error starting kube manager")
 	}()
 
 	return testenv, nil
@@ -297,6 +349,26 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 // GetName returns the name of the testenv
 func (testenv *TestEnv) GetName() string {
 	return testenv.name
+}
+
+// GetSplunkImage returns the Splunk Enterprise image configured for this testenv.
+func (testenv *TestEnv) GetSplunkImage() string {
+	return testenv.splunkImage
+}
+
+// GetSplunkUpgradeImage returns the Splunk Enterprise upgrade image for rolling update tests.
+// Falls back to splunkImage if no upgrade image is configured.
+func (testenv *TestEnv) GetSplunkUpgradeImage() string {
+	if testenv.splunkUpgradeImage != "" {
+		return testenv.splunkUpgradeImage
+	}
+	return testenv.splunkImage
+}
+
+// HasLicenseFile returns true when a license file path is configured, meaning
+// LicenseManager deployment is expected in cluster-topology tests.
+func (testenv *TestEnv) HasLicenseFile() bool {
+	return testenv.licenseFilePath != ""
 }
 
 // Teardown cleanup the resources use in this testenv
