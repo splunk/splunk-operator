@@ -16,9 +16,7 @@ package noah
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"net/url"
 )
 
 const operationBucketMapsGet = "noah.bucketmaps.get"
@@ -43,13 +41,9 @@ const (
 // GetLatestBucketMap returns the latest Noah bucket map.
 func (client *Client) GetLatestBucketMap(ctx context.Context) (*BucketMap, error) {
 	bucketMap := &BucketMap{}
-	requestURL := fmt.Sprintf("%s/latest", client.bucketMapsURL())
+	requestURL := client.url("bucketMaps/latest")
 	if err := client.do(ctx, operationBucketMapsGet, http.MethodGet, requestURL, http.StatusOK, true, bucketMap); err != nil {
 		return nil, err
 	}
 	return bucketMap, nil
-}
-
-func (client *Client) bucketMapsURL() string {
-	return fmt.Sprintf("%s/%s/noah/v1/bucketMaps", client.endpoint, url.PathEscape(client.tenant))
 }

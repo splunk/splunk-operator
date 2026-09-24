@@ -42,7 +42,9 @@ make noah-local-deploy
 ```
 
 The chart pins the Noah server and migration images to the same published
-build. Override both tags together when testing a different build:
+build. SOK uses the Noah v1 REST API with HMAC v3 authentication, first
+supported by Noah build `0.0.1419`; do not override the chart with an older
+build. Override both tags together when testing a different compatible build:
 
 ```console
 make noah-local-deploy NOAH_LOCAL_HELM_ARGS='--set image.tag=<version> --set migrationImage.tag=<version>'

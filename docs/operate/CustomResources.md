@@ -452,6 +452,10 @@ registration, one-at-a-time scale-out and rollout, and reports Ready only when
 the expected Kubernetes Pods are ready and their current Noah peer
 incarnations are active and up.
 
+SOK uses Noah's v1 REST API with HMAC v3 authentication. It does not negotiate
+or downgrade the protocol. Noah build `0.0.1419` is the earliest known build
+that supports this authentication contract.
+
 Noah IndexerCluster scale-in removes the highest ordinal one at a time through
 normal Kubernetes graceful Pod termination. Before reducing the StatefulSet,
 the controller durably records the exact Pod incarnation being removed. It
