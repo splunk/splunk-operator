@@ -321,37 +321,26 @@ func TestEvaluateNoahMembershipCacheWarmTimeout(t *testing.T) {
 	}
 }
 
-func TestNoahBucketMapConfirmsScaleDown(t *testing.T) {
-	valid := &noah.BucketMap{
-		ID:      7,
-		Status:  noah.BucketMapStatusActive,
-		PeerIDs: []string{"peer-0", "peer-1"},
-	}
-
+func TestNoahPeerInactive(t *testing.T) {
 	tests := []struct {
-		name      string
-		bucketMap *noah.BucketMap
-		remaining []string
-		removed   string
-		want      bool
+		name   string
+		peers  []noah.Peer
+		peerID string
+		want   bool
 	}{
-		{name: "remaining peers present and removed peer absent", bucketMap: valid, remaining: []string{"peer-0", "peer-1"}, removed: "peer-2", want: true},
-		{name: "foreign peers are allowed", bucketMap: &noah.BucketMap{ID: 7, Status: noah.BucketMapStatusActive, PeerIDs: []string{"peer-0", "foreign"}}, remaining: []string{"peer-0"}, removed: "peer-1", want: true},
-		{name: "explicit empty remaining set is complete", bucketMap: &noah.BucketMap{ID: 7, Status: noah.BucketMapStatusActive, PeerIDs: []string{}}, removed: "peer-0", want: true},
-		{name: "missing bucket map", remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "zero map ID", bucketMap: &noah.BucketMap{Status: noah.BucketMapStatusActive, PeerIDs: []string{"peer-0"}}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "negative map ID", bucketMap: &noah.BucketMap{ID: -1, Status: noah.BucketMapStatusActive, PeerIDs: []string{"peer-0"}}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "unknown status", bucketMap: &noah.BucketMap{ID: 7, PeerIDs: []string{"peer-0"}}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "omitted peer list", bucketMap: &noah.BucketMap{ID: 7, Status: noah.BucketMapStatusActive}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "removed peer remains", bucketMap: &noah.BucketMap{ID: 7, Status: noah.BucketMapStatusActive, PeerIDs: []string{"peer-0", "peer-2"}}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "remaining peer missing", bucketMap: valid, remaining: []string{"peer-0", "peer-3"}, removed: "peer-2"},
-		{name: "empty remaining peer ID", bucketMap: valid, remaining: []string{"peer-0", ""}, removed: "peer-2"},
-		{name: "empty removed peer ID", bucketMap: valid, remaining: []string{"peer-0"}},
+		{name: "peer absent", peers: []noah.Peer{{ID: "foreign", Status: noah.PeerStatusUp}}, peerID: "peer-0", want: true},
+		{name: "peer down", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusDown}}, peerID: "peer-0", want: true},
+		{name: "duplicate down records", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusDown}, {ID: "peer-0", Status: noah.PeerStatusDown}}, peerID: "peer-0", want: true},
+		{name: "peer up", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusUp}}, peerID: "peer-0"},
+		{name: "peer state unknown", peers: []noah.Peer{{ID: "peer-0"}}, peerID: "peer-0"},
+		{name: "peer decommissioned is publicly active", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusDecommissioned}}, peerID: "peer-0"},
+		{name: "duplicate mixed states", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusDown}, {ID: "peer-0", Status: noah.PeerStatusUp}}, peerID: "peer-0"},
+		{name: "empty peer ID", peers: []noah.Peer{{ID: "foreign", Status: noah.PeerStatusUp}}},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.want, NoahBucketMapConfirmsScaleDown(test.bucketMap, test.remaining, test.removed))
+			assert.Equal(t, test.want, NoahPeerInactive(test.peers, test.peerID))
 		})
 	}
 }

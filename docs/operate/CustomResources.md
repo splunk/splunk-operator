@@ -460,8 +460,8 @@ Noah IndexerCluster scale-in removes the highest ordinal one at a time through
 normal Kubernetes graceful Pod termination. Before reducing the StatefulSet,
 the controller durably records the exact Pod incarnation being removed. It
 deletes that ordinal's PVC using the classic IndexerCluster policy, unregisters
-the peer after the Pod disappears, and waits for an active bucket map that
-excludes the removed peer before continuing.
+the peer after the Pod disappears, and waits until Noah reports the peer as
+down or no longer lists it before continuing.
 
 Scale-in does not currently request Noah cache warming before termination. This
 can increase temporary cache loss, repair work, or stack impact compared with a
