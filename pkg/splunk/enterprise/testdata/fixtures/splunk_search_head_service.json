@@ -4,7 +4,6 @@
   "metadata": {
     "name": "splunk-stack1-search-head-service",
     "namespace": "test",
-    "creationTimestamp": null,
     "labels": {
       "1": "2",
       "app.kubernetes.io/component": "search-head",

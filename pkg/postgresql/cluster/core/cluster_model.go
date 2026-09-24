@@ -1,0 +1,1445 @@
+/*
+Copyright 2026.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package core
+
+import (
+	"context"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
+	"errors"
+	"fmt"
+	"maps"
+	"regexp"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	cnpgpostgres "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
+	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+)
+
+// Reserved CNPG names the operator synthesizes on the managed cnpgv1.Cluster spec. Both are
+// operator-owned: buildCNPGClusterSpec drops any live entry matching these names before appending
+// the desired one, so a user- or third-party-supplied plugin/externalCluster using either name is
+// treated as ours and will be overwritten on the next reconcile. Kept together here (rather than
+// buried next to their builders in this large file) so the reserved namespace is discoverable.
+const (
+	// barmanCloudPluginName is the CNPG plugin name for the barman-cloud object store backup plugin.
+	barmanCloudPluginName = "barman-cloud.cloudnative-pg.io"
+
+	// recoveryExternalClusterName is the fixed name of the externalClusters entry the operator
+	// synthesizes so CNPG can replay WAL from an object-store archive during recovery. It is
+	// referenced by BootstrapRecovery.Source and, for objectStorage/walArchive sources, points at the
+	// barman-cloud ObjectStore the operator manages from the class backup config. RESERVED: this name
+	// is owned by the operator; any live externalCluster named "origin" is replaced on reconcile.
+	recoveryExternalClusterName = "origin"
+)
+
+type clusterModel struct {
+	client       client.Client
+	scheme       *runtime.Scheme
+	events       eventEmitter
+	updateStatus healthStatusUpdater
+	cluster      *enterprisev4.PostgresCluster
+	clusterClass *enterprisev4.PostgresClusterClass
+	mergedConfig *MergedConfig
+	contracts    *reconcileContracts
+	cnpgCluster  *cnpgv1.Cluster
+	cnpgCreated  bool
+	// cnpgPatch classifies this reconcile's CNPG spec change. Observe uses
+	// requiresPhaseGate() to decide whether to hold ClusterReady=Provisioning
+	// while CNPG.Status.Phase still reflects the pre-patch value.
+	cnpgPatch     cnpgPatchKind
+	blockedHealth *componentHealth
+
+	metricsEnabled bool
+}
+
+func newClusterModel(c client.Client, scheme *runtime.Scheme, events eventEmitter, updateStatus healthStatusUpdater, cluster *enterprisev4.PostgresCluster, clusterClass *enterprisev4.PostgresClusterClass, mergedConfig *MergedConfig, contracts *reconcileContracts) *clusterModel {
+	model := &clusterModel{
+		client: c, scheme: scheme,
+		events: events, updateStatus: updateStatus,
+		cluster: cluster, clusterClass: clusterClass, mergedConfig: mergedConfig,
+		contracts: contracts,
+	}
+	model.metricsEnabled = isPostgreSQLMetricsEnabled(cluster, clusterClass)
+	return model
+}
+
+func (p *clusterModel) Name() string            { return pgcConstants.ComponentProvisioner }
+func (p *clusterModel) Requires() []contractKey { return []contractKey{contractSecret} }
+func (p *clusterModel) Provides() []contractKey { return []contractKey{contractCNPGCluster} }
+
+func (p *clusterModel) CheckContracts() error {
+	if !checkContractsFromRequirements(p.Requires(), p.contracts) {
+		return errContractsNotReady
+	}
+	return nil
+}
+
+func (p *clusterModel) Reconcile(ctx context.Context) error {
+	p.cnpgCreated = false
+	p.cnpgPatch = cnpgPatchNone
+	p.blockedHealth = nil
+
+	poolerEnabled := p.mergedConfig != nil && p.mergedConfig.Spec != nil &&
+		isPoolerEnabled(p.mergedConfig.Spec.ConnectionPooler)
+
+	existingCNPG := &cnpgv1.Cluster{}
+	err := p.client.Get(ctx, types.NamespacedName{Name: p.cluster.Name, Namespace: p.cluster.Namespace}, existingCNPG)
+
+	desiredSpec := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, p.cluster.Name, p.contracts.Secret.Name, p.metricsEnabled)
+	desiredSpec.PostgresConfiguration.Parameters = maps.Clone(existingCNPG.Spec.PostgresConfiguration.Parameters)
+	applyPoolerSANs(&desiredSpec, poolerEnabled, p.cluster.Name, p.cluster.Namespace)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return newReconcileFailure(reasonClusterGetFailed, err)
+	}
+
+	if apierrors.IsNotFound(err) {
+		newCluster, err := buildCNPGCluster(p.scheme, p.cluster, p.mergedConfig, p.contracts.Secret.Name, p.metricsEnabled)
+		if err != nil {
+			return newReconcileFailure(reasonClusterBuildFailed, err)
+		}
+		applyPoolerSANs(&newCluster.Spec, poolerEnabled, p.cluster.Name, p.cluster.Namespace)
+		desiredParameters := maps.Clone(newCluster.Spec.PostgresConfiguration.Parameters)
+		newCluster.Spec.PostgresConfiguration.Parameters = nil
+		if err = p.client.Create(ctx, newCluster); err != nil {
+			return newReconcileFailure(reasonClusterBuildFailed, err)
+		}
+		if err := applyPostgreSQLParameters(ctx, p.client, newCluster, desiredParameters); err != nil {
+			return newReconcileFailure(reasonClusterBuildFailed, err)
+		}
+		createdCNPG := &cnpgv1.Cluster{}
+		if err := p.client.Get(ctx, client.ObjectKeyFromObject(newCluster), createdCNPG); err != nil {
+			return newReconcileFailure(reasonClusterGetFailed, err)
+		}
+		p.cnpgPatch = cnpgPatchBody
+		p.events.emitNormal(p.cluster, EventClusterCreationStarted, fmt.Sprintf("CNPG cluster created for PostgresCluster %s, waiting for healthy state", p.cluster.Name))
+		p.cnpgCluster = createdCNPG
+		p.cnpgCreated = true
+		return nil
+	}
+
+	p.cnpgCluster = existingCNPG
+	hasOwnerRef, ownerRefErr := controllerutil.HasOwnerReference(p.cnpgCluster.GetOwnerReferences(), p.cluster, p.scheme)
+	if ownerRefErr != nil {
+		return newReconcileFailure(reasonClusterGetFailed, fmt.Errorf("failed to check owner reference on CNPG cluster: %w", ownerRefErr))
+	}
+	if !hasOwnerRef {
+		originalCNPG := p.cnpgCluster.DeepCopy()
+		if err := ctrl.SetControllerReference(p.cluster, p.cnpgCluster, p.scheme); err != nil {
+			return newReconcileFailure(reasonClusterPatchFailed, fmt.Errorf("failed to set controller reference on existing CNPG cluster: %w", err))
+		}
+		if err := patchObject(ctx, p.client, originalCNPG, p.cnpgCluster, "CNPGCluster"); err != nil {
+			return newReconcileFailure(reasonClusterPatchFailed, err)
+		}
+		p.events.emitNormal(p.cluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster for PostgresCluster %s", p.cluster.Name))
+		p.cnpgPatch = cnpgPatchMetadata
+	}
+
+	if health, blocked := p.majorVersionDriftBlock(p.cnpgCluster); blocked {
+		p.blockedHealth = &health
+		return nil
+	}
+
+	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec)
+	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec)
+	specDrift := !equality.Semantic.DeepEqual(currentNormalized, desiredNormalized)
+	updateMessage := fmt.Sprintf("CNPG cluster spec updated for PostgresCluster %s, waiting for healthy state", p.cluster.Name)
+	needsUpdateEvent := false
+
+	if specDrift {
+		originalCluster := p.cnpgCluster.DeepCopy()
+		patchKind := cnpgPatchMetadata
+		if isClusterDrift(currentNormalized, desiredNormalized) {
+			patchKind = cnpgPatchBody
+		}
+		p.cnpgCluster.Spec = desiredSpec
+		if err := patchObject(ctx, p.client, originalCluster, p.cnpgCluster, "CNPGCluster"); err != nil {
+			return newReconcileFailure(reasonClusterPatchFailed, err)
+		}
+		needsUpdateEvent = true
+		if p.cnpgPatch != cnpgPatchBody {
+			p.cnpgPatch = patchKind
+		}
+		if err := p.client.Get(ctx, client.ObjectKeyFromObject(p.cnpgCluster), p.cnpgCluster); err != nil {
+			return newReconcileFailure(reasonClusterGetFailed, err)
+		}
+	}
+	beforeGeneration := p.cnpgCluster.Generation
+	if err := applyPostgreSQLParameters(ctx, p.client, p.cnpgCluster, p.mergedConfig.Spec.PostgreSQLConfig); err != nil {
+		return newReconcileFailure(reasonClusterPatchFailed, err)
+	}
+	updatedCNPG := &cnpgv1.Cluster{}
+	if err := p.client.Get(ctx, client.ObjectKeyFromObject(p.cnpgCluster), updatedCNPG); err != nil {
+		return newReconcileFailure(reasonClusterGetFailed, err)
+	}
+	p.cnpgCluster = updatedCNPG
+	if updatedCNPG.Generation != beforeGeneration {
+		p.cnpgPatch = cnpgPatchBody
+		needsUpdateEvent = true
+	}
+	if needsUpdateEvent {
+		p.events.emitNormal(p.cluster, EventClusterUpdateStarted, updateMessage)
+	}
+
+	p.contracts.CNPGCluster = p.cnpgCluster
+	return nil
+}
+
+func (p *clusterModel) Observe(_ context.Context, reconcileErr error) (componentHealth, error) {
+	before := p.cluster.Status.DeepCopy()
+	health, err := p.computeHealth(reconcileErr)
+	statusErr := writeComponentStatus(p.updateStatus, before, health)
+	return health, errors.Join(err, statusErr)
+}
+
+func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error) {
+	if h, err, ok := classifyReconcileErr(reconcileErr, clusterReady, p.events, p.cluster, EventClusterCreateFailed, "CNPG cluster"); ok {
+		return h, err
+	}
+
+	if p.cnpgCluster == nil || p.cnpgCreated {
+		return newPendingHealth(clusterReady, reasonCNPGProvisioning, msgCNPGPendingCreation), nil
+	}
+
+	p.cluster.Status.ProvisionerRef = &corev1.ObjectReference{
+		APIVersion: "postgresql.cnpg.io/v1",
+		Kind:       "Cluster",
+		Namespace:  p.cnpgCluster.Namespace,
+		Name:       p.cnpgCluster.Name,
+		UID:        p.cnpgCluster.UID,
+	}
+	p.cluster.Status.Instances = ptr.To(int32(p.cnpgCluster.Status.Instances))
+	p.cluster.Status.ReadyInstances = ptr.To(int32(p.cnpgCluster.Status.ReadyInstances))
+	p.cluster.Status.CurrentPrimary = ptr.To(p.cnpgCluster.Status.CurrentPrimary)
+	if info := p.cnpgCluster.Status.PGDataImageInfo; info != nil && info.MajorVersion > 0 {
+		p.cluster.Status.CurrentPgVersion = fmt.Sprintf("%d", info.MajorVersion)
+	}
+
+	if p.blockedHealth != nil {
+		return *p.blockedHealth, nil
+	}
+
+	if (p.cnpgPatch.requiresPhaseGate() || imageUpdateInProgress(p.cnpgCluster)) &&
+		(p.cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy || p.cnpgCluster.Status.Phase == "") {
+		return newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, p.cnpgCluster.Status.Phase)), nil
+	}
+
+	phase := p.cnpgCluster.Status.Phase
+	var convergeErr error
+	var health componentHealth
+
+	switch phase {
+	case cnpgv1.PhaseHealthy:
+		// CNPG holds Phase=Healthy throughout scale-down and the scale-out tail
+		// (only Instances/ReadyInstances move). Report Provisioning here so
+		// runComponents short-circuits at this component and the downstream
+		// pooler + configMap never reconcile against a transient ready count —
+		// scaling is owned entirely by the cluster component, and other
+		// components react only once it has settled.
+		if desired, ready, scaling := p.scaleInProgress(); scaling {
+			health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGScaling, ready, desired))
+		} else if pending, total, resizing := p.storageResizeInProgress(); resizing {
+			health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGStorageResizing, pending, total))
+		} else {
+			health = newReadyHealth(clusterReady, reasonCNPGClusterHealthy, msgProvisionerHealthy)
+		}
+	case cnpgv1.PhaseFirstPrimary, cnpgv1.PhaseCreatingReplica:
+		health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGProvisioning, phase))
+	case cnpgv1.PhaseWaitingForInstancesToBeActive:
+		desiredInstances := p.cnpgCluster.Status.Instances
+		if p.mergedConfig != nil && p.mergedConfig.Spec != nil && p.mergedConfig.Spec.Instances != nil {
+			desiredInstances = int(*p.mergedConfig.Spec.Instances)
+		}
+		alreadyProvisioning := p.cluster.Status.Phase != nil && *p.cluster.Status.Phase == string(provisioningClusterPhase)
+		if p.cnpgPatch.requiresPhaseGate() || desiredInstances != p.cnpgCluster.Status.Instances || alreadyProvisioning {
+			health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGProvisioning, phase))
+		} else {
+			health = newPendingHealth(clusterReady, reasonCNPGRecovery, string(phase))
+		}
+	case cnpgv1.PhaseSwitchover:
+		health = newConfiguringHealth(clusterReady, reasonCNPGSwitchover, msgCNPGSwitchover)
+	case cnpgv1.PhaseFailOver:
+		health = newPendingHealth(clusterReady, reasonCNPGFailingOver, string(phase))
+	case cnpgv1.PhaseInplacePrimaryRestart, cnpgv1.PhaseInplaceDeletePrimaryRestart:
+		health = newConfiguringHealth(clusterReady, reasonCNPGRestarting, fmt.Sprintf(msgFmtCNPGRestarting, phase))
+	case cnpgv1.PhaseUpgrade, cnpgv1.PhaseMajorUpgrade, cnpgv1.PhaseUpgradeDelayed, cnpgv1.PhaseOnlineUpgrading:
+		health = newConfiguringHealth(clusterReady, reasonCNPGUpgrading, fmt.Sprintf(msgFmtCNPGUpgrading, phase))
+	case cnpgv1.PhaseApplyingConfiguration:
+		health = newConfiguringHealth(clusterReady, reasonCNPGApplyingConfig, msgCNPGApplyingConfiguration)
+	case cnpgv1.PhaseReplicaClusterPromotion:
+		health = newConfiguringHealth(clusterReady, reasonCNPGPromoting, msgCNPGPromoting)
+	case cnpgv1.PhaseWaitingForUser:
+		health = newFailedHealth(clusterReady, reasonCNPGWaitingForUser, msgCNPGWaitingForUser)
+		convergeErr = fmt.Errorf("provisioner requires user action")
+	case cnpgv1.PhaseUnrecoverable:
+		health = newFailedHealth(clusterReady, reasonCNPGUnrecoverable, msgCNPGUnrecoverable)
+		convergeErr = fmt.Errorf("provisioner unrecoverable")
+	case cnpgv1.PhaseCannotCreateClusterObjects:
+		health = newFailedHealth(clusterReady, reasonCNPGProvisioningFailed, msgCNPGCannotCreateObjects)
+		convergeErr = fmt.Errorf("provisioner cannot create cluster objects")
+	case cnpgv1.PhaseUnknownPlugin, cnpgv1.PhaseFailurePlugin:
+		health = newFailedHealth(clusterReady, reasonCNPGPluginError, fmt.Sprintf(msgFmtCNPGPluginError, phase))
+		convergeErr = fmt.Errorf("provisioner plugin error")
+	case cnpgv1.PhaseImageCatalogError, cnpgv1.PhaseArchitectureBinaryMissing:
+		health = newFailedHealth(clusterReady, reasonCNPGImageError, fmt.Sprintf(msgFmtCNPGImageError, phase))
+		convergeErr = fmt.Errorf("provisioner image error")
+	case "":
+		health = newPendingHealth(clusterReady, reasonCNPGProvisioning, msgCNPGPendingCreation)
+	default:
+		health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, phase))
+	}
+	return health, convergeErr
+}
+
+func (p *clusterModel) majorVersionDriftBlock(existingCNPG *cnpgv1.Cluster) (componentHealth, bool) {
+	if p.cluster == nil || p.mergedConfig == nil || p.mergedConfig.Spec == nil || p.mergedConfig.Spec.PostgresVersion == nil {
+		return componentHealth{}, false
+	}
+
+	currentVersion := postgresVersionFromImageName(existingCNPG.Spec.ImageName)
+	if currentVersion == "" {
+		return componentHealth{}, false
+	}
+
+	currentMajor, _ := parseVersion(currentVersion)
+	requestedMajor, _ := parseVersion(*p.mergedConfig.Spec.PostgresVersion)
+	if currentMajor <= 0 || requestedMajor <= 0 || currentMajor == requestedMajor {
+		return componentHealth{}, false
+	}
+	if requestedMajor < currentMajor {
+		return newPendingHealth(
+			clusterReady,
+			reasonMajorDowngradeUnsupported,
+			fmt.Sprintf(string(msgFmtMajorDowngradeUnsupported), currentVersion, *p.mergedConfig.Spec.PostgresVersion),
+		), true
+	}
+
+	if isMajorUpgradeAllowed(p.cluster.Spec.PostgresMajorUpgradeConfig) {
+		// allow=true authorizes the major-upgrade *workflow*; it does not
+		// license the provisioner to bump the CNPG image itself. Hold here so
+		// the major-upgrade use case (backup -> preflight -> patch -> verify ->
+		// finalize) owns the transition. We must NOT patch the image directly:
+		// that would skip the orchestrated backup/preflight and could jump
+		// multiple majors at once, since this guard performs no multi-major-jump
+		// check.
+		//
+		// Holding (not patching) is also what lets the use case eventually take
+		// over: it reads the running major straight from the live CNPG cluster
+		// (PGDataImageInfo.MajorVersion), so once CNPG reports a version its
+		// Prerequisites pass and it activates and blocks this component outright.
+		// (Observe still latches status.currentPgVersion from the same CNPG field
+		// here, but that projection is now observability only — the use case does
+		// not depend on it.)
+		return newPendingHealth(
+			clusterReady,
+			reasonMajorUpgradePending,
+			fmt.Sprintf(string(msgFmtMajorUpgradePending), currentVersion, *p.mergedConfig.Spec.PostgresVersion),
+		), true
+	}
+
+	return newPendingHealth(
+		clusterReady,
+		reasonMajorUpgradeConfigRequired,
+		fmt.Sprintf(string(msgFmtMajorUpgradeConfigRequired), currentVersion, *p.mergedConfig.Spec.PostgresVersion),
+	), true
+}
+
+// scaleInProgress reports whether desired and observed/ready instance counts
+// disagree. Returns (_, _, false) when merged config or CNPG status is not yet
+// available. computeHealth uses it to hold ClusterReady=Provisioning while CNPG
+// reports Phase=Healthy during a scale, so downstream components are gated until
+// the count settles.
+func (p *clusterModel) scaleInProgress() (desired, ready int, scaling bool) {
+	if p.mergedConfig == nil || p.mergedConfig.Spec == nil || p.mergedConfig.Spec.Instances == nil {
+		return 0, 0, false
+	}
+	if p.cnpgCluster == nil {
+		return 0, 0, false
+	}
+	desired = int(*p.mergedConfig.Spec.Instances)
+	observed := p.cnpgCluster.Status.Instances
+	ready = p.cnpgCluster.Status.ReadyInstances
+	if desired == observed && desired == ready {
+		return 0, 0, false
+	}
+	return desired, ready, true
+}
+
+// storageResizeInProgress reports whether CNPG is still resizing instance PVCs.
+// Returns (pending, total, true) while Status.ResizingPVC is non-empty.
+// Returns (0, 0, false) when the CNPG cluster is unavailable or no resize is in progress.
+func (p *clusterModel) storageResizeInProgress() (pending, total int, resizing bool) {
+	if p.cnpgCluster == nil || len(p.cnpgCluster.Status.ResizingPVC) == 0 {
+		return 0, 0, false
+	}
+	return len(p.cnpgCluster.Status.ResizingPVC), p.cnpgCluster.Status.Instances, true
+}
+
+// GetMergedConfig overlays PostgresCluster spec on top of the class defaults.
+// Class values are used only where the cluster spec is silent.
+// Returns the merged config without validation — call ValidateMergedConfig separately.
+func GetMergedConfig(class *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) *MergedConfig {
+	result := cluster.Spec.DeepCopy()
+
+	// Config is optional on the class — apply defaults only when provided.
+	if defaults := class.Spec.Config; defaults != nil {
+		if result.Instances == nil {
+			result.Instances = defaults.Instances
+		}
+		if result.PostgresVersion == nil {
+			result.PostgresVersion = defaults.PostgresVersion
+		}
+		if result.Resources == nil {
+			result.Resources = defaults.Resources
+		}
+		if result.Storage == nil {
+			result.Storage = defaults.Storage
+		}
+		if len(result.PostgreSQLConfig) == 0 {
+			result.PostgreSQLConfig = defaults.PostgreSQLConfig
+		}
+		if len(result.PgHBA) == 0 {
+			result.PgHBA = defaults.PgHBA
+		}
+		result.ConnectionPooler = mergeConnectionPoolerEnable(result.ConnectionPooler, defaults.ConnectionPooler)
+		if defaults.Backup != nil {
+			if result.Backup == nil {
+				result.Backup = defaults.Backup.DeepCopy()
+			} else {
+				if result.Backup.Enabled == nil {
+					result.Backup.Enabled = defaults.Backup.Enabled
+				}
+				if result.Backup.Schedule == nil {
+					result.Backup.Schedule = defaults.Backup.Schedule
+				}
+			}
+		}
+	}
+
+	if result.PostgreSQLConfig == nil {
+		result.PostgreSQLConfig = make(map[string]string)
+	}
+	if result.PgHBA == nil {
+		result.PgHBA = make([]string, 0)
+	}
+	if result.Resources == nil {
+		result.Resources = &corev1.ResourceRequirements{}
+	}
+
+	return &MergedConfig{Spec: result, CNPG: class.Spec.CNPG}
+}
+
+// ValidateCrossResource checks constraints that require both the class and the cluster to be visible.
+// It is called from both the webhook (admission) and the reconciler (runtime fallback).
+func ValidateCrossResource(class *enterprisev4.PostgresClusterClass, cluster *enterprisev4.PostgresCluster) []ConfigValidationError {
+	var errs []ConfigValidationError
+
+	if classConfig := class.Spec.Config; classConfig != nil {
+		if cluster.Spec.PostgresVersion != nil && classConfig.PostgresVersion != nil {
+			clusterMajor, clusterMinor := parseVersion(*cluster.Spec.PostgresVersion)
+			classMajor, classMinor := parseVersion(*classConfig.PostgresVersion)
+			if clusterMinor < 0 {
+				clusterMinor = 0
+			}
+			if clusterMajor > 0 && classMajor > 0 {
+				versionTooLow := clusterMajor < classMajor ||
+					(clusterMajor == classMajor && classMinor >= 0 && clusterMinor < classMinor)
+				if versionTooLow {
+					errs = append(errs, ConfigValidationError{
+						Field:   "spec.postgresVersion",
+						Value:   *cluster.Spec.PostgresVersion,
+						Message: "postgresVersion cannot be lower than class default (" + *classConfig.PostgresVersion + ")",
+					})
+				}
+			}
+		}
+	}
+
+	// The RO-pooler-needs-2 rule is deliberately NOT enforced here: the reconciler
+	// tolerates instances<2 by suppressing the RO pooler (see roPoolerWanted), so
+	// it is an admission-only fail-fast. Switchover has no such graceful path, so
+	// it stays here where both admission and the reconciler enforce it.
+	effectiveInstances := cluster.Spec.Instances
+	if effectiveInstances == nil && class.Spec.Config != nil {
+		effectiveInstances = class.Spec.Config.Instances
+	}
+	switchover := class.Spec.CNPG != nil &&
+		class.Spec.CNPG.PrimaryUpdateMethod != nil &&
+		*class.Spec.CNPG.PrimaryUpdateMethod == "switchover"
+	if switchover && effectiveInstances != nil && *effectiveInstances < minInstancesForSwitchover {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.instances",
+			Value:   *effectiveInstances,
+			Message: fmt.Sprintf("instances must be >= %d when PostgresClusterClass %q uses primaryUpdateMethod=switchover", minInstancesForSwitchover, class.Name),
+		})
+	}
+
+	var classPooler *enterprisev4.ConnectionPoolerEnableConfig
+	if class.Spec.Config != nil {
+		classPooler = class.Spec.Config.ConnectionPooler
+	}
+	mergedPooler := mergeConnectionPoolerEnable(cluster.Spec.ConnectionPooler, classPooler)
+	poolerEnabled := isPoolerEnabled(mergedPooler)
+	if poolerEnabled && (class.Spec.CNPG == nil || class.Spec.CNPG.ConnectionPooler == nil) {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.connectionPooler.enabled",
+			Value:   true,
+			Message: "connection pooler requires cnpg.connectionPooler configuration in PostgresClusterClass",
+		})
+	}
+	if poolerEnabled && !poolerReadWriteWanted(mergedPooler) && !poolerReadOnlyWanted(mergedPooler) {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.connectionPooler",
+			Value:   "readWrite=false,readOnly=false",
+			Message: "at least one of readWrite or readOnly must be enabled when connectionPooler.enabled is true",
+		})
+	}
+
+	backupEnabled := (cluster.Spec.Backup != nil && cluster.Spec.Backup.Enabled != nil && *cluster.Spec.Backup.Enabled) ||
+		(class.Spec.Config != nil && class.Spec.Config.Backup != nil && class.Spec.Config.Backup.Enabled != nil && *class.Spec.Config.Backup.Enabled)
+	backupProviderConfigured := class.Spec.CNPG != nil && class.Spec.CNPG.Backup != nil &&
+		(class.Spec.CNPG.Backup.VolumeSnapshot != nil || class.Spec.CNPG.Backup.BarmanObjectStore != nil)
+	if backupEnabled && !backupProviderConfigured {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.backup.enabled",
+			Value:   true,
+			Message: "backup requires cnpg.backup.volumeSnapshot or cnpg.backup.barmanObjectStore configuration in PostgresClusterClass",
+		})
+	}
+
+	errs = append(errs, validateBootstrapFrom(cluster)...)
+
+	return errs
+}
+
+// validateBootstrapFrom enforces the cross-struct and cross-resource rules for recovery bootstrap
+// that CEL on a single type cannot express: exactly one source, the walArchive-required-for-PITR
+// coupling, and the requirement that a WAL/object-store source has a class object store to resolve
+// bucket path and credentials from.
+func validateBootstrapFrom(cluster *enterprisev4.PostgresCluster) []ConfigValidationError {
+	b := cluster.Spec.BootstrapFrom
+	if b == nil {
+		return nil
+	}
+
+	var errs []ConfigValidationError
+
+	// Exactly one source. The CRD enforces this via CEL too; validate here so an intended restore
+	// can never silently fall through to a fresh initdb, and to give a clear webhook message.
+	hasSnapshot := b.VolumeSnapshot != nil
+	hasObjectStorage := b.ObjectStorage != nil
+	if hasSnapshot == hasObjectStorage {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.bootstrapFrom",
+			Message: "exactly one of volumeSnapshot or objectStorage must be set",
+		})
+		// The remaining rules assume a well-formed single source; bail to avoid misleading errors.
+		return errs
+	}
+
+	// PITR from a volume snapshot needs a WAL archive to replay past the snapshot point.
+	if hasSnapshot && b.RecoveryTarget != nil && b.VolumeSnapshot.WalArchive == nil {
+		errs = append(errs, ConfigValidationError{
+			Field:   "spec.bootstrapFrom.volumeSnapshot.walArchive",
+			Message: "walArchive is required when recoveryTarget is set on a volumeSnapshot source (WAL segments must be replayed past the snapshot point)",
+		})
+	}
+
+	// Validate the target value formats here so CNPG does not reject a malformed timestamp/LSN/XID
+	// after the immutable parent CR already exists (which would force a delete-and-recreate). The CRD
+	// CEL enforces exactly-one-target and rejects empty strings; this mirrors CNPG's format checks.
+	// Value formats are PostgreSQL-level (provisioner-independent), so they stay in core; the
+	// provisioner-specific capability rules — which source supports which target kind, and whether a
+	// class object store is required — are delegated to the RecoveryBackend port (see
+	// ValidateRecoveryCapabilities) so they do not accrete as CNPG-specific domain logic here.
+	if b.RecoveryTarget != nil {
+		errs = append(errs, validateRecoveryTargetFormat(b.RecoveryTarget)...)
+	}
+
+	return errs
+}
+
+// lsnRegexp matches a PostgreSQL LSN: two hex segments separated by a slash, e.g. "0/16D68D0".
+var lsnRegexp = regexp.MustCompile(`^[0-9A-Fa-f]+/[0-9A-Fa-f]+$`)
+
+// restorePointNameRegexp matches a valid PostgreSQL restore point name. pg_create_restore_point
+// truncates names to 63 bytes; disallow control characters so the value is a usable identifier.
+var restorePointNameRegexp = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,63}$`)
+
+// validateRecoveryTargetFormat mirrors the value-format checks CNPG applies to recovery targets so
+// a malformed timestamp, LSN, XID, or restore-point name is rejected at admission — before the
+// immutable parent CR is created and CNPG would fail the restore with no actionable in-place fix.
+// The CRD CEL already guarantees exactly one target is set and rejects empty strings.
+func validateRecoveryTargetFormat(rt *enterprisev4.RecoveryTarget) []ConfigValidationError {
+	var errs []ConfigValidationError
+	switch rt.Type {
+	case enterprisev4.RecoveryTargetTime:
+		// CNPG parses the recovery target time with time.Parse; accept RFC 3339 (the format the docs
+		// and examples use). Reject anything else so users get a clear error at creation time.
+		if _, err := time.Parse(time.RFC3339, rt.Value); err != nil {
+			errs = append(errs, ConfigValidationError{
+				Field:   "spec.bootstrapFrom.recoveryTarget.value",
+				Message: fmt.Sprintf("value for target type time must be an RFC 3339 timestamp (e.g. 2026-05-01T13:30:00Z), got %q", rt.Value),
+			})
+		}
+	case enterprisev4.RecoveryTargetLSN:
+		if !lsnRegexp.MatchString(rt.Value) {
+			errs = append(errs, ConfigValidationError{
+				Field:   "spec.bootstrapFrom.recoveryTarget.value",
+				Message: fmt.Sprintf("value for target type lsn must be a WAL log sequence number of the form X/Y in hex (e.g. 0/16D68D0), got %q", rt.Value),
+			})
+		}
+	case enterprisev4.RecoveryTargetXID:
+		// A transaction ID is an unsigned integer. Reject non-numeric or out-of-range values.
+		if _, err := strconv.ParseUint(rt.Value, 10, 64); err != nil {
+			errs = append(errs, ConfigValidationError{
+				Field:   "spec.bootstrapFrom.recoveryTarget.value",
+				Message: fmt.Sprintf("value for target type xid must be a numeric transaction ID, got %q", rt.Value),
+			})
+		}
+	case enterprisev4.RecoveryTargetName:
+		if !restorePointNameRegexp.MatchString(rt.Value) {
+			errs = append(errs, ConfigValidationError{
+				Field:   "spec.bootstrapFrom.recoveryTarget.value",
+				Message: fmt.Sprintf("value for target type name must be a restore-point name of 1-63 printable characters, got %q", rt.Value),
+			})
+		}
+	}
+	return errs
+}
+
+func parseVersion(version string) (major, minor int) {
+	for i, ch := range version {
+		if ch == '.' {
+			major, _ = strconv.Atoi(version[:i])
+			minor, _ = strconv.Atoi(version[i+1:])
+			return major, minor
+		}
+	}
+	major, _ = strconv.Atoi(version)
+	return major, -1
+}
+
+func isMajorUpgradeAllowed(config *enterprisev4.PostgresMajorUpgradeConfig) bool {
+	return config != nil && config.Allow != nil && *config.Allow
+}
+
+func postgresVersionFromImageName(imageName string) string {
+	if imageName == "" {
+		return ""
+	}
+	imageName = strings.SplitN(imageName, "@", 2)[0]
+	lastSlash := strings.LastIndex(imageName, "/")
+	lastColon := strings.LastIndex(imageName, ":")
+	if lastColon <= lastSlash {
+		return ""
+	}
+	return imageName[lastColon+1:]
+}
+
+// ValidateMergedConfig checks the merged configuration for required fields and cross-field constraints.
+func ValidateMergedConfig(merged *MergedConfig, className string) []ConfigValidationError {
+	var errs []ConfigValidationError
+
+	if merged.Spec.Instances == nil {
+		errs = append(errs, ConfigValidationError{Field: "spec.instances", Message: "must be set in PostgresCluster or PostgresClusterClass"})
+	}
+	if merged.Spec.PostgresVersion == nil {
+		errs = append(errs, ConfigValidationError{Field: "spec.postgresVersion", Message: "must be set in PostgresCluster or PostgresClusterClass"})
+	}
+	if merged.Spec.Storage == nil {
+		errs = append(errs, ConfigValidationError{Field: "spec.storage", Message: "must be set in PostgresCluster or PostgresClusterClass"})
+	}
+	if merged.Spec.Backup != nil && merged.Spec.Backup.Enabled != nil && *merged.Spec.Backup.Enabled {
+		if merged.Spec.Backup.Schedule == nil || *merged.Spec.Backup.Schedule == "" {
+			errs = append(errs, ConfigValidationError{Field: "spec.backup.schedule", Message: "backup.schedule is required when backup.enabled is true"})
+		} else if len(strings.Fields(*merged.Spec.Backup.Schedule)) != 5 {
+			errs = append(errs, ConfigValidationError{Field: "spec.backup.schedule", Message: "backup.schedule must be a 5-field cron expression (minute hour day month weekday)"})
+		}
+	}
+	if err := validatePostgreSQLConfigNoCNPGFixedKeys(merged.Spec.PostgreSQLConfig); err != nil {
+		errs = append(errs, ConfigValidationError{Field: "spec.postgresqlConfig", Message: err.Error()})
+	}
+
+	return errs
+}
+
+// validatePostgreSQLConfigNoCNPGFixedKeys rejects postgresqlConfig keys that CloudNativePG
+// registers as fixed/blocked (see cnpgpostgres.FixedConfigurationParameters). Users must
+// not set these; CNPG and the instance manager own them.
+func validatePostgreSQLConfigNoCNPGFixedKeys(params map[string]string) error {
+	if len(params) == 0 {
+		return nil
+	}
+	invalid := make([]string, 0)
+	for k := range params {
+		if _, fixed := cnpgpostgres.FixedConfigurationParameters[k]; fixed {
+			invalid = append(invalid, k)
+		}
+	}
+	if len(invalid) == 0 {
+		return nil
+	}
+	sort.Strings(invalid)
+	return fmt.Errorf("postgresqlConfig must not set CNPG-managed parameters: %s", strings.Join(invalid, ", "))
+}
+
+// buildCNPGClusterSpec builds the desired CNPG ClusterSpec by mutating the live
+// spec in-place so unowned fields (e.g. Managed) survive the patch.
+// IMPORTANT: any field derived from user-controlled CRD fields must also appear in normalizeCNPGClusterSpec,
+// otherwise external changes to those fields on the CNPG cluster will be silently ignored.
+// Operator-controlled invariants (e.g. SuperuserSecret, EnableSuperuserAccess) are exempt — they
+// are always the same value and are never exposed in the PostgresCluster CRD.
+func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, clusterName, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
+	live.ImageName = clusterCnpg.PostgresImageName(*specCfg.Spec.PostgresVersion)
+	live.Instances = int(*specCfg.Spec.Instances)
+	live.PostgresConfiguration = cnpgv1.PostgresConfiguration{
+		Parameters: maps.Clone(specCfg.Spec.PostgreSQLConfig),
+		PgHBA:      specCfg.Spec.PgHBA,
+	}
+	live.SuperuserSecret = &cnpgv1.LocalObjectReference{Name: secretName}
+	live.EnableSuperuserAccess = ptr.To(true)
+	live.Bootstrap = buildBootstrapConfiguration(specCfg, secretName)
+	live.StorageConfiguration = cnpgv1.StorageConfiguration{
+		Size: specCfg.Spec.Storage.String(),
+	}
+	live.Resources = *specCfg.Spec.Resources
+	if specCfg.CNPG != nil && specCfg.CNPG.PrimaryUpdateMethod != nil {
+		live.PrimaryUpdateMethod = cnpgv1.PrimaryUpdateMethod(*specCfg.CNPG.PrimaryUpdateMethod)
+	} else {
+		live.PrimaryUpdateMethod = cnpgv1.PrimaryUpdateMethodRestart
+	}
+	annotations := make(map[string]string)
+	if postgresMetricsEnabled {
+		annotations = buildPostgresScrapeAnnotations()
+	}
+	live.InheritedMetadata = &cnpgv1.EmbeddedObjectMetadata{Annotations: annotations}
+	live.Backup = nil
+	if backupIsEnabled(specCfg) && specCfg.CNPG != nil && specCfg.CNPG.Backup != nil && specCfg.CNPG.Backup.VolumeSnapshot != nil {
+		live.Backup = buildCNPGBackupConfiguration(specCfg)
+	}
+	// Preserve plugins owned by other controllers/users: drop only our managed
+	// barman entry from the live spec, then append the desired one (if any).
+	filtered := make([]cnpgv1.PluginConfiguration, 0, len(live.Plugins))
+	for _, p := range live.Plugins {
+		if p.Name != barmanCloudPluginName {
+			filtered = append(filtered, p)
+		}
+	}
+	live.Plugins = append(filtered, buildCNPGPlugins(specCfg, clusterName)...)
+
+	// Preserve externalClusters owned by other controllers/users: drop only our managed recovery
+	// entry from the live spec, then append the desired one (only present for object-store recovery).
+	// This entry, recovery.source, and recovery.recoveryTarget are captured by normalizeRecovery so
+	// they participate in drift detection: they are rebuilt deterministically from the immutable
+	// bootstrapFrom every reconcile, so tracking them heals an out-of-band edit before bootstrap
+	// completes without risking false-positive drift (CNPG ignores the stanza once bootstrapped).
+	filteredExt := make([]cnpgv1.ExternalCluster, 0, len(live.ExternalClusters))
+	for _, e := range live.ExternalClusters {
+		if e.Name != recoveryExternalClusterName {
+			filteredExt = append(filteredExt, e)
+		}
+	}
+	live.ExternalClusters = append(filteredExt, buildRecoveryExternalClusters(specCfg, clusterName)...)
+	return live
+}
+
+func buildCNPGPlugins(cfg *MergedConfig, clusterName string) []cnpgv1.PluginConfiguration {
+	if activeBarmanObjectStoreCfg(cfg) == nil {
+		return nil
+	}
+	return []cnpgv1.PluginConfiguration{
+		{
+			Name:          barmanCloudPluginName,
+			Enabled:       ptr.To(true),
+			IsWALArchiver: ptr.To(true),
+			Parameters: map[string]string{
+				"barmanObjectName": objectStoreName(clusterName),
+			},
+		},
+	}
+}
+
+func objectStoreName(clusterName string) string {
+	return clusterName + "-object-store"
+}
+
+func buildCNPGBackupConfiguration(cfg *MergedConfig) *cnpgv1.BackupConfiguration {
+	backupCfg := &cnpgv1.BackupConfiguration{}
+	if cfg.CNPG.Backup.Target != nil {
+		backupCfg.Target = cnpgv1.BackupTarget(*cfg.CNPG.Backup.Target)
+	}
+	if vs := cfg.CNPG.Backup.VolumeSnapshot; vs != nil {
+		backupCfg.VolumeSnapshot = buildVolumeSnapshotConfiguration(vs)
+	}
+	return backupCfg
+}
+
+func buildVolumeSnapshotConfiguration(vs *enterprisev4.CNPGVolumeSnapshotConfig) *cnpgv1.VolumeSnapshotConfiguration {
+	vsCfg := &cnpgv1.VolumeSnapshotConfiguration{}
+	if vs.ClassName != nil {
+		vsCfg.ClassName = *vs.ClassName
+	}
+	if vs.WalClassName != nil {
+		vsCfg.WalClassName = *vs.WalClassName
+	}
+	if vs.SnapshotOwnerReference != nil {
+		vsCfg.SnapshotOwnerReference = cnpgv1.SnapshotOwnerReference(*vs.SnapshotOwnerReference)
+	}
+	vsCfg.Online = vs.Online
+	vsCfg.Labels = vs.Labels
+	vsCfg.Annotations = vs.Annotations
+	return vsCfg
+}
+
+// buildBootstrapConfiguration selects initdb for a fresh cluster, or recovery from the
+// configured source (VolumeSnapshot and/or object-store WAL archive) when spec.bootstrapFrom is set.
+func buildBootstrapConfiguration(cfg *MergedConfig, secretName string) *cnpgv1.BootstrapConfiguration {
+	// No bootstrapFrom means a fresh cluster (initdb). The bootstrapFrom-set-but-no-source case is
+	// rejected upstream by ValidateCrossResource, so the nil-source branch here is only defensive —
+	// it must not hand CNPG an empty BootstrapRecovery it would reject.
+	b := cfg.Spec.BootstrapFrom
+	if b == nil || (b.VolumeSnapshot == nil && b.ObjectStorage == nil) {
+		return &cnpgv1.BootstrapConfiguration{
+			InitDB: &cnpgv1.BootstrapInitDB{
+				Database: defaultDatabaseName,
+				Owner:    superUsername,
+				Secret:   &cnpgv1.LocalObjectReference{Name: secretName},
+			},
+		}
+	}
+	return &cnpgv1.BootstrapConfiguration{
+		Recovery: buildBootstrapRecovery(b),
+	}
+}
+
+// buildBootstrapRecovery translates the provider-agnostic BootstrapFrom into a CNPG
+// BootstrapRecovery. Four shapes are supported:
+//   - volumeSnapshot only                       → recovery.volumeSnapshots
+//   - volumeSnapshot + walArchive               → recovery.volumeSnapshots + recovery.source (WAL replay)
+//   - objectStorage                             → recovery.source (base backup + WAL from object store)
+//   - any of the above + recoveryTarget (PITR)  → recovery.recoveryTarget
+//
+// When recovery reads WAL from an object store, recovery.source names an externalClusters entry
+// built by buildRecoveryExternalClusters; the two must stay in sync via recoveryExternalClusterName.
+func buildBootstrapRecovery(b *enterprisev4.BootstrapFrom) *cnpgv1.BootstrapRecovery {
+	recovery := &cnpgv1.BootstrapRecovery{}
+
+	if b.VolumeSnapshot != nil {
+		recovery.VolumeSnapshots = &cnpgv1.DataSource{
+			Storage: corev1.TypedLocalObjectReference{
+				Name:     b.VolumeSnapshot.Storage,
+				Kind:     "VolumeSnapshot",
+				APIGroup: ptr.To("snapshot.storage.k8s.io"),
+			},
+		}
+		if b.VolumeSnapshot.WalStorage != nil {
+			recovery.VolumeSnapshots.WalStorage = &corev1.TypedLocalObjectReference{
+				Name:     *b.VolumeSnapshot.WalStorage,
+				Kind:     "VolumeSnapshot",
+				APIGroup: ptr.To("snapshot.storage.k8s.io"),
+			}
+		}
+	}
+
+	// recovery.source points CNPG at the object-store archive (via externalClusters) for WAL replay.
+	// Set it whenever a WAL archive is referenced — either alongside a snapshot (snapshot+PITR) or as
+	// the sole objectStorage source.
+	if recoveryReadsObjectStore(b) {
+		recovery.Source = recoveryExternalClusterName
+	}
+
+	recovery.RecoveryTarget = buildRecoveryTarget(b.RecoveryTarget)
+	return recovery
+}
+
+// buildRecoveryTarget maps the provider-agnostic RecoveryTarget onto the CNPG type.
+// Returns nil when no target is set (recovery to the latest available WAL).
+func buildRecoveryTarget(rt *enterprisev4.RecoveryTarget) *cnpgv1.RecoveryTarget {
+	if rt == nil {
+		return nil
+	}
+	target := &cnpgv1.RecoveryTarget{}
+	switch rt.Type {
+	case enterprisev4.RecoveryTargetTime:
+		target.TargetTime = normalizeRecoveryTargetTime(rt.Value)
+	case enterprisev4.RecoveryTargetLSN:
+		target.TargetLSN = rt.Value
+	case enterprisev4.RecoveryTargetXID:
+		target.TargetXID = rt.Value
+	case enterprisev4.RecoveryTargetName:
+		target.TargetName = rt.Value
+	case enterprisev4.RecoveryTargetImmediate:
+		immediate := true
+		target.TargetImmediate = &immediate
+	}
+	// Exclusive is meaningless for an immediate target; the API documents it as ignored there.
+	if rt.Exclusive != nil && rt.Type != enterprisev4.RecoveryTargetImmediate {
+		target.Exclusive = rt.Exclusive
+	}
+	return target
+}
+
+// pgTargetTimeLayout renders a timestamp with a numeric UTC offset (e.g. 2026-05-01 13:30:00+00:00).
+// PostgreSQL's recovery_target_time GUC parser rejects the RFC 3339 "Z" zone designator, so a UTC
+// value admitted as "...Z" would otherwise fail the restore with "invalid value for parameter
+// recovery_target_time". Emitting a numeric offset keeps the same instant in a form PG accepts.
+const pgTargetTimeLayout = "2006-01-02 15:04:05.999999999-07:00"
+
+// normalizeRecoveryTargetTime re-renders an admitted RFC 3339 recovery target time into a
+// PostgreSQL-safe layout with a numeric offset. Admission (validateRecoveryTargetFormat) has already
+// accepted the value via time.Parse(time.RFC3339, ...); if for any reason it does not parse here we
+// pass it through unchanged rather than dropping the target.
+func normalizeRecoveryTargetTime(value string) string {
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return value
+	}
+	return t.Format(pgTargetTimeLayout)
+}
+
+// recoveryReadsObjectStore reports whether recovery needs to read WAL (and, for objectStorage, the
+// base backup) from a barman-cloud object store. True for a volumeSnapshot source with a walArchive,
+// or for an objectStorage source.
+func recoveryReadsObjectStore(b *enterprisev4.BootstrapFrom) bool {
+	if b == nil {
+		return false
+	}
+	if b.ObjectStorage != nil {
+		return true
+	}
+	return b.VolumeSnapshot != nil && b.VolumeSnapshot.WalArchive != nil
+}
+
+// recoveryObjectStoreServerName returns the source cluster's server name in the object store, i.e.
+// the folder under which its backup/WAL are stored. Empty when recovery does not read an object store.
+func recoveryObjectStoreServerName(b *enterprisev4.BootstrapFrom) string {
+	if b == nil {
+		return ""
+	}
+	if b.ObjectStorage != nil {
+		return b.ObjectStorage.ServerName
+	}
+	if b.VolumeSnapshot != nil && b.VolumeSnapshot.WalArchive != nil {
+		return b.VolumeSnapshot.WalArchive.ServerName
+	}
+	return ""
+}
+
+// managedObjectStoreCfg returns the class barman-cloud object store config when the operator must
+// manage an ObjectStore CR for this cluster — either to write backups (backup enabled) or to read
+// WAL/base backups during recovery (a walArchive or objectStorage restore source). Returns nil when
+// neither applies. This is the single gate objectStoreModel uses to create/delete the ObjectStore.
+func managedObjectStoreCfg(cfg *MergedConfig) *enterprisev4.CNPGBarmanObjectStoreConfig {
+	if c := activeBarmanObjectStoreCfg(cfg); c != nil {
+		return c
+	}
+	if cfg != nil && cfg.Spec != nil && recoveryReadsObjectStore(cfg.Spec.BootstrapFrom) {
+		return barmanObjectStoreCfg(cfg)
+	}
+	return nil
+}
+
+// buildRecoveryExternalClusters synthesizes the externalClusters entry CNPG needs to reach the
+// object-store WAL archive during recovery. It returns nil unless bootstrapFrom references an object
+// store; the entry points at the operator-managed barman-cloud ObjectStore (objectStoreName) and the
+// source cluster's serverName. Returns nil when no object store is referenced.
+func buildRecoveryExternalClusters(cfg *MergedConfig, clusterName string) []cnpgv1.ExternalCluster {
+	b := cfg.Spec.BootstrapFrom
+	if !recoveryReadsObjectStore(b) {
+		return nil
+	}
+	return []cnpgv1.ExternalCluster{
+		{
+			Name: recoveryExternalClusterName,
+			PluginConfiguration: &cnpgv1.PluginConfiguration{
+				Name: barmanCloudPluginName,
+				Parameters: map[string]string{
+					"barmanObjectName": objectStoreName(clusterName),
+					"serverName":       recoveryObjectStoreServerName(b),
+				},
+			},
+		},
+	}
+}
+
+func buildCNPGCluster(scheme *runtime.Scheme, cluster *enterprisev4.PostgresCluster, cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) (*cnpgv1.Cluster, error) {
+	cnpg := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, cluster.Name, secretName, postgresMetricsEnabled),
+	}
+	if err := ctrl.SetControllerReference(cluster, cnpg, scheme); err != nil {
+		return nil, fmt.Errorf("setting controller reference on CNPG cluster: %w", err)
+	}
+	return cnpg, nil
+}
+
+func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec {
+	normalized := normalizedCNPGClusterSpec{
+		ImageName:           stripImageRefForDrift(spec.ImageName),
+		Instances:           spec.Instances,
+		PrimaryUpdateMethod: string(spec.PrimaryUpdateMethod),
+		StorageSize:         spec.StorageConfiguration.Size,
+		Resources:           spec.Resources,
+	}
+	if len(spec.PostgresConfiguration.PgHBA) > 0 {
+		normalized.PgHBA = spec.PostgresConfiguration.PgHBA
+	}
+	if spec.InheritedMetadata != nil && len(spec.InheritedMetadata.Annotations) > 0 {
+		normalized.InheritedAnnotations = spec.InheritedMetadata.Annotations
+	}
+	if spec.Bootstrap != nil {
+		if spec.Bootstrap.InitDB != nil {
+			normalized.BootstrapType = bootstrapInitDB
+			normalized.DefaultDatabase = spec.Bootstrap.InitDB.Database
+			normalized.Owner = spec.Bootstrap.InitDB.Owner
+		} else if spec.Bootstrap.Recovery != nil {
+			normalized.BootstrapType = bootstrapRecovery
+			normalized.Recovery = normalizeRecovery(spec.Bootstrap.Recovery, spec.ExternalClusters)
+		}
+	}
+	if spec.Certificates != nil && len(spec.Certificates.ServerAltDNSNames) > 0 {
+		normalized.ServerAltDNSNames = spec.Certificates.ServerAltDNSNames
+	}
+	if spec.Backup != nil {
+		normalized.Backup = &normalizedBackupSpec{
+			Target: string(spec.Backup.Target),
+		}
+		if spec.Backup.VolumeSnapshot != nil {
+			normalized.Backup.VolumeSnapshotClass = spec.Backup.VolumeSnapshot.ClassName
+			normalized.Backup.WalClassName = spec.Backup.VolumeSnapshot.WalClassName
+			normalized.Backup.SnapshotOwnerReference = string(spec.Backup.VolumeSnapshot.SnapshotOwnerReference)
+			normalized.Backup.Online = spec.Backup.VolumeSnapshot.Online
+			normalized.Backup.Labels = spec.Backup.VolumeSnapshot.Labels
+			normalized.Backup.Annotations = spec.Backup.VolumeSnapshot.Annotations
+		}
+	}
+	for _, p := range spec.Plugins {
+		np := normalizedPluginSpec{Name: p.Name}
+		// CNPG defaults Enabled to true when unset, so a nil pointer normalizes to true
+		// to match what the API server stores — otherwise drift would be flagged on every
+		// reconcile against our explicitly-true desired spec.
+		np.Enabled = p.Enabled == nil || *p.Enabled
+		if p.IsWALArchiver != nil {
+			np.IsWALArchiver = *p.IsWALArchiver
+		}
+		if len(p.Parameters) > 0 {
+			np.Parameters = maps.Clone(p.Parameters)
+		}
+		normalized.Plugins = append(normalized.Plugins, np)
+	}
+	return normalized
+}
+
+// normalizeRecovery captures the operator-owned recovery wiring so it participates in drift
+// detection while bootstrap is in progress. It records recovery.source, the synthesized "origin"
+// externalCluster (matched by recoveryExternalClusterName), and the recovery target. CNPG consumes
+// this stanza at bootstrap; re-asserting it after the cluster has bootstrapped is a no-op, so the
+// only effect of tracking it is that out-of-band edits before bootstrap completes are healed rather
+// than silently accepted.
+func normalizeRecovery(rec *cnpgv1.BootstrapRecovery, externalClusters []cnpgv1.ExternalCluster) *normalizedRecoverySpec {
+	nr := &normalizedRecoverySpec{Source: rec.Source}
+	for i := range externalClusters {
+		e := externalClusters[i]
+		if e.Name != recoveryExternalClusterName {
+			continue
+		}
+		nrec := &normalizedRecoveryExternalCluster{Name: e.Name}
+		if e.PluginConfiguration != nil {
+			nrec.PluginName = e.PluginConfiguration.Name
+			if len(e.PluginConfiguration.Parameters) > 0 {
+				nrec.Parameters = maps.Clone(e.PluginConfiguration.Parameters)
+			}
+		}
+		nr.ExternalCluster = nrec
+		break
+	}
+	if rt := rec.RecoveryTarget; rt != nil {
+		nr.Target = &normalizedRecoveryTarget{
+			TargetTime:      rt.TargetTime,
+			TargetLSN:       rt.TargetLSN,
+			TargetXID:       rt.TargetXID,
+			TargetName:      rt.TargetName,
+			TargetImmediate: rt.TargetImmediate,
+			Exclusive:       rt.Exclusive,
+		}
+	}
+	return nr
+}
+
+// stripImageRefForDrift trims whitespace and strips an OCI digest suffix (@sha256:… / @…)
+// so drift detection matches tag-only desired images against apiserver materialized refs.
+func stripImageRefForDrift(name string) string {
+	name = strings.TrimSpace(name)
+	if i := strings.Index(name, "@"); i >= 0 {
+		return name[:i]
+	}
+	return name
+}
+
+// cnpgPatchKind classifies Reconcile's drift outcome so Observe can gate
+// ClusterReady on CNPG.Status.Phase only for material changes — annotation
+// drift propagates via metadata PATCH without a phase transition.
+type cnpgPatchKind int
+
+const (
+	cnpgPatchNone     cnpgPatchKind = iota // no drift detected; nothing patched.
+	cnpgPatchMetadata                      // InheritedAnnotations changed only; metadata-only.
+	cnpgPatchBody                          // structural change; CNPG must observably reconcile.
+)
+
+// requiresPhaseGate reports whether Observe should hold ClusterReady=Provisioning
+// while CNPG.Status.Phase still reflects the pre-patch value.
+func (k cnpgPatchKind) requiresPhaseGate() bool { return k == cnpgPatchBody }
+
+// imageUpdateInProgress reports whether CNPG has applied the requested image
+// to both the running pods and the data directory.
+func imageUpdateInProgress(cluster *cnpgv1.Cluster) bool {
+	specImage := stripImageRefForDrift(cluster.Spec.ImageName)
+	if specImage == "" {
+		return false
+	}
+	statusImage := stripImageRefForDrift(cluster.Status.Image)
+	if statusImage != "" && specImage != statusImage {
+		return true
+	}
+	if cluster.Status.PGDataImageInfo == nil {
+		return false
+	}
+	dataImage := stripImageRefForDrift(cluster.Status.PGDataImageInfo.Image)
+	return dataImage != "" && specImage != dataImage
+}
+
+// isClusterDrift reports whether two normalized specs differ in any field CNPG
+// must observably reconcile against. InheritedAnnotations is excluded (metadata-only).
+func isClusterDrift(a, b normalizedCNPGClusterSpec) bool {
+	a.InheritedAnnotations = nil
+	b.InheritedAnnotations = nil
+	return !equality.Semantic.DeepEqual(a, b)
+}
+
+func getServerAltDNSNames(cnpg *cnpgv1.Cluster) []string {
+	if cnpg == nil || cnpg.Spec.Certificates == nil {
+		return nil
+	}
+	return cnpg.Spec.Certificates.ServerAltDNSNames
+}
+
+// computeDesiredPoolerSANSet returns the desired serverAltDNSNames sorted
+// lexicographically. When poolerEnabled is false, existing SANs are preserved
+// so a transient toggle does not trigger CNPG cert rotation.
+func computeDesiredPoolerSANSet(poolerEnabled bool, current []string, clusterName, namespace string) []string {
+	set := make(map[string]struct{}, len(current))
+	for _, s := range current {
+		if s == "" {
+			continue
+		}
+		set[s] = struct{}{}
+	}
+	if poolerEnabled {
+		for _, s := range []string{
+			fmt.Sprintf("%s.%s", poolerResourceName(clusterName, readWriteEndpoint), namespace),
+			fmt.Sprintf("%s.%s%s", poolerResourceName(clusterName, readWriteEndpoint), namespace, poolerSANSuffix),
+			fmt.Sprintf("%s.%s", poolerResourceName(clusterName, readOnlyEndpoint), namespace),
+			fmt.Sprintf("%s.%s%s", poolerResourceName(clusterName, readOnlyEndpoint), namespace, poolerSANSuffix),
+		} {
+			set[s] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(set))
+	for s := range set {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// applyPoolerSANs merges the desired pooler SAN set into the cluster spec's
+// ServerAltDNSNames. It is called on desiredSpec before the drift comparison
+// so that SAN changes are included in the single CNPG patch.
+func applyPoolerSANs(spec *cnpgv1.ClusterSpec, poolerEnabled bool, clusterName, namespace string) {
+	current := []string(nil)
+	if spec.Certificates != nil {
+		current = spec.Certificates.ServerAltDNSNames
+	}
+	desired := computeDesiredPoolerSANSet(poolerEnabled, current, clusterName, namespace)
+	if sets.New(current...).Equal(sets.New(desired...)) {
+		return
+	}
+	if spec.Certificates == nil {
+		spec.Certificates = &cnpgv1.CertificatesConfiguration{}
+	}
+	spec.Certificates.ServerAltDNSNames = desired
+}
+
+// isSANPolicyConverged reports whether the contracts CNPGCluster snapshot has
+// the desired pooler SANs. Pure comparison — no client call.
+func isSANPolicyConverged(cnpg *cnpgv1.Cluster, poolerEnabled bool) bool {
+	if cnpg == nil {
+		return true
+	}
+	current := sets.New(getServerAltDNSNames(cnpg)...)
+	desired := sets.New(computeDesiredPoolerSANSet(poolerEnabled, current.UnsortedList(), cnpg.Name, cnpg.Namespace)...)
+	return current.Equal(desired)
+}
+
+func serverTLSSecretNameFromCNPG(cnpg *cnpgv1.Cluster) string {
+	if cnpg == nil {
+		return ""
+	}
+	if cnpg.Status.Certificates.ServerTLSSecret != "" {
+		return cnpg.Status.Certificates.ServerTLSSecret
+	}
+	if cnpg.Spec.Certificates != nil && cnpg.Spec.Certificates.ServerTLSSecret != "" {
+		return cnpg.Spec.Certificates.ServerTLSSecret
+	}
+	return ""
+}
+
+// isServerTLSLeafAlignedWithSpec checks whether the materialized TLS leaf cert
+// covers all SANs declared in the CNPG cluster spec. Failure modes:
+//   - no Cluster / no spec SANs    → (true,  nil)
+//   - no Secret / no tls.crt       → (false, nil) — transient race with CNPG cert-controller
+//   - SAN mismatch                 → (false, nil) — mid-rotation
+//   - PEM/x509 parse failure       → (false, %w errServerTLSLeafInvalid)
+func isServerTLSLeafAlignedWithSpec(ctx context.Context, c client.Client, namespace string, cnpg *cnpgv1.Cluster) (bool, error) {
+	if cnpg == nil {
+		return true, nil
+	}
+	specSANs := getServerAltDNSNames(cnpg)
+	if len(specSANs) == 0 {
+		return true, nil
+	}
+	secretName := serverTLSSecretNameFromCNPG(cnpg)
+	if secretName == "" {
+		return false, nil
+	}
+	var sec corev1.Secret
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: secretName}, &sec); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	raw := sec.Data[corev1.TLSCertKey]
+	if len(raw) == 0 {
+		return false, nil
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return false, fmt.Errorf("%w: PEM decode failed for secret %s/%s",
+			errServerTLSLeafInvalid, namespace, secretName)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false, fmt.Errorf("%w: x509 parse failed for secret %s/%s: %v",
+			errServerTLSLeafInvalid, namespace, secretName, err)
+	}
+	for _, alt := range specSANs {
+		if alt == "" {
+			continue
+		}
+		if !slices.Contains(cert.DNSNames, alt) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// buildPostgreSQLParametersPatch builds an SSA payload for CNPG spec.postgresql.parameters.
+func buildPostgreSQLParametersPatch(cluster *cnpgv1.Cluster, params map[string]string) client.Object {
+	parameters := maps.Clone(params)
+	if parameters == nil {
+		parameters = map[string]string{}
+	}
+	paramPatch := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": cnpgv1.SchemeGroupVersion.String(),
+			"kind":       cnpgv1.ClusterKind,
+			"metadata": map[string]any{
+				"name":      cluster.Name,
+				"namespace": cluster.Namespace,
+			},
+			"spec": map[string]any{
+				"postgresql": map[string]any{
+					"parameters": parameters,
+				},
+			},
+		},
+	}
+	return paramPatch
+}
+
+// applyPostgreSQLParametersPatch sends one SSA payload for CNPG spec.postgresql.parameters.
+func applyPostgreSQLParametersPatch(ctx context.Context, c client.Client, cluster *cnpgv1.Cluster, params map[string]string) error {
+	patch := buildPostgreSQLParametersPatch(cluster, params)
+	if err := c.Apply(
+		ctx,
+		client.ApplyConfigurationFromUnstructured(patch.(*unstructured.Unstructured)),
+		client.FieldOwner(postgresqlParametersFieldManager),
+	); err != nil {
+		return fmt.Errorf("applying PostgreSQL parameters: %w", err)
+	}
+
+	return nil
+}
+
+// applyPostgreSQLParameters applies CNPG spec.postgresql.parameters with a dedicated SSA field manager.
+func applyPostgreSQLParameters(ctx context.Context, c client.Client, cluster *cnpgv1.Cluster, params map[string]string) error {
+	adoptionParams := postgreSQLParametersWithLegacyAdoption(cluster, params)
+	if len(adoptionParams) > 0 {
+		if err := applyPostgreSQLParametersPatch(ctx, c, cluster, adoptionParams); err != nil {
+			return err
+		}
+	}
+
+	return applyPostgreSQLParametersPatch(ctx, c, cluster, params)
+}
+
+// postgreSQLParametersWithLegacyAdoption returns a temporary SSA payload that includes parameters
+// previously managed by the operator through MergeFrom patches. The following desired-only apply
+// can then prune those keys because this field manager owns their managedFields entries.
+func postgreSQLParametersWithLegacyAdoption(cluster *cnpgv1.Cluster, desired map[string]string) map[string]string {
+	staleLegacyParameters := staleLegacyPostgreSQLParameters(cluster, desired)
+	if len(staleLegacyParameters) == 0 {
+		return nil
+	}
+
+	adoptionParams := maps.Clone(desired)
+	if adoptionParams == nil {
+		adoptionParams = map[string]string{}
+	}
+	maps.Copy(adoptionParams, staleLegacyParameters)
+	return adoptionParams
+}
+
+// staleLegacyPostgreSQLParameters finds live parameters that were owned by the old merge-patch
+// manager but are absent from desired config. These keys need one managedFields adoption apply
+// before omission can prune them.
+func staleLegacyPostgreSQLParameters(cluster *cnpgv1.Cluster, desired map[string]string) map[string]string {
+	if cluster == nil || len(cluster.Spec.PostgresConfiguration.Parameters) == 0 {
+		return nil
+	}
+
+	legacyOwned := legacyUpdatedPostgreSQLParameterKeys(cluster.ManagedFields)
+	if len(legacyOwned) == 0 {
+		return nil
+	}
+
+	applyOwners := appliedPostgreSQLParameterOwners(cluster.ManagedFields)
+	stale := map[string]string{}
+	for key, value := range cluster.Spec.PostgresConfiguration.Parameters {
+		_, inDesired := desired[key]
+		_, isLegacy := legacyOwned[key]
+
+		applyOwner := applyOwners[key]
+		externallyApplied := applyOwner != "" && applyOwner != postgresqlParametersFieldManager
+
+		if inDesired || !isLegacy || externallyApplied || isCNPGManagedPostgreSQLParameter(key) {
+			continue
+		}
+
+		stale[key] = value
+	}
+	return stale
+}
+
+// legacyUpdatedPostgreSQLParameterKeys returns parameter keys owned by the old controller-runtime
+// update manager used before parameters moved to SSA.
+func legacyUpdatedPostgreSQLParameterKeys(managedFields []metav1.ManagedFieldsEntry) map[string]struct{} {
+	keys := map[string]struct{}{}
+	for _, field := range managedFields {
+		if field.Manager != legacyPostgreSQLParametersUpdateManager ||
+			field.Operation != metav1.ManagedFieldsOperationUpdate ||
+			field.FieldsV1 == nil {
+			continue
+		}
+		for _, key := range parsePostgreSQLParameterFieldNames(field.FieldsV1.GetRawBytes()) {
+			keys[key] = struct{}{}
+		}
+	}
+	return keys
+}
+
+// appliedPostgreSQLParameterOwners returns per-key SSA managers for PostgreSQL parameters.
+func appliedPostgreSQLParameterOwners(managedFields []metav1.ManagedFieldsEntry) map[string]string {
+	owners := map[string]string{}
+	for _, field := range managedFields {
+		if field.Operation != metav1.ManagedFieldsOperationApply || field.FieldsV1 == nil {
+			continue
+		}
+		for _, key := range parsePostgreSQLParameterFieldNames(field.FieldsV1.GetRawBytes()) {
+			owners[key] = field.Manager
+		}
+	}
+	return owners
+}
+
+// parsePostgreSQLParameterFieldNames extracts f:<parameter> keys from managedFields fieldsV1.
+func parsePostgreSQLParameterFieldNames(raw []byte) []string {
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil
+	}
+
+	spec, _ := fields["f:spec"].(map[string]any)
+	postgresql, _ := spec["f:postgresql"].(map[string]any)
+	parameters, _ := postgresql["f:parameters"].(map[string]any)
+	names := make([]string, 0, len(parameters))
+	for key := range parameters {
+		name, found := strings.CutPrefix(key, "f:")
+		if found && name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// isCNPGManagedPostgreSQLParameter reports whether a parameter is known to be CNPG fixed,
+// defaulted, or mandatory and should not be adopted as legacy user intent.
+func isCNPGManagedPostgreSQLParameter(key string) bool {
+	if _, fixed := cnpgpostgres.FixedConfigurationParameters[key]; fixed {
+		return true
+	}
+	if _, defaulted := cnpgpostgres.CnpgConfigurationSettings.GlobalDefaultSettings[key]; defaulted {
+		return true
+	}
+	if _, mandatory := cnpgpostgres.CnpgConfigurationSettings.MandatorySettings[key]; mandatory {
+		return true
+	}
+	return false
+}

@@ -1,0 +1,25 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+    name: splunk-operator
+    title: splunk-operator
+    functionalDomain: []
+    description: Splunk Operator for Kubernetes
+    annotations:
+        backstage.io/source-location: url:https://cd.splunkdev.com/sok/splunk-operator
+        splunk.com/issue-tracker-url: http://go/replace/me
+        splunk.com/slack-url: http://go/replace/me
+        backstage.io/view-url: https://cd.splunkdev.com/sok/splunk-operator/-/blob/develop/.service-manifests/splunk-operator-component.yaml
+        backstage.io/edit-url: https://cd.splunkdev.com/sok/splunk-operator/-/edit/develop/.service-manifests/splunk-operator-component.yaml
+    links:
+        - title: Overview
+          url: http://go/replace/me
+        - title: ERD/RFC
+          url: http://go/replace/me
+        - title: Ops Runbook
+          url: http://go/replace/me
+spec:
+    lifecycle: production
+    type: product
+    owner: group:sg-cloud-sok-developer-platform

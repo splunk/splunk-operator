@@ -21,6 +21,7 @@ items:
 {{ toYaml . | indent 6 }}
   {{- end }}
   spec:
+    disableResourceDefaults: {{ $.Values.searchHeadCluster.disableResourceDefaults }}
   {{- if $.Values.searchHeadCluster.replicaCount }}
     replicas: {{ $.Values.searchHeadCluster.replicaCount }}
   {{- end }}
@@ -83,6 +84,10 @@ items:
   {{- end }}
   {{- with $.Values.image.imagePullSecrets }}
     imagePullSecrets:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.podAnnotations }}
+    podAnnotations:
 {{ toYaml . | indent 6 }}
   {{- end }}
   {{- with $.Values.searchHeadCluster.volumes }}

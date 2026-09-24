@@ -23,18 +23,19 @@ import (
 	"strings"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -46,9 +47,6 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		Requeue:      true,
 		RequeueAfter: time.Second * 5,
 	}
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
-
 	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "MonitoringConsole"
@@ -58,8 +56,17 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	var err error
-	// Initialize phase
-	cr.Status.Phase = enterpriseApi.PhaseError
+	// Initialize phase and conditions
+	isPaused := cr.GetAnnotations()[enterpriseApi.MonitoringConsolePausedAnnotation] == "true"
+	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
+		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
+			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
+		})
+		cr.Status.Phase = result.Phase
+		cr.Status.Conditions = result.Conditions
+		cr.Status.ObservedGeneration = cr.GetGeneration()
+	}
+	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -67,14 +74,15 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// validate and updates defaults for CR
 	err = validateMonitoringConsoleSpec(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "validateMonitoringConsoleSpec", fmt.Sprintf("validate monitoringconsole spec failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to validate monitoring console spec")
-		return result, err
+		eventPublisher.Warning(ctx, EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Monitoring Console spec validation failed")
+		return reconcile.Result{}, splcommon.NewTerminalError(EventReasonValidateSpecFailed, "Monitoring Console spec validation failed", err)
 	}
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "App framework migration failed")
 		return result, err
 	}
 
@@ -84,8 +92,9 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
-			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			eventPublisher.Warning(ctx, EventReasonAppFrameworkInitFailed, fmt.Sprintf("App framework initialization failed for %s — check operator logs", cr.GetName()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
+			setPhaseAndConditions(enterpriseApi.PhaseError, "App framework initialization failed")
 			return result, err
 		}
 	}
@@ -95,9 +104,9 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
 	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
+		eventPublisher.Warning(ctx, EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
+		return result, fmt.Errorf("apply splunk config: %w", err)
 	}
 
 	// check if deletion has been requested
@@ -108,13 +117,14 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkLicenseManager)
 			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up resources during deletion")
 				return result, err
 			}
 		}
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
+			setPhaseAndConditions(enterpriseApi.PhaseTerminating, "Resource is being deleted")
 		} else {
 			result.Requeue = false
 		}
@@ -124,21 +134,24 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// create or update a headless service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, true))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update headless service failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply headless service for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update headless service")
 		return result, err
 	}
 
 	// create or update a regular service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, false))
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update regular service failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonApplyServiceFailed, fmt.Sprintf("Failed to apply regular service for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update regular service")
 		return result, err
 	}
 
 	// create or update statefulset
 	statefulSet, err := getMonitoringConsoleStatefulSet(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "getMonitoringConsoleStatefulSet", fmt.Sprintf("get monitoring console stateful set failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonStatefulSetFailed, fmt.Sprintf("Failed to get monitoring console statefulset for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
 		return result, err
 	}
 
@@ -147,6 +160,13 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		// check if the Monitoring Console is ready for version upgrade, if required
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if err != nil || !continueReconcile {
+			if err != nil {
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Upgrade path validation failed")
+			} else {
+				// waiting on a dependency (e.g. ClusterManager recycling) is not an error,
+				// so don't leave the earlier-staged PhaseError as the persisted status
+				setPhaseAndConditions(enterpriseApi.PhasePending, "Waiting for upgrade path dependency to become ready")
+			}
 			return result, err
 		}
 	}
@@ -154,10 +174,11 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
-		eventPublisher.Warning(ctx, "getMonitoringConsoleStatefulSet", fmt.Sprintf("update to default statefuleset pod manager failed %s", err.Error()))
+		eventPublisher.Warning(ctx, EventReasonStatefulSetUpdateFailed, fmt.Sprintf("Failed to update statefulset for %s — check operator logs", cr.GetName()))
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 		return result, err
 	}
-	cr.Status.Phase = phase
+	setPhaseAndConditions(phase, "")
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
@@ -178,7 +199,11 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	// get generic statefulset for Splunk Enterprise objects
 	var monitoringConsoleConfigMap *corev1.ConfigMap
 	configMap := GetSplunkMonitoringconsoleConfigMapName(cr.GetName(), SplunkMonitoringConsole)
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, 1, []corev1.EnvVar{})
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, toCertEntries(cr.Spec.Certs, autoDNSNames(SplunkMonitoringConsole, cr.GetName(), cr.GetNamespace(), 1)))
+	if err != nil {
+		return nil, fmt.Errorf("reconcile certs: %w", err)
+	}
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, 1, []corev1.EnvVar{}, certMounts)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +224,7 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	if err != nil {
 		return nil, err
 	}
-	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
+	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = configDataHash(monitoringConsoleConfigMap.Data)
 
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
@@ -208,14 +233,13 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 
 // helper function to get the list of MonitoringConsole types in the current namespace
 func getMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (enterpriseApi.MonitoringConsoleList, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getMonitoringConsoleList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "getMonitoringConsoleList", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	objectList := enterpriseApi.MonitoringConsoleList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		scopedLog.Error(err, "MonitoringConsole types not found in namespace", "namsespace", cr.GetNamespace())
+		logger.ErrorContext(ctx, "MonitoringConsole types not found in namespace", "error", err, "namespace", cr.GetNamespace())
 		return objectList, err
 	}
 
@@ -297,6 +321,47 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 	return &current, nil
 }
 
+// crPodNamePrefix derives the per-CR resource-name prefix "splunk-<id>-<kind>-"
+// from the first entry of a comma-separated MC URL value. Supports statefulset
+// pod URLs (suffix "-<digits>") and service URLs (suffix "-service"/"-headless").
+// Returns "" when the prefix cannot be derived; callers then fall back to crName.
+func crPodNamePrefix(value string) string {
+	if value == "" {
+		return ""
+	}
+	// Pod/service name has no '.', strip any DNS suffix and trailing entries.
+	name := strings.SplitN(strings.SplitN(value, ",", 2)[0], ".", 2)[0]
+	idx := strings.LastIndex(name, "-")
+	if idx <= 0 || idx == len(name)-1 {
+		return ""
+	}
+	suffix := name[idx+1:]
+	if suffix != "service" && suffix != "headless" {
+		for _, r := range suffix {
+			if r < '0' || r > '9' {
+				return ""
+			}
+		}
+	}
+	return name[:idx+1]
+}
+
+// crOwnsURL reports whether `curr` belongs to the CR identified by crPrefix.
+// Ownership requires the derived prefix of `curr` to equal crPrefix: a plain
+// substring check is unsafe when one CR's name (or kind segment) is contained
+// in another's (e.g. "search-head" vs "search-head-adhoc", or "cm" vs
+// "cm-cluster-manager-extra"). Falls back to a crName substring match when no
+// prefix can be derived.
+func crOwnsURL(curr, crPrefix, crName string) bool {
+	if crPrefix == "" {
+		return strings.Contains(curr, crName)
+	}
+	if currPrefix := crPodNamePrefix(curr); currPrefix != "" {
+		return currPrefix == crPrefix
+	}
+	return strings.Contains(curr, crPrefix)
+}
+
 // AddURLsConfigMap for adding new server peers to the monitoring console or scaling up
 func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar) {
 	for _, url := range newURLs {
@@ -305,32 +370,43 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 			revised.Data[url.Name] = url.Value
 		} else {
 			newInsURLs := strings.Split(url.Value, ",")
-			//1. Find number of URLs, that crname,  present in the current configmap
-			var crURLs string
-			for _, newURL := range newInsURLs {
-				if strings.Contains(revised.Data[url.Name], newURL) {
-					if crURLs == "" {
-						crURLs = newURL
-					} else {
-						str := []string{crURLs, newURL}
-						crURLs = strings.Join(str, ",")
-					}
+			crPrefix := crPodNamePrefix(url.Value)
+			// 1. Count CR-owned URLs currently present in the configmap for this key.
+			//    We compare counts (not string lengths) because string-length comparison
+			//    is unreliable: it depends on whether new entries are a subset of current,
+			//    and could never detect scale-down (where current has MORE CR URLs than new).
+			currentURLs := strings.Split(revised.Data[url.Name], ",")
+			currentCRCount := 0
+			for _, curr := range currentURLs {
+				if crOwnsURL(curr, crPrefix, crName) {
+					currentCRCount++
 				}
 			}
-			//2. if length of both same then just reconcile
-			if len(crURLs) == len(url.Value) {
-				//reconcile
-				continue
-			} else if len(crURLs) < len(url.Value) { //3. incoming URLs are more than current scaling up
-				//scaling UP
+			newCount := len(newInsURLs)
+
+			// 2. Same count: ensure all new entries are present (otherwise it's a rename/no-op),
+			//    nothing to add or remove.
+			if currentCRCount == newCount {
+				allPresent := true
+				for _, newEntry := range newInsURLs {
+					if !strings.Contains(revised.Data[url.Name], newEntry) {
+						allPresent = false
+						break
+					}
+				}
+				if allPresent {
+					continue
+				}
+			}
+
+			if currentCRCount < newCount { // 3. scaling UP
 				for _, newEntry := range newInsURLs {
 					if !strings.Contains(revised.Data[url.Name], newEntry) {
 						str := []string{revised.Data[url.Name], newEntry}
 						revised.Data[url.Name] = strings.Join(str, ",")
 					}
 				}
-			} else { //4. incoming URLs are less than current then scaling down
-				//scaling DOWN pods
+			} else { // 4. scaling DOWN (currentCRCount > newCount)
 				DeleteURLsConfigMap(revised, crName, newURLs, false)
 			}
 		}
@@ -340,13 +416,14 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 // DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
 func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
 	for _, url := range newURLs {
+		crPrefix := crPodNamePrefix(url.Value)
 		currentURLs := strings.Split(revised.Data[url.Name], ",")
 		sort.Strings(currentURLs)
 		for _, curr := range currentURLs {
 			//scale DOWN
-			if strings.Contains(curr, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
+			if crOwnsURL(curr, crPrefix, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
-			} else if strings.Contains(curr, crName) && deleteCR {
+			} else if crOwnsURL(curr, crPrefix, crName) && deleteCR {
 				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
 			}
 			//if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
@@ -375,8 +452,7 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 // changeMonitoringConsoleAnnotations updates the splunk/image-tag field of the MonitoringConsole annotations to trigger the reconcile loop
 // on update, and returns error if something is wrong.
 func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "changeMonitoringConsoleAnnotations", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
 	eventPublisher := GetEventPublisher(ctx, cr)
@@ -427,14 +503,14 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 
 	image, err := getCurrentImage(ctx, client, cr, SplunkClusterManager)
 	if err != nil {
-		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
-		scopedLog.Error(err, "Get ClusterManager Image failed with", "error", err)
+		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
+		logger.ErrorContext(ctx, "get ClusterManager Image failed with", "error", err)
 		return err
 	}
 	err = changeAnnotations(ctx, client, image, monitoringConsoleInstance)
 	if err != nil {
-		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
-		scopedLog.Error(err, "MonitoringConsole types update after changing annotations failed with", "error", err)
+		eventPublisher.Warning(ctx, EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not update annotations. Reason %v", err))
+		logger.ErrorContext(ctx, "MonitoringConsole types update after changing annotations failed with", "error", err)
 		return err
 	}
 

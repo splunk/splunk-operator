@@ -7,8 +7,8 @@ import (
 	"runtime/debug"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestUpgradePathValidation(t *testing.T) {
@@ -30,8 +29,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -301,7 +299,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplySearchHeadCluster should not have returned error; err=%v", err)
 	}
 
-	// mock the verify RF peer funciton
+	// mock the verify RF peer function
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
 		return nil
 	}
@@ -359,7 +357,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("shc is not in ready state")
 	}
 
-	// mock the verify RF peer funciton
+	// mock the verify RF peer function
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
 		return nil
 	}
@@ -625,6 +623,99 @@ func TestUpgradePathValidation(t *testing.T) {
 
 }
 
+// TestUpgradePathValidation_LicenseManagerGate verifies that the LicenseManager
+// gate in UpgradePathValidation distinguishes a transient not-Ready phase (soft
+// wait, no error) from a genuine image mismatch (hard error), instead of
+// conflating both into a single fatal error.
+func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := newFakeClientBuilder(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{})
+	client := builder.Build()
+	ctx := context.TODO()
+
+	lm := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-lm-gate", Namespace: "test"},
+		Spec: enterpriseApi.LicenseManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+			},
+		},
+	}
+	if err := client.Create(ctx, &lm); err != nil {
+		t.Fatalf("Failed to create LicenseManager: %v", err)
+	}
+
+	cm := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm-gate", Namespace: "test"},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec:              enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				LicenseManagerRef: corev1.ObjectReference{Name: "test-lm-gate"},
+			},
+		},
+	}
+	cm.Kind = "ClusterManager"
+	if err := client.Create(ctx, &cm); err != nil {
+		t.Fatalf("Failed to create ClusterManager: %v", err)
+	}
+
+	lmSS := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-test-lm-gate-license-manager", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test"}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:old"}}},
+			},
+		},
+	}
+	if err := client.Create(ctx, lmSS); err != nil {
+		t.Fatalf("Failed to create LicenseManager StatefulSet: %v", err)
+	}
+
+	// LicenseManager image matches, but it's not yet Ready (e.g. mid pod recycle):
+	// expect a soft wait, not an error.
+	lm.Status.Phase = enterpriseApi.PhaseUpdating
+	if err := client.Status().Update(ctx, &lm); err != nil {
+		t.Fatalf("Failed to update LicenseManager status: %v", err)
+	}
+
+	continueReconcile, err := UpgradePathValidation(ctx, client, &cm, cm.Spec.CommonSplunkSpec, nil)
+	if err != nil {
+		t.Errorf("Expected no error when LicenseManager is transiently not Ready, got: %v", err)
+	}
+	if continueReconcile {
+		t.Errorf("Expected continueReconcile to be false while LicenseManager is not Ready")
+	}
+
+	// LicenseManager is Ready, but its current image differs from the CR spec
+	// image: expect a hard error.
+	lm.Status.Phase = enterpriseApi.PhaseReady
+	if err := client.Status().Update(ctx, &lm); err != nil {
+		t.Fatalf("Failed to update LicenseManager status: %v", err)
+	}
+	lmSS.Spec.Template.Spec.Containers[0].Image = "splunk/splunk:new"
+	if err := client.Update(ctx, lmSS); err != nil {
+		t.Fatalf("Failed to update LicenseManager StatefulSet image: %v", err)
+	}
+
+	continueReconcile, err = UpgradePathValidation(ctx, client, &cm, cm.Spec.CommonSplunkSpec, nil)
+	if err == nil {
+		t.Errorf("Expected an error when LicenseManager image differs from CR image")
+	}
+	if continueReconcile {
+		t.Errorf("Expected continueReconcile to be false when LicenseManager image mismatches CR image")
+	}
+}
+
 func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
@@ -633,8 +724,7 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
+	builder := newFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{})
 

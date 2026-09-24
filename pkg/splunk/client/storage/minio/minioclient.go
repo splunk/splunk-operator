@@ -1,0 +1,206 @@
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package minio
+
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/splunk/splunk-operator/pkg/logging"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+)
+
+const httpClientTimeout = 2000
+
+// blank assignment to verify that MinioClient implements splcommon.RemoteDataClient
+var _ splcommon.RemoteDataClient = &MinioClient{}
+
+// SplunkMinioClient is an interface to Minio S3 client
+type SplunkMinioClient interface {
+	ListObjects(ctx context.Context, bucketName string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo
+	FGetObject(ctx context.Context, bucketName string, remoteFileName string, localFileName string, opts minio.GetObjectOptions) error
+}
+
+// MinioClient is a client to implement S3 specific APIs
+type MinioClient struct {
+	BucketName        string
+	S3AccessKeyID     string
+	S3SecretAccessKey string
+	Prefix            string
+	StartAfter        string
+	Endpoint          string
+	Client            SplunkMinioClient
+}
+
+// NewMinioClient returns an Minio client
+func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn splcommon.GetInitFunc) (splcommon.RemoteDataClient, error) {
+
+	var s3SplunkClient SplunkMinioClient
+	var err error
+
+	cl := fn(ctx, endpoint, accessKeyID, secretAccessKey)
+	if cl == nil {
+		err = fmt.Errorf("failed to create an Minio S3 client")
+		return nil, err
+	}
+
+	s3SplunkClient = cl.(*minio.Client)
+
+	return &MinioClient{
+		BucketName:        bucketName,
+		S3AccessKeyID:     accessKeyID,
+		S3SecretAccessKey: secretAccessKey,
+		Prefix:            prefix,
+		StartAfter:        startAfter,
+		Endpoint:          endpoint,
+		Client:            s3SplunkClient,
+	}, nil
+}
+
+// InitClientWrapper is a wrapper around InitClientSession
+func InitClientWrapper(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) interface{} {
+	return InitClientSession(ctx, appS3Endpoint, accessKeyID, secretAccessKey)
+}
+
+// InitClientSession initializes and returns a client session object
+func InitClientSession(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) SplunkMinioClient {
+	scopedLog := logging.FromContext(ctx).With("func", "InitClientSession")
+
+	// Check if SSL is needed
+	useSSL := true
+	if strings.HasPrefix(appS3Endpoint, "http://") {
+		// We should always use a secure SSL endpoint, so we won't set useSSL = false
+		scopedLog.InfoContext(ctx, "using insecure endpoint, useSSL=false for Minio Client Session", "appS3Endpoint", appS3Endpoint)
+		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "http://")
+		useSSL = false
+	} else if strings.HasPrefix(appS3Endpoint, "https://") {
+		appS3Endpoint = strings.TrimPrefix(appS3Endpoint, "https://")
+	} else {
+		// Unsupported endpoint
+		scopedLog.InfoContext(ctx, "unsupported endpoint for Minio S3 client", "appS3Endpoint", appS3Endpoint)
+		return nil
+	}
+
+	// New returns an Minio compatible client object. API compatibility (v2 or v4) is automatically
+	// determined based on the Endpoint value.
+	scopedLog.InfoContext(ctx, "connecting to Minio S3 for apps", "appS3Endpoint", appS3Endpoint)
+	var s3Client *minio.Client
+	var err error
+
+	// Create a custom http transport as minio doesn't support
+	transport := http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: httpClientTimeout * time.Second,
+		}).Dial,
+		DisableCompression: true,
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+
+	options := &minio.Options{
+		Secure:    useSSL,
+		Transport: &transport,
+	}
+	if accessKeyID != "" && secretAccessKey != "" {
+		options.Creds = credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
+	} else {
+		scopedLog.InfoContext(ctx, "no Access/Secret Keys, attempt connection without them using IAM", "appS3Endpoint", appS3Endpoint)
+		options.Creds = credentials.NewIAM("")
+	}
+	s3Client, err = minio.New(appS3Endpoint, options)
+	if err != nil {
+		scopedLog.InfoContext(ctx, "error creating new Minio Client Session", "err", err)
+		return nil
+	}
+
+	return s3Client
+}
+
+// GetAppsList get the list of apps from remote storage
+func (client *MinioClient) GetAppsList(ctx context.Context) (splcommon.RemoteDataListResponse, error) {
+	scopedLog := logging.FromContext(ctx).With("func", "GetAppsList")
+
+	scopedLog.InfoContext(ctx, "getting Apps list", "bucket", client.BucketName, "prefix", client.Prefix)
+	remoteDataClientResponse := splcommon.RemoteDataListResponse{}
+	s3Client := client.Client
+
+	// Create a bucket list command for all files in bucket
+	opts := minio.ListObjectsOptions{
+		UseV1:     true,
+		Prefix:    client.Prefix,
+		Recursive: false,
+	}
+
+	// List all objects from a bucket-name with a matching prefix.
+	for object := range s3Client.ListObjects(context.Background(), client.BucketName, opts) {
+		if object.Err != nil {
+			err := fmt.Errorf("got an object error: %v for bucket: %s", object.Err, client.BucketName)
+			return remoteDataClientResponse, err
+		}
+		scopedLog.InfoContext(ctx, "got an object", "object", object)
+
+		// Create a new object to add to append to the response
+		newETag := object.ETag
+		newKey := object.Key
+		newLastModified := object.LastModified
+		newSize := object.Size
+		newStorageClass := object.StorageClass
+		newRemoteObject := splcommon.RemoteObject{Etag: &newETag, Key: &newKey, LastModified: &newLastModified, Size: &newSize, StorageClass: &newStorageClass}
+		remoteDataClientResponse.Objects = append(remoteDataClientResponse.Objects, &newRemoteObject)
+	}
+
+	return remoteDataClientResponse, nil
+}
+
+// DownloadApp downloads an app package from remote storage
+func (client *MinioClient) DownloadApp(ctx context.Context, downloadRequest splcommon.RemoteDataDownloadRequest) (bool, error) {
+	scopedLog := logging.FromContext(ctx).With("func", "DownloadApp", "remoteFile", downloadRequest.RemoteFile,
+		"localFile", downloadRequest.LocalFile, "etag", downloadRequest.Etag)
+
+	file, err := os.Create(downloadRequest.LocalFile)
+	if err != nil {
+		scopedLog.ErrorContext(ctx, "unable to create local file", "error", err)
+		return false, err
+	}
+	defer file.Close()
+
+	s3Client := client.Client
+
+	options := minio.GetObjectOptions{}
+	// set the option to match the specified etag on remote storage
+	if err = options.SetMatchETag(downloadRequest.Etag); err != nil {
+		scopedLog.ErrorContext(ctx, "unable to set match etag", "error", err)
+		return false, err
+	}
+
+	err = s3Client.FGetObject(ctx, client.BucketName, downloadRequest.RemoteFile, downloadRequest.LocalFile, options)
+	if err != nil {
+		scopedLog.ErrorContext(ctx, "unable to download remote file", "error", err)
+		return false, err
+	}
+
+	scopedLog.InfoContext(ctx, "file downloaded")
+
+	return true, nil
+}

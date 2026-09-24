@@ -1,0 +1,113 @@
+{
+  "links": {
+    "create": "/services/cluster/master/peers/_new"
+  },
+  "origin": "https://localhost:8089/services/cluster/master/peers",
+  "updated": "2020-03-18T01:08:53+00:00",
+  "generator": {
+    "build": "a7f645ddaf91",
+    "version": "8.0.2"
+  },
+  "entry": [
+    {
+      "name": "D39B1729-E2C5-4273-B9B2-534DA7C2F866",
+      "id": "https://localhost:8089/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866",
+      "updated": "1970-01-01T00:00:00+00:00",
+      "links": {
+        "alternate": "/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866",
+        "list": "/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866",
+        "edit": "/services/cluster/master/peers/D39B1729-E2C5-4273-B9B2-534DA7C2F866"
+      },
+      "author": "system",
+      "acl": {
+        "app": "",
+        "can_list": true,
+        "can_write": true,
+        "modifiable": false,
+        "owner": "system",
+        "perms": {
+          "read": [
+            "admin",
+            "splunk-system-role"
+          ],
+          "write": [
+            "admin",
+            "splunk-system-role"
+          ]
+        },
+        "removable": false,
+        "sharing": "system"
+      },
+      "content": {
+        "active_bundle_id": "14310A4AABD23E85BBD4559C4A3B59F8",
+        "apply_bundle_status": {
+          "invalid_bundle": {
+            "bundle_validation_errors": [],
+            "invalid_bundle_id": ""
+          },
+          "reasons_for_restart": [],
+          "restart_required_for_apply_bundle": false,
+          "status": "None"
+        },
+        "base_generation_id": 26,
+        "bucket_count": 73,
+        "bucket_count_by_index": {
+          "_audit": 24,
+          "_internal": 45,
+          "_telemetry": 4
+        },
+        "buckets_rf_by_origin_site": {
+          "default": 73
+        },
+        "buckets_sf_by_origin_site": {
+          "default": 73
+        },
+        "delayed_buckets_to_discard": [],
+        "eai:acl": null,
+        "fixup_set": [],
+        "heartbeat_started": true,
+        "host_port_pair": "10.36.0.6:8089",
+        "indexing_disk_space": 210707374080,
+        "is_searchable": true,
+        "is_valid_bundle": true,
+        "label": "splunk-s1-indexer-0",
+        "last_dry_run_bundle": "",
+        "last_heartbeat": 1584493732,
+        "last_validated_bundle": "14310A4AABD23E85BBD4559C4A3B59F8",
+        "latest_bundle_id": "14310A4AABD23E85BBD4559C4A3B59F8",
+        "peer_registered_summaries": true,
+        "pending_builds": [],
+        "pending_job_count": 0,
+        "primary_count": 73,
+        "primary_count_remote": 0,
+        "register_search_address": "10.36.0.6:8089",
+        "replication_count": 0,
+        "replication_port": 9887,
+        "replication_use_ssl": false,
+        "restart_required_for_applying_dry_run_bundle": false,
+        "search_state_counter": {
+          "PendingSearchable": 0,
+          "Searchable": 73,
+          "SearchablePendingMask": 0,
+          "Unsearchable": 0
+        },
+        "site": "default",
+        "splunk_version": "8.0.2",
+        "status": "Up",
+        "status_counter": {
+          "Complete": 69,
+          "NonStreamingTarget": 0,
+          "StreamingSource": 4,
+          "StreamingTarget": 0
+        },
+        "summary_replication_count": 0
+      }
+    }
+  ],
+  "paging": {
+    "total": 1,
+    "perPage": 30,
+    "offset": 0
+  },
+  "messages": []
+}

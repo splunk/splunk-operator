@@ -1,0 +1,95 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "mergeConfidence:all-badges"
+  ],
+  "labels": [
+    "dependency-update"
+  ],
+  "major": {
+    "labels": [
+      "major",
+      "dependency-update"
+    ]
+  },
+  "minor": {
+    "labels": [
+      "minor",
+      "dependency-update"
+    ]
+  },
+  "patch": {
+    "labels": [
+      "patch",
+      "dependency-update"
+    ]
+  },
+  "prConcurrentLimit": 2,
+  "prHourlyLimit": 2,
+  "ignorePaths": [
+    ".github/**"
+  ],
+  "ignoreDeps": [
+    "docker.io/splunk/universalforwarder",
+    "docker.io/splunk/splunk"
+  ],
+  "assignAutomerge": true,
+  "reviewers": [
+    "gabrielm",
+    "igorg",
+    "jbuczak",
+    "kkoziol",
+    "mqiu",
+    "patrykw",
+    "qingw",
+    "rlieberman",
+    "vivekr"
+  ],
+  "packageRules": [
+    {
+        "matchUpdateTypes": ["patch", "minor"],
+        "automerge": true,
+        "addLabels": [
+            "dependency-update",
+            "auto-merge-enabled"
+        ]
+    },
+    {
+        "matchPackageNames": ["github.com/cloudnative-pg/cloudnative-pg"],
+        "separateMinorPatch": true
+    },
+    {
+        "matchPackageNames": ["github.com/cloudnative-pg/cloudnative-pg"],
+        "matchUpdateTypes": ["patch"],
+        "automerge": true,
+        "addLabels": [
+            "dependency-update",
+            "auto-merge-enabled"
+        ]
+    },
+    {
+        "matchPackageNames": ["github.com/cloudnative-pg/cloudnative-pg"],
+        "matchUpdateTypes": ["major", "minor"],
+        "enabled": false
+    },
+    {
+        "matchPackageNames": ["cert-manager", "github.com/cert-manager/cert-manager"],
+        "groupName": "cert-manager"
+    },
+    {
+        "matchPackageNames": ["cert-manager", "github.com/cert-manager/cert-manager"],
+        "matchUpdateTypes": ["patch"],
+        "automerge": true,
+        "addLabels": [
+            "dependency-update",
+            "auto-merge-enabled"
+        ]
+    },
+    {
+        "matchPackageNames": ["cert-manager", "github.com/cert-manager/cert-manager"],
+        "matchUpdateTypes": ["major", "minor"],
+        "enabled": false
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,150 +14,70 @@
 package smoke
 
 import (
-	"context"
-	"fmt"
-
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	corev1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("Smoke test", func() {
+var _ = Describe("Smoke test", Label("tier:e2e-pr", "cloud:aws", "feature:basic"), func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	ctx := context.TODO()
 
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+		Expect(err).To(Succeed(), "Failed to setup test case environment")
 	})
 
-	AfterEach(func() {
-		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
-			testcaseEnvInst.SkipTeardown = true
-		}
-		if deployment != nil {
-			deployment.Teardown()
-		}
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+		Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("smoke, basic, s1: can deploy a standalone instance", func() {
+		It("can deploy a standalone instance", Label("sva:s1"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
+			result, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
-			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
-
-			// Verify standalone goes to ready state
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, result.Standalone)).To(Succeed(), "Standalone Ready condition not met")
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, basic, c3: can deploy indexers and search head cluster", func() {
+	Context("Clustered deployment (C3 - Clustered Indexer, Search Head Cluster)", func() {
+		It("can deploy indexers and search head cluster", Label("tier:e2e-pr", "sva:c3", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumLongTimeout), func(ctx SpecContext) {
+			_, err := testcaseEnvInst.RunC3DeploymentWorkflow(ctx, deployment, 3)
+			Expect(err).To(Succeed(), "Unable to deploy C3 cluster")
 
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-
-			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
-
-			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyC3ConditionsReady(ctx, deployment)).To(Succeed(), "C3 Ready conditions not met")
 		})
 	})
 
-	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("smoke, basic, m4: can deploy indexers and search head cluster", func() {
+	Context("Multisite cluster deployment (M4 - Multisite Indexer Cluster, Search Head Cluster)", func() {
+		It("can deploy indexers and search head cluster", Label("tier:e2e-pr", "sva:m4", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+			_, err := testcaseEnvInst.RunM4DeploymentWorkflow(ctx, deployment, 1, 3)
+			Expect(err).To(Succeed(), "Unable to deploy M4 cluster")
 
-			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, "")
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
-
-			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
-
-			// Ensure search head cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-
-			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyM4ConditionsReady(ctx, deployment, 3)).To(Succeed(), "M4 Ready conditions not met")
 		})
 	})
 
-	Context("Multisite cluster deployment (M1 - multisite indexer cluster)", func() {
-		It("smoke, basic: can deploy multisite indexers cluster", func() {
+	Context("Multisite cluster deployment (M1 - Multisite Indexer Cluster)", func() {
+		It("can deploy multisite indexers cluster", Label("tier:e2e-pr", "sva:m1", "cloud:aws", "feature:basic"), NodeTimeout(testenv.MediumTimeout), func(ctx SpecContext) {
+			_, err := testcaseEnvInst.RunM1DeploymentWorkflow(ctx, deployment, 1, 3)
+			Expect(err).To(Succeed(), "Unable to deploy M1 cluster")
 
-			siteCount := 3
-			err := deployment.DeployMultisiteCluster(ctx, deployment.GetName(), 1, siteCount, "")
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
-
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-			// Ensure the indexers of all sites go to Ready phase
-			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
-
-			// Ensure cluster configured as multisite
-			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
-
-			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			Expect(testcaseEnvInst.VerifyM1ConditionsReady(ctx, deployment, 3)).To(Succeed(), "M1 Ready conditions not met")
 		})
 	})
 
 	Context("Standalone deployment (S1) with Service Account", func() {
-		It("smoke, basic, s1: can deploy a standalone instance attached to a service account", func() {
-			// Create Service Account
+		It("can deploy a standalone instance attached to a service account", Label("tier:e2e-pr", "sva:s1", "cloud:aws", "feature:basic"), NodeTimeout(testenv.ShortTimeout), func(ctx SpecContext) {
 			serviceAccountName := "smoke-service-account"
-			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+			result, err := testcaseEnvInst.RunStandaloneWithServiceAccountWorkflow(ctx, deployment, serviceAccountName)
+			Expect(err).To(Succeed(), "Unable to deploy standalone with service account")
 
-			standaloneSpec := enterpriseApi.StandaloneSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes:        []corev1.Volume{},
-					ServiceAccount: serviceAccountName,
-				},
-			}
-
-			// Create standalone Deployment with License Manager
-			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), standaloneSpec)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
-
-			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// Verify serviceAccount is configured on Pod
-			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testenv.VerifyServiceAccountConfiguredOnPod(deployment, testcaseEnvInst.GetName(), standalonePodName, serviceAccountName)
+			Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, result.Standalone)).To(Succeed(), "Standalone Ready condition not met")
 		})
 	})
 })

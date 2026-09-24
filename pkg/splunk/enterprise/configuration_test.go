@@ -17,15 +17,19 @@ package enterprise
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/stretchr/testify/require"
+	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
@@ -33,9 +37,124 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
+
+func TestValidateSpecResourceDefaulting(t *testing.T) {
+	defaultResources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("4"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
+		},
+	}
+
+	tests := []struct {
+		name                    string
+		disableResourceDefaults bool
+		resources               corev1.ResourceRequirements
+		want                    corev1.ResourceRequirements
+	}{
+		{
+			name: "omitted opt-out retains defaulting",
+			want: defaultResources,
+		},
+		{
+			name: "false opt-out retains defaulting for empty maps",
+			resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{},
+				Limits:   corev1.ResourceList{},
+			},
+			want: defaultResources,
+		},
+		{
+			name:                    "true opt-out preserves nil requests and limits",
+			disableResourceDefaults: true,
+		},
+		{
+			name:                    "true opt-out preserves empty requests and limits",
+			disableResourceDefaults: true,
+			resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{},
+				Limits:   corev1.ResourceList{},
+			},
+			want: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{},
+				Limits:   corev1.ResourceList{},
+			},
+		},
+		{
+			name:                    "true opt-out preserves partial resources without backfilling",
+			disableResourceDefaults: true,
+			resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("250m"),
+				},
+			},
+			want: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("250m"),
+				},
+			},
+		},
+		{
+			name: "false opt-out retains per-key defaulting",
+			resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("16Gi"),
+				},
+			},
+			want: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("512Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("4"),
+					corev1.ResourceMemory: resource.MustParse("16Gi"),
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := enterpriseApi.Spec{
+				ImagePullPolicy:         "IfNotPresent",
+				DisableResourceDefaults: tt.disableResourceDefaults,
+				Resources:               tt.resources,
+			}
+
+			require.NoError(t, ValidateSpec(&spec, defaultResources))
+			require.Equal(t, tt.want, spec.Resources)
+		})
+	}
+}
+
+func TestEffectiveResourcesDoesNotMutateSpec(t *testing.T) {
+	spec := enterpriseApi.Spec{
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("250m"),
+			},
+		},
+	}
+
+	effective := EffectiveResources(spec, SplunkDefaultResources())
+
+	require.Equal(t, "250m", effective.Requests.Cpu().String())
+	require.Equal(t, splcommon.DefaultRequestsMemory, effective.Requests.Memory().String())
+	require.Equal(t, splcommon.DefaultLimitsCPU, effective.Limits.Cpu().String())
+	require.Equal(t, splcommon.DefaultLimitsMemory, effective.Limits.Memory().String())
+	require.Len(t, spec.Resources.Requests, 1)
+	require.Nil(t, spec.Resources.Limits)
+}
 
 func configTester2(t *testing.T, method string, f func() (interface{}, error), want string) {
 	result, err := f()
@@ -48,15 +167,18 @@ func configTester2(t *testing.T, method string, f func() (interface{}, error), w
 }
 
 func marshalAndCompare2(t *testing.T, compare interface{}, method string, want string) {
+	t.Helper()
 	got, err := json.Marshal(compare)
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
 
-	if string(got) != want {
+	gotJSON := normalizeGeneratedConfigJSON(t, string(got))
+	wantJSON := normalizeGeneratedConfigJSON(t, want)
+	if gotJSON != wantJSON {
 		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
 	}
-	require.JSONEq(t, string(got), want)
+	require.JSONEq(t, wantJSON, gotJSON)
 }
 
 func configTester(t *testing.T, method string, f func() (interface{}, error), want string) {
@@ -69,14 +191,52 @@ func configTester(t *testing.T, method string, f func() (interface{}, error), wa
 	marshalAndCompare(t, result, method, want)
 }
 
+func getStatefulSetEnvValue(sts *appsv1.StatefulSet, name string) (string, bool) {
+	for _, env := range sts.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == name {
+			return env.Value, true
+		}
+	}
+	return "", false
+}
+
 func marshalAndCompare(t *testing.T, compare interface{}, method string, want string) {
+	t.Helper()
 	got, err := json.Marshal(compare)
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	want = strings.ReplaceAll(want, " ", "")
 
-	require.JSONEq(t, want, string(got))
+	require.JSONEq(t, normalizeGeneratedConfigJSON(t, want), normalizeGeneratedConfigJSON(t, string(got)))
+}
+
+func normalizeGeneratedConfigJSON(t *testing.T, data string) string {
+	t.Helper()
+
+	var value interface{}
+	require.NoError(t, json.Unmarshal([]byte(data), &value))
+	dropNilCreationTimestamp(value)
+
+	normalized, err := json.Marshal(value)
+	require.NoError(t, err)
+
+	return string(normalized)
+}
+
+func dropNilCreationTimestamp(value interface{}) {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		if creationTimestamp, ok := typed["creationTimestamp"]; ok && creationTimestamp == nil {
+			delete(typed, "creationTimestamp")
+		}
+		for _, child := range typed {
+			dropNilCreationTimestamp(child)
+		}
+	case []interface{}:
+		for _, child := range typed {
+			dropNilCreationTimestamp(child)
+		}
+	}
 }
 
 func TestGetSplunkService(t *testing.T) {
@@ -208,7 +368,7 @@ func TestSetVolumeDefault(t *testing.T) {
 		},
 	}
 
-	// Make sure the default mode is set correcty
+	// Make sure the default mode is set correctly
 	setVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	if cr.Spec.CommonSplunkSpec.Volumes == nil {
 		t.Errorf("setVolumeDefaults() returns nil for Volumes")
@@ -232,6 +392,7 @@ func TestSetVolumeDefault(t *testing.T) {
 }
 
 func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	cr := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
@@ -255,12 +416,14 @@ func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.
 	client := spltest.NewMockClient()
 
 	_, err := ApplyClusterManager(context.TODO(), client, &cr, nil)
-	if err == nil {
-		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
+	// ValidateSplunkSmartstoreSpec is called inside validateClusterManagerSpec — stalled, returns terminal error
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
 }
 
 func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	cr := enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standalone",
@@ -287,8 +450,9 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	_, err := ApplyStandalone(context.Background(), client, &cr)
-	if err == nil {
-		t.Errorf("ApplyStandalone should fail on invalid smartstore config")
+	// ValidateSplunkSmartstoreSpec is called inside validateStandaloneSpec — stalled, returns terminal error
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
 }
 
@@ -667,16 +831,13 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
 	ctx := context.TODO()
 
-	currentDownloadVolume := splcommon.AppDownloadVolume
-	splcommon.AppDownloadVolume = fmt.Sprintf("/tmp/appdownload-%d", rand.Intn(1000))
+	// Point the resolved download path at a unique, not-yet-created directory so the
+	// mount-existence check below can be reliably driven between missing and present.
+	resolvedVolume := filepath.Join(t.TempDir(), "appdownload")
+	defaultVol := operatorResourceTracker.storage.resolvedAppDownloadVolume
+	operatorResourceTracker.storage.resolvedAppDownloadVolume = resolvedVolume
 	defer func() {
-		// remove the AppDownloadVolume if exist just to make sure
-		// previous test case have not created directory
-		err = os.RemoveAll(splcommon.AppDownloadVolume)
-		if err != nil {
-			t.Errorf("unable to delete directory %s", splcommon.AppDownloadVolume)
-		}
-		splcommon.AppDownloadVolume = currentDownloadVolume
+		operatorResourceTracker.storage.resolvedAppDownloadVolume = defaultVol
 	}()
 
 	// Valid app framework config
@@ -716,11 +877,10 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	err = os.MkdirAll(resolvedVolume, 0755)
 	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+		t.Errorf("Unable to create download directory for apps :%s", resolvedVolume)
 	}
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false, "")
 
@@ -1357,7 +1517,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 	// Test defaults - PVCs for etc & var with 10Gi and 100Gi storage capacity
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_default.json"))
 	// Define PVCs for etc & var with storage capacity and storage class name defined
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1369,7 +1529,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp3",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_custom_storage.json"))
 	// Define PVCs for etc & ephemeral for var
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1380,7 +1540,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			EphemeralStorage: true,
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_ephemeral_var.json"))
 	// Define ephemeral for etc & PVCs for var
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1391,7 +1551,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_ephemeral_etc.json"))
 	// Define ephemeral for etc & var(should ignore storage capacity & storage class name)
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1403,7 +1563,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_ephemeral_both.json"))
 	// Define invalid EtcVolumeStorageConfig
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1414,7 +1574,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	client := spltest.NewMockClient()
 	err := addStorageVolumes(ctx, &cr, client, spec, statefulSet, labels)
 	if err == nil {
-		t.Errorf("Unable to idenitfy incorrect EtcVolumeStorageConfig resource quantity")
+		t.Errorf("Unable to identify incorrect EtcVolumeStorageConfig resource quantity")
 	}
 
 	// Define invalid VarVolumeStorageConfig
@@ -1425,7 +1585,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 	err = addStorageVolumes(ctx, &cr, client, spec, statefulSet, labels)
 	if err == nil {
-		t.Errorf("Unable to idenitfy incorrect VarVolumeStorageConfig resource quantity")
+		t.Errorf("Unable to identify incorrect VarVolumeStorageConfig resource quantity")
 	}
 
 	// test if adminManagedPV logic works
@@ -1487,7 +1647,7 @@ func TestAddStorageVolumes(t *testing.T) {
 		},
 	}
 
-	test(`{"apiVersion":"apps/v1","kind":"StatefulSet","metadata":{"annotations":{"enterprise.splunk.com/admin-managed-pv":"true"},"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager"},"name":"test-statefulset","namespace":"test"},"spec":{"replicas":1,"selector":null,"serviceName":"","template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"image":"test","name":"splunk","resources":{},"volumeMounts":[{"mountPath":"/opt/splunk/etc","name":"pvc-etc"},{"mountPath":"/opt/splunk/var","name":"pvc-var"},{"mountPath":"/mnt/probes","name":"splunk-test-probe-configmap"}]}],"volumes":[{"configMap":{"defaultMode":365,"name":"splunk-test-probe-configmap"},"name":"splunk-test-probe-configmap"}]}},"updateStrategy":{},"volumeClaimTemplates":[{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager"},"name":"pvc-etc","namespace":"test"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"selector":{"matchLabels":{"app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/name":"cluster-manager"}}},"status":{}},{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager"},"name":"pvc-var","namespace":"test"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"selector":{"matchLabels":{"app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/name":"cluster-manager"}}},"status":{}}]},"status":{"availableReplicas":0,"replicas":0}}`)
+	test(loadFixture(t, "add_storage_volumes_admin_managed_pv.json"))
 }
 
 func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
@@ -1509,7 +1669,7 @@ func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
 
 	}
 
-	test(cm, &mode, `{"configMap":{"name":"testConfgMap","items":[{"key":"a","path":"a","mode":755},{"key":"b","path":"b","mode":755},{"key":"z","path":"z","mode":755}],"defaultMode":755}}`)
+	test(cm, &mode, loadFixture(t, "get_volume_source_mount_from_configmap.json"))
 }
 
 func TestGetLivenessProbe(t *testing.T) {
@@ -1593,7 +1753,7 @@ func TestGetProbe(t *testing.T) {
 
 	}
 
-	test(command, 100, 10, 10, `{"exec":{"command":["grep","ready","file.txt"]},"initialDelaySeconds":100,"timeoutSeconds":10,"periodSeconds":10}`)
+	test(command, 100, 10, 10, loadFixture(t, "get_probe.json"))
 }
 
 func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
@@ -1830,4 +1990,525 @@ func TestGetSplunkPorts(t *testing.T) {
 	test(SplunkIndexer)
 	test(SplunkIngestor)
 	test(SplunkMonitoringConsole)
+}
+
+func TestKVStoreDefaultTypeEnv(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
+	require.NoError(t, err)
+
+	cr := &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	sts, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, 1, nil, nil)
+	require.NoError(t, err)
+	value, found := getStatefulSetEnvValue(sts, splunkKVStoreDefaultTypeEnv)
+	require.True(t, found)
+	require.Equal(t, splunkKVStoreTypeLocal, value)
+
+	ingestor := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	sts, err = getSplunkStatefulSet(ctx, client, ingestor, &ingestor.Spec.CommonSplunkSpec, SplunkIngestor, 1, nil, nil)
+	require.NoError(t, err)
+	_, found = getStatefulSetEnvValue(sts, splunkKVStoreDefaultTypeEnv)
+	require.False(t, found)
+}
+
+func TestValidateKVStoreDefaultTypeExtraEnv(t *testing.T) {
+	valid := []corev1.EnvVar{{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal}}
+	require.NoError(t, validateKVStoreDefaultTypeExtraEnv(valid))
+
+	invalid := []corev1.EnvVar{{Name: splunkKVStoreDefaultTypeEnv, Value: "remote"}}
+	require.ErrorContains(t, validateKVStoreDefaultTypeExtraEnv(invalid), "SPLUNK_KVSTORE_DEFAULT_TYPE")
+}
+
+func TestConfigMapVolAnnotationStamped(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "my-defaults",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "my-defaults-cm",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	// Pre-create the ConfigMap so GetConfigMapDataHash can find it.
+	cmData := map[string]string{"default.yml": "splunk:\n  conf: value1"}
+	cm := splctrl.PrepareConfigMap("my-defaults-cm", "test", cmData)
+	err = splutil.CreateResource(ctx, c, cm)
+	require.NoError(t, err)
+
+	// Build the StatefulSet — this calls updateSplunkPodTemplateWithConfig internally
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() error: %v", err)
+	}
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	annotations := ss.Spec.Template.ObjectMeta.Annotations
+	annotationKey := splcommon.ConfigMapRevAnnotationPrefix + "my-defaults"
+	hash, ok := annotations[annotationKey]
+	if !ok {
+		t.Errorf("expected annotation %q to be present on pod template, got annotations: %v", annotationKey, annotations)
+	}
+	if hash == "" {
+		t.Errorf("expected annotation %q to be non-empty, got empty string", annotationKey)
+	}
+	// Verify the hash is stable: same data must produce the same hash.
+	hash2, err := splctrl.GetConfigMapDataHash(ctx, c, types.NamespacedName{Namespace: "test", Name: "my-defaults-cm"}, nil)
+	require.NoError(t, err)
+	if hash != hash2 {
+		t.Errorf("annotation hash %q does not match expected data hash %q", hash, hash2)
+	}
+}
+
+// TestConfigMapVolAnnotationAbsentWhenNoVolumes verifies that no ConfigMapRevAnnotationPrefix annotations
+// are added when spec.Volumes contains no ConfigMap sources.
+func TestConfigMapVolAnnotationAbsentWhenNoVolumes(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() error: %v", err)
+	}
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	for k := range ss.Spec.Template.ObjectMeta.Annotations {
+		if strings.HasPrefix(k, splcommon.ConfigMapRevAnnotationPrefix) {
+			t.Errorf("unexpected configmaprev annotation %q on pod template with no ConfigMap volumes", k)
+		}
+	}
+}
+
+// TestConfigMapVolAnnotationMultipleVolumes verifies that annotations are stamped for
+// each ConfigMap volume independently, and non-ConfigMap volumes are skipped.
+func TestConfigMapVolAnnotationMultipleVolumes(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "cm-vol-a",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "cm-a"},
+							},
+						},
+					},
+					{
+						Name: "cm-vol-b",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "cm-b"},
+							},
+						},
+					},
+					{
+						// Secret volume — should not produce a ConfigMapRevAnnotationPrefix annotation
+						Name: "secret-vol",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{SecretName: "my-secret"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	for _, name := range []string{"cm-a", "cm-b"} {
+		cm := splctrl.PrepareConfigMap(name, "test", map[string]string{"default.yml": "val"})
+		require.NoError(t, splutil.CreateResource(ctx, c, cm))
+	}
+
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() error: %v", err)
+	}
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	annotations := ss.Spec.Template.ObjectMeta.Annotations
+	// Annotation key uses volume name (not ConfigMap name) as suffix.
+	for _, volName := range []string{"cm-vol-a", "cm-vol-b"} {
+		key := splcommon.ConfigMapRevAnnotationPrefix + volName
+		if _, ok := annotations[key]; !ok {
+			t.Errorf("expected annotation %q missing from pod template annotations: %v", key, annotations)
+		}
+	}
+	if _, ok := annotations[splcommon.ConfigMapRevAnnotationPrefix+"secret-vol"]; ok {
+		t.Error("unexpected configmaprev annotation for secret volume")
+	}
+}
+
+// TestProjectedConfigMapAnnotationLongVolName verifies that a projected volume whose name
+// would exceed the 63-char annotation name-segment limit produces a "p.<hash>.<idx>" key,
+// which is structurally distinct from any real short volume name (DNS labels cannot contain
+// dots), preventing false collisions.
+func TestProjectedConfigMapAnnotationLongVolName(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	// 63-char volume name: appending ".0" would produce 65 chars — triggers the hash path.
+	longVolName := strings.Repeat("a", 63)
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: longVolName,
+						VolumeSource: corev1.VolumeSource{
+							Projected: &corev1.ProjectedVolumeSource{
+								Sources: []corev1.VolumeProjection{
+									{
+										ConfigMap: &corev1.ConfigMapProjection{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "proj-cm"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	cm := splctrl.PrepareConfigMap("proj-cm", "test", map[string]string{"key": "val"})
+	require.NoError(t, splutil.CreateResource(ctx, c, cm))
+
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() error: %v", err)
+	}
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	annotations := ss.Spec.Template.ObjectMeta.Annotations
+
+	// The annotation key must use the "p.<hash>.0" form, not the raw long name.
+	sum := sha256.Sum256([]byte(longVolName))
+	expectedKey := splcommon.ConfigMapRevAnnotationPrefix + "p." + hex.EncodeToString(sum[:])[:8] + ".0"
+	if _, ok := annotations[expectedKey]; !ok {
+		t.Errorf("expected annotation %q for long projected vol name, got annotations: %v", expectedKey, annotations)
+	}
+
+	// Ensure the raw long name does NOT appear as an annotation suffix (collision guard).
+	rawKey := splcommon.ConfigMapRevAnnotationPrefix + longVolName + ".0"
+	if _, ok := annotations[rawKey]; ok {
+		t.Errorf("raw long-name annotation %q must not be present (would exceed 63-char limit)", rawKey)
+	}
+}
+
+// TestConfigMapVolAnnotationOptOut verifies that a ConfigMap annotated with
+// splunk.com/configmap-restart=false does not produce a restart annotation on the pod template.
+// The operator should let Kubernetes propagate file changes on disk without rolling pods.
+func TestConfigMapVolAnnotationOptOut(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "app-config",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "app-config-cm",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	// ConfigMap opts out of operator-triggered restarts.
+	cm := splctrl.PrepareConfigMap("app-config-cm", "test", map[string]string{"config.json": `{"key":"value"}`})
+	cm.Annotations = map[string]string{
+		splcommon.ConfigMapRestartOptOutAnnotation: "false",
+	}
+	require.NoError(t, splutil.CreateResource(ctx, c, cm))
+
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() error: %v", err)
+	}
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	annotationKey := splcommon.ConfigMapRevAnnotationPrefix + "app-config"
+	if _, ok := ss.Spec.Template.ObjectMeta.Annotations[annotationKey]; ok {
+		t.Errorf("annotation %q must not be present when ConfigMap opts out of restart", annotationKey)
+	}
+}
+
+// TestConfigMapVolAnnotationOptOutProjected verifies the opt-out works for projected volumes too.
+func TestConfigMapVolAnnotationOptOutProjected(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "proj-vol",
+						VolumeSource: corev1.VolumeSource{
+							Projected: &corev1.ProjectedVolumeSource{
+								Sources: []corev1.VolumeProjection{
+									{
+										ConfigMap: &corev1.ConfigMapProjection{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "proj-cm-opt-out"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	cm := splctrl.PrepareConfigMap("proj-cm-opt-out", "test", map[string]string{"sidecar.conf": "reload=true"})
+	cm.Annotations = map[string]string{
+		splcommon.ConfigMapRestartOptOutAnnotation: "false",
+	}
+	require.NoError(t, splutil.CreateResource(ctx, c, cm))
+
+	if err := validateStandaloneSpec(ctx, c, &cr); err != nil {
+		t.Fatalf("validateStandaloneSpec() error: %v", err)
+	}
+	ss, err := getStandaloneStatefulSet(ctx, c, &cr)
+	require.NoError(t, err)
+
+	for k := range ss.Spec.Template.ObjectMeta.Annotations {
+		if strings.HasPrefix(k, splcommon.ConfigMapRevAnnotationPrefix) {
+			t.Errorf("unexpected restart annotation %q present when projected ConfigMap opted out", k)
+		}
+	}
+}
+
+func TestUpdateSplunkPodTemplateLooksUpClusterManagerInRefNamespace(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+
+	// ClusterManager lives in a different namespace than the referencing SearchHeadCluster,
+	// same setup as the FQDN construction a few lines above the lookup this test targets.
+	cm := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cm1",
+			Namespace: "cm-namespace",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: "lm1",
+				},
+			},
+		},
+	}
+	client.AddObject(cm)
+
+	shc := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shc1",
+			Namespace: "shc-namespace",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name:      "cm1",
+					Namespace: "cm-namespace",
+				},
+			},
+		},
+	}
+
+	sts, err := getSplunkStatefulSet(ctx, client, shc, &shc.Spec.CommonSplunkSpec, SplunkSearchHead, 1, getSearchHeadExtraEnv(shc, shc.Spec.Replicas), nil)
+	require.NoError(t, err)
+
+	found := false
+	for _, env := range sts.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == splcommon.LicenseManagerURL {
+			require.Equal(t, splcommon.GetServiceFQDN(cm.GetNamespace(), splcommon.GetSplunkServiceName(SplunkLicenseManager, "lm1", false)), env.Value)
+			found = true
+		}
+	}
+	require.True(t, found, "expected SPLUNK_LICENSE_MASTER_URL to be qualified with the ClusterManager's namespace")
+}
+
+func TestSplunkProvisionInjection(t *testing.T) {
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+
+	spec := &enterpriseApi.CommonSplunkSpec{}
+
+	makeCR := func(annotations map[string]string) *enterpriseApi.SearchHeadCluster {
+		return &enterpriseApi.SearchHeadCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "shc1", Namespace: "test", Annotations: annotations},
+		}
+	}
+
+	makePodTemplate := func() corev1.PodTemplateSpec {
+		return corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{}},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:latest"}},
+			},
+		}
+	}
+
+	allMountPaths := func(pod corev1.PodTemplateSpec) []string {
+		var paths []string
+		for _, c := range pod.Spec.Containers {
+			for _, m := range c.VolumeMounts {
+				paths = append(paths, m.MountPath)
+			}
+		}
+		return paths
+	}
+
+	envVars := func(pod corev1.PodTemplateSpec) map[string]string {
+		m := map[string]string{}
+		for _, c := range pod.Spec.Containers {
+			for _, e := range c.Env {
+				m[e.Name] = e.Value
+			}
+		}
+		return m
+	}
+
+	t.Run("no annotation leaves pod unchanged", func(t *testing.T) {
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod, makeCR(nil), spec, SplunkSearchHead, nil, "secret")
+		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
+	t.Run("annotation=false leaves pod unchanged", func(t *testing.T) {
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod,
+			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "false"}),
+			spec, SplunkSearchHead, nil, "secret")
+		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
+	t.Run("annotation=true routes provisioning to splunk-provision", func(t *testing.T) {
+		t.Setenv("SPLUNK_PROVISION_IMAGE", "splunk-provision:latest")
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod,
+			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "true"}),
+			spec, SplunkSearchHead, nil, "secret")
+
+		require.Equal(t, "true", envVars(pod)["SPLUNK_NO_ANSIBLE"])
+		require.Contains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.Contains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
+	t.Run("annotation=true with SPLUNK_PROVISION_IMAGE unset skips injection", func(t *testing.T) {
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod,
+			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "true"}),
+			spec, SplunkSearchHead, nil, "secret")
+
+		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
+	t.Run("annotation=true with SPLUNK_PROVISION_IMAGE unresolved placeholder skips injection", func(t *testing.T) {
+		t.Setenv("SPLUNK_PROVISION_IMAGE", "SPLUNK_PROVISION_IMAGE_VALUE")
+		pod := makePodTemplate()
+		updateSplunkPodTemplateWithConfig(ctx, client, &pod,
+			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "true"}),
+			spec, SplunkSearchHead, nil, "secret")
+
+		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
+		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
+	})
+
 }

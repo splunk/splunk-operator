@@ -4,7 +4,6 @@
   "metadata": {
     "name": "splunk-stack1-indexer",
     "namespace": "test",
-    "creationTimestamp": null,
     "labels": {
       "app.kubernetes.io/component": "indexer",
       "app.kubernetes.io/instance": "splunk-stack1-indexer",
@@ -35,7 +34,6 @@
     },
     "template": {
       "metadata": {
-        "creationTimestamp": null,
         "labels": {
           "app.kubernetes.io/component": "indexer",
           "app.kubernetes.io/instance": "splunk-stack1-indexer",
@@ -131,6 +129,14 @@
               {
                 "name": "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH",
                 "value": "true"
+              },
+              {
+                "name": "SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED",
+                "value": "true"
+              },
+              {
+                "name": "SPLUNK_KVSTORE_DEFAULT_TYPE",
+                "value": "local"
               }
             ],
             "resources": {
@@ -251,7 +257,6 @@
         "metadata": {
           "name": "pvc-etc",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "indexer",
             "app.kubernetes.io/instance": "splunk-stack1-indexer",
@@ -276,7 +281,6 @@
         "metadata": {
           "name": "pvc-var",
           "namespace": "test",
-          "creationTimestamp": null,
           "labels": {
             "app.kubernetes.io/component": "indexer",
             "app.kubernetes.io/instance": "splunk-stack1-indexer",

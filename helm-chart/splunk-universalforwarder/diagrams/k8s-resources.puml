@@ -1,0 +1,84 @@
+@startuml k8s-resources
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundcorner 8
+
+skinparam rectangle {
+  BackgroundColor #EEF4FF
+  BorderColor #5B8DB8
+  FontColor #222222
+}
+skinparam card {
+  BackgroundColor #FFF8E1
+  BorderColor #F9A825
+}
+skinparam note {
+  BackgroundColor #F1F8E9
+  BorderColor #7CB342
+}
+skinparam arrow {
+  Color #444444
+}
+
+title Kubernetes Resources Created by helm install
+
+package "Kubernetes Namespace" {
+
+  rectangle "Secret\n<release>-splunk-universalforwarder" as SEC {
+    card "data.<passwordKey>\n(b64 plaintext)" as SECPW
+    card "data.default.yml\n(Ansible config blob)" as SECYML
+  }
+
+  rectangle "PVC -etc (1Gi) [durable only]" as PVCE #E8F5E9
+  rectangle "PVC -var (5Gi) [durable only]" as PVCV #E8F5E9
+  rectangle "emptyDir etc/+var/\n[stateless default]" as EMPTYDIR #FFF3E0
+
+  rectangle "ConfigMap [optional]\n<release>-...-conf" as CM {
+    card "outputs.conf override" as CMO
+    card "inputs.conf override" as CMI
+  }
+
+  rectangle "ServiceAccount" as SA
+  rectangle "Role / ClusterRole\n(empty rules)" as ROLE
+  rectangle "RoleBinding / CRB" as RB
+
+  rectangle "Service [optional]\nports: 514/UDP 601/TCP 9997/TCP 8088/TCP" as SVC
+  rectangle "Ingress [optional]\ntargets hec port 8088" as ING #E3F2FD
+  rectangle "PodDisruptionBudget [optional]\nminAvailable: 1" as PDB #FCE4EC
+  rectangle "NetworkPolicy [optional]\nIngress + Egress" as NP #F3E5F5
+
+  rectangle "Deployment\n<release>-splunk-universalforwarder" as DS {
+    rectangle "Pod Template" as PT {
+      rectangle "init: fix-ownership\nbusybox:1.36.1  uid=0" as FO #FFE0E0
+      rectangle "init: seed-etc\nuf-image  uid=41812" as SE #FFE0E0
+      rectangle "container: splunk-universalforwarder\nuf-image  uid=41812\nstartupProbe + readinessProbe + livenessProbe" as UFP #E8F5E9
+      FO -[hidden]down-> SE
+      SE -[hidden]down-> UFP
+    }
+  }
+}
+
+DS -[dashed]-> PVCE    : mounts etc/ (durable)
+DS -[dashed]-> PVCV    : mounts var/ (durable)
+DS -[dashed]-> EMPTYDIR : mounts etc/+var/ (stateless)
+DS --> SEC             : mounts /mnt/splunk-secrets
+DS -[dashed]-> CM      : mounts system/local (optional)
+SVC -[dashed]-> DS     : selects pods (optional)
+ING -[dashed]-> SVC    : routes to hec:8088 (optional)
+PDB ..> DS             : guards pods (optional)
+NP ..> DS              : restricts traffic (optional)
+DS --> SA              : serviceAccountName
+SA --> ROLE
+ROLE --> RB
+
+note bottom of EMPTYDIR
+  Default (storage.emptyDir=true).
+  No PVCs. Pod restart re-inits
+  Splunk from Secret.
+end note
+
+note right of ING
+  Requires service.enabled=true
+  (validated at render time).
+end note
+@enduml

@@ -1,0 +1,11 @@
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresDatabase
+metadata:
+  name: test-missing-fields
+  namespace: default
+spec:
+  # Missing clusterRef - REQUIRED field!
+  databases:
+    - name: kvstore
+    - extensions:  # Missing name - REQUIRED in DatabaseDefinition!
+        - pg_stat_statements

@@ -1,0 +1,105 @@
+suite: hardening
+templates:
+  - templates/workload.yaml
+tests:
+  # HARD-02: SSL volume + mount + env vars
+  - it: "should mount SSL Secret and auto-wire SPLUNK_S2S_CERT and SPLUNK_S2S_CA env vars"
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      splunkConfig.ssl.secretName: my-s2s-certs
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: splunk-ssl-certs
+            secret:
+              secretName: my-s2s-certs
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: splunk-ssl-certs
+            mountPath: /opt/splunkforwarder/etc/auth/s2s
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_S2S_CERT
+            value: "/opt/splunkforwarder/etc/auth/s2s/tls.crt"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_S2S_CA
+            value: "/opt/splunkforwarder/etc/auth/s2s/ca.crt"
+
+  # HARD-03: ephemeral-storage limit
+  - it: "should include ephemeral-storage limit in default render"
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.ephemeral-storage
+          value: "1Gi"
+
+  # HARD-04: liveness probe — startupProbe guards startup; liveness initialDelay is 0
+  - it: "should include livenessProbe with splunk status command"
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command
+          value:
+            - /opt/splunkforwarder/bin/splunk
+            - status
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 0
+
+  - it: "should allow overriding livenessProbe timing parameters"
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      livenessProbe.initialDelaySeconds: 60
+      livenessProbe.periodSeconds: 15
+      livenessProbe.failureThreshold: 5
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 60
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 15
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 5
+
+  # HARD-02 negative: no SSL volume when ssl.secretName is empty
+  - it: "should NOT mount SSL volume when ssl.secretName is empty (default)"
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: splunk-ssl-certs
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: splunk-ssl-certs
+
+  - it: "should NOT render SPLUNK_S2S_CERT or SPLUNK_S2S_CA when ssl.secretName is empty"
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_S2S_CERT
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLUNK_S2S_CA

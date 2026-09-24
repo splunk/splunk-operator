@@ -1,3 +1,4 @@
+{{- if .Values.ingestorCluster }}
 {{- if .Values.ingestorCluster.enabled }}
 apiVersion: enterprise.splunk.com/v4
 kind: IngestorCluster
@@ -13,6 +14,7 @@ metadata:
   {{ toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  disableResourceDefaults: {{ .Values.ingestorCluster.disableResourceDefaults }}
   replicas: {{ default 3 .Values.ingestorCluster.replicaCount }}
   {{- if .Values.image.repository }}
   image: {{ .Values.image.repository }}
@@ -22,6 +24,10 @@ spec:
   {{- end }}
   {{- with .Values.image.imagePullSecrets }}
   imagePullSecrets:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.podAnnotations }}
+  podAnnotations:
   {{- toYaml . | nindent 4 }}
   {{- end }}
   {{- if .Values.ingestorCluster.serviceAccount }}
@@ -134,4 +140,5 @@ spec:
   {{- if .Values.ingestorCluster.defaultsUrlApps }}
     defaultsUrlApps: {{ .Values.ingestorCluster.defaultsUrlApps }}
   {{- end }}
+{{- end }}
 {{- end }}

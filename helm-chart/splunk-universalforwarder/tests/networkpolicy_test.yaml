@@ -1,0 +1,56 @@
+suite: networkpolicy
+templates:
+  - templates/networkpolicy.yaml
+tests:
+  - it: should not render NetworkPolicy by default
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render NetworkPolicy when enabled
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      networkPolicy.enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+
+  - it: should target pods via selectorLabels
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      networkPolicy.enabled: true
+    asserts:
+      - isNotEmpty:
+          path: spec.podSelector.matchLabels
+
+  - it: should include both Ingress and Egress policyTypes
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+
+  - it: should render custom ingress rules when provided
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      networkPolicy.enabled: true
+      networkPolicy.ingress:
+        - ports:
+            - protocol: TCP
+              port: 9997
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports[0].port
+          value: 9997

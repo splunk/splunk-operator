@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Recreate avoids a surge pod contending with the existing pod for the two
+  # ReadWriteOnce volumes during replacement.
+  - script: |
+      EXTRA=''
+      if [ -n "${KUTTL_SPLUNK_UF_IMAGE:-}" ]; then
+        EXTRA="--set image.repository=${KUTTL_SPLUNK_UF_IMAGE%:*} --set image.tag=${KUTTL_SPLUNK_UF_IMAGE##*:}"
+      fi
+      helm install splunk-uf-durable ../../../../helm-chart/splunk-universalforwarder \
+        -f uf_durable_config.yaml \
+        --namespace "$NAMESPACE" \
+        --wait \
+        --timeout 15m \
+        --set "splunkConfig.forwardServer=splunk-stdln-standalone-service.$NAMESPACE.svc.cluster.local:9997" \
+        --set splunkConfig.password=TestPassword1 \
+        --set splunkConfig.splunkGeneralTerms=--accept-sgt-current-at-splunk-com \
+        $EXTRA

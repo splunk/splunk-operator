@@ -13,6 +13,7 @@ metadata:
 {{ toYaml . | indent 4 }}
 {{- end }}
 spec:
+  disableResourceDefaults: {{ .Values.standalone.disableResourceDefaults }}
 {{- if .Values.standalone.serviceAccount }}
   serviceAccount: {{ .Values.standalone.serviceAccount }}
 {{- end }}
@@ -76,6 +77,10 @@ spec:
 {{- end }}
 {{- with .Values.image.imagePullSecrets }}
   imagePullSecrets:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.standalone.podAnnotations }}
+  podAnnotations:
 {{ toYaml . | indent 4 }}
 {{- end }}
 {{- with .Values.standalone.volumes }}

@@ -11,6 +11,13 @@ spec:
     authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: index-ingest-separation-test-dlq
+    secretKeyRef:
+      awsAccessKey:
+        name: index-ing-sep-secret
+        key: s3_access_key
+      awsSecretKey:
+        name: index-ing-sep-secret
+        key: s3_secret_key
 
 ---
 # assert for object storage custom resource to be ready

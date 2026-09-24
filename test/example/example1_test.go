@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,58 +14,36 @@
 package example
 
 import (
-	"fmt"
-	"math/rand"
-	"time"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = XDescribe("Example1", func() {
+var _ = Describe("Example integration test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 
-	// This is invoke for each "It" spec below
-	BeforeEach(func() {
+	BeforeEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
 		var err error
-		// Create a deployment for this test
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
-		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
-		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
-		Expect(err).To(Succeed(), "Unable to create deployment")
+		testcaseEnvInst, deployment, err = testenv.SetupTestCaseEnv(testenvInstance, "")
+		Expect(err).To(Succeed(), "Failed to setup test case environment")
 	})
 
-	AfterEach(func() {
-		deployment.Teardown()
-		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
-		}
+	AfterEach(NodeTimeout(testenv.SetupTeardownTimeout), func(ctx SpecContext) {
+		Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
-	// "It" spec
-	It("deploys successfully", func() {
-		// Add your test spec!!
-		// eg deployment.DeployStandalone()
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-		testcaseEnvInst.Log.Info("Running test spec", "name", deployment.GetName())
-	})
+	It("can deploy a standalone instance",
+		// Replace tier:template and the other labels after copying this suite.
+		Label("tier:template", "sva:s1", "cloud:any", "feature:basic"),
+		NodeTimeout(testenv.ShortTimeout),
+		func(ctx SpecContext) {
+			result, err := testcaseEnvInst.RunStandaloneDeploymentWorkflow(ctx, deployment)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
-	// "It" spec
-	It("can update volumes", func() {
-		// Add your test spec!!
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-		testcaseEnvInst.Log.Info("Running test spec", "name", deployment.GetName())
-	})
-
-	// "It" spec
-	It("can update service ports", func() {
-		// Add your test spec!!
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Microsecond)
-		testcaseEnvInst.Log.Info("Running test spec", "name", deployment.GetName())
-	})
+			Expect(testcaseEnvInst.VerifyStandaloneConditionReady(ctx, deployment, result.Standalone)).
+				To(Succeed(), "Standalone Ready condition not met")
+		})
 })

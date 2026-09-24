@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/record"
 	ctrl2 "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -43,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	webhookconversion "sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 	//"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -144,6 +146,10 @@ func (mgr MockManager) GetControllerOptions() config.Controller {
 	return config.Controller{}
 }
 
+func (mgr MockManager) GetConverterRegistry() webhookconversion.Registry {
+	return webhookconversion.NewRegistry()
+}
+
 func (mgr MockManager) AddMetricsExtraHandler(path string, handler http.Handler) error {
 	return nil
 }
@@ -219,6 +225,11 @@ func (mgr MockManager) GetEventRecorderFor(name string) record.EventRecorder {
 	return broadcaster.NewRecorder(mgr.GetScheme(), corev1.EventSource{})
 }
 
+// GetEventRecorder returns a new EventRecorder for the provided name
+func (mgr MockManager) GetEventRecorder(name string) events.EventRecorder {
+	return events.NewFakeRecorder(100)
+}
+
 // GetRESTMapper returns a RESTMapper
 func (mgr MockManager) GetRESTMapper() meta.RESTMapper {
 	return &meta.DefaultRESTMapper{}
@@ -243,6 +254,14 @@ func (mgr MockManager) GetWebhookServer() webhook.Server {
 	})
 	mgr.SetFields(&s)
 	return s
+}
+
+func (mgr MockManager) NeedLeaderElection() bool {
+	return false
+}
+
+func (mgr MockManager) Warmup(ctx context.Context) error {
+	return nil
 }
 
 // NewMockManager returns a new instance of a MockManager

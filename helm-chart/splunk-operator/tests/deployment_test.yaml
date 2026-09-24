@@ -1,0 +1,185 @@
+suite: deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should be a Deployment
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should set the correct name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: splunk-operator-controller-manager
+
+  - it: should use Recreate strategy
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: should include default args without feature-gates
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --leader-elect
+            - --pprof
+
+  - it: should include feature-gates arg with a single gate
+    set:
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --feature-gates=ValidationWebhook=true
+
+  - it: should include feature-gates arg with multiple gates
+    set:
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+        MyNewFeature: false
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[2]
+          pattern: "^--feature-gates="
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[2]
+          pattern: "ValidationWebhook=true"
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[2]
+          pattern: "MyNewFeature=false"
+
+  - it: should not include feature-gates arg when featureGates is empty
+    set:
+      splunkOperator.featureGates: {}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --leader-elect
+            - --pprof
+
+  - it: should always include --leader-elect and --pprof even with feature gates
+    set:
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --pprof
+
+  - it: should set the command to /manager
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value:
+            - /manager
+
+  - it: should use the configured image
+    set:
+      splunkOperator.image.repository: my-registry/splunk-operator:test
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: my-registry/splunk-operator:test
+
+  - it: should set WATCH_NAMESPACE to watchNamespaces when clusterWideAccess is true
+    set:
+      splunkOperator.clusterWideAccess: true
+      splunkOperator.watchNamespaces: "ns1,ns2"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WATCH_NAMESPACE
+            value: "ns1,ns2"
+
+  - it: should set WATCH_NAMESPACE to release namespace when clusterWideAccess is false
+    release:
+      namespace: my-namespace
+    set:
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WATCH_NAMESPACE
+            value: my-namespace
+
+  - it: should add custom labels to deployment
+    set:
+      splunkOperator.labels:
+        custom-label: custom-value
+    asserts:
+      - equal:
+          path: metadata.labels.custom-label
+          value: custom-value
+
+  - it: should add custom annotations to deployment
+    set:
+      splunkOperator.annotations:
+        custom-annotation: custom-value
+    asserts:
+      - equal:
+          path: metadata.annotations.custom-annotation
+          value: custom-value
+
+  - it: should add pod labels
+    set:
+      splunkOperator.podLabels:
+        pod-label: pod-value
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.pod-label
+          value: pod-value
+
+  - it: should add pod annotations
+    set:
+      splunkOperator.podAnnotations:
+        pod-annotation: pod-value
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations.pod-annotation
+          value: pod-value
+
+  - it: should set security context defaults
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+
+  - it: should disable host namespaces by default
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: false
+      - equal:
+          path: spec.template.spec.hostPID
+          value: false
+      - equal:
+          path: spec.template.spec.hostIPC
+          value: false
+
+  - it: should set extra environment variables
+    set:
+      extraEnvs:
+        - name: MY_VAR
+          value: my-value
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR
+            value: my-value

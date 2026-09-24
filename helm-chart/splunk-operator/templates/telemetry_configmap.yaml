@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: splunk-operator-manager-telemetry
+  namespace: {{ include "splunk-operator.namespace" . }}
+  labels:
+    name: splunk-operator
+{{- include "splunk-operator.labels" . | nindent 4 }}
+data:
+  status: |
+    {
+      "lastTransmission": "",
+      "test": {{ .Values.splunkOperator.telemetry.test | quote }},
+      "sokVersion": {{ .Chart.AppVersion | quote }}
+    }

@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,7 +48,7 @@ var fakePodExecGetConfig = func() (*rest.Config, error) {
 }
 
 // Faking RESTClientForGVK
-var fakePodExecRESTClientForGVK = func(gvk schema.GroupVersionKind, isUnstructured bool, baseConfig *rest.Config, codecs serializer.CodecFactory, client *http.Client) (rest.Interface, error) {
+var fakePodExecRESTClientForGVK = func(gvk schema.GroupVersionKind, forceDisableProtoBuf bool, isUnstructured bool, baseConfig *rest.Config, codecs serializer.CodecFactory, client *http.Client) (rest.Interface, error) {
 	return &fakeRestInterface{}, errors.New("fakeerror")
 }
 
@@ -403,5 +403,91 @@ func TestSuppressHarmlessErrorMessages(t *testing.T) {
 	suppressHarmlessErrorMessages(&finalStr)
 	if finalStr != "" {
 		t.Errorf("Known messages did not get suppressed.")
+	}
+}
+
+func TestValidateHECToken(t *testing.T) {
+	tests := []struct {
+		name      string
+		tokenVal  []byte
+		wantError bool
+	}{
+		{
+			name:      "valid UUID format with dashes",
+			tokenVal:  []byte("550e8400-e29b-41d4-a716-446655440000"),
+			wantError: false,
+		},
+		{
+			name:      "valid UUID format (uppercase)",
+			tokenVal:  []byte("550E8400-E29B-41D4-A716-446655440000"),
+			wantError: false,
+		},
+		{
+			name:      "valid UUID format without dashes",
+			tokenVal:  []byte("550e8400e29b41d4a716446655440000"),
+			wantError: true,
+		},
+		{
+			name:      "empty string",
+			tokenVal:  []byte(""),
+			wantError: true,
+		},
+		{
+			name:      "invalid UUID format",
+			tokenVal:  []byte("not-a-uuid-format"),
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHECToken(tt.tokenVal)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateHECToken() error = %v, wantError %v", err, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestValidateSecret(t *testing.T) {
+	tests := []struct {
+		name      string
+		tokenVal  []byte
+		wantError bool
+	}{
+		{
+			name:      "valid secret - 12 characters (minimum)",
+			tokenVal:  []byte("123456789012"),
+			wantError: false,
+		},
+		{
+			name:      "valid secret - 24 characters",
+			tokenVal:  []byte("123456789012345678901234"),
+			wantError: false,
+		},
+		{
+			name:      "valid secret - long",
+			tokenVal:  []byte("thisIsAVeryLongSecretTokenWithMoreCharacters"),
+			wantError: false,
+		},
+		{
+			name:      "empty secret",
+			tokenVal:  []byte(""),
+			wantError: true,
+		},
+		{
+			name:      "secret too short - 11 characters",
+			tokenVal:  []byte("12345678901"),
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSecret(tt.tokenVal)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateSecret() error = %v, wantError %v", err, tt.wantError)
+			}
+		})
 	}
 }

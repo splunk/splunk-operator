@@ -1,0 +1,28 @@
+# splunk-universalforwarder Helm Chart
+
+Deploys a Splunk Universal Forwarder (UF) on Kubernetes as a stateless-by-default Deployment.
+
+> **Splunk General Terms:** Use of the Splunk Universal Forwarder image requires acceptance of the Splunk General Terms. See [Splunk General Terms Acceptance](https://splunk.github.io/splunk-operator/#splunk-general-terms-acceptance) in the Splunk Operator documentation for the required `SPLUNK_GENERAL_TERMS` env var and the legal language you must accept before setting it.
+
+## Documentation
+
+Full deployment guide, configuration reference, forwarding setup, SSL, storage modes, and troubleshooting:
+
+📄 **[docs/deploy/uf-helm-chart.md](../../docs/deploy/uf-helm-chart.md)**
+
+## Quick Install
+
+Before installing, read the [Splunk General Terms Acceptance](https://splunk.github.io/splunk-operator/#splunk-general-terms-acceptance) section and explicitly set `splunkConfig.splunkGeneralTerms` to indicate acceptance.
+
+```sh
+helm install my-uf ./helm-chart/splunk-universalforwarder \
+  --namespace my-namespace \
+  --create-namespace \
+  --set splunkConfig.forwardServer=indexer.example.com:9997 \
+  --set splunkConfig.password=MySecurePassword1 \
+  --set splunkConfig.splunkGeneralTerms=<value-from-splunk-general-terms-acceptance-page>
+```
+
+> The chart fails at render time if `splunkConfig.splunkGeneralTerms` is not set to the required value.
+
+See `values.yaml` for all configurable options.

@@ -3,7 +3,17 @@ splunk-operator:
 
 # Splunk image
 image:
-  repository: docker.io/splunk/splunk:10.2.0
+  repository: docker.io/splunk/splunk:10.4.0
+
+# cert-manager (https://cert-manager.io/) — optional dependency used by the operator's
+# CertManagement feature gate to auto-generate TLS certificates for Splunk components.
+# Disabled by default: enable only if the target cluster does not already have
+# cert-manager installed. See https://artifacthub.io/packages/helm/cert-manager/cert-manager
+# for the full set of configurable values.
+cert-manager:
+  enabled: false
+  crds:
+    enabled: true
 
 # Splunk Operator configurations
 splunkOperator:
@@ -11,7 +21,7 @@ splunkOperator:
   # Splunk operator image and pull policy
   # reference: https://github.com/splunk/splunk-operator
   image:
-    repository: docker.io/splunk/splunk-operator:3.1.0
+    repository: docker.io/splunk/splunk-operator:3.2.0
     pullPolicy: IfNotPresent
 
   # Set image pull secrets to pull image from a private registry
@@ -145,6 +155,19 @@ splunkOperator:
 
   # Mandatory acknowledgment mechanism for the Splunk General Terms (SGT) 
   splunkGeneralTerms: ""
+
+  # Feature gates to enable or disable on the operator.
+  # Each key is a gate name and the value is a boolean (true/false).
+  # The map is formatted into a single --feature-gates arg automatically.
+  # Adding a new gate requires no chart changes — just add an entry here.
+  # reference: https://splunk.github.io/splunk-operator/FeatureGates
+  featureGates: {}
+  # featureGates:
+  #   ValidationWebhook: true
+  #   MyNewFeature: false
+
+  telemetry:
+    test: true
 
 # Array with extra yaml to deploy with the chart. Evaluated as a template
 extraManifests: []

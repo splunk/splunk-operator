@@ -1,0 +1,567 @@
+/*
+Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package validation
+
+import (
+	"fmt"
+	"regexp"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
+)
+
+// storageCapacityRegex validates storage capacity format (e.g., "10Gi", "100Gi")
+var storageCapacityRegex = regexp.MustCompile(`^[0-9]+Gi$`)
+
+const (
+	splunkKVStoreDefaultTypeEnv = "SPLUNK_KVSTORE_DEFAULT_TYPE"
+	splunkKVStoreTypeLocal      = "local"
+)
+
+// validateCommonSplunkSpec validates fields common to all Splunk CRDs
+func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Note: The following fields are validated via kubebuilder annotations in api/enterprise/v4/common_types.go:
+	// - ImagePullPolicy: +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	// - LivenessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
+	// - ReadinessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
+
+	// Reject spec.certs[] when the CertManagement feature is disabled, since the
+	// reconciler silently no-ops it in that state (see certs.ReconcileCerts).
+	if len(spec.Certs) > 0 && !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("certs"),
+			"the CertManagement feature is not enabled; set --feature-gates=CertManagement=true to activate"))
+	}
+
+	// Validate EtcVolumeStorageConfig
+	allErrs = append(allErrs, validateStorageConfig(&spec.EtcVolumeStorageConfig, fldPath.Child("etcVolumeStorageConfig"))...)
+
+	// Validate VarVolumeStorageConfig
+	allErrs = append(allErrs, validateStorageConfig(&spec.VarVolumeStorageConfig, fldPath.Child("varVolumeStorageConfig"))...)
+
+	// Validate extraEnv uniqueness by Name
+	seenEnvNames := make(map[string]int) // map name -> first index seen
+	for i, env := range spec.ExtraEnv {
+		if firstIdx, exists := seenEnvNames[env.Name]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("extraEnv").Index(i).Child("name"),
+				fmt.Sprintf("environment variable name %q is duplicate (same as extraEnv[%d])", env.Name, firstIdx)))
+		} else {
+			seenEnvNames[env.Name] = i
+		}
+
+		if env.Name == splunkKVStoreDefaultTypeEnv &&
+			env.Value != splunkKVStoreTypeLocal {
+			allErrs = append(allErrs, field.NotSupported(
+				fldPath.Child("extraEnv").Index(i).Child("value"),
+				env.Value,
+				[]string{splunkKVStoreTypeLocal}))
+		}
+	}
+
+	// Validate imagePullSecrets uniqueness by Name
+	seenSecretNames := make(map[string]int) // map name -> first index seen
+	for i, secret := range spec.ImagePullSecrets {
+		if firstIdx, exists := seenSecretNames[secret.Name]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("imagePullSecrets").Index(i).Child("name"),
+				fmt.Sprintf("secret reference %q is duplicate (same as imagePullSecrets[%d])", secret.Name, firstIdx)))
+		} else {
+			seenSecretNames[secret.Name] = i
+		}
+	}
+
+	// Validate probe configurations
+	if spec.LivenessProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.LivenessProbe, fldPath.Child("livenessProbe"))...)
+	}
+	if spec.ReadinessProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.ReadinessProbe, fldPath.Child("readinessProbe"))...)
+	}
+	if spec.StartupProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.StartupProbe, fldPath.Child("startupProbe"))...)
+	}
+
+	// Validate resource requests <= limits
+	allErrs = append(allErrs, validateResourceRequirements(&spec.Resources, fldPath.Child("resources"))...)
+
+	return allErrs
+}
+
+// validateProbe validates probe configuration
+func validateProbe(probe *enterpriseApi.Probe, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate initialDelaySeconds (minimum is 0)
+	if probe.InitialDelaySeconds < 0 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("initialDelaySeconds"),
+			probe.InitialDelaySeconds,
+			"must be greater than or equal to 0"))
+	}
+
+	// Validate timeoutSeconds (minimum is 1)
+	if probe.TimeoutSeconds < 1 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("timeoutSeconds"),
+			probe.TimeoutSeconds,
+			"must be greater than or equal to 1"))
+	}
+
+	// Validate periodSeconds (minimum is 1)
+	if probe.PeriodSeconds < 1 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("periodSeconds"),
+			probe.PeriodSeconds,
+			"must be greater than or equal to 1"))
+	}
+
+	// Validate failureThreshold (minimum is 1)
+	if probe.FailureThreshold < 1 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("failureThreshold"),
+			probe.FailureThreshold,
+			"must be greater than or equal to 1"))
+	}
+
+	return allErrs
+}
+
+// validateResourceRequirements validates that resource requests do not exceed limits
+func validateResourceRequirements(resources *corev1.ResourceRequirements, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate memory: request <= limit
+	memoryRequest := resources.Requests.Memory()
+	memoryLimit := resources.Limits.Memory()
+	if !memoryRequest.IsZero() && !memoryLimit.IsZero() {
+		if memoryRequest.Cmp(*memoryLimit) > 0 {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("requests").Child("memory"),
+				memoryRequest.String(),
+				fmt.Sprintf("memory request must be less than or equal to memory limit (%s)", memoryLimit.String())))
+		}
+	}
+
+	// Validate CPU: request <= limit
+	cpuRequest := resources.Requests.Cpu()
+	cpuLimit := resources.Limits.Cpu()
+	if !cpuRequest.IsZero() && !cpuLimit.IsZero() {
+		if cpuRequest.Cmp(*cpuLimit) > 0 {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("requests").Child("cpu"),
+				cpuRequest.String(),
+				fmt.Sprintf("cpu request must be less than or equal to cpu limit (%s)", cpuLimit.String())))
+		}
+	}
+
+	return allErrs
+}
+
+// validateStorageConfig validates storage configuration
+func validateStorageConfig(config *enterpriseApi.StorageClassSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate ephemeralStorage is mutually exclusive with storageClassName and storageCapacity
+	if config.EphemeralStorage {
+		if config.StorageClassName != "" {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("storageClassName"),
+				config.StorageClassName,
+				"storageClassName cannot be set when ephemeralStorage is true"))
+		}
+		if config.StorageCapacity != "" {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("storageCapacity"),
+				config.StorageCapacity,
+				"storageCapacity cannot be set when ephemeralStorage is true"))
+		}
+	}
+
+	// Validate storageCapacity format (must be in Gi format, e.g., "10Gi", "100Gi")
+	if config.StorageCapacity != "" {
+		if !storageCapacityRegex.MatchString(config.StorageCapacity) {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("storageCapacity"),
+				config.StorageCapacity,
+				"must be in Gi format (e.g., '10Gi', '100Gi')"))
+		}
+	}
+
+	// Validate storageClassName is not empty when ephemeralStorage is false and storageCapacity is set
+	if !config.EphemeralStorage && config.StorageCapacity != "" && config.StorageClassName == "" {
+		allErrs = append(allErrs, field.Required(
+			fldPath.Child("storageClassName"),
+			"storageClassName is required when using persistent storage"))
+	}
+
+	return allErrs
+}
+
+// validateSmartStore validates SmartStore configuration
+func validateSmartStore(smartStore *enterpriseApi.SmartStoreSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Build a set of valid volume names for reference validation and detect duplicates
+	validVolumes := make(map[string]bool)
+	seenVolNames := make(map[string]int)
+	for i, vol := range smartStore.VolList {
+		if vol.Name != "" {
+			if firstIdx, exists := seenVolNames[vol.Name]; exists {
+				allErrs = append(allErrs, field.Duplicate(
+					fldPath.Child("volumes").Index(i).Child("name"),
+					fmt.Sprintf("duplicate volume name %q (same as volumes[%d])", vol.Name, firstIdx)))
+			} else {
+				seenVolNames[vol.Name] = i
+				validVolumes[vol.Name] = true
+			}
+		}
+	}
+
+	// Validate: SmartStore indexes require at least one volume to be configured
+	if len(smartStore.IndexList) > 0 && len(smartStore.VolList) == 0 {
+		allErrs = append(allErrs, field.Required(
+			fldPath.Child("volumes"),
+			"at least one volume must be configured when indexes are defined"))
+	}
+
+	// Validate volume definitions
+	for i, vol := range smartStore.VolList {
+		volPath := fldPath.Child("volumes").Index(i)
+		if vol.Name == "" {
+			allErrs = append(allErrs, field.Required(volPath.Child("name"), "volume name is required"))
+		}
+		if vol.Endpoint == "" && vol.Path == "" {
+			allErrs = append(allErrs, field.Required(volPath, "either endpoint or path must be specified"))
+		}
+		allErrs = append(allErrs, validateVolumeProviderTypeMismatch(&smartStore.VolList[i], volPath)...)
+	}
+
+	// Validate index definitions
+	for i, idx := range smartStore.IndexList {
+		idxPath := fldPath.Child("indexes").Index(i)
+		if idx.Name == "" {
+			allErrs = append(allErrs, field.Required(idxPath.Child("name"), "index name is required"))
+		}
+
+		// Determine effective volumeName (index-level or defaults)
+		effectiveVolName := idx.VolName
+		if effectiveVolName == "" {
+			effectiveVolName = smartStore.Defaults.VolName
+		}
+
+		// Validate: Index must have volumeName or defaults.volumeName provided
+		if effectiveVolName == "" {
+			allErrs = append(allErrs, field.Required(
+				idxPath.Child("volumeName"),
+				"volumeName is required for index (either directly or via defaults.volumeName)"))
+		} else {
+			// Validate: Index volumeName must reference an existing volume in volumes list
+			if !validVolumes[effectiveVolName] {
+				allErrs = append(allErrs, field.Invalid(
+					idxPath.Child("volumeName"),
+					effectiveVolName,
+					fmt.Sprintf("volumeName %q does not reference any volume in the volumes list", effectiveVolName)))
+			}
+		}
+	}
+
+	return allErrs
+}
+
+// Constants for appsRepoPollInterval validation
+const (
+	// minAppsRepoPollInterval is the minimum allowed poll interval (1 minute)
+	minAppsRepoPollInterval int64 = 60
+	// maxAppsRepoPollInterval is the maximum allowed poll interval (1 day)
+	maxAppsRepoPollInterval int64 = 86400
+)
+
+// validAppFrameworkScopes is the set of all valid scope values for app sources
+var validAppFrameworkScopes = map[string]bool{
+	enterpriseApi.ScopeLocal:                true,
+	enterpriseApi.ScopeCluster:              true,
+	enterpriseApi.ScopeClusterWithPreConfig: true,
+	enterpriseApi.ScopePremiumApps:          true,
+}
+
+// validAppFrameworkScopesList is the sorted list used for NotSupported error messages
+var validAppFrameworkScopesList = []string{
+	enterpriseApi.ScopeLocal,
+	enterpriseApi.ScopeCluster,
+	enterpriseApi.ScopeClusterWithPreConfig,
+	enterpriseApi.ScopePremiumApps,
+}
+
+// localOnlyAppFrameworkScopes is the set of scopes valid for local-only CRs
+// (Standalone, LicenseManager, IngestorCluster)
+var localOnlyAppFrameworkScopes = map[string]bool{
+	enterpriseApi.ScopeLocal:       true,
+	enterpriseApi.ScopePremiumApps: true,
+}
+
+// validProviderTypeMap maps each provider to the single storageType it supports.
+var validProviderTypeMap = map[string]string{
+	"aws":   "s3",
+	"minio": "s3",
+	"azure": "blob",
+	"gcp":   "gcs",
+}
+
+// validateVolumeProviderTypeMismatch returns an error when the provider/storageType
+// combination on a VolumeSpec is invalid (e.g. azure provider with s3 type).
+func validateVolumeProviderTypeMismatch(vol *enterpriseApi.VolumeSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	if vol.Provider == "" || vol.Type == "" {
+		return allErrs
+	}
+	expectedType, knownProvider := validProviderTypeMap[vol.Provider]
+	if knownProvider && vol.Type != expectedType {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("storageType"),
+			vol.Type,
+			fmt.Sprintf("storageType %q is incompatible with provider %q; expected %q", vol.Type, vol.Provider, expectedType)))
+	}
+	return allErrs
+}
+
+// validateAppFramework validates App Framework configuration.
+// localOrPremiumScope must be true for CRs that only support local/premiumApps scope
+// (Standalone, LicenseManager); false for cluster-aware CRs (ClusterManager, SearchHeadCluster).
+func validateAppFramework(appConfig *enterpriseApi.AppFrameworkSpec, fldPath *field.Path, localOrPremiumScope bool) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Validate appsRepoPollInterval
+	// - Default is 0 (disabled)
+	// - Minimum is 0, Maximum is 86400
+	// - Values between (0, 60) are invalid (will be adjusted to 60 at runtime, but we reject here)
+	pollInterval := appConfig.AppsRepoPollInterval
+	if pollInterval < 0 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("appsRepoPollIntervalSeconds"),
+			pollInterval,
+			"must be greater than or equal to 0"))
+	} else if pollInterval > 0 && pollInterval < minAppsRepoPollInterval {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("appsRepoPollIntervalSeconds"),
+			pollInterval,
+			"must be 0 (disabled) or at least 60 seconds"))
+	} else if pollInterval > maxAppsRepoPollInterval {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("appsRepoPollIntervalSeconds"),
+			pollInterval,
+			"must be less than or equal to 86400 seconds (1 day)"))
+	}
+
+	// Validate defaults.Scope if set
+	if appConfig.Defaults.Scope != "" {
+		if !validAppFrameworkScopes[appConfig.Defaults.Scope] {
+			allErrs = append(allErrs, field.NotSupported(
+				fldPath.Child("defaults").Child("scope"),
+				appConfig.Defaults.Scope,
+				validAppFrameworkScopesList))
+		} else if localOrPremiumScope && !localOnlyAppFrameworkScopes[appConfig.Defaults.Scope] {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("defaults").Child("scope"),
+				appConfig.Defaults.Scope,
+				fmt.Sprintf("scope %q is not supported by this CR type; valid values are %q and %q",
+					appConfig.Defaults.Scope, enterpriseApi.ScopeLocal, enterpriseApi.ScopePremiumApps)))
+		}
+	}
+
+	// Validate app sources
+	for i, source := range appConfig.AppSources {
+		sourcePath := fldPath.Child("appSources").Index(i)
+		if source.Name == "" {
+			allErrs = append(allErrs, field.Required(sourcePath.Child("name"), "app source name is required"))
+		}
+		if source.Location == "" {
+			allErrs = append(allErrs, field.Required(sourcePath.Child("location"), "app source location is required"))
+		}
+
+		// Require an effective volumeName: either source-level or via defaults.
+		effectiveVolName := source.VolName
+		if effectiveVolName == "" {
+			effectiveVolName = appConfig.Defaults.VolName
+		}
+		if effectiveVolName == "" {
+			allErrs = append(allErrs, field.Required(
+				sourcePath.Child("volumeName"),
+				"volumeName is required (set it directly on the app source or via defaults.volumeName)"))
+		}
+
+		// Validate scope value and CR kind compatibility when scope is explicitly set
+		if source.Scope != "" {
+			if !validAppFrameworkScopes[source.Scope] {
+				allErrs = append(allErrs, field.NotSupported(
+					sourcePath.Child("scope"),
+					source.Scope,
+					validAppFrameworkScopesList))
+			} else if localOrPremiumScope && !localOnlyAppFrameworkScopes[source.Scope] {
+				allErrs = append(allErrs, field.Invalid(
+					sourcePath.Child("scope"),
+					source.Scope,
+					fmt.Sprintf("scope %q is not supported by this CR type; valid values are %q and %q",
+						source.Scope, enterpriseApi.ScopeLocal, enterpriseApi.ScopePremiumApps)))
+			}
+		}
+
+		// Validate premiumAppsProps is required when effective scope is "premiumApps"
+		effectiveScope := source.Scope
+		if effectiveScope == "" {
+			effectiveScope = appConfig.Defaults.Scope
+		}
+		if effectiveScope == enterpriseApi.ScopePremiumApps {
+			premiumType := source.PremiumAppsProps.Type
+			if premiumType == "" {
+				premiumType = appConfig.Defaults.PremiumAppsProps.Type
+			}
+			if premiumType == "" {
+				allErrs = append(allErrs, field.Required(
+					sourcePath.Child("premiumAppsProps").Child("type"),
+					"premiumAppsProps.type is required when scope is 'premiumApps'"))
+			}
+		}
+	}
+
+	// Validate uniqueness of app sources by volumeName + Location + Scope combination.
+	// The reconciler treats (effectiveVolName, location, scope) as the unique tuple:
+	// two sources that share the same relative location but target different volumes are
+	// distinct and must not be rejected as duplicates.
+	seenAppSources := make(map[string]int) // map key -> first index seen
+	for i, source := range appConfig.AppSources {
+		// Resolve effective scope from source or defaults
+		scope := source.Scope
+		if scope == "" {
+			scope = appConfig.Defaults.Scope
+		}
+		// Resolve effective volumeName from source or defaults
+		effectiveVolName := source.VolName
+		if effectiveVolName == "" {
+			effectiveVolName = appConfig.Defaults.VolName
+		}
+		key := effectiveVolName + "|" + source.Location + "|" + scope
+		if firstIdx, exists := seenAppSources[key]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("appSources").Index(i),
+				fmt.Sprintf("duplicate app source: volumeName=%q, location=%q, scope=%q (same as appSources[%d])", effectiveVolName, source.Location, scope, firstIdx)))
+		} else {
+			seenAppSources[key] = i
+		}
+	}
+
+	// Validate uniqueness of app source names.
+	seenSourceNames := make(map[string]int)
+	for i, source := range appConfig.AppSources {
+		if source.Name == "" {
+			continue // already caught by the required-name check above
+		}
+		if firstIdx, exists := seenSourceNames[source.Name]; exists {
+			allErrs = append(allErrs, field.Duplicate(
+				fldPath.Child("appSources").Index(i).Child("name"),
+				fmt.Sprintf("duplicate app source name %q (same as appSources[%d])", source.Name, firstIdx)))
+		} else {
+			seenSourceNames[source.Name] = i
+		}
+	}
+
+	// Validate volume definitions, detect duplicates, and check provider/type compatibility.
+	seenVolNames := make(map[string]int)
+	validVolumes := make(map[string]bool)
+	for i, vol := range appConfig.VolList {
+		volPath := fldPath.Child("volumes").Index(i)
+		if vol.Name == "" {
+			allErrs = append(allErrs, field.Required(volPath.Child("name"), "volume name is required"))
+		} else {
+			if firstIdx, exists := seenVolNames[vol.Name]; exists {
+				allErrs = append(allErrs, field.Duplicate(
+					volPath.Child("name"),
+					fmt.Sprintf("duplicate volume name %q (same as volumes[%d])", vol.Name, firstIdx)))
+			} else {
+				seenVolNames[vol.Name] = i
+				validVolumes[vol.Name] = true
+			}
+		}
+		allErrs = append(allErrs, validateVolumeProviderTypeMismatch(&appConfig.VolList[i], volPath)...)
+	}
+
+	// Validate that defaults.volumeName references a declared volume (if set).
+	if appConfig.Defaults.VolName != "" && !validVolumes[appConfig.Defaults.VolName] {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("defaults").Child("volumeName"),
+			appConfig.Defaults.VolName,
+			fmt.Sprintf("volumeName %q does not reference any volume in the volumes list", appConfig.Defaults.VolName)))
+	}
+
+	// Validate that each appSources[].volumeName references a declared volume (if set).
+	for i, source := range appConfig.AppSources {
+		if source.VolName != "" && !validVolumes[source.VolName] {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("appSources").Index(i).Child("volumeName"),
+				source.VolName,
+				fmt.Sprintf("volumeName %q does not reference any volume in the volumes list", source.VolName)))
+		}
+	}
+
+	return allErrs
+}
+
+// getCommonWarnings returns warnings for common Splunk spec fields
+func getCommonWarnings(spec *enterpriseApi.CommonSplunkSpec) []string {
+	var warnings []string
+
+	// Warn about deprecated fields or configurations
+	// Add warnings as needed based on spec fields
+
+	return warnings
+}
+
+// ValidateImagePullSecretsExistence validates that imagePullSecrets reference existing secrets
+// This function requires a ValidationContext with a Kubernetes client
+func ValidateImagePullSecretsExistence(secrets []corev1.LocalObjectReference, vc *ValidationContext, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if vc == nil || vc.Client == nil {
+		// Skip existence validation if no client is available
+		return allErrs
+	}
+
+	for i, secret := range secrets {
+		if secret.Name == "" {
+			continue // Empty names are validated elsewhere
+		}
+
+		exists, err := vc.SecretExists(secret.Name)
+		if err != nil {
+			// Log the error but don't fail validation for transient errors
+			// This prevents webhook failures due to temporary API issues
+			continue
+		}
+
+		if !exists {
+			allErrs = append(allErrs, field.NotFound(
+				fldPath.Index(i).Child("name"),
+				secret.Name))
+		}
+	}
+
+	return allErrs
+}

@@ -28,4 +28,7 @@ webhooks:
     - clustermanagers
     - licensemanagers
     - monitoringconsoles
+    - postgresclusters
+    - postgresclusterclasses
+    - postgresdatabases
   sideEffects: None

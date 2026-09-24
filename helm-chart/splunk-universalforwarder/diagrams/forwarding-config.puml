@@ -1,0 +1,57 @@
+@startuml forwarding-config
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundcorner 6
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #5B8DB8
+  FontColor #222222
+  DiamondBackgroundColor #FFF8E1
+  DiamondBorderColor #F9A825
+  ArrowColor #444444
+}
+
+title Forwarding Configuration Decision Tree
+
+start
+
+if (conf.outputs or\nconf.inputs set?) then (yes)
+  :Render ConfigMap mounted at system/local\nShadows Ansible-written files;
+  :outputs.conf from ConfigMap\n(operator-owned, bypasses Ansible);
+  stop
+else (no)
+  if (splunkConfig.forwardServers\nnon-empty list?) then (yes)
+    note right
+      Takes precedence over forwardServer scalar.
+      All entries written to default.yml.
+    end note
+    :Write default.yml:\n  forward_servers: [all entries]\n  s2s_port: <first entry port>;
+    :Ansible: splunk add forward-server\n<host>:<port> -auth admin:<pw>;
+    :outputs.conf written;
+    stop
+  elseif (splunkConfig.forwardServer\nnon-empty?) then (yes)
+    :Split host:port;
+    :Write default.yml:\n  forward_servers: [<host>]\n  s2s_port: <port>;
+    note right
+      Both fields required —
+      forward_servers alone does not
+      trigger add_forward_server.yml.
+    end note
+    :Ansible: splunk add forward-server\n<host>:<port> -auth admin:<pw>;
+    :outputs.conf written;
+    stop
+  elseif (splunkConfig.deploymentServer\nnon-empty?) then (yes)
+    :Set SPLUNK_DEPLOYMENT_SERVER env var;
+    note right
+      DS pushes deployment app with
+      outputs.conf at runtime.
+    end note
+    :DS-provided outputs.conf at runtime;
+    stop
+  else (all empty)
+    #FF6B6B:Render-time FAIL\n"splunkConfig.forwardServer or\nsplunkConfig.deploymentServer\nmust be set";
+    stop
+  endif
+endif
+@enduml

@@ -274,6 +274,37 @@ func TestMergeServiceSpecUpdates(t *testing.T) {
 	svcUpdateTester("Service ExternalTrafficPolicy changed")
 }
 
+func TestMergeServiceSpecUpdatesEmptyRevisedType(t *testing.T) {
+	ctx := context.TODO()
+
+	// Case 1: current is already ClusterIP and revised has no Type set
+	// (the common steady-state case). Must not report a diff and must
+	// not overwrite the current value.
+	current := corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP}
+	revised := corev1.ServiceSpec{}
+	if MergeServiceSpecUpdates(ctx, &current, &revised, "test-svc") {
+		t.Errorf("MergeServiceSpecUpdates() reported a diff for empty revised.Type against ClusterIP; want no diff")
+	}
+	if current.Type != corev1.ServiceTypeClusterIP {
+		t.Errorf("current.Type was overwritten to %q; want it preserved as ClusterIP", current.Type)
+	}
+
+	// Case 2: rollback path. The CR previously customized the service to
+	// LoadBalancer/NodePort via spec.serviceTemplate; the override is now
+	// removed so revised.Type is empty. The merge must drive the live
+	// Service back to the default ClusterIP.
+	for _, fromType := range []corev1.ServiceType{corev1.ServiceTypeLoadBalancer, corev1.ServiceTypeNodePort} {
+		current := corev1.ServiceSpec{Type: fromType}
+		revised := corev1.ServiceSpec{}
+		if !MergeServiceSpecUpdates(ctx, &current, &revised, "test-svc") {
+			t.Errorf("MergeServiceSpecUpdates() did not detect rollback from %q to default ClusterIP", fromType)
+		}
+		if current.Type != corev1.ServiceTypeClusterIP {
+			t.Errorf("rollback from %q: current.Type = %q; want ClusterIP", fromType, current.Type)
+		}
+	}
+}
+
 func TestSortStatefulSetSlices(t *testing.T) {
 	ctx := context.TODO()
 	var unsorted, sorted corev1.PodSpec

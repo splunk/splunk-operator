@@ -1,0 +1,35 @@
+{{- if not .Values.storage.emptyDir }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "splunk-universalforwarder.fullname" . }}-etc
+  namespace: {{ include "splunk-universalforwarder.namespace" . }}
+  labels:
+    {{- include "splunk-universalforwarder.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.storage.etcSize }}
+  {{- if .Values.storage.storageClassName }}
+  storageClassName: {{ .Values.storage.storageClassName }}
+  {{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "splunk-universalforwarder.fullname" . }}-var
+  namespace: {{ include "splunk-universalforwarder.namespace" . }}
+  labels:
+    {{- include "splunk-universalforwarder.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.storage.varSize }}
+  {{- if .Values.storage.storageClassName }}
+  storageClassName: {{ .Values.storage.storageClassName }}
+  {{- end }}
+{{- end }}

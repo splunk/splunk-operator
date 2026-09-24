@@ -1,0 +1,16 @@
+# PostgresCluster with backup schedule override
+# Inherits backup enabled from class, overrides schedule to run at 3:30am
+apiVersion: enterprise.splunk.com/v4
+kind: PostgresCluster
+metadata:
+  labels:
+    app.kubernetes.io/name: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: postgresql-cluster-backup
+spec:
+  class: postgresql-backup
+  clusterDeletionPolicy: Retain
+
+  # Override the backup schedule from the class (daily at 3:30am instead of 2am)
+  backup:
+    schedule: "30 3 * * *"

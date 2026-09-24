@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@ package secret
 
 import (
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -23,36 +22,29 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-const (
-	// PollInterval specifies the polling interval
-	PollInterval = 5 * time.Second
-
-	// ConsistentPollInterval is the interval to use to consistently check a state is stable
-	ConsistentPollInterval = 200 * time.Millisecond
-	ConsistentDuration     = 10 * ConsistentPollInterval
-)
-
 var (
 	testenvInstance *testenv.TestEnv
 	testSuiteName   = "secret-" + testenv.RandomDNSName(3)
 )
 
-// TestBasic is the main entry point
-func TestBasic(t *testing.T) {
-
+// TestSecret is the main entry point
+func TestSecret(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Running "+testSuiteName)
+	sc, _ := GinkgoConfiguration()
+	sc.Timeout = testenv.MediumLongSuiteTimeout
+
+	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
 var _ = BeforeSuite(func() {
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
-	Expect(err).ToNot(HaveOccurred())
+	Expect(err).To(Succeed(), "Failed to initialize test environment")
 })
 
 var _ = AfterSuite(func() {
 	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+		Expect(testenvInstance.Teardown()).To(Succeed(), "Failed to teardown test environment")
 	}
 })

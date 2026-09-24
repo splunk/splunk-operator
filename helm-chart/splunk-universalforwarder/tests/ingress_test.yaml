@@ -1,0 +1,81 @@
+suite: ingress
+templates:
+  - templates/ingress.yaml
+tests:
+  - it: should not render Ingress by default
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render Ingress when enabled
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      ingress.enabled: true
+    asserts:
+      - isKind:
+          of: Ingress
+
+  - it: should set ingressClassName when provided
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      ingress.enabled: true
+      ingress.className: nginx
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  - it: should not set ingressClassName when empty
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      ingress.enabled: true
+    asserts:
+      - notExists:
+          path: spec.ingressClassName
+
+  - it: should route to hec backend port
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      ingress.enabled: true
+      ingress.hosts:
+        - host: hec.example.com
+          paths:
+            - path: /services/collector
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.name
+          value: hec
+
+  - it: should render annotations when set
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      ingress.enabled: true
+      ingress.annotations:
+        nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/ssl-redirect"]
+          value: "true"
+
+  - it: should render TLS when set
+    set:
+      splunkConfig.forwardServer: "indexer.example.com:9997"
+      splunkConfig.password: "TestPassword1"
+      ingress.enabled: true
+      ingress.tls:
+        - secretName: hec-tls
+          hosts:
+            - hec.example.com
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: hec-tls

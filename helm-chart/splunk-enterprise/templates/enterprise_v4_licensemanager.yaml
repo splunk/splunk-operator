@@ -13,6 +13,7 @@ metadata:
 {{ toYaml . | indent 4 }}
   {{- end }}
 spec:
+  disableResourceDefaults: {{ .Values.licenseManager.disableResourceDefaults }}
 {{- with .Values.licenseManager.appRepo }}
   appRepo:
 {{ toYaml . | indent 4 }}
@@ -51,6 +52,10 @@ spec:
 {{- end }}
 {{- with .Values.image.imagePullSecrets }}
   imagePullSecrets:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.licenseManager.podAnnotations }}
+  podAnnotations:
 {{ toYaml . | indent 4 }}
 {{- end }}
 {{- with .Values.licenseManager.volumes }}

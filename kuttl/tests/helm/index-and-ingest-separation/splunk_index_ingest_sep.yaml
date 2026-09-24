@@ -14,9 +14,13 @@ queue:
     authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: index-ingest-separation-test-dlq
-    volumes:
-      - name: helm-bus-secret-ref-test
-        secretRef: index-ing-sep-secret
+    secretKeyRef:
+      awsAccessKey:
+        name: index-ing-sep-secret
+        key: s3_access_key
+      awsSecretKey:
+        name: index-ing-sep-secret
+        key: s3_secret_key
 
 objectStorage:
   enabled: true
