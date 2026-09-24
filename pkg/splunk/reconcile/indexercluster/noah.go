@@ -574,7 +574,7 @@ func (mgr *noahIndexerPodManager) PrepareScaleDown(ctx context.Context, ordinal 
 }
 
 // FinishScaleDown deletes the removed Pod's PVCs, unregisters its peer, and
-// waits for Noah's latest bucket map to exclude it.
+// waits for Noah to report it down or absent.
 func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, ordinal int32) (bool, error) {
 	lifecycle := mgr.cr.Status.Lifecycle
 	if !lifecycleIsScaleIn(lifecycle) {
@@ -632,20 +632,15 @@ func (mgr *noahIndexerPodManager) FinishScaleDown(ctx context.Context, ordinal i
 		}
 	}
 
-	bucketMap, err := noahClient.GetLatestBucketMap(ctx)
+	peers, err := noahClient.ListPeers(ctx)
 	if err != nil {
 		return false, newNoahIndexerOperationError(
-			fmt.Errorf("get latest Noah bucket map: %w", err),
+			fmt.Errorf("list Noah peers after unregistering %s: %w", target.PeerID, err),
 			enterpriseApi.PhaseScalingDown,
 		)
 	}
 
-	remainingPeerIDs, err := noahIndexerPeerIDs(mgr.statefulSet, lifecycle.Target.TargetReplicas)
-	if err != nil {
-		return false, err
-	}
-
-	if !indexerworkflow.NoahBucketMapConfirmsScaleDown(bucketMap, remainingPeerIDs, target.PeerID) {
+	if !indexerworkflow.NoahPeerInactive(peers, target.PeerID) {
 		return false, nil
 	}
 

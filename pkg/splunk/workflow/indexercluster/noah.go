@@ -186,19 +186,15 @@ func noahPeerRegistered(status noah.PeerStatus) bool {
 	}
 }
 
-// NoahBucketMapConfirmsScaleDown reports whether Noah's latest bucket map is
-// active, includes every remaining indexer peer, and excludes the removed peer.
-func NoahBucketMapConfirmsScaleDown(bucketMap *noah.BucketMap, remainingPeerIDs []string, removedPeerID string) bool {
-	if bucketMap == nil || bucketMap.ID <= 0 || bucketMap.Status != noah.BucketMapStatusActive || bucketMap.PeerIDs == nil || removedPeerID == "" {
+// NoahPeerInactive reports whether an exact peer is absent or every matching
+// record is down. Any other matching state fails closed.
+func NoahPeerInactive(peers []noah.Peer, peerID string) bool {
+	if peerID == "" {
 		return false
 	}
 
-	if slices.Contains(bucketMap.PeerIDs, removedPeerID) {
-		return false
-	}
-
-	for _, peerID := range remainingPeerIDs {
-		if peerID == "" || !slices.Contains(bucketMap.PeerIDs, peerID) {
+	for _, peer := range peers {
+		if peer.ID == peerID && peer.Status != noah.PeerStatusDown {
 			return false
 		}
 	}
