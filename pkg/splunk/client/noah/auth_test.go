@@ -16,47 +16,93 @@ package noah
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha512"
-	"encoding/base64"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/crypto/pbkdf2"
 )
 
-func TestHMACV2Authenticator(t *testing.T) {
-	pass4SymmKey := []byte("unit-test-noah-key")
+func TestHMACV3Authenticator(t *testing.T) {
+	pass4SymmKey := []byte(t.Name())
 	now := func() time.Time { return time.Unix(1_700_000_000, 0) }
-	authenticator, err := newHMACV2Authenticator(pass4SymmKey, now, bytes.NewReader(make([]byte, 32)))
+	random := append(make([]byte, hmacNonceBytes), []byte{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+	}...)
+	authenticator, err := newHMACV3Authenticator(pass4SymmKey, now, bytes.NewReader(random))
 	assert.NoError(t, err)
+	clear(pass4SymmKey)
+
 	request, err := http.NewRequest(http.MethodGet, "https://noah.test/tenant/noah/v1/peers", nil)
 	assert.NoError(t, err)
 	assert.NoError(t, authenticator.Authenticate(request, nil))
 
-	nonce := strings.Repeat("a", 32)
-	timestamp := "1700000000"
-	serialized := strings.Join([]string{
-		nonce,
-		timestamp,
-		http.MethodGet,
-		"/tenant/noah/v1/peers",
-		"",
-	}, "\x00")
-	derivedKey := pbkdf2.Key(pass4SymmKey, nil, 100_000, 64, sha512.New)
-	digest := hmac.New(sha512.New, []byte(base64.StdEncoding.EncodeToString(derivedKey)))
-	_, _ = digest.Write([]byte(serialized))
-
-	assert.Equal(t, nonce, request.Header.Get(hmacV2NonceHeader))
-	assert.Equal(t, timestamp, request.Header.Get(hmacV2TimestampHeader))
-	wantDigest := "v2," + base64.StdEncoding.EncodeToString(digest.Sum(nil))
-	assert.Equal(t, wantDigest, request.Header.Get(hmacV2DigestHeader))
+	assert.Equal(t, strings.Repeat("a", hmacNonceBytes), request.Header.Get(hmacNonceHeader))
+	assert.Equal(t, "1700000000", request.Header.Get(hmacTimestampHeader))
+	assert.Equal(t,
+		"v3,wNo+n3P9VpXBYbhhJvwjhIRBTQgUZCIbLe5Dp7Bj21Oc0nqfc8ZFGnwDjTLt19UKlm9Ubs0DG6lf2OA3mi3WOQ==",
+		request.Header.Get(hmacDigestHeader),
+	)
+	assert.Equal(t,
+		"v3,@salt=AAECAwQFBgcICQoLDA0ODw==@iterCount=1000",
+		request.Header.Get(hmacDigestKeyParamsHeader),
+	)
 }
 
-func TestNewHMACV2AuthenticatorRejectsEmptyKey(t *testing.T) {
-	_, err := NewHMACV2Authenticator(nil)
+func TestNewHMACV3AuthenticatorRejectsEmptyKey(t *testing.T) {
+	_, err := NewHMACV3Authenticator(nil)
 	assert.Error(t, err)
+}
+
+func TestNewHMACV3AuthenticatorValidatesDependencies(t *testing.T) {
+	tests := []struct {
+		name   string
+		now    func() time.Time
+		random io.Reader
+	}{
+		{name: "nil clock", random: bytes.NewReader(nil)},
+		{name: "nil random source", now: time.Now},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := newHMACV3Authenticator([]byte(t.Name()), test.now, test.random)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestHMACV3AuthenticatorReportsRandomSourceFailures(t *testing.T) {
+	tests := []struct {
+		name   string
+		random io.Reader
+		want   string
+	}{
+		{name: "nonce", random: iotest.ErrReader(assert.AnError), want: "generate nonce"},
+		{
+			name:   "salt",
+			random: io.MultiReader(bytes.NewReader(make([]byte, hmacNonceBytes)), iotest.ErrReader(assert.AnError)),
+			want:   "generate digest salt",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			authenticator, err := newHMACV3Authenticator([]byte(t.Name()), time.Now, test.random)
+			assert.NoError(t, err)
+			request, err := http.NewRequest(http.MethodGet, "https://noah.test/tenant/noah/v1/peers", nil)
+			assert.NoError(t, err)
+
+			assert.ErrorContains(t, authenticator.Authenticate(request, nil), test.want)
+		})
+	}
+}
+
+func TestHMACV3AuthenticatorRejectsNilRequest(t *testing.T) {
+	authenticator, err := NewHMACV3Authenticator([]byte(t.Name()))
+	assert.NoError(t, err)
+	assert.Error(t, authenticator.Authenticate(nil, nil))
 }

@@ -2141,7 +2141,11 @@ func TestNoahIndexerScaleOutUsesReferencedAuthentication(t *testing.T) {
 	fixture.advanceToPendingAction(t)
 	assert.NotEmpty(t, fixture.requestHeaders.Get("x-splunk-lm-nonce"))
 	assert.NotEmpty(t, fixture.requestHeaders.Get("x-splunk-lm-timestamp"))
-	assert.True(t, strings.HasPrefix(fixture.requestHeaders.Get("x-splunk-digest"), "v2,"))
+	assert.True(t, strings.HasPrefix(fixture.requestHeaders.Get("x-splunk-digest"), "v3,"))
+	assert.Regexp(t,
+		`^v3,@salt=[A-Za-z0-9+/]{22}==@iterCount=1000$`,
+		fixture.requestHeaders.Get("x-splunk-digest-key-params"),
+	)
 }
 
 func TestNoahIndexerPodManagerPersistsScaleOutActionBeforeApplyingTarget(t *testing.T) {

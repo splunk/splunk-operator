@@ -126,7 +126,7 @@ func (runtime *NoahRuntime) Client() (*noahclient.Client, error) {
 		return runtime.client, nil
 	}
 
-	authenticator, err := noahclient.NewHMACV2Authenticator(runtime.credential)
+	authenticator, err := noahclient.NewHMACV3Authenticator(runtime.credential)
 	if err != nil {
 		return nil, noahDependencyError(NoahDependencyInvalid, fmt.Errorf("configure Noah authentication: %w", err))
 	}

@@ -23,11 +23,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
 
 const (
+	apiVersion              = "v1"
 	defaultRequestTimeout   = 5 * time.Second
 	defaultMaxResponseBytes = 1 << 20
 )
@@ -58,6 +60,7 @@ const (
 	ErrorKindAuthentication   ErrorKind = "authentication"
 	ErrorKindCanceled         ErrorKind = "canceled"
 	ErrorKindConflict         ErrorKind = "conflict"
+	ErrorKindFailedDependency ErrorKind = "failed-dependency"
 	ErrorKindForbidden        ErrorKind = "forbidden"
 	ErrorKindInvalidRequest   ErrorKind = "invalid-request"
 	ErrorKindInvalidResponse  ErrorKind = "invalid-response"
@@ -213,6 +216,10 @@ func (client *Client) do(ctx context.Context, operation, method, requestURL stri
 	return nil
 }
 
+func (client *Client) url(resource string) string {
+	return fmt.Sprintf("%s/%s/noah/%s/%s", client.endpoint, url.PathEscape(client.tenant), apiVersion, resource)
+}
+
 func classifyRequestError(operation string, ctx context.Context, err error, retrySafe bool) *Error {
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return &Error{Operation: operation, Kind: ErrorKindCanceled, Err: err}
@@ -239,6 +246,8 @@ func classifyStatus(statusCode int) ErrorKind {
 		return ErrorKindNotFound
 	case http.StatusConflict:
 		return ErrorKindConflict
+	case http.StatusFailedDependency:
+		return ErrorKindFailedDependency
 	case http.StatusTooManyRequests:
 		return ErrorKindRateLimited
 	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
@@ -280,7 +289,7 @@ func invalidResponse(operation string, err error) *Error {
 
 func retryableKind(kind ErrorKind) bool {
 	switch kind {
-	case ErrorKindRateLimited, ErrorKindTimeout, ErrorKindTransport, ErrorKindUnavailable:
+	case ErrorKindFailedDependency, ErrorKindRateLimited, ErrorKindTimeout, ErrorKindTransport, ErrorKindUnavailable:
 		return true
 	default:
 		return false
