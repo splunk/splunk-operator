@@ -68,10 +68,6 @@ const (
 	PeerStatusDecommissioned    PeerStatus = "decommissioned"
 )
 
-func (client *Client) peersURL() string {
-	return fmt.Sprintf("%s/%s/noah/v1/peers", client.endpoint, url.PathEscape(client.tenant))
-}
-
 // ListPeers returns all Noah peers visible in the configured tenant.
 func (client *Client) ListPeers(ctx context.Context) ([]Peer, error) {
 	var peers []Peer
@@ -112,4 +108,8 @@ func (client *Client) UnregisterPeer(ctx context.Context, peerID string) error {
 	}
 	requestURL := fmt.Sprintf("%s/%s", client.peersURL(), url.PathEscape(peerID))
 	return client.do(ctx, operationPeersUnregister, http.MethodDelete, requestURL, http.StatusAccepted, true, nil)
+}
+
+func (client *Client) peersURL() string {
+	return client.url("peers")
 }

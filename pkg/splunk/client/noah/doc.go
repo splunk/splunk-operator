@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package noah provides typed access to the Noah membership API.
+// Package noah provides typed access to the Noah v1 membership API.
 //
 // The package owns transport, authentication hooks, URL construction, response
-// validation, and error classification. It does not read Kubernetes resources
-// or decide workload readiness and lifecycle sequencing.
+// validation, and error classification. The API version is fixed rather than
+// negotiated. The package does not read Kubernetes resources or decide workload
+// readiness and lifecycle sequencing.
 package noah
