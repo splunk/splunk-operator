@@ -185,36 +185,39 @@ require_equal "$map_peer_ids" "$up_peer_ids" 'latest bucket map and up Noah peer
 printf 'Latest bucket map: %s (%s peer(s)).\n' "$bucket_map_id" "$map_peer_count"
 
 peer_bucket_attempt=0
+peer_bucket_total=0
+failed_peer=
 up_peer_id_list=$(printf '%s\n' "$peers" | jq -r '.[] | select(.status == "up") | .id')
 while [ "$peer_bucket_attempt" -lt 36 ]; do
-  missing_peer=
+  peer_bucket_total=0
+  failed_peer=
   for peer_id in $up_peer_id_list; do
-    if ! peer_buckets=$(noah_request GET "v1/peers/${peer_id}/${bucket_map_id}/buckets?limit=1" 2>/dev/null); then
-      missing_peer=$peer_id
+    if ! peer_buckets=$(noah_request GET "v1/peers/${peer_id}/${bucket_map_id}/buckets?limit=5000" 2>/dev/null); then
+      failed_peer=$peer_id
       break
     fi
-    if ! printf '%s\n' "$peer_buckets" | jq -e 'type == "object" and (.buckets | type == "array")' >/dev/null; then
+    if ! printf '%s\n' "$peer_buckets" | jq -e 'type == "object" and ((.buckets // []) | type == "array")' >/dev/null; then
       printf 'FAIL: get peer buckets response for %s is invalid.\n' "$peer_id" >&2
       exit 1
     fi
-    peer_bucket_count=$(printf '%s\n' "$peer_buckets" | jq '.buckets | length')
-    if [ "$peer_bucket_count" -lt 1 ]; then
-      missing_peer=$peer_id
-      break
-    fi
+    peer_bucket_count=$(printf '%s\n' "$peer_buckets" | jq '(.buckets // []) | length')
+    peer_bucket_total=$((peer_bucket_total + peer_bucket_count))
   done
-  if [ -z "$missing_peer" ]; then
+  if [ -z "$failed_peer" ] && [ "$peer_bucket_total" -ge "$replicas" ]; then
     break
   fi
   peer_bucket_attempt=$((peer_bucket_attempt + 1))
   sleep 5
 done
-if [ -n "$missing_peer" ]; then
-  printf 'FAIL: no buckets reported for Noah peer %s in bucket map %s.\n' \
-    "$missing_peer" "$bucket_map_id" >&2
+if [ -n "$failed_peer" ]; then
+  printf 'FAIL: unable to retrieve buckets for Noah peer %s in bucket map %s.\n' \
+    "$failed_peer" "$bucket_map_id" >&2
   exit 1
 fi
-printf 'Peer bucket checks passed for %s peer(s).\n' "$up_peers"
+require_at_least "$peer_bucket_total" "$replicas" \
+  'bucket assignments in the latest Noah bucket map'
+printf 'Latest bucket map contains %s bucket assignment(s) across %s peer(s).\n' \
+  "$peer_bucket_total" "$up_peers"
 
 bucket_map_before_bootstrap=$(noah_request GET v1/bucketMaps/latest)
 require_bucket_map "$bucket_map_before_bootstrap" 'latest bucket map before bootstrap response'
