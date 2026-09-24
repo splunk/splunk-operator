@@ -28,7 +28,8 @@
   "prConcurrentLimit": 2,
   "prHourlyLimit": 2,
   "ignorePaths": [
-    ".github/**"
+    ".github/**",
+    "helm/charts/noah/**"
   ],
   "ignoreDeps": [
     "docker.io/splunk/universalforwarder",
