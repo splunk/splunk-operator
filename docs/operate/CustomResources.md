@@ -165,9 +165,11 @@ metadata:
 spec:
   etcVolumeStorageConfig:
     storageClassName: gp2
+    volumeAttributesClassName: encrypted
     storageCapacity: 15Gi
   varVolumeStorageConfig:
     storageClassName: customStorageClass
+    volumeAttributesClassName: high-throughput
     storageCapacity: 25Gi
   volumes:
     - name: licenses

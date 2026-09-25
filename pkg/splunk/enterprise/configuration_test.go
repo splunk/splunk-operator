@@ -1108,12 +1108,14 @@ func TestAddStorageVolumes(t *testing.T) {
 	// Define PVCs for etc & var with storage capacity and storage class name defined
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
-			StorageCapacity:  "25Gi",
-			StorageClassName: "gp2",
+			StorageCapacity:           "25Gi",
+			StorageClassName:          "gp2",
+			VolumeAttributesClassName: "encrypted",
 		},
 		VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
-			StorageCapacity:  "35Gi",
-			StorageClassName: "gp3",
+			StorageCapacity:           "35Gi",
+			StorageClassName:          "gp3",
+			VolumeAttributesClassName: "high-throughput",
 		},
 	}
 	test(loadFixture(t, "add_storage_volumes_custom_storage.json"))
@@ -1198,12 +1200,14 @@ func TestAddStorageVolumes(t *testing.T) {
 
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
-			StorageCapacity:  "35Gi",
-			StorageClassName: "gp2",
+			StorageCapacity:           "35Gi",
+			StorageClassName:          "gp2",
+			VolumeAttributesClassName: "encrypted",
 		},
 		VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
-			StorageCapacity:  "25Gi",
-			StorageClassName: "gp2",
+			StorageCapacity:           "25Gi",
+			StorageClassName:          "gp2",
+			VolumeAttributesClassName: "high-throughput",
 		},
 	}
 
@@ -1235,6 +1239,84 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 	test(loadFixture(t, "add_storage_volumes_admin_managed_pv.json"))
+}
+
+func TestGetSplunkVolumeClaimsVolumeAttributesClassName(t *testing.T) {
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+		},
+	}
+	labels := map[string]string{"app.kubernetes.io/name": "standalone"}
+
+	tests := []struct {
+		name           string
+		spec           *enterpriseApi.CommonSplunkSpec
+		volumeType     string
+		adminManagedPV bool
+		wantClassName  string
+	}{
+		{
+			name:       "etc volume",
+			volumeType: splcommon.EtcVolumeStorage,
+			spec: &enterpriseApi.CommonSplunkSpec{
+				EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
+					VolumeAttributesClassName: "encrypted",
+				},
+			},
+			wantClassName: "encrypted",
+		},
+		{
+			name:       "var volume",
+			volumeType: splcommon.VarVolumeStorage,
+			spec: &enterpriseApi.CommonSplunkSpec{
+				VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
+					VolumeAttributesClassName: "high-throughput",
+				},
+			},
+			wantClassName: "high-throughput",
+		},
+		{
+			name:       "omitted for dynamic PVC",
+			volumeType: splcommon.EtcVolumeStorage,
+			spec:       &enterpriseApi.CommonSplunkSpec{},
+		},
+		{
+			name:           "admin-managed PVC",
+			volumeType:     splcommon.VarVolumeStorage,
+			adminManagedPV: true,
+			spec: &enterpriseApi.CommonSplunkSpec{
+				VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
+					VolumeAttributesClassName: "encrypted",
+				},
+			},
+			wantClassName: "encrypted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			volumeClaim, err := getSplunkVolumeClaims(&cr, tt.spec, labels, tt.volumeType, tt.adminManagedPV)
+			if err != nil {
+				t.Fatalf("getSplunkVolumeClaims() returned unexpected error: %v", err)
+			}
+
+			if tt.wantClassName == "" {
+				if volumeClaim.Spec.VolumeAttributesClassName != nil {
+					t.Fatalf("VolumeAttributesClassName = %q, want nil", *volumeClaim.Spec.VolumeAttributesClassName)
+				}
+				return
+			}
+
+			if volumeClaim.Spec.VolumeAttributesClassName == nil {
+				t.Fatalf("VolumeAttributesClassName = nil, want %q", tt.wantClassName)
+			}
+			if got := *volumeClaim.Spec.VolumeAttributesClassName; got != tt.wantClassName {
+				t.Errorf("VolumeAttributesClassName = %q, want %q", got, tt.wantClassName)
+			}
+		})
+	}
 }
 
 func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {

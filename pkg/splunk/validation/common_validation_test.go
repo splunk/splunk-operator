@@ -1239,6 +1239,14 @@ func TestValidateStorageConfig(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
+			name: "valid volume attributes class name",
+			config: &enterpriseApi.StorageClassSpec{
+				StorageClassName:          "fast",
+				VolumeAttributesClassName: "encrypted",
+			},
+			wantErrCount: 0,
+		},
+		{
 			name: "invalid storage capacity - missing Gi suffix",
 			config: &enterpriseApi.StorageClassSpec{
 				StorageCapacity:  "10",
@@ -1292,6 +1300,15 @@ func TestValidateStorageConfig(t *testing.T) {
 			},
 			wantErrCount: 1,
 			wantErrField: "spec.storageClassName",
+		},
+		{
+			name: "ephemeral storage - invalid with volumeAttributesClassName",
+			config: &enterpriseApi.StorageClassSpec{
+				EphemeralStorage:          true,
+				VolumeAttributesClassName: "encrypted",
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.volumeAttributesClassName",
 		},
 		{
 			name: "ephemeral storage - invalid with storageCapacity",

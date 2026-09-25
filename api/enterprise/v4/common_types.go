@@ -359,10 +359,17 @@ type CommonSplunkSpec struct {
 // StorageClassSpec defines storage class configuration
 // +kubebuilder:validation:XValidation:rule="!(has(self.storageClassName) && size(self.storageClassName) > 0 && self.ephemeralStorage == true)",message="storageClassName and ephemeralStorage are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="!(has(self.storageCapacity) && size(self.storageCapacity) > 0 && self.ephemeralStorage == true)",message="storageCapacity and ephemeralStorage are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.volumeAttributesClassName) && size(self.volumeAttributesClassName) > 0 && self.ephemeralStorage == true)",message="volumeAttributesClassName and ephemeralStorage are mutually exclusive"
 type StorageClassSpec struct {
 	// Name of StorageClass to use for persistent volume claims
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
+
+	// Name of VolumeAttributesClass to use for persistent volume claims.
+	// The CSI driver applies the attributes defined by the referenced
+	// VolumeAttributesClass to the provisioned volume.
+	// +optional
+	VolumeAttributesClassName string `json:"volumeAttributesClassName,omitempty"`
 
 	// Storage capacity to request persistent volume claims (default="10Gi" for etc and "100Gi" for var)
 	// +optional
