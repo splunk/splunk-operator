@@ -13,42 +13,116 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package clustermanager
 
 import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"log/slog"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	rclient "sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
-	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	// TODO: Remove this temporary dependency once all CRs have migrated from enterprise.
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/reconcile/upgrade"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
-	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// ApplyClusterManager reconciles the state of a Splunk Enterprise cluster manager.
+// apply owns the request-level ClusterManager reconciliation boundary.
+func apply(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
+	logger := logging.FromContext(ctx).With("controller", "ClusterManager", "name", namespacedName.Name, "namespace", namespacedName.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
+	ctx = logging.WithLogger(ctx, logger)
+
+	instance := &enterpriseApi.ClusterManager{}
+	if err := client.Get(ctx, namespacedName, instance); err != nil {
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, fmt.Errorf("could not load cluster manager data: %w", err)
+	}
+	if instance.GetAnnotations()[enterpriseApi.ClusterManagerPausedAnnotation] == "true" {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{Phase: instance.Status.Phase, IsPaused: true, Generation: instance.GetGeneration()})
+		instance.Status.Conditions = result.Conditions
+		if err := client.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update paused status", "error", err)
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, nil
+	} else if condition := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); condition != nil && condition.Status == metav1.ConditionTrue {
+		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{Phase: instance.Status.Phase, IsPaused: false, Generation: instance.GetGeneration()})
+		instance.Status.Conditions = result.Conditions
+		if err := client.Status().Update(ctx, instance); err != nil {
+			logger.ErrorContext(ctx, "failed to update unpaused status", "error", err)
+			return reconcile.Result{}, err
+		}
+	}
+	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
+	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, recorder)
+	result, err := ApplyClusterManager(ctx, client, instance, nil)
+	if result.Requeue && result.RequeueAfter != 0 {
+		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
+	}
+	fresh := &enterpriseApi.ClusterManager{}
+	if fetchErr := client.Get(ctx, namespacedName, fresh); fetchErr != nil {
+		if apierrors.IsNotFound(fetchErr) {
+			return result, nil
+		}
+		logger.WarnContext(ctx, "failed to refetch CR for stalled condition update", "error", fetchErr)
+		return result, fetchErr
+	}
+	oldConditions := append([]metav1.Condition(nil), fresh.Status.Conditions...)
+	if message, ok := splcommon.TerminalMessage(err); ok {
+		reason, _ := splcommon.TerminalReason(err)
+		fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, message, fresh.GetGeneration())
+	} else {
+		fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
+	}
+	eventPublisher, publisherErr := k8sops.NewK8EventPublisherWithRecorder(recorder, fresh)
+	if publisherErr != nil {
+		logger.WarnContext(ctx, "failed to create event publisher", "error", publisherErr)
+		return result, publisherErr
+	}
+	k8sops.EmitStalledTransitionEvents(ctx, eventPublisher, fresh.GetName(), oldConditions, fresh.Status.Conditions)
+	if updateErr := client.Status().Update(ctx, fresh); updateErr != nil {
+		logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
+		return result, updateErr
+	}
+	if _, terminal := splcommon.TerminalMessage(err); terminal {
+		return reconcile.Result{}, err
+	}
+	return result, err
+}
+
+// Apply is the request-level entry point used by the controller.
+var Apply = apply
+
+// ApplyClusterManager reconciles the ClusterManager resource after the request boundary has loaded it.
+var ApplyClusterManager = applyClusterManager
+
+// Apply reconciles the state of a Splunk Enterprise cluster manager.
 // podExecClient parameter is optional - if nil, a real PodExecClient will be created.
 // This allows tests to inject a mock client.
-func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
+func applyClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	var err error
 	result := reconcile.Result{
@@ -57,7 +131,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 	logger := logging.FromContext(ctx).With("func", "ApplyClusterManager")
 
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "ClusterManager"
 
@@ -91,7 +165,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-%s", cr.GetName(), "cluster-manager")
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
-		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkClusterManager, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
+		k8sops.AreRemoteVolumeKeysChanged(ctx, client, cr, splcommon.SplunkClusterManager, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
 		if err != nil {
 			eventPublisher.Warning(ctx, splcommon.EventReasonRemoteVolumeKeyCheckFailed, fmt.Sprintf("Remote volume key change check failed for %s — check operator logs", cr.GetName()))
@@ -99,7 +173,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 
-		_, configMapDataChanged, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
+		_, configMapDataChanged, err := k8sops.ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply SmartStore ConfigMap")
 			return result, err
@@ -141,7 +215,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	namespaceScopedSecret, err := k8sops.ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkIndexer)
 	if err != nil {
 		eventPublisher.Warning(ctx, splcommon.EventReasonApplySplunkConfigFailed, fmt.Sprintf("Failed to apply general config for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to apply configuration")
@@ -150,13 +224,13 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 	// Smart Store secrets get created manually and should not be managed by the Operator
 	if &cr.Spec.SmartStore != nil {
-		_ = DeleteOwnerReferencesForS3SecretObjects(ctx, client, cr, &cr.Spec.SmartStore)
+		_ = k8sops.DeleteOwnerReferencesForS3SecretObjects(ctx, client, cr, &cr.Spec.SmartStore)
 	}
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
+			extraEnv, _ := getCMMultisiteEnvVars(ctx, cr, namespaceScopedSecret)
 			_, err = k8sops.ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Monitoring Console env ConfigMap during deletion")
@@ -168,7 +242,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = appframework.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, appframework.SplunkClusterManager)
+			err = appframework.UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, splcommon.SplunkClusterManager)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to clean up app framework ConfigMap during deletion")
 				return result, err
@@ -176,13 +250,13 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		}
 
 		// Check if ClusterManager has any remaining references to other CRs, if so don't delete
-		err = checkCmRemainingReferences(ctx, client, cr)
+		err = checkClusterManagerRemainingReferences(ctx, client, cr)
 		if err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Cluster Manager still has remaining CR references")
 			return result, err
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkClusterManager)
+		_ = k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkClusterManager)
 
 		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 
@@ -198,7 +272,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// create or update a regular service for the cluster manager
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterManager, false))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkClusterManager, false))
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update service")
 		return result, err
@@ -212,7 +286,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
+	extraEnv, _ := getCMMultisiteEnvVars(ctx, cr, namespaceScopedSecret)
 	err = k8sops.ValidateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to validate Monitoring Console reference")
@@ -255,7 +329,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkMonitoringConsole, cr.GetNamespace())}
 		err = k8sops.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
@@ -268,7 +342,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
-			err := telapp.AddTelApp(ctx, podExecClient, numberOfClusterMasterReplicas, cr)
+			err := telapp.AddTelApp(ctx, podExecClient, 1, cr)
 			if err != nil {
 				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to install Telemetry app")
 				return result, err
@@ -280,7 +354,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
-		err = PerformCmBundlePush(ctx, client, cr, podExecClient)
+		err = performCmBundlePush(ctx, client, cr, podExecClient)
 		if err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to push Manager Apps bundle")
 			return result, err
@@ -315,7 +389,7 @@ type clusterManagerPodManager struct {
 
 // getClusterManagerClient for clusterManagerPodManager returns a SplunkClient for cluster manager
 func (mgr *clusterManagerPodManager) getClusterManagerClient(cr *enterpriseApi.ClusterManager) *splclient.SplunkClient {
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), splcommon.GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false))
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), splcommon.GetSplunkServiceName(splcommon.SplunkClusterManager, cr.GetName(), false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
@@ -323,7 +397,7 @@ func (mgr *clusterManagerPodManager) getClusterManagerClient(cr *enterpriseApi.C
 func validateClusterManagerSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
-		err := ValidateSplunkSmartstoreSpec(ctx, &cr.Spec.SmartStore)
+		err := reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &cr.Spec.SmartStore)
 		if err != nil {
 			return err
 		}
@@ -336,25 +410,26 @@ func validateClusterManagerSpec(ctx context.Context, c splcommon.ControllerClien
 		}
 	}
 
-	return ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+	return reconcileutil.ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
-// getClusterManagerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
+// getClusterManagerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise cluster manager.
 func getClusterManagerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (*appsv1.StatefulSet, error) {
 	var extraEnvVar []corev1.EnvVar
 
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(SplunkClusterManager, cr.GetName(), cr.GetNamespace(), 1)))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkClusterManager, cr.GetName(), cr.GetNamespace(), 1)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterManager, 1, extraEnvVar, certMounts)
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkClusterManager, 1, extraEnvVar)
 	if err != nil {
 		return ss, err
 	}
-	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkClusterManager)
+	certs.InjectCertMounts(&ss.Spec.Template, certMounts)
+	smartStoreConfigMap := k8sops.GetSmartstoreConfigMap(ctx, client, cr, splcommon.SplunkClusterManager)
 
 	if smartStoreConfigMap != nil {
-		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
+		resources.SetupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, splcommon.CommandForClusterManagerSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
 	// Setup App framework staging volume for apps
 	resources.SetupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
@@ -362,288 +437,139 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 	return ss, err
 }
 
-// CheckIfsmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not
-func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) error {
-	logger := logging.FromContext(ctx).With("func", "CheckIfsmartstoreConfigMapUpdatedToPod", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	eventPublisher := GetEventPublisher(ctx, cr)
-
-	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
-	streamOptions := splutil.NewStreamOptionsObject(command)
-
-	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-	if err != nil || stdErr != "" {
-		eventPublisher.Warning(ctx, splcommon.EventReasonPodExecFailed, fmt.Sprintf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err))
-		return fmt.Errorf("failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
-	}
-
-	smartStoreConfigMap := getSmartstoreConfigMap(ctx, c, cr, SplunkClusterManager)
-	if smartStoreConfigMap != nil {
-		tokenFromConfigMap := smartStoreConfigMap.Data[configToken]
-		if tokenFromConfigMap == stdOut {
-			logger.InfoContext(ctx, "token matched", "podToken", stdOut, "configMapToken", tokenFromConfigMap)
-			return nil
-		}
-		eventPublisher.Warning(ctx, splcommon.EventReasonSmartStoreConfigPending, fmt.Sprintf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap))
-		return fmt.Errorf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap)
-	}
-
-	// Somehow the configmap was deleted, ideally this should not happen
-	eventPublisher.Warning(ctx, splcommon.EventReasonSmartStoreConfigPending, "smartstore ConfigMap is missing")
-	return fmt.Errorf("smartstore ConfigMap is missing")
-}
-
-// PerformCmBundlePush performs cluster manager bundle push operation
-// Defined as a variable to allow mocking in unit tests
-var PerformCmBundlePush = func(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) error {
-	if !cr.Status.BundlePushTracker.NeedToPushManagerApps {
-		return nil
-	}
-
-	logger := logging.FromContext(ctx).With("func", "PerformCmBundlePush", "name", cr.GetName(), "namespace", cr.GetNamespace())
-	// Reconciler can be called for multiple reasons. If we are waiting on configMap update to happen,
-	// do not increment the Retry Count unless the last check was 5 seconds ago.
-	// This helps, to wait for the required time
-
-	currentEpoch := time.Now().Unix()
-	if cr.Status.BundlePushTracker.LastCheckInterval+5 > currentEpoch {
-		return fmt.Errorf("will re-attempt to push the bundle after the 5 seconds period passed from last check. LastCheckInterval=%d, current epoch=%d", cr.Status.BundlePushTracker.LastCheckInterval, currentEpoch)
-	}
-
-	logger.InfoContext(ctx, "attempting to push the bundle")
-	cr.Status.BundlePushTracker.LastCheckInterval = currentEpoch
-
-	// The amount of time it takes for the configMap update to Pod depends on
-	// how often the Kubelet on the K8 node refreshes its cache with API server.
-	// From our tests, the Pod can take as high as 90 seconds. So keep checking
-	// for the configMap update to the Pod before proceeding for the manager apps
-	// bundle push.
-
-	cmPodName := fmt.Sprintf("splunk-%s-%s-0", cr.GetName(), "cluster-manager")
-
-	// Create podExecClient if not provided
-	if podExecClient == nil {
-		podExecClient = splutil.GetPodExecClient(c, cr, cmPodName)
-	}
-	// The client may be reused after another operation changed or did not set its target pod.
-	podExecClient.SetTargetPodName(ctx, cmPodName)
-
-	err := CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, cr, podExecClient)
-	if err != nil {
-		return err
-	}
-
-	// Reset symbolic links for pod
-	err = resetSymbolicLinks(ctx, c, cr, 1, podExecClient)
-	if err != nil {
-		return err
-	}
-
-	err = PushManagerAppsBundle(ctx, c, cr)
-	if err == nil {
-		logger.InfoContext(ctx, "bundle push success")
-		cr.Status.BundlePushTracker.NeedToPushManagerApps = false
-	}
-
-	return err
-}
-
-// PushManagerAppsBundle issues the REST command to for cluster manager bundle push
-func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
-	logger := logging.FromContext(ctx).With("func", "PushManagerApps", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, cr)
-
-	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), defaultSecretObjName)
-	if err != nil {
-		eventPublisher.Warning(ctx, splcommon.EventReasonBundlePushFailed, fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
-		return fmt.Errorf("could not access default secret object to fetch admin password. Reason %v", err)
-	}
-
-	//Get the admin password from the secret object
-	adminPwd, foundSecret := defaultSecret.Data["password"]
-	if !foundSecret {
-		return fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
-	}
-
-	logger.InfoContext(ctx, "issuing REST call to push manager aps bundle")
-
-	managerIdxcName := cr.GetName()
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), splcommon.GetSplunkServiceName(SplunkClusterManager, managerIdxcName, false))
-
-	// Get a Splunk client to execute the REST call
-	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
-
-	return splunkClient.BundlePush(true)
-}
-
-// helper function to get the list of ClusterManager types in the current namespace
-func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (int, error) {
-	logger := logging.FromContext(ctx).With("func", "getClusterManagerList", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	objectList := enterpriseApi.ClusterManagerList{}
-
-	err := c.List(context.TODO(), &objectList, listOpts...)
-	numOfObjects := len(objectList.Items)
-
-	if err != nil {
-		logger.ErrorContext(ctx, "ClusterManager types not found in namespace", "error", err, "namespace", cr.GetNamespace())
-		return numOfObjects, err
-	}
-
-	return numOfObjects, nil
-}
-
-// changeMonitoringConsoleAnnotations updates the MonitoringConsole image annotation
-// when the referenced ClusterManager image changes.
-func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
-	logger := logging.FromContext(ctx).With("func", "changeMonitoringConsoleAnnotations", "name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher := GetEventPublisher(ctx, cr)
-
-	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
-	if len(cr.Spec.MonitoringConsoleRef.Name) > 0 {
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.MonitoringConsoleRef.Name}
-		err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}
-	} else {
-		// List out all the MonitoringConsole instances in the namespace
-		opts := []rclient.ListOption{
-			rclient.InNamespace(cr.GetNamespace()),
-		}
-		objectList, err := k8sops.GetMonitoringConsoleList(ctx, client, cr, opts)
-		if err != nil {
-			if err.Error() == "NotFound" {
-				return nil
-			}
-			return err
-		}
-		if len(objectList.Items) == 0 {
-			return nil
-		}
-
-		// check if instance has the required ClusterManagerRef
-		for _, mc := range objectList.Items {
-			if mc.Spec.ClusterManagerRef.Name == cr.GetName() {
-				monitoringConsoleInstance = &mc
-				break
-			}
-		}
-
-		if len(monitoringConsoleInstance.GetName()) == 0 {
-			return nil
-		}
-	}
-
-	image, err := getCurrentImage(ctx, client, cr, SplunkClusterManager)
-	if err != nil {
-		eventPublisher.Warning(ctx, splcommon.EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
-		logger.ErrorContext(ctx, "get ClusterManager Image failed with", "error", err)
-		return err
-	}
-	if err = changeAnnotations(ctx, client, image, monitoringConsoleInstance); err != nil {
-		eventPublisher.Warning(ctx, splcommon.EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not update annotations. Reason %v", err))
-		logger.ErrorContext(ctx, "MonitoringConsole types update after changing annotations failed with", "error", err)
-		return err
-	}
-	return nil
-}
-
-// GetCMMultisiteEnvVarsCall checks if cluster is multisite and returns appropriate environment variables
+// getCMMultisiteEnvVars checks if cluster is multisite and returns appropriate environment variables
 // If it fails to connect to the cluster manager (e.g., pod not ready yet), it returns basic env vars as fallback
-// This function is used also in mock tests
-var GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+// The indirection lets unit tests replace the remote probe.
+var getCMMultisiteEnvVars = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 	logger := logging.FromContext(ctx).With("func", "GetCMMultisiteEnvVars", "name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+	extraEnv := resources.GetClusterManagerExtraEnv(cr)
 
 	mgr := clusterManagerPodManager{log: logger, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	cm := mgr.getClusterManagerClient(cr)
-	clusterInfo, err := cm.GetClusterInfo(false)
+	clusterInfo, err := cm.GetClusterInfo(cr.Spec.CommonSplunkSpec.Mock)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to get cluster info from ClusterManager pod, using basic environment variables", "error", err)
 		return extraEnv, err
 	}
 
-	if clusterInfo.MultiSite == "true" {
+	if clusterInfo != nil && clusterInfo.MultiSite == "true" {
 		extraEnv = append(extraEnv,
 			corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"},
-			corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: splcommon.GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false)})
+			corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: splcommon.GetSplunkServiceName(splcommon.SplunkClusterManager, cr.GetName(), false)})
 	}
 
 	return extraEnv, nil
 }
 
-// changeClusterManagerAnnotations updates the splunk/image-tag field of the ClusterManager annotations to trigger the reconcile loop
-// on update, and returns error if something is wrong
-func changeClusterManagerAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
-	logger := logging.FromContext(ctx).With("func", "changeClusterManagerAnnotations", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, cr)
-
-	clusterManagerInstance := &enterpriseApi.ClusterManager{}
-	if len(cr.Spec.ClusterManagerRef.Name) > 0 {
-		// if the LicenseManager holds the ClusterManagerRef
-		namespacedName := types.NamespacedName{
-			Namespace: cr.GetNamespace(),
-			Name:      cr.Spec.ClusterManagerRef.Name,
+// checkClusterManagerRemainingReferences prevents deletion while another CR still points at this manager.
+func checkClusterManagerRemainingReferences(ctx context.Context, c splcommon.ControllerClient, cmCr splcommon.MetaObject) error {
+	scopedLog := logging.FromContext(ctx).With("func", "CheckClusterManagerRemainingReferences", "cmCr", cmCr.GetName(), "namespace", cmCr.GetNamespace())
+	listOpts := []rclient.ListOption{rclient.InNamespace(cmCr.GetNamespace())}
+	idxcList, err := k8sops.GetIndexerClusterList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if !strings.Contains(err.Error(), "NotFound") && !apierrors.IsNotFound(err) {
+			scopedLog.ErrorContext(ctx, "couldn't retrieve IndexerCluster list", "error", err)
+			return err
 		}
-		err := c.Get(ctx, namespacedName, clusterManagerInstance)
+	}
+	for _, item := range idxcList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.ErrorContext(ctx, fmt.Sprintf(`IndexerCluster %s still has a reference for ClusterManager %s,
+				please backup if needed and delete the IndexerCluster`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to an indexerCluster")
+		}
+	}
+	shcList, err := k8sops.GetSearchHeadClusterList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if !strings.Contains(err.Error(), "NotFound") && !apierrors.IsNotFound(err) {
+			scopedLog.ErrorContext(ctx, "couldn't retrieve SearchHeadCluster list", "error", err)
+			return err
+		}
+	}
+	for _, item := range shcList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.ErrorContext(ctx, fmt.Sprintf(`SearchHeadCluster %s still has a reference for ClusterManager %s,
+				please backup if needed and delete the SearchHeadCluster`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to a searchHeadCluster")
+		}
+	}
+	lmList, err := k8sops.GetLicenseManagerList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if !strings.Contains(err.Error(), "NotFound") && !apierrors.IsNotFound(err) {
+			scopedLog.ErrorContext(ctx, "couldn't retrieve LicenseManager list", "error", err)
+			return err
+		}
+	}
+	for _, item := range lmList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.ErrorContext(ctx, fmt.Sprintf(`LicenseManager %s still has a reference for ClusterManager %s,
+				please backup if needed and delete the LicenseManager`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to a LicenseManager")
+		}
+	}
+	mcList, err := k8sops.GetMonitoringConsoleList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if !strings.Contains(err.Error(), "NotFound") && !apierrors.IsNotFound(err) {
+			scopedLog.ErrorContext(ctx, "couldn't retrieve MonitoringConsole list", "error", err)
+			return err
+		}
+	}
+	for _, item := range mcList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.ErrorContext(ctx, fmt.Sprintf(`MonitoringConsole %s still has a reference for ClusterManager %s,
+				please backup if needed and delete the MonitoringConsole`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to a MonitoringConsole")
+		}
+	}
+	return nil
+}
+
+// changeMonitoringConsoleAnnotations causes MonitoringConsole resources that use this manager to reconcile.
+func changeMonitoringConsoleAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
+	logger := logging.FromContext(ctx).With("func", "changeMonitoringConsoleAnnotations", "name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
+	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
+	if cr.Spec.MonitoringConsoleRef.Name != "" {
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.MonitoringConsoleRef.Name}
+		var err error
+		monitoringConsoleInstance, err = k8sops.GetMonitoringConsole(ctx, c, cr, namespacedName)
 		if err != nil {
-			if k8serrors.IsNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				return nil
 			}
 			return err
 		}
 	} else {
-		// List out all the ClusterManager instances in the namespace
-		opts := []rclient.ListOption{
-			rclient.InNamespace(cr.GetNamespace()),
-		}
-		objectList := enterpriseApi.ClusterManagerList{}
-		err := c.List(ctx, &objectList, opts...)
+		listOpts := []rclient.ListOption{rclient.InNamespace(cr.GetNamespace())}
+		monitoringConsoleList, err := k8sops.GetMonitoringConsoleList(ctx, c, cr, listOpts)
 		if err != nil {
-			if err.Error() == "NotFound" {
+			if apierrors.IsNotFound(err) || err.Error() == "NotFound" {
 				return nil
 			}
 			return err
 		}
-		if len(objectList.Items) == 0 {
-			return nil
-		}
-
-		// check if instance has the required LicenseManagerRef
-		for _, cm := range objectList.Items {
-			if cm.Spec.LicenseManagerRef.Name == cr.GetName() {
-				clusterManagerInstance = &cm
+		for i := range monitoringConsoleList.Items {
+			if monitoringConsoleList.Items[i].Spec.ClusterManagerRef.Name == cr.GetName() {
+				monitoringConsoleInstance = &monitoringConsoleList.Items[i]
 				break
 			}
 		}
-
-		if len(clusterManagerInstance.GetName()) == 0 {
+		if monitoringConsoleInstance.GetName() == "" {
 			return nil
 		}
 	}
 
-	image, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
+	statefulSetImage, err := k8sops.GetStatefulSetImage(ctx, c, cr, splcommon.SplunkClusterManager)
 	if err != nil {
-		eventPublisher.Warning(ctx, splcommon.EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not get the LicenseManager Image. Reason %v", err))
-		logger.ErrorContext(ctx, "get LicenseManager Image failed with", "error", err)
+		eventPublisher.Warning(ctx, splcommon.EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
+		logger.ErrorContext(ctx, "get ClusterManager Image failed with", "error", err)
 		return err
 	}
-	err = changeAnnotations(ctx, c, image, clusterManagerInstance)
-	if err != nil {
+	if err = k8sops.ChangeAnnotations(ctx, c, statefulSetImage, monitoringConsoleInstance); err != nil {
 		eventPublisher.Warning(ctx, splcommon.EventReasonAnnotationUpdateFailed, fmt.Sprintf("Could not update annotations. Reason %v", err))
-		logger.ErrorContext(ctx, "ClusterManager types update after changing annotations failed with", "error", err)
+		logger.ErrorContext(ctx, "MonitoringConsole types update after changing annotations failed with", "error", err)
 		return err
 	}
-
 	return nil
 }

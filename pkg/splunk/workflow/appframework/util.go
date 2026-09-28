@@ -468,6 +468,12 @@ type RemoteDataClientManager struct {
 		location string, fp splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error)
 }
 
+// NewRemoteDataClientManager constructs a remote-data manager for workflows
+// outside this package without exposing its implementation fields.
+func NewRemoteDataClientManager(client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, initFn splcommon.GetInitFunc, getRemoteDataClient func(context.Context, splcommon.ControllerClient, splcommon.MetaObject, *enterpriseApi.AppFrameworkSpec, *enterpriseApi.VolumeSpec, string, splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error)) *RemoteDataClientManager {
+	return &RemoteDataClientManager{client: client, cr: cr, appFrameworkRef: appFrameworkRef, vol: vol, location: location, initFn: initFn, getRemoteDataClient: getRemoteDataClient}
+}
+
 // GetAppsList gets the apps list
 func (rdcMgr *RemoteDataClientManager) GetAppsList(ctx context.Context) (splcommon.RemoteDataListResponse, error) {
 	var remoteDataListResponse splcommon.RemoteDataListResponse

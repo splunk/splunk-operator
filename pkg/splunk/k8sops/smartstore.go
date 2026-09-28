@@ -107,8 +107,8 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := GetConfigMap(ctx, client, namespacedName)
 	if err == nil && configMap != nil && configMap.Data != nil && reflect.ValueOf(configMap.Data).Kind() == reflect.Map {
-		if _, ok := configMap.Data[configToken]; ok {
-			SplunkOperatorAppConfigMap.Data[configToken] = configMap.Data[configToken]
+		if _, ok := configMap.Data[splcommon.ConfigToken]; ok {
+			SplunkOperatorAppConfigMap.Data[splcommon.ConfigToken] = configMap.Data[splcommon.ConfigToken]
 		}
 	}
 
@@ -118,7 +118,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 		return nil, configMapDataChanged, err
 	} else if configMapDataChanged {
 		// Create a token to check if the config is really populated to the pod
-		SplunkOperatorAppConfigMap.Data[configToken] = fmt.Sprintf(`%d`, time.Now().Unix())
+		SplunkOperatorAppConfigMap.Data[splcommon.ConfigToken] = fmt.Sprintf(`%d`, time.Now().Unix())
 
 		// this is tricky call, I have seen update fail here  with error": "Operation cannot be fulfilled on configmaps
 		// the object has been modified; please apply your changes to the latest version and try again"
