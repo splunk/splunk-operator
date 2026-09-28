@@ -21,7 +21,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"k8s.io/apimachinery/pkg/types"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 )
 
 const maxRetryCountForCRStatusUpdate = 10
@@ -31,7 +31,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 
 	var tryCnt int
 	for tryCnt = 0; tryCnt < maxRetryCountForCRStatusUpdate; tryCnt++ {
-		latestCR, err := fetchCurrentCRWithStatusUpdate(ctx, client, origCR, crError)
+		latestCR, err := k8sops.GetCurrentCRWithStatusUpdate(ctx, client, origCR, crError)
 		if err != nil {
 			if origCR.GetDeletionTimestamp() == nil {
 				scopedLog.ErrorContext(ctx, "unable to Read the latest CR from the K8s", "error", err)
@@ -47,7 +47,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 			scopedLog.InfoContext(ctx, "status update successful", "current CR version", curCRVersion, "updated CR version", updatedCRVersion)
 
 			for chkCnt := 0; chkCnt < maxRetryCountForCRStatusUpdate; chkCnt++ {
-				crAfterUpdate, err := fetchCurrentCRWithStatusUpdate(ctx, client, latestCR, crError)
+				crAfterUpdate, err := k8sops.GetCurrentCRWithStatusUpdate(ctx, client, latestCR, crError)
 				if err == nil && updatedCRVersion == crAfterUpdate.GetResourceVersion() {
 					scopedLog.InfoContext(ctx, "cache is reflecting the latest CR", "updated CR version", updatedCRVersion)
 					break
@@ -64,19 +64,4 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 	if origCR.GetDeletionTimestamp() == nil && tryCnt >= maxRetryCountForCRStatusUpdate {
 		scopedLog.ErrorContext(ctx, "status update failed", "attemptCount", tryCnt)
 	}
-}
-
-func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.ControllerClient, origCR *enterpriseApi.SearchHeadCluster, crError *error) (*enterpriseApi.SearchHeadCluster, error) {
-	namespacedName := types.NamespacedName{Name: origCR.GetName(), Namespace: origCR.GetNamespace()}
-	latestCR := &enterpriseApi.SearchHeadCluster{}
-	if err := client.Get(ctx, namespacedName, latestCR); err != nil {
-		return nil, err
-	}
-
-	origCR.Status.Message = ""
-	if crError != nil && *crError != nil {
-		origCR.Status.Message = (*crError).Error()
-	}
-	origCR.Status.DeepCopyInto(&latestCR.Status)
-	return latestCR, nil
 }

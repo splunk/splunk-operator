@@ -28,6 +28,63 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// ValidateSplunkSmartstoreSpec validates SmartStore input shared by manager CRs.
+func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi.SmartStoreSpec) error {
+	if smartstore == nil || (smartstore.IndexList == nil && smartstore.VolList == nil && smartstore.Defaults.VolName == "") {
+		return nil
+	}
+	if len(smartstore.IndexList) > 0 && len(smartstore.VolList) == 0 {
+		return fmt.Errorf("volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", len(smartstore.IndexList), len(smartstore.VolList))
+	}
+	if err := validateSmartstoreVolumes(ctx, smartstore.VolList); err != nil {
+		return err
+	}
+	if smartstore.Defaults.VolName != "" {
+		if _, err := splutil.CheckIfVolumeExists(smartstore.VolList, smartstore.Defaults.VolName); err != nil {
+			return fmt.Errorf("invalid configuration for defaults volume. %s", err)
+		}
+	}
+	seen := make(map[string]bool)
+	for i, index := range smartstore.IndexList {
+		if index.Name == "" {
+			return fmt.Errorf("index name is missing for index at: %d", i)
+		}
+		if seen[index.Name] {
+			return fmt.Errorf("duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
+		}
+		seen[index.Name] = true
+		if index.VolName == "" && smartstore.Defaults.VolName == "" {
+			return fmt.Errorf("volumeName is missing for index: %s", index.Name)
+		}
+		if index.VolName != "" {
+			if _, err := splutil.CheckIfVolumeExists(smartstore.VolList, index.VolName); err != nil {
+				return fmt.Errorf("invalid configuration for index: %s. %s", index.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func validateSmartstoreVolumes(ctx context.Context, volumes []enterpriseApi.VolumeSpec) error {
+	seen := make(map[string]bool)
+	for i, volume := range volumes {
+		if seen[volume.Name] {
+			return fmt.Errorf("duplicate volume name detected: %s. Remove the duplicate entry and reapply the configuration", volume.Name)
+		}
+		seen[volume.Name] = true
+		if volume.Name == "" {
+			return fmt.Errorf("volume name is missing for volume at : %d", i)
+		}
+		if volume.Endpoint == "" {
+			return fmt.Errorf("volume Endpoint URI is missing")
+		}
+		if volume.Path == "" {
+			return fmt.Errorf("volume Path is missing")
+		}
+	}
+	return nil
+}
+
 // ValidateSplunkGeneralTerms verifies that the current Splunk terms have been accepted.
 func ValidateSplunkGeneralTerms() error {
 	if os.Getenv("SPLUNK_GENERAL_TERMS") == "--accept-sgt-current-at-splunk-com" {

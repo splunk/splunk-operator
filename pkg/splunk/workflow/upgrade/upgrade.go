@@ -1,11 +1,10 @@
 // Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
-
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// 	http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,361 +12,122 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package upgrade implements the shared upgrade-path validation workflow.
-
-// TODO: Once all CRs have migrated from enterprise, revisit this boundary and
-// make the workflow CR-agnostic if needed.
-*/
 package upgrade
 
 import (
-	"context"
 	"fmt"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	appsv1 "k8s.io/api/apps/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ClusterInfoFunc supplies current IndexerCluster information from its manager.
-type ClusterInfoFunc func(context.Context) (*splclient.ClusterInfo, error)
+const phaseReady = "Ready"
 
-// UpgradePathValidation is used in validating if upgrade can be done to given custom resource
-//
-// the method follows the sequence
-//  1. Standalone or License Manager
-//  2. Cluster Manager - if LM ref is defined, wait for License manager to complete
-//  3. Monitoring Console - if CM ref is defined, wait for Cluster Manager to complete
-//  4. Search Head Cluster - if MC ref , CM ref , LM ref is defined, wait for them to complete in order,
-//     if any one of them not defined, ignore them and wait for the one added in ref
-//  5. Indexer Cluster - same as above also wait for search head cluster to complete before starting upgrade
-//     if its multisite then do 1 site at a time
-//     function returns bool and error , true  - go ahead with upgrade
-//     false -  exit the reconciliation loop with error
-func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, getClusterInfo ClusterInfoFunc) (bool, error) {
-	logger := logging.FromContext(ctx).With("func", "UpgradePathValidation", "name", cr.GetName(), "namespace", cr.GetNamespace())
+// State contains the dependency state needed to decide whether an upgrade may proceed.
+type State struct {
+	Kind                          string
+	Name                          string
+	Image                         string
+	HasLicenseManagerRef          bool
+	HasClusterManagerRef          bool
+	ValidateIndexerCluster        bool
+	LicenseManager                *ResourceState
+	ClusterManager                *ResourceState
+	PreviousIndexer               *ResourceState
+	SearchHeadCluster             *ResourceState
+	MonitoringConsoleDependencies []ResourceState
+	ClusterInfo                   *splclient.ClusterInfo
+}
 
-	// Get event publisher from context
-	eventPublisher := GetEventPublisher(ctx, cr)
+// ResourceState contains the upgrade-relevant state for one dependent resource.
+type ResourceState struct {
+	Type  string
+	Name  string
+	Image string
+	Phase string
+}
 
-	kind := cr.GroupVersionKind().Kind
-	logger.InfoContext(ctx, "kind is set to", "kind", kind)
-	// start from standalone first
-	goto Standalone
+// Event describes a Kubernetes event the reconcile adapter should emit.
+type Event struct {
+	Reason  string
+	Message string
+}
 
-	// if custom resource type is standalone or license manager go ahead and upgrade
-Standalone:
-	if cr.GroupVersionKind().Kind == "Standalone" {
-		return true, nil
-	} else {
-		goto LicenseManager
-	}
-LicenseManager:
-	if cr.GroupVersionKind().Kind == "LicenseManager" {
-		return true, nil
-	} else {
-		licenseManagerRef := spec.LicenseManagerRef
-		// if custom resource type not license manager or standalone then
-		// check if there is license manager reference
-		// if no reference go to cluster manager
-		if licenseManagerRef.Name == "" {
-			goto ClusterManager
-		}
+// Result is the workflow decision for the reconcile adapter.
+type Result struct {
+	Continue bool
+	Events   []Event
+}
 
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: licenseManagerRef.Name}
-		licenseManager := &enterpriseApi.LicenseManager{}
-		// get the license manager referred in CR
-		err := c.Get(ctx, namespacedName, licenseManager)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				goto ClusterManager
-			}
-			return false, err
-		}
-
-		// get current image of license manager
-		lmImage, err := getCurrentImage(ctx, c, licenseManager, splcommon.SplunkLicenseManager)
-		if err != nil {
-			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not get the License Manager image — check operator logs for details")
-			logger.ErrorContext(ctx, "unable to get LicenseManager current image", "error", err)
-			return false, err
-		}
-		// an image mismatch is a genuine upgrade-safety block, so it's a hard error
-		if lmImage != spec.Image {
-			return false, fmt.Errorf("license manager current image (%s) is different than CR image (%s)", lmImage, spec.Image)
-		}
-		// license manager not yet Ready is expected during normal pod recycling (e.g.
-		// concurrent secret rotation or image upgrade); wait without erroring so this
-		// doesn't get surfaced as PhaseError and doesn't trigger reconcile backoff
-		if licenseManager.Status.Phase != enterpriseApi.PhaseReady {
-			return false, nil
-		}
-		goto ClusterManager
-	}
-ClusterManager:
-	if cr.GroupVersionKind().Kind == "ClusterManager" {
-
-		licenseManagerRef := spec.LicenseManagerRef
-		if licenseManagerRef.Name == "" {
-			return true, nil
-		}
-		namespacedName := types.NamespacedName{
-			Namespace: cr.GetNamespace(),
-			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkClusterManager, cr.GetName()),
-		}
-
-		// check if the stateful set is created at this instance
-		statefulSet := &appsv1.StatefulSet{}
-		err := c.Get(ctx, namespacedName, statefulSet)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				return true, nil
-			}
-			return false, nil
-		}
-		return true, nil
-	} else {
-		// check if a cluster manager reference is added to custom resource
-		clusterManagerRef := spec.ClusterManagerRef
-		if clusterManagerRef.Name == "" {
-			// if ref is not defined go to monitoring console step
-			goto SearchHeadCluster
-		}
-
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterManagerRef.Name}
-		clusterManager := &enterpriseApi.ClusterManager{}
-
-		// get the cluster manager referred in custom resource
-		err := c.Get(ctx, namespacedName, clusterManager)
-		if err != nil {
-			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not find the Cluster Manager — check operator logs for details")
-			logger.ErrorContext(ctx, "unable to get ClusterManager", "error", err)
-			goto SearchHeadCluster
-		}
-
-		/// get the cluster manager image referred in custom resource
-		cmImage, err := getCurrentImage(ctx, c, clusterManager, splcommon.SplunkClusterManager)
-		if err != nil {
-			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not get the Cluster Manager image — check operator logs for details")
-			logger.ErrorContext(ctx, "unable to get ClusterManager current image", "error", err)
-			return false, err
-		}
-
-		// check if an image upgrade is happening and whether CM has finished updating yet, return false to stop
-		// further reconcile operations on custom resource until CM is ready
-		if clusterManager.Status.Phase != enterpriseApi.PhaseReady {
-			return false, fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", clusterManager.Name, clusterManager.Status.Phase)
-		}
-		if cmImage != spec.Image {
-			// Emit event when upgrade is blocked due to ClusterManager / IndexerCluster version mismatch
-			if eventPublisher != nil {
-				eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeBlockedVersionMismatch,
-					fmt.Sprintf("Upgrade blocked: ClusterManager version %s != IndexerCluster version %s. Upgrade ClusterManager first.", cmImage, spec.Image))
-			}
-			return false, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", clusterManager.Name, cmImage, spec.Image)
-		}
-		goto IndexerCluster
+// Validate decides whether reconciliation should continue based on collected upgrade state.
+func Validate(state State) (Result, error) {
+	if state.Kind == "Standalone" || state.Kind == "LicenseManager" {
+		return continueResult(), nil
 	}
 
-IndexerCluster:
-	if cr.GroupVersionKind().Kind == "IndexerCluster" {
-
-		// check cluster info call using splunk rest api
-		if getClusterInfo == nil {
-			return false, fmt.Errorf("cluster info provider is required for IndexerCluster upgrade validation")
+	if state.HasLicenseManagerRef && state.LicenseManager != nil {
+		if state.LicenseManager.Image != state.Image {
+			return waitResult(), fmt.Errorf("license manager current image (%s) is different than CR image (%s)", state.LicenseManager.Image, state.Image)
 		}
-		clusterInfo, err := getClusterInfo(ctx)
-		if err != nil {
-			return false, fmt.Errorf("could not get cluster info from cluster manager")
+		if state.LicenseManager.Phase != phaseReady {
+			return waitResult(), nil
 		}
-		// check if cluster is multisite
-		if clusterInfo.MultiSite == "true" {
-			opts := []runtime.ListOption{
-				runtime.InNamespace(cr.GetNamespace()),
-			}
-			indexerList, err := k8sops.GetIndexerClusterList(ctx, c, cr, opts)
-			if err != nil {
-				return false, err
-			}
-			// get sorted current indexer site list
-			sortedList, _ := getIndexerClusterSortedSiteList(ctx, c, spec.ClusterManagerRef, indexerList)
-
-			preIdx := enterpriseApi.IndexerCluster{}
-
-			for i, v := range sortedList.Items {
-				if &v == cr {
-					if i > 0 {
-						preIdx = sortedList.Items[i-1]
-					}
-					break
-
-				}
-			}
-			if len(preIdx.Name) != 0 {
-				// check if previous indexer have completed before starting next one
-				image, _ := getCurrentImage(ctx, c, &preIdx, splcommon.SplunkIndexer)
-				if preIdx.Status.Phase != enterpriseApi.PhaseReady || image != spec.Image {
-					return false, nil
-				}
-			}
-
-		}
-		return true, nil
-	} else {
-		goto SearchHeadCluster
 	}
-SearchHeadCluster:
-	if cr.GroupVersionKind().Kind == "SearchHeadCluster" {
 
-		namespacedName := types.NamespacedName{
-			Namespace: cr.GetNamespace(),
-			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkSearchHead, cr.GetName()),
-		}
-
-		// check if the stateful set is created at this instance
-		statefulSet := &appsv1.StatefulSet{}
-		err := c.Get(ctx, namespacedName, statefulSet)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				return true, nil
-			}
-			return false, nil
-		}
-		return true, nil
-	} else {
-
-		// get the clusterManagerRef attached to the instance
-		clusterManagerRef := spec.ClusterManagerRef
-
-		// check if a search head cluster exists with the same ClusterManager instance attached
-		searchHeadClusterInstance := enterpriseApi.SearchHeadCluster{}
-		opts := []runtime.ListOption{
-			runtime.InNamespace(cr.GetNamespace()),
-		}
-		searchHeadList, err := k8sops.GetSearchHeadClusterList(ctx, c, cr, opts)
-		if err != nil {
-			if err.Error() == "NotFound" {
-				goto MonitoringConsole
-			}
-			return false, err
-		}
-		if len(searchHeadList.Items) == 0 {
-			goto MonitoringConsole
-		}
-
-		// check if instance has the ClusterManagerRef defined
-		for _, shc := range searchHeadList.Items {
-			if shc.Spec.ClusterManagerRef.Name == clusterManagerRef.Name {
-				searchHeadClusterInstance = shc
-				break
-			}
-		}
-		if len(searchHeadClusterInstance.GetName()) == 0 {
-			goto MonitoringConsole
-		}
-
-		shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, splcommon.SplunkSearchHead)
-		if err != nil {
-			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not get the Search Head Cluster image — check operator logs for details")
-			logger.ErrorContext(ctx, "unable to get SearchHeadCluster current image", "error", err)
-			return false, err
-		}
-
-		// check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
-		// further reconcile operations on IDX until SHC is ready
-		if searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != spec.Image {
-			return false, nil
-		}
-		goto MonitoringConsole
+	if state.Kind == "ClusterManager" {
+		return continueResult(), nil
 	}
-MonitoringConsole:
-	if cr.GroupVersionKind().Kind == "MonitoringConsole" {
 
-		listOpts := []runtime.ListOption{
-			runtime.InNamespace(cr.GetNamespace()),
+	if state.ClusterManager != nil {
+		if state.ClusterManager.Phase != phaseReady {
+			return waitResult(), fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", state.ClusterManager.Name, state.ClusterManager.Phase)
 		}
-
-		// get the list of cluster managers
-		clusterManagerList := &enterpriseApi.ClusterManagerList{}
-		err := c.List(ctx, clusterManagerList, listOpts...)
-		if err != nil && err.Error() != "NotFound" {
-			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not find the Cluster Manager list — check operator logs for details")
-			logger.ErrorContext(ctx, "unable to get ClusterManager list", "error", err)
-			return false, err
+		if state.ClusterManager.Image != state.Image {
+			message := fmt.Sprintf("Upgrade blocked: ClusterManager version %s != IndexerCluster version %s. Upgrade ClusterManager first.", state.ClusterManager.Image, state.Image)
+			return Result{
+				Continue: false,
+				Events: []Event{{
+					Reason:  string(splcommon.EventReasonUpgradeBlockedVersionMismatch),
+					Message: message,
+				}},
+			}, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", state.ClusterManager.Name, state.ClusterManager.Image, state.Image)
 		}
-
-		// Run through list, if it has the MC reference, bail out if it is NOT ready
-		for _, cm := range clusterManagerList.Items {
-			if cm.Spec.MonitoringConsoleRef.Name == cr.GetName() {
-				if cm.Status.Phase != enterpriseApi.PhaseReady {
-					return false, fmt.Errorf("cluster manager %s is not ready", cm.Name)
-				}
-			}
-		}
-
-		// get the list of search head clusters
-		searchHeadClusterList := &enterpriseApi.SearchHeadClusterList{}
-		err = c.List(ctx, searchHeadClusterList, listOpts...)
-		if err != nil && err.Error() != "NotFound" {
-			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not find the Search Head Cluster list — check operator logs for details")
-			logger.ErrorContext(ctx, "unable to get SearchHeadCluster list", "error", err)
-			return false, err
-		}
-
-		// Run through list, if it has the MC reference, bail out if it is NOT ready
-		for _, shc := range searchHeadClusterList.Items {
-			if shc.Spec.MonitoringConsoleRef.Name == cr.GetName() {
-				if shc.Status.Phase != enterpriseApi.PhaseReady {
-					return false, fmt.Errorf("search head %s is not ready", shc.Name)
-				}
-			}
-		}
-
-		// get the list of indexer clusters
-		indexerClusterList := &enterpriseApi.IndexerClusterList{}
-		err = c.List(ctx, indexerClusterList, listOpts...)
-		if err != nil && err.Error() != "NotFound" {
-			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not find the Indexer list — check operator logs for details")
-			logger.ErrorContext(ctx, "unable to get IndexerCluster list", "error", err)
-			return false, err
-		}
-
-		// Run through list, if it has the MC reference, bail out if it is NOT ready
-		for _, idx := range indexerClusterList.Items {
-			if idx.Name == cr.GetName() {
-				if idx.Status.Phase != enterpriseApi.PhaseReady {
-					return false, fmt.Errorf("indexer %s is not ready", idx.Name)
-				}
-			}
-		}
-
-		// get the list of standalones
-		standaloneList := &enterpriseApi.IndexerClusterList{}
-		err = c.List(ctx, standaloneList, listOpts...)
-		if err != nil && err.Error() != "NotFound" {
-			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not find the Standalone list — check operator logs for details")
-			logger.ErrorContext(ctx, "unable to get Standalone list", "error", err)
-			return false, err
-		}
-
-		// Run through list, if it has the MC reference, bail out if it is NOT ready
-		for _, stdln := range standaloneList.Items {
-			if stdln.Name == cr.GetName() {
-				if stdln.Status.Phase != enterpriseApi.PhaseReady {
-					return false, fmt.Errorf("standalone %s is not ready", stdln.Name)
-				}
-			}
-		}
-		goto EndLabel
 	}
-EndLabel:
-	return true, nil
+
+	if state.Kind == "IndexerCluster" && state.ValidateIndexerCluster {
+		if state.ClusterInfo != nil && state.ClusterInfo.MultiSite == "true" && state.PreviousIndexer != nil {
+			if state.PreviousIndexer.Phase != phaseReady || state.PreviousIndexer.Image != state.Image {
+				return waitResult(), nil
+			}
+		}
+		return continueResult(), nil
+	}
+
+	if state.Kind == "SearchHeadCluster" {
+		return continueResult(), nil
+	}
+
+	if state.SearchHeadCluster != nil {
+		if state.SearchHeadCluster.Phase != phaseReady || state.SearchHeadCluster.Image != state.Image {
+			return waitResult(), nil
+		}
+	}
+
+	if state.Kind == "MonitoringConsole" {
+		for _, dependency := range state.MonitoringConsoleDependencies {
+			if dependency.Phase != phaseReady {
+				return waitResult(), fmt.Errorf("%s %s is not ready", dependency.Type, dependency.Name)
+			}
+		}
+	}
+
+	return continueResult(), nil
+}
+
+func continueResult() Result {
+	return Result{Continue: true}
+}
+
+func waitResult() Result {
+	return Result{Continue: false}
 }

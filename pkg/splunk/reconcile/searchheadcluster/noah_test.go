@@ -110,7 +110,7 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 
 	deployerStatefulSet := &appsv1.StatefulSet{}
 	err = client.Get(ctx, types.NamespacedName{
-		Name:      splutil.GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
+		Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkDeployer, cr.GetName()),
 		Namespace: cr.GetNamespace(),
 	}, deployerStatefulSet)
 	assert.Error(t, err, "Noah must never create a deployer StatefulSet")

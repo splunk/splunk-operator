@@ -18,7 +18,6 @@ package enterprise
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -26,10 +25,10 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/stretchr/testify/require"
-	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -432,74 +431,6 @@ func TestSetVolumeDefault(t *testing.T) {
 	}
 }
 
-func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	cr := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "idxCluster",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			SmartStore: enterpriseApi.SmartStoreSpec{
-				VolList: []enterpriseApi.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
-				},
-
-				IndexList: []enterpriseApi.IndexSpec{
-					{Name: "salesdata1"},
-					{Name: "salesdata2", RemotePath: "salesdata2"},
-					{Name: "salesdata3", RemotePath: ""},
-				},
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	_, err := ApplyClusterManager(context.TODO(), client, &cr, nil)
-	// ValidateSplunkSmartstoreSpec is called inside validateClusterManagerSpec — stalled, returns terminal error
-	if !errors.Is(err, reconcile.TerminalError(nil)) {
-		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
-	}
-}
-
-func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	ctx := context.TODO()
-	c := spltest.NewMockClient()
-	cr := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "CM",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			SmartStore: enterpriseApi.SmartStoreSpec{
-				VolList: []enterpriseApi.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
-				},
-
-				IndexList: []enterpriseApi.IndexSpec{
-					{Name: "salesdata1", RemotePath: "remotepath1", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
-						VolName: "msos_s2s3_vol"},
-					},
-					{Name: "salesdata2", RemotePath: "remotepath2", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
-						VolName: "msos_s2s3_vol"},
-					},
-					{Name: "salesdata3", RemotePath: "remotepath3", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
-						VolName: "msos_s2s3_vol"},
-					},
-				},
-			},
-		},
-	}
-
-	err := validateClusterManagerSpec(ctx, c, &cr)
-
-	if err != nil {
-		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)
-	}
-}
-
 func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	var err error
 	ctx := context.TODO()
@@ -524,7 +455,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStore)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStore)
 	if err != nil {
 		t.Errorf("Valid Smartstore configuration should not cause error: %v", err)
 	}
@@ -551,7 +482,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreMultipleVolumes)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreMultipleVolumes)
 	if err == nil {
 		t.Errorf("Missing Secret Object reference should error out")
 	}
@@ -563,7 +494,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreVolumeWithNoRemoteEndPoint)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreVolumeWithNoRemoteEndPoint)
 	if err == nil {
 		t.Errorf("Should not accept a volume with missing Endpoint")
 	}
@@ -575,7 +506,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithVolumeNameMissing)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithVolumeNameMissing)
 	if err == nil {
 		t.Errorf("Should not accept a volume with missing Remotename")
 	}
@@ -587,7 +518,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithVolumePathMissing)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithVolumePathMissing)
 	if err == nil {
 		t.Errorf("Should not accept a volume with missing Remote Path")
 	}
@@ -613,7 +544,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithMissingIndexName)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithMissingIndexName)
 	if err == nil {
 		t.Errorf("Should not accept an Index with missing indexname ")
 	}
@@ -639,7 +570,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithMissingIndexLocation)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithMissingIndexLocation)
 	if err != nil {
 		t.Errorf("An index with missing remotePath should use index name as path, but failed with error: %v", err)
 	}
@@ -663,13 +594,13 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreConfWithDefaults)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreConfWithDefaults)
 	if err != nil {
 		t.Errorf("Should accept an Index with missing remotePath location, when defaults are configured. But, got the error: %v", err)
 	}
 
 	// Empty smartstore config
-	err = ValidateSplunkSmartstoreSpec(ctx, nil)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, nil)
 	if err != nil {
 		t.Errorf("Smartstore config is optional, should not cause an error. But, got the error: %v", err)
 	}
@@ -692,7 +623,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithoutVolumes)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithoutVolumes)
 	if err == nil {
 		t.Errorf("Smartstore config without volume details should return error")
 	}
@@ -720,7 +651,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithDuplicateVolumes)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithDuplicateVolumes)
 	if err == nil {
 		t.Errorf("Duplicate volume configuration should return an error")
 	}
@@ -736,7 +667,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreDefaultsWithNonExistingVolume)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreDefaultsWithNonExistingVolume)
 	if err == nil {
 		t.Errorf("Volume referred in the indexes defaults should be a valid volume")
 	}
@@ -758,7 +689,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithDuplicateIndexes)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreWithDuplicateIndexes)
 	if err == nil {
 		t.Errorf("Duplicate index names should return an error")
 	}
@@ -778,7 +709,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreVolumeMissingBothFromDefaultsAndIndex)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreVolumeMissingBothFromDefaultsAndIndex)
 	if err == nil {
 		t.Errorf("If no default volume, index with missing volume info should return an error")
 	}
@@ -796,7 +727,7 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 		},
 	}
 
-	err = ValidateSplunkSmartstoreSpec(ctx, &SmartStoreIndexesWithInvalidVolumeName)
+	err = reconcileutil.ValidateSplunkSmartstoreSpec(ctx, &SmartStoreIndexesWithInvalidVolumeName)
 	if err == nil {
 		t.Errorf("Index with an invalid volume name should return error")
 	}

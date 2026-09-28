@@ -15,6 +15,5 @@
 
 /*
 Package clustermanager owns the reconcile loop for the ClusterManager CR.
-Migrated from enterprise.ApplyClusterManager().
 */
 package clustermanager

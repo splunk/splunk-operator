@@ -7,11 +7,11 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	clustermanager "github.com/splunk/splunk-operator/pkg/splunk/reconcile/clustermanager"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -29,6 +29,8 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
+var defaultClusterManagerApplyClusterManager = clustermanager.ApplyClusterManager
+
 var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 
 	BeforeEach(func() {
@@ -36,14 +38,14 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 	})
 
 	AfterEach(func() {
-
+		clustermanager.ApplyClusterManager = defaultClusterManagerApplyClusterManager
 	})
 
 	Context("ClusterManager Management failed", func() {
 
 		It("Get ClusterManager custom resource should failed", func() {
 			namespace := "ns-splunk-cm-1"
-			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
+			clustermanager.ApplyClusterManager = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -59,7 +61,7 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 
 		It("Create ClusterManager custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-cm-2"
-			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
+			clustermanager.ApplyClusterManager = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -79,7 +81,7 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 	Context("ClusterManager Management", func() {
 		It("Create ClusterManager custom resource should succeeded", func() {
 			namespace := "ns-splunk-cm-3"
-			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
+			clustermanager.ApplyClusterManager = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -92,7 +94,7 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-cm-4"
-			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
+			clustermanager.ApplyClusterManager = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -158,7 +160,7 @@ var _ = Describe("ClusterManager Controller", Label("integration"), func() {
 			ssSpec := testutils.NewClusterManager("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 
-			ApplyClusterManager = func(ctx context.Context, cl client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
+			clustermanager.ApplyClusterManager = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
 			}
 

@@ -20,21 +20,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	clustermanager "github.com/splunk/splunk-operator/pkg/splunk/reconcile/clustermanager"
 	indexercluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/indexercluster"
 	reconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemanager"
 	monitoringconsole "github.com/splunk/splunk-operator/pkg/splunk/reconcile/monitoringconsole"
 	searchheadcluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/searchheadcluster"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/reconcile/upgrade"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
-	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -162,6 +163,7 @@ func TestUpgradePathValidation(t *testing.T) {
 					Image:           "splunk/splunk:old",
 				},
 				Volumes: []corev1.Volume{},
+				Mock:    true,
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: "test",
 				},
@@ -280,7 +282,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
 	}
 
-	_, err = enterprise.ApplyClusterManager(ctx, client, &cm, nil)
+	_, err = clustermanager.ApplyClusterManager(ctx, client, &cm, nil)
 	// license manager statefulset is not created
 	if err != nil && !k8serrors.IsNotFound(err) {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -334,7 +336,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("lm is not in ready state")
 	}
 
-	_, err = enterprise.ApplyClusterManager(ctx, client, &cm, nil)
+	_, err = clustermanager.ApplyClusterManager(ctx, client, &cm, nil)
 	// lm statefulset should have been created by now, this should pass
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -345,7 +347,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-cluster-manager", cm.Name), cm.Namespace)
 	cm.Status.TelAppInstalled = true
 	// cluster manager is found  and creat
-	_, err = enterprise.ApplyClusterManager(ctx, client, &cm, nil)
+	_, err = clustermanager.ApplyClusterManager(ctx, client, &cm, nil)
 	// lm statefulset should have been created by now, this should pass
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -443,14 +445,6 @@ func TestUpgradePathValidation(t *testing.T) {
 
 	if idx.Status.Phase != enterpriseApi.PhaseReady {
 		t.Errorf("shc is not in ready state")
-	}
-
-	enterprise.GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-		extraEnv := []corev1.EnvVar{{
-			Name:  splcommon.ClusterManagerURL,
-			Value: splcommon.GetSplunkServiceName(splcommon.SplunkClusterManager, cr.GetName(), false),
-		}}
-		return extraEnv, nil
 	}
 
 	// mointoring console statefulset is created here
@@ -559,7 +553,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	cm.Status.TelAppInstalled = true
-	_, err = enterprise.ApplyClusterManager(ctx, client, &cm, nil)
+	_, err = clustermanager.ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
@@ -612,13 +606,13 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	cm.Status.TelAppInstalled = true
-	_, err = enterprise.ApplyClusterManager(ctx, client, &cm, nil)
+	_, err = clustermanager.ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
 
 	cm.Status.TelAppInstalled = true
-	_, err = enterprise.ApplyClusterManager(ctx, client, &cm, nil)
+	_, err = clustermanager.ApplyClusterManager(ctx, client, &cm, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
@@ -742,6 +736,97 @@ func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
 	}
 	if continueReconcile {
 		t.Errorf("Expected continueReconcile to be false when LicenseManager image mismatches CR image")
+	}
+}
+
+func TestUpgradePathValidationIndexerClusterWithoutClusterManagerSkipsClusterInfoProvider(t *testing.T) {
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := newFakeClientBuilder(sch).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		Build()
+
+	idx := enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-idx", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+			},
+		},
+	}
+	idx.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("IndexerCluster"))
+
+	continueReconcile, err := upgrade.UpgradePathValidation(context.TODO(), client, &idx, idx.Spec.CommonSplunkSpec, nil)
+	if err != nil {
+		t.Fatalf("expected nil error without ClusterManager ref, got %v", err)
+	}
+	if !continueReconcile {
+		t.Fatalf("expected continueReconcile to be true without ClusterManager ref")
+	}
+}
+
+func TestUpgradePathValidationIndexerClusterWithClusterManagerRequiresClusterInfoProvider(t *testing.T) {
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := newFakeClientBuilder(sch).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		Build()
+
+	cm := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+			},
+		},
+	}
+	cm.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("ClusterManager"))
+	if err := client.Create(context.TODO(), &cm); err != nil {
+		t.Fatalf("failed to create ClusterManager: %v", err)
+	}
+	cm.Status.Phase = enterpriseApi.PhaseReady
+	if err := client.Status().Update(context.TODO(), &cm); err != nil {
+		t.Fatalf("failed to update ClusterManager status: %v", err)
+	}
+
+	cmSS := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-test-cm-cluster-manager", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test"}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:old"}}},
+			},
+		},
+	}
+	if err := client.Create(context.TODO(), cmSS); err != nil {
+		t.Fatalf("failed to create ClusterManager StatefulSet: %v", err)
+	}
+
+	idx := enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-idx", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec:              enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				ClusterManagerRef: corev1.ObjectReference{Name: "test-cm"},
+			},
+		},
+	}
+	idx.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("IndexerCluster"))
+
+	continueReconcile, err := upgrade.UpgradePathValidation(context.TODO(), client, &idx, idx.Spec.CommonSplunkSpec, nil)
+	if err == nil || !strings.Contains(err.Error(), "cluster info provider is required") {
+		t.Fatalf("expected missing cluster info provider error, got %v", err)
+	}
+	if continueReconcile {
+		t.Fatalf("expected continueReconcile to be false without cluster info provider")
 	}
 }
 

@@ -46,6 +46,7 @@ import (
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	clustermanager "github.com/splunk/splunk-operator/pkg/splunk/reconcile/clustermanager"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -416,27 +417,6 @@ func TestGetClusterMasterExtraEnv(t *testing.T) {
 	//if differ then CompareEnvs returns true
 	if result == true {
 		t.Errorf("getClusterMasterExtraEnv(\"%s\") = %s; want %s", SplunkClusterManager, got, want)
-	}
-}
-
-func TestGetClusterManagerExtraEnv(t *testing.T) {
-	cr := enterpriseApi.LicenseManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-	}
-	got := getClusterManagerExtraEnv(&cr, &cr.Spec.CommonSplunkSpec)
-	want := []corev1.EnvVar{
-		{
-			Name:  splcommon.ClusterManagerURL,
-			Value: splcommon.GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
-		},
-	}
-	result := splcommon.CompareEnvs(got, want)
-	//if differ then CompareEnvs returns true
-	if result == true {
-		t.Errorf("getClusterManagerExtraEnv(\"%s\") = %s; want %s", SplunkClusterManager, got, want)
 	}
 }
 
@@ -2577,7 +2557,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("standalone CR creation failed.")
 	}
 
-	receivedCR, err := fetchCurrentCRWithStatusUpdate(ctx, c, &stdln, nil)
+	receivedCR, err := k8sops.GetCurrentCRWithStatusUpdate(ctx, c, &stdln, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if _, ok := receivedCR.(*enterpriseApi.Standalone); !ok {
@@ -2587,7 +2567,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	// When the CR is not available, should return and Error
 	invalidCR := stdln
 	invalidCR.ObjectMeta.Name = "unknownCR"
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &invalidCR, nil)
+	receivedCR, err = k8sops.GetCurrentCRWithStatusUpdate(ctx, c, &invalidCR, nil)
 	if err == nil {
 		t.Errorf("When CR is not available, should return an error")
 	} else if !strings.Contains(err.Error(), "\"unknownCR\" not found") {
@@ -2622,7 +2602,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("LicenseMaster CR creation failed. error: %v", err)
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &lmCR, nil)
+	receivedCR, err = k8sops.GetCurrentCRWithStatusUpdate(ctx, c, &lmCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if _, ok := receivedCR.(*enterpriseApiV3.LicenseMaster); !ok {
@@ -2656,7 +2636,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("MonitoringConsole CR creation failed.")
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &mcCR, nil)
+	receivedCR, err = k8sops.GetCurrentCRWithStatusUpdate(ctx, c, &mcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if _, ok := receivedCR.(*enterpriseApi.MonitoringConsole); !ok {
@@ -2690,7 +2670,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("ClusterMaster CR creation failed.")
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &cmCR, nil)
+	receivedCR, err = k8sops.GetCurrentCRWithStatusUpdate(ctx, c, &cmCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if _, ok := receivedCR.(*enterpriseApiV3.ClusterMaster); !ok {
@@ -2726,7 +2706,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("IndexerCluster CR creation failed.")
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &idxcCR, nil)
+	receivedCR, err = k8sops.GetCurrentCRWithStatusUpdate(ctx, c, &idxcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if _, ok := receivedCR.(*enterpriseApi.IndexerCluster); !ok {
@@ -2762,7 +2742,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("SearchHeadCluster CR creation failed.")
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, nil)
+	receivedCR, err = k8sops.GetCurrentCRWithStatusUpdate(ctx, c, &shcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if _, ok := receivedCR.(*enterpriseApi.SearchHeadCluster); !ok {
@@ -2771,7 +2751,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 
 	// SearchHeadCluster test update of status message
 	err = errors.New("testerror")
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, &err)
+	receivedCR, err = k8sops.GetCurrentCRWithStatusUpdate(ctx, c, &shcCR, &err)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if _, ok := receivedCR.(*enterpriseApi.SearchHeadCluster); !ok {
@@ -2810,7 +2790,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("ingestor CR creation failed.")
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &ic, nil)
+	receivedCR, err = k8sops.GetCurrentCRWithStatusUpdate(ctx, c, &ic, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if _, ok := receivedCR.(*enterpriseApi.IngestorCluster); !ok {
@@ -2886,184 +2866,6 @@ func TestGetApplicablePodNameForK8Probes(t *testing.T) {
 	}
 }
 
-func TestCheckCmRemainingReferences(t *testing.T) {
-	ctx := context.TODO()
-	cmCr := enterpriseApi.ClusterManager{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{},
-	}
-	client := spltest.NewMockClient()
-
-	err := checkCmRemainingReferences(ctx, client, &cmCr)
-	if err != nil {
-		t.Errorf("Didn't expect error, clean run required %v", err)
-	}
-
-	// Add an indexerCluster to the client
-	idxc := enterpriseApi.IndexerCluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "IndexerCluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.IndexerClusterSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				ClusterManagerRef: corev1.ObjectReference{
-					Name: "stack1",
-				},
-			}},
-	}
-	idxcList := &enterpriseApi.IndexerClusterList{}
-	idxcList.Items = append(idxcList.Items, idxc)
-
-	client.ListObj = idxcList
-	err = checkCmRemainingReferences(ctx, client, &cmCr)
-	if err == nil {
-		t.Errorf("Expected an error for having found a stale IDXC connected to clusterManager %v", err)
-	}
-
-	// Add a SHC to the client
-	shcClient := spltest.NewMockClient()
-
-	shc := enterpriseApi.SearchHeadCluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "SearchHeadCluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.SearchHeadClusterSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				ClusterManagerRef: corev1.ObjectReference{
-					Name: "stack1",
-				},
-			}},
-	}
-	shcList := &enterpriseApi.SearchHeadClusterList{}
-	shcList.Items = append(shcList.Items, shc)
-
-	shcClient.ListObj = shcList
-	err = checkCmRemainingReferences(ctx, shcClient, &cmCr)
-	if err == nil {
-		t.Errorf("Expected an error for having found a stale SHC connected to clusterManager %v", err)
-	}
-
-	// Add a LM to the client
-	lmClient := spltest.NewMockClient()
-
-	lm := enterpriseApi.LicenseManager{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseManager",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.LicenseManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				ClusterManagerRef: corev1.ObjectReference{
-					Name: "stack1",
-				},
-			}},
-	}
-	lmList := &enterpriseApi.LicenseManagerList{}
-	lmList.Items = append(lmList.Items, lm)
-
-	lmClient.ListObj = lmList
-	err = checkCmRemainingReferences(ctx, lmClient, &cmCr)
-	if err == nil {
-		t.Errorf("Expected an error for having found a stale LM connected to clusterManager %v", err)
-	}
-
-	// Add a MC to the client
-	mcClient := spltest.NewMockClient()
-
-	mc := enterpriseApi.MonitoringConsole{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "MonitoringConsole",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.MonitoringConsoleSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				ClusterManagerRef: corev1.ObjectReference{
-					Name: "stack1",
-				},
-			}},
-	}
-	mcList := &enterpriseApi.MonitoringConsoleList{}
-	mcList.Items = append(mcList.Items, mc)
-
-	mcClient.ListObj = mcList
-	err = checkCmRemainingReferences(ctx, mcClient, &cmCr)
-	if err == nil {
-		t.Errorf("Expected an error for having found a stale MC connected to clusterManager %v", err)
-	}
-
-}
-
-func TestResetSymbolicLinks(t *testing.T) {
-	ctx := context.TODO()
-	client := spltest.NewMockClient()
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
-
-	// Test CM
-	cmCr := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "example",
-			Namespace: "test",
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
-		},
-	}
-
-	podExecCommands := []string{
-		setSymbolicLinkCmanager,
-	}
-	mockPodExecReturnCtxts := []*spltest.MockPodExecReturnContext{
-		{
-			StdOut: "",
-			StdErr: "",
-		},
-	}
-
-	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
-
-	// CM should pass
-	err := resetSymbolicLinks(ctx, client, &cmCr, 1, mockPodExecClient)
-	if err != nil {
-		t.Errorf("Didn't expect error, err %v", err)
-	}
-
-	// Invalid CR test
-	lmCr := enterpriseApi.LicenseManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lm",
-			Namespace: "test",
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseManager",
-		},
-	}
-
-	err = resetSymbolicLinks(ctx, client, &lmCr, 1, mockPodExecClient)
-	if err == nil {
-		t.Errorf("Expected error")
-	}
-}
-
 func TestSetupInitContainer(t *testing.T) {
 	pts := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3072,10 +2874,10 @@ func TestSetupInitContainer(t *testing.T) {
 		},
 	}
 	// etc pvc
-	setupInitContainer(&pts, "testimage", string(corev1.PullAlways), "/bin/sh ls", false)
+	resources.SetupInitContainer(&pts, "testimage", string(corev1.PullAlways), "/bin/sh ls", false)
 
 	// etc eph
-	setupInitContainer(&pts, "testimage", string(corev1.PullAlways), "/bin/sh ls", true)
+	resources.SetupInitContainer(&pts, "testimage", string(corev1.PullAlways), "/bin/sh ls", true)
 
 }
 
@@ -3164,20 +2966,20 @@ func TestGetCurrentImage(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
 	client := builder.Build()
 	client.Create(ctx, &current)
-	_, err := ApplyClusterManager(ctx, client, &current, nil)
+	_, err := clustermanager.ApplyClusterManager(ctx, client, &current, nil)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
 
 	instanceType := SplunkClusterManager
 
-	image, err := getCurrentImage(ctx, client, &current, instanceType)
+	image, err := k8sops.GetStatefulSetImage(ctx, client, &current, instanceType)
 
 	if err != nil {
-		t.Errorf("Unexpected getCurrentImage error %v", err)
+		t.Errorf("Unexpected GetCurrentImage error %v", err)
 	}
 	if image != current.Spec.Image {
-		t.Errorf("getCurrentImage does not return the current statefulset image")
+		t.Errorf("GetCurrentImage does not return the current statefulset image")
 	}
 
 }

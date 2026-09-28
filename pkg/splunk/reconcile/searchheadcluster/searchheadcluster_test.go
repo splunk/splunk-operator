@@ -56,15 +56,15 @@ import (
 func init() {
 	// Re-Assigning splutil.GetReadinessScriptLocation, splutil.GetLivenessScriptLocation, splutil.GetStartupScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation
 	splutil.GetReadinessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../../" + readinessScriptLocation)
+		fileLocation, _ := filepath.Abs("../../../../" + spltest.ReadinessScriptLocation)
 		return fileLocation
 	}
 	splutil.GetLivenessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../../" + livenessScriptLocation)
+		fileLocation, _ := filepath.Abs("../../../../" + spltest.LivenessScriptLocation)
 		return fileLocation
 	}
 	splutil.GetStartupScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../../" + startupScriptLocation)
+		fileLocation, _ := filepath.Abs("../../../../" + spltest.StartupScriptLocation)
 		return fileLocation
 	}
 }
@@ -193,7 +193,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		_, err := ApplySearchHeadCluster(context.Background(), c, cr.(*enterpriseApi.SearchHeadCluster))
 		return true, err
 	}
-	splunkDeletionTester(t, revised, deleteFunc)
+	spltest.SplunkDeletionTester(t, revised, deleteFunc)
 }
 
 func TestGetSearchHeadStatefulSet(t *testing.T) {
@@ -219,14 +219,14 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 			}
 			return getSearchHeadStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, fmt.Sprintf("getSearchHeadStatefulSet(Replicas=%d)", cr.Spec.Replicas), f, want)
+		spltest.ConfigTester(t, fmt.Sprintf("getSearchHeadStatefulSet(Replicas=%d)", cr.Spec.Replicas), f, want)
 	}
 
 	cr.Spec.Replicas = 3
-	test(loadFixture(t, "statefulset_stack1_search_head_base.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_search_head_base.json"))
 
 	cr.Spec.Replicas = 4
-	test(loadFixture(t, "statefulset_stack1_search_head_base_1.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_search_head_base_1.json"))
 
 	cr.Spec.Replicas = 5
 	cr.Spec.ClusterManagerRef.Name = "stack1"
@@ -236,7 +236,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 	})
-	test(loadFixture(t, "statefulset_stack1_search_head_base_2.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_search_head_base_2.json"))
 
 	cr.Spec.Replicas = 6
 
@@ -247,13 +247,13 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 			Namespace: "test2",
 		},
 	})
-	test(loadFixture(t, "statefulset_stack1_search_head_base_3.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_search_head_base_3.json"))
 
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
-	test(loadFixture(t, "statefulset_stack1_search_head_base_4.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_search_head_base_4.json"))
 
 	// Define additional service port in CR and verified the statefulset has the new port
-	test(loadFixture(t, "statefulset_stack1_search_head_base_5.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_search_head_base_5.json"))
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -264,7 +264,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
-	test(loadFixture(t, "statefulset_stack1_search_head_with_service_account.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_search_head_with_service_account.json"))
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -273,12 +273,12 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 			Value: "test_value",
 		},
 	}
-	test(loadFixture(t, "statefulset_stack1_search_head_with_service_account_1.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_search_head_with_service_account_1.json"))
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
-	test(loadFixture(t, "statefulset_stack1_search_head_with_service_account_2.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_search_head_with_service_account_2.json"))
 }
 
 func TestGetDeployerStatefulSet(t *testing.T) {
@@ -304,15 +304,15 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 			}
 			return getDeployerStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getDeployerStatefulSet()", f, want)
+		spltest.ConfigTester(t, "getDeployerStatefulSet()", f, want)
 	}
 
 	cr.Spec.Replicas = 3
-	test(loadFixture(t, "statefulset_stack1_deployer_base.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_deployer_base.json"))
 
 	// Allow installation of apps via DefaultsURLApps on the SHCDeployer
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
-	test(loadFixture(t, "statefulset_stack1_deployer_with_apps.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_deployer_with_apps.json"))
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -324,7 +324,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
 
-	test(loadFixture(t, "statefulset_stack1_deployer_with_service_account.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_deployer_with_service_account.json"))
 }
 
 func TestSearchHeadSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
@@ -408,7 +408,7 @@ func TestApplySearchHeadClusterDeployerPodTerminalFailure(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
 		Build()
 
@@ -435,14 +435,14 @@ func TestApplySearchHeadClusterDeployerPodTerminalFailure(t *testing.T) {
 	// checkPodsForTerminalFailures returns a TerminalError on the next reconcile.
 	deployerPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splutil.GetSplunkStatefulsetPodName(SplunkDeployer, cr.GetName(), 0),
+			Name:      splutil.GetSplunkStatefulsetPodName(splcommon.SplunkDeployer, cr.GetName(), 0),
 			Namespace: cr.GetNamespace(),
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "splunk-operator",
 				"app.kubernetes.io/component":  "search-head",
 				"app.kubernetes.io/name":       "deployer",
 				"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-%s-search-head", cr.GetName()),
-				"app.kubernetes.io/instance":   splutil.GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
+				"app.kubernetes.io/instance":   splutil.GetSplunkStatefulsetName(splcommon.SplunkDeployer, cr.GetName()),
 			},
 		},
 		Status: corev1.PodStatus{
@@ -481,7 +481,7 @@ func TestApplySearchHeadClusterUpgradePathSoftWait(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		Build()
@@ -537,7 +537,7 @@ func TestApplySearchHeadClusterUpgradePathSoftWait(t *testing.T) {
 	// fake client doesn't populate CreationTimestamp on Create, so set it
 	// explicitly to make pass 2 exercise UpgradePathValidation.
 	deployerStatefulSetName := types.NamespacedName{
-		Name:      splutil.GetSplunkStatefulsetName(SplunkDeployer, cr.GetName()),
+		Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkDeployer, cr.GetName()),
 		Namespace: cr.GetNamespace(),
 	}
 	deployerStatefulSet := &appsv1.StatefulSet{}
@@ -554,7 +554,7 @@ func TestApplySearchHeadClusterUpgradePathSoftWait(t *testing.T) {
 	// instead of the hard image-mismatch error branch.
 	lmStatefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      splutil.GetSplunkStatefulsetName(SplunkLicenseManager, lm.GetName()),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkLicenseManager, lm.GetName()),
 			Namespace: lm.GetNamespace(),
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -793,20 +793,16 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
-		remoteDataClientMgr := &RemoteDataClientManager{client: client,
-			CR: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
-			vol:      &vol,
-			location: appSource.Location,
-			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		remoteDataClientMgr := appframework.NewRemoteDataClientManager(client, &cr, &cr.Spec.AppFrameworkConfig, &vol, appSource.Location,
+			func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 				cl := spltest.MockAWSS3Client{}
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
+			func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 				c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
-			},
-		}
+			})
 
 		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 		if err != nil {
@@ -912,24 +908,18 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
-	remoteDataClientMgr := &RemoteDataClientManager{
-		client:          client,
-		CR:              &cr,
-		appFrameworkRef: &cr.Spec.AppFrameworkConfig,
-		vol:             &vol,
-		location:        appSource.Location,
-		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	remoteDataClientMgr := appframework.NewRemoteDataClientManager(client, &cr, &cr.Spec.AppFrameworkConfig, &vol, appSource.Location,
+		func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			// Purposefully return nil here so that we test the error scenario
 			return nil
 		},
-		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+		func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 			// Get the mock client
 			c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
-		},
-	}
+		})
 
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
@@ -952,15 +942,15 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
 	}
 
-	s3AccessKey := []byte{'1'}
-	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
+	accessKey := []byte{'1'}
+	s3Secret.Data = map[string][]byte{spltest.S3AccessKey: accessKey}
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
 	}
 
-	s3SecretKey := []byte{'2'}
-	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
+	secretKey := []byte{'2'}
+	s3Secret.Data = map[string][]byte{spltest.S3SecretKey: secretKey}
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
@@ -976,11 +966,19 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
 
-	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-		// To test the error scenario, do no set the Objects member yet
-		cl := spltest.MockAWSS3Client{}
-		return cl
-	}
+	remoteDataClientMgr = appframework.NewRemoteDataClientManager(client, &cr, &cr.Spec.AppFrameworkConfig, &vol, appSource.Location,
+		func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+			// To test the error scenario, do no set the Objects member yet
+			cl := spltest.MockAWSS3Client{}
+			return cl
+		},
+		func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
+			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
+			// Get the mock client
+			c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
+			return c, err
+		})
 
 	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 	if err != nil {
@@ -1288,7 +1286,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest9, 200, string(response3), nil)
 
 	// mock new search pod manager
-	shcworkflow.NewPodManager = func(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, operations shcworkflow.Operations) shcworkflow.PodManager {
+	shcworkflow.NewPodManager = func(client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient shcworkflow.NewSplunkClientFunc, operations shcworkflow.Operations) shcworkflow.PodManager {
 		mgr := shcworkflow.PodManager{
 			CR:         cr,
 			Secrets:    secret,
@@ -1307,7 +1305,9 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
+	savedGetAppsList := appframework.GetAppsList
+	defer func() { appframework.GetAppsList = savedGetAppsList }()
+	appframework.GetAppsList = func(ctx context.Context, remoteDataClientMgr appframework.RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splcommon.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
@@ -1317,7 +1317,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := newFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -1782,7 +1782,7 @@ func TestSetDeployerConfig(t *testing.T) {
 	shc.Spec.DeployerNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = append(shc.Spec.DeployerNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms, nsTerm)
 
 	// Get deployer STS and set resources
-	depSts, err := getSplunkStatefulSet(ctx, client, &shc, &shc.Spec.CommonSplunkSpec, SplunkDeployer, 1, resources.GetSearchHeadExtraEnv(&shc, shc.Spec.Replicas), nil)
+	depSts, err := k8sops.GetSplunkStatefulSet(ctx, client, &shc, &shc.Spec.CommonSplunkSpec, splcommon.SplunkDeployer, 1, resources.GetSearchHeadExtraEnv(&shc, shc.Spec.Replicas))
 	if err != nil {
 		t.Errorf("Failed to get deployer statefulset due to error=%s", err)
 	}
