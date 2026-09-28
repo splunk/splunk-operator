@@ -28,8 +28,28 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+func TestGetMonitoringConsole(t *testing.T) {
+	ctx := context.Background()
+	mc := enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mc",
+			Namespace: "test",
+		},
+	}
+	namespacedName := types.NamespacedName{Name: mc.GetName(), Namespace: mc.GetNamespace()}
+	c := spltest.NewMockClient()
+	_, err := GetMonitoringConsole(ctx, c, &mc, namespacedName)
+	require.Error(t, err)
+
+	c.AddObject(&mc)
+	object, err := GetMonitoringConsole(ctx, c, &mc, namespacedName)
+	require.NoError(t, err)
+	assert.Equal(t, mc.GetName(), object.GetName())
+}
 
 func TestGetMonitoringConsoleList(t *testing.T) {
 	ctx := context.Background()

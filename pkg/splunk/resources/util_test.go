@@ -74,6 +74,19 @@ func TestGetStandaloneExtraEnv(t *testing.T) {
 	}}, env)
 }
 
+func TestGetClusterManagerExtraEnv(t *testing.T) {
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "stack1", Namespace: "test"},
+	}
+
+	env := resources.GetClusterManagerExtraEnv(cr)
+
+	require.Equal(t, []corev1.EnvVar{{
+		Name:  splcommon.ClusterManagerURL,
+		Value: splcommon.GetSplunkServiceName(splcommon.SplunkClusterManager, cr.GetName(), false),
+	}}, env)
+}
+
 func TestGetSplunkDefaults(t *testing.T) {
 	defaults := resources.GetSplunkDefaults("stack1", "test", splcommon.SplunkIndexer, "defaults_string")
 

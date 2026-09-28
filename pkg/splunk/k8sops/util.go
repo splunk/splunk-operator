@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@ import (
 	"context"
 	"reflect"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
@@ -68,7 +69,6 @@ const (
 	SplunkMonitoringConsole = splcommon.SplunkMonitoringConsole
 
 	livenessProbeDriverPathEnv  = "SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH"
-	configToken                 = "conftoken"
 	smartStoreConfigRev         = "SmartStoreConfigRev"
 	splunkKVStoreDefaultTypeEnv = "SPLUNK_KVSTORE_DEFAULT_TYPE"
 	splunkKVStoreTypeLocal      = "local"
@@ -82,4 +82,31 @@ func ReadFile(ctx context.Context, location string) (string, error) {
 
 func isCMDeployed(instanceType InstanceType) bool {
 	return instanceType == SplunkClusterManager || instanceType == SplunkClusterMaster
+}
+
+func setStatusMessage(cr splcommon.MetaObject, crError *error) {
+	message := ""
+	if crError != nil && *crError != nil {
+		message = (*crError).Error()
+	}
+	switch status := cr.(type) {
+	case *enterpriseApi.Standalone:
+		status.Status.Message = message
+	case *enterpriseApi.IngestorCluster:
+		status.Status.Message = message
+	case *enterpriseApi.Queue:
+		status.Status.Message = message
+	case *enterpriseApi.ObjectStorage:
+		status.Status.Message = message
+	case *enterpriseApi.LicenseManager:
+		status.Status.Message = message
+	case *enterpriseApi.SearchHeadCluster:
+		status.Status.Message = message
+	case *enterpriseApi.IndexerCluster:
+		status.Status.Message = message
+	case *enterpriseApi.ClusterManager:
+		status.Status.Message = message
+	case *enterpriseApi.MonitoringConsole:
+		status.Status.Message = message
+	}
 }

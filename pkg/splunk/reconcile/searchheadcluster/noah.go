@@ -31,11 +31,11 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/reconcile/upgrade"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
-	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 )
 
 // ApplySearchHeadClusterNoah is the top-level reconciler for a

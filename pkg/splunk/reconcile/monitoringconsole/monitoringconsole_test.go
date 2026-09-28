@@ -67,24 +67,6 @@ func init() {
 	}
 }
 
-type remoteDataClientManager struct {
-	client              splcommon.ControllerClient
-	cr                  splcommon.MetaObject
-	appFrameworkRef     *enterpriseApi.AppFrameworkSpec
-	vol                 *enterpriseApi.VolumeSpec
-	location            string
-	initFn              splcommon.GetInitFunc
-	getRemoteDataClient func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error)
-}
-
-func (m *remoteDataClientManager) GetAppsList(ctx context.Context) (splcommon.RemoteDataListResponse, error) {
-	c, err := m.getRemoteDataClient(ctx, m.client, m.cr, m.appFrameworkRef, m.vol, m.location, m.initFn)
-	if err != nil {
-		return splcommon.RemoteDataListResponse{}, err
-	}
-	return c.Client.GetAppsList(ctx)
-}
-
 func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
@@ -201,20 +183,16 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
 		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
-		remoteDataClientMgr := &remoteDataClientManager{client: client,
-			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
-			vol:      &vol,
-			location: appSource.Location,
-			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		remoteDataClientMgr := appframework.NewRemoteDataClientManager(client, &cr, &cr.Spec.AppFrameworkConfig, &vol, appSource.Location,
+			func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 				cl := spltest.MockAWSS3Client{}
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
+			func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 				c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
-			},
-		}
+			})
 		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
@@ -304,24 +282,18 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
 	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
-	remoteDataClientMgr := &remoteDataClientManager{
-		client:          client,
-		cr:              &cr,
-		appFrameworkRef: &cr.Spec.AppFrameworkConfig,
-		vol:             &vol,
-		location:        appSource.Location,
-		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	remoteDataClientMgr := appframework.NewRemoteDataClientManager(client, &cr, &cr.Spec.AppFrameworkConfig, &vol, appSource.Location,
+		func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			// Purposefully return nil here so that we test the error scenario
 			return nil
 		},
-		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+		func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
 			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 			// Get the mock client
 			c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
-		},
-	}
+		})
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
@@ -359,11 +331,19 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
-	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-		// To test the error scenario, do no set the Objects member yet
-		cl := spltest.MockAWSS3Client{}
-		return cl
-	}
+	remoteDataClientMgr = appframework.NewRemoteDataClientManager(client, &cr, &cr.Spec.AppFrameworkConfig, &vol, appSource.Location,
+		func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+			// To test the error scenario, do no set the Objects member yet
+			cl := spltest.MockAWSS3Client{}
+			return cl
+		},
+		func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
+			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
+			// Get the mock client
+			c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
+			return c, err
+		})
 	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed.")
