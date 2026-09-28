@@ -94,8 +94,9 @@ spec:
               cacheWarmScaleOutTimeoutSeconds:
                 default: 3600
                 description: |-
-                  CacheWarmScaleOutTimeoutSeconds is the maximum time to wait for a peer to become up when
-                  cache-warm coordination is enabled. Zero disables the timeout.
+                  CacheWarmScaleOutTimeoutSeconds is the maximum time to wait for each registered peer to
+                  become up before permitting the next scale-out batch. Expiry does not make the peer or
+                  cluster ready. Zero disables the timeout.
                 format: int32
                 minimum: 0
                 type: integer

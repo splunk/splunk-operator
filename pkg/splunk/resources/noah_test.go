@@ -26,7 +26,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 )
@@ -37,7 +36,7 @@ func TestWithNoahPodIdentity_InjectsStableInputs(t *testing.T) {
 
 	env := envByName(statefulSet.Spec.Template.Spec.Containers[0].Env)
 	assert.Equal(t, "true", env[resources.NoahEnabledEnvName].Value)
-	assert.Equal(t, statefulSet.Spec.ServiceName, env[resources.NoahHeadlessServiceEnvName].Value)
+	assert.Equal(t, statefulSet.Spec.ServiceName, env[resources.HeadlessServiceEnvName].Value)
 	assert.Equal(t, "cluster.local", env[resources.ClusterDomainEnvName].Value)
 	assert.Equal(t, "preserved", env["UNMANAGED"].Value)
 
@@ -61,10 +60,39 @@ func TestWithNoahPodIdentity_UsesCustomClusterDomain(t *testing.T) {
 	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
 }
 
-func TestWithNoahPodIdentity_PreservesAdvertisedHostAcrossPodReplacement(t *testing.T) {
+func TestWithNoahIndexerIdentity_InjectsAdvertisedAddressLast(t *testing.T) {
+	statefulSet := makeNoahStatefulSet()
+	statefulSet.Spec.Template.Spec.Containers[0].Env = append(
+		statefulSet.Spec.Template.Spec.Containers[0].Env,
+		corev1.EnvVar{Name: resources.NoahAdvertisedAddressEnvName, Value: "https://stale.example:8089"},
+	)
+
+	option := resources.WithNoahIndexerIdentity("")
+	option(statefulSet)
+	want := statefulSet.DeepCopy()
+	option(statefulSet)
+
+	assert.Equal(t, want, statefulSet)
+	env := statefulSet.Spec.Template.Spec.Containers[0].Env
+	assert.Equal(t, resources.NoahAdvertisedAddressEnvName, env[len(env)-1].Name)
+	assert.Equal(t,
+		"https://$(POD_NAME).splunk-main-indexer-headless.$(POD_NAMESPACE).svc.cluster.local:8089",
+		env[len(env)-1].Value,
+	)
+	advertisedAddressIndex := envIndex(env, resources.NoahAdvertisedAddressEnvName)
+	podNameIndex := envIndex(env, resources.PodNameEnvName)
+	podNamespaceIndex := envIndex(env, resources.PodNamespaceEnvName)
+	require.NotEqual(t, -1, podNameIndex)
+	require.NotEqual(t, -1, podNamespaceIndex)
+	assert.Less(t, podNameIndex, advertisedAddressIndex)
+	assert.Less(t, podNamespaceIndex, advertisedAddressIndex)
+	assert.Equal(t, 1, envCount(env, resources.NoahAdvertisedAddressEnvName))
+}
+
+func TestWithNoahIndexerIdentity_PreservesAdvertisedAddressAcrossPodReplacement(t *testing.T) {
 	statefulSet := makeNoahStatefulSet()
 	statefulSet.Name = "splunk-main-indexer"
-	resources.WithNoahPodIdentity("corp.example")(statefulSet)
+	resources.WithNoahIndexerIdentity("corp.example")(statefulSet)
 
 	namespace := strings.Repeat("n", 63)
 	require.Len(t, namespace, 63)
@@ -87,10 +115,9 @@ func TestWithNoahPodIdentity_PreservesAdvertisedHostAcrossPodReplacement(t *test
 		require.NotEqual(t, original.UID, replacement.UID)
 		require.NotEqual(t, original.Status.PodIP, replacement.Status.PodIP)
 
-		identity := noahAdvertisedHost(t, statefulSet, original)
-		assert.Equal(t, identity, noahAdvertisedHost(t, statefulSet, replacement))
-		assert.Equal(t, fmt.Sprintf("%s.%s.%s.svc.corp.example", podName, statefulSet.Spec.ServiceName, namespace), identity)
-		assert.Empty(t, validation.IsDNS1123Subdomain(identity))
+		identity := noahAdvertisedAddress(t, statefulSet, original)
+		assert.Equal(t, identity, noahAdvertisedAddress(t, statefulSet, replacement))
+		assert.Equal(t, fmt.Sprintf("https://%s.%s.%s.svc.corp.example:8089", podName, statefulSet.Spec.ServiceName, namespace), identity)
 		identities = append(identities, identity)
 	}
 
@@ -112,7 +139,7 @@ func TestWithNoahPodIdentity_IsIdempotentAndReplacesManagedValues(t *testing.T) 
 		splunk.Env,
 		corev1.EnvVar{Name: resources.NoahEnabledEnvName, Value: "false"},
 		corev1.EnvVar{Name: resources.NoahEnabledEnvName, Value: "duplicate"},
-		corev1.EnvVar{Name: resources.NoahHeadlessServiceEnvName, Value: "stale-service"},
+		corev1.EnvVar{Name: resources.HeadlessServiceEnvName, Value: "stale-service"},
 	)
 
 	option := resources.WithNoahPodIdentity("")
@@ -127,7 +154,7 @@ func TestWithNoahPodIdentity_IsIdempotentAndReplacesManagedValues(t *testing.T) 
 	}
 	for _, name := range []string{
 		resources.NoahEnabledEnvName,
-		resources.NoahHeadlessServiceEnvName,
+		resources.HeadlessServiceEnvName,
 		resources.ClusterDomainEnvName,
 		resources.PodNameEnvName,
 		resources.PodNamespaceEnvName,
@@ -137,7 +164,7 @@ func TestWithNoahPodIdentity_IsIdempotentAndReplacesManagedValues(t *testing.T) 
 
 	env := envByName(statefulSet.Spec.Template.Spec.Containers[0].Env)
 	assert.Equal(t, "true", env[resources.NoahEnabledEnvName].Value)
-	assert.Equal(t, statefulSet.Spec.ServiceName, env[resources.NoahHeadlessServiceEnvName].Value)
+	assert.Equal(t, statefulSet.Spec.ServiceName, env[resources.HeadlessServiceEnvName].Value)
 }
 
 func TestWithNoahPodIdentity_NoSplunkContainerIsNoop(t *testing.T) {
@@ -201,31 +228,32 @@ func makeNoahStatefulSet() *appsv1.StatefulSet {
 	}
 }
 
-func noahAdvertisedHost(t *testing.T, statefulSet *appsv1.StatefulSet, pod *corev1.Pod) string {
+func noahAdvertisedAddress(t *testing.T, statefulSet *appsv1.StatefulSet, pod *corev1.Pod) string {
 	t.Helper()
 	env := envByName(statefulSet.Spec.Template.Spec.Containers[0].Env)
-	resolve := func(name string) string {
-		value, ok := env[name]
-		require.True(t, ok, "missing environment variable %s", name)
-		if value.ValueFrom == nil {
-			return value.Value
-		}
-		require.NotNil(t, value.ValueFrom.FieldRef, "environment variable %s must use fieldRef", name)
-		switch value.ValueFrom.FieldRef.FieldPath {
-		case "metadata.name":
-			return pod.Name
-		case "metadata.namespace":
-			return pod.Namespace
-		default:
-			t.Fatalf("unsupported fieldRef %q for environment variable %s", value.ValueFrom.FieldRef.FieldPath, name)
-			return ""
+	advertisedAddress, ok := env[resources.NoahAdvertisedAddressEnvName]
+	require.True(t, ok)
+	return strings.NewReplacer(
+		"$(POD_NAME)", pod.Name,
+		"$(POD_NAMESPACE)", pod.Namespace,
+	).Replace(advertisedAddress.Value)
+}
+
+func envIndex(env []corev1.EnvVar, name string) int {
+	for index, item := range env {
+		if item.Name == name {
+			return index
 		}
 	}
+	return -1
+}
 
-	return fmt.Sprintf("%s.%s.%s.svc.%s",
-		resolve(resources.PodNameEnvName),
-		resolve(resources.NoahHeadlessServiceEnvName),
-		resolve(resources.PodNamespaceEnvName),
-		resolve(resources.ClusterDomainEnvName),
-	)
+func envCount(env []corev1.EnvVar, name string) int {
+	count := 0
+	for _, item := range env {
+		if item.Name == name {
+			count++
+		}
+	}
+	return count
 }
