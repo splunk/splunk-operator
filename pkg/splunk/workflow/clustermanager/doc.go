@@ -14,6 +14,6 @@
 // limitations under the License.
 
 /*
-Package clustermanager owns the reconcile loop for the ClusterManager CR.
+Package clustermanager contains multi-step ClusterManager workflows.
 */
 package clustermanager

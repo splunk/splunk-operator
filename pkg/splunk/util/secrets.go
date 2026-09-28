@@ -396,9 +396,9 @@ func GetLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient,
 	return latestVersionedSecret, nil
 }
 
-// GetSplunkReadableNamespaceScopedSecretData retrieves the namespace scoped secret's data and converts it into Splunk readable format if possible
+// GetSplunkReadableNamespaceScopedSecretData ensures the namespace-scoped secret exists with all required tokens, then converts its data into Splunk-readable format.
 func GetSplunkReadableNamespaceScopedSecretData(ctx context.Context, c splcommon.ControllerClient, namespace string) (map[string][]byte, error) {
-	// Get namespace scoped secret ensuring all tokens are present
+	// Apply the namespace-scoped secret so all required tokens are present.
 	namespaceScopedSecret, err := ApplyNamespaceScopedSecretObject(ctx, c, namespace)
 	if err != nil {
 		return nil, err
@@ -511,7 +511,7 @@ func ApplySplunkSecret(ctx context.Context, c splcommon.ControllerClient, cr spl
 	return &current, nil
 }
 
-// ApplyNamespaceScopedSecretObject creates/updates the namespace scoped K8S secret object
+// ApplyNamespaceScopedSecretObject ensures the namespace-scoped Kubernetes secret exists, is valid, and contains all required tokens, creating or updating it as needed.
 func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.ControllerClient, namespace string) (*corev1.Secret, error) {
 	var current corev1.Secret
 

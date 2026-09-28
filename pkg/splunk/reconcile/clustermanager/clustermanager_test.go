@@ -13,17 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package clustermanager
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strings"
 	"testing"
 	"time"
 
@@ -36,40 +34,51 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	lmreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemanager"
 	monitoringconsole "github.com/splunk/splunk-operator/pkg/splunk/reconcile/monitoringconsole"
+	upgrade "github.com/splunk/splunk-operator/pkg/splunk/reconcile/upgrade"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
-	upgrade "github.com/splunk/splunk-operator/pkg/splunk/workflow/upgrade"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 )
+
+func init() {
+	splutil.GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/readinessProbe.sh")
+		return fileLocation
+	}
+	splutil.GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/livenessProbe.sh")
+		return fileLocation
+	}
+	splutil.GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/startupProbe.sh")
+		return fileLocation
+	}
+}
+
+func stubCMMultisiteEnvVars(t *testing.T) {
+	t.Helper()
+	original := getCMMultisiteEnvVars
+	getCMMultisiteEnvVars = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := resources.GetClusterManagerExtraEnv(cr)
+		return extraEnv, nil
+	}
+	t.Cleanup(func() { getCMMultisiteEnvVars = original })
+}
 
 func TestApplyClusterManager(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
-	// redefining cpmakeTar to return nil always
-	cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
-		return nil
-	}
-
-	// Mock the event publisher to return a valid (empty) publisher in tests
-	newK8EventPublisher = func(recorder record.EventRecorder, instance pkgruntime.Object) (*K8EventPublisher, error) {
-		return &K8EventPublisher{}, nil
-	}
-
-	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
-		return extraEnv, nil
-	}
+	stubCMMultisiteEnvVars(t)
 
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
@@ -161,7 +170,7 @@ func TestApplyClusterManager(t *testing.T) {
 		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager), nil)
 		return true, err
 	}
-	splunkDeletionTester(t, revised, deleteFunc)
+	spltest.SplunkDeletionTester(t, revised, deleteFunc)
 
 	// Negative testing: spec validation failure is a terminal condition — returns nil (no requeue)
 	current.Spec.CommonSplunkSpec.LivenessProbe = &enterpriseApi.Probe{
@@ -479,20 +488,20 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 			}
 			return getClusterManagerStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getClusterManagerStatefulSet", f, want)
+		spltest.ConfigTester(t, "getClusterManagerStatefulSet", f, want)
 	}
-	test(loadFixture(t, "statefulset_stack1_cluster_manager_base.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_cluster_manager_base.json"))
 
 	cr.Spec.LicenseManagerRef.Name = "stack1"
 	cr.Spec.LicenseManagerRef.Namespace = "test"
-	test(loadFixture(t, "statefulset_stack1_cluster_manager_base_1.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_cluster_manager_base_1.json"))
 
 	cr.Spec.LicenseManagerRef.Name = ""
 	cr.Spec.LicenseURL = "/mnt/splunk.lic"
-	test(loadFixture(t, "statefulset_stack1_cluster_manager_base_2.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_cluster_manager_base_2.json"))
 
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
-	test(loadFixture(t, "statefulset_stack1_cluster_manager_with_apps.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_cluster_manager_with_apps.json"))
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -503,7 +512,7 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
-	test(loadFixture(t, "statefulset_stack1_cluster_manager_with_service_account.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_cluster_manager_with_service_account.json"))
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -512,12 +521,12 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 			Value: "test_value",
 		},
 	}
-	test(loadFixture(t, "statefulset_stack1_cluster_manager_with_service_account_1.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_cluster_manager_with_service_account_1.json"))
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
-	test(loadFixture(t, "statefulset_stack1_cluster_manager_with_service_account_2.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_cluster_manager_with_service_account_2.json"))
 }
 
 func TestClusterManagerSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
@@ -554,13 +563,78 @@ func TestClusterManagerSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	}
 }
 
+func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	cr := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idxCluster",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			SmartStore: enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "", Path: "testbucket-rs-london"},
+				},
+
+				IndexList: []enterpriseApi.IndexSpec{
+					{Name: "salesdata1"},
+					{Name: "salesdata2", RemotePath: "salesdata2"},
+					{Name: "salesdata3", RemotePath: ""},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	_, err := ApplyClusterManager(context.TODO(), client, &cr, nil)
+	// ValidateSplunkSmartstoreSpec is called inside validateClusterManagerSpec — stalled, returns terminal error
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
+	}
+}
+
+func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	cr := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			SmartStore: enterpriseApi.SmartStoreSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret"},
+				},
+
+				IndexList: []enterpriseApi.IndexSpec{
+					{Name: "salesdata1", RemotePath: "remotepath1", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+						VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata2", RemotePath: "remotepath2", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+						VolName: "msos_s2s3_vol"},
+					},
+					{Name: "salesdata3", RemotePath: "remotepath3", IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+						VolName: "msos_s2s3_vol"},
+					},
+				},
+			},
+		},
+	}
+
+	err := validateClusterManagerSpec(ctx, c, &cr)
+
+	if err != nil {
+		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)
+	}
+}
+
 func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
-	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
-		return extraEnv, nil
-	}
+	stubCMMultisiteEnvVars(t)
 
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
@@ -685,8 +759,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
-	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
+	secret.Data[spltest.S3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
+	secret.Data[spltest.S3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
 	_, err = k8sops.ApplySecret(ctx, client, secret)
 	if err != nil {
 		t.Error(err.Error())
@@ -762,186 +836,11 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 }
 
-func TestPerformCmBundlePush(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
-	ctx := context.TODO()
-	current := enterpriseApi.ClusterManager{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Mock: true,
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	// When the secret object is not present, should return an error
-	current.Status.BundlePushTracker.NeedToPushManagerApps = true
-	err := PerformCmBundlePush(ctx, client, &current, nil)
-	if err == nil {
-		t.Errorf("Should return error, when the secret object is not present")
-	}
-
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	_, err = k8sops.ApplySecret(ctx, client, secret)
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	smartstoreConfigMap := corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-clustermanager-smartstore",
-			Namespace: "test",
-		},
-		Data: map[string]string{configToken: ""},
-	}
-
-	_, err = k8sops.ApplyConfigMap(ctx, client, &smartstoreConfigMap)
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	current.Status.BundlePushTracker.NeedToPushManagerApps = true
-
-	//Re-attempting to push the CM bundle in less than 5 seconds should return an error
-	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 1
-	err = PerformCmBundlePush(ctx, client, &current, nil)
-	if err == nil {
-		t.Errorf("Bundle Push Should fail, if attempted to push within 5 seconds interval")
-	}
-
-	//Re-attempting to push the CM bundle after 5 seconds passed, should not return an error
-	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 10
-	err = PerformCmBundlePush(ctx, client, &current, nil)
-	if err != nil && strings.HasPrefix(err.Error(), "Will re-attempt to push the bundle after the 5 seconds") {
-		t.Errorf("Bundle Push Should not fail if reattempted after 5 seconds interval passed. Error: %s", err.Error())
-	}
-
-	// When the CM Bundle push is not pending, should not return an error
-	current.Status.BundlePushTracker.NeedToPushManagerApps = false
-	err = PerformCmBundlePush(ctx, client, &current, nil)
-	if err != nil {
-		t.Errorf("Should not return an error when the Bundle push is not required. Error: %s", err.Error())
-	}
-
-	// Negative testing
-	current.Status.BundlePushTracker.NeedToPushManagerApps = true
-	err = PerformCmBundlePush(ctx, client, &current, nil)
-	if err != nil && strings.HasPrefix(err.Error(), "Will re-attempt to push the bundle after the 5 seconds") {
-		t.Errorf("Bundle Push Should not fail if reattempted after 5 seconds interval passed. Error: %s", err.Error())
-	}
-}
-
-func TestPerformCmBundlePushTargetsClusterManagerPod(t *testing.T) {
-	ctx := context.TODO()
-	current := enterpriseApi.ClusterManager{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-	}
-	current.Status.BundlePushTracker.NeedToPushManagerApps = true
-	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 10
-
-	client := spltest.NewMockClient()
-	smartstoreConfigMap := corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-clustermanager-smartstore",
-			Namespace: "test",
-		},
-		Data: map[string]string{configToken: "current-token"},
-	}
-	if _, err := k8sops.ApplyConfigMap(ctx, client, &smartstoreConfigMap); err != nil {
-		t.Fatal(err)
-	}
-
-	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
-	podExecClient := &spltest.MockPodExecClient{TargetPodName: "stale-pod"}
-	podExecClient.AddMockPodExecReturnContext(ctx, command, &spltest.MockPodExecReturnContext{StdOut: "stale-token"})
-
-	if err := PerformCmBundlePush(ctx, client, &current, podExecClient); err == nil {
-		t.Fatal("PerformCmBundlePush() should return an error when the config token has not propagated")
-	}
-
-	wantPodName := "splunk-stack1-cluster-manager-0"
-	if got := podExecClient.GetTargetPodName(); got != wantPodName {
-		t.Errorf("PerformCmBundlePush() target pod = %q, want %q", got, wantPodName)
-	}
-}
-
-func TestPushManagerAppsBundle(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
-	ctx := context.TODO()
-	current := enterpriseApi.ClusterManager{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Mock: true,
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	//Without global secret object, should return an error
-	err := PushManagerAppsBundle(ctx, client, &current)
-	if err == nil {
-		t.Errorf("Bundle push should fail, when the secret object is not found")
-	}
-
-	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	_, err = k8sops.ApplySecret(ctx, client, secret)
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	err = PushManagerAppsBundle(ctx, client, &current)
-	if err == nil {
-		t.Errorf("Bundle push should fail, when the password is not found")
-	}
-
-	//Without password, should return an error
-	delete(secret.Data, "password")
-	err = PushManagerAppsBundle(ctx, client, &current)
-	if err == nil {
-		t.Errorf("Bundle push should fail, when the password is not found")
-	}
-}
-
 func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	initGlobalResourceTracker()
+	appframework.InitGlobalResourceTracker()
 
-	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
-		return extraEnv, nil
-	}
+	stubCMMultisiteEnvVars(t)
 
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterManager{
@@ -988,11 +887,11 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 	}
 
 	// to pass the validation stage, add the directory to download apps
-	err := os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
+	err := os.MkdirAll(appframework.TmpAppDownloadDir, 0755)
+	defer os.RemoveAll(appframework.TmpAppDownloadDir)
 
 	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+		t.Errorf("Unable to create download directory for apps :%s", appframework.TmpAppDownloadDir)
 	}
 
 	client := spltest.NewMockClient()
@@ -1018,10 +917,7 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 func TestApplyClusterManagerDeletion(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
-	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
-		return extraEnv, nil
-	}
+	stubCMMultisiteEnvVars(t)
 
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterManager{
@@ -1105,11 +1001,11 @@ func TestApplyClusterManagerDeletion(t *testing.T) {
 	c.ListObj = &pvclist
 
 	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
+	err = os.MkdirAll(appframework.TmpAppDownloadDir, 0755)
+	defer os.RemoveAll(appframework.TmpAppDownloadDir)
 
 	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+		t.Errorf("Unable to create download directory for apps :%s", appframework.TmpAppDownloadDir)
 	}
 	cm.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(ctx, c, &cm, nil)
@@ -1117,433 +1013,6 @@ func TestApplyClusterManagerDeletion(t *testing.T) {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
 	}
 }
-func TestClusterManagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
-	ctx := context.TODO()
-	cm := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				Defaults: enterpriseApi.AppSourceDefaultSpec{
-					VolName: "msos_s2s3_vol2",
-					Scope:   enterpriseApi.ScopeLocal,
-				},
-				VolList: []enterpriseApi.VolumeSpec{
-					{
-						Name:      "msos_s2s3_vol",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws",
-					},
-					{
-						Name:      "msos_s2s3_vol2",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london-2",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws",
-					},
-				},
-				AppSources: []enterpriseApi.AppSourceSpec{
-					{Name: "adminApps",
-						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-					{Name: "securityApps",
-						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-					{
-						Name:     "authenticationApps",
-						Location: "authenticationAppsRepo",
-					},
-				},
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	// Create S3 secret
-	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
-	client.AddObject(&s3Secret)
-
-	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	splstorage.RegisterRemoteDataClient(ctx, "aws")
-
-	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
-	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
-	Sizes := []int64{10, 20, 30}
-	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
-	mockAwsHandler := spltest.MockAWSS3Handler{}
-
-	mockAwsObjects := []spltest.MockAWSS3Client{
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[0],
-					Key:          &Keys[0],
-					LastModified: &randomTime,
-					Size:         &Sizes[0],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[1],
-					Key:          &Keys[1],
-					LastModified: &randomTime,
-					Size:         &Sizes[1],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[2],
-					Key:          &Keys[2],
-					LastModified: &randomTime,
-					Size:         &Sizes[2],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-	}
-
-	appFrameworkRef := cm.Spec.AppFrameworkConfig
-
-	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
-
-	var vol enterpriseApi.VolumeSpec
-	var allSuccess bool = true
-	for index, appSource := range appFrameworkRef.AppSources {
-
-		vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		// Update the GetS3Client with our mock call which initializes mock AWS client
-		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
-
-		remoteDataClientMgr := &RemoteDataClientManager{
-			client:          client,
-			cr:              &cm,
-			appFrameworkRef: &cm.Spec.AppFrameworkConfig,
-			vol:             &vol,
-			location:        appSource.Location,
-			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-				cl := spltest.MockAWSS3Client{}
-				cl.Objects = mockAwsObjects[index].Objects
-				return cl
-			},
-			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
-				appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-				location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
-				// Get the mock client
-				c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
-				return c, err
-			},
-		}
-
-		s3Response, err := remoteDataClientMgr.GetAppsList(ctx)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		var mockResponse spltest.MockRemoteDataClient
-		mockResponse, err = splstorage.ConvertRemoteDataListResponse(ctx, s3Response)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		if mockAwsHandler.GotSourceAppListResponseMap == nil {
-			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
-		}
-
-		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAWSS3Client(mockResponse)
-	}
-
-	if allSuccess == false {
-		t.Errorf("Unable to get apps list for all the app sources")
-	}
-	method := "GetAppsList"
-	mockAwsHandler.CheckAWSRemoteDataListResponse(t, method)
-}
-
-func TestClusterManagerGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
-	ctx := context.TODO()
-	cm := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				VolList: []enterpriseApi.VolumeSpec{
-					{Name: "msos_s2s3_vol",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws"},
-				},
-				AppSources: []enterpriseApi.AppSourceSpec{
-					{Name: "adminApps",
-						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-				},
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	splstorage.RegisterRemoteDataClient(ctx, "aws")
-
-	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
-	Keys := []string{"admin_app.tgz"}
-	Sizes := []int64{10}
-	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
-	mockAwsHandler := spltest.MockAWSS3Handler{}
-
-	mockAwsObjects := []spltest.MockAWSS3Client{
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[0],
-					Key:          &Keys[0],
-					LastModified: &randomTime,
-					Size:         &Sizes[0],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-	}
-
-	appFrameworkRef := cm.Spec.AppFrameworkConfig
-
-	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
-
-	var vol enterpriseApi.VolumeSpec
-
-	appSource := appFrameworkRef.AppSources[0]
-	vol, err = splutil.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
-	if err != nil {
-		t.Errorf("Unable to get Volume due to error=%s", err)
-	}
-
-	// Update the GetS3Client with our mock call which initializes mock AWS client
-	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
-
-	remoteDataClientMgr := &RemoteDataClientManager{
-		client:          client,
-		cr:              &cm,
-		appFrameworkRef: &cm.Spec.AppFrameworkConfig,
-		vol:             &vol,
-		location:        appSource.Location,
-		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-			// Purposefully return nil here so that we test the error scenario
-			return nil
-		},
-		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
-			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
-			// Get the mock client
-			c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
-			return c, err
-		},
-	}
-
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
-	}
-
-	// Create empty S3 secret
-	s3Secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "s3-secret",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{},
-	}
-
-	client.AddObject(&s3Secret)
-
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
-	}
-
-	s3AccessKey := []byte{'1'}
-	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
-	}
-
-	s3SecretKey := []byte{'2'}
-	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
-	}
-
-	// Create S3 secret
-	s3Secret = spltest.GetMockS3SecretKeys("s3-secret")
-
-	// This should return an error as we have initialized initFn for remoteDataClientMgr
-	// to return a nil client.
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
-	}
-
-	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-		// To test the error scenario, do no set the Objects member yet
-		cl := spltest.MockAWSS3Client{}
-		return cl
-	}
-
-	s3Resp, err := remoteDataClientMgr.GetAppsList(ctx)
-	if err != nil {
-		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed.")
-	}
-	if len(s3Resp.Objects) != 0 {
-		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
-	}
-}
-
-func TestGetClusterManagerList(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	ctx := context.TODO()
-	cm := enterpriseApi.ClusterManager{}
-
-	listOpts := []runtime.ListOption{
-		runtime.InNamespace("test"),
-	}
-
-	client := spltest.NewMockClient()
-
-	var numOfObjects int
-	// Invalid scenario since we haven't added clustermanager to the list yet
-	_, err := getClusterManagerList(ctx, client, &cm, listOpts)
-	if err == nil {
-		t.Errorf("getNumOfObjects should have returned error as we haven't added cluster manager to the list yet")
-	}
-
-	cmList := &enterpriseApi.ClusterManagerList{}
-	cmList.Items = append(cmList.Items, cm)
-
-	client.ListObj = cmList
-
-	numOfObjects, err = getClusterManagerList(ctx, client, &cm, listOpts)
-	if err != nil {
-		t.Errorf("getNumOfObjects should not have returned error=%v", err)
-	}
-
-	if numOfObjects != 1 {
-		t.Errorf("Got wrong number of ClusterManager objects. Expected=%d, Got=%d", 1, numOfObjects)
-	}
-}
-
-func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	ctx := context.TODO()
-	cm := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "clustermanager",
-		},
-	}
-
-	c := spltest.NewMockClient()
-	podExecCommands := []string{
-		"cat /mnt/splunk-operator/local/",
-	}
-
-	smartstoreConfigMap := corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-clustermanager-smartstore",
-			Namespace: "test",
-		},
-		Data: map[string]string{"a": "b"},
-	}
-
-	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
-		{
-			StdOut: "",
-			StdErr: "",
-			Err:    fmt.Errorf("dummy error"),
-		},
-	}
-
-	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
-	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
-
-	err := CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
-	if err == nil {
-		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error")
-	}
-
-	mockPodExecReturnContexts[0].Err = nil
-	err = CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
-	if err == nil {
-		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error since we did not add configMap yet.")
-	}
-
-	c.AddObject(&smartstoreConfigMap)
-	err = CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
-	if err != nil {
-		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should not have returned error; err=%v", err)
-	}
-
-	mockPodExecClient.CheckPodExecCommands(t, "CheckIfsmartstoreConfigMapUpdatedToPod")
-}
-
 func createLicenseManagerStatefulSetForTest(t *testing.T, ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) {
 	t.Helper()
 	statefulSet := &appsv1.StatefulSet{
@@ -1563,10 +1032,7 @@ func createLicenseManagerStatefulSetForTest(t *testing.T, ctx context.Context, c
 func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
-	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
-		return extraEnv, nil
-	}
+	stubCMMultisiteEnvVars(t)
 
 	ctx := context.TODO()
 
@@ -1575,7 +1041,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := newFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
@@ -1734,7 +1200,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := newFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
@@ -1769,10 +1235,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
-		return extraEnv, err
-	}
+	stubCMMultisiteEnvVars(t)
 
 	cm.Kind = "ClusterManager"
 	client.Create(ctx, cm)
@@ -1807,20 +1270,17 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	newpath := filepath.Join("/tmp", "appframework")
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
-	// Mock GetCMMultisiteEnvVarsCall to avoid 5-second HTTP timeout
+	// Mock getCMMultisiteEnvVars to avoid 5-second HTTP timeout
 	// This function tries to connect to Splunk REST API which doesn't exist in unit tests
-	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
-		return extraEnv, nil
-	}
+	stubCMMultisiteEnvVars(t)
 
-	savedPerformCmBundlePush := PerformCmBundlePush
-	PerformCmBundlePush = func(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) error {
+	savedPerformCmBundlePush := performCmBundlePush
+	performCmBundlePush = func(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) error {
 		// Just set the flag to false to simulate successful bundle push
 		cr.Status.BundlePushTracker.NeedToPushManagerApps = false
 		return nil
 	}
-	defer func() { PerformCmBundlePush = savedPerformCmBundlePush }()
+	defer func() { performCmBundlePush = savedPerformCmBundlePush }()
 
 	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
 	savedGetPodExecClient := splutil.GetPodExecClient
@@ -1843,17 +1303,19 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	defer func() { splutil.GetPodExecClient = savedGetPodExecClient }()
 
 	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
+	savedGetAppsList := appframework.GetAppsList
+	appframework.GetAppsList = func(ctx context.Context, remoteDataClientMgr appframework.RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
 		remoteDataListResponse := splcommon.RemoteDataListResponse{}
 		return remoteDataListResponse, nil
 	}
+	defer func() { appframework.GetAppsList = savedGetAppsList }()
 
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := newFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -2136,6 +1598,133 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	}
 }
 
+func TestCheckCmRemainingReferences(t *testing.T) {
+	ctx := context.TODO()
+	cmCr := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{},
+	}
+	client := spltest.NewMockClient()
+
+	err := checkClusterManagerRemainingReferences(ctx, client, &cmCr)
+	if err != nil {
+		t.Errorf("Didn't expect error, clean run required %v", err)
+	}
+
+	// Add an indexerCluster to the client
+	idxc := enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "stack1",
+				},
+			}},
+	}
+	idxcList := &enterpriseApi.IndexerClusterList{}
+	idxcList.Items = append(idxcList.Items, idxc)
+
+	client.ListObj = idxcList
+	err = checkClusterManagerRemainingReferences(ctx, client, &cmCr)
+	if err == nil {
+		t.Errorf("Expected an error for having found a stale IDXC connected to clusterManager %v", err)
+	}
+
+	// Add a SHC to the client
+	shcClient := spltest.NewMockClient()
+
+	shc := enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "stack1",
+				},
+			}},
+	}
+	shcList := &enterpriseApi.SearchHeadClusterList{}
+	shcList.Items = append(shcList.Items, shc)
+
+	shcClient.ListObj = shcList
+	err = checkClusterManagerRemainingReferences(ctx, shcClient, &cmCr)
+	if err == nil {
+		t.Errorf("Expected an error for having found a stale SHC connected to clusterManager %v", err)
+	}
+
+	// Add a LM to the client
+	lmClient := spltest.NewMockClient()
+
+	lm := enterpriseApi.LicenseManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.LicenseManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "stack1",
+				},
+			}},
+	}
+	lmList := &enterpriseApi.LicenseManagerList{}
+	lmList.Items = append(lmList.Items, lm)
+
+	lmClient.ListObj = lmList
+	err = checkClusterManagerRemainingReferences(ctx, lmClient, &cmCr)
+	if err == nil {
+		t.Errorf("Expected an error for having found a stale LM connected to clusterManager %v", err)
+	}
+
+	// Add a MC to the client
+	mcClient := spltest.NewMockClient()
+
+	mc := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "stack1",
+				},
+			}},
+	}
+	mcList := &enterpriseApi.MonitoringConsoleList{}
+	mcList.Items = append(mcList.Items, mc)
+
+	mcClient.ListObj = mcList
+	err = checkClusterManagerRemainingReferences(ctx, mcClient, &cmCr)
+	if err == nil {
+		t.Errorf("Expected an error for having found a stale MC connected to clusterManager %v", err)
+	}
+
+}
+
 func TestClusterManagerUpdatesMonitoringConsoleAnnotations(t *testing.T) {
 	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
@@ -2143,7 +1732,7 @@ func TestClusterManagerUpdatesMonitoringConsoleAnnotations(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	builder := newFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).

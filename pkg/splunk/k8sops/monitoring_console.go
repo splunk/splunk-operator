@@ -34,13 +34,26 @@ import (
 
 // GetMonitoringConsoleList returns MonitoringConsoles in the current namespace.
 func GetMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.MonitoringConsoleList, error) {
-	logger := logging.FromContext(ctx).With("func", "getMonitoringConsoleList", "name", cr.GetName(), "namespace", cr.GetNamespace())
+	logger := logging.FromContext(ctx).With("func", "GetMonitoringConsoleList", "name", cr.GetName(), "namespace", cr.GetNamespace())
 	objectList := enterpriseApi.MonitoringConsoleList{}
 	if err := c.List(ctx, &objectList, listOpts...); err != nil {
 		logger.ErrorContext(ctx, "MonitoringConsole types not found in namespace", "error", err, "namespace", cr.GetNamespace())
 		return objectList, err
 	}
 	return objectList, nil
+}
+
+// GetMonitoringConsole returns a MonitoringConsole by namespaced name.
+func GetMonitoringConsole(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (*enterpriseApi.MonitoringConsole, error) {
+	logger := logging.FromContext(ctx).With("func", "GetMonitoringConsole", "name", cr.GetName(), "namespace", cr.GetNamespace(), "monitoringConsole", namespacedName.Name)
+	object := &enterpriseApi.MonitoringConsole{}
+	if err := c.Get(ctx, namespacedName, object); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			logger.ErrorContext(ctx, "failed to get MonitoringConsole", "error", err, "namespace", namespacedName.Namespace)
+		}
+		return nil, err
+	}
+	return object, nil
 }
 
 // ValidateMonitoringConsoleRef validates changes to the MonitoringConsole reference.

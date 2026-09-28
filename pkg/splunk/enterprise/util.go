@@ -44,7 +44,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -187,16 +186,6 @@ func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Commo
 		{
 			Name:  splcommon.ClusterManagerURL,
 			Value: splcommon.GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
-		},
-	}
-}
-
-// getClusterManagerExtraEnv returns extra environment variables used by indexer clusters
-func getClusterManagerExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  splcommon.ClusterManagerURL,
-			Value: splcommon.GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
 		},
 	}
 }
@@ -668,9 +657,7 @@ func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.Con
 	// There are several owner references added to the statefulSet currently
 	// and potentially a few more in the future. With this approach we are
 	// removing all of the owner references except to the parent CR(needed for deletion)
-	// Currently for the cluster manager, we are checking if there are any entities
-	// holding ties to it via clusterManagerRef(via checkCmRemainingReferences)
-	// and removing the owner references only when all the ties no longer exist.
+	// Callers should handle any cross-CR reference checks before removing owner references.
 	// TODO: Implement the same logic for LicenseManager and MonitoringConsole for
 	// their respective references. Alternatively, see if we can implement a solution
 	// where the ownerReferenced entity can be the one to remove its ownerReference
@@ -831,84 +818,6 @@ func changePhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, 
 		// Ideally this should never happen, check if the "IsDeploymentInProgress" flag is handled correctly or not
 		scopedLog.ErrorContext(ctx, "could not find the App Source in App context")
 	}
-}
-
-// checkCmRemainingReferences checks for any stale references of IndexerCluster, LicenseManager, SearchheadCluster, MonitoringConsole
-// pointing to a particular ClusterManager CR
-func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClient, cmCr splcommon.MetaObject) error {
-
-	scopedLog := logging.FromContext(ctx).With("func", "checkCmRemainingReferences", "cmCr", cmCr.GetName(), "namespace", cmCr.GetNamespace())
-
-	// Filter by namespace
-	listOpts := []client.ListOption{
-		client.InNamespace(cmCr.GetNamespace()),
-	}
-
-	// Look for indexerClusters still holding references to the ClusterManager
-	idxcList, err := k8sops.GetIndexerClusterList(ctx, c, cmCr, listOpts)
-	if err != nil {
-		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
-			scopedLog.ErrorContext(ctx, "couldn't retrieve IndexerCluster list", "error", err)
-			return err
-		}
-	}
-	for _, item := range idxcList.Items {
-		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
-			scopedLog.ErrorContext(ctx, fmt.Sprintf(`IndexerCluster %s still has a reference for ClusterManager %s,
-				please backup if needed and delete the IndexerCluster`, item.GetName(), cmCr.GetName()))
-			return fmt.Errorf("ClusterManager has stale references to an indexerCluster")
-		}
-	}
-
-	// Look for searchHeadClusters still holding references to the ClusterManager
-	shcList, err := k8sops.GetSearchHeadClusterList(ctx, c, cmCr, listOpts)
-	if err != nil {
-		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
-			scopedLog.ErrorContext(ctx, "couldn't retrieve SearchHeadCluster list", "error", err)
-			return err
-		}
-	}
-	for _, item := range shcList.Items {
-		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
-			scopedLog.ErrorContext(ctx, fmt.Sprintf(`SearchHeadCluster %s still has a reference for ClusterManager %s,
-				please backup if needed and delete the SearchHeadCluster`, item.GetName(), cmCr.GetName()))
-			return fmt.Errorf("ClusterManager has stale references to a searchHeadCluster")
-		}
-	}
-
-	// Look for LicenseManagers still holding references to the ClusterManager
-	lmList, err := k8sops.GetLicenseManagerList(ctx, c, cmCr, listOpts)
-	if err != nil {
-		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
-			scopedLog.ErrorContext(ctx, "couldn't retrieve LicenseManager list", "error", err)
-			return err
-		}
-	}
-	for _, item := range lmList.Items {
-		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
-			scopedLog.ErrorContext(ctx, fmt.Sprintf(`LicenseManager %s still has a reference for ClusterManager %s,
-				please backup if needed and delete the LicenseManager`, item.GetName(), cmCr.GetName()))
-			return fmt.Errorf("ClusterManager has stale references to a LicenseManager")
-		}
-	}
-
-	// Look for MonitoringConsole still holding references to the ClusterManager
-	mcList, err := k8sops.GetMonitoringConsoleList(ctx, c, cmCr, listOpts)
-	if err != nil {
-		if !strings.Contains(err.Error(), "NotFound") && !k8serrors.IsNotFound(err) {
-			scopedLog.ErrorContext(ctx, "couldn't retrieve MonitoringConsole list", "error", err)
-			return err
-		}
-	}
-	for _, item := range mcList.Items {
-		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
-			scopedLog.ErrorContext(ctx, fmt.Sprintf(`MonitoringConsole %s still has a reference for ClusterManager %s,
-				please backup if needed and delete the MonitoringConsole`, item.GetName(), cmCr.GetName()))
-			return fmt.Errorf("ClusterManager has stale references to a MonitoringConsole")
-		}
-	}
-
-	return nil
 }
 
 func removeStaleEntriesFromAuxPhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) {
@@ -1750,7 +1659,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 
 	var tryCnt int
 	for tryCnt = 0; tryCnt < maxRetryCountForCRStatusUpdate; tryCnt++ {
-		latestCR, err := fetchCurrentCRWithStatusUpdate(ctx, client, origCR, crError)
+		latestCR, err := k8sops.GetCurrentCRWithStatusUpdate(ctx, client, origCR, crError)
 		if err != nil {
 			if origCR.GetDeletionTimestamp() == nil {
 				scopedLog.ErrorContext(ctx, "unable to Read the latest CR from the K8s", "error", err)
@@ -1774,7 +1683,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 			// So, always make sure that the cache is reflecting the latest CR, before the next event
 			// waiting in the Q triggers the next reconcile
 			for chkCnt := 0; chkCnt < maxRetryCountForCRStatusUpdate; chkCnt++ {
-				crAfterUpdate, err := fetchCurrentCRWithStatusUpdate(ctx, client, latestCR, crError)
+				crAfterUpdate, err := k8sops.GetCurrentCRWithStatusUpdate(ctx, client, latestCR, crError)
 				if err == nil && updatedCRVersion == crAfterUpdate.GetResourceVersion() {
 					scopedLog.InfoContext(ctx, "cache is reflecting the latest CR", "updated CR version", updatedCRVersion)
 					// Latest CR is reflecting in the cache
@@ -1796,142 +1705,6 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 	if origCR.GetDeletionTimestamp() == nil && tryCnt >= maxRetryCountForCRStatusUpdate {
 		scopedLog.ErrorContext(ctx, "status update failed", "attemptCount", tryCnt)
 	}
-}
-
-// fetchCurrentCRWithStatusUpdate returns a CR (fresh Read) with latest status copied
-// Use this API to update the CR status message with an error if any. This aviods multiple
-// hops of CR specific logic to determine CR type.
-func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject, crError *error) (splcommon.MetaObject, error) {
-	namespacedName := types.NamespacedName{Name: origCR.GetName(), Namespace: origCR.GetNamespace()}
-
-	var err error
-	switch cr := origCR.(type) {
-	case *enterpriseApi.Standalone:
-		latestCR := &enterpriseApi.Standalone{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.Message = ""
-		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApi.IngestorCluster:
-		latestCR := &enterpriseApi.IngestorCluster{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.Message = ""
-		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApi.Queue:
-		latestCR := &enterpriseApi.Queue{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.Message = ""
-		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApi.ObjectStorage:
-		latestCR := &enterpriseApi.ObjectStorage{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.Message = ""
-		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApiV3.LicenseMaster:
-		latestCR := &enterpriseApiV3.LicenseMaster{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApi.LicenseManager:
-		latestCR := &enterpriseApi.LicenseManager{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.Message = ""
-		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApi.SearchHeadCluster:
-		latestCR := &enterpriseApi.SearchHeadCluster{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.Message = ""
-		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApi.IndexerCluster:
-		latestCR := &enterpriseApi.IndexerCluster{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.Message = ""
-		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApiV3.ClusterMaster:
-		latestCR := &enterpriseApiV3.ClusterMaster{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApi.ClusterManager:
-		latestCR := &enterpriseApi.ClusterManager{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.Message = ""
-		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-
-	case *enterpriseApi.MonitoringConsole:
-		latestCR := &enterpriseApi.MonitoringConsole{}
-		if err = client.Get(ctx, namespacedName, latestCR); err != nil {
-			return nil, err
-		}
-		cr.Status.Message = ""
-		if (crError != nil) && ((*crError) != nil) {
-			cr.Status.Message = (*crError).Error()
-		}
-		cr.Status.DeepCopyInto(&latestCR.Status)
-		return latestCR, nil
-	}
-
-	return nil, fmt.Errorf("invalid CR Kind")
 }
 
 // ReadFile reads the contents of the given file name passed as string

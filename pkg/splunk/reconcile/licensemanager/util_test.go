@@ -17,38 +17,17 @@ package licensemanager
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-type RemoteDataClientManager struct {
-	client              splcommon.ControllerClient
-	cr                  splcommon.MetaObject
-	appFrameworkRef     *enterpriseApi.AppFrameworkSpec
-	vol                 *enterpriseApi.VolumeSpec
-	location            string
-	initFn              splcommon.GetInitFunc
-	getRemoteDataClient func(context.Context, splcommon.ControllerClient, splcommon.MetaObject, *enterpriseApi.AppFrameworkSpec, *enterpriseApi.VolumeSpec, string, splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error)
-}
-
-func (m *RemoteDataClientManager) GetAppsList(ctx context.Context) (splcommon.RemoteDataListResponse, error) {
-	c, err := m.getRemoteDataClient(ctx, m.client, m.cr, m.appFrameworkRef, m.vol, m.location, m.initFn)
-	if err != nil {
-		return splcommon.RemoteDataListResponse{}, err
-	}
-	return c.Client.GetAppsList(ctx)
-}
 
 func loadFixture(t *testing.T, filename string) string {
 	t.Helper()

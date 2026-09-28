@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -573,6 +573,22 @@ func GetStatefulSetByName(ctx context.Context, c splcommon.ControllerClient, nam
 	return &statefulset, nil
 }
 
+// GetStatefulSetImage returns the current image for the first container in a CR's StatefulSet.
+func GetStatefulSetImage(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType splcommon.InstanceType) (string, error) {
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      splutil.GetSplunkStatefulsetName(instanceType, cr.GetName()),
+	}
+	statefulSet, err := GetStatefulSetByName(ctx, c, namespacedName)
+	if err != nil {
+		return "", err
+	}
+	if len(statefulSet.Spec.Template.Spec.Containers) > 0 {
+		return statefulSet.Spec.Template.Spec.Containers[0].Image, nil
+	}
+	return "", fmt.Errorf("unable to get image from statefulset of type %s", instanceType.ToString())
+}
+
 // DeleteReferencesToAutomatedMCIfExists deletes the automated MC sts. This is when customer migrates from automated MC to MC CRD
 // Check if MC CR is not the owner of the MC statefulset then delete that Statefulset
 func DeleteReferencesToAutomatedMCIfExists(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) error {
@@ -999,7 +1015,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Items: []corev1.KeyToPath{
 					{Key: "indexes.conf", Path: "indexes.conf", Mode: &configMapVolDefaultMode},
 					{Key: "server.conf", Path: "server.conf", Mode: &configMapVolDefaultMode},
-					{Key: configToken, Path: configToken, Mode: &configMapVolDefaultMode},
+					{Key: splcommon.ConfigToken, Path: splcommon.ConfigToken, Mode: &configMapVolDefaultMode},
 				},
 			},
 		})

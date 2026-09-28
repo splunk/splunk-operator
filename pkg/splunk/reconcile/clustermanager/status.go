@@ -1,6 +1,19 @@
 // Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
-package standalone
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package clustermanager
 
 import (
 	"context"
@@ -14,7 +27,7 @@ import (
 
 const maxRetryCountForCRStatusUpdate = 10
 
-func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, origCR *enterpriseApi.Standalone, crError *error) {
+func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, origCR *enterpriseApi.ClusterManager, crError *error) {
 	scopedLog := logging.FromContext(ctx).With("func", "updateCRStatus", "original cr version", origCR.GetResourceVersion())
 
 	var tryCnt int
@@ -22,7 +35,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 		latestCR, err := k8sops.GetCurrentCRWithStatusUpdate(ctx, client, origCR, crError)
 		if err != nil {
 			if origCR.GetDeletionTimestamp() == nil {
-				scopedLog.ErrorContext(ctx, "unable to Read the latest CR from the K8s", "error", err)
+				scopedLog.ErrorContext(ctx, "unable to read the latest CR from the K8s", "error", err)
 			}
 			continue
 		}
