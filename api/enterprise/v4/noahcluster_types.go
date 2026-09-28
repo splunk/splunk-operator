@@ -64,8 +64,9 @@ type NoahClusterSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:default=3600
-	// CacheWarmScaleOutTimeoutSeconds is the maximum time to wait for a peer to become up when
-	// cache-warm coordination is enabled. Zero disables the timeout.
+	// CacheWarmScaleOutTimeoutSeconds is the maximum time to wait for each registered peer to
+	// become up before permitting the next scale-out batch. Expiry does not make the peer or
+	// cluster ready. Zero disables the timeout.
 	CacheWarmScaleOutTimeoutSeconds *int32 `json:"cacheWarmScaleOutTimeoutSeconds,omitempty"`
 }
 

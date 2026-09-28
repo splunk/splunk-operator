@@ -183,7 +183,7 @@ func TestEvaluateNoahMembership(t *testing.T) {
 			got := EvaluateNoahMembership(test.expected, test.observed, NoahCacheWarmPolicy{}, startedAt)
 			assert.Equal(t, test.want.AllRegistered, got.AllRegistered)
 			assert.Equal(t, test.want.AllReady, got.AllReady)
-			assert.Equal(t, test.want.TimedOutPeerID, got.TimedOutPeerID)
+			assert.Equal(t, test.want.TimedOutPeerIDs, got.TimedOutPeerIDs)
 		})
 	}
 }
@@ -249,6 +249,7 @@ func TestEvaluateNoahMembershipAcceptsExplicitZero(t *testing.T) {
 	assert.Equal(t, []string{"unrelated"}, got.UnexpectedPeerIDs)
 	assert.True(t, got.AllRegistered)
 	assert.True(t, got.AllReady)
+	assert.True(t, got.AllReadyOrTimedOut)
 }
 
 func TestEvaluateNoahMembershipRegistrationStatuses(t *testing.T) {
@@ -288,7 +289,7 @@ func TestEvaluateNoahMembershipRegistrationStatuses(t *testing.T) {
 
 func TestEvaluateNoahMembershipCacheWarmTimeout(t *testing.T) {
 	startedAt := time.Unix(1_700_000_000, 0)
-	now := startedAt.Add(time.Minute)
+	deadline := startedAt.Add(time.Minute)
 	policy := NoahCacheWarmPolicy{Required: true, Timeout: time.Minute}
 	expected := []ExpectedNoahPeer{{ID: "peer-b", StartedAt: startedAt}, {ID: "peer-a", StartedAt: startedAt}}
 	peer := func(id string, status noah.PeerStatus, start time.Time) noah.Peer {
@@ -300,58 +301,52 @@ func TestEvaluateNoahMembershipCacheWarmTimeout(t *testing.T) {
 		observed []noah.Peer
 		policy   NoahCacheWarmPolicy
 		now      time.Time
-		want     string
+		wantIDs  []string
+		wantGate bool
 	}{
-		{name: "missing peers time out deterministically", policy: policy, now: now, want: "peer-a"},
-		{name: "warming peers time out deterministically", observed: []noah.Peer{peer("peer-b", noah.PeerStatusWarming, startedAt), peer("peer-a", noah.PeerStatusWarming, startedAt)}, policy: policy, now: now, want: "peer-a"},
-		{name: "started peer times out", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusStarted, startedAt)}, policy: policy, now: now, want: "peer-a"},
-		{name: "warmed peer must still become up", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusWarmed, startedAt)}, policy: policy, now: now, want: "peer-a"},
-		{name: "down peer times out", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusDown, startedAt)}, policy: policy, now: now, want: "peer-a"},
-		{name: "missing peers remain within timeout", policy: policy, now: now.Add(-time.Second)},
-		{name: "warming peers remain within timeout", observed: []noah.Peer{peer("peer-b", noah.PeerStatusWarming, startedAt), peer("peer-a", noah.PeerStatusWarming, startedAt)}, policy: policy, now: now.Add(-time.Second)},
-		{name: "up peers do not time out", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusUp, startedAt)}, policy: policy, now: now},
-		{name: "timeout policy can be disabled", policy: NoahCacheWarmPolicy{Timeout: time.Minute}, now: now},
-		{name: "zero timeout is disabled", policy: NoahCacheWarmPolicy{Required: true}, now: now},
+		{name: "registered warming peers time out deterministically", observed: []noah.Peer{peer("peer-b", noah.PeerStatusWarming, startedAt), peer("peer-a", noah.PeerStatusWarming, startedAt)}, policy: policy, now: deadline, wantIDs: []string{"peer-a", "peer-b"}, wantGate: true},
+		{name: "started peer times out", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusStarted, startedAt)}, policy: policy, now: deadline, wantIDs: []string{"peer-a"}, wantGate: true},
+		{name: "warmed peer times out", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusWarmed, startedAt)}, policy: policy, now: deadline, wantIDs: []string{"peer-a"}, wantGate: true},
+		{name: "warming peer remains within timeout", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusWarming, startedAt)}, policy: policy, now: deadline.Add(-time.Second)},
+		{name: "older timeout does not skip newer warming peer", observed: []noah.Peer{peer("peer-b", noah.PeerStatusWarming, startedAt), peer("peer-a", noah.PeerStatusWarming, deadline)}, policy: policy, now: deadline, wantIDs: []string{"peer-b"}},
+		{name: "up peers satisfy gate without timeout", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusUp, startedAt)}, policy: policy, now: deadline, wantGate: true},
+		{name: "missing peers do not time out", policy: policy, now: deadline},
+		{name: "down peer does not time out", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusDown, startedAt)}, policy: policy, now: deadline},
+		{name: "stale peer does not time out", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusWarming, startedAt.Add(-time.Second))}, policy: policy, now: deadline},
+		{name: "duplicate peer does not time out", observed: []noah.Peer{peer("peer-b", noah.PeerStatusUp, startedAt), peer("peer-a", noah.PeerStatusWarming, startedAt), peer("peer-a", noah.PeerStatusWarming, startedAt)}, policy: policy, now: deadline},
+		{name: "timeout policy can be disabled", observed: []noah.Peer{peer("peer-b", noah.PeerStatusWarming, startedAt), peer("peer-a", noah.PeerStatusWarming, startedAt)}, policy: NoahCacheWarmPolicy{Timeout: time.Minute}, now: deadline},
+		{name: "zero timeout is disabled", observed: []noah.Peer{peer("peer-b", noah.PeerStatusWarming, startedAt), peer("peer-a", noah.PeerStatusWarming, startedAt)}, policy: NoahCacheWarmPolicy{Required: true}, now: deadline},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.want, EvaluateNoahMembership(expected, test.observed, test.policy, test.now).TimedOutPeerID)
+			got := EvaluateNoahMembership(expected, test.observed, test.policy, test.now)
+			assert.Equal(t, test.wantIDs, got.TimedOutPeerIDs)
+			assert.Equal(t, test.wantGate, got.AllReadyOrTimedOut)
 		})
 	}
 }
 
-func TestNoahBucketMapConfirmsScaleDown(t *testing.T) {
-	valid := &noah.BucketMap{
-		ID:      7,
-		Status:  noah.BucketMapStatusActive,
-		PeerIDs: []string{"peer-0", "peer-1"},
-	}
-
+func TestNoahPeerInactive(t *testing.T) {
 	tests := []struct {
-		name      string
-		bucketMap *noah.BucketMap
-		remaining []string
-		removed   string
-		want      bool
+		name   string
+		peers  []noah.Peer
+		peerID string
+		want   bool
 	}{
-		{name: "remaining peers present and removed peer absent", bucketMap: valid, remaining: []string{"peer-0", "peer-1"}, removed: "peer-2", want: true},
-		{name: "foreign peers are allowed", bucketMap: &noah.BucketMap{ID: 7, Status: noah.BucketMapStatusActive, PeerIDs: []string{"peer-0", "foreign"}}, remaining: []string{"peer-0"}, removed: "peer-1", want: true},
-		{name: "explicit empty remaining set is complete", bucketMap: &noah.BucketMap{ID: 7, Status: noah.BucketMapStatusActive, PeerIDs: []string{}}, removed: "peer-0", want: true},
-		{name: "missing bucket map", remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "zero map ID", bucketMap: &noah.BucketMap{Status: noah.BucketMapStatusActive, PeerIDs: []string{"peer-0"}}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "negative map ID", bucketMap: &noah.BucketMap{ID: -1, Status: noah.BucketMapStatusActive, PeerIDs: []string{"peer-0"}}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "unknown status", bucketMap: &noah.BucketMap{ID: 7, PeerIDs: []string{"peer-0"}}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "omitted peer list", bucketMap: &noah.BucketMap{ID: 7, Status: noah.BucketMapStatusActive}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "removed peer remains", bucketMap: &noah.BucketMap{ID: 7, Status: noah.BucketMapStatusActive, PeerIDs: []string{"peer-0", "peer-2"}}, remaining: []string{"peer-0"}, removed: "peer-2"},
-		{name: "remaining peer missing", bucketMap: valid, remaining: []string{"peer-0", "peer-3"}, removed: "peer-2"},
-		{name: "empty remaining peer ID", bucketMap: valid, remaining: []string{"peer-0", ""}, removed: "peer-2"},
-		{name: "empty removed peer ID", bucketMap: valid, remaining: []string{"peer-0"}},
+		{name: "peer absent", peers: []noah.Peer{{ID: "foreign", Status: noah.PeerStatusUp}}, peerID: "peer-0", want: true},
+		{name: "peer down", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusDown}}, peerID: "peer-0", want: true},
+		{name: "duplicate down records", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusDown}, {ID: "peer-0", Status: noah.PeerStatusDown}}, peerID: "peer-0", want: true},
+		{name: "peer up", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusUp}}, peerID: "peer-0"},
+		{name: "peer state unknown", peers: []noah.Peer{{ID: "peer-0"}}, peerID: "peer-0"},
+		{name: "peer decommissioned is publicly active", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusDecommissioned}}, peerID: "peer-0"},
+		{name: "duplicate mixed states", peers: []noah.Peer{{ID: "peer-0", Status: noah.PeerStatusDown}, {ID: "peer-0", Status: noah.PeerStatusUp}}, peerID: "peer-0"},
+		{name: "empty peer ID", peers: []noah.Peer{{ID: "foreign", Status: noah.PeerStatusUp}}},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.want, NoahBucketMapConfirmsScaleDown(test.bucketMap, test.remaining, test.removed))
+			assert.Equal(t, test.want, NoahPeerInactive(test.peers, test.peerID))
 		})
 	}
 }
@@ -395,15 +390,24 @@ func TestPlanNoahScaleOut(t *testing.T) {
 			want:              common.ScaleOutPlan{TargetReplicas: 1},
 		},
 		{
-			name:              "cache warm timeout fails closed",
-			membership:        NoahMembership{AllRegistered: true, AllReady: true, TimedOutPeerID: "peer-0"},
+			name:              "cache warm timeout advances one ordinal",
+			membership:        NoahMembership{AllRegistered: true, AllReadyOrTimedOut: true, TimedOutPeerIDs: []string{"peer-0"}},
 			appliedReplicas:   1,
 			requestedReplicas: 3,
-			want:              common.ScaleOutPlan{TargetReplicas: 1},
+			requireReady:      true,
+			want:              common.ScaleOutPlan{TargetReplicas: 2},
+		},
+		{
+			name:              "one timed out peer cannot skip another warming peer",
+			membership:        NoahMembership{AllRegistered: true, TimedOutPeerIDs: []string{"peer-0"}},
+			appliedReplicas:   2,
+			requestedReplicas: 3,
+			requireReady:      true,
+			want:              common.ScaleOutPlan{TargetReplicas: 2},
 		},
 		{
 			name:              "readiness advances only one ordinal",
-			membership:        NoahMembership{AllRegistered: true, AllReady: true},
+			membership:        NoahMembership{AllRegistered: true, AllReady: true, AllReadyOrTimedOut: true},
 			appliedReplicas:   1,
 			requestedReplicas: 5,
 			requireReady:      true,
@@ -411,7 +415,7 @@ func TestPlanNoahScaleOut(t *testing.T) {
 		},
 		{
 			name:              "requested replicas and readiness complete scale-out",
-			membership:        NoahMembership{AllRegistered: true, AllReady: true},
+			membership:        NoahMembership{AllRegistered: true, AllReady: true, AllReadyOrTimedOut: true},
 			appliedReplicas:   3,
 			requestedReplicas: 3,
 			requireReady:      true,
@@ -422,6 +426,14 @@ func TestPlanNoahScaleOut(t *testing.T) {
 			membership:        NoahMembership{AllRegistered: true},
 			appliedReplicas:   3,
 			requestedReplicas: 3,
+			want:              common.ScaleOutPlan{TargetReplicas: 3},
+		},
+		{
+			name:              "timed out final peer is not complete",
+			membership:        NoahMembership{AllRegistered: true, AllReadyOrTimedOut: true, TimedOutPeerIDs: []string{"peer-2"}},
+			appliedReplicas:   3,
+			requestedReplicas: 3,
+			requireReady:      true,
 			want:              common.ScaleOutPlan{TargetReplicas: 3},
 		},
 		{

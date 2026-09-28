@@ -16,18 +16,22 @@
 package resources
 
 import (
+	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
 const (
-	NoahEnabledEnvName         = "SPLUNK_NOAH_ENABLED"
-	NoahHeadlessServiceEnvName = "SPLUNK_HEADLESS_SERVICE_NAME"
-	ClusterDomainEnvName       = "CLUSTER_DOMAIN"
-	PodNameEnvName             = "POD_NAME"
-	PodNamespaceEnvName        = "POD_NAMESPACE"
+	NoahEnabledEnvName           = "SPLUNK_NOAH_ENABLED"
+	NoahAdvertisedAddressEnvName = "SPLUNK_NOAH_ADVERTISED_ADDR"
+	HeadlessServiceEnvName       = "SPLUNK_HEADLESS_SERVICE_NAME"
+	ClusterDomainEnvName         = "CLUSTER_DOMAIN"
+	PodNameEnvName               = "POD_NAME"
+	PodNamespaceEnvName          = "POD_NAMESPACE"
 
 	noahCacheWarmDecommissionCommand  = `touch "$SPLUNK_HOME/var/run/splunk/decommission_for_cache_warming"`
+	noahManagementPort                = 8089
 	noahTerminationGracePeriodSeconds = int64(15 * 60)
 )
 
@@ -45,7 +49,7 @@ func WithNoahPodIdentity(clusterDomain string) StatefulSetOption {
 	return func(statefulSet *appsv1.StatefulSet) {
 		identityEnv := []corev1.EnvVar{
 			{Name: NoahEnabledEnvName, Value: "true"},
-			{Name: NoahHeadlessServiceEnvName, Value: statefulSet.Spec.ServiceName},
+			{Name: HeadlessServiceEnvName, Value: statefulSet.Spec.ServiceName},
 			{Name: ClusterDomainEnvName, Value: clusterDomain},
 			{
 				Name: PodNameEnvName,
@@ -68,7 +72,40 @@ func WithNoahPodIdentity(clusterDomain string) StatefulSetOption {
 			if container.Name != "splunk" {
 				continue
 			}
-			container.Env = upsertEnvVars(container.Env, identityEnv)
+			container.Env = replaceAndAppendEnvVars(container.Env, identityEnv)
+		}
+	}
+}
+
+// WithNoahIndexerIdentity supplies the stable advertised management address
+// consumed by a Noah indexer. The Downward API variables are added first so
+// Kubernetes expands them in SPLUNK_NOAH_ADVERTISED_ADDR.
+func WithNoahIndexerIdentity(clusterDomain string) StatefulSetOption {
+	if clusterDomain == "" {
+		clusterDomain = "cluster.local"
+	}
+	podIdentity := WithNoahPodIdentity(clusterDomain)
+
+	return func(statefulSet *appsv1.StatefulSet) {
+		podIdentity(statefulSet)
+		advertisedAddress := corev1.EnvVar{
+			Name: NoahAdvertisedAddressEnvName,
+			Value: fmt.Sprintf(
+				"https://$(%s).%s.$(%s).svc.%s:%d",
+				PodNameEnvName,
+				statefulSet.Spec.ServiceName,
+				PodNamespaceEnvName,
+				clusterDomain,
+				noahManagementPort,
+			),
+		}
+
+		for i := range statefulSet.Spec.Template.Spec.Containers {
+			container := &statefulSet.Spec.Template.Spec.Containers[i]
+			if container.Name != "splunk" {
+				continue
+			}
+			container.Env = replaceAndAppendEnvVars(container.Env, []corev1.EnvVar{advertisedAddress})
 		}
 	}
 }
@@ -94,32 +131,18 @@ func WithNoahCacheWarmDecommission() StatefulSetOption {
 	}
 }
 
-func upsertEnvVars(existing, desired []corev1.EnvVar) []corev1.EnvVar {
-	replacements := make(map[string]corev1.EnvVar, len(desired))
+func replaceAndAppendEnvVars(existing, desired []corev1.EnvVar) []corev1.EnvVar {
+	names := make(map[string]struct{}, len(desired))
 	for _, env := range desired {
-		replacements[env.Name] = env
+		names[env.Name] = struct{}{}
 	}
 
 	result := make([]corev1.EnvVar, 0, len(existing)+len(desired))
-	seen := make(map[string]bool, len(desired))
 	for _, env := range existing {
-		replacement, managed := replacements[env.Name]
-		if !managed {
+		if _, replace := names[env.Name]; !replace {
 			result = append(result, env)
-			continue
 		}
-		if seen[env.Name] {
-			continue
-		}
-		result = append(result, replacement)
-		seen[env.Name] = true
 	}
 
-	for _, env := range desired {
-		if seen[env.Name] {
-			continue
-		}
-		result = append(result, env)
-	}
-	return result
+	return append(result, desired...)
 }
