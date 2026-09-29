@@ -74,6 +74,30 @@ func (s *SearchHeadClusterSpec) NoahEnabled() bool {
 	return s != nil && s.NoahClusterRef != nil
 }
 
+// MemberOperation names the lifecycle operation currently being performed on one search head
+// cluster member, if any. Distinct from the member's own Status (which reports Splunk's view,
+// e.g. "Up" or "ManualDetention") — CurrentOperation reports what SOK is doing about it.
+type MemberOperation string
+
+const (
+	// MemberOperationDetaining: SOK has just told this member to enter manual detention and is
+	// waiting for Splunk to confirm the member's Status has flipped to ManualDetention.
+	MemberOperationDetaining MemberOperation = "Detaining"
+
+	// MemberOperationDraining: the member has confirmed ManualDetention; SOK is waiting for its
+	// active search count to reach zero (or for the detention timeout to expire).
+	MemberOperationDraining MemberOperation = "Draining"
+
+	// MemberOperationRemoving: drain finished (or timed out); SOK has asked the cluster to remove
+	// this member from consensus, immediately before deleting its Pod. Scale-down only — a plain
+	// rolling recycle goes straight from Draining to Recycling.
+	MemberOperationRemoving MemberOperation = "Removing"
+
+	// MemberOperationRecycling: the member's Pod has been (or is about to be) deleted so
+	// Kubernetes can recreate it on the current revision; waiting for it to rejoin.
+	MemberOperationRecycling MemberOperation = "Recycling"
+)
+
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
 type SearchHeadClusterMemberStatus struct {
 	// Name of the search head cluster member
@@ -97,6 +121,16 @@ type SearchHeadClusterMemberStatus struct {
 	// StatefulSet controller-revision-hash label of the pod — populated by updateStatus
 	// so PrepareRecycle can detect when a replacement pod (new revision) enters ManualDetention.
 	PodRevision string `json:"podRevision,omitempty"`
+
+	// The lifecycle operation SOK is currently performing on this member, if any. Empty when the
+	// member is Up on the current revision and nothing is being done to it.
+	// +optional
+	CurrentOperation MemberOperation `json:"currentOperation,omitempty"`
+
+	// Unix timestamp when CurrentOperation last transitioned to its present value. Zero when
+	// CurrentOperation is empty.
+	// +optional
+	OperationStartTimestamp int64 `json:"operationStartTimestamp,omitempty"`
 }
 
 // SearchHeadClusterStatus defines the observed state of a Splunk Enterprise search head cluster
