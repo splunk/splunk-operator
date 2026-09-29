@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package ingestorcluster
 
 import (
 	"context"
@@ -23,6 +23,8 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -45,7 +47,7 @@ func newRestartTestScheme() *runtime.Scheme {
 func newRestartTestSTS(crName, namespace, currentRevision, updateRevision string) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkIngestor, crName),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, crName),
 			Namespace: namespace,
 		},
 		Status: appsv1.StatefulSetStatus{
@@ -87,14 +89,14 @@ func newRestartTestPod(name, namespace, crName string, deletionTimestamp *metav1
 	return pod
 }
 
-// withChecker overrides MakeRestartRequiredChecker for the duration of a test and restores it on cleanup.
-func withChecker(t *testing.T, checker RestartRequiredChecker) {
+// withChecker overrides makeRestartChecker for the duration of a test and restores it on cleanup.
+func withChecker(t *testing.T, checker restartChecker) {
 	t.Helper()
-	orig := MakeRestartRequiredChecker
-	MakeRestartRequiredChecker = func(_ splcommon.ControllerClient, _ *enterpriseApi.IngestorCluster) RestartRequiredChecker {
+	orig := makeRestartChecker
+	makeRestartChecker = func(_ splcommon.ControllerClient, _ *enterpriseApi.IngestorCluster) restartChecker {
 		return checker
 	}
-	t.Cleanup(func() { MakeRestartRequiredChecker = orig })
+	t.Cleanup(func() { makeRestartChecker = orig })
 }
 
 // findCondition is a test helper that looks up a condition by type.
@@ -107,19 +109,19 @@ func findCondition(conditions []metav1.Condition, condType string) *metav1.Condi
 	return nil
 }
 
-// TestRunRollingEviction_EvictsAllCandidatesUntilPDBBlocks verifies that all candidates are
+// TestReconcileRestart_EvictsAllCandidatesUntilPDBBlocks verifies that all candidates are
 // evicted in ordinal order when the PDB allows it, and the result carries a retry interval.
-func TestRunRollingEviction_EvictsAllCandidatesUntilPDBBlocks(t *testing.T) {
+func TestReconcileRestart_EvictsAllCandidatesUntilPDBBlocks(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 3)
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
-	pod2 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 2), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod2 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 2), "ns", "test", nil)
 
 	withChecker(t, func(_ context.Context, _ int32) (bool, error) { return true, nil })
 
 	var evicted []string
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1, pod2).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceCreate: func(_ context.Context, _ client.Client, _ string, obj client.Object, _ client.Object, _ ...client.SubResourceCreateOption) error {
@@ -129,14 +131,14 @@ func TestRunRollingEviction_EvictsAllCandidatesUntilPDBBlocks(t *testing.T) {
 		}).
 		Build()
 
-	result, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	result, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	expected := []string{
-		GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0),
-		GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1),
-		GetSplunkStatefulsetPodName(SplunkIngestor, "test", 2),
+		splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0),
+		splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1),
+		splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 2),
 	}
 	if !reflect.DeepEqual(evicted, expected) {
 		t.Errorf("expected all pods evicted in order %v, got %v", expected, evicted)
@@ -146,24 +148,24 @@ func TestRunRollingEviction_EvictsAllCandidatesUntilPDBBlocks(t *testing.T) {
 	}
 }
 
-// TestRunRollingEviction_StopsAtPDBBlock verifies that eviction stops as soon as the PDB
+// TestReconcileRestart_StopsAtPDBBlock verifies that eviction stops as soon as the PDB
 // blocks, leaving remaining candidates unevicted.
-func TestRunRollingEviction_StopsAtPDBBlock(t *testing.T) {
+func TestReconcileRestart_StopsAtPDBBlock(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 3)
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
-	pod2 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 2), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod2 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 2), "ns", "test", nil)
 
 	withChecker(t, func(_ context.Context, _ int32) (bool, error) { return true, nil })
 
 	var evicted []string
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1, pod2).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceCreate: func(_ context.Context, _ client.Client, _ string, obj client.Object, _ client.Object, _ ...client.SubResourceCreateOption) error {
 				// Allow pod-0, block pod-1 with PDB.
-				if obj.GetName() == GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1) {
+				if obj.GetName() == splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1) {
 					return k8serrors.NewTooManyRequests("pdb", 0)
 				}
 				evicted = append(evicted, obj.GetName())
@@ -172,11 +174,11 @@ func TestRunRollingEviction_StopsAtPDBBlock(t *testing.T) {
 		}).
 		Build()
 
-	result, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	result, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(evicted) != 1 || evicted[0] != GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0) {
+	if len(evicted) != 1 || evicted[0] != splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0) {
 		t.Errorf("expected only pod-0 evicted before PDB block, got %v", evicted)
 	}
 	if result.RequeueAfter != pdbRetryInterval {
@@ -188,17 +190,17 @@ func TestRunRollingEviction_StopsAtPDBBlock(t *testing.T) {
 	}
 }
 
-// TestRunRollingEviction_PDB429ReturnsLongerRequeue verifies that a PDB block sets the condition
+// TestReconcileRestart_PDB429ReturnsLongerRequeue verifies that a PDB block sets the condition
 // and returns pdbRetryInterval.
-func TestRunRollingEviction_PDB429ReturnsLongerRequeue(t *testing.T) {
+func TestReconcileRestart_PDB429ReturnsLongerRequeue(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 2)
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
 
 	withChecker(t, func(_ context.Context, _ int32) (bool, error) { return true, nil })
 
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceCreate: func(_ context.Context, _ client.Client, _ string, _ client.Object, _ client.Object, _ ...client.SubResourceCreateOption) error {
@@ -207,7 +209,7 @@ func TestRunRollingEviction_PDB429ReturnsLongerRequeue(t *testing.T) {
 		}).
 		Build()
 
-	result, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	result, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -220,17 +222,17 @@ func TestRunRollingEviction_PDB429ReturnsLongerRequeue(t *testing.T) {
 	}
 }
 
-// TestRunRollingEviction_NoneNeedRestart verifies poll interval and no evictions when no pods need restart.
-func TestRunRollingEviction_NoneNeedRestart(t *testing.T) {
+// TestReconcileRestart_NoneNeedRestart verifies poll interval and no evictions when no pods need restart.
+func TestReconcileRestart_NoneNeedRestart(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 2)
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
 
 	withChecker(t, func(_ context.Context, _ int32) (bool, error) { return false, nil })
 
 	evicted := 0
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceCreate: func(_ context.Context, _ client.Client, _ string, _ client.Object, _ client.Object, _ ...client.SubResourceCreateOption) error {
@@ -240,7 +242,7 @@ func TestRunRollingEviction_NoneNeedRestart(t *testing.T) {
 		}).
 		Build()
 
-	result, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	result, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -252,14 +254,14 @@ func TestRunRollingEviction_NoneNeedRestart(t *testing.T) {
 	}
 }
 
-// TestRunRollingEviction_CheckerErrorContinues verifies that a checker error for one pod is
+// TestReconcileRestart_CheckerErrorContinues verifies that a checker error for one pod is
 // skipped and others are still evaluated.
-func TestRunRollingEviction_CheckerErrorContinues(t *testing.T) {
+func TestReconcileRestart_CheckerErrorContinues(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 3)
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
-	pod2 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 2), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod2 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 2), "ns", "test", nil)
 
 	// Ordinal 0 errors, ordinal 1 needs restart, ordinal 2 does not.
 	withChecker(t, func(_ context.Context, n int32) (bool, error) {
@@ -274,7 +276,7 @@ func TestRunRollingEviction_CheckerErrorContinues(t *testing.T) {
 	})
 
 	var evicted []string
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1, pod2).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceCreate: func(_ context.Context, _ client.Client, _ string, obj client.Object, _ client.Object, _ ...client.SubResourceCreateOption) error {
@@ -284,27 +286,27 @@ func TestRunRollingEviction_CheckerErrorContinues(t *testing.T) {
 		}).
 		Build()
 
-	_, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	_, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(evicted) != 1 || evicted[0] != GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1) {
+	if len(evicted) != 1 || evicted[0] != splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1) {
 		t.Errorf("expected pod-1 evicted, got %v", evicted)
 	}
 }
 
-// TestRunRollingEviction_AllCheckersFail verifies RestartCheckIncomplete condition and retry interval.
-func TestRunRollingEviction_AllCheckersFail(t *testing.T) {
+// TestReconcileRestart_AllCheckersFail verifies RestartCheckIncomplete condition and retry interval.
+func TestReconcileRestart_AllCheckersFail(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 2)
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
 
 	withChecker(t, func(_ context.Context, _ int32) (bool, error) { return false, fmt.Errorf("unreachable") })
 
-	c := newFakeClientBuilder(scheme).WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).Build()
+	c := spltest.NewFakeClientBuilder(scheme).WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).Build()
 
-	result, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	result, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -317,12 +319,12 @@ func TestRunRollingEviction_AllCheckersFail(t *testing.T) {
 	}
 }
 
-// TestRunRollingEviction_PartialCheckFailureNoCandidate verifies RestartCheckIncomplete condition.
-func TestRunRollingEviction_PartialCheckFailureNoCandidate(t *testing.T) {
+// TestReconcileRestart_PartialCheckFailureNoCandidate verifies RestartCheckIncomplete condition.
+func TestReconcileRestart_PartialCheckFailureNoCandidate(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 2)
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
 
 	// Ordinal 0 errors, ordinal 1 reports no restart — no candidate but one failure.
 	withChecker(t, func(_ context.Context, n int32) (bool, error) {
@@ -332,9 +334,9 @@ func TestRunRollingEviction_PartialCheckFailureNoCandidate(t *testing.T) {
 		return false, nil
 	})
 
-	c := newFakeClientBuilder(scheme).WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).Build()
+	c := spltest.NewFakeClientBuilder(scheme).WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).Build()
 
-	result, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	result, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -347,17 +349,17 @@ func TestRunRollingEviction_PartialCheckFailureNoCandidate(t *testing.T) {
 	}
 }
 
-// TestRunRollingEviction_NonPDB429PropagatesError verifies that a non-429 eviction error
+// TestReconcileRestart_NonPDB429PropagatesError verifies that a non-429 eviction error
 // is propagated as a reconcile error.
-func TestRunRollingEviction_NonPDB429PropagatesError(t *testing.T) {
+func TestReconcileRestart_NonPDB429PropagatesError(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 2)
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
 
 	withChecker(t, func(_ context.Context, _ int32) (bool, error) { return true, nil })
 
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceCreate: func(_ context.Context, _ client.Client, _ string, _ client.Object, _ client.Object, _ ...client.SubResourceCreateOption) error {
@@ -366,7 +368,7 @@ func TestRunRollingEviction_NonPDB429PropagatesError(t *testing.T) {
 		}).
 		Build()
 
-	result, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	result, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err == nil {
 		t.Fatal("expected non-429 eviction error to be propagated")
 	}
@@ -375,9 +377,9 @@ func TestRunRollingEviction_NonPDB429PropagatesError(t *testing.T) {
 	}
 }
 
-// TestRunRollingEviction_AlreadyTerminatingSkipped verifies that a 404 or 409 eviction error
+// TestReconcileRestart_AlreadyTerminatingSkipped verifies that a 404 or 409 eviction error
 // (pod already terminating or gone) is treated as success and eviction continues to the next candidate.
-func TestRunRollingEviction_AlreadyTerminatingSkipped(t *testing.T) {
+func TestReconcileRestart_AlreadyTerminatingSkipped(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		err  error
@@ -388,18 +390,18 @@ func TestRunRollingEviction_AlreadyTerminatingSkipped(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			scheme := newRestartTestScheme()
 			cr := newRestartTestCR("test", "ns", 2)
-			pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-			pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
+			pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+			pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
 
 			withChecker(t, func(_ context.Context, _ int32) (bool, error) { return true, nil })
 
 			evictErr := tc.err
 			var evicted []string
-			c := newFakeClientBuilder(scheme).
+			c := spltest.NewFakeClientBuilder(scheme).
 				WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).
 				WithInterceptorFuncs(interceptor.Funcs{
 					SubResourceCreate: func(_ context.Context, _ client.Client, _ string, obj client.Object, _ client.Object, _ ...client.SubResourceCreateOption) error {
-						if obj.GetName() == GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0) {
+						if obj.GetName() == splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0) {
 							return evictErr
 						}
 						evicted = append(evicted, obj.GetName())
@@ -408,11 +410,11 @@ func TestRunRollingEviction_AlreadyTerminatingSkipped(t *testing.T) {
 				}).
 				Build()
 
-			_, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+			_, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 			if err != nil {
 				t.Fatalf("expected no error for %s, got %v", tc.name, err)
 			}
-			expected := []string{GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1)}
+			expected := []string{splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1)}
 			if !reflect.DeepEqual(evicted, expected) {
 				t.Errorf("expected %v evicted, got %v", expected, evicted)
 			}
@@ -420,16 +422,16 @@ func TestRunRollingEviction_AlreadyTerminatingSkipped(t *testing.T) {
 	}
 }
 
-// TestRunRollingEviction_TerminatingPodCheckerFails verifies that a terminating pod's
-// restart_required check fails (Splunk REST is down), counts as failedChecks, and the
+// TestReconcileRestart_TerminatingPodCheckerFails verifies that a terminating pod's
+// restart check fails (Splunk REST is down), counts as failedChecks, and the
 // remaining ready pods that need restart are still evicted.
-func TestRunRollingEviction_TerminatingPodCheckerFails(t *testing.T) {
+func TestReconcileRestart_TerminatingPodCheckerFails(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 3)
 	now := metav1.Now()
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
-	pod2 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 2), "ns", "test", &now)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod2 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 2), "ns", "test", &now)
 
 	// pod-2 (terminating) fails the check; pod-0 and pod-1 need restart.
 	withChecker(t, func(_ context.Context, n int32) (bool, error) {
@@ -440,7 +442,7 @@ func TestRunRollingEviction_TerminatingPodCheckerFails(t *testing.T) {
 	})
 
 	var evicted []string
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1, pod2).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceCreate: func(_ context.Context, _ client.Client, _ string, obj client.Object, _ client.Object, _ ...client.SubResourceCreateOption) error {
@@ -450,23 +452,23 @@ func TestRunRollingEviction_TerminatingPodCheckerFails(t *testing.T) {
 		}).
 		Build()
 
-	_, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	_, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// pod-2 check failed (terminating); pod-0 and pod-1 are evicted.
 	expected := []string{
-		GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0),
-		GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1),
+		splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0),
+		splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1),
 	}
 	if !reflect.DeepEqual(evicted, expected) {
 		t.Errorf("expected %v evicted, got %v", expected, evicted)
 	}
 }
 
-// TestRunRollingEviction_MarkCompleteWhenPreviouslyActive verifies the Restarting condition
+// TestReconcileRestart_MarkCompleteWhenPreviouslyActive verifies the Restarting condition
 // transitions to False/RollingRestartComplete when no pods need restart and it was previously active.
-func TestRunRollingEviction_MarkCompleteWhenPreviouslyActive(t *testing.T) {
+func TestReconcileRestart_MarkCompleteWhenPreviouslyActive(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 2)
 	cr.Status.Conditions = []metav1.Condition{
@@ -476,14 +478,14 @@ func TestRunRollingEviction_MarkCompleteWhenPreviouslyActive(t *testing.T) {
 			Reason: string(enterpriseApi.ReasonRollingRestartInProgress),
 		},
 	}
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
 
 	withChecker(t, func(_ context.Context, _ int32) (bool, error) { return false, nil })
 
-	c := newFakeClientBuilder(scheme).WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).Build()
+	c := spltest.NewFakeClientBuilder(scheme).WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-1"), pod0, pod1).Build()
 
-	_, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	_, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -493,18 +495,18 @@ func TestRunRollingEviction_MarkCompleteWhenPreviouslyActive(t *testing.T) {
 	}
 }
 
-// TestRunRollingEviction_DefersWhenRolloutInProgress verifies that eviction is deferred
+// TestReconcileRestart_DefersWhenRolloutInProgress verifies that eviction is deferred
 // when UpdateRevision != CurrentRevision (StatefulSet spec change in progress).
-func TestRunRollingEviction_DefersWhenRolloutInProgress(t *testing.T) {
+func TestReconcileRestart_DefersWhenRolloutInProgress(t *testing.T) {
 	scheme := newRestartTestScheme()
 	cr := newRestartTestCR("test", "ns", 2)
-	pod0 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 0), "ns", "test", nil)
-	pod1 := newRestartTestPod(GetSplunkStatefulsetPodName(SplunkIngestor, "test", 1), "ns", "test", nil)
+	pod0 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 0), "ns", "test", nil)
+	pod1 := newRestartTestPod(splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, "test", 1), "ns", "test", nil)
 
 	withChecker(t, func(_ context.Context, _ int32) (bool, error) { return true, nil })
 
 	evicted := 0
-	c := newFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).
 		WithObjects(cr, newRestartTestSTS("test", "ns", "rev-1", "rev-2"), pod0, pod1).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceCreate: func(_ context.Context, _ client.Client, _ string, _ client.Object, _ client.Object, _ ...client.SubResourceCreateOption) error {
@@ -514,7 +516,7 @@ func TestRunRollingEviction_DefersWhenRolloutInProgress(t *testing.T) {
 		}).
 		Build()
 
-	result, err := RunRollingEviction(context.Background(), c, cr, slog.Default())
+	result, err := ReconcileRestart(context.Background(), c, cr, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -62,6 +62,12 @@ func enterpriseObjCopier(dst, src *client.Object) bool {
 		*dstP.(*enterpriseApiV3.ClusterMaster) = *srcP.(*enterpriseApiV3.ClusterMaster)
 	case *enterpriseApi.IndexerCluster:
 		*dstP.(*enterpriseApi.IndexerCluster) = *srcP.(*enterpriseApi.IndexerCluster)
+	case *enterpriseApi.IngestorCluster:
+		*dstP.(*enterpriseApi.IngestorCluster) = *srcP.(*enterpriseApi.IngestorCluster)
+	case *enterpriseApi.Queue:
+		*dstP.(*enterpriseApi.Queue) = *srcP.(*enterpriseApi.Queue)
+	case *enterpriseApi.ObjectStorage:
+		*dstP.(*enterpriseApi.ObjectStorage) = *srcP.(*enterpriseApi.ObjectStorage)
 	case *enterpriseApi.LicenseManager:
 		*dstP.(*enterpriseApi.LicenseManager) = *srcP.(*enterpriseApi.LicenseManager)
 	case *enterpriseApiV3.LicenseMaster:
@@ -119,6 +125,8 @@ func enterpriseObjListCopier(dst, src *client.ObjectList) bool {
 	switch srcP.(type) {
 	case *enterpriseApi.IndexerClusterList:
 		*dstP.(*enterpriseApi.IndexerClusterList) = *srcP.(*enterpriseApi.IndexerClusterList)
+	case *enterpriseApi.IngestorClusterList:
+		*dstP.(*enterpriseApi.IngestorClusterList) = *srcP.(*enterpriseApi.IngestorClusterList)
 	case *enterpriseApi.LicenseManagerList:
 		*dstP.(*enterpriseApi.LicenseManagerList) = *srcP.(*enterpriseApi.LicenseManagerList)
 	case *enterpriseApiV3.LicenseMasterList:

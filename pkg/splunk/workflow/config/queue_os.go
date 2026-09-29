@@ -22,6 +22,7 @@ import (
 	sqsaws "github.com/splunk/splunk-operator/pkg/splunk/client/queue/aws"
 	s3aws "github.com/splunk/splunk-operator/pkg/splunk/client/storage/aws"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -49,8 +50,8 @@ func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerCli
 			ns = queueRef.Namespace
 		}
 		queueNamespace = ns
-		var queue enterpriseApi.Queue
-		if err := c.Get(ctx, types.NamespacedName{Name: queueRef.Name, Namespace: ns}, &queue); err != nil {
+		queue, err := k8sops.GetQueue(ctx, c, cr, types.NamespacedName{Name: queueRef.Name, Namespace: ns})
+		if err != nil {
 			return nil, err
 		}
 		cfg.Queue = queue.Spec
@@ -70,8 +71,8 @@ func ResolveQueueAndObjectStorage(ctx context.Context, c splcommon.ControllerCli
 		if osRef.Namespace != "" {
 			ns = osRef.Namespace
 		}
-		var os enterpriseApi.ObjectStorage
-		if err := c.Get(ctx, types.NamespacedName{Name: osRef.Name, Namespace: ns}, &os); err != nil {
+		os, err := k8sops.GetObjectStorage(ctx, c, cr, types.NamespacedName{Name: osRef.Name, Namespace: ns})
+		if err != nil {
 			return nil, err
 		}
 		cfg.OS = os.Spec

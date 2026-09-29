@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package queue
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +37,7 @@ func TestApplyQueue(t *testing.T) {
 	_ = enterpriseApi.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
-	c := newFakeClientBuilder(scheme).Build()
+	c := spltest.NewFakeClientBuilder(scheme).Build()
 
 	// Object definitions
 	queue := &enterpriseApi.Queue{
@@ -60,8 +61,8 @@ func TestApplyQueue(t *testing.T) {
 	}
 	c.Create(ctx, queue)
 
-	// ApplyQueue
-	result, err := ApplyQueue(ctx, c, queue)
+	// Apply
+	result, err := Apply(ctx, c, queue)
 	assert.NoError(t, err)
 	assert.True(t, result.Requeue)
 	assert.NotEqual(t, enterpriseApi.PhaseError, queue.Status.Phase)

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package ingestorcluster
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -53,9 +54,9 @@ const (
 	pdbRetryInterval = 30 * time.Second
 )
 
-// RestartRequiredChecker polls a single pod for restart_required.
+// restartChecker polls a single pod for restart_required.
 // Abstracted so tests can inject a mock without a real Splunk client.
-type RestartRequiredChecker func(ctx context.Context, podIndex int32) (bool, error)
+type restartChecker func(ctx context.Context, podIndex int32) (bool, error)
 
 type restartCheckResult struct {
 	pod             corev1.Pod
@@ -63,21 +64,52 @@ type restartCheckResult struct {
 	err             error
 }
 
-// MakeRestartRequiredChecker is a package-level var so tests can override it without
+type newSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
+
+type ingestorClusterPodManager struct {
+	c               splcommon.ControllerClient
+	cr              *enterpriseApi.IngestorCluster
+	newSplunkClient newSplunkClientFunc
+}
+
+var newIngestorClusterPodManager = func(cr *enterpriseApi.IngestorCluster, newSplunkClient newSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
+	return ingestorClusterPodManager{
+		cr:              cr,
+		newSplunkClient: newSplunkClient,
+		c:               c,
+	}
+}
+
+func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
+	logger := slog.With("func", "ingestorClusterPodManager.getClient", "name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+
+	memberName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, mgr.cr.GetName(), n)
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(splcommon.SplunkIngestor, mgr.cr.GetName(), true)))
+
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
+	if err != nil {
+		logger.WarnContext(ctx, "couldn't retrieve the admin password from pod", "error", err)
+	}
+
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+}
+
+// makeRestartChecker is a package-level var so tests can override it without
 // standing up a real Splunk HTTP server.
-var MakeRestartRequiredChecker = func(c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) RestartRequiredChecker {
-	mgr := newIngestorClusterPodManager(slog.Default(), cr, nil, splclient.NewSplunkClient, c)
+var makeRestartChecker = func(c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) restartChecker {
+	mgr := newIngestorClusterPodManager(cr, splclient.NewSplunkClient, c)
 	return func(ctx context.Context, podIndex int32) (bool, error) {
 		splunkClient := mgr.getClient(ctx, podIndex)
 		return splunkClient.GetRestartRequired(ctx)
 	}
 }
 
-// RunRollingEviction checks all ingestor pods for restart_required (concurrently) and evicts
+// ReconcileRestart checks all ingestor pods for restart_required (concurrently) and evicts
 // candidates in ordinal order until the PDB blocks. Unready or terminating pods fail the
-// restart_required check and are counted as failedChecks. It returns a reconcile.Result with
+// restart check and are counted as failedChecks. It returns a reconcile.Result with
 // an appropriate requeue interval so the caller can return it directly.
-func RunRollingEviction(
+func ReconcileRestart(
 	ctx context.Context,
 	c splcommon.ControllerClient,
 	cr *enterpriseApi.IngestorCluster,
@@ -87,7 +119,7 @@ func RunRollingEviction(
 
 	// Fetch the StatefulSet to get the current UpdateRevision.
 	sts := &appsv1.StatefulSet{}
-	stsName := GetSplunkStatefulsetName(SplunkIngestor, cr.GetName())
+	stsName := splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, cr.GetName())
 	if err := c.Get(ctx, types.NamespacedName{Name: stsName, Namespace: cr.GetNamespace()}, sts); err != nil {
 		return reconcile.Result{}, fmt.Errorf("get ingestor StatefulSet %s: %w", stsName, err)
 	}
@@ -127,7 +159,7 @@ func RunRollingEviction(
 		return ingestorPodOrdinal(pods[i].Name) < ingestorPodOrdinal(pods[j].Name)
 	})
 
-	results := checkRestartRequiredConcurrently(ctx, c, cr, pods)
+	results := checkRestartConcurrently(ctx, c, cr, pods)
 	if ctx.Err() != nil {
 		return reconcile.Result{}, ctx.Err()
 	}
@@ -188,14 +220,14 @@ func RunRollingEviction(
 	return reconcile.Result{RequeueAfter: restartRetryInterval}, nil
 }
 
-func checkRestartRequiredConcurrently(
+func checkRestartConcurrently(
 	ctx context.Context,
 	c splcommon.ControllerClient,
 	cr *enterpriseApi.IngestorCluster,
 	pods []corev1.Pod,
 ) []restartCheckResult {
 	results := make([]restartCheckResult, len(pods))
-	checker := MakeRestartRequiredChecker(c, cr)
+	checker := makeRestartChecker(c, cr)
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(restartCheckConcurrency)
 
