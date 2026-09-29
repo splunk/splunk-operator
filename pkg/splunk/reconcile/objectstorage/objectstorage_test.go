@@ -12,36 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package objectstorage
 
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
-
-func init() {
-	GetReadinessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
-		return fileLocation
-	}
-	GetLivenessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
-		return fileLocation
-	}
-	GetStartupScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
-		return fileLocation
-	}
-}
 
 func TestApplyObjectStorage(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
@@ -52,7 +37,7 @@ func TestApplyObjectStorage(t *testing.T) {
 	_ = enterpriseApi.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
-	c := newFakeClientBuilder(scheme).Build()
+	c := spltest.NewFakeClientBuilder(scheme).Build()
 
 	// Object definitions
 	os := &enterpriseApi.ObjectStorage{
@@ -74,8 +59,8 @@ func TestApplyObjectStorage(t *testing.T) {
 	}
 	c.Create(ctx, os)
 
-	// ApplyObjectStorage
-	result, err := ApplyObjectStorage(ctx, c, os)
+	// Apply
+	result, err := Apply(ctx, c, os)
 	assert.NoError(t, err)
 	assert.True(t, result.Requeue)
 	assert.NotEqual(t, enterpriseApi.PhaseError, os.Status.Phase)

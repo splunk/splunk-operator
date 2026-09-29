@@ -13,6 +13,6 @@
 // limitations under the License.
 
 /*
-Package ingestorcluster owns the reconcile loop for the IngestorCluster CR.
+Package queue owns the reconcile loop for the Queue CR.
 */
-package ingestorcluster
+package queue

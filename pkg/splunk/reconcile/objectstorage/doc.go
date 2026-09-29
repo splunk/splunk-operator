@@ -13,6 +13,6 @@
 // limitations under the License.
 
 /*
-Package ingestorcluster owns the reconcile loop for the IngestorCluster CR.
+Package objectstorage owns the reconcile loop for the ObjectStorage CR.
 */
-package ingestorcluster
+package objectstorage

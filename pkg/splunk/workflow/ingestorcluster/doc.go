@@ -1,5 +1,5 @@
 // Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
-//
+
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -13,6 +13,6 @@
 // limitations under the License.
 
 /*
-Package ingestorcluster owns the reconcile loop for the IngestorCluster CR.
+Package ingestorcluster contains multi-step IngestorCluster workflows.
 */
 package ingestorcluster

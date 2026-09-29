@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package queue
 
 import (
 	"context"
@@ -21,12 +21,11 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// ApplyObjectStorage reconciles the state of an IngestorCluster custom resource
-func ApplyObjectStorage(ctx context.Context, client client.Client, cr *enterpriseApi.ObjectStorage) (reconcile.Result, error) {
+// Apply reconciles the state of a Queue custom resource.
+func Apply(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Queue) (reconcile.Result, error) {
 	var err error
 
 	// Unless modified, reconcile for this object will be requeued after 5 seconds
@@ -39,13 +38,13 @@ func ApplyObjectStorage(ctx context.Context, client client.Client, cr *enterpris
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
-	cr.Kind = "ObjectStorage"
+	cr.Kind = "Queue"
 
 	// Initialize phase and conditions
-	isPaused := cr.GetAnnotations()[enterpriseApi.ObjectStoragePausedAnnotation] == "true"
+	isPaused := cr.GetAnnotations()[enterpriseApi.QueuePausedAnnotation] == "true"
 	setPhaseAndConditions := func(phase enterpriseApi.Phase, message string) {
 		result := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
 			Phase: phase, IsPaused: isPaused, Message: message, Generation: cr.GetGeneration(),
