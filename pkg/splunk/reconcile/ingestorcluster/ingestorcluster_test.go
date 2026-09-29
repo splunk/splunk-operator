@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package ingestorcluster
 
 import (
 	"context"
@@ -43,16 +43,16 @@ import (
 )
 
 func init() {
-	GetReadinessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
+	splutil.GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/readinessProbe.sh")
 		return fileLocation
 	}
-	GetLivenessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
+	splutil.GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/livenessProbe.sh")
 		return fileLocation
 	}
-	GetStartupScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
+	splutil.GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/startupProbe.sh")
 		return fileLocation
 	}
 }
@@ -68,7 +68,7 @@ func TestApplyIngestorClusterTerminalFailures(t *testing.T) {
 		_ = enterpriseApi.AddToScheme(scheme)
 		_ = corev1.AddToScheme(scheme)
 		_ = appsv1.AddToScheme(scheme)
-		c := newFakeClientBuilder(scheme).Build()
+		c := spltest.NewFakeClientBuilder(scheme).Build()
 
 		cr := &enterpriseApi.IngestorCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
@@ -93,7 +93,7 @@ func TestApplyIngestorClusterTerminalFailures(t *testing.T) {
 		_ = enterpriseApi.AddToScheme(scheme)
 		_ = corev1.AddToScheme(scheme)
 		_ = appsv1.AddToScheme(scheme)
-		c := newFakeClientBuilder(scheme).Build()
+		c := spltest.NewFakeClientBuilder(scheme).Build()
 
 		cr := &enterpriseApi.IngestorCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
@@ -119,7 +119,7 @@ func TestApplyIngestorClusterTerminalFailures(t *testing.T) {
 		_ = corev1.AddToScheme(scheme)
 		_ = appsv1.AddToScheme(scheme)
 		_ = policyv1.AddToScheme(scheme)
-		c := newFakeClientBuilder(scheme).Build()
+		c := spltest.NewFakeClientBuilder(scheme).Build()
 
 		// Create the Queue CR so only the ObjectStorage CR is missing.
 		_ = c.Create(ctx, &enterpriseApi.Queue{
@@ -158,7 +158,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = policyv1.AddToScheme(scheme)
-	c := newFakeClientBuilder(scheme).Build()
+	c := spltest.NewFakeClientBuilder(scheme).Build()
 
 	queue := &enterpriseApi.Queue{
 		ObjectMeta: metav1.ObjectMeta{
@@ -400,12 +400,13 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 			}
 			return getIngestorStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getIngestorStatefulSet()", f, want)
+		spltest.ConfigTester(t, "getIngestorStatefulSet()", f, want)
 	}
 
 	// Define additional service port in CR and verify the statefulset has the new port
 	cr.Spec.ServiceTemplate.Spec.Ports = []corev1.ServicePort{{Name: "user-defined", Port: 32000, Protocol: "UDP"}}
-	test(loadFixture(t, "statefulset_ingestor.json"))
+	want := spltest.LoadFixture(t, "statefulset_ingestor.json")
+	test(want)
 
 	// Create a service account
 	current := corev1.ServiceAccount{
@@ -416,7 +417,8 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
-	test(loadFixture(t, "statefulset_ingestor_with_serviceaccount.json"))
+	want = spltest.LoadFixture(t, "statefulset_ingestor_with_serviceaccount.json")
+	test(want)
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -425,12 +427,14 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 			Value: "test_value",
 		},
 	}
-	test(loadFixture(t, "statefulset_ingestor_with_extraenv.json"))
+	want = spltest.LoadFixture(t, "statefulset_ingestor_with_extraenv.json")
+	test(want)
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
-	test(loadFixture(t, "statefulset_ingestor_with_labels.json"))
+	want = spltest.LoadFixture(t, "statefulset_ingestor_with_labels.json")
+	test(want)
 }
 
 // TestGetIngestorStatefulSet_ConfigMapVolAnnotation reproduces CSPL-4611 CI failure locally:
@@ -587,7 +591,7 @@ func TestEnsureIngestorCredentialsSecret_CreatesMountsAndRotates(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(appsv1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	c := newFakeClientBuilder(sch).Build()
+	c := spltest.NewFakeClientBuilder(sch).Build()
 
 	queue, objStorage := newIngestorQueueOSFixture(t, ctx, c, "queue", "queue-secrets")
 
@@ -656,7 +660,7 @@ func TestEnsureIngestorCredentialsSecret_NoQueueRef(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	c := newFakeClientBuilder(sch).Build()
+	c := spltest.NewFakeClientBuilder(sch).Build()
 
 	cr := &enterpriseApi.IngestorCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
@@ -679,7 +683,7 @@ func TestEnsureIngestorCredentialsSecret_IRSAProducesNoStaticCreds(t *testing.T)
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(appsv1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	c := newFakeClientBuilder(sch).Build()
+	c := spltest.NewFakeClientBuilder(sch).Build()
 
 	// Queue with no VolList — simulates IRSA / workload identity where no static creds exist.
 	irsaQueue := &enterpriseApi.Queue{
@@ -735,8 +739,8 @@ func TestApplyIngestorCluster_QueueCredsSecretLifecycle(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
-	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	recorder := &spltest.MockEventRecorder{}
+	eventPublisher, _ := k8sops.NewK8EventPublisherWithRecorder(recorder, &enterpriseApi.IngestorCluster{})
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	sch := pkgruntime.NewScheme()
@@ -745,7 +749,7 @@ func TestApplyIngestorCluster_QueueCredsSecretLifecycle(t *testing.T) {
 	utilruntime.Must(appsv1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	c := newFakeClientBuilder(sch).
+	c := spltest.NewFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.IngestorCluster{}).
 		Build()
 
@@ -780,7 +784,7 @@ func TestApplyIngestorCluster_QueueCredsSecretLifecycle(t *testing.T) {
 	threeReplicas := int32(3)
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, cr.GetName()),
 			Namespace: cr.GetNamespace(),
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -811,10 +815,10 @@ func TestApplyIngestorCluster_QueueCredsSecretLifecycle(t *testing.T) {
 	for i := int32(0); i < threeReplicas; i++ {
 		pod := basePod.DeepCopy()
 		pod.ObjectMeta = metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), i),
+			Name:      splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, cr.GetName(), i),
 			Namespace: cr.GetNamespace(),
 			Labels: map[string]string{
-				"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+				"app.kubernetes.io/instance": splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, cr.GetName()),
 				"controller-revision-hash":   "v1",
 			},
 		}
@@ -849,9 +853,9 @@ func TestApplyIngestorCluster_QueueCredsSecretLifecycle(t *testing.T) {
 	assert.Contains(t, defaultsURL, resources.SecretMountPath(), "SPLUNK_DEFAULTS_URL must include the creds mount path")
 
 	// The declarative path emits no imperative queue-config / restart events.
-	for _, event := range recorder.events {
-		assert.NotEqual(t, "QueueConfigUpdated", event.reason, "declarative path must not emit QueueConfigUpdated")
-		assert.NotEqual(t, "IngestorsRestarted", event.reason, "declarative path must not emit IngestorsRestarted")
+	for _, event := range recorder.Events {
+		assert.NotEqual(t, "QueueConfigUpdated", event.Reason, "declarative path must not emit QueueConfigUpdated")
+		assert.NotEqual(t, "IngestorsRestarted", event.Reason, "declarative path must not emit IngestorsRestarted")
 	}
 
 	// --- Pass 2: rotate credentials → new Secret name, stale one garbage-collected ---
@@ -874,8 +878,8 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
-	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	recorder := &spltest.MockEventRecorder{}
+	eventPublisher, _ := k8sops.NewK8EventPublisherWithRecorder(recorder, &enterpriseApi.IngestorCluster{})
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	scheme := pkgruntime.NewScheme()
@@ -883,7 +887,7 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = policyv1.AddToScheme(scheme)
-	c := newFakeClientBuilder(scheme).Build()
+	c := spltest.NewFakeClientBuilder(scheme).Build()
 
 	queue := &enterpriseApi.Queue{
 		ObjectMeta: metav1.ObjectMeta{Name: "queue", Namespace: "test"},
@@ -937,7 +941,7 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	oneReplica := int32(1)
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+			Name:      splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, cr.GetName()),
 			Namespace: cr.GetNamespace(),
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -966,9 +970,9 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	}
 	pod := basePod.DeepCopy()
 	pod.ObjectMeta = metav1.ObjectMeta{
-		Name: GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), 0), Namespace: cr.GetNamespace(),
+		Name: splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, cr.GetName(), 0), Namespace: cr.GetNamespace(),
 		Labels: map[string]string{
-			"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+			"app.kubernetes.io/instance": splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, cr.GetName()),
 			"controller-revision-hash":   "v1",
 		},
 	}
@@ -984,9 +988,9 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	for i := int32(1); i < threeReplicas; i++ {
 		p := basePod.DeepCopy()
 		p.ObjectMeta = metav1.ObjectMeta{
-			Name: GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), i), Namespace: cr.GetNamespace(),
+			Name: splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, cr.GetName(), i), Namespace: cr.GetNamespace(),
 			Labels: map[string]string{
-				"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()),
+				"app.kubernetes.io/instance": splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, cr.GetName()),
 				"controller-revision-hash":   "v1",
 			},
 		}
@@ -996,7 +1000,7 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	_, err = ApplyIngestorCluster(ctx, c, cr)
 	assert.NoError(t, err)
 
-	_ = c.Get(ctx, client.ObjectKey{Name: GetSplunkStatefulsetName(SplunkIngestor, cr.GetName()), Namespace: cr.GetNamespace()}, sts)
+	_ = c.Get(ctx, client.ObjectKey{Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, cr.GetName()), Namespace: cr.GetNamespace()}, sts)
 	sts.Status.Replicas = threeReplicas
 	sts.Status.ReadyReplicas = threeReplicas
 	_ = c.Status().Update(ctx, sts)
@@ -1006,15 +1010,15 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
 
 	scaledUp := false
-	for _, event := range recorder.events {
-		if event.reason == "ScaledUp" {
+	for _, event := range recorder.Events {
+		if event.Reason == "ScaledUp" {
 			scaledUp = true
 		}
 	}
 	assert.True(t, scaledUp)
 
 	// ===== Scale down =====
-	recorder.events = []mockEvent{}
+	recorder.Events = []spltest.MockEvent{}
 	cr.Spec.Replicas = oneReplica
 	cr.Status.Replicas = threeReplicas
 	cr.Status.ReadyReplicas = threeReplicas
@@ -1029,7 +1033,7 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	currentSts.Status.ReadyReplicas = oneReplica
 	_ = c.Status().Update(ctx, currentSts)
 	for i := int32(1); i < threeReplicas; i++ {
-		_ = c.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: GetSplunkStatefulsetPodName(SplunkIngestor, cr.GetName(), i), Namespace: cr.GetNamespace()}})
+		_ = c.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, cr.GetName(), i), Namespace: cr.GetNamespace()}})
 	}
 
 	_, err = ApplyIngestorCluster(ctx, c, cr)
@@ -1038,8 +1042,8 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 	assert.Equal(t, oneReplica, cr.Status.ReadyReplicas)
 
 	scaledDown := false
-	for _, event := range recorder.events {
-		if event.reason == "ScaledDown" {
+	for _, event := range recorder.Events {
+		if event.Reason == "ScaledDown" {
 			scaledDown = true
 		}
 	}
@@ -1054,8 +1058,8 @@ func TestIngQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
-	recorder := &mockEventRecorder{events: []mockEvent{}}
-	eventPublisher := &K8EventPublisher{recorder: recorder}
+	recorder := &spltest.MockEventRecorder{}
+	eventPublisher, _ := k8sops.NewK8EventPublisherWithRecorder(recorder, &enterpriseApi.IngestorCluster{})
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	sch := pkgruntime.NewScheme()
@@ -1064,7 +1068,7 @@ func TestIngQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 	utilruntime.Must(appsv1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	c := newFakeClientBuilder(sch).
+	c := spltest.NewFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.IngestorCluster{}).
 		Build()
 
@@ -1145,7 +1149,7 @@ func TestIngQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 
 	oneReplica := int32(1)
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: GetSplunkStatefulsetName(SplunkIngestor, crName), Namespace: "test"},
+		ObjectMeta: metav1.ObjectMeta{Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, crName), Namespace: "test"},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &oneReplica,
 			Template: corev1.PodTemplateSpec{
@@ -1161,9 +1165,9 @@ func TestIngQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: GetSplunkStatefulsetPodName(SplunkIngestor, crName, 0), Namespace: "test",
+			Name: splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIngestor, crName, 0), Namespace: "test",
 			Labels: map[string]string{
-				"app.kubernetes.io/instance": GetSplunkStatefulsetName(SplunkIngestor, crName),
+				"app.kubernetes.io/instance": splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, crName),
 				"controller-revision-hash":   "v1",
 			},
 		},
@@ -1191,13 +1195,13 @@ func TestIngQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 	assert.Regexp(t, regexp.MustCompile(`^sok-ingestorcluster-creds-[0-9a-f]{6}$`), oldSecretName)
 
 	// The declarative path emits no imperative queue-config / restart events.
-	for _, event := range recorder.events {
-		assert.NotEqual(t, "QueueConfigUpdated", event.reason, "declarative path must not emit QueueConfigUpdated")
-		assert.NotEqual(t, "IngestorsRestarted", event.reason, "declarative path must not emit IngestorsRestarted")
+	for _, event := range recorder.Events {
+		assert.NotEqual(t, "QueueConfigUpdated", event.Reason, "declarative path must not emit QueueConfigUpdated")
+		assert.NotEqual(t, "IngestorsRestarted", event.Reason, "declarative path must not emit IngestorsRestarted")
 	}
 
 	// --- Pass 2: swap QueueRef to a queue with different config ---
-	recorder.events = []mockEvent{}
+	recorder.Events = []spltest.MockEvent{}
 	cr.Spec.QueueRef = corev1.ObjectReference{Name: queueNew.Name, Namespace: "test"}
 
 	_, err = ApplyIngestorCluster(ctx, c, cr)
@@ -1212,9 +1216,9 @@ func TestIngQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 	assert.NotEqual(t, oldSecretName, secretListNew[0].Name, "new queue config must produce a new Secret name")
 
 	// Still no imperative events on the ref-change pass.
-	for _, event := range recorder.events {
-		assert.NotEqual(t, "QueueConfigUpdated", event.reason, "declarative path must not emit QueueConfigUpdated on ref change")
-		assert.NotEqual(t, "IngestorsRestarted", event.reason, "declarative path must not emit IngestorsRestarted on ref change")
+	for _, event := range recorder.Events {
+		assert.NotEqual(t, "QueueConfigUpdated", event.Reason, "declarative path must not emit QueueConfigUpdated on ref change")
+		assert.NotEqual(t, "IngestorsRestarted", event.Reason, "declarative path must not emit IngestorsRestarted on ref change")
 	}
 }
 func TestGetIngestorStatefulSetPreStop(t *testing.T) {
