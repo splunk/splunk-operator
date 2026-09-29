@@ -28,6 +28,11 @@ bases:
 # [METRICS] Expose the controller manager metrics service.
 - metrics_service.yaml
 
+components:
+# The webhook serving certificate, the Service fronting the webhook port, and
+# the Deployment patch that mounts the certificate.
+- ../conversion-webhook
+
 patchesStrategicMerge:
 - debug-sidecar-patch.yaml
 

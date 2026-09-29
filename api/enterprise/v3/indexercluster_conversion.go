@@ -33,25 +33,27 @@ func (c *IndexerCluster) ConvertTo(dstHub conversion.Hub) error {
 		return fmt.Errorf("unsupported conversion hub for IndexerCluster: %T", dstHub)
 	}
 
-	dst.ObjectMeta = c.ObjectMeta
-	dst.Spec.CommonSplunkSpec = c.Spec.CommonSplunkSpec
-	dst.Spec.Replicas = c.Spec.Replicas
+	src := c.DeepCopy()
+
+	dst.ObjectMeta = src.ObjectMeta
+	dst.Spec.CommonSplunkSpec = src.Spec.CommonSplunkSpec
+	dst.Spec.Replicas = src.Spec.Replicas
 
 	dst.Status = hubApi.IndexerClusterStatus{
-		Phase:                          c.Status.Phase,
-		ClusterMasterPhase:             c.Status.ClusterMasterPhase,
-		ClusterManagerPhase:            c.Status.ClusterManagerPhase,
-		Replicas:                       c.Status.Replicas,
-		ReadyReplicas:                  c.Status.ReadyReplicas,
-		Selector:                       c.Status.Selector,
-		Initialized:                    c.Status.Initialized,
-		IndexingReady:                  c.Status.IndexingReady,
-		ServiceReady:                   c.Status.ServiceReady,
-		IndexerSecretChanged:           c.Status.IndexerSecretChanged,
-		NamespaceSecretResourceVersion: c.Status.NamespaceSecretResourceVersion,
-		IdxcPasswordChangedSecrets:     c.Status.IdxcPasswordChangedSecrets,
-		MaintenanceMode:                c.Status.MaintenanceMode,
-		Peers:                          convertPeersTo(c.Status.Peers),
+		Phase:                          src.Status.Phase,
+		ClusterMasterPhase:             src.Status.ClusterMasterPhase,
+		ClusterManagerPhase:            src.Status.ClusterManagerPhase,
+		Replicas:                       src.Status.Replicas,
+		ReadyReplicas:                  src.Status.ReadyReplicas,
+		Selector:                       src.Status.Selector,
+		Initialized:                    src.Status.Initialized,
+		IndexingReady:                  src.Status.IndexingReady,
+		ServiceReady:                   src.Status.ServiceReady,
+		IndexerSecretChanged:           src.Status.IndexerSecretChanged,
+		NamespaceSecretResourceVersion: src.Status.NamespaceSecretResourceVersion,
+		IdxcPasswordChangedSecrets:     src.Status.IdxcPasswordChangedSecrets,
+		MaintenanceMode:                src.Status.MaintenanceMode,
+		Peers:                          convertPeersTo(src.Status.Peers),
 	}
 
 	return nil
@@ -68,6 +70,8 @@ func (c *IndexerCluster) ConvertFrom(srcHub conversion.Hub) error {
 		unrepresentableIndexerClusterFields(&src.Spec)); err != nil {
 		return err
 	}
+
+	src = src.DeepCopy()
 
 	c.ObjectMeta = src.ObjectMeta
 	c.Spec.CommonSplunkSpec = src.Spec.CommonSplunkSpec

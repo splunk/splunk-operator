@@ -36,15 +36,16 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
-
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -52,15 +53,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	enterpriseController "github.com/splunk/splunk-operator/internal/controller/enterprise"
 	platformController "github.com/splunk/splunk-operator/internal/controller/platform"
-
-	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	//+kubebuilder:scaffold:imports
@@ -70,6 +70,15 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+)
+
+const (
+	// conversionWebhookPort serves /convert. It is separate from the validation
+	// webhook port so the two have independent lifecycles until validation is mandatory
+	conversionWebhookPort = 9444
+
+	// webhookCertDir is where the webhook servers expect tls.crt and tls.key.
+	webhookCertDir = "/tmp/k8s-webhook-server/serving-certs"
 )
 
 func init() {
@@ -236,7 +245,6 @@ func main() {
 	managerOptions := config.ManagerOptionsWithNamespaces(setupLog, baseOptions)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
-
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -379,7 +387,7 @@ func main() {
 
 		webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
 			Port:         9443,
-			CertDir:      "/tmp/k8s-webhook-server/serving-certs",
+			CertDir:      webhookCertDir,
 			Validators:   validation.DefaultValidators,
 			ReadTimeout:  readTimeout,
 			WriteTimeout: writeTimeout,
@@ -395,6 +403,19 @@ func main() {
 	} else {
 		setupLog.Info("Validation webhook disabled (set --feature-gates=ValidationWebhook=true to enable)")
 	}
+
+	conversionWebhookServer := webhook.NewServer(webhook.Options{
+		Port:    conversionWebhookPort,
+		CertDir: webhookCertDir,
+	})
+	conversionWebhookServer.Register("/convert",
+		conversion.NewWebhookHandler(mgr.GetScheme(), mgr.GetConverterRegistry()))
+
+	if err := mgr.Add(conversionWebhookServer); err != nil {
+		setupLog.Error(err, "unable to add conversion webhook server to manager")
+		os.Exit(1)
+	}
+	setupLog.Info("Conversion webhook enabled", "port", conversionWebhookPort)
 	//+kubebuilder:scaffold:builder
 
 	// Register certificate watchers with the manager
@@ -414,7 +435,15 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
-
+	// StartedChecker dials the webhook port over TLS on every probe, so this covers
+	// a server that is running but not serving: a certificate that rotates to
+	// something unloadable, a failing handshake, or a listener that died without
+	// taking the manager down. A certificate missing at startup is already fatal,
+	// so this is about the states that leave the process alive.
+	if err := mgr.AddReadyzCheck("conversion-webhook", conversionWebhookServer.StartedChecker()); err != nil {
+		setupLog.Error(err, "unable to set up conversion webhook ready check")
+		os.Exit(1)
+	}
 	if err := customSetupEndpoints(pprofActive, mgr); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
