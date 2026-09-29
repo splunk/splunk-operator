@@ -401,8 +401,10 @@ func TestUpgradePathValidation(t *testing.T) {
 	// used in mocking this function
 	shcworkflow.GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *shcworkflow.PodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
 		shci := &splclient.SearchHeadCaptainInfo{
-			ServiceReady: true,
-			Initialized:  true,
+			Label:          fmt.Sprintf("splunk-%s-search-head-0", mgr.CR.GetName()),
+			ServiceReady:   true,
+			Initialized:    true,
+			MinPeersJoined: true,
 		}
 		return shci, nil
 	}

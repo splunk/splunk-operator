@@ -233,6 +233,17 @@ const (
 	ReasonNoahPeerObservationFailed ConditionReason = "NoahPeerObservationFailed"
 	ReasonNoahOperationFailed       ConditionReason = "NoahOperationFailed"
 	ReasonNoahCacheWarmTimeout      ConditionReason = "NoahCacheWarmTimeout"
+
+	// Ready=False causes specific to SearchHeadCluster, promoted onto the
+	// generic Ready reason above when applicable (see
+	// pkg/splunk/reconcile/searchheadcluster's refineReadyReason)
+	ReasonNoCaptainElected  ConditionReason = "NoCaptainElected"
+	ReasonBelowMinimumPeers ConditionReason = "BelowMinimumPeers"
+	ReasonDeployerNotReady  ConditionReason = "DeployerNotReady"
+
+	// Progressing=True cause specific to SearchHeadCluster: a member has an
+	// in-flight lifecycle operation (Detaining/Draining/Recycling/Removing).
+	ReasonMemberOperationInProgress ConditionReason = "MemberOperationInProgress"
 )
 
 // Probe defines set of configurable values for Startup, Readiness, and Liveness probes
