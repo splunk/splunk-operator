@@ -134,6 +134,23 @@ metadata:
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "NoahCluster",
+          "metadata": {
+            "name": "noahcluster-sample",
+            "namespace": "splunk-operator"
+          },
+          "spec": {
+            "authSecretRef": {
+              "name": "noah-auth"
+            },
+            "cacheWarmScaleOutEnabled": true,
+            "cacheWarmScaleOutTimeoutSeconds": 3600,
+            "endpoint": "http://noah.splunk-operator.svc:8443",
+            "tenant": "axolotl"
+          }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
           "kind": "ObjectStorage",
           "metadata": {
             "finalizers": [
@@ -147,6 +164,52 @@ metadata:
               "path": "bucket/path"
             }
           }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "Queue",
+          "metadata": {
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "queue-sample"
+          },
+          "spec": {
+            "provider": "sqs",
+            "sqs": {
+              "authRegion": "us-west-2",
+              "dlq": "dlq",
+              "name": "queue"
+            }
+          }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "SearchHeadCluster",
+          "metadata": {
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "searchheadcluster-sample",
+            "namespace": "splunk-operator"
+          },
+          "spec": {
+            "clusterManagerRef": {
+              "name": "clustermanager-sample"
+            }
+          }
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "Standalone",
+          "metadata": {
+            "finalizers": [
+              "enterprise.splunk.com/delete-pvc"
+            ],
+            "name": "standalone-sample",
+            "namespace": "splunk-operator"
+          },
+          "spec": null
         },
         {
           "apiVersion": "platform.splunk.com/v1alpha1",
@@ -195,7 +258,8 @@ metadata:
             },
             "config": {
               "connectionPooler": {
-                "enabled": true
+                "enabled": true,
+                "readOnly": false
               },
               "instances": 1,
               "monitoring": {
@@ -234,6 +298,7 @@ metadata:
             },
             "databases": [
               {
+                "connectionLimit": -1,
                 "deletionPolicy": "Delete",
                 "extensions": [
                   "pg_stat_statements",
@@ -250,64 +315,18 @@ metadata:
               }
             ]
           }
-        },
-        {
-          "apiVersion": "enterprise.splunk.com/v4",
-          "kind": "Queue",
-          "metadata": {
-            "finalizers": [
-              "enterprise.splunk.com/delete-pvc"
-            ],
-            "name": "queue-sample"
-          },
-          "spec": {
-            "provider": "sqs",
-            "sqs": {
-              "authRegion": "us-west-2",
-              "dlq": "dlq",
-              "name": "queue"
-            }
-          }
-        },
-        {
-          "apiVersion": "enterprise.splunk.com/v4",
-          "kind": "SearchHeadCluster",
-          "metadata": {
-            "finalizers": [
-              "enterprise.splunk.com/delete-pvc"
-            ],
-            "name": "searchheadcluster-sample",
-            "namespace": "splunk-operator"
-          },
-          "spec": {
-            "clusterManagerRef": {
-              "name": "clustermanager-sample"
-            }
-          }
-        },
-        {
-          "apiVersion": "enterprise.splunk.com/v4",
-          "kind": "Standalone",
-          "metadata": {
-            "finalizers": [
-              "enterprise.splunk.com/delete-pvc"
-            ],
-            "name": "standalone-sample",
-            "namespace": "splunk-operator"
-          },
-          "spec": null
         }
       ]
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
-    createdAt: "2026-05-26T14:06:01Z"
+    createdAt: "2026-09-29T10:20:03Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
       administrative workflows using Kubernetes best practices.
-    olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.19"}]'
-    operators.operatorframework.io/builder: operator-sdk-v1.42.2
+    olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.22"}]'
+    operators.operatorframework.io/builder: operator-sdk-v1.42.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/splunk/splunk-operator
   name: splunk-operator.v3.1.0
@@ -326,12 +345,6 @@ spec:
       kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
       version: v3
-    - kind: ClusterMaster
-      name: clustermasters.enterprise.splunk.com
-      version: v1
-    - kind: ClusterMaster
-      name: clustermasters.enterprise.splunk.com
-      version: v2
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       displayName: Indexer Cluster
       kind: IndexerCluster
@@ -342,13 +355,9 @@ spec:
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
       version: v4
-    - kind: IndexerCluster
-      name: indexerclusters.enterprise.splunk.com
-      version: v1
-    - kind: IndexerCluster
-      name: indexerclusters.enterprise.splunk.com
-      version: v2
-    - description: IngestorCluster is the Schema for the ingestorclusters API
+    - description: 'IngestorCluster is the Schema for the ingestorclusters API. NOTE:
+        IngestorCluster is part of the index and ingestion separation feature, which
+        is currently in Preview and not recommended for production use.'
       displayName: Ingestor Cluster
       kind: IngestorCluster
       name: ingestorclusters.enterprise.splunk.com
@@ -363,12 +372,6 @@ spec:
       kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com
       version: v3
-    - kind: LicenseMaster
-      name: licensemasters.enterprise.splunk.com
-      version: v1
-    - kind: LicenseMaster
-      name: licensemasters.enterprise.splunk.com
-      version: v2
     - description: MonitoringConsole is the Schema for the monitoringconsole API
       displayName: Monitoring Console
       kind: MonitoringConsole
@@ -379,7 +382,18 @@ spec:
       kind: MonitoringConsole
       name: monitoringconsoles.enterprise.splunk.com
       version: v4
-    - description: ObjectStorage is the Schema for the objectstorages API
+    - description: |-
+        NoahCluster is shared, configuration-only connection detail for Splunk
+        workloads that use Noah. Because several resources (e.g. IndexerClusters and SearchHeadClusters)
+        can reference the same NoahCluster with differing health, no single controller can maintain a status
+        consistently for all of them. Operational state is reported on each referencing workload instead.
+      displayName: Noah Cluster
+      kind: NoahCluster
+      name: noahclusters.enterprise.splunk.com
+      version: v4
+    - description: 'ObjectStorage is the Schema for the objectstorages API. NOTE:
+        ObjectStorage is part of the index and ingestion separation feature, which
+        is currently in Preview and not recommended for production use.'
       displayName: Object Storage
       kind: ObjectStorage
       name: objectstorages.enterprise.splunk.com
@@ -401,7 +415,9 @@ spec:
       kind: PostgresDatabase
       name: postgresdatabases.platform.splunk.com
       version: v1alpha1
-    - description: Queue is the Schema for the queues API
+    - description: 'Queue is the Schema for the queues API. NOTE: Queue is part of
+        the index and ingestion separation feature, which is currently in Preview
+        and not recommended for production use.'
       displayName: Queue
       kind: Queue
       name: queues.enterprise.splunk.com
@@ -418,12 +434,6 @@ spec:
       kind: SearchHeadCluster
       name: searchheadclusters.enterprise.splunk.com
       version: v4
-    - kind: SearchHeadCluster
-      name: searchheadclusters.enterprise.splunk.com
-      version: v1
-    - kind: SearchHeadCluster
-      name: searchheadclusters.enterprise.splunk.com
-      version: v2
     - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
       displayName: Standalone
       kind: Standalone
@@ -434,12 +444,6 @@ spec:
       kind: Standalone
       name: standalones.enterprise.splunk.com
       version: v4
-    - kind: Standalone
-      name: standalones.enterprise.splunk.com
-      version: v1
-    - kind: Standalone
-      name: standalones.enterprise.splunk.com
-      version: v2
   description: The Splunk Operator for Kubernetes enables you to quickly and easily
     deploy Splunk Enterprise on your choice of private or public cloud provider. The
     Operator simplifies scaling and management of Splunk Enterprise by automating
@@ -480,16 +484,6 @@ spec:
           verbs:
           - create
         - apiGroups:
-          - policy
-          resources:
-          - poddisruptionbudgets
-          verbs:
-          - create
-          - get
-          - list
-          - update
-          - watch
-        - apiGroups:
           - apiextensions.k8s.io
           resources:
           - customresourcedefinitions
@@ -509,6 +503,39 @@ spec:
           - update
           - watch
         - apiGroups:
+          - barmancloud.cnpg.io
+          resources:
+          - objectstores
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - clusterissuers
+          - issuers
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
           - enterprise.splunk.com
           resources:
           - clustermanagers
@@ -522,19 +549,6 @@ spec:
           - queues
           - searchheadclusters
           - standalones
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - platform.splunk.com
-          resources:
-          - postgresclusters
-          - postgresdatabases
           verbs:
           - create
           - delete
@@ -560,13 +574,6 @@ spec:
           verbs:
           - update
         - apiGroups:
-          - platform.splunk.com
-          resources:
-          - postgresclusters/finalizers
-          - postgresdatabases/finalizers
-          verbs:
-          - update
-        - apiGroups:
           - enterprise.splunk.com
           resources:
           - clustermanagers/status
@@ -583,6 +590,42 @@ spec:
           verbs:
           - get
           - patch
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - noahclusters
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - platform.splunk.com
+          resources:
+          - postgresclusterclasses
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - platform.splunk.com
+          resources:
+          - postgresclusters
+          - postgresdatabases
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - platform.splunk.com
+          resources:
+          - postgresclusters/finalizers
+          - postgresdatabases/finalizers
+          verbs:
           - update
         - apiGroups:
           - platform.splunk.com
@@ -603,16 +646,19 @@ spec:
           - update
           - watch
         - apiGroups:
-          - platform.splunk.com
+          - policy
           resources:
-          - postgresclusterclasses
+          - poddisruptionbudgets
           verbs:
+          - create
           - get
           - list
+          - update
           - watch
         - apiGroups:
           - postgresql.cnpg.io
           resources:
+          - backups
           - clusters
           - databases
           - poolers
@@ -628,6 +674,7 @@ spec:
         - apiGroups:
           - postgresql.cnpg.io
           resources:
+          - backups/status
           - clusters/status
           - poolers/status
           - scheduledbackups/status
@@ -701,6 +748,10 @@ spec:
                   initialDelaySeconds: 15
                   periodSeconds: 20
                 name: manager
+                ports:
+                - containerPort: 9444
+                  name: conversion
+                  protocol: TCP
                 readinessProbe:
                   httpGet:
                     path: /readyz
@@ -726,6 +777,9 @@ spec:
                   seccompProfile:
                     type: RuntimeDefault
                 volumeMounts:
+                - mountPath: /tmp/k8s-webhook-server/serving-certs
+                  name: webhook-cert
+                  readOnly: true
                 - mountPath: /opt/splunk/appframework/
                   name: app-staging
               securityContext:
@@ -736,6 +790,10 @@ spec:
               serviceAccountName: splunk-operator-controller-manager
               terminationGracePeriodSeconds: 10
               volumes:
+              - name: webhook-cert
+                secret:
+                  defaultMode: 420
+                  secretName: webhook-server-cert
               - configMap:
                   name: splunk-operator-config
                 name: splunk-operator-config
