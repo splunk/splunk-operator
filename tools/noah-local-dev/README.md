@@ -1,9 +1,12 @@
 # Noah local development
 
 Spins up a Kraken vCluster running Noah, PostgreSQL, Redis and MinIO, installs
-the operator and its CRDs, and creates a SmartStore-backed C3 deployment. The
-recommended workflow runs the operator inside the vCluster; a local `go run`
-workflow is also available for operator development.
+cert-manager, the operator and its CRDs, and creates a SmartStore-backed C3
+deployment. The recommended workflow runs the operator inside the vCluster; a
+local `go run` workflow is also available for operator development.
+
+Both workflows install cert-manager into the vCluster, which issues the operator's
+webhook serving certificate. The operator needs that certificate to start.
 
 Prerequisites:
 
@@ -52,6 +55,11 @@ make noah-local-up NOAH_LOCAL_LICENSE_FILE=/absolute/path/to/enterprise.lic
 printf '%s\n' '127.0.0.1 noah.splunk-operator.svc' | sudo tee -a /etc/hosts
 ```
 
+As well as the Noah port-forward, this issues the operator's webhook serving
+certificate and copies it to `/tmp/k8s-webhook-server/serving-certs`, which is
+where the operator reads it from. Re-run `make noah-local-webhook-certs` if
+cert-manager later rotates the certificate, or if that directory is cleared.
+
 Then run the operator, supplying your own accepted terms:
 
 ```console
@@ -62,6 +70,11 @@ SPLUNK_GENERAL_TERMS='<your accepted terms>' \
 ```
 
 Do not run local and in-cluster operators at the same time.
+
+A locally run operator serves its webhooks on localhost, and the vCluster API
+server has no route back to your machine, so it cannot call them. Reconciliation
+works, but exercising the conversion webhook needs the in-cluster workflow
+(`make noah-local-c3-up`).
 
 Tear down when you are done
 
@@ -85,6 +98,8 @@ the targets under **Noah Local Development**. They are defined in
 | `noah-local-cluster`           | create the vCluster, write the `kraken` kubeconfig context, copy Kraken's Artifactory pull secret into `splunk-operator` |
 | `install`                      | install all CRDs from `config/crd/bases`                                                                                 |
 | `noah-local-deploy`            | `helm upgrade --install` of [`helm/charts/noah`](../../helm/charts/noah), waits for ready                                |
+| `noah-local-cert-manager`      | install cert-manager, which issues the operator's webhook serving certificate                                            |
+| `noah-local-webhook-certs`     | issue that certificate and copy it out for a locally run operator                                                        |
 | `noah-local-operator-deploy`   | install or upgrade a staged operator image in the vCluster                                                               |
 | `noah-local-fixtures`          | create prerequisite Secrets, apply [`fixtures/c3.yaml`](fixtures/c3.yaml)                                                |
 | `noah-local-port-forward`      | forward the Noah service to localhost                                                                                    |

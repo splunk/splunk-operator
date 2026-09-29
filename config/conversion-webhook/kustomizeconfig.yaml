@@ -1,0 +1,7 @@
+# The certificate's SANs reference the Service by var. Without this, kustomize does
+# not substitute inside spec/dnsNames and the literal $(SERVICE_NAME) survives into
+# the rendered certificate.
+varReference:
+- kind: Certificate
+  group: cert-manager.io
+  path: spec/dnsNames

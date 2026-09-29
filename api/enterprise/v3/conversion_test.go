@@ -370,3 +370,73 @@ func TestSearchHeadClusterConvertFrom(t *testing.T) {
 			"unsupported conversion hub for SearchHeadCluster: *v4.IndexerCluster")
 	})
 }
+
+// TestConversionDoesNotShareBackingData covers the shallow-copy trap. ObjectMeta,
+// CommonSplunkSpec and several status fields carry pointers, slices and maps, so
+// assigning the structs wholesale would leave both objects sharing backing data
+// and a mutation of one could silently change the other.
+func TestConversionDoesNotShareBackingData(t *testing.T) {
+	t.Run("IndexerCluster ConvertTo", func(t *testing.T) {
+		source := populatedIndexerCluster()
+		hub := &hubApi.IndexerCluster{}
+		require.NoError(t, source.ConvertTo(hub))
+
+		hub.Labels["tier"] = "mutated"
+		hub.Status.IdxcPasswordChangedSecrets["secret-a"] = false
+		hub.Status.IndexerSecretChanged[0] = false
+		hub.Spec.Resources.Requests[corev1.ResourceCPU] = resource.MustParse("99")
+
+		assert.Equal(t, "indexing", source.Labels["tier"])
+		assert.True(t, source.Status.IdxcPasswordChangedSecrets["secret-a"])
+		assert.True(t, source.Status.IndexerSecretChanged[0])
+		assert.Equal(t, resource.MustParse("2"), source.Spec.Resources.Requests[corev1.ResourceCPU])
+	})
+
+	t.Run("IndexerCluster ConvertFrom", func(t *testing.T) {
+		hub := &hubApi.IndexerCluster{}
+		require.NoError(t, populatedIndexerCluster().ConvertTo(hub))
+
+		converted := &IndexerCluster{}
+		require.NoError(t, converted.ConvertFrom(hub))
+
+		converted.Labels["tier"] = "mutated"
+		converted.Status.IdxcPasswordChangedSecrets["secret-a"] = false
+		converted.Spec.Resources.Requests[corev1.ResourceCPU] = resource.MustParse("99")
+
+		assert.Equal(t, "indexing", hub.Labels["tier"])
+		assert.True(t, hub.Status.IdxcPasswordChangedSecrets["secret-a"])
+		assert.Equal(t, resource.MustParse("2"), hub.Spec.Resources.Requests[corev1.ResourceCPU])
+	})
+
+	t.Run("SearchHeadCluster ConvertTo", func(t *testing.T) {
+		source := populatedSearchHeadCluster()
+		hub := &hubApi.SearchHeadCluster{}
+		require.NoError(t, source.ConvertTo(hub))
+
+		hub.Labels["tier"] = "mutated"
+		hub.Status.AdminPasswordChangedSecrets["admin-secret"] = false
+		hub.Status.ShcSecretChanged[0] = false
+		hub.Status.Members[0].Name = "mutated"
+
+		assert.Equal(t, "search", source.Labels["tier"])
+		assert.True(t, source.Status.AdminPasswordChangedSecrets["admin-secret"])
+		assert.True(t, source.Status.ShcSecretChanged[0])
+		assert.Equal(t, "splunk-shc-0", source.Status.Members[0].Name)
+	})
+
+	t.Run("SearchHeadCluster ConvertFrom", func(t *testing.T) {
+		hub := &hubApi.SearchHeadCluster{}
+		require.NoError(t, populatedSearchHeadCluster().ConvertTo(hub))
+
+		converted := &SearchHeadCluster{}
+		require.NoError(t, converted.ConvertFrom(hub))
+
+		converted.Labels["tier"] = "mutated"
+		converted.Status.AdminPasswordChangedSecrets["admin-secret"] = false
+		converted.Status.Members[0].Name = "mutated"
+
+		assert.Equal(t, "search", hub.Labels["tier"])
+		assert.True(t, hub.Status.AdminPasswordChangedSecrets["admin-secret"])
+		assert.Equal(t, "splunk-shc-0", hub.Status.Members[0].Name)
+	})
+}

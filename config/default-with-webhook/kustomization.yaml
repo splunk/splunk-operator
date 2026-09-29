@@ -22,8 +22,8 @@ bases:
 - ../manager
 # [WEBHOOK] Enabled for opt-in webhook deployment
 - ../webhook
-# [CERTMANAGER] Required for webhook TLS
-- ../certmanager
+# [CERTMANAGER] The serving certificate, the webhook Service and the SERVICE_* vars
+# all come from the ../conversion-webhook component below.
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
 # [METRICS] Expose the controller manager metrics service.
@@ -57,18 +57,8 @@ vars:
     group: cert-manager.io
     version: v1
     name: serving-cert # this name should match the one in certificate.yaml
-- name: SERVICE_NAMESPACE # namespace of the service
-  objref:
-    kind: Service
-    version: v1
-    name: webhook-service
-  fieldref:
-    fieldpath: metadata.namespace
-- name: SERVICE_NAME
-  objref:
-    kind: Service
-    version: v1
-    name: webhook-service
+# SERVICE_NAMESPACE and SERVICE_NAME are declared by the ../conversion-webhook
+# component; redeclaring them here is a kustomize error.
 
 #patches:
 #- target:
@@ -139,3 +129,8 @@ patches:
 - path: manager_metrics_patch.yaml
   target:
     kind: Deployment
+
+components:
+# The webhook serving certificate, the Service fronting the webhook ports, and
+# the Deployment patch that mounts the certificate.
+- ../conversion-webhook

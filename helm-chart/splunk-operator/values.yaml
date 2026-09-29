@@ -92,6 +92,14 @@ splunkOperator:
     initialDelaySeconds: 5
     periodSeconds: 10
 
+  # Webhook configuration. Requires cert-manager in the cluster.
+  webhook:
+    # Port the conversion webhook serves /convert on.
+    conversionPort: 9444
+    # Secret cert-manager writes the serving certificate into, mounted by the
+    # operator. Change only if it collides with an existing secret.
+    certSecretName: webhook-server-cert
+
   # Define splunk operator manager service ports
   # reference: https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/
   service:

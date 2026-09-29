@@ -1,0 +1,19 @@
+# Fronts the validation and conversion webhook ports. One Service, so one
+# certificate and one set of SANs.
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-service
+  namespace: system
+spec:
+  ports:
+  - name: validation
+    port: 443
+    protocol: TCP
+    targetPort: 9443
+  - name: conversion
+    port: 9444
+    protocol: TCP
+    targetPort: 9444
+  selector:
+    control-plane: controller-manager

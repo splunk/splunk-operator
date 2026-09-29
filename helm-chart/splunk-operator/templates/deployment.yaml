@@ -88,12 +88,17 @@ spec:
             - containerPort: {{ .port }}
               name: {{ .name }}
             {{- end }}
+            - containerPort: {{ .Values.splunkOperator.webhook.conversionPort }}
+              name: conversion
           resources:
 {{- toYaml .Values.splunkOperator.resources | nindent 12 }}
           securityContext:
 {{- toYaml .Values.splunkOperator.containerSecurityContext | nindent 12 }}
-{{- with .Values.splunkOperator.volumeMounts }}
           volumeMounts:
+            - name: webhook-cert
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+{{- with .Values.splunkOperator.volumeMounts }}
 {{- toYaml .| nindent 12 }}
 {{- end }}
 {{- with .Values.splunkOperator.nodeSelector }}
@@ -109,7 +114,11 @@ spec:
 {{- toYaml . | nindent 8 }}
 {{- end }}
       terminationGracePeriodSeconds: {{ .Values.splunkOperator.terminationGracePeriodSeconds }}
-{{- with .Values.splunkOperator.volumes }}
       volumes:
+        - name: webhook-cert
+          secret:
+            defaultMode: 420
+            secretName: {{ .Values.splunkOperator.webhook.certSecretName }}
+{{- with .Values.splunkOperator.volumes }}
 {{- toYaml .| nindent 8 }}
 {{- end }}
