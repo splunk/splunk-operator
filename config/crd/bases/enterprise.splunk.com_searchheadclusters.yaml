@@ -10566,6 +10566,11 @@ spec:
                       description: Flag that indicates if this member can run scheduled
                         searches.
                       type: boolean
+                    currentOperation:
+                      description: |-
+                        The lifecycle operation SOK is currently performing on this member, if any. Empty when the
+                        member is Up on the current revision and nothing is being done to it.
+                      type: string
                     is_registered:
                       description: Indicates if this member is registered with the
                         searchhead cluster captain.
@@ -10573,6 +10578,12 @@ spec:
                     name:
                       description: Name of the search head cluster member
                       type: string
+                    operationStartTimestamp:
+                      description: |-
+                        Unix timestamp when CurrentOperation last transitioned to its present value. Zero when
+                        CurrentOperation is empty.
+                      format: int64
+                      type: integer
                     podRevision:
                       description: |-
                         StatefulSet controller-revision-hash label of the pod — populated by updateStatus

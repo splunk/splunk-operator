@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -111,6 +112,8 @@ func apply(ctx context.Context, client splcommon.ControllerClient, namespacedNam
 	} else {
 		fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
 	}
+	refineReadyReason(fresh)
+	refineProgressingReason(fresh)
 	eventPublisher, publisherErr := k8sops.NewK8EventPublisherWithRecorder(recorder, fresh)
 	if publisherErr != nil {
 		logger.WarnContext(ctx, "failed to create event publisher", "error", publisherErr)
@@ -129,6 +132,118 @@ func apply(ctx context.Context, client splcommon.ControllerClient, namespacedNam
 
 // Apply is the request-level entry point used by the controller.
 var Apply = apply
+
+// genericReadyMessages mirrors the phase-derived Ready message
+// common.SetPhaseAndConditions produces on its own, for the phases where a
+// cause below is trustworthy enough to promote onto Ready's own
+// Reason/Message. PhaseError and PhaseTerminating are deliberately
+// excluded: a Phase of Error can mean the reconcile aborted before
+// UpdateStatus even ran this cycle, in which case the causes below would
+// just be stale data from a previous cycle.
+var genericReadyMessages = map[enterpriseApi.Phase]string{
+	enterpriseApi.PhasePending:     "Resource is pending initialization",
+	enterpriseApi.PhaseUpdating:    "Resource is being updated",
+	enterpriseApi.PhaseScalingUp:   "Resource is scaling up",
+	enterpriseApi.PhaseScalingDown: "Resource is scaling down",
+}
+
+// genericProgressingMessages mirrors genericReadyMessages for the Progressing
+// condition: the phase-derived messages common.SetPhaseAndConditions produces
+// for the phases where promoting an in-flight member operation is trustworthy.
+var genericProgressingMessages = []string{
+	"Resource is being initialized",
+	"Resource is being updated",
+	"Resource is scaling up",
+	"Resource is scaling down",
+}
+
+// refineReadyReason promotes a more specific cause onto the Ready
+// condition's own Reason/Message when Ready is False, computed directly
+// from the same flat Status fields that already gate
+// shcworkflow.PodManager.Update from ever reporting PhaseReady (Captain/
+// CaptainReady, MinPeersJoined) plus the pre-existing NoahDependencyResolved
+// condition for Noah mode — never from a separate new boolean Condition, so
+// this does not reintroduce the duplicate Conditions trimmed in
+// CSPL-5271/5281. Deliberately conservative: only takes over when Ready's
+// message is still exactly the untouched generic default for its phase, so
+// it never clobbers a more specific message already threaded through
+// elsewhere.
+func refineReadyReason(cr *enterpriseApi.SearchHeadCluster) {
+	ready := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionReady)
+	if ready == nil || ready.Status != metav1.ConditionFalse {
+		return
+	}
+	generic, ok := genericReadyMessages[cr.Status.Phase]
+	if !ok || ready.Message != generic {
+		return
+	}
+	reason, message, ok := readyCause(cr)
+	if !ok {
+		return
+	}
+	cr.Status.Conditions = splcommon.UpsertCondition(cr.Status.Conditions, metav1.Condition{
+		Type:               string(enterpriseApi.ConditionReady),
+		Status:             metav1.ConditionFalse,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: ready.ObservedGeneration,
+	})
+}
+
+// readyCause identifies the most specific known reason SHC is not ready, in
+// priority order: an unresolved Noah dependency (Noah mode only), no
+// elected+ready captain, insufficient joined peers, and — classic mode only,
+// since Noah has no deployer — a deployer that is not yet ready.
+func readyCause(cr *enterpriseApi.SearchHeadCluster) (reason, message string, ok bool) {
+	if cr.Spec.NoahEnabled() {
+		if dep := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionNoahDependencyResolved); dep != nil && dep.Status == metav1.ConditionFalse {
+			return dep.Reason, dep.Message, true
+		}
+	}
+	if cr.Status.Captain == "" || !cr.Status.CaptainReady {
+		return string(enterpriseApi.ReasonNoCaptainElected), "No search head captain has been elected and reported ready", true
+	}
+	if !cr.Status.MinPeersJoined {
+		return string(enterpriseApi.ReasonBelowMinimumPeers), "Fewer than the minimum required search head peers have joined the cluster", true
+	}
+	if !cr.Spec.NoahEnabled() && cr.Status.DeployerPhase != enterpriseApi.PhaseReady {
+		return string(enterpriseApi.ReasonDeployerNotReady), "Deployer is not yet ready", true
+	}
+	return "", "", false
+}
+
+// refineProgressingReason promotes a more specific cause onto the
+// Progressing condition's own Reason/Message when Progressing is True and a
+// member has an in-flight lifecycle operation (Detaining/Draining/
+// Recycling/Removing, tracked in Status.Members[].CurrentOperation — see
+// PrepareRecycle/PrepareScaleDown). As conservative as refineReadyReason:
+// only takes over the generic Pending/Updating/ScalingUp/ScalingDown
+// message for its phase — including Pending, since PodManager.Update can
+// still report PhasePending (captain/min-peer gates not yet satisfied)
+// while a rolling recycle or scale-down already has a member's
+// CurrentOperation in flight.
+func refineProgressingReason(cr *enterpriseApi.SearchHeadCluster) {
+	progressing := splcommon.GetCondition(cr.Status.Conditions, enterpriseApi.ConditionProgressing)
+	if progressing == nil || progressing.Status != metav1.ConditionTrue {
+		return
+	}
+	if !slices.Contains(genericProgressingMessages, progressing.Message) {
+		return
+	}
+	for _, m := range cr.Status.Members {
+		if m.CurrentOperation == "" {
+			continue
+		}
+		cr.Status.Conditions = splcommon.UpsertCondition(cr.Status.Conditions, metav1.Condition{
+			Type:               string(enterpriseApi.ConditionProgressing),
+			Status:             metav1.ConditionTrue,
+			Reason:             string(enterpriseApi.ReasonMemberOperationInProgress),
+			Message:            fmt.Sprintf("%s is %s", m.Name, m.CurrentOperation),
+			ObservedGeneration: progressing.ObservedGeneration,
+		})
+		return
+	}
+}
 
 // Keep the existing SearchHeadCluster telemetry target unchanged after moving
 // the reconcile implementation out of enterprise.

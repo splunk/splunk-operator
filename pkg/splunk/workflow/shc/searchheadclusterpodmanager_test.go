@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -1958,5 +1959,41 @@ func TestUpdateStatusRestartsCaptainStableClockAfterZeroReadyReplicasRecovers(t 
 	}
 	if cr.Status.CaptainStableSince < before {
 		t.Errorf("expected CaptainStableSince to restart to approximately now after recovering from zero ready replicas, not inherit the stale pre-outage %d, got %d", stableSince, cr.Status.CaptainStableSince)
+	}
+}
+
+// TestUpdateStatus_TotalOutageClearsCaptainWithoutTouchingMembers covers a
+// P2 finding from automated review: a cluster that was previously healthy
+// and then loses every ready search-head pod must not leave Captain/
+// CaptainReady frozen at their last-known-healthy values.
+func TestUpdateStatus_TotalOutageClearsCaptainWithoutTouchingMembers(t *testing.T) {
+	ctx := context.Background()
+	restoreSearchHeadClusterInfoStubs(t)
+
+	cr := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"}}
+	mgr := newTestSHCPodManager(cr)
+	mgr.Client = spltest.NewMockClient()
+
+	// Establish a healthy baseline first.
+	if err := mgr.UpdateStatus(ctx, searchHeadStatefulSet("test-shc", 1)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cr.Status.CaptainReady {
+		t.Fatalf("expected a healthy baseline before the outage, got CaptainReady=%v", cr.Status.CaptainReady)
+	}
+	members := cr.Status.Members
+
+	// Total outage: every search-head pod is now unready.
+	outageStatefulSet := searchHeadStatefulSet("test-shc", 1)
+	outageStatefulSet.Status.ReadyReplicas = 0
+	if err := mgr.UpdateStatus(ctx, outageStatefulSet); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cr.Status.Captain != "" || cr.Status.CaptainReady {
+		t.Errorf("expected Captain/CaptainReady cleared after total outage, got Captain=%q CaptainReady=%v", cr.Status.Captain, cr.Status.CaptainReady)
+	}
+	if !reflect.DeepEqual(cr.Status.Members, members) {
+		t.Errorf("expected last-known Members preserved through a transient outage, got %+v, want %+v", cr.Status.Members, members)
 	}
 }

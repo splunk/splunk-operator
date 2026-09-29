@@ -141,7 +141,8 @@ func (mgr *PodManager) Update(ctx context.Context, c splcommon.ControllerClient,
 
 	// update CR status with SHC information
 	err = mgr.UpdateStatus(ctx, statefulSet)
-	if err != nil || mgr.CR.Status.ReadyReplicas == 0 || !mgr.CR.Status.Initialized || !mgr.CR.Status.CaptainReady {
+	captainElected := mgr.CR.Status.Captain != "" && mgr.CR.Status.CaptainReady
+	if err != nil || mgr.CR.Status.ReadyReplicas == 0 || !mgr.CR.Status.Initialized || !captainElected || !mgr.CR.Status.MinPeersJoined {
 		if termErr := ops.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
 			logger.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
 			return enterpriseApi.PhaseError, termErr
@@ -199,6 +200,9 @@ func (mgr *PodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, err
 	logger.WarnContext(ctx, "member leaving SearchHeadCluster",
 		"member", memberName,
 		"remaining_count", len(mgr.CR.Status.Members)-1)
+
+	mgr.CR.Status.Members[n].CurrentOperation = enterpriseApi.MemberOperationRemoving
+	mgr.CR.Status.Members[n].OperationStartTimestamp = time.Now().Unix()
 
 	c := mgr.getClient(ctx, n)
 	err = c.RemoveSearchHeadClusterMember()
@@ -266,6 +270,8 @@ func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error
 		// that was never cleared by FinishRecycle (e.g. a new revision arrived before
 		// the pod returned to Up and FinishRecycle was skipped).
 		mgr.clearDetentionTimer(memberName)
+		mgr.CR.Status.Members[n].CurrentOperation = enterpriseApi.MemberOperationDetaining
+		mgr.CR.Status.Members[n].OperationStartTimestamp = time.Now().Unix()
 		// Detain search head
 		logger.InfoContext(ctx, "detaining SearchHeadCluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
@@ -326,6 +332,8 @@ func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error
 		mgr.CR.Status.DetentionStartTimestamp = window.StartTimestamp
 		mgr.CR.Status.DetainedMemberName = window.MemberName
 		mgr.CR.Status.DetainedPodRevision = window.PodRevision
+		mgr.CR.Status.Members[n].CurrentOperation = enterpriseApi.MemberOperationDraining
+		mgr.CR.Status.Members[n].OperationStartTimestamp = window.StartTimestamp
 
 		activeSearches := activeSearchCount(
 			mgr.CR.Status.Members[n].ActiveHistoricalSearchCount,
@@ -336,6 +344,8 @@ func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error
 		if activeSearches <= 0 {
 			logger.InfoContext(ctx, "detention complete", "memberName", memberName)
 			mgr.clearDetentionTimer(memberName)
+			mgr.CR.Status.Members[n].CurrentOperation = enterpriseApi.MemberOperationRecycling
+			mgr.CR.Status.Members[n].OperationStartTimestamp = now.Unix()
 			return true, nil
 		}
 
@@ -355,6 +365,8 @@ func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error
 				logger.WarnContext(ctx, "event publisher unavailable, skipping DetentionTimeoutForced event",
 					"memberName", memberName)
 			}
+			mgr.CR.Status.Members[n].CurrentOperation = enterpriseApi.MemberOperationRecycling
+			mgr.CR.Status.Members[n].OperationStartTimestamp = now.Unix()
 			return true, nil
 		}
 
@@ -463,14 +475,26 @@ func (mgr *PodManager) UpdateStatus(ctx context.Context, statefulSet *appsv1.Sta
 	previousCaptainStableSince := mgr.CR.Status.CaptainStableSince
 	previousMemberCount := int32(len(mgr.CR.Status.Members))
 	previousPodRevisions := make(map[string]string, len(mgr.CR.Status.Members))
+	type memberOperationState struct {
+		operation enterpriseApi.MemberOperation
+		since     int64
+	}
+	previousOperations := make(map[string]memberOperationState, len(mgr.CR.Status.Members))
 	for _, member := range mgr.CR.Status.Members {
 		if member.PodRevision != "" {
 			previousPodRevisions[member.Name] = member.PodRevision
+		}
+		if member.CurrentOperation != "" {
+			previousOperations[member.Name] = memberOperationState{
+				operation: member.CurrentOperation,
+				since:     member.OperationStartTimestamp,
+			}
 		}
 	}
 
 	mgr.CR.Status.Captain = ""
 	mgr.CR.Status.CaptainReady = false
+	mgr.CR.Status.MinPeersJoined = false
 	mgr.CR.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if mgr.CR.Status.ReadyReplicas == 0 {
 		return nil
@@ -507,6 +531,21 @@ func (mgr *PodManager) UpdateStatus(ctx context.Context, statefulSet *appsv1.Sta
 			}
 		} else {
 			memberStatus.PodRevision = previousPodRevisions[memberName]
+		}
+
+		// CurrentOperation/OperationStartTimestamp are rebuilt from scratch every reconcile just
+		// like the rest of memberStatus, so carry the previous cycle's value forward by default —
+		// PrepareRecycle/PrepareScaleDown are the ones that advance it to a new stage — and clear
+		// it once the member is confirmed back Up on the StatefulSet's current revision, whether
+		// or not PrepareRecycle ran for it this cycle (it stops being called at all once revisions
+		// match, so nothing else would ever clear a stale value otherwise).
+		if prev, ok := previousOperations[memberName]; ok {
+			memberStatus.CurrentOperation = prev.operation
+			memberStatus.OperationStartTimestamp = prev.since
+		}
+		if memberOperationComplete(memberStatus.Status, memberStatus.PodRevision, statefulSet.Status.UpdateRevision) {
+			memberStatus.CurrentOperation = ""
+			memberStatus.OperationStartTimestamp = 0
 		}
 
 		if err == nil && !gotCaptainInfo {
