@@ -23,35 +23,38 @@ import (
 	. "github.com/onsi/gomega"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	ingestorcluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/ingestorcluster"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/pkg/errors"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 )
 
 var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
+	var originalApplyIngestorCluster func(context.Context, splcommon.ControllerClient, *enterpriseApi.IngestorCluster) (reconcile.Result, error)
+
 	BeforeEach(func() {
+		originalApplyIngestorCluster = ingestorcluster.ApplyIngestorCluster
 		time.Sleep(2 * time.Second)
 	})
 
 	AfterEach(func() {
-
+		ingestorcluster.ApplyIngestorCluster = originalApplyIngestorCluster
 	})
 
 	Context("IngestorCluster Management", func() {
 
 		It("Get IngestorCluster custom resource should fail", func() {
 			namespace := "ns-splunk-ing-1"
-			ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+			ingestorcluster.ApplyIngestorCluster = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -68,7 +71,7 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			namespace := "ns-splunk-ing-2"
 			annotations := make(map[string]string)
 			annotations[enterpriseApi.IngestorClusterPausedAnnotation] = "true"
-			ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+			ingestorcluster.ApplyIngestorCluster = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -115,7 +118,7 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 
 		It("Create IngestorCluster custom resource should succeeded", func() {
 			namespace := "ns-splunk-ing-3"
-			ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+			ingestorcluster.ApplyIngestorCluster = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -158,7 +161,7 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-ing-4"
-			ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+			ingestorcluster.ApplyIngestorCluster = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -268,7 +271,7 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 			icSpec := testutils.NewIngestorCluster("test", namespace, "image", objStorage, queue)
 			Expect(c.Create(ctx, icSpec)).Should(Succeed())
 
-			ApplyIngestorCluster = func(ctx context.Context, cl client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+			ingestorcluster.ApplyIngestorCluster = func(ctx context.Context, cl splcommon.ControllerClient, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
 				return reconcile.Result{}, splcommon.NewTerminalError("ValidateSpecFailed", "test terminal failure", fmt.Errorf("test"))
 			}
 

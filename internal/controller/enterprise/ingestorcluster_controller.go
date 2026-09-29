@@ -16,14 +16,10 @@ package controller
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -34,14 +30,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	"github.com/splunk/splunk-operator/pkg/config"
-	"github.com/splunk/splunk-operator/pkg/logging"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	ingestorcluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/ingestorcluster"
 	certs "github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
@@ -82,111 +76,8 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}()
 
-	logger := slog.Default().With("controller", "IngestorCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
-	ctx = logging.WithLogger(ctx, logger)
-
-	// Fetch the IngestorCluster
-	instance := &enterpriseApi.IngestorCluster{}
-	err = r.Get(ctx, req.NamespacedName, instance)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			// Request object not found, could have been deleted after
-			// reconcile request.  Owned objects are automatically
-			// garbage collected. For additional cleanup logic use
-			// finalizers.  Return and don't requeue
-			err = nil
-			return ctrl.Result{}, err
-		}
-		// Error reading the object - requeue the request.
-		err = errors.Wrap(err, "could not load ingestor cluster data")
-		return ctrl.Result{}, err
-	}
-
-	// If the reconciliation is paused, set the Paused condition and requeue
-	if instance.GetAnnotations()[enterpriseApi.IngestorClusterPausedAnnotation] == "true" {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: instance.Status.Phase, IsPaused: true, Message: "", Generation: instance.GetGeneration(),
-		})
-		instance.Status.Conditions = result.Conditions
-		if statusErr := r.Status().Update(ctx, instance); statusErr != nil {
-			logger.ErrorContext(ctx, "failed to update paused status", "error", statusErr)
-			err = statusErr
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, err
-	} else if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionPaused)); cond != nil && cond.Status == metav1.ConditionTrue {
-		result := splcommon.SetPhaseAndConditions(instance.Status.Conditions, splcommon.PhaseConditionInput{
-			Phase: instance.Status.Phase, IsPaused: false, Message: "", Generation: instance.GetGeneration(),
-		})
-		instance.Status.Conditions = result.Conditions
-		if statusErr := r.Status().Update(ctx, instance); statusErr != nil {
-			logger.ErrorContext(ctx, "failed to update unpaused status", "error", statusErr)
-			err = statusErr
-			return ctrl.Result{}, err
-		}
-	}
-
-	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
-
-	// Pass event recorder through context
-	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
-
-	// Phase as of reconcile entry, so we can tell a genuine transition into
-	// the Error phase apart from a CR that was already in Error.
-	previousPhase := instance.Status.Phase
-
-	result, err := ApplyIngestorCluster(ctx, r.Client, instance)
-	if result.Requeue && result.RequeueAfter != 0 {
-		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
-	}
-	// Record metrics if Error phase was entered. instance was mutated in place by
-	// ApplyIngestorCluster, so this doesn't depend on the refetch below succeeding.
-	if instance.Status.Phase == enterpriseApi.PhaseError && previousPhase != enterpriseApi.PhaseError {
-		errorType := "Reconciliation failed"
-		if cond := meta.FindStatusCondition(instance.Status.Conditions, string(enterpriseApi.ConditionReady)); cond != nil && cond.Message != "" {
-			errorType = cond.Message
-		}
-		labels := metrics.GetPrometheusLabels(req, "IngestorCluster")
-		labels[metrics.LabelErrorType] = errorType
-		metrics.ActionFailureCounters.With(labels).Inc()
-	}
-	fresh := &enterpriseApi.IngestorCluster{}
-	if fetchErr := r.Get(ctx, req.NamespacedName, fresh); fetchErr != nil {
-		if k8serrors.IsNotFound(fetchErr) {
-			err = nil
-			return result, err
-		}
-		logger.WarnContext(ctx, "failed to refetch CR for stalled condition update", "error", fetchErr)
-		err = fetchErr
-		return result, err
-	}
-	oldConditions := append([]metav1.Condition(nil), fresh.Status.Conditions...)
-	if msg, ok := splcommon.TerminalMessage(err); ok {
-		reason, _ := splcommon.TerminalReason(err)
-		fresh.Status.Conditions = splcommon.UpsertStalledCondition(fresh.Status.Conditions, reason, msg, fresh.GetGeneration())
-	} else {
-		fresh.Status.Conditions = splcommon.ClearStalledCondition(fresh.Status.Conditions, fresh.GetGeneration())
-	}
-	ep, epErr := enterprise.NewK8EventPublisherWithRecorder(r.Recorder, fresh)
-	if epErr != nil {
-		logger.WarnContext(ctx, "failed to create event publisher", "error", epErr)
-		err = epErr
-		return result, err
-	}
-	enterprise.EmitStalledTransitionEvents(ctx, ep, fresh.GetName(), oldConditions, fresh.Status.Conditions)
-	if updateErr := r.Status().Update(ctx, fresh); updateErr != nil {
-		logger.WarnContext(ctx, "failed to upsert stalled condition", "error", updateErr)
-		err = updateErr
-		return result, err
-	}
-	if _, ok := splcommon.TerminalMessage(err); ok {
-		return reconcile.Result{}, err
-	}
+	result, err := ingestorcluster.Apply(ctx, r.Client, req.NamespacedName, r.Recorder)
 	return result, err
-}
-
-var ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
-	return enterprise.ApplyIngestorCluster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -223,8 +114,10 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 
 				// Only consider ingestor clusters in the same namespace as the Secret
-				var list enterpriseApi.IngestorClusterList
-				if err := r.Client.List(ctx, &list, client.InNamespace(secret.Namespace)); err != nil {
+				cr := &enterpriseApi.IngestorCluster{}
+				cr.SetNamespace(secret.Namespace)
+				list, err := k8sops.GetIngestorClusterList(ctx, r.Client, cr, []client.ListOption{client.InNamespace(secret.Namespace)})
+				if err != nil {
 					return nil
 				}
 
@@ -239,11 +132,11 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						queueNS = ic.Namespace
 					}
 
-					queue := &enterpriseApi.Queue{}
-					if err := r.Client.Get(ctx, types.NamespacedName{
+					queue, err := k8sops.GetQueue(ctx, r.Client, &ic, types.NamespacedName{
 						Name:      ic.Spec.QueueRef.Name,
 						Namespace: queueNS,
-					}, queue); err != nil {
+					})
+					if err != nil {
 						continue
 					}
 
@@ -283,8 +176,10 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if !ok {
 					return nil
 				}
-				var list enterpriseApi.IngestorClusterList
-				if err := r.Client.List(ctx, &list, client.InNamespace(cm.Namespace)); err != nil {
+				listCR := &enterpriseApi.IngestorCluster{}
+				listCR.SetNamespace(cm.Namespace)
+				list, err := k8sops.GetIngestorClusterList(ctx, r.Client, listCR, []client.ListOption{client.InNamespace(cm.Namespace)})
+				if err != nil {
 					return nil
 				}
 				var reqs []reconcile.Request
@@ -310,8 +205,8 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if !ok {
 					return nil
 				}
-				var list enterpriseApi.IngestorClusterList
-				if err := r.Client.List(ctx, &list); err != nil {
+				list, err := k8sops.GetIngestorClusterList(ctx, r.Client, &enterpriseApi.IngestorCluster{}, nil)
+				if err != nil {
 					return nil
 				}
 				var reqs []reconcile.Request
@@ -338,8 +233,8 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if !ok {
 					return nil
 				}
-				var list enterpriseApi.IngestorClusterList
-				if err := r.Client.List(ctx, &list); err != nil {
+				list, err := k8sops.GetIngestorClusterList(ctx, r.Client, &enterpriseApi.IngestorCluster{}, nil)
+				if err != nil {
 					return nil
 				}
 				var reqs []reconcile.Request
