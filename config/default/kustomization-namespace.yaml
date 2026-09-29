@@ -140,3 +140,8 @@ patches:
 - path: manager_metrics_patch.yaml
   target:
     kind: Deployment
+
+components:
+# The webhook serving certificate, the Service fronting the webhook port, and
+# the Deployment patch that mounts the certificate.
+- ../conversion-webhook

@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# This component is the single owner of the webhook Service, the serving
+# certificate, and the Deployment's certificate mount. Overlays include it and
+# must not declare ../certmanager or the SERVICE_* vars themselves.
+resources:
+  - service.yaml
+  - ../certmanager
+
+patches:
+  - path: conversion_webhook_patch.yaml
+
+vars:
+- name: SERVICE_NAMESPACE
+  objref:
+    kind: Service
+    version: v1
+    name: webhook-service
+  fieldref:
+    fieldpath: metadata.namespace
+- name: SERVICE_NAME
+  objref:
+    kind: Service
+    version: v1
+    name: webhook-service
+
+configurations:
+  - kustomizeconfig.yaml
