@@ -239,3 +239,13 @@ func shouldDeferCaptainRecycle(isCaptain bool, alreadyStartedOwnRecycle bool, ot
 	}
 	return isCaptain && otherMembersNeedingRecycle > 0
 }
+
+// memberOperationComplete reports whether a member that is back to "Up" on
+// the StatefulSet's current revision has finished whatever CurrentOperation
+// was tracking, so the field should be cleared. Empty podRevision or
+// updateRevision means the comparison cannot be made yet (label not observed
+// this reconcile) — treated as not complete so a transient miss never
+// clears an in-flight operation early.
+func memberOperationComplete(status, podRevision, updateRevision string) bool {
+	return status == "Up" && podRevision != "" && updateRevision != "" && podRevision == updateRevision
+}

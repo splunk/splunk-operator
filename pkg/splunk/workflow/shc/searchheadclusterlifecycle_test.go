@@ -365,3 +365,26 @@ func TestIsCaptainMember(t *testing.T) {
 		})
 	}
 }
+
+func TestMemberOperationComplete(t *testing.T) {
+	cases := []struct {
+		name           string
+		status         string
+		podRevision    string
+		updateRevision string
+		want           bool
+	}{
+		{"up on current revision is complete", "Up", "rev-1", "rev-1", true},
+		{"up on a stale revision is not complete", "Up", "rev-0", "rev-1", false},
+		{"not up is never complete", "ManualDetention", "rev-1", "rev-1", false},
+		{"unobserved pod revision is not complete", "Up", "", "rev-1", false},
+		{"unobserved update revision is not complete", "Up", "rev-1", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := memberOperationComplete(tc.status, tc.podRevision, tc.updateRevision); got != tc.want {
+				t.Errorf("memberOperationComplete(%q, %q, %q) = %v, want %v", tc.status, tc.podRevision, tc.updateRevision, got, tc.want)
+			}
+		})
+	}
+}
