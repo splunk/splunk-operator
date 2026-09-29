@@ -36,33 +36,35 @@ func (c *SearchHeadCluster) ConvertTo(dstHub conversion.Hub) error {
 		return fmt.Errorf("unsupported conversion hub for SearchHeadCluster: %T", dstHub)
 	}
 
-	dst.ObjectMeta = c.ObjectMeta
-	dst.Spec.CommonSplunkSpec = c.Spec.CommonSplunkSpec
-	dst.Spec.Replicas = c.Spec.Replicas
-	dst.Spec.AppFrameworkConfig = c.Spec.AppFrameworkConfig
-	dst.Spec.DetentionTimeoutSeconds = c.Spec.DetentionTimeoutSeconds
+	src := c.DeepCopy()
+
+	dst.ObjectMeta = src.ObjectMeta
+	dst.Spec.CommonSplunkSpec = src.Spec.CommonSplunkSpec
+	dst.Spec.Replicas = src.Spec.Replicas
+	dst.Spec.AppFrameworkConfig = src.Spec.AppFrameworkConfig
+	dst.Spec.DetentionTimeoutSeconds = src.Spec.DetentionTimeoutSeconds
 
 	dst.Status = hubApi.SearchHeadClusterStatus{
-		Phase:                          c.Status.Phase,
-		DeployerPhase:                  c.Status.DeployerPhase,
-		Replicas:                       c.Status.Replicas,
-		ReadyReplicas:                  c.Status.ReadyReplicas,
-		Selector:                       c.Status.Selector,
-		Captain:                        c.Status.Captain,
-		CaptainReady:                   c.Status.CaptainReady,
-		Initialized:                    c.Status.Initialized,
-		MinPeersJoined:                 c.Status.MinPeersJoined,
-		MaintenanceMode:                c.Status.MaintenanceMode,
-		ShcSecretChanged:               c.Status.ShcSecretChanged,
-		AdminSecretChanged:             c.Status.AdminSecretChanged,
-		AdminPasswordChangedSecrets:    c.Status.AdminPasswordChangedSecrets,
-		NamespaceSecretResourceVersion: c.Status.NamespaceSecretResourceVersion,
-		Members:                        convertMembersTo(c.Status.Members),
-		AppContext:                     c.Status.AppContext,
-		TelAppInstalled:                c.Status.TelAppInstalled,
-		DetentionStartTimestamp:        c.Status.DetentionStartTimestamp,
-		DetainedMemberName:             c.Status.DetainedMemberName,
-		DetainedPodRevision:            c.Status.DetainedPodRevision,
+		Phase:                          src.Status.Phase,
+		DeployerPhase:                  src.Status.DeployerPhase,
+		Replicas:                       src.Status.Replicas,
+		ReadyReplicas:                  src.Status.ReadyReplicas,
+		Selector:                       src.Status.Selector,
+		Captain:                        src.Status.Captain,
+		CaptainReady:                   src.Status.CaptainReady,
+		Initialized:                    src.Status.Initialized,
+		MinPeersJoined:                 src.Status.MinPeersJoined,
+		MaintenanceMode:                src.Status.MaintenanceMode,
+		ShcSecretChanged:               src.Status.ShcSecretChanged,
+		AdminSecretChanged:             src.Status.AdminSecretChanged,
+		AdminPasswordChangedSecrets:    src.Status.AdminPasswordChangedSecrets,
+		NamespaceSecretResourceVersion: src.Status.NamespaceSecretResourceVersion,
+		Members:                        convertMembersTo(src.Status.Members),
+		AppContext:                     src.Status.AppContext,
+		TelAppInstalled:                src.Status.TelAppInstalled,
+		DetentionStartTimestamp:        src.Status.DetentionStartTimestamp,
+		DetainedMemberName:             src.Status.DetainedMemberName,
+		DetainedPodRevision:            src.Status.DetainedPodRevision,
 	}
 
 	return nil
@@ -83,6 +85,8 @@ func (c *SearchHeadCluster) ConvertFrom(srcHub conversion.Hub) error {
 		unrepresentableSearchHeadClusterFields(&src.Spec)); err != nil {
 		return err
 	}
+
+	src = src.DeepCopy()
 
 	c.ObjectMeta = src.ObjectMeta
 	c.Spec.CommonSplunkSpec = src.Spec.CommonSplunkSpec

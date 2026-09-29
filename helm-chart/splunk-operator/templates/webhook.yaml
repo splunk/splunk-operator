@@ -1,0 +1,45 @@
+{{/*
+The webhook serving certificate, issued by cert-manager, and the Service fronting
+the conversion webhook port.
+*/}}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-selfsigned-issuer
+  namespace: {{ include "splunk-operator.namespace" . }}
+  labels:
+{{- include "splunk-operator.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-serving-cert
+  namespace: {{ include "splunk-operator.namespace" . }}
+  labels:
+{{- include "splunk-operator.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+  - {{ include "splunk-operator.operator.fullname" . }}-webhook-service.{{ include "splunk-operator.namespace" . }}.svc
+  - {{ include "splunk-operator.operator.fullname" . }}-webhook-service.{{ include "splunk-operator.namespace" . }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ include "splunk-operator.operator.fullname" . }}-selfsigned-issuer
+  secretName: {{ .Values.splunkOperator.webhook.certSecretName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-webhook-service
+  namespace: {{ include "splunk-operator.namespace" . }}
+  labels:
+{{- include "splunk-operator.labels" . | nindent 4 }}
+spec:
+  ports:
+  - name: conversion
+    port: {{ .Values.splunkOperator.webhook.conversionPort }}
+    protocol: TCP
+    targetPort: {{ .Values.splunkOperator.webhook.conversionPort }}
+  selector:
+{{- include "splunk-operator.selectorLabels" . | nindent 4 }}

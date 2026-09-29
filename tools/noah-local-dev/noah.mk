@@ -33,6 +33,23 @@ NOAH_LOCAL_DEPLOY_TIMEOUT ?= 10m
 NOAH_LOCAL_HELM_ARGS ?=
 NOAH_LOCAL_OPERATOR_TIMEOUT ?= 5m
 NOAH_LOCAL_OPERATOR_HELM_ARGS ?=
+# cert-manager issues the operator's webhook serving certificate. It installs as a
+# separate release, before the operator chart: Helm validates a whole release
+# against the API server up front, so one release cannot both create the
+# cert-manager CRDs and use them.
+# Keep this version in step with the dependency in the operator chart's Chart.yaml.
+NOAH_LOCAL_CERT_MANAGER_VERSION ?= v1.21.2
+NOAH_LOCAL_CERT_MANAGER_RELEASE ?= cert-manager
+NOAH_LOCAL_CERT_MANAGER_NAMESPACE ?= cert-manager
+NOAH_LOCAL_CERT_MANAGER_TIMEOUT ?= 5m
+# Where a locally run operator reads its webhook serving certificate from. Must
+# match webhookCertDir in cmd/main.go.
+NOAH_LOCAL_WEBHOOK_CERT_DIR ?= /tmp/k8s-webhook-server/serving-certs
+# Named separately from the chart's own certificate and Secret. Both workflows
+# share a namespace, and Helm refuses to adopt resources it does not own, so
+# reusing the chart's names breaks a later in-cluster install.
+NOAH_LOCAL_WEBHOOK_CERT_SECRET ?= splunk-operator-local-dev-webhook-cert
+NOAH_LOCAL_WEBHOOK_CERTIFICATE ?= splunk-operator-local-dev-serving-cert
 
 .PHONY: noah-local-c3-up
 noah-local-c3-up: noah-local-cluster install noah-local-deploy noah-local-operator-deploy noah-local-fixtures ## Create a complete C3 deployment with an in-cluster operator.
@@ -40,7 +57,7 @@ noah-local-c3-up: noah-local-cluster install noah-local-deploy noah-local-operat
 	@printf '    %s\n\n' 'make noah-local-smoke'
 
 .PHONY: noah-local-up
-noah-local-up: noah-local-cluster install noah-local-deploy noah-local-fixtures noah-local-port-forward ## Prepare a C3 deployment for an operator running locally.
+noah-local-up: noah-local-cluster install noah-local-deploy noah-local-fixtures noah-local-webhook-certs noah-local-port-forward ## Prepare a C3 deployment for an operator running locally.
 	@printf '\n%s\n\n' 'Noah is ready. Run the operator locally with:'
 	@printf '    %s \\\n      %s \\\n      %s \\\n      %s\n\n' \
 		'RELATED_IMAGE_SPLUNK_ENTERPRISE='"'"'<immutable Noah-capable Splunk image>'"'" \
@@ -126,8 +143,51 @@ noah-local-operator-chart-deps: ## Fetch the operator chart's subchart dependenc
 	helm repo add jetstack https://charts.jetstack.io --force-update
 	helm dependency build "$(NOAH_LOCAL_OPERATOR_CHART)"
 
+.PHONY: noah-local-cert-manager
+noah-local-cert-manager: ## Install cert-manager, which issues the operator's webhook certificate.
+	helm upgrade --install "$(NOAH_LOCAL_CERT_MANAGER_RELEASE)" cert-manager \
+		--repo https://charts.jetstack.io \
+		--version "$(NOAH_LOCAL_CERT_MANAGER_VERSION)" \
+		--kube-context "$(NOAH_LOCAL_CONTEXT)" \
+		--namespace "$(NOAH_LOCAL_CERT_MANAGER_NAMESPACE)" --create-namespace \
+		--set crds.enabled=true \
+		--wait --timeout "$(NOAH_LOCAL_CERT_MANAGER_TIMEOUT)"
+	@# --wait covers the Deployments, but the webhook only admits Certificate
+	@# resources once its own serving certificate is in place, so give the API
+	@# server a moment to start routing to it before the operator chart applies one.
+	kubectl --context "$(NOAH_LOCAL_CONTEXT)" \
+		--namespace "$(NOAH_LOCAL_CERT_MANAGER_NAMESPACE)" \
+		wait --for=condition=Available --timeout="$(NOAH_LOCAL_CERT_MANAGER_TIMEOUT)" \
+		deployment/cert-manager deployment/cert-manager-cainjector deployment/cert-manager-webhook
+
+.PHONY: noah-local-webhook-certs
+noah-local-webhook-certs: noah-local-cert-manager ## Issue and copy out the webhook serving certificate for a locally run operator.
+	@# The operator chart is not installed in this workflow, so nothing else
+	@# creates a Certificate for cert-manager to act on.
+	kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
+		apply -f "$(NOAH_LOCAL_DIR)/local-operator-cert.yaml"
+	kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
+		wait --for=condition=Ready --timeout="$(NOAH_LOCAL_CERT_MANAGER_TIMEOUT)" \
+		"certificate/$(NOAH_LOCAL_WEBHOOK_CERTIFICATE)"
+	@# The certificate is only valid for the in-cluster Service DNS names, which is
+	@# enough for the operator to start; exercising /convert needs the in-cluster
+	@# workflow.
+	@set -eu; \
+		mkdir -p "$(NOAH_LOCAL_WEBHOOK_CERT_DIR)"; \
+		kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
+			get secret "$(NOAH_LOCAL_WEBHOOK_CERT_SECRET)" \
+			--output "jsonpath={.data['tls\.crt']}" \
+			| base64 -d > "$(NOAH_LOCAL_WEBHOOK_CERT_DIR)/tls.crt"; \
+		kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
+			get secret "$(NOAH_LOCAL_WEBHOOK_CERT_SECRET)" \
+			--output "jsonpath={.data['tls\.key']}" \
+			| base64 -d > "$(NOAH_LOCAL_WEBHOOK_CERT_DIR)/tls.key"; \
+		chmod 600 "$(NOAH_LOCAL_WEBHOOK_CERT_DIR)/tls.key"; \
+		printf 'Wrote tls.crt and tls.key to %s from Secret %s.\n' \
+			"$(NOAH_LOCAL_WEBHOOK_CERT_DIR)" "$(NOAH_LOCAL_WEBHOOK_CERT_SECRET)"
+
 .PHONY: noah-local-operator-deploy
-noah-local-operator-deploy: noah-local-operator-chart-deps ## Install or upgrade a Noah-enabled operator in the vCluster.
+noah-local-operator-deploy: noah-local-operator-chart-deps noah-local-cert-manager ## Install or upgrade a Noah-enabled operator in the vCluster.
 	@set -eu; \
 		test -n "$(NOAH_LOCAL_OPERATOR_IMAGE)" || { \
 			printf '%s\n' 'Set NOAH_LOCAL_OPERATOR_IMAGE to an immutable staged operator image.' >&2; \

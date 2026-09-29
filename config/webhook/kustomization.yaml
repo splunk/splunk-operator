@@ -1,6 +1,8 @@
+# The Service fronting both webhook ports lives in ../conversion-webhook, which is
+# a component every overlay includes. Keeping it there means one Service, one
+# certificate, and one set of SANs regardless of whether validation is enabled.
 resources:
 - manifests.yaml
-- service.yaml
 
 configurations:
 - kustomizeconfig.yaml

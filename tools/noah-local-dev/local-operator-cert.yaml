@@ -1,0 +1,27 @@
+# Issues a webhook serving certificate for the `go run` workflow, where the
+# operator chart is never installed and so nothing else creates one.
+# `make noah-local-webhook-certs` copies the Secret out to the path the operator
+# reads.
+#
+# Every name here is distinct from the chart's equivalents, including the Secret:
+# both workflows share a namespace, and Helm refuses to adopt resources it does not
+# own, so reusing the chart's names breaks a later `noah-local-c3-up`.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: splunk-operator-local-dev-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: splunk-operator-local-dev-serving-cert
+spec:
+  dnsNames:
+  - splunk-operator-webhook-service.splunk-operator.svc
+  - splunk-operator-webhook-service.splunk-operator.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: splunk-operator-local-dev-issuer
+  secretName: splunk-operator-local-dev-webhook-cert
