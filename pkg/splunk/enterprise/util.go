@@ -208,28 +208,6 @@ func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSpl
 	}
 }
 
-// getLicenseMasterURL returns URL of license manager
-func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
-	if spec.LicenseMasterRef.Name != "" {
-		licenseManagerURL := splcommon.GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
-		if spec.LicenseMasterRef.Namespace != "" {
-			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
-		}
-		return []corev1.EnvVar{
-			{
-				Name:  splcommon.LicenseManagerURL,
-				Value: licenseManagerURL,
-			},
-		}
-	}
-	return []corev1.EnvVar{
-		{
-			Name:  splcommon.LicenseManagerURL,
-			Value: splcommon.GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
-		},
-	}
-}
-
 // GetSmartstoreRemoteVolumeSecrets is used to retrieve S3 access key and secrete keys.
 func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) (string, string, string, error) {
 	// Get event publisher from context
