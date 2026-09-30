@@ -246,8 +246,18 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 	},
 
 	PostgresClusterClassGVR: &GenericValidator[*platformApi.PostgresClusterClass]{
-		ValidateCreateFunc:   pgclusterwebhook.ValidatePostgresClusterClassCreate,
-		ValidateUpdateFunc:   pgclusterwebhook.ValidatePostgresClusterClassUpdate,
+		ValidateCreateFunc: func(obj *platformApi.PostgresClusterClass) field.ErrorList {
+			return pgclusterwebhook.ValidatePostgresClusterClassCreate(obj)
+		},
+		ValidateUpdateFunc: func(obj, oldObj *platformApi.PostgresClusterClass) field.ErrorList {
+			return pgclusterwebhook.ValidatePostgresClusterClassUpdate(obj, oldObj)
+		},
+		ValidateCreateWithContextFunc: func(obj *platformApi.PostgresClusterClass, vc *ValidationContext) field.ErrorList {
+			return pgclusterwebhook.ValidatePostgresClusterClassCreateWithContext(vc.Ctx, obj, vc.Client)
+		},
+		ValidateUpdateWithContextFunc: func(obj, oldObj *platformApi.PostgresClusterClass, vc *ValidationContext) field.ErrorList {
+			return pgclusterwebhook.ValidatePostgresClusterClassUpdateWithContext(vc.Ctx, obj, oldObj, vc.Client)
+		},
 		WarningsOnCreateFunc: pgclusterwebhook.GetPostgresClusterClassWarningsOnCreate,
 		WarningsOnUpdateFunc: pgclusterwebhook.GetPostgresClusterClassWarningsOnUpdate,
 		GroupKind: schema.GroupKind{

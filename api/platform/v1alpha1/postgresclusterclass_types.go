@@ -49,6 +49,91 @@ type PostgresClusterClassSpec struct {
 	// These settings CANNOT be overridden in PostgresCluster CR (platform policy).
 	// +optional
 	CNPG *CNPGConfig `json:"cnpg,omitempty"`
+
+	// TLS configures the TLS certificate policy for clusters using this class.
+	// This policy is immutable with the rest of the class.
+	// +optional
+	TLS *PostgresClusterClassTLS `json:"tls,omitempty"`
+}
+
+// PostgresClusterClassTLS contains class-wide TLS certificate settings.
+type PostgresClusterClassTLS struct {
+	// Certificates configures the server certificate source.
+	// +optional
+	Certificates *PostgresCertificateConfig `json:"certificates,omitempty"`
+}
+
+// +kubebuilder:validation:Enum=cnpgDefault;certManager
+type PostgresCertificateMode string
+
+const (
+	// PostgresCertificateModeCNPGDefault retains CloudNativePG's certificate handling.
+	PostgresCertificateModeCNPGDefault PostgresCertificateMode = "cnpgDefault"
+	// PostgresCertificateModeCertManager obtains the server certificate through cert-manager.
+	PostgresCertificateModeCertManager PostgresCertificateMode = "certManager"
+)
+
+// +kubebuilder:validation:Enum=Retain;Delete
+type PostgresCertificateRetentionPolicy string
+
+const (
+	// PostgresCertificateRetentionPolicyRetain preserves the copied CA Secret on cluster deletion.
+	PostgresCertificateRetentionPolicyRetain PostgresCertificateRetentionPolicy = "Retain"
+	// PostgresCertificateRetentionPolicyDelete removes the copied CA Secret on cluster deletion.
+	PostgresCertificateRetentionPolicyDelete PostgresCertificateRetentionPolicy = "Delete"
+)
+
+// CertificateIssuerReference identifies the cert-manager Issuer or ClusterIssuer.
+type CertificateIssuerReference struct {
+	// Name is the issuer resource name.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Kind is the issuer resource kind. Supported values are Issuer and ClusterIssuer.
+	// +kubebuilder:validation:Enum=Issuer;ClusterIssuer
+	// +kubebuilder:default=Issuer
+	// +optional
+	Kind string `json:"kind,omitempty"`
+
+	// Group is the issuer API group.
+	// +kubebuilder:validation:Enum=cert-manager.io
+	// +kubebuilder:default=cert-manager.io
+	// +optional
+	Group string `json:"group,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'certManager' || has(self.issuerRef)",message="issuerRef is required when mode is certManager"
+// +kubebuilder:validation:XValidation:rule="!has(self.duration) || !has(self.renewBefore) || duration(self.renewBefore) < duration(self.duration)",message="renewBefore must be less than duration"
+// PostgresCertificateConfig configures server certificates for a class.
+type PostgresCertificateConfig struct {
+	// Mode selects either the CloudNativePG default or cert-manager certificate flow.
+	// +kubebuilder:default=cnpgDefault
+	// +optional
+	Mode *PostgresCertificateMode `json:"mode,omitempty"`
+
+	// IssuerRef is required when mode is certManager.
+	// +optional
+	IssuerRef *CertificateIssuerReference `json:"issuerRef,omitempty"`
+
+	// Duration is the requested certificate lifetime.
+	// +optional
+	Duration *metav1.Duration `json:"duration,omitempty"`
+
+	// RenewBefore is the requested certificate renewal lead time. It must be less than Duration.
+	// +optional
+	RenewBefore *metav1.Duration `json:"renewBefore,omitempty"`
+
+	// ServerUsages overrides the cert-manager certificate usages. The default is
+	// digital signature, key encipherment, and server auth.
+	// +listType=atomic
+	// +optional
+	ServerUsages []string `json:"serverUsages,omitempty"`
+
+	// SecretRetentionPolicy controls copied server CA Secret deletion.
+	// +kubebuilder:default=Retain
+	// +optional
+	SecretRetentionPolicy *PostgresCertificateRetentionPolicy `json:"secretRetentionPolicy,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="!has(self.monitoring) || !has(self.monitoring.connectionPoolerMetrics) || !has(self.monitoring.connectionPoolerMetrics.enabled) || !self.monitoring.connectionPoolerMetrics.enabled || (has(self.connectionPooler) && has(self.connectionPooler.enabled) && self.connectionPooler.enabled)",message="connectionPooler.enabled must be true when monitoring.connectionPoolerMetrics.enabled is true"

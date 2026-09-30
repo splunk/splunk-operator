@@ -43,7 +43,7 @@ C4Container
 
     System_Boundary(operator_boundary, "Splunk Operator") {
         Container(pcc_ctrl, "PostgresClusterClass", "CRD (cluster-scoped)", "Immutable template + platform policy")
-        Container(pc_ctrl, "PostgresCluster controller", "controller-runtime", "Component pipeline: secret, objectStore, cluster, roles, pooler, backup, configMap")
+        Container(pc_ctrl, "PostgresCluster controller", "controller-runtime", "Component pipeline: secret, objectStore, server TLS, cluster, roles, pooler, backup, configMap")
         Container(pdb_ctrl, "PostgresDatabase controller", "controller-runtime", "Linear pipeline: cluster to secrets to configMaps to roles to databases to privileges")
     }
 
