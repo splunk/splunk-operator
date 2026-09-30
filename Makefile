@@ -150,6 +150,14 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-unit_test.xml}"; \
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=$$REPORT_FILE --output-dir=`pwd` -vv --trace --keep-going --timeout=$${TEST_TIMEOUT:-170m} --cover --covermode=count --coverprofile=coverage.out $(UNIT_TEST_PACKAGES)
 
+.PHONY: test-testenv
+test-testenv: setup/ginkgo ## Run Ginkgo tests for shared integration-test helpers without changing production coverage.
+	"$(GOBIN)/ginkgo" -v --trace ./test/testenv
+
+.PHONY: test-noah-framework
+test-noah-framework: setup/ginkgo ## Discover the attached Noah Ginkgo suite without requiring a cluster.
+	"$(GOBIN)/ginkgo" --dry-run -v --trace ./test/noah
+
 
 ##@ Documentation
 
