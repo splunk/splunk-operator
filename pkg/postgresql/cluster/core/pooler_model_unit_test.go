@@ -703,10 +703,8 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
 		},
 	}
-	// healthyCNPG has no SANs in spec so both isSANPolicyConverged (poolerEnabled=true → needs
-	// SANs added → not converged) and isServerTLSLeafAlignedWithSpec (no spec SANs → true) are
-	// bypassed. Tests that require the pooler to reach Ready must seed SANs + a valid TLS cert.
-	// Tests that don't care about SAN/TLS gates and use poolerEnabled=false work correctly.
+	// Tests that require the pooler to reach Ready seed the CNPG-selected leaf
+	// Secret; the TLS plan validates it after backend convergence.
 	healthyCNPG := &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy}}
 
 	t.Run("does not set enabled true while pooler is pending (no CNPG contract)", func(t *testing.T) {
@@ -898,7 +896,7 @@ func TestPoolerConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	assert.Empty(t, events.normals)
 }
 
-func TestPoolerModelConvergeWaitsForSANPolicy(t *testing.T) {
+func TestPoolerModelConvergeWaitsForBackendTLSState(t *testing.T) {
 	t.Parallel()
 
 	scheme := newTestScheme()
@@ -917,7 +915,8 @@ func TestPoolerModelConvergeWaitsForSANPolicy(t *testing.T) {
 
 	rwPooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readWriteEndpoint), Namespace: cluster.Namespace}}
 	roPooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readOnlyEndpoint), Namespace: cluster.Namespace}}
-	// SANs not yet converged: pooler SANs absent from spec
+	// CNPG has not yet selected a server TLS Secret, so the observed backend
+	// state is not ready for pooler leaf validation.
 	contracts := &reconcileContracts{
 		EnvironmentNamer: testEnvironmentNamer,
 		CNPGCluster: &cnpgv1.Cluster{
@@ -934,8 +933,8 @@ func TestPoolerModelConvergeWaitsForSANPolicy(t *testing.T) {
 	health, err := model.Observe(context.Background(), reconcileErr)
 	require.NoError(t, err)
 	assert.Equal(t, pgcConstants.Provisioning, health.State)
-	assert.Equal(t, reasonPoolerSANsPending, health.Reason)
-	assert.Equal(t, msgPoolerSANsPending, health.Message)
+	assert.Equal(t, reasonPoolerTLSLeafPending, health.Reason)
+	assert.Equal(t, msgPoolerTLSLeafPending, health.Message)
 	assert.True(t, health.Result.RequeueAfter > 0)
 }
 
@@ -958,7 +957,7 @@ func TestPoolerModelConvergeWaitsForTLSLeafMaterial(t *testing.T) {
 
 	rwPooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readWriteEndpoint), Namespace: cluster.Namespace}}
 	roPooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: poolerResourceName(cluster.Name, readOnlyEndpoint), Namespace: cluster.Namespace}}
-	// SANs converged but TLS secret NOT seeded → isServerTLSLeafAlignedWithSpec returns false
+	// CNPG selected the leaf but it is not yet materialized, so validation waits.
 	cnpgReady, _ := makePoolerReadyCNPG(t, "pg1", "default")
 	contracts := &reconcileContracts{CNPGCluster: cnpgReady, EnvironmentNamer: testEnvironmentNamer}
 	model := newPoolerModel(

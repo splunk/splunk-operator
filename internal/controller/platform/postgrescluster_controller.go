@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"strings"
 
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
@@ -30,8 +31,10 @@ import (
 	majorversionupgradetypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	majorversionupgrade "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case"
+	certmanageradapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/certmanager"
 	cnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	clusterk8s "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/k8s"
+	tlsport "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/tls"
 	dbadapter "github.com/splunk/splunk-operator/pkg/postgresql/database/adapter"
 	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
@@ -92,6 +95,9 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=backups/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=issuers;clusterissuers,verbs=get;list;watch
 
 func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := slog.Default().With("controller", "PostgresCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
@@ -105,6 +111,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		ClusterCardResolver:     r.IdentityResolver,
 		EnvironmentNamer:        r.IdentityResolver,
 		ClusterInputFactory:     identityadapter.ClusterInputFromPostgresCluster,
+		ServerTLSManager:        certmanageradapter.NewManager(r.Client),
 	}
 	result, err := clustercore.PostgresClusterService(ctx, rc, req, dbadapter.NewRoleSweeper,
 		cnpgadapter.NewBackupBackend(r.Client, r.Scheme),
@@ -179,7 +186,6 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	); err != nil {
 		return err
 	}
-
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
 		&platformv1alpha1.PostgresCluster{},
@@ -212,6 +218,9 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.enqueueClustersForExternalSecret),
 			builder.WithPredicates(predicates.ExternalSecret())).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueClustersForTLSSecret),
+			builder.WithPredicates(tlsSecretPredicate())).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(r.enqueueClustersForCustomMetricsConfigMap),
 			builder.WithPredicates(customMetricsConfigMapPredicate()))
@@ -236,6 +245,16 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			"controller", "postgresCluster")
 	}
 
+	certManagerInstalled, err := certManagerCertificateCRDInstalled(mgr)
+	if err != nil {
+		return fmt.Errorf("probing cert-manager Certificate CRD presence: %w", err)
+	}
+	if certManagerInstalled {
+		ctrlBuilder = ctrlBuilder.Owns(&cmapi.Certificate{}, builder.WithPredicates(certificatePredicate()))
+	} else {
+		slog.Info("cert-manager Certificate CRD not installed; skipping Certificate owner watch", "controller", "postgresCluster")
+	}
+
 	return ctrlBuilder.
 		Named(ports.ControllerCluster).
 		WithOptions(controller.Options{
@@ -250,6 +269,18 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // error is returned so the caller can fail startup rather than permanently skip the watch.
 func objectStoreCRDInstalled(mgr ctrl.Manager) (bool, error) {
 	gvk := clustercore.ObjectStoreGVK
+	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err == nil {
+		return true, nil
+	}
+	if meta.IsNoMatchError(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+func certManagerCertificateCRDInstalled(mgr ctrl.Manager) (bool, error) {
+	gvk := cmapi.SchemeGroupVersion.WithKind("Certificate")
 	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err == nil {
 		return true, nil
@@ -443,6 +474,43 @@ func secretPredicator() predicate.Predicate {
 	}
 }
 
+// tlsSecretPredicate deliberately does not reuse secretPredicator: cert-manager
+// rotation changes Secret data without changing generation or owner references.
+func tlsSecretPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool { return isManagedTLSSecret(e.Object) },
+		DeleteFunc: func(e event.DeleteEvent) bool { return isManagedTLSSecret(e.Object) },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldSecret, oldOK := e.ObjectOld.(*corev1.Secret)
+			newSecret, newOK := e.ObjectNew.(*corev1.Secret)
+			return oldOK && newOK && (isManagedTLSSecret(oldSecret) || isManagedTLSSecret(newSecret)) &&
+				(!equality.Semantic.DeepEqual(oldSecret.Data, newSecret.Data) || oldSecret.Type != newSecret.Type || !equality.Semantic.DeepEqual(oldSecret.Labels, newSecret.Labels))
+		},
+	}
+}
+
+func isManagedTLSSecret(obj client.Object) bool {
+	if obj == nil {
+		return false
+	}
+	labels := obj.GetLabels()
+	return labels[tlsport.ClusterNameLabel] != "" &&
+		labels[tlsport.ClusterUIDLabel] != "" &&
+		labels[tlsport.PurposeLabel] == tlsport.ServerTLSPurpose
+}
+
+func certificatePredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool { return true },
+		DeleteFunc: func(event.DeleteEvent) bool { return true },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldCertificate, oldOK := e.ObjectOld.(*cmapi.Certificate)
+			newCertificate, newOK := e.ObjectNew.(*cmapi.Certificate)
+			return oldOK && newOK && (!equality.Semantic.DeepEqual(oldCertificate.Spec, newCertificate.Spec) || !equality.Semantic.DeepEqual(oldCertificate.Status, newCertificate.Status))
+		},
+	}
+}
+
 // ConfigMap has no Generation. Owned data and controller-owner drift are
 // relevant; safety metadata also carries the recoverable revision contract.
 func configMapPredicator() predicate.Predicate {
@@ -479,6 +547,14 @@ func extractExternalSuperuserSecretName(obj client.Object) []string {
 		return []string{name}
 	}
 	return nil
+}
+
+func (r *PostgresClusterReconciler) enqueueClustersForTLSSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok || !isManagedTLSSecret(secret) {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: client.ObjectKey{Namespace: secret.Namespace, Name: secret.Labels[tlsport.ClusterNameLabel]}}}
 }
 
 // enqueueClustersForExternalSecret maps a Secret event to every PostgresCluster

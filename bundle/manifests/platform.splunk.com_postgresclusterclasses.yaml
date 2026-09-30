@@ -517,6 +517,77 @@ spec:
                 enum:
                 - postgresql.cnpg.io
                 type: string
+              tls:
+                description: |-
+                  TLS configures the TLS certificate policy for clusters using this class.
+                  This policy is immutable with the rest of the class.
+                properties:
+                  certificates:
+                    description: Certificates configures the server certificate source.
+                    properties:
+                      duration:
+                        description: Duration is the requested certificate lifetime.
+                        type: string
+                      issuerRef:
+                        description: IssuerRef is required when mode is certManager.
+                        properties:
+                          group:
+                            default: cert-manager.io
+                            description: Group is the issuer API group.
+                            enum:
+                            - cert-manager.io
+                            type: string
+                          kind:
+                            default: Issuer
+                            description: Kind is the issuer resource kind. Supported
+                              values are Issuer and ClusterIssuer.
+                            enum:
+                            - Issuer
+                            - ClusterIssuer
+                            type: string
+                          name:
+                            description: Name is the issuer resource name.
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      mode:
+                        default: cnpgDefault
+                        description: Mode selects either the CloudNativePG default
+                          or cert-manager certificate flow.
+                        enum:
+                        - cnpgDefault
+                        - certManager
+                        type: string
+                      renewBefore:
+                        description: RenewBefore is the requested certificate renewal
+                          lead time. It must be less than Duration.
+                        type: string
+                      secretRetentionPolicy:
+                        default: Retain
+                        description: SecretRetentionPolicy controls copied server
+                          CA Secret deletion.
+                        enum:
+                        - Retain
+                        - Delete
+                        type: string
+                      serverUsages:
+                        description: |-
+                          ServerUsages overrides the cert-manager certificate usages. The default is
+                          digital signature, key encipherment, and server auth.
+                        items:
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: atomic
+                    type: object
+                    x-kubernetes-validations:
+                    - message: issuerRef is required when mode is certManager
+                      rule: '!has(self.mode) || self.mode != ''certManager'' || has(self.issuerRef)'
+                    - message: renewBefore must be less than duration
+                      rule: '!has(self.duration) || !has(self.renewBefore) || duration(self.renewBefore)
+                        < duration(self.duration)'
+                type: object
             required:
             - provisioner
             type: object

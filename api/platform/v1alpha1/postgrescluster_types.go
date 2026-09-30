@@ -226,6 +226,19 @@ type PostgresClusterSpec struct {
 	// PostgresMajorUpgradeConfig sets up the upgrade flow according to backup, version and strategy requirements.
 	// +optional
 	PostgresMajorUpgradeConfig *PostgresMajorUpgradeConfig `json:"postgresMajorUpgradeConfig,omitempty"`
+
+	// TLS adds cluster-specific server DNS names to the class TLS policy.
+	// +optional
+	TLS *PostgresClusterTLS `json:"tls,omitempty"`
+}
+
+// PostgresClusterTLS contains cluster-specific TLS settings.
+type PostgresClusterTLS struct {
+	// ServerAltDNSNames are additional DNS names included in a cert-manager server certificate.
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=100
+	// +optional
+	ServerAltDNSNames []string `json:"serverAltDNSNames,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="self.superuserExternalSecretRef.name.size() > 0",message="superuserExternalSecretRef.name must not be empty"

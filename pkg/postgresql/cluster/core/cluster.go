@@ -30,6 +30,7 @@ import (
 	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
+	tlsport "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/tls"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	monitoring "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
@@ -232,6 +233,7 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	components := []component{
 		newSecretModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, postgresSecretName, contracts),
 		newObjectStoreModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, mergedConfig, contracts),
+		newServerTLSModel(rc.ServerTLSManager, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, contracts),
 		newClusterModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, clusterClass, mergedConfig, contracts),
 		newCustomMetricsModel(customMetricsModel, rc, updateComponentHealthStatus, postgresCluster, contracts),
 		newManagedRolesModel(c, rc.Scheme, rc, updateComponentHealthStatus, postgresCluster, contracts, newRoleSweeper),
@@ -758,6 +760,31 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platfor
 			}
 		}
 
+	}
+
+	// The class supplies the TLS cleanup policy. Its lifecycle is not currently
+	// coupled to PostgresCluster; if it has already been removed, TLS cleanup is
+	// skipped and the finalizer continues. CPI-2233 tracks durable finalization
+	// metadata for that case.
+	if rc.ServerTLSManager != nil {
+		class := &platformv1alpha1.PostgresClusterClass{}
+		if err := c.Get(ctx, client.ObjectKey{Name: cluster.Spec.Class}, class); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("fetching PostgresClusterClass for TLS cleanup: %w", err)
+		} else if err == nil {
+			certificates := certificateConfigForClass(class)
+			if certificates != nil && certificates.Mode != nil && *certificates.Mode == platformv1alpha1.PostgresCertificateModeCertManager {
+				request := tlsport.FinalizeRequest{
+					Identity: serverTLSIdentity(cluster),
+					Retain:   policy == clusterDeletionPolicyRetain,
+				}
+				if !request.Retain && resolvedServerTLSRetentionPolicy(certificates) == platformv1alpha1.PostgresCertificateRetentionPolicyDelete {
+					request.DeleteCASecret = true
+				}
+				if err := rc.ServerTLSManager.Finalize(ctx, request); err != nil {
+					return fmt.Errorf("finalizing server TLS resources: %w", err)
+				}
+			}
+		}
 	}
 
 	controllerutil.RemoveFinalizer(cluster, PostgresClusterFinalizerName)

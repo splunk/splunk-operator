@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -101,9 +100,11 @@ func newClusterModel(c client.Client, scheme *runtime.Scheme, events eventEmitte
 
 func (p *clusterModel) Name() string { return pgcConstants.ComponentProvisioner }
 func (p *clusterModel) Requires() []contractKey {
-	return []contractKey{contractSecret, contractAuthority}
+	return []contractKey{contractSecret, contractAuthority, contractServerTLS}
 }
-func (p *clusterModel) Provides() []contractKey { return []contractKey{contractCNPGCluster} }
+func (p *clusterModel) Provides() []contractKey {
+	return []contractKey{contractCNPGCluster, contractTLSBackend}
+}
 
 func (p *clusterModel) CheckContracts() error {
 	if !checkContractsFromRequirements(p.Requires(), p.contracts) {
@@ -117,9 +118,6 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 	p.cnpgPatch = cnpgPatchNone
 	p.blockedHealth = nil
 
-	poolerEnabled := p.mergedConfig != nil && p.mergedConfig.Spec != nil &&
-		isPoolerEnabled(p.mergedConfig.Spec.ConnectionPooler)
-
 	existingCNPG, conventionalFallback, err := resolveAuthoritativeCNPGCluster(ctx, p.client, p.cluster, p.contracts.Authority)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return newReconcileFailure(reasonClusterGetFailed, err)
@@ -132,7 +130,7 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		if err != nil {
 			return newReconcileFailure(reasonClusterBuildFailed, err)
 		}
-		applyPoolerSANs(&newCluster.Spec, poolerEnabled, newCluster.Name, p.cluster.Namespace)
+		p.contracts.ServerTLS.ApplyToCNPG(&newCluster.Spec, newCluster.Name, p.cluster.Namespace)
 		desiredParameters := maps.Clone(newCluster.Spec.PostgresConfiguration.Parameters)
 		newCluster.Spec.PostgresConfiguration.Parameters = nil
 		if err = p.client.Create(ctx, newCluster); err != nil {
@@ -154,7 +152,7 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 
 	desiredSpec := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, existingCNPG.Name, p.contracts.Secret.Name, p.metricsEnabled)
 	desiredSpec.PostgresConfiguration.Parameters = maps.Clone(existingCNPG.Spec.PostgresConfiguration.Parameters)
-	applyPoolerSANs(&desiredSpec, poolerEnabled, existingCNPG.Name, p.cluster.Namespace)
+	p.contracts.ServerTLS.ApplyToCNPG(&desiredSpec, existingCNPG.Name, p.cluster.Namespace)
 
 	p.cnpgCluster = existingCNPG
 	hasOwnerRef, ownerRefErr := controllerutil.HasOwnerReference(p.cnpgCluster.GetOwnerReferences(), p.cluster, p.scheme)
@@ -211,6 +209,7 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		return newReconcileFailure(reasonClusterGetFailed, err)
 	}
 	p.cnpgCluster = updatedCNPG
+	p.contracts.TLSBackend = p.contracts.ServerTLS.ObserveCNPG(updatedCNPG.Status)
 	if updatedCNPG.Generation != beforeGeneration {
 		p.cnpgPatch = cnpgPatchBody
 		needsUpdateEvent = true
@@ -325,6 +324,9 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		health = newPendingHealth(clusterReady, reasonCNPGProvisioning, msgCNPGPendingCreation)
 	default:
 		health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, phase))
+	}
+	if health.State == pgcConstants.Ready && p.contracts != nil && p.contracts.ServerTLS.initialized && p.contracts.TLSBackend.observed && !p.contracts.TLSBackend.Converged {
+		return newProvisioningHealth(clusterReady, reasonCNPGProvisioning, "waiting for CNPG server TLS adoption"), nil
 	}
 	return health, convergeErr
 }
@@ -1173,6 +1175,10 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec
 	if spec.Certificates != nil && len(spec.Certificates.ServerAltDNSNames) > 0 {
 		normalized.ServerAltDNSNames = spec.Certificates.ServerAltDNSNames
 	}
+	if spec.Certificates != nil {
+		normalized.ServerTLSSecret = spec.Certificates.ServerTLSSecret
+		normalized.ServerCASecret = spec.Certificates.ServerCASecret
+	}
 	if spec.Backup != nil {
 		normalized.Backup = &normalizedBackupSpec{
 			Target: string(spec.Backup.Target),
@@ -1317,13 +1323,6 @@ func imageRefsEquivalentForDrift(desired, current string) bool {
 	return desired == stripImageRefForDrift(current)
 }
 
-func getServerAltDNSNames(cnpg *cnpgv1.Cluster) []string {
-	if cnpg == nil || cnpg.Spec.Certificates == nil {
-		return nil
-	}
-	return cnpg.Spec.Certificates.ServerAltDNSNames
-}
-
 // computeDesiredPoolerSANSet returns the desired serverAltDNSNames sorted
 // lexicographically. When poolerEnabled is false, existing SANs are preserved
 // so a transient toggle does not trigger CNPG cert rotation.
@@ -1371,45 +1370,17 @@ func applyPoolerSANs(spec *cnpgv1.ClusterSpec, poolerEnabled bool, clusterName, 
 	spec.Certificates.ServerAltDNSNames = desired
 }
 
-// isSANPolicyConverged reports whether the contracts CNPGCluster snapshot has
-// the desired pooler SANs. Pure comparison — no client call.
-func isSANPolicyConverged(cnpg *cnpgv1.Cluster, poolerEnabled bool) bool {
-	if cnpg == nil {
-		return true
+// isServerTLSLeafAlignedWithPlan validates the backend-selected leaf against
+// the immutable TLS plan. The plan supplies required pooler SANs, so this
+// helper does not inspect TLS mode or reconstruct CNPG configuration.
+func isServerTLSLeafAlignedWithPlan(ctx context.Context, c client.Client, namespace, secretName string, plan serverTLSPlan) (bool, error) {
+	if secretName == "" {
+		return false, nil
 	}
-	current := sets.New(getServerAltDNSNames(cnpg)...)
-	desired := sets.New(computeDesiredPoolerSANSet(poolerEnabled, current.UnsortedList(), cnpg.Name, cnpg.Namespace)...)
-	return current.Equal(desired)
+	return isServerTLSLeafAligned(ctx, c, namespace, secretName, plan.ValidatesPoolerLeaf)
 }
 
-func serverTLSSecretNameFromCNPG(cnpg *cnpgv1.Cluster) string {
-	if cnpg == nil {
-		return ""
-	}
-	if cnpg.Status.Certificates.ServerTLSSecret != "" {
-		return cnpg.Status.Certificates.ServerTLSSecret
-	}
-	if cnpg.Spec.Certificates != nil && cnpg.Spec.Certificates.ServerTLSSecret != "" {
-		return cnpg.Spec.Certificates.ServerTLSSecret
-	}
-	return ""
-}
-
-// isServerTLSLeafAlignedWithSpec checks whether the materialized TLS leaf cert
-// covers all SANs declared in the CNPG cluster spec. Failure modes:
-//   - no Cluster / no spec SANs    → (true,  nil)
-//   - no Secret / no tls.crt       → (false, nil) — transient race with CNPG cert-controller
-//   - SAN mismatch                 → (false, nil) — mid-rotation
-//   - PEM/x509 parse failure       → (false, %w errServerTLSLeafInvalid)
-func isServerTLSLeafAlignedWithSpec(ctx context.Context, c client.Client, namespace string, cnpg *cnpgv1.Cluster) (bool, error) {
-	if cnpg == nil {
-		return true, nil
-	}
-	specSANs := getServerAltDNSNames(cnpg)
-	if len(specSANs) == 0 {
-		return true, nil
-	}
-	secretName := serverTLSSecretNameFromCNPG(cnpg)
+func isServerTLSLeafAligned(ctx context.Context, c client.Client, namespace, secretName string, validates func(*x509.Certificate) bool) (bool, error) {
 	if secretName == "" {
 		return false, nil
 	}
@@ -1434,15 +1405,7 @@ func isServerTLSLeafAlignedWithSpec(ctx context.Context, c client.Client, namesp
 		return false, fmt.Errorf("%w: x509 parse failed for secret %s/%s: %v",
 			errServerTLSLeafInvalid, namespace, secretName, err)
 	}
-	for _, alt := range specSANs {
-		if alt == "" {
-			continue
-		}
-		if !slices.Contains(cert.DNSNames, alt) {
-			return false, nil
-		}
-	}
-	return true, nil
+	return validates(cert), nil
 }
 
 // buildPostgreSQLParametersPatch builds an SSA payload for CNPG spec.postgresql.parameters.

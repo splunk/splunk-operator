@@ -125,6 +125,7 @@ func TestValidateComponentOrder(t *testing.T) {
 		components := []component{
 			newSecretModel(c, scheme, noopEventEmitter{}, nil, cluster, "pg1-secret", contracts),
 			newObjectStoreModel(c, scheme, noopEventEmitter{}, nil, cluster, mergedConfig, contracts),
+			newServerTLSModel(nil, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts),
 			newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts),
 			newManagedRolesModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts, nil),
 			newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts),
@@ -198,6 +199,30 @@ func TestCheckContractsFromRequirements(t *testing.T) {
 		{
 			name:      "Authority required but absent",
 			requires:  []contractKey{contractAuthority},
+			contracts: &reconcileContracts{},
+			want:      false,
+		},
+		{
+			name:      "ServerTLS plan required and initialized",
+			requires:  []contractKey{contractServerTLS},
+			contracts: &reconcileContracts{ServerTLS: serverTLSPlan{initialized: true}},
+			want:      true,
+		},
+		{
+			name:      "ServerTLS plan required but absent",
+			requires:  []contractKey{contractServerTLS},
+			contracts: &reconcileContracts{},
+			want:      false,
+		},
+		{
+			name:      "TLS backend required and observed",
+			requires:  []contractKey{contractTLSBackend},
+			contracts: &reconcileContracts{TLSBackend: tlsBackendState{observed: true}},
+			want:      true,
+		},
+		{
+			name:      "TLS backend required but absent",
+			requires:  []contractKey{contractTLSBackend},
 			contracts: &reconcileContracts{},
 			want:      false,
 		},

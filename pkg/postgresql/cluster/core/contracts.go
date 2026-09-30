@@ -34,6 +34,8 @@ const (
 	contractCNPGCluster      contractKey = "CNPGCluster"
 	contractAuthority        contractKey = "Authority"
 	contractEnvironmentNamer contractKey = "EnvironmentNamer"
+	contractServerTLS        contractKey = "ServerTLS"
+	contractTLSBackend       contractKey = "TLSBackend"
 )
 
 // reconcileContracts carries component-published Kubernetes objects and
@@ -45,6 +47,8 @@ type reconcileContracts struct {
 	Secret           *corev1.Secret
 	Authority        identitytypes.ClusterCard
 	EnvironmentNamer clusteridentity.EnvironmentNamer
+	ServerTLS        serverTLSPlan
+	TLSBackend       tlsBackendState
 }
 
 // checkContractsFromRequirements is the single implementation of contract
@@ -66,6 +70,14 @@ func checkContractsFromRequirements(requires []contractKey, contracts *reconcile
 			}
 		case contractEnvironmentNamer:
 			if contracts.EnvironmentNamer == nil {
+				return false
+			}
+		case contractServerTLS:
+			if !contracts.ServerTLS.initialized {
+				return false
+			}
+		case contractTLSBackend:
+			if !contracts.TLSBackend.observed {
 				return false
 			}
 		}
