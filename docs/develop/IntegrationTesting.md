@@ -9,6 +9,9 @@ nav_order: 4
 This guide explains the Splunk Operator in-cluster E2E framework, how it
 differs from faster test levels, and how to write, execute, and debug suites.
 
+For the Noah-backed C3 developer workflow, see
+[Noah integration testing on Kraken](NoahIntegrationTesting.md).
+
 > **Assumed for E2E execution:** You have a suitable Kubernetes test cluster
 > and have completed the setup in [How to Execute Tests](#how-to-execute-tests).
 
@@ -222,16 +225,18 @@ copy of the same Go files here.
 
 Test selection is driven by Ginkgo `Label(...)` arguments on `It` blocks and filtered via `--label-filter`. Labels are orthogonal tokens — combine them instead of using compound names. All labels use a `key:value` form. The canonical order is **tier → sva → cloud → variant → feature → extra**.
 
-- A **tier** label: `tier:e2e-pr` (PR gate, fast subset) or `tier:e2e-full` (full validation).
+- A **tier** label: `tier:e2e-pr` (PR gate, fast subset), `tier:e2e-full` (full validation),
+  or `tier:noah-e2e` (attached Noah environment; selected only after its Kraken setup completes).
 - An **sva** (topology) label: `sva:s1`, `sva:c3`, `sva:m4`, `sva:m1`, `sva:shc`.
-- A **cloud** provider label: `cloud:aws`, `cloud:gcp`, `cloud:azure` (or `cloud:any` for cloud-agnostic tests).
-- A **variant** label (where a CR has V3/V4 variants): `variant:manager` (ClusterManager / V4) or `variant:master` (ClusterMaster / V3).
+- A **cloud** provider label: `cloud:aws`, `cloud:gcp`, `cloud:azure`, `cloud:kraken` (or `cloud:any` for cloud-agnostic tests).
+- A **variant** label: `variant:manager` (ClusterManager / V4), `variant:master` (ClusterMaster / V3), or `variant:noah` (Noah-backed V4 resources).
 - A **feature** label — exactly one, matching the test's directory:
   `feature:appframework` (under `test/appframework/`), `feature:smartstore`, `feature:monitoringconsole`,
-  `feature:secret`, `feature:crcrud`, `feature:deletecr`, `feature:licensemanager`, `feature:ingestsearch`, `feature:indingsep`, `feature:basic`, `feature:idxclustering`, `feature:detention` (under `test/shc_detention/`).
+  `feature:secret`, `feature:crcrud`, `feature:deletecr`, `feature:licensemanager`, `feature:ingestsearch`, `feature:indingsep`, `feature:basic`, `feature:idxclustering`, `feature:detention` (under `test/shc_detention/`), `feature:noah` (under `test/noah/`).
 - **Extra / scenario** labels when they carry meaning orthogonal to the above:
   `suite:mc1` / `suite:mc2` (CI parallelization groups),
-  `feature:scaling` (added in addition to the test's primary `feature:*` label on scale-up/scale-down scenarios so the `managerscaling` CI job can target them).
+  `feature:scaling` (added in addition to the test's primary `feature:*` label on scale-up/scale-down scenarios so the `managerscaling` CI job can target them),
+  `scenario:readiness` (a focused behavior within an attached integration environment).
 
 Example:
 

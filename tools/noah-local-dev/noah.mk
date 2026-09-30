@@ -2,7 +2,7 @@
 
 # Local development loop for the Noah integration on a Kraken vCluster.
 # Included by the root Makefile, so every path here is relative to the
-# repository root, not to this file. See tools/noah-local-dev/README.md.
+# repository root, not to this file. See docs/develop/NoahIntegrationTesting.md.
 NOAH_LOCAL_DIR = tools/noah-local-dev
 NOAH_LOCAL_STATE_DIR ?= .noah-local-dev
 NOAH_LOCAL_DEPLOYMENT_ID_FILE = $(NOAH_LOCAL_STATE_DIR)/deployment-id
@@ -11,6 +11,11 @@ NOAH_LOCAL_PORT_FORWARD_LOG = $(NOAH_LOCAL_STATE_DIR)/noah-port-forward.log
 NOAH_LOCAL_CHART = helm/charts/noah
 NOAH_LOCAL_FIXTURES ?= $(NOAH_LOCAL_DIR)/fixtures/c3.yaml
 NOAH_LOCAL_OPERATOR_CHART ?= helm-chart/splunk-operator
+# Avoid stale or unauthenticated repositories in the developer's global Helm
+# configuration.
+NOAH_LOCAL_HELM_STATE_DIR ?= $(NOAH_LOCAL_STATE_DIR)/helm
+NOAH_LOCAL_HELM_REPOSITORY_CONFIG ?= $(NOAH_LOCAL_HELM_STATE_DIR)/repositories.yaml
+NOAH_LOCAL_HELM_REPOSITORY_CACHE ?= $(NOAH_LOCAL_HELM_STATE_DIR)/repository
 
 NOAH_LOCAL_DEPLOYMENT_ID ?=
 NOAH_LOCAL_CONTEXT ?= kraken
@@ -31,8 +36,19 @@ NOAH_LOCAL_C3_NAME ?= c3
 # A fresh vCluster also pulls MinIO and binds the PostgreSQL and MinIO PVCs.
 NOAH_LOCAL_DEPLOY_TIMEOUT ?= 10m
 NOAH_LOCAL_HELM_ARGS ?=
+# Helm 4's watcher can leave healthy ClusterIP Services at Unknown on Kraken.
+# Retain Helm 3's polling behavior when Helm 4 is installed.
+NOAH_LOCAL_HELM_WAIT_ARGS ?= $(shell \
+	version="$$(helm version --template '{{.Version}}' 2>/dev/null || true)"; \
+	if printf '%s' "$$version" | grep -q '^v4'; then \
+		printf '%s' '--wait=legacy'; \
+	else \
+		printf '%s' '--wait'; \
+	fi)
 NOAH_LOCAL_OPERATOR_TIMEOUT ?= 5m
 NOAH_LOCAL_OPERATOR_HELM_ARGS ?=
+NOAH_LOCAL_GINKGO ?= $(GOBIN)/ginkgo
+NOAH_LOCAL_READY_TIMEOUT ?= 30m
 # cert-manager issues the operator's webhook serving certificate. It installs as a
 # separate release, before the operator chart: Helm validates a whole release
 # against the API server up front, so one release cannot both create the
@@ -53,8 +69,8 @@ NOAH_LOCAL_WEBHOOK_CERTIFICATE ?= splunk-operator-local-dev-serving-cert
 
 .PHONY: noah-local-c3-up
 noah-local-c3-up: noah-local-cluster install noah-local-deploy noah-local-operator-deploy noah-local-fixtures ## Create a complete C3 deployment with an in-cluster operator.
-	@printf '\n%s\n\n' 'Noah C3 is deployed. Once the C3 Pods are running, verify it with:'
-	@printf '    %s\n\n' 'make noah-local-smoke'
+	@$(MAKE) --no-print-directory noah-local-ready
+	@printf '\n%s\n\n' 'Noah C3 is deployed and passed the Ginkgo readiness scenario.'
 
 .PHONY: noah-local-up
 noah-local-up: noah-local-cluster install noah-local-deploy noah-local-fixtures noah-local-webhook-certs noah-local-port-forward ## Prepare a C3 deployment for an operator running locally.
@@ -135,13 +151,19 @@ noah-local-deploy: ## Install or upgrade Noah, PostgreSQL, Redis and MinIO in th
 	helm upgrade --install "$(NOAH_LOCAL_RELEASE)" "$(NOAH_LOCAL_CHART)" \
 		--kube-context "$(NOAH_LOCAL_CONTEXT)" \
 		--namespace "$(NOAH_LOCAL_NAMESPACE)" \
+		--set-string fullnameOverride="$(NOAH_LOCAL_RELEASE)" \
 		--set service.port=$(NOAH_LOCAL_PORT) \
-		--wait --timeout $(NOAH_LOCAL_DEPLOY_TIMEOUT) $(NOAH_LOCAL_HELM_ARGS)
+		$(NOAH_LOCAL_HELM_WAIT_ARGS) --timeout $(NOAH_LOCAL_DEPLOY_TIMEOUT) $(NOAH_LOCAL_HELM_ARGS)
 
 .PHONY: noah-local-operator-chart-deps
 noah-local-operator-chart-deps: ## Fetch the operator chart's subchart dependencies.
-	helm repo add jetstack https://charts.jetstack.io --force-update
-	helm dependency build "$(NOAH_LOCAL_OPERATOR_CHART)"
+	@mkdir -p "$(NOAH_LOCAL_HELM_REPOSITORY_CACHE)"
+	HELM_REPOSITORY_CONFIG="$(NOAH_LOCAL_HELM_REPOSITORY_CONFIG)" \
+	HELM_REPOSITORY_CACHE="$(NOAH_LOCAL_HELM_REPOSITORY_CACHE)" \
+		helm repo add jetstack https://charts.jetstack.io --force-update
+	HELM_REPOSITORY_CONFIG="$(NOAH_LOCAL_HELM_REPOSITORY_CONFIG)" \
+	HELM_REPOSITORY_CACHE="$(NOAH_LOCAL_HELM_REPOSITORY_CACHE)" \
+		helm dependency build --skip-refresh "$(NOAH_LOCAL_OPERATOR_CHART)"
 
 .PHONY: noah-local-cert-manager
 noah-local-cert-manager: ## Install cert-manager, which issues the operator's webhook certificate.
@@ -151,7 +173,7 @@ noah-local-cert-manager: ## Install cert-manager, which issues the operator's we
 		--kube-context "$(NOAH_LOCAL_CONTEXT)" \
 		--namespace "$(NOAH_LOCAL_CERT_MANAGER_NAMESPACE)" --create-namespace \
 		--set crds.enabled=true \
-		--wait --timeout "$(NOAH_LOCAL_CERT_MANAGER_TIMEOUT)"
+		$(NOAH_LOCAL_HELM_WAIT_ARGS) --timeout "$(NOAH_LOCAL_CERT_MANAGER_TIMEOUT)"
 	@# --wait covers the Deployments, but the webhook only admits Certificate
 	@# resources once its own serving certificate is in place, so give the API
 	@# server a moment to start routing to it before the operator chart applies one.
@@ -207,6 +229,7 @@ noah-local-operator-deploy: noah-local-operator-chart-deps noah-local-cert-manag
 		helm upgrade --install "$(NOAH_LOCAL_OPERATOR_RELEASE)" "$(NOAH_LOCAL_OPERATOR_CHART)" \
 			--kube-context "$(NOAH_LOCAL_CONTEXT)" \
 			--namespace "$(NOAH_LOCAL_NAMESPACE)" \
+			--set-string splunkOperator.nameOverride="$(NOAH_LOCAL_OPERATOR_RELEASE)" \
 			--set-string splunkOperator.image.repository="$(NOAH_LOCAL_OPERATOR_IMAGE)" \
 			--set splunkOperator.image.pullPolicy=Always \
 			--set-string "splunkOperator.imagePullSecrets[0].name=$$pull_secret" \
@@ -219,7 +242,7 @@ noah-local-operator-deploy: noah-local-operator-chart-deps noah-local-cert-manag
 			--set-string "splunkOperator.tolerations[0].value=splunk" \
 			--set-string "splunkOperator.tolerations[0].effect=NoSchedule" \
 			--set-string splunkOperator.persistentVolumeClaim.storageClassName=gp3-automode \
-			--wait --timeout "$(NOAH_LOCAL_OPERATOR_TIMEOUT)" \
+			$(NOAH_LOCAL_HELM_WAIT_ARGS) --timeout "$(NOAH_LOCAL_OPERATOR_TIMEOUT)" \
 			$(NOAH_LOCAL_OPERATOR_HELM_ARGS)
 
 .PHONY: noah-local-fixtures
@@ -248,13 +271,26 @@ noah-local-fixtures: ## Create prerequisite Secrets and apply the sample C3 cust
 	kubectl --context "$(NOAH_LOCAL_CONTEXT)" --namespace "$(NOAH_LOCAL_NAMESPACE)" \
 		apply -f "$(NOAH_LOCAL_FIXTURES)"
 
-.PHONY: noah-local-smoke
-noah-local-smoke: noah-local-port-forward ## Verify Noah health, then index on every C3 peer, roll buckets, search through the SHC, and bootstrap main.
-	KUBE_CONTEXT="$(NOAH_LOCAL_CONTEXT)" \
-	NAMESPACE="$(NOAH_LOCAL_NAMESPACE)" \
-	C3_NAME="$(NOAH_LOCAL_C3_NAME)" \
-	NOAH_LOCAL_PORT="$(NOAH_LOCAL_PORT)" \
-		$(NOAH_LOCAL_DIR)/smoke-test
+.PHONY: noah-local-ready
+noah-local-ready: setup/ginkgo noah-local-test-context ## Run the Noah C3 Ginkgo readiness gate without changing indexed data.
+	NOAH_TEST_NAMESPACE="$(NOAH_LOCAL_NAMESPACE)" \
+	NOAH_TEST_OPERATOR_NAME="$(NOAH_LOCAL_OPERATOR_RELEASE)-controller-manager" \
+	NOAH_TEST_NOAH_DEPLOYMENT="$(NOAH_LOCAL_RELEASE)" \
+	NOAH_TEST_C3_NAME="$(NOAH_LOCAL_C3_NAME)" \
+	NOAH_TEST_READY_TIMEOUT="$(NOAH_LOCAL_READY_TIMEOUT)" \
+		"$(NOAH_LOCAL_GINKGO)" -v --trace \
+		--label-filter='tier:noah-e2e && scenario:readiness' ./test/noah
+
+.PHONY: noah-local-test-context
+noah-local-test-context: ## Fail fast unless the active kubeconfig context is the saved Kraken context.
+	@set -eu; \
+		current_context="$$(kubectl config current-context 2>/dev/null || true)"; \
+		if test "$$current_context" != "$(NOAH_LOCAL_CONTEXT)"; then \
+			printf 'Active Kubernetes context is %s; expected %s.\n' \
+				"$${current_context:-<unset>}" "$(NOAH_LOCAL_CONTEXT)" >&2; \
+			printf 'Select it with: kubectl config use-context %s\n' "$(NOAH_LOCAL_CONTEXT)" >&2; \
+			exit 1; \
+		fi
 
 .PHONY: noah-local-port-forward
 noah-local-port-forward: ## Forward the Noah service so a locally run operator can reach it.
@@ -309,13 +345,15 @@ noah-local-stop-port-forward: ## Stop the Noah port-forward.
 		rm -f "$(NOAH_LOCAL_PORT_FORWARD_PID_FILE)"
 
 .PHONY: noah-local-lint
-noah-local-lint: ## Lint the Noah chart and the local development scripts.
+noah-local-lint: noah-local-operator-chart-deps ## Lint the Noah chart and local deployment helpers.
 	helm lint $(NOAH_LOCAL_CHART)
 	helm template $(NOAH_LOCAL_RELEASE) $(NOAH_LOCAL_CHART) \
-		--namespace $(NOAH_LOCAL_NAMESPACE) >/dev/null
+		--namespace $(NOAH_LOCAL_NAMESPACE) \
+		--set-string fullnameOverride=$(NOAH_LOCAL_RELEASE) >/dev/null
 	helm lint $(NOAH_LOCAL_OPERATOR_CHART)
 	helm template $(NOAH_LOCAL_OPERATOR_RELEASE) $(NOAH_LOCAL_OPERATOR_CHART) \
 		--namespace $(NOAH_LOCAL_NAMESPACE) \
+		--set-string splunkOperator.nameOverride=$(NOAH_LOCAL_OPERATOR_RELEASE) \
 		--set-string splunkOperator.image.repository=$(NOAH_LOCAL_OPERATOR_IMAGE) \
 		--set splunkOperator.image.pullPolicy=Always \
 		--set-string 'splunkOperator.imagePullSecrets[0].name=kraken-artifactory-creds-test' \
@@ -328,8 +366,8 @@ noah-local-lint: ## Lint the Noah chart and the local development scripts.
 		--set-string 'splunkOperator.tolerations[0].effect=NoSchedule' \
 		--set-string splunkOperator.persistentVolumeClaim.storageClassName=gp3-automode >/dev/null
 	yq eval-all '.' "$(NOAH_LOCAL_FIXTURES)" >/dev/null
-	@for script in $(NOAH_LOCAL_DIR)/create-cluster $(NOAH_LOCAL_DIR)/create-auth-secret $(NOAH_LOCAL_DIR)/smoke-test; do \
+	@for script in $(NOAH_LOCAL_DIR)/create-cluster $(NOAH_LOCAL_DIR)/create-auth-secret; do \
 		sh -n "$$script" || exit 1; \
 		if command -v shellcheck >/dev/null 2>&1; then shellcheck -s sh "$$script" || exit 1; fi; \
 	done
-	@printf '%s\n' 'Noah local development chart and scripts are clean.'
+	@printf '%s\n' 'Noah local development chart and deployment helpers are clean.'

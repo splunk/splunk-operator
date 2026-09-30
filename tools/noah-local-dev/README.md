@@ -1,5 +1,8 @@
 # Noah local development
 
+For the concise setup and Ginkgo readiness workflow, see
+[Noah integration testing on Kraken](../../docs/develop/NoahIntegrationTesting.md).
+
 Spins up a Kraken vCluster running Noah, PostgreSQL, Redis and MinIO, installs
 cert-manager, the operator and its CRDs, and creates a SmartStore-backed C3
 deployment. The recommended workflow runs the operator inside the vCluster; a
@@ -43,8 +46,9 @@ docker-test.repo.splunkdev.net/sok/splunk-operator:$(git rev-parse HEAD)
 ```
 
 The branch pipeline must have completed successfully for that image to exist.
-Override `NOAH_LOCAL_OPERATOR_IMAGE` if it was published elsewhere. Once the C3
-Pods are running, run `make noah-local-smoke`.
+Override `NOAH_LOCAL_OPERATOR_IMAGE` if it was published elsewhere. The setup
+target runs the Ginkgo readiness scenario after the C3 is deployed; rerun it
+independently with `make noah-local-ready`.
 
 ### Run the operator locally
 
@@ -76,6 +80,9 @@ server has no route back to your machine, so it cannot call them. Reconciliation
 works, but exercising the conversion webhook needs the in-cluster workflow
 (`make noah-local-c3-up`).
 
+The attached readiness target also requires the in-cluster workflow because it
+validates the operator Deployment as part of the system.
+
 Tear down when you are done
 
 ```console
@@ -86,9 +93,8 @@ make noah-local-down
 
 `make noah-local-c3-up` runs the complete in-cluster workflow. `make
 noah-local-up` prepares the equivalent local-operator workflow and starts the
-required Noah port-forward. Each constituent target also runs on its own. Run
-`noah-local-smoke` separately after the C3 Pods are running. `make help` lists
-the targets under **Noah Local Development**. They are defined in
+required Noah port-forward. Each constituent target also runs on its own. `make
+help` lists the targets under **Noah Local Development**. They are defined in
 [`noah.mk`](noah.mk), which the root `Makefile` includes.
 
 | target                         |                                                                                                                          |
@@ -103,11 +109,12 @@ the targets under **Noah Local Development**. They are defined in
 | `noah-local-operator-deploy`   | install or upgrade a staged operator image in the vCluster                                                               |
 | `noah-local-fixtures`          | create prerequisite Secrets, apply [`fixtures/c3.yaml`](fixtures/c3.yaml)                                                |
 | `noah-local-port-forward`      | forward the Noah service to localhost                                                                                    |
-| `noah-local-smoke`             | verify Noah peer readiness, index on every peer, roll buckets, search events, and bootstrap `main`                                |
+| `noah-local-ready`             | run the non-mutating Noah Ginkgo readiness scenario against the deployed C3                                              |
+| `noah-local-test-context`      | verify that the active kubeconfig context matches `NOAH_LOCAL_CONTEXT` before attached tests run                          |
 | `noah-local-destroy`           | terminate the vCluster                                                                                                   |
 | `noah-local-stop-port-forward` | stop the forward                                                                                                         |
 | `noah-local-deployment-id`     | print the saved deployment ID                                                                                            |
-| `noah-local-lint`              | lint the chart and scripts                                                                                               |
+| `noah-local-lint`              | lint the chart and deployment helpers                                                                                    |
 
 State lives in `.noah-local-dev/`. Re-running `noah-local-cluster` reuses the
 saved deployment, or creates a new one if it has gone.
@@ -125,19 +132,11 @@ data remains accessible. As with the PostgreSQL password, set
 `minio.auth.rootPassword` in an untracked values file if a known development
 credential is required.
 
-Once the operator has reconciled the C3 deployment, run:
-
-```console
-make noah-local-smoke
-```
-
-The local chart uses mock authentication. The smoke test starts or reuses the
-Noah port-forward, verifies peers and repairs, indexes and rolls `main`, then
-checks the bucket map and warm bootstrap. It does not restart indexers.
-
-The local operator cannot reach the SearchHeadCluster management endpoints
-without additional ingress, so the smoke test does not wait for CR phase
-`Ready`. Run it once the C3 pods are running.
+The local chart uses mock authentication. `noah-local-ready` runs the Ginkgo
+readiness scenario and does not modify CRs, index data, or Pods. Distributed
+data-path, Noah API, bucket-map and warm-bootstrap checks will be added as
+separate Ginkgo scenarios in subsequent changes; there is no script-based
+smoke-test path.
 
 ## Why the /etc/hosts entry
 
