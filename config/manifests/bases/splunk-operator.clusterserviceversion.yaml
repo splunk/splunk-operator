@@ -65,6 +65,15 @@ spec:
       kind: MonitoringConsole
       name: monitoringconsoles.enterprise.splunk.com
       version: v3
+    - description: |-
+        NoahCluster is shared, configuration-only connection detail for Splunk
+        workloads that use Noah. Because several resources (e.g. IndexerClusters and SearchHeadClusters)
+        can reference the same NoahCluster with differing health, no single controller can maintain a status
+        consistently for all of them. Operational state is reported on each referencing workload instead.
+      displayName: Noah Cluster
+      kind: NoahCluster
+      name: noahclusters.enterprise.splunk.com
+      version: v4
     - description: 'ObjectStorage is the Schema for the objectstorages API. NOTE:
         ObjectStorage is part of the index and ingestion separation feature, which
         is currently in Preview and not recommended for production use.'
