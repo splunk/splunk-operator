@@ -167,7 +167,7 @@ func mergeConnectionPoolerEnable(cluster, class *platformv1alpha1.ConnectionPool
 
 func (p *poolerModel) Name() string { return pgcConstants.ComponentPooler }
 func (p *poolerModel) Requires() []contractKey {
-	return []contractKey{contractCNPGCluster, contractAuthority, contractEnvironmentNamer}
+	return []contractKey{contractCNPGCluster, contractTLSBackend, contractAuthority, contractEnvironmentNamer}
 }
 func (p *poolerModel) Provides() []contractKey { return nil }
 
@@ -242,9 +242,6 @@ func (p *poolerModel) computeHealth(ctx context.Context, reconcileErr error) (co
 	}
 
 	if !p.poolerEnabled() {
-		if !isSANPolicyConverged(p.contracts.CNPGCluster, p.poolerEnabled()) {
-			return newProvisioningHealth(poolerReady, reasonPoolerSANsPending, msgPoolerSANsPending), nil
-		}
 		p.cluster.Status.ConnectionPoolerStatus = nil
 		meta.RemoveStatusCondition(&p.cluster.Status.Conditions, string(poolerReady))
 		return newReadyHealth(poolerReady, reasonPoolerDisabled, msgPoolerDisabled), nil
@@ -256,14 +253,17 @@ func (p *poolerModel) computeHealth(ctx context.Context, reconcileErr error) (co
 		return newProvisioningHealth(poolerReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, p.contracts.CNPGCluster.Status.Phase)), nil
 	}
 
-	if !isSANPolicyConverged(p.contracts.CNPGCluster, p.poolerEnabled()) {
-		return newProvisioningHealth(poolerReady, reasonPoolerSANsPending, msgPoolerSANsPending), nil
+	backend := p.contracts.TLSBackend
+	if !backend.observed {
+		backend = p.contracts.ServerTLS.ObserveCNPG(p.contracts.CNPGCluster.Status)
 	}
-
-	leafOK, leafErr := isServerTLSLeafAlignedWithSpec(ctx, p.client, p.cluster.Namespace, p.contracts.CNPGCluster)
+	if !backend.Converged {
+		return newProvisioningHealth(poolerReady, reasonPoolerTLSLeafPending, msgPoolerTLSLeafPending), nil
+	}
+	leafOK, leafErr := isServerTLSLeafAlignedWithPlan(ctx, p.client, p.cluster.Namespace, backend.ServerTLSSecret, p.contracts.ServerTLS)
 	if errors.Is(leafErr, errServerTLSLeafInvalid) {
 		logger := logging.FromContext(ctx)
-		secretName := serverTLSSecretNameFromCNPG(p.contracts.CNPGCluster)
+		secretName := backend.ServerTLSSecret
 		logger.Error("server TLS secret cannot be parsed; cluster requires investigation",
 			"error", leafErr.Error(), "namespace", p.cluster.Namespace,
 			"pgCluster", p.cluster.Name, "secret", secretName)

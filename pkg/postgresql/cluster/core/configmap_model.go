@@ -53,7 +53,7 @@ func newConfigMapModel(c client.Client, scheme *runtime.Scheme, events eventEmit
 
 func (c *configMapModel) Name() string { return pgcConstants.ComponentConfigMap }
 func (c *configMapModel) Requires() []contractKey {
-	return []contractKey{contractCNPGCluster, contractSecret, contractEnvironmentNamer}
+	return []contractKey{contractCNPGCluster, contractTLSBackend, contractSecret, contractEnvironmentNamer}
 }
 func (c *configMapModel) Provides() []contractKey { return nil }
 
@@ -65,7 +65,7 @@ func (c *configMapModel) CheckContracts() error {
 }
 
 func (c *configMapModel) Reconcile(ctx context.Context) error {
-	desiredCM, err := generateConfigMap(ctx, c.client, c.scheme, c.cluster, c.contracts.CNPGCluster, c.contracts.Secret.Name, c.contracts.EnvironmentNamer)
+	desiredCM, err := generateConfigMap(ctx, c.client, c.scheme, c.cluster, c.contracts.CNPGCluster, c.contracts.TLSBackend, c.contracts.Secret.Name, c.contracts.EnvironmentNamer)
 	if err != nil {
 		return newReconcileFailure(reasonConfigMapFailed, err)
 	}
@@ -131,7 +131,6 @@ func (c *configMapModel) computeHealth(reconcileErr error) (componentHealth, err
 	if _, ok := c.cm.Data[configMapKeyServerCASecretRef]; !ok {
 		return newProvisioningHealth(configMapsReady, reasonConfigMapFailed, msgConfigMapCAMetadataPending), nil
 	}
-
 	h := newReadyHealth(configMapsReady, reasonConfigMapReady, msgAccessConfigMapReady)
 	if !meta.IsStatusConditionTrue(c.cluster.Status.Conditions, string(configMapsReady)) {
 		c.events.emitNormal(c.cluster, EventConfigMapReady, h.Message)
@@ -139,18 +138,19 @@ func (c *configMapModel) computeHealth(reconcileErr error) (componentHealth, err
 	return h, nil
 }
 
-// caMetadataForConfigMap returns a SecretKeySelector for the CNPG server CA Secret when it is
-// published and contains the expected data key (same SecretKeySelector shape as database secret refs).
+// caMetadataForConfigMap validates the resolved backend CA selector before it
+// is published. TLS mode selection and selector construction belong to the
+// immutable plan and its CNPG observation, not to the ConfigMap model.
 func caMetadataForConfigMap(
 	ctx context.Context,
 	c client.Client,
 	namespace string,
-	cnpgCluster *cnpgv1.Cluster,
+	backend tlsBackendState,
 ) (*corev1.SecretKeySelector, bool, error) {
-	name := cnpgCluster.Status.Certificates.ServerCASecret
-	if name == "" {
+	if !backend.observed || backend.ConnectionCARef == nil {
 		return nil, false, nil // not ready yet — omit keys
 	}
+	name := backend.ConnectionCARef.Name
 	var sec corev1.Secret
 	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &sec); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -158,19 +158,16 @@ func caMetadataForConfigMap(
 		}
 		return nil, false, err
 	}
-	key := defaultServerCACertKey
+	key := backend.ConnectionCARef.Key
 	if len(sec.Data[key]) == 0 && len(sec.StringData[key]) == 0 {
 		// Secret exists but unexpected shape — don't advertise a broken contract
 		return nil, false, nil
 	}
-	return &corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: name},
-		Key:                  key,
-	}, true, nil
+	return backend.ConnectionCARef.DeepCopy(), true, nil
 }
 
 // generateConfigMap builds a ConfigMap with connection details for the PostgresCluster.
-func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cnpgCluster *cnpgv1.Cluster, secretName string, environmentNamer clusteridentity.EnvironmentNamer) (*corev1.ConfigMap, error) {
+func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cnpgCluster *cnpgv1.Cluster, backend tlsBackendState, secretName string, environmentNamer clusteridentity.EnvironmentNamer) (*corev1.ConfigMap, error) {
 	cmName := fmt.Sprintf("%s%s", cluster.Name, defaultConfigMapSuffix)
 	if cluster.Status.Resources != nil && cluster.Status.Resources.ConfigMapRef != nil {
 		cmName = cluster.Status.Resources.ConfigMapRef.Name
@@ -185,7 +182,7 @@ func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Sch
 		return nil, fmt.Errorf("failed to check RO pooler existence: %w", err)
 	}
 
-	caSecretRef, ok, err := caMetadataForConfigMap(ctx, c, cluster.Namespace, cnpgCluster)
+	caSecretRef, ok, err := caMetadataForConfigMap(ctx, c, cluster.Namespace, backend)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CA metadata for ConfigMap: %w", err)
 	}

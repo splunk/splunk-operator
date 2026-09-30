@@ -62,6 +62,8 @@ const (
 	EventCustomMetricsConfigTooLarge      = "CustomMetricsConfigTooLarge"
 	EventCustomMetricsOwnershipConflict   = "CustomMetricsOwnershipConflict"
 	EventCustomMetricsReconcileFailed     = "CustomMetricsReconcileFailed"
+	EventCertificateReady                 = "CertificateReady"
+	EventCertificateReconcileFailed       = "CertificateReconcileFailed"
 )
 
 const (

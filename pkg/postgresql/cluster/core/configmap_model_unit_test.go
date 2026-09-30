@@ -55,7 +55,7 @@ func TestGenerateConfigMap(t *testing.T) {
 
 	t.Run("base endpoints without poolers", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-configmap", cm.Name)
@@ -79,7 +79,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-pooler-ro", Namespace: "default"},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler).Build()
-		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-rw.default.svc.cluster.local", cm.Data[pgconninfo.KeyPoolerRWEndpoint])
@@ -93,7 +93,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ConfigMapRef: &corev1.LocalObjectReference{Name: "custom-configmap"},
 		}
 
-		cm, err := generateConfigMap(context.Background(), c, scheme, pg, cnpgCluster, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(context.Background(), c, scheme, pg, cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "custom-configmap", cm.Name)
@@ -107,14 +107,15 @@ func TestGenerateConfigMap(t *testing.T) {
 		cnpg := cnpgCluster.DeepCopy()
 		cnpg.Status.Certificates.ServerCASecret = "my-server-ca"
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(caSecret).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpg, "my-secret", testEnvironmentNamer)
+		backend := tlsBackendState{observed: true, ConnectionCARef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "my-server-ca"}, Key: defaultServerCACertKey}}
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpg, backend, "my-secret", testEnvironmentNamer)
 		require.NoError(t, err)
 		assert.Equal(t, "my-server-ca/"+defaultServerCACertKey, cm.Data[configMapKeyServerCASecretRef])
 	})
 
 	t.Run("omits CA metadata when CNPG has no CA secret set", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 		require.NoError(t, err)
 		assert.NotContains(t, cm.Data, configMapKeyServerCASecretRef)
 	})
@@ -136,6 +137,7 @@ func TestConfigMapModelPublishesAuthoritativeEndpointsWithoutRoutingService(t *t
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 	model := newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, &reconcileContracts{
 		CNPGCluster:      green,
+		TLSBackend:       tlsBackendState{observed: true},
 		Secret:           &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-secret", Namespace: "default"}},
 		EnvironmentNamer: testEnvironmentNamer,
 	})
@@ -190,7 +192,7 @@ func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t
 		},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingCM).Build()
-	contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}, EnvironmentNamer: testEnvironmentNamer}
+	contracts := &reconcileContracts{CNPGCluster: cnpg, TLSBackend: tlsBackendState{observed: true}, Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}, EnvironmentNamer: testEnvironmentNamer}
 	model := newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts)
 
 	// Act
@@ -232,7 +234,7 @@ func TestConfigMapModel_CheckContracts(t *testing.T) {
 	})
 
 	t.Run("returns nil when both contracts are satisfied", func(t *testing.T) {
-		contracts := &reconcileContracts{CNPGCluster: cnpg, Secret: secret, EnvironmentNamer: testEnvironmentNamer}
+		contracts := &reconcileContracts{CNPGCluster: cnpg, TLSBackend: tlsBackendState{observed: true}, Secret: secret, EnvironmentNamer: testEnvironmentNamer}
 		model := newConfigMapModel(c, scheme, noopEventEmitter{}, nil, cluster, contracts)
 		assert.NoError(t, model.CheckContracts())
 	})
