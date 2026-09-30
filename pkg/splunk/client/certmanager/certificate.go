@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 
 	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -152,8 +153,11 @@ func EnsureCertificate(ctx context.Context, c client.Client, secretName, namespa
 	if cfg.rotationPolicy != "" {
 		desiredSpec.PrivateKey = &cmapi.CertificatePrivateKey{RotationPolicy: cfg.rotationPolicy}
 	}
-	if len(cfg.secretAnnotations) > 0 {
-		desiredSpec.SecretTemplate = &cmapi.CertificateSecretTemplate{Annotations: cfg.secretAnnotations}
+	if len(cfg.secretAnnotations) > 0 || len(cfg.secretLabels) > 0 {
+		desiredSpec.SecretTemplate = &cmapi.CertificateSecretTemplate{
+			Annotations: cfg.secretAnnotations,
+			Labels:      cfg.secretLabels,
+		}
 	}
 
 	certObj := &cmapi.Certificate{
@@ -163,9 +167,31 @@ func EnsureCertificate(ctx context.Context, c client.Client, secretName, namespa
 		},
 	}
 	result, err := controllerutil.CreateOrUpdate(ctx, c, certObj, func() error {
+		if certObj.GetResourceVersion() != "" && cfg.existingGuard != nil {
+			if err := cfg.existingGuard(certObj); err != nil {
+				return fmt.Errorf("verifying existing certificate ownership: %w", err)
+			}
+		}
 		certObj.Spec = desiredSpec
+		if len(cfg.labels) > 0 {
+			if certObj.Labels == nil {
+				certObj.Labels = make(map[string]string, len(cfg.labels))
+			}
+			maps.Copy(certObj.Labels, cfg.labels)
+		}
+		if len(cfg.annotations) > 0 {
+			if certObj.Annotations == nil {
+				certObj.Annotations = make(map[string]string, len(cfg.annotations))
+			}
+			maps.Copy(certObj.Annotations, cfg.annotations)
+		}
 		if cfg.owner != nil {
 			if err := controllerutil.SetControllerReference(cfg.owner, certObj, c.Scheme()); err != nil {
+				return fmt.Errorf("setting owner reference on certificate %s: %w", certName, err)
+			}
+		}
+		if cfg.ownerReference != nil {
+			if err := setCertificateControllerReference(certObj, *cfg.ownerReference); err != nil {
 				return fmt.Errorf("setting owner reference on certificate %s: %w", certName, err)
 			}
 		}
@@ -187,6 +213,17 @@ func EnsureCertificate(ctx context.Context, c client.Client, secretName, namespa
 		logger.InfoContext(ctx, "certificate unchanged, checking readiness", "certificate", certName)
 		return checkCertificateReady(ctx, c, certName, namespace)
 	}
+}
+
+func setCertificateControllerReference(certificate *cmapi.Certificate, desired metav1.OwnerReference) error {
+	if current := metav1.GetControllerOf(certificate); current != nil {
+		if current.UID != desired.UID || current.APIVersion != desired.APIVersion || current.Kind != desired.Kind {
+			return fmt.Errorf("Certificate is already controlled by %s %s", current.Kind, current.Name)
+		}
+		return nil
+	}
+	certificate.SetOwnerReferences(append(certificate.GetOwnerReferences(), desired))
+	return nil
 }
 
 // resolveIssuerRef verifies that the Issuer or ClusterIssuer named by ref
@@ -235,7 +272,7 @@ func resolveIssuerRef(ctx context.Context, c client.Client, namespace string, re
 		return cmmeta.IssuerReference{}, fmt.Errorf("%w: %s %q in namespace %q", ErrIssuerNotReady, kind, ref.Name, namespace)
 	}
 
-	return cmmeta.IssuerReference{Name: ref.Name, Kind: kind}, nil
+	return cmmeta.IssuerReference{Name: ref.Name, Kind: kind, Group: ref.Group}, nil
 }
 
 // checkCertificateReady fetches the existing Certificate CR and reports

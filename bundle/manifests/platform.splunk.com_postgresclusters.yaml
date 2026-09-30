@@ -498,6 +498,19 @@ spec:
                   Example: "5Gi"
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
+              tls:
+                description: TLS adds cluster-specific server DNS names to the class
+                  TLS policy.
+                properties:
+                  serverAltDNSNames:
+                    description: ServerAltDNSNames are additional DNS names included
+                      in a cert-manager server certificate.
+                    items:
+                      type: string
+                    maxItems: 100
+                    type: array
+                    x-kubernetes-list-type: set
+                type: object
             required:
             - class
             type: object

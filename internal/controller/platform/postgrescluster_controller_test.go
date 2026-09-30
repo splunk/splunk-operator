@@ -181,6 +181,11 @@ func markCNPGClusterHealthy(cnpg *cnpgv1.Cluster, clusterName, caSecretName stri
 	cnpg.Status.Instances = healthyReadyInstances
 	cnpg.Status.ReadyInstances = healthyReadyInstances
 	cnpg.Status.CurrentPrimary = "example"
+	if cnpg.Status.Certificates.ServerTLSSecret == "" {
+		// CNPG publishes its default server-TLS Secret before the PostgresCluster
+		// workflow can adopt the healthy backend state.
+		cnpg.Status.Certificates.ServerTLSSecret = clusterName + "-server"
+	}
 	if caSecretName != "" {
 		cnpg.Status.Certificates.CertificatesConfiguration.ServerCASecret = caSecretName
 	}
@@ -293,6 +298,11 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		cnpg.Status.ReadyInstances = int(instances)
 		cnpg.Status.WriteService = cnpg.Name + "-rw"
 		cnpg.Status.ReadService = cnpg.Name + "-ro"
+		if cnpg.Status.Certificates.ServerTLSSecret == "" {
+			// CNPG publishes its default server-TLS Secret before the PostgresCluster
+			// workflow can adopt the healthy backend state.
+			cnpg.Status.Certificates.ServerTLSSecret = cnpg.Name + "-server"
+		}
 	}
 
 	acknowledgeCNPGMetricsConfigMap := func(enabled bool) {
@@ -2740,9 +2750,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			// managedRoles component — where the sweep gate is exercised.
 			cnpg := &cnpgv1.Cluster{}
 			Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-			cnpg.Status.Phase = cnpgv1.PhaseHealthy
-			cnpg.Status.Instances = int(clusterMemberCount)
-			cnpg.Status.ReadyInstances = int(clusterMemberCount)
+			markCNPGHealthy(cnpg, clusterMemberCount)
 			Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 			reconcileNTimes(1)
 

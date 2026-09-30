@@ -22,6 +22,7 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	clusteridentity "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/identity"
+	tlsport "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/tls"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
@@ -58,6 +59,7 @@ type ReconcileContext struct {
 	ClusterCardResolver     clusteridentity.ClusterCardResolver
 	EnvironmentNamer        clusteridentity.EnvironmentNamer
 	ClusterInputFactory     ClusterInputFactory
+	ServerTLSManager        tlsport.Manager
 }
 
 // ClusterInputFactory translates a PostgresCluster API snapshot into neutral
@@ -110,6 +112,8 @@ type normalizedCNPGClusterSpec struct {
 	Resources            corev1.ResourceRequirements
 	InheritedAnnotations map[string]string
 	ServerAltDNSNames    []string
+	ServerTLSSecret      string
+	ServerCASecret       string
 	Backup               *normalizedBackupSpec
 	Plugins              []normalizedPluginSpec
 	BootstrapType        bootstrapKind
@@ -252,6 +256,7 @@ const (
 	secretsReady       conditionTypes = "SecretsReady"
 	configMapsReady    conditionTypes = "ConfigMapsReady"
 	customMetricsReady conditionTypes = "CustomMetricsReady"
+	certificatesReady  conditionTypes = "CertificatesReady"
 	readyCondition     conditionTypes = "Ready"
 
 	// credential-sweep log values
@@ -303,9 +308,12 @@ const (
 	reasonPoolerConfigMissing        conditionReasons = "PoolerConfigMissing"
 	reasonPoolerCreating             conditionReasons = "PoolerCreating"
 	reasonPoolerDisabled             conditionReasons = "PoolerDisabled"
-	reasonPoolerSANsPending          conditionReasons = "PoolerSANsPending"
 	reasonPoolerTLSLeafPending       conditionReasons = "PoolerTLSLeafPending"
 	reasonPoolerTLSLeafInvalidCert   conditionReasons = "PoolerTLSLeafInvalidCert"
+	reasonCertificatePending         conditionReasons = "CertificatePending"
+	reasonCertificateInvalid         conditionReasons = "CertificateInvalid"
+	reasonCertManagerNotInstalled    conditionReasons = "CertManagerNotInstalled"
+	reasonCertificateConfigError     conditionReasons = "CertificateConfigError"
 	reasonAllInstancesReady          conditionReasons = "AllInstancesReady"
 
 	// condition reasons — backupReady
@@ -392,9 +400,11 @@ const (
 	msgWaitRWPoolerObject             statusMessage = "Waiting for RW pooler object"
 	msgWaitROPoolerObject             statusMessage = "Waiting for RO pooler object"
 	msgPoolersNotReady                statusMessage = "Connection poolers are not ready yet"
-	msgPoolerSANsPending              statusMessage = "Waiting for pooler SAN reconcile"
 	msgPoolerTLSLeafPending           statusMessage = "Waiting for pooler server TLS leaf to match spec"
 	msgFmtPoolerTLSLeafInvalidCert    statusMessage = "Server TLS secret %s/%s cannot be parsed; see operator logs"
+	msgCertificatePending             statusMessage = "Waiting for cert-manager server certificate"
+	msgCertManagerNotInstalled        statusMessage = "cert-manager Certificate API is not installed"
+	msgCertificateInvalid             statusMessage = "cert-manager server certificate material is invalid"
 	msgPoolersReady                   statusMessage = "Connection poolers are ready"
 	msgConfigMapRefNotPublished       statusMessage = "ConfigMap reference not published yet"
 	msgConfigMapCAMetadataPending     statusMessage = "Waiting for CA metadata in access ConfigMap"

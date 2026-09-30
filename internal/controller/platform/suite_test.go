@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -82,6 +83,7 @@ var _ = BeforeSuite(func(context.Context) {
 
 	Expect(platformApi.AddToScheme(clientgoscheme.Scheme)).To(Succeed())
 	Expect(cnpgv1.AddToScheme(clientgoscheme.Scheme)).To(Succeed())
+	Expect(cmapi.AddToScheme(clientgoscheme.Scheme)).To(Succeed())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: clientgoscheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())

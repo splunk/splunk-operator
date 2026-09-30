@@ -1857,11 +1857,15 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			// closed — these cases exercise downstream component gating, not scaling.
 			Instances:      int(instances),
 			ReadyInstances: int(instances),
+			Certificates: cnpgv1.CertificatesStatus{CertificatesConfiguration: cnpgv1.CertificatesConfiguration{
+				ServerTLSSecret: cluster.Name + "-server-tls",
+			}},
 		}
 		if withCA {
 			cnpgStatus.Certificates = cnpgv1.CertificatesStatus{
 				CertificatesConfiguration: cnpgv1.CertificatesConfiguration{
-					ServerCASecret: exampleCASecret.Name,
+					ServerTLSSecret: cluster.Name + "-server-tls",
+					ServerCASecret:  exampleCASecret.Name,
 				},
 			}
 		}
@@ -1871,7 +1875,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			Status:     cnpgStatus,
 		}
 		require.NoError(t, ctrl.SetControllerReference(cluster, cnpg, scheme))
-		return &reconcileContracts{CNPGCluster: cnpg, Authority: conventionalClusterCard(cluster), EnvironmentNamer: testEnvironmentNamer}
+		return &reconcileContracts{CNPGCluster: cnpg, Authority: conventionalClusterCard(cluster), EnvironmentNamer: testEnvironmentNamer, ServerTLS: newCNPGDefaultServerTLSPlan(cluster, mergedConfig, cluster.Name)}
 	}
 
 	combinations := []struct {
@@ -1889,13 +1893,21 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 				cnpg := &cnpgv1.Cluster{
 					ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
 					Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, cluster.Name, "pg1-secret", false),
-					Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: int(instances), ReadyInstances: int(instances)},
+					Status: cnpgv1.ClusterStatus{
+						Phase:          cnpgv1.PhaseHealthy,
+						Instances:      int(instances),
+						ReadyInstances: int(instances),
+						Certificates: cnpgv1.CertificatesStatus{CertificatesConfiguration: cnpgv1.CertificatesConfiguration{
+							ServerTLSSecret: cluster.Name + "-server-tls",
+						}},
+					},
 				}
 				require.NoError(t, ctrl.SetControllerReference(cluster, cnpg, scheme))
 				// provisioner gets full contracts; pooler gets empty contracts (no CNPGCluster).
 				provisionerContracts := &reconcileContracts{
 					Secret:    &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}},
 					Authority: conventionalClusterCard(cluster),
+					ServerTLS: newCNPGDefaultServerTLSPlan(cluster, mergedConfig, cluster.Name),
 				}
 				poolerContracts := &reconcileContracts{} // simulates pooler running before provisioner publishes
 				provisioner := newClusterModel(
@@ -2352,7 +2364,8 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 		Spec:       cnpgv1.ClusterSpec{},
 	}
 	contracts := &reconcileContracts{
-		Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}},
+		Secret:    &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}},
+		ServerTLS: newCNPGDefaultServerTLSPlan(cluster, mergedConfig, cluster.Name),
 	}
 	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
 	clusterClass := &platformv1alpha1.PostgresClusterClass{
@@ -2431,17 +2444,6 @@ func TestClusterModelSANPolicyPoolerDisabledDoesNotInjectPoolerSANsWhenAbsent(t 
 	}
 }
 
-func TestClusterModelIsSANPolicyConvergedNilVsEmptyServerAltDNSNames(t *testing.T) {
-	t.Parallel()
-
-	cnpg := &cnpgv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec:       cnpgv1.ClusterSpec{Certificates: &cnpgv1.CertificatesConfiguration{ServerAltDNSNames: nil}},
-	}
-	applyPoolerSANs(&cnpg.Spec, false, "pg1", "default")
-	assert.True(t, isSANPolicyConverged(cnpg, false))
-}
-
 func TestClusterModelSANPolicyPoolerEnabledAddsShortAndFQDNPoolerSANs(t *testing.T) {
 	t.Parallel()
 
@@ -2460,24 +2462,6 @@ func TestClusterModelSANPolicyPoolerEnabledAddsShortAndFQDNPoolerSANs(t *testing
 	}
 }
 
-func TestClusterModelIsSANPolicyConvergedPoolerEnabledDetectsDrift(t *testing.T) {
-	t.Parallel()
-
-	cnpg := &cnpgv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: cnpgv1.ClusterSpec{
-			Certificates: &cnpgv1.CertificatesConfiguration{
-				ServerAltDNSNames: []string{"static.example", "pg1-pooler-rw.default"},
-			},
-		},
-	}
-
-	assert.False(t, isSANPolicyConverged(cnpg, true), "missing RO / fqdn pooler SANs must not converge")
-
-	applyPoolerSANs(&cnpg.Spec, true, "pg1", "default")
-	assert.True(t, isSANPolicyConverged(cnpg, true), "applyPoolerSANs must have added the missing pooler SANs")
-}
-
 func TestClusterModelSANPolicyPoolerDisabledIsStrictNoOp(t *testing.T) {
 	t.Parallel()
 
@@ -2488,14 +2472,11 @@ func TestClusterModelSANPolicyPoolerDisabledIsStrictNoOp(t *testing.T) {
 		},
 	}
 
-	cnpg := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}, Spec: spec}
-	assert.True(t, isSANPolicyConverged(cnpg, false), "isSANPolicyConverged must return true when pooler is disabled")
-
 	applyPoolerSANs(&spec, false, "pg1", "default")
 	assert.Equal(t, unsorted, spec.Certificates.ServerAltDNSNames, "applyPoolerSANs must be a strict no-op when pooler is disabled")
 }
 
-func TestClusterModelIsServerTLSLeafAlignedWithSpec(t *testing.T) {
+func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 	t.Parallel()
 
 	scheme := runtime.NewScheme()
@@ -2503,32 +2484,11 @@ func TestClusterModelIsServerTLSLeafAlignedWithSpec(t *testing.T) {
 	require.NoError(t, corev1.AddToScheme(scheme))
 
 	wantSANs := []string{"pg1-rw.default.svc.cluster.local", "pg1-pooler-rw.default.svc.cluster.local"}
-	cnpg := &cnpgv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: cnpgv1.ClusterSpec{
-			Certificates: &cnpgv1.CertificatesConfiguration{
-				ServerAltDNSNames: wantSANs,
-			},
-		},
-		Status: cnpgv1.ClusterStatus{
-			Certificates: cnpgv1.CertificatesStatus{
-				CertificatesConfiguration: cnpgv1.CertificatesConfiguration{
-					ServerTLSSecret: "pg1-server-tls",
-				},
-			},
-		},
-	}
-
-	t.Run("nil_cnpg_short_circuits_true", func(t *testing.T) {
-		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		ok, err := isServerTLSLeafAlignedWithSpec(context.Background(), c, "default", nil)
-		require.NoError(t, err)
-		assert.True(t, ok)
-	})
+	plan := serverTLSPlan{initialized: true, requiredPoolerSANs: wantSANs}
 
 	t.Run("missing_secret", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		ok, err := isServerTLSLeafAlignedWithSpec(context.Background(), c, "default", cnpg)
+		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -2541,7 +2501,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithSpec(t *testing.T) {
 			},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithSpec(context.Background(), c, "default", cnpg)
+		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -2554,18 +2514,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithSpec(t *testing.T) {
 			},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithSpec(context.Background(), c, "default", cnpg)
-		require.NoError(t, err)
-		assert.True(t, ok)
-	})
-
-	t.Run("empty_spec_sans_skips_secret", func(t *testing.T) {
-		emptyCNPG := &cnpgv1.Cluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "pg2", Namespace: "default"},
-			Spec:       cnpgv1.ClusterSpec{},
-		}
-		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		ok, err := isServerTLSLeafAlignedWithSpec(context.Background(), c, "default", emptyCNPG)
+		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
 		require.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -2576,7 +2525,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithSpec(t *testing.T) {
 			Data:       map[string][]byte{corev1.TLSCertKey: []byte("this is not a PEM block")},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithSpec(context.Background(), c, "default", cnpg)
+		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
 		require.Error(t, err, "malformed PEM must escalate via the sentinel so callers can route to Failed")
 		assert.True(t, errors.Is(err, errServerTLSLeafInvalid))
 		assert.Contains(t, err.Error(), "PEM decode failed")
@@ -2591,7 +2540,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithSpec(t *testing.T) {
 			Data:       map[string][]byte{corev1.TLSCertKey: badDER},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithSpec(context.Background(), c, "default", cnpg)
+		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
 		require.Error(t, err, "x509.ParseCertificate failure must escalate via the sentinel")
 		assert.True(t, errors.Is(err, errServerTLSLeafInvalid))
 		assert.Contains(t, err.Error(), "x509 parse failed")

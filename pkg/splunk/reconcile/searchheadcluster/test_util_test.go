@@ -31,7 +31,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	"github.com/stretchr/testify/require"
@@ -42,7 +41,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	clienttesting "k8s.io/client-go/testing"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -125,19 +123,6 @@ func loadFixture(t *testing.T, filename string) string {
 		return ""
 	}
 	return compactJSON.String()
-}
-
-func GetSplunkStatefulsetName(instanceType splcommon.InstanceType, identifier string) string {
-	return splutil.GetSplunkStatefulsetName(instanceType, identifier)
-}
-
-func GetSplunkStatefulsetPodName(instanceType splcommon.InstanceType, identifier string, index int32) string {
-	return splutil.GetSplunkStatefulsetPodName(instanceType, identifier, index)
-}
-
-func newTestEventPublisher(recorder record.EventRecorder) *k8sops.K8EventPublisher {
-	publisher, _ := k8sops.NewK8EventPublisherWithRecorder(recorder, &corev1.Pod{})
-	return publisher
 }
 
 func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(splcommon.MetaObject, splcommon.ControllerClient) (bool, error)) {

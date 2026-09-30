@@ -27,8 +27,9 @@ var defaultUsages = []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageClientAut
 // already exist in the cluster. Kind must be "Issuer" (the default, when
 // empty) or "ClusterIssuer".
 type IssuerRef struct {
-	Name string
-	Kind string
+	Name  string
+	Kind  string
+	Group string
 }
 
 // certConfig accumulates optional settings for EnsureCertificate.
@@ -38,10 +39,15 @@ type certConfig struct {
 	commonName        string
 	usages            []cmapi.KeyUsage
 	owner             metav1.Object
+	ownerReference    *metav1.OwnerReference
+	existingGuard     func(*cmapi.Certificate) error
 	duration          *metav1.Duration
 	renewBefore       *metav1.Duration
 	rotationPolicy    cmapi.PrivateKeyRotationPolicy
 	secretAnnotations map[string]string
+	secretLabels      map[string]string
+	labels            map[string]string
+	annotations       map[string]string
 }
 
 // CertOption configures optional behavior of EnsureCertificate.
@@ -85,6 +91,19 @@ func WithOwner(owner metav1.Object) CertOption {
 	}
 }
 
+// WithOwnerReference sets a controller owner reference without requiring the
+// caller to pass its full Kubernetes object through the certificate boundary.
+func WithOwnerReference(owner metav1.OwnerReference) CertOption {
+	return func(c *certConfig) { c.ownerReference = &owner }
+}
+
+// WithExistingCertificateGuard verifies that an existing Certificate is safe
+// to update. The guard runs inside CreateOrUpdate's mutation callback, after
+// its read and before any Certificate fields are changed.
+func WithExistingCertificateGuard(guard func(*cmapi.Certificate) error) CertOption {
+	return func(c *certConfig) { c.existingGuard = guard }
+}
+
 // WithDuration sets the requested validity period of the generated
 // certificate. When unset, cert-manager applies its own default.
 func WithDuration(d metav1.Duration) CertOption {
@@ -121,4 +140,20 @@ func WithSecretAnnotations(annotations map[string]string) CertOption {
 	return func(c *certConfig) {
 		c.secretAnnotations = annotations
 	}
+}
+
+// WithSecretLabels stamps labels onto the Secret cert-manager creates and
+// renews through CertificateSpec.SecretTemplate.
+func WithSecretLabels(labels map[string]string) CertOption {
+	return func(c *certConfig) { c.secretLabels = labels }
+}
+
+// WithLabels stamps labels on the Certificate resource itself.
+func WithLabels(labels map[string]string) CertOption {
+	return func(c *certConfig) { c.labels = labels }
+}
+
+// WithAnnotations stamps annotations on the Certificate resource itself.
+func WithAnnotations(annotations map[string]string) CertOption {
+	return func(c *certConfig) { c.annotations = annotations }
 }
