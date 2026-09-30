@@ -1,5 +1,5 @@
 # Adds namespace to all resources.
-namespace: splunk-operator 
+namespace: splunk-operator
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
@@ -13,20 +13,20 @@ commonLabels:
   name: splunk-operator
 
 bases:
-- ../crd
-- ../rbac
-- ../persistent-volume
-- ../service
-- ../manager
-# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
-# crd/kustomization.yaml
-#- ../webhook
-# [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'. 'WEBHOOK' components are required.
-#- ../certmanager
-# [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
-#- ../prometheus
-# [METRICS] Expose the controller manager metrics service.
-- metrics_service.yaml
+  - ../crd
+  - ../rbac
+  - ../persistent-volume
+  - ../service
+  - ../manager
+  # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
+  # crd/kustomization.yaml
+  #- ../webhook
+  # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'. 'WEBHOOK' components are required.
+  #- ../certmanager
+  # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
+  #- ../prometheus
+  # [METRICS] Expose the controller manager metrics service.
+  - metrics_service.yaml
 
 patchesStrategicMerge:
 # Mount the controller config file for loading manager configurations
@@ -111,35 +111,35 @@ vars:
 
 # currently patch is set to change deployment environment variables
 patches:
-- target:
-    kind: Deployment
-    name: controller-manager
-  patch: |-
-    - op: add
-      path: /spec/template/spec/containers/0/env
-      value: 
-      - name: WATCH_NAMESPACE
-        value: WATCH_NAMESPACE_VALUE
-      - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-        value: SPLUNK_ENTERPRISE_IMAGE
-      - name: OPERATOR_NAME
-        value: splunk-operator
-      - name: SPLUNK_GENERAL_TERMS
-        value: SPLUNK_GENERAL_TERMS_VALUE
-      - name: POD_NAME
-        valueFrom:
-          fieldRef:
-            fieldPath: metadata.name
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: MANAGER_EXTRA_ARG_VALUE            
-# [METRICS] The following patch will enable the metrics endpoint using HTTPS and the port :8443.
-# More info: https://book.kubebuilder.io/reference/metrics
-- path: manager_metrics_patch.yaml
-  target:
-    kind: Deployment
+  - target:
+      kind: Deployment
+      name: controller-manager
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env
+        value:
+        - name: WATCH_NAMESPACE
+          value: WATCH_NAMESPACE_VALUE
+        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+          value: SPLUNK_ENTERPRISE_IMAGE
+        - name: OPERATOR_NAME
+          value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: SPLUNK_GENERAL_TERMS_VALUE
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: MANAGER_EXTRA_ARG_VALUE
+  # [METRICS] The following patch will enable the metrics endpoint using HTTPS and the port :8443.
+  # More info: https://book.kubebuilder.io/reference/metrics
+  - path: manager_metrics_patch.yaml
+    target:
+      kind: Deployment
 
 components:
-# The webhook serving certificate, the Service fronting the webhook port, and
-# the Deployment patch that mounts the certificate.
-- ../conversion-webhook
+  # The webhook serving certificate, the Service fronting the webhook port, and
+  # the Deployment patch that mounts the certificate.
+  - ../conversion-webhook

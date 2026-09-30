@@ -413,6 +413,9 @@ spec:
                 x-kubernetes-validations:
                 - message: blueGreen may be configured only when strategy is blueGreen
                   rule: self.strategy == 'blueGreen' || !has(self.blueGreen)
+                - message: blueGreen allow must remain false until its runtime flow
+                    is released
+                  rule: self.strategy != 'blueGreen' || !has(self.allow) || !self.allow
               postgresVersion:
                 description: |-
                   PostgresVersion is the PostgreSQL version (major or major.minor).
@@ -1403,19 +1406,52 @@ spec:
                           - postgresDatabaseUID
                           - databaseName
                           x-kubernetes-list-type: map
-                        endpointPublication:
-                          description: |-
-                            EndpointPublication records the generation-scoped handoff from the parent
-                            controller to database access ConfigMap projections.
+                        endpointPreparation:
+                          description: EndpointPreparation records green-endpoint
+                            validation before canonical commit.
                           properties:
                             acknowledgements:
-                              description: |-
-                                Acknowledgements records one acknowledgement from every PostgresDatabase
-                                controller after it has updated its own access ConfigMap projection.
                               items:
-                                description: |-
-                                  BlueGreenEndpointPublicationAcknowledgementStatus records a database-owned
-                                  ConfigMap projection acknowledgement for an endpoint-publication generation.
+                                properties:
+                                  databaseName:
+                                    minLength: 1
+                                    type: string
+                                  endpointFingerprint:
+                                    type: string
+                                  postgresDatabaseName:
+                                    minLength: 1
+                                    type: string
+                                  postgresDatabaseUID:
+                                    minLength: 1
+                                    type: string
+                                  validatedAt:
+                                    format: date-time
+                                    type: string
+                                required:
+                                - databaseName
+                                - postgresDatabaseName
+                                - postgresDatabaseUID
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - postgresDatabaseName
+                              - postgresDatabaseUID
+                              - databaseName
+                              x-kubernetes-list-type: map
+                            generation:
+                              format: int64
+                              type: integer
+                          type: object
+                        endpointPublication:
+                          description: EndpointPublication records database access
+                            ConfigMap publication after canonical commit.
+                          properties:
+                            acknowledgements:
+                              description: Acknowledgements records one post-commit
+                                ConfigMap publication per database.
+                              items:
+                                description: BlueGreenEndpointPublicationAcknowledgementStatus
+                                  records one post-commit publication.
                                 properties:
                                   acknowledgedAt:
                                     format: date-time
@@ -1424,9 +1460,8 @@ spec:
                                     minLength: 1
                                     type: string
                                   endpointFingerprint:
-                                    description: |-
-                                      EndpointFingerprint is the opaque normalized endpoint value verified by
-                                      the parent before canonical publication.
+                                    description: EndpointFingerprint is the published
+                                      endpoint value.
                                     type: string
                                   postgresDatabaseName:
                                     minLength: 1
@@ -1720,8 +1755,9 @@ spec:
                 type: array
               provisionerRef:
                 description: |-
-                  ProvisionerRef contains reference to the provisioner resource managing this PostgresCluster.
-                  Right now, only CNPG is supported.
+                  ProvisionerRef identifies the CNPG Cluster managing this PostgresCluster.
+                  It is authoritative when present; an absent reference falls back to the matching cluster name.
+                  Its UID, when present, prevents a reused name from being treated as the same provider.
                 properties:
                   apiVersion:
                     description: API version of the referent.
