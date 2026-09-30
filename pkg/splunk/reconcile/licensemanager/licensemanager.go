@@ -294,7 +294,7 @@ func applyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		result = *finalResult
 
 		// trigger ClusterManager reconcile by changing the splunk/image-tag annotation
-		err = ChangeClusterManagerAnnotations(ctx, client, cr)
+		err = k8sops.ChangeClusterManagerAnnotations(ctx, client, cr)
 		if err != nil {
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to trigger Cluster Manager reconciliation")
 			return result, err
