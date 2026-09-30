@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"os/exec"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,7 +40,10 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
+
+const readySplunkMemberStatus = "Up"
 
 // VerifyCRCondition checks that the given condition type exists and has the expected status.
 func VerifyCRCondition(crKind, crName string, conditions []metav1.Condition, conditionType enterpriseApi.ConditionType, expectedStatus metav1.ConditionStatus) error {
@@ -52,6 +56,109 @@ func VerifyCRCondition(crKind, crName string, conditions []metav1.Condition, con
 			crKind, crName, conditionType, cond.Status, expectedStatus, cond.Reason, cond.Message)
 	}
 	return nil
+}
+
+// VerifyCRConditionForGeneration verifies both the condition status and that
+// its observed generation exactly matches the current resource generation.
+func VerifyCRConditionForGeneration(crKind, crName string, conditions []metav1.Condition, conditionType enterpriseApi.ConditionType, expectedStatus metav1.ConditionStatus, generation int64) error {
+	if err := VerifyCRCondition(crKind, crName, conditions, conditionType, expectedStatus); err != nil {
+		return err
+	}
+	cond := splcommon.GetCondition(conditions, conditionType)
+	if cond.ObservedGeneration != generation {
+		return fmt.Errorf("%s %s: %s condition is not current (observed generation %d, current generation %d)",
+			crKind, crName, conditionType, cond.ObservedGeneration, generation)
+	}
+	return nil
+}
+
+// VerifyCRNotStalledForGeneration rejects a terminal Stalled=True condition
+// only when it belongs to the current resource generation. A stale condition
+// from an earlier spec is ignored while the controller reconciles the change.
+func VerifyCRNotStalledForGeneration(crKind, crName string, conditions []metav1.Condition, generation int64) error {
+	cond := splcommon.GetCondition(conditions, enterpriseApi.ConditionStalled)
+	if cond == nil || cond.ObservedGeneration != generation || cond.Status != metav1.ConditionTrue {
+		return nil
+	}
+	return fmt.Errorf("%s %s is stalled at generation %d (reason: %s, message: %s)",
+		crKind, crName, generation, cond.Reason, cond.Message)
+}
+
+// VerifyPodReady verifies that a Pod is running, is not terminating, has a
+// Ready=True Pod condition, and has the named application container ready.
+func VerifyPodReady(pod *corev1.Pod, applicationContainer string) error {
+	if pod == nil {
+		return fmt.Errorf("Pod is nil")
+	}
+	if pod.DeletionTimestamp != nil {
+		return fmt.Errorf("Pod %s/%s is terminating", pod.Namespace, pod.Name)
+	}
+	if pod.Status.Phase != corev1.PodRunning {
+		return fmt.Errorf("Pod %s/%s is in phase %s, expected Running", pod.Namespace, pod.Name, pod.Status.Phase)
+	}
+
+	podReady := false
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			podReady = condition.Status == corev1.ConditionTrue
+			break
+		}
+	}
+	if !podReady {
+		return fmt.Errorf("Pod %s/%s does not have Ready=True", pod.Namespace, pod.Name)
+	}
+
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name == applicationContainer {
+			if !status.Ready {
+				return fmt.Errorf("Pod %s/%s container %s is not ready", pod.Namespace, pod.Name, applicationContainer)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("Pod %s/%s has no %s container status", pod.Namespace, pod.Name, applicationContainer)
+}
+
+// VerifyDeploymentReady verifies that a Deployment is fully rolled out for its
+// current generation, with no unavailable or old-revision replicas.
+func VerifyDeploymentReady(deployment *appsv1.Deployment) error {
+	if deployment == nil {
+		return fmt.Errorf("Deployment is nil")
+	}
+	if deployment.DeletionTimestamp != nil {
+		return fmt.Errorf("Deployment %s/%s is terminating", deployment.Namespace, deployment.Name)
+	}
+	if deployment.Spec.Replicas == nil || *deployment.Spec.Replicas < 1 {
+		return fmt.Errorf("Deployment %s/%s has no desired replicas", deployment.Namespace, deployment.Name)
+	}
+	if deployment.Status.ObservedGeneration != deployment.Generation {
+		return fmt.Errorf("Deployment %s/%s status is not current: observed generation %d, current generation %d",
+			deployment.Namespace, deployment.Name, deployment.Status.ObservedGeneration, deployment.Generation)
+	}
+
+	desired := *deployment.Spec.Replicas
+	if deployment.Status.Replicas != desired ||
+		deployment.Status.UpdatedReplicas != desired ||
+		deployment.Status.ReadyReplicas != desired ||
+		deployment.Status.AvailableReplicas != desired ||
+		deployment.Status.UnavailableReplicas != 0 {
+		return fmt.Errorf("Deployment %s/%s is not fully rolled out: desired=%d replicas=%d updated=%d ready=%d available=%d unavailable=%d",
+			deployment.Namespace,
+			deployment.Name,
+			desired,
+			deployment.Status.Replicas,
+			deployment.Status.UpdatedReplicas,
+			deployment.Status.ReadyReplicas,
+			deployment.Status.AvailableReplicas,
+			deployment.Status.UnavailableReplicas,
+		)
+	}
+	for _, condition := range deployment.Status.Conditions {
+		if condition.Type == appsv1.DeploymentAvailable && condition.Status == corev1.ConditionTrue {
+			return nil
+		}
+	}
+	return fmt.Errorf("Deployment %s/%s does not have Available=True", deployment.Namespace, deployment.Name)
 }
 
 // VerifyCRConditionsForPhase verifies that all conditions (Ready, Progressing, Paused)
@@ -87,6 +194,234 @@ func VerifyCRConditionsForPhase(crKind, crName string, conditions []metav1.Condi
 		return fmt.Errorf("phase %s: %w", phase, err)
 	}
 	return VerifyCRCondition(crKind, crName, conditions, enterpriseApi.ConditionPaused, metav1.ConditionFalse)
+}
+
+// VerifyIndexerClusterReadyStatus verifies the generation-current status shared
+// by classic and Noah-backed IndexerClusters. Callers can require additional
+// mode-specific True conditions without duplicating the common readiness rules.
+func VerifyIndexerClusterReadyStatus(idxc *enterpriseApi.IndexerCluster, requiredConditions ...enterpriseApi.ConditionType) error {
+	if idxc == nil {
+		return fmt.Errorf("IndexerCluster is nil")
+	}
+	if err := verifyReadyStatus(
+		"IndexerCluster",
+		idxc.Name,
+		idxc.Generation,
+		idxc.Status.ObservedGeneration,
+		idxc.Status.Phase,
+		idxc.Spec.Replicas,
+		idxc.Status.Replicas,
+		idxc.Status.ReadyReplicas,
+		idxc.Status.Conditions,
+		requiredConditions...,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+// VerifySearchHeadClusterReadyStatus verifies the generation-current status
+// shared by classic and Noah-backed SearchHeadClusters, including deployer,
+// captain, initialization, and minimum-member readiness.
+func VerifySearchHeadClusterReadyStatus(shc *enterpriseApi.SearchHeadCluster, requiredConditions ...enterpriseApi.ConditionType) error {
+	if shc == nil {
+		return fmt.Errorf("SearchHeadCluster is nil")
+	}
+	if err := verifyReadyStatus(
+		"SearchHeadCluster",
+		shc.Name,
+		shc.Generation,
+		shc.Status.ObservedGeneration,
+		shc.Status.Phase,
+		shc.Spec.Replicas,
+		shc.Status.Replicas,
+		shc.Status.ReadyReplicas,
+		shc.Status.Conditions,
+		requiredConditions...,
+	); err != nil {
+		return err
+	}
+	if shc.Status.DeployerPhase != enterpriseApi.PhaseReady ||
+		!shc.Status.Initialized ||
+		shc.Status.Captain == "" ||
+		!shc.Status.CaptainReady ||
+		!shc.Status.MinPeersJoined {
+		return fmt.Errorf("SearchHeadCluster %s is not ready: deployerPhase=%s initialized=%t captain=%q captainReady=%t minPeersJoined=%t",
+			shc.Name, shc.Status.DeployerPhase, shc.Status.Initialized, shc.Status.Captain,
+			shc.Status.CaptainReady, shc.Status.MinPeersJoined)
+	}
+	return nil
+}
+
+// VerifyLicenseManagerReadyStatus verifies that the LicenseManager status and
+// Ready conditions describe the resource's current generation.
+func VerifyLicenseManagerReadyStatus(lm *enterpriseApi.LicenseManager) error {
+	if lm == nil {
+		return fmt.Errorf("LicenseManager is nil")
+	}
+	return verifyGenerationReady(
+		"LicenseManager",
+		lm.Name,
+		lm.Generation,
+		lm.Status.ObservedGeneration,
+		lm.Status.Phase,
+		lm.Status.Conditions,
+	)
+}
+
+// ReadyIndexerClusterPods returns the stable StatefulSet Pod names projected in
+// a fully ready IndexerCluster status. It rejects missing, duplicate, stale, or
+// non-searchable peer entries.
+func ReadyIndexerClusterPods(idxc *enterpriseApi.IndexerCluster) ([]string, error) {
+	if idxc == nil {
+		return nil, fmt.Errorf("IndexerCluster is nil")
+	}
+	if len(idxc.Status.Peers) != int(idxc.Spec.Replicas) {
+		return nil, fmt.Errorf("IndexerCluster %s reports %d peers, expected %d", idxc.Name, len(idxc.Status.Peers), idxc.Spec.Replicas)
+	}
+	expected := expectedStatefulSetPods(splcommon.SplunkIndexer, idxc.Name, idxc.Spec.Replicas)
+	pods := make([]string, 0, len(idxc.Status.Peers))
+	seenNames := make(map[string]struct{}, len(idxc.Status.Peers))
+	seenIDs := make(map[string]struct{}, len(idxc.Status.Peers))
+	for _, peer := range idxc.Status.Peers {
+		if peer.ID == "" || peer.Name == "" || peer.Status != readySplunkMemberStatus || !peer.Searchable {
+			return nil, fmt.Errorf("IndexerCluster %s peer is not ready: id=%q name=%q status=%q searchable=%t",
+				idxc.Name, peer.ID, peer.Name, peer.Status, peer.Searchable)
+		}
+		if _, duplicate := seenNames[peer.Name]; duplicate {
+			return nil, fmt.Errorf("IndexerCluster %s reports duplicate peer %q", idxc.Name, peer.Name)
+		}
+		if _, duplicate := seenIDs[peer.ID]; duplicate {
+			return nil, fmt.Errorf("IndexerCluster %s reports duplicate peer ID %q", idxc.Name, peer.ID)
+		}
+		if _, wanted := expected[peer.Name]; !wanted {
+			return nil, fmt.Errorf("IndexerCluster %s reports unexpected peer Pod %q", idxc.Name, peer.Name)
+		}
+		seenNames[peer.Name] = struct{}{}
+		seenIDs[peer.ID] = struct{}{}
+		pods = append(pods, peer.Name)
+	}
+	sort.Strings(pods)
+	return pods, nil
+}
+
+// ReadySearchHeadClusterPods returns the stable StatefulSet Pod names projected
+// in a fully ready SearchHeadCluster status. It rejects unregistered members
+// and members with an in-flight lifecycle operation.
+func ReadySearchHeadClusterPods(shc *enterpriseApi.SearchHeadCluster) ([]string, error) {
+	if shc == nil {
+		return nil, fmt.Errorf("SearchHeadCluster is nil")
+	}
+	if len(shc.Status.Members) != int(shc.Spec.Replicas) {
+		return nil, fmt.Errorf("SearchHeadCluster %s reports %d members, expected %d", shc.Name, len(shc.Status.Members), shc.Spec.Replicas)
+	}
+	expected := expectedStatefulSetPods(splcommon.SplunkSearchHead, shc.Name, shc.Spec.Replicas)
+	pods := make([]string, 0, len(shc.Status.Members))
+	seen := make(map[string]struct{}, len(shc.Status.Members))
+	for _, member := range shc.Status.Members {
+		if member.Name == "" || member.Status != readySplunkMemberStatus || !member.Registered || member.CurrentOperation != "" {
+			return nil, fmt.Errorf("SearchHeadCluster %s member is not ready: name=%q status=%q registered=%t operation=%q",
+				shc.Name, member.Name, member.Status, member.Registered, member.CurrentOperation)
+		}
+		if _, duplicate := seen[member.Name]; duplicate {
+			return nil, fmt.Errorf("SearchHeadCluster %s reports duplicate member %q", shc.Name, member.Name)
+		}
+		if _, wanted := expected[member.Name]; !wanted {
+			return nil, fmt.Errorf("SearchHeadCluster %s reports unexpected member Pod %q", shc.Name, member.Name)
+		}
+		seen[member.Name] = struct{}{}
+		pods = append(pods, member.Name)
+	}
+	sort.Strings(pods)
+	return pods, nil
+}
+
+func expectedStatefulSetPods(instanceType splcommon.InstanceType, name string, replicas int32) map[string]struct{} {
+	pods := make(map[string]struct{}, replicas)
+	for ordinal := int32(0); ordinal < replicas; ordinal++ {
+		pods[splutil.GetSplunkStatefulsetPodName(instanceType, name, ordinal)] = struct{}{}
+	}
+	return pods
+}
+
+func verifyReadyStatus(
+	crKind string,
+	crName string,
+	generation int64,
+	observedGeneration int64,
+	phase enterpriseApi.Phase,
+	expectedReplicas int32,
+	replicas int32,
+	readyReplicas int32,
+	conditions []metav1.Condition,
+	requiredConditions ...enterpriseApi.ConditionType,
+) error {
+	if err := verifyGenerationReady(
+		crKind,
+		crName,
+		generation,
+		observedGeneration,
+		phase,
+		conditions,
+		requiredConditions...,
+	); err != nil {
+		return err
+	}
+	if replicas != expectedReplicas || readyReplicas != expectedReplicas {
+		return fmt.Errorf("%s %s is not ready: phase=%s replicas=%d readyReplicas=%d expected=%d",
+			crKind, crName, phase, replicas, readyReplicas, expectedReplicas)
+	}
+	return nil
+}
+
+func verifyGenerationReady(
+	crKind string,
+	crName string,
+	generation int64,
+	observedGeneration int64,
+	phase enterpriseApi.Phase,
+	conditions []metav1.Condition,
+	requiredConditions ...enterpriseApi.ConditionType,
+) error {
+	if observedGeneration != generation {
+		return fmt.Errorf("%s %s status is not current: observed generation %d, current generation %d",
+			crKind, crName, observedGeneration, generation)
+	}
+	if phase != enterpriseApi.PhaseReady {
+		return fmt.Errorf("%s %s is not ready: phase=%s", crKind, crName, phase)
+	}
+	if err := VerifyCRConditionsForPhase(crKind, crName, conditions, enterpriseApi.PhaseReady); err != nil {
+		return err
+	}
+	currentConditions := []struct {
+		conditionType enterpriseApi.ConditionType
+		status        metav1.ConditionStatus
+	}{
+		{enterpriseApi.ConditionReady, metav1.ConditionTrue},
+		{enterpriseApi.ConditionProgressing, metav1.ConditionFalse},
+		{enterpriseApi.ConditionPaused, metav1.ConditionFalse},
+	}
+	for _, expected := range currentConditions {
+		if err := VerifyCRConditionForGeneration(crKind, crName, conditions, expected.conditionType, expected.status, generation); err != nil {
+			return err
+		}
+	}
+	if err := VerifyCRNotStalledForGeneration(crKind, crName, conditions, generation); err != nil {
+		return err
+	}
+	for _, conditionType := range requiredConditions {
+		if err := VerifyCRConditionForGeneration(
+			crKind,
+			crName,
+			conditions,
+			conditionType,
+			metav1.ConditionTrue,
+			generation,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // PodDetailsStruct captures output of kubectl get pods podname -o json
