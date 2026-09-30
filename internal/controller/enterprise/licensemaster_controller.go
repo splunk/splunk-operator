@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,21 +18,16 @@ package controller
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
-	"github.com/splunk/splunk-operator/internal/controller/common"
-	"github.com/splunk/splunk-operator/pkg/logging"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-
-	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/internal/controller/common"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemaster"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -82,46 +77,7 @@ type LicenseMasterReconciler struct {
 func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "LicenseMaster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseMaster")
-
-	logger := slog.Default().With("controller", "LicenseMaster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
-	ctx = logging.WithLogger(ctx, logger)
-
-	// Fetch the LicenseMaster
-	instance := &enterpriseApiV3.LicenseMaster{}
-	err := r.Get(ctx, req.NamespacedName, instance)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			// Request object not found, could have been deleted after
-			// reconcile request.  Owned objects are automatically
-			// garbage collected. For additional cleanup logic use
-			// finalizers.  Return and don't requeue
-			return ctrl.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load license manager data")
-	}
-
-	// If the reconciliation is paused, requeue
-	if instance.GetAnnotations()[enterpriseApiV3.LicenseMasterPausedAnnotation] == "true" {
-		return ctrl.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, nil
-	}
-
-	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
-
-	// Pass event recorder through context
-	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
-
-	result, err := ApplyLicenseMaster(ctx, r.Client, instance)
-	if result.Requeue && result.RequeueAfter != 0 {
-		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
-	}
-
-	return result, err
-}
-
-// ApplyLicenseMaster adding to handle unit test case
-var ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
-	return enterprise.ApplyLicenseMaster(ctx, client, instance)
+	return licensemaster.Apply(ctx, r.Client, req.NamespacedName, r.Recorder)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -162,8 +118,8 @@ func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if !ok {
 					return nil
 				}
-				var list enterpriseApiV3.LicenseMasterList
-				if err := r.Client.List(ctx, &list, client.InNamespace(cm.Namespace)); err != nil {
+				list, err := k8sops.GetLicenseMasterList(ctx, r.Client, cm, []client.ListOption{client.InNamespace(cm.Namespace)})
+				if err != nil {
 					return nil
 				}
 				var reqs []reconcile.Request

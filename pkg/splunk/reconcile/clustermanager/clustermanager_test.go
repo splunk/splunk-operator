@@ -39,7 +39,6 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
-	lmreconcile "github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemanager"
 	monitoringconsole "github.com/splunk/splunk-operator/pkg/splunk/reconcile/monitoringconsole"
 	upgrade "github.com/splunk/splunk-operator/pkg/splunk/reconcile/upgrade"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -1029,6 +1028,109 @@ func createLicenseManagerStatefulSetForTest(t *testing.T, ctx context.Context, c
 	}
 }
 
+func TestChangeClusterManagerAnnotations(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+	// define LM and CM
+	lm := &enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-lm",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.LicenseManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Image:           "splunk/splunk:latest",
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+	cm := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cm",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					Image:           "splunk/splunk:latest",
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: "test-lm",
+				},
+			},
+		},
+	}
+	lm.Spec.Image = "splunk/splunk:latest"
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := spltest.NewFakeClientBuilder(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{})
+	client := builder.Build()
+
+	// Create the instances
+	client.Create(ctx, lm)
+	createLicenseManagerStatefulSetForTest(t, ctx, client, lm)
+	var err error
+	namespacedName := types.NamespacedName{
+		Name:      lm.Name,
+		Namespace: lm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, lm)
+	if err != nil {
+		t.Errorf("changeLicenseManagerAnnotations should not have returned error=%v", err)
+	}
+
+	// create pods for license manager
+	spltest.CreatePods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
+	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
+	lm.Status.TelAppInstalled = true
+	err = client.Get(ctx, namespacedName, lm)
+	if err != nil {
+		t.Errorf("changeLicenseManagerAnnotations should not have returned error=%v", err)
+	}
+	lm.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, lm)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+	stubCMMultisiteEnvVars(t)
+	cm.Kind = "ClusterManager"
+	client.Create(ctx, cm)
+	_, err = ApplyClusterManager(ctx, client, cm, nil)
+	if err != nil {
+		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
+	}
+	err = k8sops.ChangeClusterManagerAnnotations(ctx, client, lm)
+	if err != nil {
+		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
+	}
+	clusterManager := &enterpriseApi.ClusterManager{}
+	namespacedName = types.NamespacedName{
+		Name:      cm.Name,
+		Namespace: cm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, clusterManager)
+	if err != nil {
+		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
+	}
+
+	annotations := clusterManager.GetAnnotations()
+	if annotations["splunk/image-tag"] != lm.Spec.Image {
+		t.Errorf("changeClusterManagerAnnotations should have set the checkUpdateImage annotation field to the current image")
+	}
+}
+
 func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
@@ -1151,116 +1253,6 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 
 	if !check {
 		t.Errorf("isClusterManagerReadyForUpgrade: CM should be ready for upgrade")
-	}
-}
-
-func TestChangeClusterManagerAnnotations(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	ctx := context.TODO()
-
-	// define LM and CM
-	lm := &enterpriseApi.LicenseManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-lm",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.LicenseManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Image:           "splunk/splunk:latest",
-					ImagePullPolicy: "Always",
-				},
-				Volumes: []corev1.Volume{},
-			},
-		},
-	}
-
-	cm := &enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cm",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Image:           "splunk/splunk:latest",
-					ImagePullPolicy: "Always",
-				},
-				Volumes: []corev1.Volume{},
-				LicenseManagerRef: corev1.ObjectReference{
-					Name: "test-lm",
-				},
-			},
-		},
-	}
-	lm.Spec.Image = "splunk/splunk:latest"
-
-	sch := pkgruntime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(sch))
-	utilruntime.Must(corev1.AddToScheme(sch))
-	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-
-	builder := spltest.NewFakeClientBuilder(sch).
-		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
-		WithStatusSubresource(&enterpriseApi.ClusterManager{})
-	client := builder.Build()
-
-	// Create the instances
-	client.Create(ctx, lm)
-	createLicenseManagerStatefulSetForTest(t, ctx, client, lm)
-	var err error
-
-	namespacedName := types.NamespacedName{
-		Name:      lm.Name,
-		Namespace: lm.Namespace,
-	}
-	err = client.Get(ctx, namespacedName, lm)
-	if err != nil {
-		t.Errorf("changeLicenseManagerAnnotations should not have returned error=%v", err)
-	}
-
-	// create pods for license manager
-	spltest.CreatePods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
-	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
-	lm.Status.TelAppInstalled = true
-	err = client.Get(ctx, namespacedName, lm)
-	if err != nil {
-		t.Errorf("changeLicenseManagerAnnotations should not have returned error=%v", err)
-	}
-
-	lm.Status.Phase = enterpriseApi.PhaseReady
-	err = client.Status().Update(ctx, lm)
-	if err != nil {
-		t.Errorf("Unexpected update pod  %v", err)
-		debug.PrintStack()
-	}
-
-	stubCMMultisiteEnvVars(t)
-
-	cm.Kind = "ClusterManager"
-	client.Create(ctx, cm)
-	_, err = ApplyClusterManager(ctx, client, cm, nil)
-	if err != nil {
-		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
-	}
-
-	err = lmreconcile.ChangeClusterManagerAnnotations(ctx, client, lm)
-	if err != nil {
-		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
-	}
-	clusterManager := &enterpriseApi.ClusterManager{}
-	namespacedName = types.NamespacedName{
-		Name:      cm.Name,
-		Namespace: cm.Namespace,
-	}
-	err = client.Get(ctx, namespacedName, clusterManager)
-	if err != nil {
-		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
-	}
-
-	annotations := clusterManager.GetAnnotations()
-	if annotations["splunk/image-tag"] != lm.Spec.Image {
-		t.Errorf("changeClusterManagerAnnotations should have set the checkUpdateImage annotation field to the current image")
 	}
 }
 

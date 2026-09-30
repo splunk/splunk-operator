@@ -54,6 +54,19 @@ import (
 
 func init() {
 	initGlobalResourceTracker()
+	// Re-Assigning GetReadinessScriptLocation, GetLivenessScriptLocation, GetStartupScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation
+	GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
+		return fileLocation
+	}
+	GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
+		return fileLocation
+	}
+	GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
+		return fileLocation
+	}
 }
 
 type mockEvent struct {
@@ -2896,39 +2909,6 @@ func TestGetSearchHeadEnv(t *testing.T) {
 	}
 }
 
-func TestGetLicenseMasterURL(t *testing.T) {
-	cr := enterpriseApi.SearchHeadCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.SearchHeadClusterSpec{
-			Replicas: 2,
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				LicenseMasterRef: corev1.ObjectReference{
-					Name:      "test",
-					Namespace: "test",
-				},
-			},
-		},
-	}
-	// With LMRef
-	envVar := getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
-	if envVar == nil {
-		t.Errorf("Expected a valid return value")
-	}
-
-	cr = enterpriseApi.SearchHeadCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-	}
-	envVar = getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
-	if envVar == nil {
-		t.Errorf("Expected a valid return value")
-	}
-}
 func TestGetCurrentImage(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
