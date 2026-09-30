@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package licensemaster
 
 import (
 	"context"
@@ -21,15 +21,8 @@ import (
 	"reflect"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
@@ -40,10 +33,52 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// ApplyLicenseMaster reconciles the state for the Splunk Enterprise license manager.
-func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+// apply owns the request-level LicenseMaster reconciliation boundary.
+func apply(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, recorder record.EventRecorder) (reconcile.Result, error) {
+	logger := logging.FromContext(ctx).With("controller", "LicenseMaster", "name", namespacedName.Name, "namespace", namespacedName.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
+	ctx = logging.WithLogger(ctx, logger)
+
+	instance := &enterpriseApiV3.LicenseMaster{}
+	err := client.Get(ctx, namespacedName, instance)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, fmt.Errorf("could not load license master data: %w", err)
+	}
+
+	if instance.GetAnnotations()[enterpriseApiV3.LicenseMasterPausedAnnotation] == "true" {
+		return reconcile.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, nil
+	}
+
+	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
+	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, recorder)
+
+	result, err := ApplyLicenseMaster(ctx, client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
+}
+
+// Apply is the request-level entry point used by the controller.
+var Apply = apply
+
+// ApplyLicenseMaster reconciles the state for the Splunk Enterprise license master.
+var ApplyLicenseMaster = applyLicenseMaster
+
+func applyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -52,7 +87,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 	logger := logging.FromContext(ctx).With("func", "ApplyLicenseMaster")
 
-	eventPublisher := GetEventPublisher(ctx, cr)
+	eventPublisher := k8sops.GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	var err error
@@ -88,7 +123,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 
 	// create or update general config resources
-	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseMaster)
+	_, err = k8sops.ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkLicenseMaster)
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, fmt.Errorf("apply splunk config: %w", err)
@@ -113,7 +148,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkLicenseMaster)
+		k8sops.DeleteOwnerReferencesForResources(ctx, client, cr, splcommon.SplunkLicenseMaster)
 
 		terminating, err := k8sops.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -128,7 +163,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 
 	// create or update a service
-	err = k8sops.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, false))
+	err = k8sops.ApplyService(ctx, client, resources.GetSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkLicenseMaster, false))
 	if err != nil {
 		return result, err
 	}
@@ -162,7 +197,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkMonitoringConsole, cr.GetNamespace())}
 		err = k8sops.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			logger.ErrorContext(ctx, "error in deleting automated MonitoringConsole resource", "error", err)
@@ -191,16 +226,17 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	return result, nil
 }
 
-// getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
+// getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
 func getLicenseMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster) (*appsv1.StatefulSet, error) {
-	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(SplunkLicenseMaster, cr.GetName(), cr.GetNamespace(), 1)))
+	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkLicenseMaster, cr.GetName(), cr.GetNamespace(), 1)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkLicenseMaster, 1, []corev1.EnvVar{}, certMounts)
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkLicenseMaster, 1, []corev1.EnvVar{})
 	if err != nil {
 		return ss, err
 	}
+	certs.InjectCertMounts(&ss.Spec.Template, certMounts)
 
 	// Setup App framework staging volume for apps
 	resources.SetupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
@@ -208,7 +244,7 @@ func getLicenseMasterStatefulSet(ctx context.Context, client splcommon.Controlle
 	return ss, err
 }
 
-// validateLicenseManagerSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
+// validateLicenseMasterSpec checks validity and makes default updates to a LicenseMasterSpec, and returns error if something is wrong.
 func validateLicenseMasterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
@@ -218,22 +254,27 @@ func validateLicenseMasterSpec(ctx context.Context, c splcommon.ControllerClient
 		}
 	}
 
-	return ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+	return reconcileutil.ValidateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
-// helper function to get the list of LicenseMaster types in the current namespace
-func getLicenseMasterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
-	logger := logging.FromContext(ctx).With("func", "getLicenseMasterList", "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	objectList := enterpriseApiV3.LicenseMasterList{}
-
-	err := c.List(context.TODO(), &objectList, listOpts...)
-	numOfObjects := len(objectList.Items)
-
-	if err != nil {
-		logger.ErrorContext(ctx, "LicenseMaster types not found in namespace", "error", err, "namespace", cr.GetNamespace())
-		return numOfObjects, err
+// getLicenseMasterURL returns URL of license master.
+func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.LicenseMasterRef.Name != "" {
+		licenseManagerURL := splcommon.GetSplunkServiceName(splcommon.SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  splcommon.LicenseManagerURL,
+				Value: licenseManagerURL,
+			},
+		}
 	}
-
-	return numOfObjects, nil
+	return []corev1.EnvVar{
+		{
+			Name:  splcommon.LicenseManagerURL,
+			Value: splcommon.GetSplunkServiceName(splcommon.SplunkLicenseMaster, cr.GetName(), false),
+		},
+	}
 }

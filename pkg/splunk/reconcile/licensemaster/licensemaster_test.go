@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package licensemaster
 
 import (
 	"context"
@@ -41,6 +41,7 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -48,18 +49,23 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 )
 
+const (
+	testStack1LicenseMasterServiceTestService = "Service-test-splunk-stack1-" + string(splcommon.SplunkLicenseMaster) + "-service"
+	testStack1LicenseMasterStatefulSet        = "StatefulSet-test-splunk-stack1-" + string(splcommon.SplunkLicenseMaster)
+)
+
 func init() {
-	// Re-Assigning GetReadinessScriptLocation, GetLivenessScriptLocation, GetStartupScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation
-	GetReadinessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
+	// Re-Assigning splutil.GetReadinessScriptLocation, splutil.GetLivenessScriptLocation, splutil.GetStartupScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation
+	splutil.GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/readinessProbe.sh")
 		return fileLocation
 	}
-	GetLivenessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
+	splutil.GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/livenessProbe.sh")
 		return fileLocation
 	}
-	GetStartupScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
+	splutil.GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../../tools/k8_probes/startupProbe.sh")
 		return fileLocation
 	}
 }
@@ -71,8 +77,8 @@ func TestApplyLicenseMaster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-license-master-stack1-configmap"},
-		{MetaName: "*v1." + testStack1LicenseManagerServiceTestService},
-		{MetaName: "*v1." + testStack1LicenseManagerStatefulSet},
+		{MetaName: "*v1." + testStack1LicenseMasterServiceTestService},
+		{MetaName: "*v1." + testStack1LicenseMasterStatefulSet},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -124,7 +130,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 		_, err := ApplyLicenseMaster(context.Background(), c, cr.(*enterpriseApiV3.LicenseMaster))
 		return true, err
 	}
-	splunkDeletionTester(t, revised, deleteFunc)
+	spltest.SplunkDeletionTester(t, revised, deleteFunc)
 
 	// Negative testing
 	c := spltest.NewMockClient()
@@ -179,15 +185,15 @@ func TestGetLicenseMasterStatefulSet(t *testing.T) {
 			}
 			return getLicenseMasterStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getLicenseMasterStatefulSet()", f, want)
+		spltest.ConfigTester(t, "getLicenseMasterStatefulSet()", f, want)
 	}
 
-	test(loadFixture(t, "statefulset_stack1_license_master_base.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_license_master_base.json"))
 	cr.Spec.LicenseURL = "/mnt/splunk.lic"
-	test(loadFixture(t, "statefulset_stack1_license_master_base_1.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_license_master_base_1.json"))
 	// Allow installing apps via DefaultsURLApps for Licence Manager
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
-	test(loadFixture(t, "statefulset_stack1_license_master_with_apps.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_license_master_with_apps.json"))
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -197,7 +203,7 @@ func TestGetLicenseMasterStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
-	test(loadFixture(t, "statefulset_stack1_license_master_with_service_account.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_license_master_with_service_account.json"))
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
 		{
@@ -205,12 +211,46 @@ func TestGetLicenseMasterStatefulSet(t *testing.T) {
 			Value: "test_value",
 		},
 	}
-	test(loadFixture(t, "statefulset_stack1_license_master_with_service_account_1.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_license_master_with_service_account_1.json"))
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
-	test(loadFixture(t, "statefulset_stack1_license_master_with_service_account_2.json"))
+	test(spltest.LoadFixture(t, "statefulset_stack1_license_master_with_service_account_2.json"))
+}
+
+func TestGetLicenseMasterURL(t *testing.T) {
+	cr := enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			Replicas: 2,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				LicenseMasterRef: corev1.ObjectReference{
+					Name:      "test",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+	// With LMRef
+	envVar := getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	if envVar == nil {
+		t.Errorf("Expected a valid return value")
+	}
+
+	cr = enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+	}
+	envVar = getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	if envVar == nil {
+		t.Errorf("Expected a valid return value")
+	}
 }
 
 func TestLicenseMasterSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
@@ -298,14 +338,6 @@ func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 	client.AddObject(&s3Secret)
 	configmap := spltest.GetMockPerCRConfigMap("splunk-license-master-stack1-configmap")
 	client.AddObject(&configmap)
-
-	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
-	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
-	}
 
 	_, err = ApplyLicenseMaster(ctx, client, &cr)
 
@@ -452,20 +484,17 @@ func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
-		remoteDataClientMgr := &RemoteDataClientManager{client: client,
-			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
-			vol:      &vol,
-			location: appSource.Location,
-			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		remoteDataClientMgr := appframework.NewRemoteDataClientManager(client, &cr, &cr.Spec.AppFrameworkConfig, &vol, appSource.Location,
+			func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 				cl := spltest.MockAWSS3Client{}
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
+			func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
 				c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
-		}
+		)
 
 		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 		if err != nil {
@@ -573,24 +602,19 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	getClientWrapper := splstorage.RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splstorage.NewMockAWSS3Client)
 
-	remoteDataClientMgr := &RemoteDataClientManager{
-		client:          client,
-		cr:              &lm,
-		appFrameworkRef: &lm.Spec.AppFrameworkConfig,
-		vol:             &vol,
-		location:        appSource.Location,
-		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	getRemoteDataClient := func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+		appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
+		location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
+		// Get the mock client
+		c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
+		return c, err
+	}
+	remoteDataClientMgr := appframework.NewRemoteDataClientManager(client, &lm, &lm.Spec.AppFrameworkConfig, &vol, appSource.Location,
+		func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			// Purposefully return nil here so that we test the error scenario
 			return nil
 		},
-		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
-			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-			location string, fn splcommon.GetInitFunc) (splstorage.SplunkRemoteDataClient, error) {
-			// Get the mock client
-			c, err := appframework.GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
-			return c, err
-		},
-	}
+		getRemoteDataClient)
 
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
@@ -639,11 +663,13 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
 
-	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-		// To test the error scenario, do no set the Objects member yet
-		cl := spltest.MockAWSS3Client{}
-		return cl
-	}
+	remoteDataClientMgr = appframework.NewRemoteDataClientManager(client, &lm, &lm.Spec.AppFrameworkConfig, &vol, appSource.Location,
+		func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+			// To test the error scenario, do no set the Objects member yet
+			cl := spltest.MockAWSS3Client{}
+			return cl
+		},
+		getRemoteDataClient)
 
 	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 	if err != nil {
@@ -738,14 +764,6 @@ func TestApplyLicenseMasterDeletion(t *testing.T) {
 	}
 	c.ListObj = &pvclist
 
-	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
-	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
-	}
-
 	_, err = ApplyLicenseMaster(ctx, c, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseMaster should not have returned error here.")
@@ -765,9 +783,9 @@ func TestLicenseMasterList(t *testing.T) {
 
 	var numOfObjects int
 	// Invalid scenario since we haven't added license master to the list yet
-	_, err := getLicenseMasterList(ctx, client, &lm, listOpts)
+	_, err := k8sops.GetLicenseMasterList(ctx, client, &lm, listOpts)
 	if err == nil {
-		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
+		t.Errorf("GetLicenseMasterList should have returned error as no LicenseMaster objects were added to the list yet")
 	}
 
 	lmList := &enterpriseApiV3.LicenseMasterList{}
@@ -775,11 +793,12 @@ func TestLicenseMasterList(t *testing.T) {
 
 	client.ListObj = lmList
 
-	numOfObjects, err = getLicenseMasterList(ctx, client, &lm, listOpts)
+	objList, err := k8sops.GetLicenseMasterList(ctx, client, &lm, listOpts)
 	if err != nil {
-		t.Errorf("getNumOfObjects should not have returned error=%v", err)
+		t.Errorf("GetLicenseMasterList should not have returned error=%v", err)
 	}
 
+	numOfObjects = len(objList.Items)
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of LicenseMaster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
@@ -847,24 +866,25 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 
 	// Mock VerifyCMasterisMultisite to avoid HTTP timeout when ApplyClusterMaster is called
-	savedVerifyCMasterisMultisite := VerifyCMasterisMultisite
-	defer func() { VerifyCMasterisMultisite = savedVerifyCMasterisMultisite }()
-	VerifyCMasterisMultisite = func(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-		extraEnv := getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
-		return extraEnv, nil
+	savedVerifyCMasterisMultisite := enterprise.VerifyCMasterisMultisite
+	defer func() { enterprise.VerifyCMasterisMultisite = savedVerifyCMasterisMultisite }()
+	enterprise.VerifyCMasterisMultisite = func(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		return []corev1.EnvVar{
+			{
+				Name:  splcommon.ClusterManagerURL,
+				Value: splcommon.GetSplunkServiceName(splcommon.SplunkClusterMaster, cr.GetName(), false),
+			},
+		}, nil
 	}
-
-	// Initialize GlobalResourceTracker to enable app framework
-	initGlobalResourceTracker()
 
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	savedGetAppsList := GetAppsList
-	defer func() { GetAppsList = savedGetAppsList }()
-	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
+	savedGetAppsList := appframework.GetAppsList
+	defer func() { appframework.GetAppsList = savedGetAppsList }()
+	appframework.GetAppsList = func(ctx context.Context, remoteDataClientMgr appframework.RemoteDataClientManager) (splcommon.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splcommon.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
@@ -895,7 +915,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(sch))
 
-	builder := newFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -1007,26 +1027,26 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	// simulate service
 	err := c.Create(ctx, service)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
+		t.Errorf("Unexpected error while running reconciliation for license master %v", err)
 		debug.PrintStack()
 	}
 
 	// simulate create stateful set
 	err = c.Create(ctx, statefulset)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
+		t.Errorf("Unexpected error while running reconciliation for license master %v", err)
 		debug.PrintStack()
 	}
 
-	// simulate create clustermanager instance before reconciliation
+	// simulate create license master instance before reconciliation
 	err = c.Create(ctx, licensemaster)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
+		t.Errorf("Unexpected error while running reconciliation for license master %v", err)
 		debug.PrintStack()
 	}
 	_, err = ApplyLicenseMaster(ctx, c, licensemaster)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
+		t.Errorf("Unexpected error while running reconciliation for license master %v", err)
 		debug.PrintStack()
 	}
 
@@ -1037,7 +1057,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 
 	err = c.Get(ctx, namespacedName, licensemaster)
 	if err != nil {
-		t.Errorf("Unexpected get license manager %v", err)
+		t.Errorf("Unexpected get license master %v", err)
 		debug.PrintStack()
 	}
 
@@ -1056,20 +1076,20 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 	err = c.Status().Update(ctx, licensemaster)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
+		t.Errorf("Unexpected error while running reconciliation for license master with app framework  %v", err)
 		debug.PrintStack()
 	}
 
 	err = c.Get(ctx, namespacedName, licensemaster)
 	if err != nil {
-		t.Errorf("Unexpected get license manager %v", err)
+		t.Errorf("Unexpected get license master %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
 	_, err = ApplyLicenseMaster(ctx, c, licensemaster)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
+		t.Errorf("Unexpected error while running reconciliation for license master with app framework  %v", err)
 		debug.PrintStack()
 	}
 
@@ -1123,7 +1143,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 	err = c.Get(ctx, stNamespacedName, statefulset)
 	if err != nil {
-		t.Errorf("Unexpected get license manager %v", err)
+		t.Errorf("Unexpected get license master %v", err)
 		debug.PrintStack()
 	}
 
@@ -1138,7 +1158,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 
 	err = c.Get(ctx, namespacedName, licensemaster)
 	if err != nil {
-		t.Errorf("Unexpected get license manager %v", err)
+		t.Errorf("Unexpected get license master %v", err)
 		debug.PrintStack()
 	}
 
@@ -1241,7 +1261,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterMaster(ctx, c, clustermanager)
+	_, err = enterprise.ApplyClusterMaster(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
@@ -1315,7 +1335,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterMaster(ctx, c, clustermanager)
+	_, err = enterprise.ApplyClusterMaster(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
@@ -1354,7 +1374,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	// call reconciliation
 	_, err = ApplyLicenseMaster(ctx, c, licensemaster)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for license manager with app framework  %v", err)
+		t.Errorf("Unexpected error while running reconciliation for license master with app framework  %v", err)
 		debug.PrintStack()
 	}
 }

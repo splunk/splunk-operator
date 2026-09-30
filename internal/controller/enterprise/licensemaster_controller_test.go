@@ -1,3 +1,18 @@
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
+
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package controller
 
 import (
@@ -6,10 +21,11 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/reconcile/licensemaster"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -21,17 +37,21 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
+var defaultLicenseMasterApply = licensemaster.Apply
+var defaultLicenseMasterApplyLicenseMaster = licensemaster.ApplyLicenseMaster
+
 var _ = Describe("LicenseMaster Controller", Label("integration"), func() {
 
 	AfterEach(func() {
-
+		licensemaster.Apply = defaultLicenseMasterApply
+		licensemaster.ApplyLicenseMaster = defaultLicenseMasterApplyLicenseMaster
 	})
 
 	Context("LicenseMaster Management", func() {
 
 		It("Get LicenseMaster custom resource should failed", func() {
 			namespace := "ns-splunk-lmaster-1"
-			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+			licensemaster.ApplyLicenseMaster = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -44,7 +64,7 @@ var _ = Describe("LicenseMaster Controller", Label("integration"), func() {
 
 		It("Create LicenseMaster custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-lmaster-2"
-			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+			licensemaster.ApplyLicenseMaster = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -63,7 +83,7 @@ var _ = Describe("LicenseMaster Controller", Label("integration"), func() {
 
 		It("Create LicenseMaster custom resource should succeeded", func() {
 			namespace := "ns-splunk-lmaster-3"
-			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+			licensemaster.ApplyLicenseMaster = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 
@@ -76,7 +96,7 @@ var _ = Describe("LicenseMaster Controller", Label("integration"), func() {
 		})
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-lmaster-4"
-			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+			licensemaster.ApplyLicenseMaster = func(ctx context.Context, client splcommon.ControllerClient, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
