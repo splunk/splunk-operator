@@ -152,6 +152,9 @@ const PhaseTransitionTimeout = 10 * time.Minute
 // observed on a 4-member SHC scale-down, CI job 242227286, 2026-07-13).
 const SHCScalingTransitionTimeout = 20 * time.Minute
 
+// SHCMemberJoinStallTimeout is the outer bound on the SHC member-join stall state; ~10x the widest benign window observed.
+const SHCMemberJoinStallTimeout = 10 * time.Minute
+
 // KubectlExecTimeout bounds longer `kubectl exec` and `kubectl logs` calls
 // (cat config files, dump pod logs). Still below the 30s Ginkgo grace period.
 const KubectlExecTimeout = 25 * time.Second
