@@ -641,7 +641,8 @@ generate-artifacts: generate-artifacts-namespace generate-artifacts-cluster gene
 
 #############################
 
-GO_DOWNLOAD_URL=https://go.dev/dl/go1.17.7.darwin-amd64.pkg
+GO_VERSION ?= 1.26.6
+GO_DOWNLOAD_URL=https://go.dev/dl/go$(GO_VERSION).darwin-$(shell uname -m | sed 's/x86_64/amd64/').pkg
 export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/v1.17.0
 OPERATOR_SDK_DOWNLOAD_URL=curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
 MINIKUBE_DOWNLOAD_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-${OS}-${ARCH}
@@ -650,7 +651,7 @@ KUBECTL_DOWNLOAD_URL="https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/r
 .PHONY: setup/devsetup
 setup/devsetup:
 	@echo Installing go
-	@curl -Lo go.tar.gz ${GO_DOWNLOAD_URL} && tar -C /usr/local -xvzf  go.tar.gz
+	@curl -fsSLo go.pkg ${GO_DOWNLOAD_URL} && sudo installer -pkg go.pkg -target / && rm -f go.pkg
 	@curl -Lo kubectl ${KUBECTL_DOWNLOAD_URL} && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 	@echo Installing Kubectl
 	@curl -Lo kubectl ${KUBECTL_DOWNLOAD_URL} && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
