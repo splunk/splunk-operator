@@ -232,6 +232,14 @@ func GetClusterManagerExtraEnv(cr splcommon.MetaObject) []corev1.EnvVar {
 	}}
 }
 
+// GetClusterMasterExtraEnv returns environment variables used by ClusterMaster pods.
+func GetClusterMasterExtraEnv(cr splcommon.MetaObject) []corev1.EnvVar {
+	return []corev1.EnvVar{{
+		Name:  splcommon.ClusterManagerURL,
+		Value: splcommon.GetSplunkServiceName(splcommon.SplunkClusterMaster, cr.GetName(), false),
+	}}
+}
+
 // GetSearchHeadEnv returns environment variables used by SearchHeadCluster
 // search heads, including the deployer service URL.
 func GetSearchHeadEnv(cr *enterpriseApi.SearchHeadCluster) []corev1.EnvVar {

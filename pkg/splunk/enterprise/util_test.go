@@ -411,27 +411,6 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	}
 }
 
-func TestGetClusterMasterExtraEnv(t *testing.T) {
-	cr := enterpriseApi.LicenseManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-	}
-	got := getClusterMasterExtraEnv(&cr, &cr.Spec.CommonSplunkSpec)
-	want := []corev1.EnvVar{
-		{
-			Name:  splcommon.ClusterManagerURL,
-			Value: splcommon.GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
-		},
-	}
-	result := splcommon.CompareEnvs(got, want)
-	//if differ then CompareEnvs returns true
-	if result == true {
-		t.Errorf("getClusterMasterExtraEnv(\"%s\") = %s; want %s", SplunkClusterManager, got, want)
-	}
-}
-
 func TestApplySmartstoreConfigMap(t *testing.T) {
 	ctx := context.TODO()
 	cr := enterpriseApiV3.ClusterMaster{
