@@ -442,6 +442,18 @@ Per-spec and suite-level timeouts are defined in `test/testenv/timeouts.go`. Use
 | `SetupTeardownTimeout` | 25 min | `BeforeEach`/`AfterEach` node timeout (0.8× = 20 min cleanup budget, 5 min grace) |
 | `DefaultTimeout` | 30 min | Infrastructure polls (namespace creation, operator readiness) |
 | `AppInstallTimeout` | 10 min | Waiting for apps to reach Install phase |
+| `SHCMemberJoinStallTimeout` | 10 min | Outer bound on the SHC member-join stall fingerprint (see below) |
+
+### Failing Fast on Stalls
+
+A poll that only waits for success can't tell "not yet" from "never," and on
+timeout reports only a generic node-timeout with no hint of what broke. Where a
+wait has a recognisable pathological state, detect it and fail fast with a
+diagnostic instead — see `isSHCMemberJoinStalled` /
+`WaitForSearchHeadClusterScaleComplete` for a worked example: require the full
+fingerprint (not one symptom), reset the timer on any real progress, and name
+the suspected component and a log string to grep for in the error. Put the
+threshold's measurement and CI job IDs in the constant's own doc comment.
 
 ---
 
