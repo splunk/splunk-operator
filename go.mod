@@ -1,6 +1,6 @@
 module github.com/splunk/splunk-operator
 
-go 1.26.4
+go 1.26.6
 
 require (
 	cloud.google.com/go/storage v1.68.0
@@ -15,7 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.4
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.1
 	github.com/cert-manager/cert-manager v1.21.2
-	github.com/cloudnative-pg/cloudnative-pg v1.30.0
+	github.com/cloudnative-pg/cloudnative-pg v1.30.1
 	github.com/cloudnative-pg/machinery v0.6.0
 	github.com/distribution/reference v0.6.0
 	github.com/go-logr/logr v1.4.4
@@ -88,8 +88,8 @@ require (
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cloudnative-pg/barman-cloud v0.5.1 // indirect
-	github.com/cloudnative-pg/cnpg-i v0.5.0 // indirect
+	github.com/cloudnative-pg/barman-cloud v0.6.0 // indirect
+	github.com/cloudnative-pg/cnpg-i v0.6.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -99,7 +99,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.3 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
@@ -151,7 +151,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.92.0 // indirect
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.94.0 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
@@ -196,7 +196,7 @@ require (
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	k8s.io/apiserver v0.37.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
+	k8s.io/kube-openapi v0.0.0-20260821135717-be32def86098 // indirect
 	k8s.io/streaming v0.37.1 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.36.0 // indirect
 	sigs.k8s.io/gateway-api v1.6.0 // indirect
