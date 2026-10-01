@@ -1152,12 +1152,26 @@ func (testenv *TestCaseEnv) VerifySearchHeadClusterPhase(ctx context.Context, de
 	})
 }
 
+// isSHCMemberJoinStalled reports every pod Ready and a captain elected but Phase still Updating: a member is running yet never joined.
+// Restricted to PhaseUpdating (not just "!= Ready") so an unrelated post-readiness controller
+// failure that lands in PhaseError keeps its real diagnosis instead of being masked as a stall.
+func isSHCMemberJoinStalled(shc *enterpriseApi.SearchHeadCluster, expectedReplicas int32) bool {
+	return shc.Spec.Replicas == expectedReplicas &&
+		shc.Status.ObservedGeneration >= shc.Generation &&
+		shc.Status.Replicas == expectedReplicas &&
+		shc.Status.ReadyReplicas == expectedReplicas &&
+		shc.Status.DeployerPhase == enterpriseApi.PhaseReady &&
+		shc.Status.CaptainReady &&
+		shc.Status.Phase == enterpriseApi.PhaseUpdating
+}
+
 // WaitForSearchHeadClusterScaleComplete waits for the requested replica count
 // to be reconciled and ready. This uses durable status fields rather than the
 // transient ScalingUp/ScalingDown phase, which can complete between polls or
 // be obscured by another in-progress reconciliation.
 func (testenv *TestCaseEnv) WaitForSearchHeadClusterScaleComplete(ctx context.Context, deployment *Deployment, expectedReplicas int32) error {
 	shcName := deployment.GetName() + "-shc"
+	var stalledSince time.Time
 	return wait.PollUntilContextTimeout(ctx, ShortPollInterval, deployment.GetTimeout(), true, func(ctx context.Context) (bool, error) {
 		shc := &enterpriseApi.SearchHeadCluster{}
 		if err := deployment.GetInstance(ctx, shcName, shc); err != nil {
@@ -1174,6 +1188,27 @@ func (testenv *TestCaseEnv) WaitForSearchHeadClusterScaleComplete(ctx context.Co
 			"phase", shc.Status.Phase,
 			"deployerPhase", shc.Status.DeployerPhase,
 			"captainReady", shc.Status.CaptainReady)
+
+		// Fail fast on the member-join stall instead of running to the Ginkgo node timeout.
+		memberJoinStalled := isSHCMemberJoinStalled(shc, expectedReplicas)
+		switch {
+		case !memberJoinStalled:
+			stalledSince = time.Time{}
+		case stalledSince.IsZero():
+			stalledSince = time.Now()
+		case time.Since(stalledSince) > SHCMemberJoinStallTimeout:
+			testenv.Log.Error(nil, "SearchHeadCluster member-join stall detected",
+				"instance", shcName,
+				"stalledFor", time.Since(stalledSince).Round(time.Second).String(),
+				"phase", shc.Status.Phase,
+				"readyReplicas", shc.Status.ReadyReplicas,
+				"expectedReplicas", expectedReplicas,
+				"hint", "member up but not joined; grep member pods for 'not part of any cluster configuration' or a failed 'splunk start'")
+			DumpGetPods(testenv.GetName())
+			return false, fmt.Errorf("SearchHeadCluster %s stalled for %s: all %d pods Ready, captain elected, phase %q, but a member never joined; "+
+				"grep member logs for 'not part of any cluster configuration' or a failed 'splunk start'",
+				shcName, time.Since(stalledSince).Round(time.Second), expectedReplicas, shc.Status.Phase)
+		}
 
 		if shc.Spec.Replicas != expectedReplicas ||
 			shc.Status.ObservedGeneration < shc.Generation ||
