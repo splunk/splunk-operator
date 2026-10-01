@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
@@ -29,73 +28,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func TestResetSymbolicLinks(t *testing.T) {
-	ctx := context.TODO()
-	mockPodExecClient := &spltest.MockPodExecClient{}
-
-	// Test CM
-	cmCr := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "example",
-			Namespace: "test",
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
-		},
-	}
-
-	podExecCommands := []string{
-		splcommon.SetSymbolicLinkClusterManager,
-	}
-	mockPodExecReturnCtxts := []*spltest.MockPodExecReturnContext{
-		{
-			StdOut: "",
-			StdErr: "",
-		},
-	}
-
-	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
-
-	// CM should pass
-	err := resetSymbolicLinks(ctx, &cmCr, 1, mockPodExecClient)
-	if err != nil {
-		t.Errorf("Didn't expect error, err %v", err)
-	}
-
-	// ClusterMaster should pass
-	clusterMasterCr := enterpriseApiV3.ClusterMaster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "example",
-			Namespace: "test",
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
-		},
-	}
-	clusterMasterPodExecClient := &spltest.MockPodExecClient{}
-	clusterMasterPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
-	err = resetSymbolicLinks(ctx, &clusterMasterCr, 1, clusterMasterPodExecClient)
-	if err != nil {
-		t.Errorf("Didn't expect error for ClusterMaster, err %v", err)
-	}
-
-	// Invalid CR test
-	lmCr := enterpriseApi.LicenseManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lm",
-			Namespace: "test",
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseManager",
-		},
-	}
-
-	err = resetSymbolicLinks(ctx, &lmCr, 1, mockPodExecClient)
-	if err == nil {
-		t.Errorf("Expected error")
-	}
-}
 
 func TestPerformCmBundlePush(t *testing.T) {
 	ctx := context.TODO()

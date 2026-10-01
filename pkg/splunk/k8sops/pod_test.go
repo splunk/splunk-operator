@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,9 +20,81 @@ import (
 	"reflect"
 	"testing"
 
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestResetSymbolicLinks(t *testing.T) {
+	ctx := context.TODO()
+	mockPodExecClient := &spltest.MockPodExecClient{}
+
+	// Test CM
+	cmCr := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "example",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+	}
+
+	podExecCommands := []string{
+		splcommon.SetSymbolicLinkClusterManager,
+	}
+	mockPodExecReturnCtxts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+			StdErr: "",
+		},
+	}
+
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
+
+	// CM should pass
+	err := ResetSymbolicLinks(ctx, &cmCr, 1, mockPodExecClient)
+	if err != nil {
+		t.Errorf("Didn't expect error, err %v", err)
+	}
+
+	// ClusterMaster should pass
+	clusterMasterCr := enterpriseApiV3.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "example",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+	}
+	clusterMasterPodExecClient := &spltest.MockPodExecClient{}
+	clusterMasterPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
+	err = ResetSymbolicLinks(ctx, &clusterMasterCr, 1, clusterMasterPodExecClient)
+	if err != nil {
+		t.Errorf("Didn't expect error for ClusterMaster, err %v", err)
+	}
+
+	// Invalid CR test
+	lmCr := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "lm",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseManager",
+		},
+	}
+
+	err = ResetSymbolicLinks(ctx, &lmCr, 1, mockPodExecClient)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+}
 
 func TestMergePodUpdates(t *testing.T) {
 	ctx := context.TODO()

@@ -3558,6 +3558,11 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 
 func TestDeleteAppPkgFromOperator(t *testing.T) {
 	ctx := context.TODO()
+	defaultTracker := operatorResourceTracker
+	defer func() {
+		operatorResourceTracker = defaultTracker
+	}()
+
 	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterManager",

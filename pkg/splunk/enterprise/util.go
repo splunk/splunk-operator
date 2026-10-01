@@ -176,16 +176,6 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 	return namespaceScopedSecret, nil
 }
 
-// getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
-func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  splcommon.ClusterManagerURL,
-			Value: splcommon.GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
-		},
-	}
-}
-
 // getLicenseManagerURL returns URL of license manager
 func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseManagerRef.Name != "" {
@@ -526,35 +516,6 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	}
 
 	return SplunkOperatorAppConfigMap, configMapDataChanged, nil
-}
-
-// resetSymbolicLinks resets symbolic links on clustermanager pod.
-// In 9.0.x on a container start the symbolic links created by init container
-// are wiped out due to bundle push and hence we need to reinstate it in case of any smartstore changes.
-var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl) error {
-	crKind := cr.GetObjectKind().GroupVersionKind().Kind
-
-	scopedLog := logging.FromContext(ctx).With("func", "ResetSymbolicLinks", "kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	// Create command for symbolic link creation
-	var command string
-	if crKind == "ClusterManager" || crKind == "ClusterMaster" {
-		command = setSymbolicLinkCmanager
-	} else {
-		return fmt.Errorf("invalid CR kind to reset symbolic links")
-	}
-
-	// Run the commands on Splunk pods
-	err := runCustomCommandOnSplunkPods(ctx, cr, replicas, command, "", podExecClient)
-	if err != nil {
-		scopedLog.ErrorContext(ctx, "unable to run command on splunk pod", "error", err)
-		return err
-	}
-
-	scopedLog.InfoContext(ctx, "reset symbolic links successfully")
-
-	// All good
-	return nil
 }
 
 // setupInitContainer modifies the podTemplateSpec object

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,21 +18,16 @@ package controller
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
-	"github.com/splunk/splunk-operator/pkg/logging"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-
-	"github.com/pkg/errors"
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/reconcile/clustermaster"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -80,49 +75,9 @@ type ClusterMasterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// your logic here
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "ClusterMaster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "ClusterMaster")
-
-	logger := slog.Default().With("controller", "ClusterMaster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
-	ctx = logging.WithLogger(ctx, logger)
-
-	// Fetch the ClusterMaster
-	instance := &enterpriseApiV3.ClusterMaster{}
-	err := r.Get(ctx, req.NamespacedName, instance)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			// Request object not found, could have been deleted after
-			// reconcile request.  Owned objects are automatically
-			// garbage collected. For additional cleanup logic use
-			// finalizers.  Return and don't requeue
-			return ctrl.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load cluster manager data")
-	}
-
-	// If the reconciliation is paused, requeue
-	if instance.GetAnnotations()[enterpriseApiV3.ClusterMasterPausedAnnotation] == "true" {
-		return ctrl.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, nil
-	}
-
-	logger.InfoContext(ctx, "start", "crVersion", instance.GetResourceVersion())
-
-	// Pass event recorder through context
-	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
-
-	result, err := ApplyClusterMaster(ctx, r.Client, instance)
-	if result.Requeue && result.RequeueAfter != 0 {
-		logger.InfoContext(ctx, "requeued", "periodSeconds", int(result.RequeueAfter/time.Second))
-	}
-
-	return result, err
-}
-
-// ApplyClusterMaster adding to handle unit test case
-var ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
-	return enterprise.ApplyClusterMaster(ctx, client, instance)
+	return clustermaster.Apply(ctx, r.Client, req.NamespacedName, r.Recorder)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -169,8 +124,8 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if !ok {
 					return nil
 				}
-				var list enterpriseApiV3.ClusterMasterList
-				if err := r.Client.List(ctx, &list, client.InNamespace(cm.Namespace)); err != nil {
+				list, err := k8sops.GetClusterMasterList(ctx, r.Client, cm, []client.ListOption{client.InNamespace(cm.Namespace)})
+				if err != nil {
 					return nil
 				}
 				var reqs []reconcile.Request

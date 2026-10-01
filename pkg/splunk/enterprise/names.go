@@ -134,9 +134,6 @@ const (
 	// command for init container on a CM
 	commandForCMSmartstore = "mkdir -p " + splcommon.OperatorClusterManagerAppsLocal + " && ln -sfn " + splcommon.OperatorMountLocalIndexesConf + " " + splcommon.OperatorClusterManagerAppsLocalIndexesConf + " && ln -sfn " + splcommon.OperatorMountLocalServerConf + " " + splcommon.OperatorClusterManagerAppsLocalServerConf
 
-	// setSymbolicLinkCmanager
-	setSymbolicLinkCmanager = "ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/manager-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/manager-apps/splunk-operator/local/server.conf"
-
 	// configToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
 
@@ -172,9 +169,6 @@ const (
 	startupProbeTimeoutSec       = 30
 	startupProbePeriodSec        = 30
 	startupProbeFailureThreshold = 12
-
-	// Number of ClusterMasterReplicas
-	numberOfClusterMasterReplicas = 1
 
 	// Number of Deployer replicas
 	numberOfDeployerReplicas = 1
