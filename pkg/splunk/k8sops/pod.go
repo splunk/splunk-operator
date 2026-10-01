@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,7 @@ package k8sops
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // SortPodSlices sorts required slices in a Pod spec
@@ -55,6 +57,54 @@ func SortPodSlices(ctx context.Context, current *corev1.PodSpec, name string) er
 	}
 	scopedLog.InfoContext(ctx, "successfully sorted slices in statefulSet")
 
+	return nil
+}
+
+// ResetSymbolicLinks restores the manager-apps SmartStore links after a bundle push.
+func ResetSymbolicLinks(ctx context.Context, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl) error {
+	crKind := cr.GetObjectKind().GroupVersionKind().Kind
+	logger := logging.FromContext(ctx).With("func", "ResetSymbolicLinks", "kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	instanceType, err := getClusterManagerInstanceType(crKind)
+	if err != nil {
+		return err
+	}
+
+	if err := runCommandOnClusterManagerPods(ctx, cr, instanceType, replicas, splcommon.SetSymbolicLinkClusterManager, podExecClient); err != nil {
+		logger.ErrorContext(ctx, "unable to run command on splunk pod", "error", err)
+		return err
+	}
+	logger.InfoContext(ctx, "reset symbolic links successfully")
+	return nil
+}
+
+func getClusterManagerInstanceType(crKind string) (splcommon.InstanceType, error) {
+	switch crKind {
+	case "ClusterManager":
+		return splcommon.SplunkClusterManager, nil
+	case "ClusterMaster":
+		return splcommon.SplunkClusterMaster, nil
+	default:
+		return "", fmt.Errorf("invalid CR kind to reset symbolic links")
+	}
+}
+
+func runCommandOnClusterManagerPods(ctx context.Context, cr splcommon.MetaObject, instanceType splcommon.InstanceType, replicas int32, command string, podExecClient splutil.PodExecClientImpl) error {
+	var err error
+	var stdOut string
+
+	streamOptions := splutil.NewStreamOptionsObject(command)
+	for replicaIndex := int32(0); replicaIndex < replicas; replicaIndex++ {
+		podName := splutil.GetSplunkStatefulsetPodName(instanceType, cr.GetName(), replicaIndex)
+		podExecClient.SetTargetPodName(ctx, podName)
+
+		splutil.ResetStringReader(streamOptions, command)
+
+		stdOut, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+		if err != nil {
+			return fmt.Errorf("unable to run command %s. stdout: %s, err: %s", command, stdOut, err)
+		}
+	}
 	return nil
 }
 

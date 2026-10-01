@@ -67,7 +67,7 @@ var performCmBundlePush = func(ctx context.Context, c splcommon.ControllerClient
 	}
 
 	// Reset symbolic links for pod
-	err = resetSymbolicLinks(ctx, cr, 1, podExecClient)
+	err = k8sops.ResetSymbolicLinks(ctx, cr, 1, podExecClient)
 	if err != nil {
 		return err
 	}
@@ -138,52 +138,4 @@ func checkIfSmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 	// Somehow the configmap was deleted, ideally this should not happen
 	eventPublisher.Warning(ctx, splcommon.EventReasonSmartStoreConfigPending, "smartstore ConfigMap is missing")
 	return fmt.Errorf("smartstore ConfigMap is missing")
-}
-
-// resetSymbolicLinks restores the manager-apps SmartStore links after a bundle push.
-func resetSymbolicLinks(ctx context.Context, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl) error {
-	crKind := cr.GetObjectKind().GroupVersionKind().Kind
-	logger := logging.FromContext(ctx).With("func", "ResetSymbolicLinks", "kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	instanceType, err := getClusterManagerInstanceType(crKind)
-	if err != nil {
-		return err
-	}
-
-	if err := runCommandOnClusterManagerPods(ctx, cr, instanceType, replicas, splcommon.SetSymbolicLinkClusterManager, podExecClient); err != nil {
-		logger.ErrorContext(ctx, "unable to run command on splunk pod", "error", err)
-		return err
-	}
-	logger.InfoContext(ctx, "reset symbolic links successfully")
-	return nil
-}
-
-func getClusterManagerInstanceType(crKind string) (splcommon.InstanceType, error) {
-	switch crKind {
-	case "ClusterManager":
-		return splcommon.SplunkClusterManager, nil
-	case "ClusterMaster":
-		return splcommon.SplunkClusterMaster, nil
-	default:
-		return "", fmt.Errorf("invalid CR kind to reset symbolic links")
-	}
-}
-
-func runCommandOnClusterManagerPods(ctx context.Context, cr splcommon.MetaObject, instanceType splcommon.InstanceType, replicas int32, command string, podExecClient splutil.PodExecClientImpl) error {
-	var err error
-	var stdOut string
-
-	streamOptions := splutil.NewStreamOptionsObject(command)
-	for replicaIndex := int32(0); replicaIndex < replicas; replicaIndex++ {
-		podName := splutil.GetSplunkStatefulsetPodName(instanceType, cr.GetName(), replicaIndex)
-		podExecClient.SetTargetPodName(ctx, podName)
-
-		splutil.ResetStringReader(streamOptions, command)
-
-		stdOut, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-		if err != nil {
-			return fmt.Errorf("unable to run command %s. stdout: %s, err: %s", command, stdOut, err)
-		}
-	}
-	return nil
 }

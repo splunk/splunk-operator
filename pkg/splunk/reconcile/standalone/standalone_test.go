@@ -705,11 +705,11 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 	client.AddObject(&configmap)
 
 	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
+	err = os.MkdirAll(appframework.TmpAppDownloadDir, 0755)
+	defer os.RemoveAll(appframework.TmpAppDownloadDir)
 
 	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+		t.Errorf("Unable to create download directory for apps :%s", appframework.TmpAppDownloadDir)
 	}
 
 	_, err = ApplyStandalone(ctx, client, &cr)
@@ -777,11 +777,11 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 	client.AddObject(&configmap)
 
 	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
+	err = os.MkdirAll(appframework.TmpAppDownloadDir, 0755)
+	defer os.RemoveAll(appframework.TmpAppDownloadDir)
 
 	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+		t.Errorf("Unable to create download directory for apps :%s", appframework.TmpAppDownloadDir)
 	}
 	_, err = ApplyStandalone(ctx, client, &cr)
 
@@ -882,11 +882,11 @@ func TestApplyStandaloneDeletion(t *testing.T) {
 	c.ListObj = &pvclist
 
 	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
+	err = os.MkdirAll(appframework.TmpAppDownloadDir, 0755)
+	defer os.RemoveAll(appframework.TmpAppDownloadDir)
 
 	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+		t.Errorf("Unable to create download directory for apps :%s", appframework.TmpAppDownloadDir)
 	}
 
 	_, err = ApplyStandalone(ctx, c, &stand1)
@@ -1068,11 +1068,11 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	defer os.RemoveAll(newpath)
 
 	// Create app download directory required by app framework
-	err := os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	err := os.MkdirAll(appframework.TmpAppDownloadDir, 0755)
 	if err != nil {
-		t.Fatalf("Unable to create download directory for apps: %s", splcommon.AppDownloadVolume)
+		t.Fatalf("Unable to create download directory for apps: %s", appframework.TmpAppDownloadDir)
 	}
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
+	defer os.RemoveAll(appframework.TmpAppDownloadDir)
 
 	// Mock appframework.GetAppsList to return empty list (no apps to download)
 	savedGetAppsList := appframework.GetAppsList

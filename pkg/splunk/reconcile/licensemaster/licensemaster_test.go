@@ -41,8 +41,8 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/reconcile/clustermaster"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
@@ -866,9 +866,9 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 
 	// Mock VerifyCMasterisMultisite to avoid HTTP timeout when ApplyClusterMaster is called
-	savedVerifyCMasterisMultisite := enterprise.VerifyCMasterisMultisite
-	defer func() { enterprise.VerifyCMasterisMultisite = savedVerifyCMasterisMultisite }()
-	enterprise.VerifyCMasterisMultisite = func(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+	savedVerifyCMasterisMultisite := clustermaster.VerifyCMasterisMultisite
+	defer func() { clustermaster.VerifyCMasterisMultisite = savedVerifyCMasterisMultisite }()
+	clustermaster.VerifyCMasterisMultisite = func(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 		return []corev1.EnvVar{
 			{
 				Name:  splcommon.ClusterManagerURL,
@@ -1261,7 +1261,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = enterprise.ApplyClusterMaster(ctx, c, clustermanager)
+	_, err = clustermaster.ApplyClusterMaster(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
@@ -1335,7 +1335,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = enterprise.ApplyClusterMaster(ctx, c, clustermanager)
+	_, err = clustermaster.ApplyClusterMaster(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()

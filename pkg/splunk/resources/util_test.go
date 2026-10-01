@@ -87,6 +87,27 @@ func TestGetClusterManagerExtraEnv(t *testing.T) {
 	}}, env)
 }
 
+func TestGetClusterMasterExtraEnv(t *testing.T) {
+	cr := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	got := resources.GetClusterMasterExtraEnv(&cr)
+	want := []corev1.EnvVar{
+		{
+			Name:  splcommon.ClusterManagerURL,
+			Value: splcommon.GetSplunkServiceName(splcommon.SplunkClusterMaster, cr.GetName(), false),
+		},
+	}
+	result := splcommon.CompareEnvs(got, want)
+	//if differ then CompareEnvs returns true
+	if result == true {
+		t.Errorf("getClusterMasterExtraEnv(\"%s\") = %s; want %s", splcommon.SplunkClusterManager, got, want)
+	}
+}
+
 func TestGetSplunkDefaults(t *testing.T) {
 	defaults := resources.GetSplunkDefaults("stack1", "test", splcommon.SplunkIndexer, "defaults_string")
 
