@@ -1415,6 +1415,12 @@ spec:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
+                  volumeAttributesClassName:
+                    description: |-
+                      Name of VolumeAttributesClass to use for persistent volume claims.
+                      The CSI driver applies the attributes defined by the referenced
+                      VolumeAttributesClass to the provisioned volume.
+                    type: string
                 type: object
                 x-kubernetes-validations:
                 - message: storageClassName and ephemeralStorage are mutually exclusive
@@ -1422,6 +1428,10 @@ spec:
                     > 0 && self.ephemeralStorage == true)'
                 - message: storageCapacity and ephemeralStorage are mutually exclusive
                   rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
+                    > 0 && self.ephemeralStorage == true)'
+                - message: volumeAttributesClassName and ephemeralStorage are mutually
+                    exclusive
+                  rule: '!(has(self.volumeAttributesClassName) && size(self.volumeAttributesClassName)
                     > 0 && self.ephemeralStorage == true)'
               extraEnv:
                 description: |-
@@ -2679,6 +2689,12 @@ spec:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
+                  volumeAttributesClassName:
+                    description: |-
+                      Name of VolumeAttributesClass to use for persistent volume claims.
+                      The CSI driver applies the attributes defined by the referenced
+                      VolumeAttributesClass to the provisioned volume.
+                    type: string
                 type: object
                 x-kubernetes-validations:
                 - message: storageClassName and ephemeralStorage are mutually exclusive
@@ -2686,6 +2702,10 @@ spec:
                     > 0 && self.ephemeralStorage == true)'
                 - message: storageCapacity and ephemeralStorage are mutually exclusive
                   rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
+                    > 0 && self.ephemeralStorage == true)'
+                - message: volumeAttributesClassName and ephemeralStorage are mutually
+                    exclusive
+                  rule: '!(has(self.volumeAttributesClassName) && size(self.volumeAttributesClassName)
                     > 0 && self.ephemeralStorage == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
@@ -6801,6 +6821,12 @@ spec:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
+                  volumeAttributesClassName:
+                    description: |-
+                      Name of VolumeAttributesClass to use for persistent volume claims.
+                      The CSI driver applies the attributes defined by the referenced
+                      VolumeAttributesClass to the provisioned volume.
+                    type: string
                 type: object
                 x-kubernetes-validations:
                 - message: storageClassName and ephemeralStorage are mutually exclusive
@@ -6808,6 +6834,10 @@ spec:
                     > 0 && self.ephemeralStorage == true)'
                 - message: storageCapacity and ephemeralStorage are mutually exclusive
                   rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
+                    > 0 && self.ephemeralStorage == true)'
+                - message: volumeAttributesClassName and ephemeralStorage are mutually
+                    exclusive
+                  rule: '!(has(self.volumeAttributesClassName) && size(self.volumeAttributesClassName)
                     > 0 && self.ephemeralStorage == true)'
               extraEnv:
                 description: |-
@@ -8085,6 +8115,12 @@ spec:
                     description: Name of StorageClass to use for persistent volume
                       claims
                     type: string
+                  volumeAttributesClassName:
+                    description: |-
+                      Name of VolumeAttributesClass to use for persistent volume claims.
+                      The CSI driver applies the attributes defined by the referenced
+                      VolumeAttributesClass to the provisioned volume.
+                    type: string
                 type: object
                 x-kubernetes-validations:
                 - message: storageClassName and ephemeralStorage are mutually exclusive
@@ -8092,6 +8128,10 @@ spec:
                     > 0 && self.ephemeralStorage == true)'
                 - message: storageCapacity and ephemeralStorage are mutually exclusive
                   rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
+                    > 0 && self.ephemeralStorage == true)'
+                - message: volumeAttributesClassName and ephemeralStorage are mutually
+                    exclusive
+                  rule: '!(has(self.volumeAttributesClassName) && size(self.volumeAttributesClassName)
                     > 0 && self.ephemeralStorage == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
