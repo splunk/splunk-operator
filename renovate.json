@@ -63,6 +63,20 @@
       "depNameTemplate": "cert-manager/cert-manager",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "semver-coerced"
+    },
+    {
+      "description": "Keep Go toolchain versions synchronized outside go.mod",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.env$/",
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "GO_VERSION\\s*(?:\\?=\\s*|=\\s*)(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "golang",
+      "datasourceTemplate": "golang-version",
+      "versioningTemplate": "semver-coerced"
     }
   ],
   "assignAutomerge": true,
@@ -85,6 +99,12 @@
         "docker.repo.splunkdev.net/ci-cd/ci-container/python-3.12-bookworm"
       ],
       "groupName": "SCS Loki deploy Python image"
+    },
+    {
+      "description": "Update the Go toolchain consistently across go.mod, .env, and Makefile",
+      "matchDatasources": ["golang-version"],
+      "groupName": "Go toolchain",
+      "rangeStrategy": "bump"
     },
     {
       "matchPackageNames": [
