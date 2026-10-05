@@ -1660,7 +1660,7 @@ func TestSplunkProvisionInjection(t *testing.T) {
 	t.Run("no annotation leaves pod unchanged", func(t *testing.T) {
 		pod := makePodTemplate()
 		updateSplunkPodTemplateWithConfig(ctx, client, &pod, makeCR(nil), spec, SplunkSearchHead, nil, "secret")
-		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, envVars(pod), "SPLUNK_USE_PROVISIONER")
 		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
 		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
 	})
@@ -1670,7 +1670,7 @@ func TestSplunkProvisionInjection(t *testing.T) {
 		updateSplunkPodTemplateWithConfig(ctx, client, &pod,
 			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "false"}),
 			spec, SplunkSearchHead, nil, "secret")
-		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, envVars(pod), "SPLUNK_USE_PROVISIONER")
 		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
 		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
 	})
@@ -1682,7 +1682,7 @@ func TestSplunkProvisionInjection(t *testing.T) {
 			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "true"}),
 			spec, SplunkSearchHead, nil, "secret")
 
-		require.Equal(t, "true", envVars(pod)["SPLUNK_NO_ANSIBLE"])
+		require.Equal(t, "true", envVars(pod)["SPLUNK_USE_PROVISIONER"])
 		require.Contains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
 		require.Contains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
 	})
@@ -1693,7 +1693,7 @@ func TestSplunkProvisionInjection(t *testing.T) {
 			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "true"}),
 			spec, SplunkSearchHead, nil, "secret")
 
-		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, envVars(pod), "SPLUNK_USE_PROVISIONER")
 		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
 		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
 	})
@@ -1705,7 +1705,7 @@ func TestSplunkProvisionInjection(t *testing.T) {
 			makeCR(map[string]string{enterpriseApi.SplunkProvisionAnnotation: "true"}),
 			spec, SplunkSearchHead, nil, "secret")
 
-		require.NotContains(t, envVars(pod), "SPLUNK_NO_ANSIBLE")
+		require.NotContains(t, envVars(pod), "SPLUNK_USE_PROVISIONER")
 		require.NotContains(t, allMountPaths(pod), "/sbin/entrypoint.sh")
 		require.NotContains(t, allMountPaths(pod), "/opt/splunk/bin/splunk-provision")
 	})
