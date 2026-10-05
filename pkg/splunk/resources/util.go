@@ -392,7 +392,7 @@ func InjectSplunkProvision(splunkProvisionImage string, podTemplateSpec *corev1.
 			corev1.VolumeMount{Name: "splunk-provision-bin", MountPath: "/sbin/entrypoint.sh", SubPath: "entrypoint.sh"},
 			corev1.VolumeMount{Name: "splunk-provision-bin", MountPath: "/opt/splunk/bin/splunk-provision", SubPath: "splunk-provision"})
 	}
-	*extraEnv = append([]corev1.EnvVar{{Name: "SPLUNK_NO_ANSIBLE", Value: "true"}}, *extraEnv...)
+	*extraEnv = append([]corev1.EnvVar{{Name: "SPLUNK_USE_PROVISIONER", Value: "true"}}, *extraEnv...)
 }
 
 // RemoveDuplicateEnvVars keeps the first occurrence of each environment variable.
@@ -467,11 +467,4 @@ func GetVolumeSourceMountFromConfigMapData(configMap *corev1.ConfigMap, mode *in
 	}
 	splcommon.SortSlice(volumeSource.ConfigMap.Items, splcommon.SortFieldKey)
 	return volumeSource
-}
-
-// TODO(SPL-307034): Move this check to `splunk-provision` - it should know which roles it support.
-// This does not account for unsupported common features - like IPv6, multisite etc.
-// SplunkProvisionSupportsRole reports whether splunk-provision supports a role.
-func SplunkProvisionSupportsRole(instanceType splcommon.InstanceType) bool {
-	return instanceType == splcommon.SplunkSearchHead || instanceType == splcommon.SplunkDeployer
 }
