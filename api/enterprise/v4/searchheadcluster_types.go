@@ -258,9 +258,6 @@ type SearchHeadCluster struct {
 	Status SearchHeadClusterStatus `json:"status,omitempty"`
 }
 
-// Hub marks v4 as the conversion hub for SearchHeadCluster
-func (*SearchHeadCluster) Hub() {}
-
 //+kubebuilder:object:root=true
 
 // SearchHeadClusterList contains a list of SearchHeadCluster
