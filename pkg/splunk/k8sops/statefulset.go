@@ -894,8 +894,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// TODO(SPL-306631): remove once the `splunk-provision` is available in the Splunk docker image
 	// TODO(SPL-306655): and once the `entrypoint.sh` has been modified in the Splunk docker image
 	crAnnotations := cr.GetAnnotations()
-	if strings.ToLower(crAnnotations[enterpriseApi.SplunkProvisionAnnotation]) == "true" &&
-		resources.SplunkProvisionSupportsRole(instanceType) {
+	if strings.ToLower(crAnnotations[enterpriseApi.SplunkProvisionAnnotation]) == "true" {
 		splunkProvisionImage := os.Getenv("SPLUNK_PROVISION_IMAGE")
 		if splunkProvisionImage == "" || splunkProvisionImage == "SPLUNK_PROVISION_IMAGE_VALUE" {
 			logger.WarnContext(ctx, "skipping splunk-provision injection", "reason", "SPLUNK_PROVISION_IMAGE not set or unresolved placeholder")
