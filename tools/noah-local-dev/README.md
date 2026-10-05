@@ -9,7 +9,8 @@ deployment. The recommended workflow runs the operator inside the vCluster; a
 local `go run` workflow is also available for operator development.
 
 Both workflows install cert-manager into the vCluster, which issues the operator's
-webhook serving certificate. The operator needs that certificate to start.
+webhook serving certificate. The operator needs that certificate when the
+`ValidationWebhook` feature gate is enabled.
 
 Prerequisites:
 
@@ -75,12 +76,7 @@ SPLUNK_GENERAL_TERMS='<your accepted terms>' \
 
 Do not run local and in-cluster operators at the same time.
 
-A locally run operator serves its webhooks on localhost, and the vCluster API
-server has no route back to your machine, so it cannot call them. Reconciliation
-works, but exercising the conversion webhook needs the in-cluster workflow
-(`make noah-local-c3-up`).
-
-The attached readiness target also requires the in-cluster workflow because it
+The attached readiness target requires the in-cluster workflow because it
 validates the operator Deployment as part of the system.
 
 Tear down when you are done

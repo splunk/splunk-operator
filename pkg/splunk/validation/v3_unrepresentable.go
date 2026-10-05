@@ -14,22 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v3
+package validation
 
 import (
 	"fmt"
 	"strings"
 
-	hubApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
+	enterpriseApiV4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 )
 
-// hubGroupVersion is the group-version every spoke in this package converts
-// through.
-var hubGroupVersion = hubApi.GroupVersion
-
-// unrepresentableIndexerClusterFields returns the json paths set on the hub
-// spec that this version cannot express.
-func unrepresentableIndexerClusterFields(spec *hubApi.IndexerClusterSpec) []string {
+// unrepresentableIndexerClusterFields returns the json paths set on the v4
+// spec that v3 cannot express.
+func unrepresentableIndexerClusterFields(spec *enterpriseApiV4.IndexerClusterSpec) []string {
 	var fields []string
 	if spec.QueueRef != nil {
 		fields = append(fields, "spec.queueRef")
@@ -43,9 +40,9 @@ func unrepresentableIndexerClusterFields(spec *hubApi.IndexerClusterSpec) []stri
 	return fields
 }
 
-// unrepresentableSearchHeadClusterFields returns the json paths set on the hub
-// spec that this version cannot express.
-func unrepresentableSearchHeadClusterFields(spec *hubApi.SearchHeadClusterSpec) []string {
+// unrepresentableSearchHeadClusterFields returns the json paths set on the v4
+// spec that v3 cannot express.
+func unrepresentableSearchHeadClusterFields(spec *enterpriseApiV4.SearchHeadClusterSpec) []string {
 	var fields []string
 	if spec.NoahClusterRef != nil {
 		fields = append(fields, "spec.noahClusterRef")
@@ -60,16 +57,16 @@ func unrepresentableSearchHeadClusterFields(spec *hubApi.SearchHeadClusterSpec) 
 	return fields
 }
 
-// refuseIfUnrepresentable builds the error a refused downgrade returns, or nil
-// when nothing unrepresentable is set. The API server surfaces the message to
-// whoever issued the request, so it names the kind, the object, the offending
-// fields and the version to use instead.
+// refuseIfUnrepresentable builds the error returned when v3 cannot represent a
+// resource, or nil when nothing unrepresentable is set. The API server surfaces
+// the message to whoever issued the request, so it names the kind, the object,
+// the offending fields and the version to use instead.
 func refuseIfUnrepresentable(kind, namespace, name string, fields []string) error {
 	if len(fields) == 0 {
 		return nil
 	}
 
 	return fmt.Errorf("%s %s/%s cannot be represented in apiVersion %s: %s set but unsupported in %s. Use %s to read or modify this resource",
-		kind, namespace, name, GroupVersion.String(), strings.Join(fields, ", "),
-		GroupVersion.Version, hubGroupVersion.String())
+		kind, namespace, name, enterpriseApiV3.GroupVersion.String(), strings.Join(fields, ", "),
+		enterpriseApiV3.GroupVersion.Version, enterpriseApiV4.GroupVersion.String())
 }

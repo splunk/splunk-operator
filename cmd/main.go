@@ -53,8 +53,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -72,14 +70,8 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
-const (
-	// conversionWebhookPort serves /convert. It is separate from the validation
-	// webhook port so the two have independent lifecycles until validation is mandatory
-	conversionWebhookPort = 9444
-
-	// webhookCertDir is where the webhook servers expect tls.crt and tls.key.
-	webhookCertDir = "/tmp/k8s-webhook-server/serving-certs"
-)
+// webhookCertDir is where the webhook server expects tls.crt and tls.key.
+const webhookCertDir = "/tmp/k8s-webhook-server/serving-certs"
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -403,19 +395,6 @@ func main() {
 	} else {
 		setupLog.Info("Validation webhook disabled (set --feature-gates=ValidationWebhook=true to enable)")
 	}
-
-	conversionWebhookServer := webhook.NewServer(webhook.Options{
-		Port:    conversionWebhookPort,
-		CertDir: webhookCertDir,
-	})
-	conversionWebhookServer.Register("/convert",
-		conversion.NewWebhookHandler(mgr.GetScheme(), mgr.GetConverterRegistry()))
-
-	if err := mgr.Add(conversionWebhookServer); err != nil {
-		setupLog.Error(err, "unable to add conversion webhook server to manager")
-		os.Exit(1)
-	}
-	setupLog.Info("Conversion webhook enabled", "port", conversionWebhookPort)
 	//+kubebuilder:scaffold:builder
 
 	// Register certificate watchers with the manager
@@ -433,15 +412,6 @@ func main() {
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
-	}
-	// StartedChecker dials the webhook port over TLS on every probe, so this covers
-	// a server that is running but not serving: a certificate that rotates to
-	// something unloadable, a failing handshake, or a listener that died without
-	// taking the manager down. A certificate missing at startup is already fatal,
-	// so this is about the states that leave the process alive.
-	if err := mgr.AddReadyzCheck("conversion-webhook", conversionWebhookServer.StartedChecker()); err != nil {
-		setupLog.Error(err, "unable to set up conversion webhook ready check")
 		os.Exit(1)
 	}
 	if err := customSetupEndpoints(pprofActive, mgr); err != nil {
