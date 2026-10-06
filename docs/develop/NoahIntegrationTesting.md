@@ -62,10 +62,9 @@ is running. A generation-current `Stalled=True` condition fails immediately.
 The initial Ginkgo suite intentionally contains only the framework and
 readiness scenario. Distributed data-path, Indexer lifecycle, Search Head
 lifecycle, and failure/recovery Ginkgo scenarios belong in separate changes so
-each behavior can be run and diagnosed independently. The bundled fixture
-currently uses ephemeral Splunk etc/var storage; tests that assert PVC or
-storage recovery must use a persistent-storage fixture rather than this
-readiness fixture.
+each behavior can be run and diagnosed independently. The bundled fixture uses
+`gp3-automode` PVCs for Splunk etc/var storage, but the readiness scenario does
+not test PVC recovery. Add a focused scenario for that behavior.
 
 There is no separate script-based smoke test. Distributed data-path, Noah API,
 bucket-map and warm-bootstrap scenarios will be added as focused Ginkgo specs
