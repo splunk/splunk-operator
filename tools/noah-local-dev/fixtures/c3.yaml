@@ -23,13 +23,11 @@ spec:
         secretName: splunk-license
   licenseUrl: /mnt/licenses/enterprise.lic
   etcVolumeStorageConfig:
-    ephemeralStorage: true
-    storageClassName: ""
-    storageCapacity: ""
+    storageClassName: gp3-automode
+    storageCapacity: 10Gi
   varVolumeStorageConfig:
-    ephemeralStorage: true
-    storageClassName: ""
-    storageCapacity: ""
+    storageClassName: gp3-automode
+    storageCapacity: 30Gi
   defaults: |
     splunk:
       conf:
@@ -70,13 +68,11 @@ spec:
       cpu: "2"
       memory: 4Gi
   etcVolumeStorageConfig:
-    ephemeralStorage: true
-    storageClassName: ""
-    storageCapacity: ""
+    storageClassName: gp3-automode
+    storageCapacity: 10Gi
   varVolumeStorageConfig:
-    ephemeralStorage: true
-    storageClassName: ""
-    storageCapacity: ""
+    storageClassName: gp3-automode
+    storageCapacity: 30Gi
   defaults: |
     splunk:
       conf:
@@ -142,13 +138,11 @@ spec:
       cpu: "2"
       memory: 4Gi
   etcVolumeStorageConfig:
-    ephemeralStorage: true
-    storageClassName: ""
-    storageCapacity: ""
+    storageClassName: gp3-automode
+    storageCapacity: 10Gi
   varVolumeStorageConfig:
-    ephemeralStorage: true
-    storageClassName: ""
-    storageCapacity: ""
+    storageClassName: gp3-automode
+    storageCapacity: 30Gi
   defaults: |
     splunk:
       conf:
