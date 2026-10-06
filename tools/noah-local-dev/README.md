@@ -50,6 +50,11 @@ Override `NOAH_LOCAL_OPERATOR_IMAGE` if it was published elsewhere. The setup
 target runs the Ginkgo readiness scenario after the C3 is deployed; rerun it
 independently with `make noah-local-ready`.
 
+The fixture uses `gp3-automode` PVCs for each Splunk workload's etc and var
+volumes. Ensure that StorageClass is available in the vCluster before deploying.
+Changing an existing ephemeral C3 to this fixture does not replace its
+StatefulSet storage; use a fresh development deployment for the PVC setup.
+
 ### Run the operator locally
 
 For an operator development loop, prepare the cluster and port-forward:
