@@ -384,7 +384,8 @@ func newFakeClientBuilder(scheme *pkgruntime.Scheme) *fake.ClientBuilder {
 }
 
 func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	t.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "")
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.Background()
 	cr := enterpriseApi.MonitoringConsole{ObjectMeta: metav1.ObjectMeta{Name: "stack1", Namespace: "test"}}
 	c := spltest.NewMockClient()
