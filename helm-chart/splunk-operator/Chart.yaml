@@ -2,8 +2,6 @@ apiVersion: v2
 name: splunk-operator
 description: A Helm chart for the Splunk Operator for Kubernetes
 maintainers:
-  - name: Vivek Reddy
-    email: vivekr@splunk.com
   - name: Raizel Lieberman
     email: rlieberman@splunk.com
   - name: Patryk Wasielewski
@@ -14,6 +12,12 @@ maintainers:
     email: kkoziol@splunk.com
   - name: Jakub Buczak
     email: jbuczak@splunk.com
+  - name: Gabriel Mendoza
+    email: gabrielm@splunk.com
+  - name: Minjie Qiu
+    email: mqiu@splunk.com
+  - name: Qing Wang
+    email: qingw@splunk.com
 # A chart can be either an 'application' or a 'library' chart.
 #
 # Application charts are a collection of templates that can be packaged into versioned archives
