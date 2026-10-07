@@ -236,7 +236,8 @@ Test selection is driven by Ginkgo `Label(...)` arguments on `It` blocks and fil
 - **Extra / scenario** labels when they carry meaning orthogonal to the above:
   `suite:mc1` / `suite:mc2` (CI parallelization groups),
   `feature:scaling` (added in addition to the test's primary `feature:*` label on scale-up/scale-down scenarios so the `managerscaling` CI job can target them),
-  `scenario:readiness` (a focused behavior within an attached integration environment).
+  `scenario:readiness`, `scenario:membership`, and
+  `scenario:scaling` (focused behaviors within the attached Noah integration environment).
 
 Example:
 

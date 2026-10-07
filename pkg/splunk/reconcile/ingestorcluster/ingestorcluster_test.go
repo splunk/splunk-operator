@@ -345,7 +345,8 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 func TestGetIngestorStatefulSet(t *testing.T) {
 	// Object definitions
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	t.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "")
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	queue := enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
