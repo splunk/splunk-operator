@@ -197,7 +197,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 }
 
 func TestGetSearchHeadStatefulSet(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	t.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "")
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
 	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -282,7 +283,8 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 }
 
 func TestGetDeployerStatefulSet(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	t.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "")
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
 	cr := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{

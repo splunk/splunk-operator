@@ -138,10 +138,13 @@ data remains accessible. As with the PostgreSQL password, set
 credential is required.
 
 The local chart uses mock authentication. `noah-local-ready` runs the Ginkgo
-readiness scenario and does not modify CRs, index data, or Pods. Distributed
-data-path, Noah API, bucket-map and warm-bootstrap checks will be added as
-separate Ginkgo scenarios in subsequent changes; there is no script-based
-smoke-test path.
+readiness scenario and does not modify CRs, index data, or Pods.
+
+The attached suite also provides read-only `scenario:membership` checks and a
+`scenario:scaling` replica round trip. Scaling verifies peer and PVC cleanup
+without restarting existing Pods; run it on a disposable stack with no concurrent
+configuration changes. See the [test guide](../../docs/develop/NoahIntegrationTesting.md)
+for commands, assertions and permissions. Neither scenario needs a Noah port-forward.
 
 ## Why the /etc/hosts entry
 

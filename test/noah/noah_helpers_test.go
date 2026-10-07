@@ -19,15 +19,28 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	noahclient "github.com/splunk/splunk-operator/pkg/splunk/client/noah"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	"github.com/splunk/splunk-operator/test/testenv"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 type c3Topology struct {
@@ -183,6 +196,86 @@ func inspectC3Ready(
 	return topology, nil
 }
 
+// uncachedClient reads directly from the API server. The shared test client is
+// backed by a cluster-wide cache, so its first read of a type starts an
+// informer that lists and watches that type in every namespace. Use this
+// client for Secrets and for reads that must observe the latest state.
+func uncachedClient() client.Client {
+	GinkgoHelper()
+	kubeConfig, err := config.GetConfig()
+	Expect(err).NotTo(HaveOccurred())
+	kubeClient, err := client.New(kubeConfig, client.Options{Scheme: testcaseEnvInstance.GetKubeClient().Scheme()})
+	Expect(err).NotTo(HaveOccurred())
+	return kubeClient
+}
+
+func getIndexerCluster(ctx context.Context) *enterpriseApi.IndexerCluster {
+	GinkgoHelper()
+	idxc := &enterpriseApi.IndexerCluster{}
+	Expect(testcaseEnvInstance.GetKubeClient().Get(ctx,
+		client.ObjectKey{Namespace: operatorNamespace, Name: clusterName}, idxc)).To(Succeed())
+	return idxc
+}
+
+// Use the Service proxy so an attached suite needs no local DNS or port-forward.
+func newNoahClient(ctx context.Context) *noahclient.Client {
+	GinkgoHelper()
+	idxc := getIndexerCluster(ctx)
+	// Resolve the NoahCluster and its auth Secret with namespaced GETs, so the
+	// test needs only read access to that Secret rather than every Secret.
+	runtime, err := configworkflow.ResolveNoahRuntime(ctx, uncachedClient(), operatorNamespace, *idxc.Spec.NoahClusterRef)
+	Expect(err).NotTo(HaveOccurred())
+	spec := runtime.Spec()
+	endpoint, err := url.Parse(spec.Endpoint)
+	Expect(err).NotTo(HaveOccurred())
+	port := endpoint.Port()
+	if port == "" {
+		port = "80"
+		if endpoint.Scheme == "https" {
+			port = "443"
+		}
+	}
+	kubeConfig, err := config.GetConfig()
+	Expect(err).NotTo(HaveOccurred())
+	proxyURL, err := url.JoinPath(kubeConfig.Host, "api/v1/namespaces", operatorNamespace,
+		"services", fmt.Sprintf("%s:%s:%s", endpoint.Scheme, noahService, port), "proxy")
+	Expect(err).NotTo(HaveOccurred())
+	baseURL, err := url.Parse(proxyURL)
+	Expect(err).NotTo(HaveOccurred())
+	httpClient, err := rest.HTTPClientFor(kubeConfig)
+	Expect(err).NotTo(HaveOccurred())
+	auth, err := noahclient.NewHMACV3Authenticator(runtime.Credential())
+	Expect(err).NotTo(HaveOccurred())
+	noah, err := noahclient.NewClient(spec.Endpoint, spec.Tenant, auth,
+		noahclient.WithHTTPClient(&noahServiceProxy{client: httpClient, baseURL: baseURL}))
+	Expect(err).NotTo(HaveOccurred())
+	return noah
+}
+
+type noahServiceProxy struct {
+	client  noahclient.HTTPClient
+	baseURL *url.URL
+}
+
+func (proxy *noahServiceProxy) Do(request *http.Request) (*http.Response, error) {
+	forwarded := request.Clone(request.Context())
+	forwarded.URL = proxy.baseURL.Clone()
+	forwarded.URL.Path = strings.TrimRight(proxy.baseURL.Path, "/") + request.URL.Path
+	forwarded.URL.RawPath = ""
+	forwarded.URL.RawQuery = request.URL.RawQuery
+	forwarded.Host = proxy.baseURL.Host
+	return proxy.client.Do(forwarded)
+}
+
+// stopOnTerminalNoahError ends the enclosing Eventually poll when Noah rejects
+// a request in a way that retrying cannot fix, such as an authentication or
+// authorization failure. Call it only from inside an Eventually function.
+func stopOnTerminalNoahError(err error, message string) {
+	if apiError, ok := errors.AsType[*noahclient.Error](err); ok && !apiError.Retryable() {
+		StopTrying(message).Wrap(err).Now()
+	}
+}
+
 func dumpC3FailureState(ctx context.Context, kubeClient client.Client, namespace, name string, writer io.Writer) {
 	lmName := name
 	idxc := &enterpriseApi.IndexerCluster{}
@@ -230,4 +323,65 @@ func dumpC3FailureState(ctx context.Context, kubeClient client.Client, namespace
 		fmt.Fprintf(writer, "Event %s/%s type=%s reason=%s count=%d message=%q\n",
 			event.InvolvedObject.Kind, event.InvolvedObject.Name, event.Type, event.Reason, event.Count, event.Message)
 	}
+}
+
+type httpClientFunc func(*http.Request) (*http.Response, error)
+
+func (fn httpClientFunc) Do(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
+
+func TestNoahServiceProxy(t *testing.T) {
+	baseURL, err := url.Parse("https://kubernetes.test/api/v1/namespaces/test/services/http:noah:8443/proxy")
+	assert.NoError(t, err)
+	auth, err := noahclient.NewHMACV3Authenticator([]byte(t.Name()))
+	assert.NoError(t, err)
+	proxy := &noahServiceProxy{baseURL: baseURL, client: httpClientFunc(func(request *http.Request) (*http.Response, error) {
+		assert.Equal(t, baseURL.Host, request.Host)
+		assert.Equal(t, baseURL.Path+"/tenant/noah/v1/peers", request.URL.Path)
+		assert.True(t, strings.HasPrefix(request.Header.Get("x-splunk-digest"), "v3,"))
+		assert.True(t, strings.HasPrefix(request.Header.Get("x-splunk-digest-key-params"), "v3,@salt="))
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("[]"))}, nil
+	})}
+	noah, err := noahclient.NewClient("http://noah.test:8443", "tenant", auth, noahclient.WithHTTPClient(proxy))
+	assert.NoError(t, err)
+	_, err = noah.ListPeers(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, "https://kubernetes.test/api/v1/namespaces/test/services/http:noah:8443/proxy", baseURL.String(), "proxy base must not mutate")
+}
+
+// TestNoahStopOnTerminalNoahError proves both polls end on the first terminal
+// Noah failure but keep retrying a transient one.
+func TestNoahStopOnTerminalNoahError(t *testing.T) {
+	auth, err := noahclient.NewHMACV3Authenticator([]byte(t.Name()))
+	assert.NoError(t, err)
+	observe := func(status int) error {
+		noah, err := noahclient.NewClient("http://noah.test:8443", "tenant", auth, noahclient.WithHTTPClient(
+			httpClientFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(""))}, nil
+			})))
+		assert.NoError(t, err)
+		_, err = noah.ListPeers(t.Context())
+		assert.Error(t, err)
+		return err
+	}
+	poll := func(observed error) (attempts int, failure string) {
+		g := NewGomega(func(message string, _ ...int) { failure = message })
+		g.Eventually(func() error {
+			attempts++
+			stopOnTerminalNoahError(observed, "Noah rejected the observation")
+			return observed
+		}).WithTimeout(200 * time.Millisecond).WithPolling(10 * time.Millisecond).Should(Succeed())
+		return attempts, failure
+	}
+
+	attempts, failure := poll(observe(http.StatusUnauthorized))
+	assert.Equal(t, 1, attempts, "an authentication failure must not be retried")
+	assert.Contains(t, failure, "Noah rejected the observation")
+
+	attempts, _ = poll(observe(http.StatusServiceUnavailable))
+	assert.Greater(t, attempts, 1, "an unavailable Noah must be retried")
+
+	attempts, _ = poll(errors.New("Kubernetes read failed"))
+	assert.Greater(t, attempts, 1, "a non-Noah error must be retried")
 }
