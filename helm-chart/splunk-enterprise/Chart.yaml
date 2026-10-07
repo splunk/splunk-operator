@@ -23,8 +23,6 @@ version: 3.1.0
 # It is recommended to use it with quotes.
 appVersion: "3.1.0"
 maintainers:
-  - name: Vivek Reddy
-    email: vivekr@splunk.com
   - name: Raizel Lieberman
     email: rlieberman@splunk.com
   - name: Patryk Wasielewski
@@ -35,6 +33,12 @@ maintainers:
     email: kkoziol@splunk.com
   - name: Jakub Buczak
     email: jbuczak@splunk.com
+  - name: Gabriel Mendoza
+    email: gabrielm@splunk.com
+  - name: Minjie Qiu
+    email: mqiu@splunk.com
+  - name: Qing Wang
+    email: qingw@splunk.com
 dependencies:
 - name: splunk-operator
   version: "3.1.0"

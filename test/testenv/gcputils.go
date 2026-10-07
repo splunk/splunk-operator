@@ -75,15 +75,6 @@ func NewGCPClient() (*GCPClient, error) {
 		}
 
 	} else {
-		//var creds google.Credentials
-
-		//err = json.Unmarshal([]byte(gcpCredentials), &creds)
-		//if err != nil {
-		//	logf.Log.Error(err, "Secret key.json value is not parsable")
-		//	return nil, err
-		//}
-		//client, err = storage.NewClient(ctx, option.WithCredentials(&creds))
-		//client, err = storage.NewClient(ctx, option.WithCredentialsFile("/Users/vivekr/Projects/splunk-operator/auth.json"))
 		client, err = storage.NewClient(ctx, option.WithCredentialsJSON([]byte(gcpCredentials)))
 		if err != nil {
 			logf.Log.Error(err, "Failed to create GCP Storage client")
