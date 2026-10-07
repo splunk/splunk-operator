@@ -29,6 +29,7 @@ var (
 	operatorNamespace = testenv.GetEnvWithDefault("NOAH_TEST_NAMESPACE", "splunk-operator")
 	operatorName      = testenv.GetEnvWithDefault("NOAH_TEST_OPERATOR_NAME", "splunk-operator-controller-manager")
 	noahDeployment    = testenv.GetEnvWithDefault("NOAH_TEST_NOAH_DEPLOYMENT", "noah")
+	noahService       = testenv.GetEnvWithDefault("NOAH_TEST_NOAH_SERVICE", noahDeployment)
 	clusterName       = testenv.GetEnvWithDefault("NOAH_TEST_C3_NAME", "c3")
 
 	readyTimeout time.Duration

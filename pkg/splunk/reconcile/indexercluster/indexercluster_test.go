@@ -1462,7 +1462,8 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 }
 
 func TestGetIndexerStatefulSet(t *testing.T) {
-	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	t.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "")
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{

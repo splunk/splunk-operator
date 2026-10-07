@@ -16,7 +16,6 @@
 package enterprise
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -133,12 +132,13 @@ func TestGetSplunkImage(t *testing.T) {
 		}
 	}
 
+	t.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "")
 	test("splunk/splunk")
 
-	os.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "splunk-test/splunk")
+	t.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "splunk-test/splunk")
 	test("splunk-test/splunk")
-	os.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "splunk/splunk")
 
+	t.Setenv("RELATED_IMAGE_SPLUNK_ENTERPRISE", "splunk/splunk")
 	specImage = "splunk/splunk-test"
 	test("splunk/splunk-test")
 }
