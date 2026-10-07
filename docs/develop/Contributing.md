@@ -212,7 +212,6 @@ If you need help, tag one of the active maintainers of this project in a post or
 ```
 # Active maintainers marked with (*)
 
-(*) Vivek Reddy
 (*) Raizel Lieberman
 (*) Patryk Wasielewski
 (*) Igor Grzankowski
@@ -222,6 +221,7 @@ If you need help, tag one of the active maintainers of this project in a post or
 (*) Gabriel Mendoza
 (*) Minjie Qiu
 (*) Yuhan Yang
+() Vivek Reddy
 () Sirish Mohan
 () Gaurav Gupta
 () Subba Gontla
