@@ -17,24 +17,19 @@ package common
 
 import (
 	"bytes"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"os"
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func init() {
-	// seed random number generator for splunk secret generation
-	rand.Seed(time.Now().UnixNano())
-}
 
 // AsOwner returns an object to use for Kubernetes resource ownership references.
 func AsOwner(cr MetaObject, isController bool) metav1.OwnerReference {
@@ -98,11 +93,18 @@ func GetServiceFQDN(namespace string, name string) string {
 	)
 }
 
-// GenerateSecret returns a randomly generated sequence of text that is n bytes in length.
+// GenerateSecret returns a cryptographically secure randomly generated sequence of text that is n bytes in length.
 func GenerateSecret(SecretBytes string, n int) []byte {
+	alphabetSize := big.NewInt(int64(len(SecretBytes)))
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = SecretBytes[rand.Int63()%int64(len(SecretBytes))]
+		idx, err := cryptorand.Int(cryptorand.Reader, alphabetSize)
+		if err != nil {
+			// The system's CSPRNG is unavailable; generated secrets would otherwise
+			// be predictable, so fail loudly rather than fall back to weak randomness.
+			panic(fmt.Sprintf("failed to generate cryptographically secure secret: %v", err))
+		}
+		b[i] = SecretBytes[idx.Int64()]
 	}
 	return b
 }
