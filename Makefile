@@ -367,7 +367,7 @@ $(LOCALBIN):
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
-GOLANGCI_LINT_VERSION ?= v2.1.0
+GOLANGCI_LINT_VERSION ?= v2.13.0
 GOSEC_VERSION ?= v2.22.4
 GOVULNCHECK_VERSION ?= v1.1.4
 HELM_UNITTEST_VERSION ?= v1.0.3
@@ -400,6 +400,10 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run
+
+.PHONY: lint-naming
+lint-naming: golangci-lint ## Run naming-only golangci-lint checks
+	$(GOLANGCI_LINT) run --config .golangci.naming.yml
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes

@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -172,7 +172,7 @@ func (b *backupModel) backupConfigured() bool {
 			b.mergedConfig.CNPG.Backup.BarmanObjectStore != nil)
 }
 
-func (b *backupModel) Name() string { return pgcConstants.ComponentBackup }
+func (b *backupModel) Name() string { return pgcconstants.ComponentBackup }
 func (b *backupModel) Requires() []contractKey {
 	return []contractKey{contractCNPGCluster, contractAuthority, contractEnvironmentNamer}
 }

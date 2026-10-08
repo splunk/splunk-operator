@@ -25,15 +25,15 @@ import (
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	pgupgradeflow "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case/pg_upgrade"
 )
 
 type upgradeFlow interface {
-	Upgrade(context.Context) (reconciliationTypes.Report, error)
+	Upgrade(context.Context) (reconciliationtypes.Report, error)
 }
 
 type MajorUpgradeUseCase struct {
@@ -102,17 +102,17 @@ func (h *MajorUpgradeUseCase) BlocksComponents() []string {
 		return nil
 	}
 	return []string{
-		pgcConstants.ComponentProvisioner,
-		pgcConstants.ComponentManagedRoles,
-		pgcConstants.ComponentPooler,
-		pgcConstants.ComponentBackup,
-		pgcConstants.ComponentConfigMap,
+		pgcconstants.ComponentProvisioner,
+		pgcconstants.ComponentManagedRoles,
+		pgcconstants.ComponentPooler,
+		pgcconstants.ComponentBackup,
+		pgcconstants.ComponentConfigMap,
 		// Shares the blocked provisioner contract and mutates the same CNPG Cluster.
-		pgcConstants.ComponentCustomMetrics,
+		pgcconstants.ComponentCustomMetrics,
 	}
 }
 
-func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationTypes.Report, error) {
+func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationtypes.Report, error) {
 
 	intent, enabled, err := h.readIntent(ctx)
 	logger := logging.FromContext(ctx)
@@ -128,7 +128,7 @@ func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationTypes.Repo
 		if err := h.store.SaveBlueGreenRearm(ctx, h.intent); err != nil {
 			return mvutypes.ReportFromError(err), err
 		}
-		return reconciliationTypes.Report{Name: mvutypes.UseCaseName}, nil
+		return reconciliationtypes.Report{Name: mvutypes.UseCaseName}, nil
 	}
 
 	if err := h.validateIntent(); err != nil {
@@ -180,7 +180,7 @@ func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationTypes.Repo
 	return h.finish(ctx, upgrade, backupStatus, nil)
 }
 
-func (h *MajorUpgradeUseCase) postUpgradeBackup(ctx context.Context) (reconciliationTypes.Report, error) {
+func (h *MajorUpgradeUseCase) postUpgradeBackup(ctx context.Context) (reconciliationtypes.Report, error) {
 	backupStatus, err := h.rollback.CreateBackup(ctx, h.intent, mvutypes.PostUpgradeBackupName)
 	if err != nil {
 		report, cause := resolveBackupErr(err, mvutypes.ErrPostUpgradeBackupNotReady)
@@ -194,8 +194,8 @@ func (h *MajorUpgradeUseCase) postUpgradeBackup(ctx context.Context) (reconcilia
 	return h.finish(ctx, completedReport(), backupStatus, nil)
 }
 
-func completedReport() reconciliationTypes.Report {
-	return reconciliationTypes.Report{
+func completedReport() reconciliationtypes.Report {
+	return reconciliationtypes.Report{
 		Name:    mvutypes.UseCaseName,
 		Phase:   string(mvutypes.Completed),
 		Reason:  mvutypes.ReasonPgUpgradeFinalized,
@@ -207,7 +207,7 @@ func completedReport() reconciliationTypes.Report {
 // resolveBackupErr maps a backup error to a report and its propagation cause.
 // Terminal errors (ErrUpgradeFlowFailed) pass through unchanged; all others are
 // wrapped in retryableSentinel so ReportFromError maps them to a retryable phase.
-func resolveBackupErr(err, retryableSentinel error) (reconciliationTypes.Report, error) {
+func resolveBackupErr(err, retryableSentinel error) (reconciliationtypes.Report, error) {
 	if errors.Is(err, mvutypes.ErrUpgradeFlowFailed) {
 		return mvutypes.ReportFromError(err), err
 	}
@@ -215,7 +215,7 @@ func resolveBackupErr(err, retryableSentinel error) (reconciliationTypes.Report,
 	return report, reportCause(err, report)
 }
 
-func reportCause(err error, report reconciliationTypes.Report) error {
+func reportCause(err error, report reconciliationtypes.Report) error {
 	if report.Retry &&
 		(report.Phase == string(mvutypes.PreUpgradeBackup) ||
 			report.Phase == string(mvutypes.PostUpgradeBackup) ||
@@ -311,7 +311,7 @@ func (h *MajorUpgradeUseCase) rawPersistedPhase() mvutypes.Status {
 	return mvutypes.Scheduled
 }
 
-func (h *MajorUpgradeUseCase) finish(ctx context.Context, report reconciliationTypes.Report, baseline *mvutypes.BackupInfo, cause error) (reconciliationTypes.Report, error) {
+func (h *MajorUpgradeUseCase) finish(ctx context.Context, report reconciliationtypes.Report, baseline *mvutypes.BackupInfo, cause error) (reconciliationtypes.Report, error) {
 	h.emitPhaseEvent(report)
 	if h.store != nil {
 		if err := h.store.SaveMajorUpgradeProgress(ctx, h.intent, mvutypes.Progress{Report: report, Baseline: baseline}); err != nil {
@@ -321,7 +321,7 @@ func (h *MajorUpgradeUseCase) finish(ctx context.Context, report reconciliationT
 	return report, cause
 }
 
-func (h *MajorUpgradeUseCase) emitPhaseEvent(report reconciliationTypes.Report) {
+func (h *MajorUpgradeUseCase) emitPhaseEvent(report reconciliationtypes.Report) {
 	if mvutypes.Status(report.Phase) == h.rawPersistedPhase() {
 		return
 	}

@@ -27,8 +27,8 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	mon "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	tlsport "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/tls"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
@@ -314,14 +314,14 @@ func blockedComponents(reconciler *usecases.Reconciler) map[string]struct{} {
 	return reconciler.BlocksComponents()
 }
 
-func reconcileUseCases(ctx context.Context, reconciler *usecases.Reconciler) (*reconciliationTypes.Report, error) {
+func reconcileUseCases(ctx context.Context, reconciler *usecases.Reconciler) (*reconciliationtypes.Report, error) {
 	if reconciler == nil {
 		return nil, nil
 	}
 	return reconciler.Reconcile(ctx)
 }
 
-func resultFromUseCaseReport(report *reconciliationTypes.Report) ctrl.Result {
+func resultFromUseCaseReport(report *reconciliationtypes.Report) ctrl.Result {
 	if report == nil || !report.Retry {
 		return ctrl.Result{}
 	}
@@ -383,7 +383,7 @@ func runComponents(ctx context.Context, logger *slog.Logger, components []compon
 
 // types/dto candidate
 type componentHealth struct {
-	State     pgcConstants.State
+	State     pgcconstants.State
 	Condition conditionTypes
 	// Allows degraded optional features without failing cluster readiness.
 	ConditionStatus *metav1.ConditionStatus
@@ -399,13 +399,13 @@ type componentHealth struct {
 // phase to Ready — that is the responsibility of the top-level reconciler once all
 // components have converged (via updatePhaseStatus at the end of Reconcile).
 func newReadyHealth(cond conditionTypes, reason conditionReasons, msg string) componentHealth {
-	return componentHealth{Condition: cond, State: pgcConstants.Ready, Reason: reason, Message: msg}
+	return componentHealth{Condition: cond, State: pgcconstants.Ready, Reason: reason, Message: msg}
 }
 
 // newFailedHealth marks a component that hit a terminal error it cannot recover from
 // on its own — operator intervention or a spec change is required.
 func newFailedHealth(cond conditionTypes, reason conditionReasons, msg string) componentHealth {
-	return componentHealth{Condition: cond, State: pgcConstants.Failed, Reason: reason, Message: msg, Phase: failedClusterPhase}
+	return componentHealth{Condition: cond, State: pgcconstants.Failed, Reason: reason, Message: msg, Phase: failedClusterPhase}
 }
 
 func newDegradedHealth(cond conditionTypes, reason conditionReasons, msg string) componentHealth {
@@ -413,7 +413,7 @@ func newDegradedHealth(cond conditionTypes, reason conditionReasons, msg string)
 	return componentHealth{
 		Condition:       cond,
 		ConditionStatus: &status,
-		State:           pgcConstants.Ready,
+		State:           pgcconstants.Ready,
 		Reason:          reason,
 		Message:         msg,
 	}
@@ -422,20 +422,20 @@ func newDegradedHealth(cond conditionTypes, reason conditionReasons, msg string)
 // newPendingHealth marks a component that is blocked waiting for an upstream object
 // to be created. The cluster stays at Pending and is requeued until the dependency appears.
 func newPendingHealth(cond conditionTypes, reason conditionReasons, msg string) componentHealth {
-	return componentHealth{Condition: cond, State: pgcConstants.Pending, Reason: reason, Message: msg, Phase: pendingClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
+	return componentHealth{Condition: cond, State: pgcconstants.Pending, Reason: reason, Message: msg, Phase: pendingClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
 }
 
 // newProvisioningHealth marks a component whose upstream object exists but has not
 // reached its desired state yet — e.g. a CNPG cluster that is still initialising replicas.
 func newProvisioningHealth(cond conditionTypes, reason conditionReasons, msg string) componentHealth {
-	return componentHealth{Condition: cond, State: pgcConstants.Provisioning, Reason: reason, Message: msg, Phase: provisioningClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
+	return componentHealth{Condition: cond, State: pgcconstants.Provisioning, Reason: reason, Message: msg, Phase: provisioningClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
 }
 
 // newConfiguringHealth marks a component whose upstream resource is healthy but is
 // actively applying a change — e.g. a switchover, rolling restart, or config rollout.
 // The cluster is operational but not yet settled; requeued until the change completes.
 func newConfiguringHealth(cond conditionTypes, reason conditionReasons, msg string) componentHealth {
-	return componentHealth{Condition: cond, State: pgcConstants.Configuring, Reason: reason, Message: msg, Phase: configuringClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
+	return componentHealth{Condition: cond, State: pgcconstants.Configuring, Reason: reason, Message: msg, Phase: configuringClusterPhase, Result: ctrl.Result{RequeueAfter: retryDelay}}
 }
 
 type component interface {
@@ -485,11 +485,11 @@ type poolerEmitter interface {
 	emitPoolerCreationTransition(obj client.Object, conditions []metav1.Condition)
 }
 
-func isIntermediateState(state pgcConstants.State) bool {
+func isIntermediateState(state pgcconstants.State) bool {
 	switch state {
-	case pgcConstants.Pending,
-		pgcConstants.Provisioning,
-		pgcConstants.Configuring:
+	case pgcconstants.Pending,
+		pgcconstants.Provisioning,
+		pgcconstants.Configuring:
 		return true
 	default:
 		return false
@@ -552,7 +552,7 @@ func applyReadyCondition(cluster *platformv1alpha1.PostgresCluster, phase reconc
 
 func setStatusFromHealth(ctx context.Context, c client.Client, metrics ports.Recorder, cluster *platformv1alpha1.PostgresCluster, before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 	conditionStatus := metav1.ConditionFalse
-	if health.State == pgcConstants.Ready {
+	if health.State == pgcconstants.Ready {
 		conditionStatus = metav1.ConditionTrue
 	}
 	if health.ConditionStatus != nil {

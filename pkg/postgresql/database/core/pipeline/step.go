@@ -18,7 +18,7 @@ package pipeline
 import (
 	"context"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 )
 
 // Step is one ordered database reconciliation unit. It may wrap a steady-state
@@ -30,7 +30,7 @@ type Step interface {
 
 	// Observe classifies the current state after any mutation attempt.
 	// Return an error only when the state cannot be classified into an Outcome.
-	Observe(ctx context.Context, contracts *Contracts, mutationErr error) (reconciliationTypes.Outcome, error)
+	Observe(ctx context.Context, contracts *Contracts, mutationErr error) (reconciliationtypes.Outcome, error)
 }
 
 // MutatingStep actuates desired state before observation. Steps that only

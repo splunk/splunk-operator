@@ -24,7 +24,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	clusteridentity "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/identity"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	corev1 "k8s.io/api/core/v1"
@@ -165,7 +165,7 @@ func mergeConnectionPoolerEnable(cluster, class *platformv1alpha1.ConnectionPool
 	return out
 }
 
-func (p *poolerModel) Name() string { return pgcConstants.ComponentPooler }
+func (p *poolerModel) Name() string { return pgcconstants.ComponentPooler }
 func (p *poolerModel) Requires() []contractKey {
 	return []contractKey{contractCNPGCluster, contractTLSBackend, contractAuthority, contractEnvironmentNamer}
 }

@@ -23,7 +23,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	clusteridentity "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/identity"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	corev1 "k8s.io/api/core/v1"
@@ -51,7 +51,7 @@ func newConfigMapModel(c client.Client, scheme *runtime.Scheme, events eventEmit
 	return &configMapModel{client: c, scheme: scheme, events: events, updateStatus: updateStatus, contracts: contracts, cluster: cluster}
 }
 
-func (c *configMapModel) Name() string { return pgcConstants.ComponentConfigMap }
+func (c *configMapModel) Name() string { return pgcconstants.ComponentConfigMap }
 func (c *configMapModel) Requires() []contractKey {
 	return []contractKey{contractCNPGCluster, contractTLSBackend, contractSecret, contractEnvironmentNamer}
 }

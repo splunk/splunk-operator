@@ -1,0 +1,18 @@
+version: "2"
+run:
+  allow-parallel-runners: true
+  timeout: 10m
+linters:
+  default: none
+  enable:
+    - staticcheck
+  settings:
+    staticcheck:
+      checks:
+        - ST1003
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

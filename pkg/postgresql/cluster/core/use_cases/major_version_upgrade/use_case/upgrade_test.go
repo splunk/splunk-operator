@@ -23,7 +23,7 @@ import (
 	"time"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	pgupgradeflow "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case/pg_upgrade"
@@ -271,12 +271,12 @@ func TestMajorUpgradeUseCaseBlocksComponentsBeforeSourceIsLatched(t *testing.T) 
 		blockedSet[c] = struct{}{}
 	}
 	for _, want := range []string{
-		pgcConstants.ComponentProvisioner,
-		pgcConstants.ComponentManagedRoles,
-		pgcConstants.ComponentPooler,
-		pgcConstants.ComponentBackup,
-		pgcConstants.ComponentConfigMap,
-		pgcConstants.ComponentCustomMetrics,
+		pgcconstants.ComponentProvisioner,
+		pgcconstants.ComponentManagedRoles,
+		pgcconstants.ComponentPooler,
+		pgcconstants.ComponentBackup,
+		pgcconstants.ComponentConfigMap,
+		pgcconstants.ComponentCustomMetrics,
 	} {
 		if _, ok := blockedSet[want]; !ok {
 			t.Errorf("BlocksComponents() missing %q; got %v", want, blocked)

@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	dbpipeline "github.com/splunk/splunk-operator/pkg/postgresql/database/core/pipeline"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,8 +47,8 @@ func TestAcknowledgementGateMapsDecisionsAndPerDatabaseMessages(t *testing.T) {
 	}{
 		{
 			name:    "unpublished",
-			reason:  string(reconciliationTypes.ReasonWaitingForCNPG),
-			phase:   string(reconciliationTypes.PhaseProvisioning),
+			reason:  string(reconciliationtypes.ReasonWaitingForCNPG),
+			phase:   string(reconciliationtypes.PhaseProvisioning),
 			message: "Waiting for cluster to publish managed role status",
 			databaseMessages: map[string]string{
 				"payments": "Waiting for cluster to publish managed role status",
@@ -60,8 +60,8 @@ func TestAcknowledgementGateMapsDecisionsAndPerDatabaseMessages(t *testing.T) {
 			acknowledgement: dbtypes.ManagedRoleAcknowledgement{
 				Published: true, Failed: map[string]string{"audit_admin": "provider rejected role"},
 			},
-			reason:  string(reconciliationTypes.ReasonRoleReconcileFailed),
-			phase:   string(reconciliationTypes.PhaseFailed),
+			reason:  string(reconciliationtypes.ReasonRoleReconcileFailed),
+			phase:   string(reconciliationtypes.PhaseFailed),
 			message: "Role reconciliation failed for PostgresDatabase tenant: role audit_admin failed to reconcile: provider rejected role",
 			databaseMessages: map[string]string{
 				"payments": "blocked by role gate on database \"audit\"",
@@ -74,8 +74,8 @@ func TestAcknowledgementGateMapsDecisionsAndPerDatabaseMessages(t *testing.T) {
 				Published: true,
 				Conflicts: []dbtypes.ManagedRoleConflict{{Role: "audit_rw", AttemptedBy: input.Owner}},
 			},
-			reason:  string(reconciliationTypes.ReasonRoleConflict),
-			phase:   string(reconciliationTypes.PhaseFailed),
+			reason:  string(reconciliationtypes.ReasonRoleConflict),
+			phase:   string(reconciliationtypes.PhaseFailed),
 			message: "Role conflict in PostgresDatabase tenant: role audit_rw is already claimed",
 			databaseMessages: map[string]string{
 				"payments": "blocked by role gate on database \"audit\"",
@@ -94,8 +94,8 @@ func TestAcknowledgementGateMapsDecisionsAndPerDatabaseMessages(t *testing.T) {
 			outcome, err := gate.Observe(t.Context(), dbpipeline.NewContracts(), nil)
 
 			require.NoError(t, err)
-			assert.Equal(t, reconciliationTypes.ModeWaiting, outcome.Mode())
-			assert.Equal(t, string(reconciliationTypes.ConditionRolesReady), outcome.Condition())
+			assert.Equal(t, reconciliationtypes.ModeWaiting, outcome.Mode())
+			assert.Equal(t, string(reconciliationtypes.ConditionRolesReady), outcome.Condition())
 			assert.Equal(t, tt.reason, outcome.Reason())
 			assert.Equal(t, tt.phase, outcome.Phase())
 			assert.Equal(t, tt.message, outcome.Message())
@@ -119,9 +119,9 @@ func TestAcknowledgementGatePublishesReadyOnlyForExactSuccess(t *testing.T) {
 	outcome, err := gate.Observe(t.Context(), contracts, nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, reconciliationTypes.ModeConverged, outcome.Mode())
-	assert.Equal(t, reconciliationTypes.StatusPersistAndContinue, outcome.StatusAction())
-	assert.Equal(t, string(reconciliationTypes.ReasonRolesAvailable), outcome.Reason())
+	assert.Equal(t, reconciliationtypes.ModeConverged, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.StatusPersistAndContinue, outcome.StatusAction())
+	assert.Equal(t, string(reconciliationtypes.ReasonRolesAvailable), outcome.Reason())
 	assert.Equal(t, "Roles reconciled: 4 active", outcome.Message())
 	assert.NotNil(t, contracts.ManagedRolesReady)
 	assert.Equal(t, GateProceed, gate.Decision().State)
@@ -147,8 +147,8 @@ func TestAcknowledgementGateReadFailurePreservesPriorDecisionAndStatus(t *testin
 	outcome, err := gate.Observe(t.Context(), dbpipeline.NewContracts(), nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
-	assert.Equal(t, reconciliationTypes.StatusNone, outcome.StatusAction())
+	assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.StatusNone, outcome.StatusAction())
 	assert.ErrorIs(t, outcome.Err(), dbtypes.ErrManagedRoleAcknowledgementRead)
 	assert.Equal(t, before, gate.Decision())
 }
@@ -174,7 +174,7 @@ func TestAcknowledgementGateRejectsInvalidInputBeforeReading(t *testing.T) {
 	outcome, err := gate.Observe(t.Context(), dbpipeline.NewContracts(), nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
 	assert.ErrorIs(t, outcome.Err(), errInvalidGateInput)
 	assert.Zero(t, readCalls)
 }

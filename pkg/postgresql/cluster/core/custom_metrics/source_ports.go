@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package custom_metrics owns provider-neutral custom-metrics policy.
-package custom_metrics
+// Package custommetrics owns provider-neutral custom-metrics policy.
+package custommetrics
 
 import (
 	"context"

@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
@@ -48,8 +48,8 @@ func TestGateObserve(t *testing.T) {
 		input            Input
 		facts            dbclusterinfo.ResolvedClusterFacts
 		err              error
-		wantMode         reconciliationTypes.Mode
-		wantAction       reconciliationTypes.StatusAction
+		wantMode         reconciliationtypes.Mode
+		wantAction       reconciliationtypes.StatusAction
 		wantStatus       metav1.ConditionStatus
 		wantReason       string
 		wantMessage      string
@@ -60,8 +60,8 @@ func TestGateObserve(t *testing.T) {
 		{
 			name:        "ready cluster continues with authoritative facts",
 			facts:       readyFacts,
-			wantMode:    reconciliationTypes.ModeConverged,
-			wantAction:  reconciliationTypes.StatusPersistAndContinue,
+			wantMode:    reconciliationtypes.ModeConverged,
+			wantAction:  reconciliationtypes.StatusPersistAndContinue,
 			wantStatus:  metav1.ConditionTrue,
 			wantReason:  reasonClusterAvailable,
 			wantMessage: messageClusterAvailable,
@@ -70,76 +70,76 @@ func TestGateObserve(t *testing.T) {
 		{
 			name:             "ready phase without cluster card waits for identity prerequisite",
 			facts:            dbclusterinfo.ResolvedClusterFacts{Lifecycle: dbclusterinfo.LifecycleReady, Recovery: dbclusterinfo.RecoveryNone},
-			wantMode:         reconciliationTypes.ModeWaiting,
-			wantAction:       reconciliationTypes.StatusPersistAndStop,
+			wantMode:         reconciliationtypes.ModeWaiting,
+			wantAction:       reconciliationtypes.StatusPersistAndStop,
 			wantStatus:       metav1.ConditionFalse,
 			wantReason:       reasonClusterProvisioning,
 			wantMessage:      messageClusterProvisioning,
 			wantPhase:        phasePending,
-			wantRequeueAfter: reconciliationTypes.ReadinessRetryDelay,
+			wantRequeueAfter: reconciliationtypes.ReadinessRetryDelay,
 		},
 		{
 			name:             "provisioning cluster waits",
 			facts:            dbclusterinfo.ResolvedClusterFacts{Lifecycle: "Provisioning", Recovery: dbclusterinfo.RecoveryNone},
-			wantMode:         reconciliationTypes.ModeWaiting,
-			wantAction:       reconciliationTypes.StatusPersistAndStop,
+			wantMode:         reconciliationtypes.ModeWaiting,
+			wantAction:       reconciliationtypes.StatusPersistAndStop,
 			wantStatus:       metav1.ConditionFalse,
 			wantReason:       reasonClusterProvisioning,
 			wantMessage:      messageClusterProvisioning,
 			wantPhase:        phasePending,
-			wantRequeueAfter: reconciliationTypes.ReadinessRetryDelay,
+			wantRequeueAfter: reconciliationtypes.ReadinessRetryDelay,
 		},
 		{
 			name:             "recovery after ready is reported distinctly",
 			input:            Input{WasReady: true},
 			facts:            dbclusterinfo.ResolvedClusterFacts{Lifecycle: "Pending", Recovery: dbclusterinfo.RecoveryInProgress},
-			wantMode:         reconciliationTypes.ModeWaiting,
-			wantAction:       reconciliationTypes.StatusPersistAndStop,
+			wantMode:         reconciliationtypes.ModeWaiting,
+			wantAction:       reconciliationtypes.StatusPersistAndStop,
 			wantStatus:       metav1.ConditionFalse,
 			wantReason:       reasonClusterRecovery,
 			wantMessage:      messageClusterRecovery,
 			wantPhase:        phasePending,
-			wantRequeueAfter: reconciliationTypes.ReadinessRetryDelay,
+			wantRequeueAfter: reconciliationtypes.ReadinessRetryDelay,
 		},
 		{
 			name:             "existing recovery reason remains recovery",
 			input:            Input{PreviousClusterReadyReason: reasonClusterRecovery},
 			facts:            dbclusterinfo.ResolvedClusterFacts{Lifecycle: "Pending", Recovery: dbclusterinfo.RecoveryInProgress},
-			wantMode:         reconciliationTypes.ModeWaiting,
-			wantAction:       reconciliationTypes.StatusPersistAndStop,
+			wantMode:         reconciliationtypes.ModeWaiting,
+			wantAction:       reconciliationtypes.StatusPersistAndStop,
 			wantStatus:       metav1.ConditionFalse,
 			wantReason:       reasonClusterRecovery,
 			wantMessage:      messageClusterRecovery,
 			wantPhase:        phasePending,
-			wantRequeueAfter: reconciliationTypes.ReadinessRetryDelay,
+			wantRequeueAfter: reconciliationtypes.ReadinessRetryDelay,
 		},
 		{
 			name:             "ordinary not ready cluster is provisioning",
 			facts:            dbclusterinfo.ResolvedClusterFacts{Lifecycle: "Pending", Recovery: dbclusterinfo.RecoveryInProgress},
-			wantMode:         reconciliationTypes.ModeWaiting,
-			wantAction:       reconciliationTypes.StatusPersistAndStop,
+			wantMode:         reconciliationtypes.ModeWaiting,
+			wantAction:       reconciliationtypes.StatusPersistAndStop,
 			wantStatus:       metav1.ConditionFalse,
 			wantReason:       reasonClusterProvisioning,
 			wantMessage:      messageClusterProvisioning,
 			wantPhase:        phasePending,
-			wantRequeueAfter: reconciliationTypes.ReadinessRetryDelay,
+			wantRequeueAfter: reconciliationtypes.ReadinessRetryDelay,
 		},
 		{
 			name:             "missing cluster has dedicated wait",
 			err:              fmt.Errorf("read: %w", dbclusterinfo.ErrClusterNotFound),
-			wantMode:         reconciliationTypes.ModeWaiting,
-			wantAction:       reconciliationTypes.StatusPersistAndStop,
+			wantMode:         reconciliationtypes.ModeWaiting,
+			wantAction:       reconciliationtypes.StatusPersistAndStop,
 			wantStatus:       metav1.ConditionFalse,
 			wantReason:       reasonClusterNotFound,
 			wantMessage:      messageClusterNotFound,
 			wantPhase:        phasePending,
-			wantRequeueAfter: reconciliationTypes.ClusterNotFoundRetryDelay,
+			wantRequeueAfter: reconciliationtypes.ClusterNotFoundRetryDelay,
 		},
 		{
 			name:        "transient read retains error for controller backoff",
 			err:         transient,
-			wantMode:    reconciliationTypes.ModeRetryableRequeue,
-			wantAction:  reconciliationTypes.StatusPersistAndStop,
+			wantMode:    reconciliationtypes.ModeRetryableRequeue,
+			wantAction:  reconciliationtypes.StatusPersistAndStop,
 			wantStatus:  metav1.ConditionFalse,
 			wantReason:  reasonClusterInfoFetchFailed,
 			wantMessage: messageClusterInfoFetchFailed,
@@ -169,7 +169,7 @@ func TestGateObserve(t *testing.T) {
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, outcome.Err(), tt.wantErr)
 			}
-			if tt.wantMode == reconciliationTypes.ModeConverged {
+			if tt.wantMode == reconciliationtypes.ModeConverged {
 				assert.Equal(t, readyFacts.Cluster, result.Facts.Cluster)
 			}
 		})
@@ -180,8 +180,8 @@ func TestGateObserveWithoutReaderReportsConfigurationError(t *testing.T) {
 	outcome := New(nil).Observe(t.Context(), Input{Namespace: "dbs", Name: "primary"}).Outcome
 
 	require.NoError(t, outcome.Validate("cluster readiness"))
-	assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
-	assert.Equal(t, reconciliationTypes.StatusPersistAndStop, outcome.StatusAction())
+	assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.StatusPersistAndStop, outcome.StatusAction())
 	assert.Equal(t, reasonClusterReaderNotConfigured, outcome.Reason())
 	assert.Equal(t, messageClusterReaderNotConfigured, outcome.Message())
 	assert.ErrorIs(t, outcome.Err(), dbclusterinfo.ErrClusterReaderNotConfigured)

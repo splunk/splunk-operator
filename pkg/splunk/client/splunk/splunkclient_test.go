@@ -29,11 +29,11 @@ import (
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
-var invalidUrlByteArray = []byte{0x7F}
+var invalidURLByteArray = []byte{0x7F}
 
 // Error tester for client
 func splunkClientErrorTester(t *testing.T, test func(splunk.SplunkClient) error) {
-	url := string(invalidUrlByteArray)
+	url := string(invalidURLByteArray)
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	c := splunk.NewSplunkClient(url, "admin", "")
 	c.Client = mockSplunkClient
@@ -469,10 +469,10 @@ func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 	splunkClientTester(t, "TestGetMonitoringconsoleServerRoles", 200, body, wantRequest, test)
 
 	// Test negative conditions
-	url := string(invalidUrlByteArray)
-	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	url := string(invalidURLByteArray)
+	mockSplunkHTTPClient := &spltest.MockHTTPClient{}
 	c := splunk.NewSplunkClient(url, "admin", "")
-	c.Client = mockSplunkHttpClient
+	c.Client = mockSplunkHTTPClient
 	c.GetMonitoringconsoleServerRoles()
 }
 func TestUpdateDMCGroups(t *testing.T) {
@@ -515,10 +515,10 @@ func TestGetMonitoringconsoleAssetTable(t *testing.T) {
 	splunkClientTester(t, "TestGetMonitoringconsoleAssetTable", 200, body, wantRequest, test)
 
 	// Test negative conditions
-	url := string(invalidUrlByteArray)
-	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	url := string(invalidURLByteArray)
+	mockSplunkHTTPClient := &spltest.MockHTTPClient{}
 	c := splunk.NewSplunkClient(url, "admin", "")
-	c.Client = mockSplunkHttpClient
+	c.Client = mockSplunkHTTPClient
 	c.GetMonitoringconsoleAssetTable()
 }
 
@@ -555,10 +555,10 @@ func TestGetMonitoringConsoleUISettings(t *testing.T) {
 	splunkClientTester(t, "TestGetMonitoringconsoleAssetTable", 200, body, wantRequest, test)
 
 	// Test negative conditions
-	url := string(invalidUrlByteArray)
-	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	url := string(invalidURLByteArray)
+	mockSplunkHTTPClient := &spltest.MockHTTPClient{}
 	c := splunk.NewSplunkClient(url, "admin", "")
-	c.Client = mockSplunkHttpClient
+	c.Client = mockSplunkHTTPClient
 	c.GetMonitoringConsoleUISettings()
 }
 
@@ -580,10 +580,10 @@ func TestUpdateLookupUISettings(t *testing.T) {
 	splunkClientTester(t, "TestPostMonitoringconsoleAssetTable", 200, "", wantRequest, test)
 
 	// Test negative conditions
-	url := string(invalidUrlByteArray)
-	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	url := string(invalidURLByteArray)
+	mockSplunkHTTPClient := &spltest.MockHTTPClient{}
 	c := splunk.NewSplunkClient(url, "admin", "")
-	c.Client = mockSplunkHttpClient
+	c.Client = mockSplunkHTTPClient
 	c.GetMonitoringConsoleUISettings()
 }
 
@@ -620,12 +620,12 @@ func TestGetClusterInfo(t *testing.T) {
 	splunkClientTester(t, "TestGetClusterInfo", 200, body, wantRequest, test)
 
 	// Test negative conditions
-	url := string(invalidUrlByteArray)
+	url := string(invalidURLByteArray)
 
 	// Test mock call
-	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	mockSplunkHTTPClient := &spltest.MockHTTPClient{}
 	c := splunk.NewSplunkClient(url, "admin", "")
-	c.Client = mockSplunkHttpClient
+	c.Client = mockSplunkHTTPClient
 	c.GetClusterInfo(true)
 
 	// Test get call error
