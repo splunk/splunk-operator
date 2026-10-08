@@ -20,7 +20,7 @@ import (
 	"fmt"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -54,7 +54,7 @@ type BackupInfo struct {
 // A non-nil BlueGreen value replaces the current attempt's nested durable
 // record together with the generic report and backup evidence.
 type Progress struct {
-	Report    reconciliationTypes.Report
+	Report    reconciliationtypes.Report
 	Baseline  *BackupInfo
 	BlueGreen *platformv1alpha1.PostgresBlueGreenUpgradeStatus
 }

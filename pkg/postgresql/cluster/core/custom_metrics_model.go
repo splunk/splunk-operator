@@ -24,7 +24,7 @@ import (
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mon "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +52,7 @@ func newCustomMetricsModel(model *mon.Model, events eventEmitter, updateStatus h
 	}
 }
 
-func (m *customMetricsModel) Name() string            { return pgcConstants.ComponentCustomMetrics }
+func (m *customMetricsModel) Name() string            { return pgcconstants.ComponentCustomMetrics }
 func (m *customMetricsModel) Requires() []contractKey { return []contractKey{contractCNPGCluster} }
 func (m *customMetricsModel) Provides() []contractKey { return nil }
 
@@ -161,7 +161,7 @@ func (m *customMetricsModel) computeHealth(reconcileErr error) (componentHealth,
 
 func withCustomMetricsRepairRequeue(health componentHealth, requeue bool) componentHealth {
 	if requeue {
-		health.State = pgcConstants.Configuring
+		health.State = pgcconstants.Configuring
 		health.Phase = configuringClusterPhase
 		health.Result.RequeueAfter = retryDelay
 	}

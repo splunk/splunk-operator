@@ -23,7 +23,7 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	majorversionupgradetypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	mvupredicate "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/predicate"
 )
 
@@ -36,7 +36,7 @@ type UseCase interface {
 	Prerequisites(context.Context) error
 	Schedule(context.Context) (bool, error)
 	BlocksComponents() []string
-	Act(context.Context) (reconciliationTypes.Report, error)
+	Act(context.Context) (reconciliationtypes.Report, error)
 }
 
 type Factory func() UseCase
@@ -154,7 +154,7 @@ func (r *Reconciler) CheckPrerequisites(ctx context.Context) error {
 	return nil
 }
 
-func (r *Reconciler) Reconcile(ctx context.Context) (*reconciliationTypes.Report, error) {
+func (r *Reconciler) Reconcile(ctx context.Context) (*reconciliationtypes.Report, error) {
 	logger := logging.FromContext(ctx)
 	if r.scheduled == nil {
 		if err := r.Schedule(ctx); err != nil {

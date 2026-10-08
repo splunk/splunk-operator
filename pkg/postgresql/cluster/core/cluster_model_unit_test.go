@@ -27,7 +27,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/google/go-cmp/cmp"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -288,7 +288,7 @@ func TestClusterModelReconcilesNonconventionalAuthoritativeEnvironmentIdempotent
 	health, err := model.computeHealth(nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	require.NotNil(t, contracts.CNPGCluster)
 	assert.Equal(t, green.Name, contracts.CNPGCluster.Name)
 	require.NotNil(t, cluster.Status.ProvisionerRef)
@@ -372,7 +372,7 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 
 	health, err := model.Observe(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, pendingClusterPhase, health.Phase)
 	assert.Equal(t, clusterReady, health.Condition)
 	assert.Equal(t, reasonMajorUpgradeConfigRequired, health.Reason)
@@ -450,7 +450,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 
 	health, err := model.Observe(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, pendingClusterPhase, health.Phase)
 	assert.Equal(t, clusterReady, health.Condition)
 	assert.Equal(t, reasonMajorDowngradeUnsupported, health.Reason)
@@ -546,7 +546,7 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 
 	health, err := model.Observe(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, pendingClusterPhase, health.Phase)
 	assert.Equal(t, clusterReady, health.Condition)
 	assert.Equal(t, reasonMajorUpgradePending, health.Reason)
@@ -1782,7 +1782,7 @@ func TestClusterModelContractsNotReadyIsUpstreamPending(t *testing.T) {
 	require.ErrorIs(t, reconcileErr, errContractsNotReady)
 	require.NoError(t, err)
 	assert.Equal(t, clusterReady, health.Condition)
-	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, reasonUpstreamNotReady, health.Reason)
 	assert.True(t, health.Result.RequeueAfter > 0)
 }
@@ -1989,7 +1989,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			components := tt.components()
 
 			// Act + Assert per-component
-			state := pgcConstants.Empty
+			state := pgcconstants.Empty
 			for i, c := range components {
 				var reconcileErr error
 				if reconcileErr = c.CheckContracts(); reconcileErr == nil {
@@ -2004,7 +2004,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 					break
 				}
 			}
-			assert.Equal(t, tt.expectAll, state&pgcConstants.Ready == pgcConstants.Ready, tt.message)
+			assert.Equal(t, tt.expectAll, state&pgcconstants.Ready == pgcconstants.Ready, tt.message)
 		})
 	}
 }
@@ -2861,28 +2861,28 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 		specImage     string
 		statusImage   string
 		pgDataImage   string
-		expectedState pgcConstants.State
+		expectedState pgcconstants.State
 		expectRequeue bool
 	}{
 		{
 			name:          "body patch + CNPG still Healthy holds at Provisioning",
 			patchKind:     cnpgPatchBody,
 			cnpgPhase:     cnpgv1.PhaseHealthy,
-			expectedState: pgcConstants.Provisioning,
+			expectedState: pgcconstants.Provisioning,
 			expectRequeue: true,
 		},
 		{
 			name:          "metadata patch + CNPG Healthy reaches Ready immediately",
 			patchKind:     cnpgPatchMetadata,
 			cnpgPhase:     cnpgv1.PhaseHealthy,
-			expectedState: pgcConstants.Ready,
+			expectedState: pgcconstants.Ready,
 			expectRequeue: false,
 		},
 		{
 			name:          "no patch + CNPG Healthy reaches Ready",
 			patchKind:     cnpgPatchNone,
 			cnpgPhase:     cnpgv1.PhaseHealthy,
-			expectedState: pgcConstants.Ready,
+			expectedState: pgcconstants.Ready,
 			expectRequeue: false,
 		},
 		{
@@ -2891,7 +2891,7 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 			cnpgPhase:     cnpgv1.PhaseHealthy,
 			specImage:     "ghcr.io/cloudnative-pg/postgresql:18.0",
 			statusImage:   "ghcr.io/cloudnative-pg/postgresql:17.6",
-			expectedState: pgcConstants.Provisioning,
+			expectedState: pgcconstants.Provisioning,
 			expectRequeue: true,
 		},
 		{
@@ -2901,7 +2901,7 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 			specImage:     "ghcr.io/cloudnative-pg/postgresql:18.0",
 			statusImage:   "ghcr.io/cloudnative-pg/postgresql:18.0",
 			pgDataImage:   "ghcr.io/cloudnative-pg/postgresql:17.6",
-			expectedState: pgcConstants.Provisioning,
+			expectedState: pgcconstants.Provisioning,
 			expectRequeue: true,
 		},
 		{
@@ -2911,7 +2911,7 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 			specImage:     "ghcr.io/cloudnative-pg/postgresql:18.0",
 			statusImage:   "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			pgDataImage:   "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			expectedState: pgcConstants.Ready,
+			expectedState: pgcconstants.Ready,
 			expectRequeue: false,
 		},
 		{
@@ -2921,7 +2921,7 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 			specImage:     "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			statusImage:   "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			pgDataImage:   "ghcr.io/cloudnative-pg/postgresql:18.0@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			expectedState: pgcConstants.Provisioning,
+			expectedState: pgcconstants.Provisioning,
 			expectRequeue: true,
 		},
 	}
@@ -2963,7 +2963,7 @@ func TestClusterModelObserve_AdoptedClusterDoesNotStallAtProvisioning(t *testing
 
 	// Assert: metadata-only patch must not trigger phase gate — adopted healthy cluster reaches Ready.
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	assert.Equal(t, ctrl.Result{}, health.Result)
 }
 
@@ -3102,21 +3102,21 @@ func TestClusterModelComputeHealthGatesScale(t *testing.T) {
 		t.Parallel()
 		health, err := newModel(3, 2).computeHealth(nil)
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Provisioning, health.State)
+		assert.Equal(t, pgcconstants.Provisioning, health.State)
 	})
 
 	t.Run("scale-down: ready trails desired holds Provisioning", func(t *testing.T) {
 		t.Parallel()
 		health, err := newModel(2, 2).computeHealth(nil)
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Provisioning, health.State)
+		assert.Equal(t, pgcconstants.Provisioning, health.State)
 	})
 
 	t.Run("settled: ready equals desired reaches Ready", func(t *testing.T) {
 		t.Parallel()
 		health, err := newModel(3, 3).computeHealth(nil)
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Ready, health.State)
+		assert.Equal(t, pgcconstants.Ready, health.State)
 	})
 }
 

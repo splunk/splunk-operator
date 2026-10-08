@@ -22,7 +22,7 @@ import (
 
 	"github.com/splunk/splunk-operator/pkg/logging"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 )
 
 var errDriverNotConfigured = errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("pg_upgrade port is not configured"))
@@ -39,10 +39,10 @@ func NewPgUpgradeFlow(driver PgUpgrade, state mvutypes.Status) *pgUpgradeFlow {
 	return &pgUpgradeFlow{state: state, driver: driver}
 }
 
-func (v *pgUpgradeFlow) Upgrade(ctx context.Context) (reconciliationTypes.Report, error) {
+func (v *pgUpgradeFlow) Upgrade(ctx context.Context) (reconciliationtypes.Report, error) {
 	logging.FromContext(ctx).InfoContext(ctx, "major version upgrade in progress", "state", string(v.state))
 
-	handleState := func() (reconciliationTypes.Report, error) {
+	handleState := func() (reconciliationtypes.Report, error) {
 		switch v.state {
 		case mvutypes.Scheduled:
 			return v.onScheduled(ctx)
@@ -60,11 +60,11 @@ func (v *pgUpgradeFlow) Upgrade(ctx context.Context) (reconciliationTypes.Report
 	return handleState()
 }
 
-func (v *pgUpgradeFlow) onScheduled(_ context.Context) (reconciliationTypes.Report, error) {
+func (v *pgUpgradeFlow) onScheduled(_ context.Context) (reconciliationtypes.Report, error) {
 	if v.driver == nil {
 		return mvutypes.ReportFromError(errDriverNotConfigured), errDriverNotConfigured
 	}
-	return reconciliationTypes.Report{
+	return reconciliationtypes.Report{
 		Name:    mvutypes.UseCaseName,
 		Phase:   string(mvutypes.Preflight),
 		Reason:  mvutypes.ReasonPreflightCheckPassed,
@@ -73,7 +73,7 @@ func (v *pgUpgradeFlow) onScheduled(_ context.Context) (reconciliationTypes.Repo
 	}, nil
 }
 
-func (v *pgUpgradeFlow) onPreflight(ctx context.Context) (reconciliationTypes.Report, error) {
+func (v *pgUpgradeFlow) onPreflight(ctx context.Context) (reconciliationtypes.Report, error) {
 	if v.driver == nil {
 		return mvutypes.ReportFromError(errDriverNotConfigured), errDriverNotConfigured
 	}
@@ -81,7 +81,7 @@ func (v *pgUpgradeFlow) onPreflight(ctx context.Context) (reconciliationTypes.Re
 		if errors.Is(err, mvutypes.ErrUpgradeFlowFailed) {
 			return mvutypes.ReportFromError(err), err
 		}
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name:    mvutypes.UseCaseName,
 			Phase:   string(mvutypes.Preflight),
 			Reason:  mvutypes.ReasonUpgradeFlowPending,
@@ -90,7 +90,7 @@ func (v *pgUpgradeFlow) onPreflight(ctx context.Context) (reconciliationTypes.Re
 		}, nil
 	}
 
-	return reconciliationTypes.Report{
+	return reconciliationtypes.Report{
 		Name:    mvutypes.UseCaseName,
 		Phase:   string(mvutypes.Upgrading),
 		Reason:  mvutypes.ReasonPgUpgradeStarted,
@@ -99,7 +99,7 @@ func (v *pgUpgradeFlow) onPreflight(ctx context.Context) (reconciliationTypes.Re
 	}, nil
 }
 
-func (v *pgUpgradeFlow) onUpgrading(ctx context.Context) (reconciliationTypes.Report, error) {
+func (v *pgUpgradeFlow) onUpgrading(ctx context.Context) (reconciliationtypes.Report, error) {
 	if v.driver == nil {
 		return mvutypes.ReportFromError(errDriverNotConfigured), errDriverNotConfigured
 	}
@@ -116,7 +116,7 @@ func (v *pgUpgradeFlow) onUpgrading(ctx context.Context) (reconciliationTypes.Re
 		return mvutypes.ReportFromError(mvutypes.ErrUpgradeFlowPending), nil
 	}
 
-	return reconciliationTypes.Report{
+	return reconciliationtypes.Report{
 		Name:    mvutypes.UseCaseName,
 		Phase:   string(mvutypes.Verifying),
 		Reason:  mvutypes.ReasonPgUpgradeObservedComplete,
@@ -125,7 +125,7 @@ func (v *pgUpgradeFlow) onUpgrading(ctx context.Context) (reconciliationTypes.Re
 	}, nil
 }
 
-func (v *pgUpgradeFlow) onVerifying(ctx context.Context) (reconciliationTypes.Report, error) {
+func (v *pgUpgradeFlow) onVerifying(ctx context.Context) (reconciliationtypes.Report, error) {
 	if v.driver == nil {
 		return mvutypes.ReportFromError(errDriverNotConfigured), errDriverNotConfigured
 	}
@@ -135,7 +135,7 @@ func (v *pgUpgradeFlow) onVerifying(ctx context.Context) (reconciliationTypes.Re
 		return mvutypes.ReportFromError(err), err
 	}
 	if !verified {
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name:    mvutypes.UseCaseName,
 			Phase:   string(mvutypes.Verifying),
 			Reason:  mvutypes.ReasonUpgradeFlowPending,
@@ -144,7 +144,7 @@ func (v *pgUpgradeFlow) onVerifying(ctx context.Context) (reconciliationTypes.Re
 		}, nil
 	}
 
-	return reconciliationTypes.Report{
+	return reconciliationtypes.Report{
 		Name:    mvutypes.UseCaseName,
 		Phase:   string(mvutypes.PostUpgradeBackup),
 		Reason:  mvutypes.ReasonPgUpgradeFinalized,

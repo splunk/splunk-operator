@@ -24,7 +24,7 @@ import (
 	"time"
 
 	dbpipeline "github.com/splunk/splunk-operator/pkg/postgresql/database/core/pipeline"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/stretchr/testify/assert"
@@ -82,8 +82,8 @@ func TestStepReconcileBuildsPublicationsInOrder(t *testing.T) {
 	assert.Equal(t, "payments_writer", publications[0].Data[dbtypes.ConnectionKeyRWUser])
 	assert.Equal(t, "tenant-audit-config", publications[1].Name)
 	require.NotNil(t, contracts.ConnectionMetadataReady)
-	assert.Equal(t, reconciliationTypes.ModeConverged, outcome.Mode())
-	assert.Equal(t, reconciliationTypes.StatusPersistAndContinue, outcome.StatusAction())
+	assert.Equal(t, reconciliationtypes.ModeConverged, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.StatusPersistAndContinue, outcome.StatusAction())
 	assert.Equal(t, "ConfigMapsReady", outcome.Condition())
 	assert.Equal(t, "True", string(outcome.ConditionStatus()))
 	assert.Equal(t, "ConfigMapsCreated", outcome.Reason())
@@ -102,7 +102,7 @@ func TestStepRequiresCredentialsAndManagedRoleIntent(t *testing.T) {
 func TestPipelineRejectsConnectionMetadataBeforeCredentialsProvider(t *testing.T) {
 	step := New(nil, nil, Input{})
 
-	_, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{step}, func(context.Context, reconciliationTypes.Outcome) error {
+	_, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{step}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("status handler must not run for an invalid step order")
 		return nil
 	})
@@ -117,7 +117,7 @@ func TestPipelineRejectsConnectionMetadataBeforeManagedRoleIntentProvider(t *tes
 	_, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{
 		&credentialsReadyProvider{ready: true},
 		step,
-	}, func(context.Context, reconciliationTypes.Outcome) error {
+	}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("status handler must not run for an invalid step order")
 		return nil
 	})
@@ -143,7 +143,7 @@ func TestStepClassifiesEndpointFailure(t *testing.T) {
 	assert.ErrorIs(t, reconcileErr, resolveErr)
 	assert.True(t, IsEndpointResolutionFailure(reconcileErr))
 	assert.Nil(t, contracts.ConnectionMetadataReady)
-	assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
 	assert.Equal(t, "ConfigMapsReady", outcome.Condition())
 	assert.Equal(t, "False", string(outcome.ConditionStatus()))
 	assert.Equal(t, "ConfigMapsCreationFailed", outcome.Reason())
@@ -177,7 +177,7 @@ func TestStepStopsAfterPublicationFailure(t *testing.T) {
 	assert.False(t, IsEndpointResolutionFailure(reconcileErr))
 	assert.Equal(t, []string{"first", "second"}, applied)
 	assert.Nil(t, contracts.ConnectionMetadataReady)
-	assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
 	assert.Equal(t, "Failed to reconcile ConfigMaps: apiserver unavailable", outcome.Message())
 }
 
@@ -201,14 +201,14 @@ func TestPipelineRequeuesConnectionMetadataConflictWithoutPublishingFailureStatu
 		&roleIntentProvider{},
 		step,
 		downstream,
-	}, func(context.Context, reconciliationTypes.Outcome) error {
+	}, func(context.Context, reconciliationtypes.Outcome) error {
 		persistCalls++
 		return nil
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, reconciliationTypes.ModeImmediateRequeue, outcome.Mode())
-	assert.Equal(t, reconciliationTypes.StatusNone, outcome.StatusAction())
+	assert.Equal(t, reconciliationtypes.ModeImmediateRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.StatusNone, outcome.StatusAction())
 	assert.True(t, outcome.Result().Requeue)
 	assert.ErrorIs(t, outcome.Err(), publicationErr)
 	assert.Equal(t, 1, publishCalls)
@@ -237,7 +237,7 @@ func TestStepRejectsIncompleteResolvedEndpointsBeforePublishing(t *testing.T) {
 	assert.ErrorContains(t, reconcileErr, "RHost is required")
 	assert.False(t, IsEndpointResolutionFailure(reconcileErr))
 	assert.Nil(t, contracts.ConnectionMetadataReady)
-	assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
 	assert.Equal(t, "ConfigMapsCreationFailed", outcome.Reason())
 }
 
@@ -261,7 +261,7 @@ func TestStepRejectsEmptyDatabaseInputBeforeExternalCalls(t *testing.T) {
 	assert.Zero(t, resolveCalls)
 	assert.Zero(t, publishCalls)
 	assert.Nil(t, contracts.ConnectionMetadataReady)
-	assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
 	assert.Equal(t, "ConfigMapsCreationFailed", outcome.Reason())
 }
 
@@ -281,14 +281,14 @@ func TestStepProviderReadFailureDoesNotChangeConfigMapStatus(t *testing.T) {
 		&roleIntentProvider{},
 		step,
 		downstream,
-	}, func(context.Context, reconciliationTypes.Outcome) error {
+	}, func(context.Context, reconciliationtypes.Outcome) error {
 		statusCalls++
 		return nil
 	})
 
 	assert.ErrorIs(t, err, providerErr)
-	assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
-	assert.Equal(t, reconciliationTypes.StatusNone, outcome.StatusAction())
+	assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.StatusNone, outcome.StatusAction())
 	assert.Empty(t, outcome.Condition())
 	assert.ErrorIs(t, outcome.Err(), providerErr)
 	assert.Zero(t, statusCalls)
@@ -328,7 +328,7 @@ func TestStepRunsBetweenCredentialsAndManagedRoleGate(t *testing.T) {
 	provider := &credentialsReadyProvider{ready: true}
 	roleIntent := &roleIntentProvider{}
 
-	_, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{provider, roleIntent, step, consumer}, func(context.Context, reconciliationTypes.Outcome) error {
+	_, err := dbpipeline.Run(t.Context(), []dbpipeline.Step{provider, roleIntent, step, consumer}, func(context.Context, reconciliationtypes.Outcome) error {
 		return nil
 	})
 
@@ -358,9 +358,9 @@ func (c *managedRoleGate) Observe(
 	_ context.Context,
 	contracts *dbpipeline.Contracts,
 	_ error,
-) (reconciliationTypes.Outcome, error) {
+) (reconciliationtypes.Outcome, error) {
 	c.called = contracts.ConnectionMetadataReady != nil
-	return reconciliationTypes.Converged(), nil
+	return reconciliationtypes.Converged(), nil
 }
 
 func TestStepDoesNotRunUntilCredentialsAreReady(t *testing.T) {
@@ -382,13 +382,13 @@ func TestStepDoesNotRunUntilCredentialsAreReady(t *testing.T) {
 		&credentialsReadyProvider{ready: false},
 		&roleIntentProvider{},
 		step,
-	}, func(context.Context, reconciliationTypes.Outcome) error {
+	}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("status must not be persisted while the prerequisite is deferred")
 		return nil
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, reconciliationTypes.ModeDeferred, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeDeferred, outcome.Mode())
 	assert.Zero(t, resolveCalls)
 	assert.Zero(t, publishCalls)
 }
@@ -410,9 +410,9 @@ func (p *roleIntentProvider) Observe(
 	_ context.Context,
 	contracts *dbpipeline.Contracts,
 	_ error,
-) (reconciliationTypes.Outcome, error) {
+) (reconciliationtypes.Outcome, error) {
 	contracts.ManagedRoleIntentPublished = &dbpipeline.ManagedRoleIntentPublishedContract{}
-	return reconciliationTypes.Converged(), nil
+	return reconciliationtypes.Converged(), nil
 }
 
 func (p *credentialsReadyProvider) Name() string { return "credentials" }
@@ -426,10 +426,10 @@ func (p *credentialsReadyProvider) Observe(
 	_ context.Context,
 	contracts *dbpipeline.Contracts,
 	_ error,
-) (reconciliationTypes.Outcome, error) {
+) (reconciliationtypes.Outcome, error) {
 	if !p.ready {
-		return reconciliationTypes.Deferred(time.Second), nil
+		return reconciliationtypes.Deferred(time.Second), nil
 	}
 	contracts.CredentialsReady = &dbpipeline.CredentialsReadyContract{}
-	return reconciliationTypes.Converged(), nil
+	return reconciliationtypes.Converged(), nil
 }

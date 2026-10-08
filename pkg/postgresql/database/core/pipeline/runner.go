@@ -20,25 +20,25 @@ import (
 	"fmt"
 	"time"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const runtimeDependencyRequeueAfter = 15 * time.Second
 
 // HandleStatus applies or persists the status represented by an outcome.
-type HandleStatus func(context.Context, reconciliationTypes.Outcome) error
+type HandleStatus func(context.Context, reconciliationtypes.Outcome) error
 
 // Run executes steps in order using fresh contracts for this pass.
-func Run(ctx context.Context, steps []Step, handleStatus HandleStatus) (reconciliationTypes.Outcome, error) {
+func Run(ctx context.Context, steps []Step, handleStatus HandleStatus) (reconciliationtypes.Outcome, error) {
 	if err := ValidateStepOrder(steps); err != nil {
-		return reconciliationTypes.Outcome{}, err
+		return reconciliationtypes.Outcome{}, err
 	}
 
 	contracts := NewContracts()
 	statusDirty := false
 	runtimeIncomplete := false
-	var deferredOutcome reconciliationTypes.Outcome
+	var deferredOutcome reconciliationtypes.Outcome
 	hasDeferredOutcome := false
 	for _, s := range steps {
 		if missing := missingContracts(s.Requires(), contracts); len(missing) > 0 {
@@ -64,36 +64,36 @@ func Run(ctx context.Context, steps []Step, handleStatus HandleStatus) (reconcil
 		}
 
 		switch outcome.Mode() {
-		case reconciliationTypes.ModeConverged:
+		case reconciliationtypes.ModeConverged:
 			if err := validateProvidedContracts(s, contracts); err != nil {
 				return outcome, err
 			}
-			if runtimeIncomplete && outcome.StatusAction() == reconciliationTypes.StatusPersistAndStop {
+			if runtimeIncomplete && outcome.StatusAction() == reconciliationtypes.StatusPersistAndStop {
 				return outcome, fmt.Errorf("%s: final converged status cannot be persisted after incomplete runtime dependencies", s.Name())
 			}
 			if err := handleStatusOutcome(ctx, handleStatus, s.Name(), outcome); err != nil {
 				return statusFailureOutcome(outcome, err)
 			}
 			statusDirty = trackStatusDirty(statusDirty, outcome.StatusAction())
-			if outcome.StatusAction() == reconciliationTypes.StatusPersistAndStop {
+			if outcome.StatusAction() == reconciliationtypes.StatusPersistAndStop {
 				return outcome, nil
 			}
 			continue
-		case reconciliationTypes.ModeDeferred:
+		case reconciliationtypes.ModeDeferred:
 			runtimeIncomplete = true
 			deferredOutcome, hasDeferredOutcome = selectDeferredOutcome(deferredOutcome, hasDeferredOutcome, outcome)
 			continue
-		case reconciliationTypes.ModeImmediateRequeue:
+		case reconciliationtypes.ModeImmediateRequeue:
 			if statusDirty {
 				return outcome, unflushedStatusError(s.Name())
 			}
 			return outcome, nil
-		case reconciliationTypes.ModeSilentStop:
+		case reconciliationtypes.ModeSilentStop:
 			if statusDirty {
 				return outcome, unflushedStatusError(s.Name())
 			}
 			return outcome, nil
-		case reconciliationTypes.ModeWaiting, reconciliationTypes.ModeRetryableRequeue, reconciliationTypes.ModeTerminalError:
+		case reconciliationtypes.ModeWaiting, reconciliationtypes.ModeRetryableRequeue, reconciliationtypes.ModeTerminalError:
 			if err := handleStatusOutcome(ctx, handleStatus, s.Name(), outcome); err != nil {
 				return statusFailureOutcome(outcome, err)
 			}
@@ -108,7 +108,7 @@ func Run(ctx context.Context, steps []Step, handleStatus HandleStatus) (reconcil
 	}
 
 	if statusDirty {
-		return reconciliationTypes.Converged(), unflushedStatusError("pipeline")
+		return reconciliationtypes.Converged(), unflushedStatusError("pipeline")
 	}
 	if runtimeIncomplete {
 		if hasDeferredOutcome {
@@ -116,12 +116,12 @@ func Run(ctx context.Context, steps []Step, handleStatus HandleStatus) (reconcil
 		}
 		return runtimeDependenciesWaiting(), nil
 	}
-	return reconciliationTypes.Converged(), nil
+	return reconciliationtypes.Converged(), nil
 }
 
-func statusFailureOutcome(outcome reconciliationTypes.Outcome, statusErr error) (reconciliationTypes.Outcome, error) {
+func statusFailureOutcome(outcome reconciliationtypes.Outcome, statusErr error) (reconciliationtypes.Outcome, error) {
 	if apierrors.IsConflict(statusErr) {
-		return reconciliationTypes.ImmediateRequeue(statusErr), nil
+		return reconciliationtypes.ImmediateRequeue(statusErr), nil
 	}
 	if outcome.Err() != nil {
 		return outcome, fmt.Errorf("%w (status action also failed: %v)", outcome.Err(), statusErr)
@@ -129,18 +129,18 @@ func statusFailureOutcome(outcome reconciliationTypes.Outcome, statusErr error) 
 	return outcome, statusErr
 }
 
-func selectDeferredOutcome(current reconciliationTypes.Outcome, hasCurrent bool, candidate reconciliationTypes.Outcome) (reconciliationTypes.Outcome, bool) {
+func selectDeferredOutcome(current reconciliationtypes.Outcome, hasCurrent bool, candidate reconciliationtypes.Outcome) (reconciliationtypes.Outcome, bool) {
 	if !hasCurrent || candidate.Result().RequeueAfter < current.Result().RequeueAfter {
 		return candidate, true
 	}
 	return current, true
 }
 
-func trackStatusDirty(dirty bool, action reconciliationTypes.StatusAction) bool {
+func trackStatusDirty(dirty bool, action reconciliationtypes.StatusAction) bool {
 	switch action {
-	case reconciliationTypes.StatusApplyAndContinue:
+	case reconciliationtypes.StatusApplyAndContinue:
 		return true
-	case reconciliationTypes.StatusPersistAndContinue, reconciliationTypes.StatusPersistAndStop:
+	case reconciliationtypes.StatusPersistAndContinue, reconciliationtypes.StatusPersistAndStop:
 		return false
 	default:
 		return dirty
@@ -151,8 +151,8 @@ func unflushedStatusError(stepName string) error {
 	return fmt.Errorf("%s: status applied in memory but not persisted", stepName)
 }
 
-func runtimeDependenciesWaiting() reconciliationTypes.Outcome {
-	return reconciliationTypes.Deferred(runtimeDependencyRequeueAfter)
+func runtimeDependenciesWaiting() reconciliationtypes.Outcome {
+	return reconciliationtypes.Deferred(runtimeDependencyRequeueAfter)
 }
 
 func validateProvidedContracts(s Step, contracts *Contracts) error {
@@ -164,8 +164,8 @@ func validateProvidedContracts(s Step, contracts *Contracts) error {
 	return nil
 }
 
-func handleStatusOutcome(ctx context.Context, handleStatus HandleStatus, stepName string, outcome reconciliationTypes.Outcome) error {
-	if outcome.StatusAction() == reconciliationTypes.StatusNone {
+func handleStatusOutcome(ctx context.Context, handleStatus HandleStatus, stepName string, outcome reconciliationtypes.Outcome) error {
+	if outcome.StatusAction() == reconciliationtypes.StatusNone {
 		return nil
 	}
 	if handleStatus == nil {

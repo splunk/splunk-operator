@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package reconciliationTypes defines database reconcile result values shared by
+// Package reconciliationtypes defines database reconcile result values shared by
 // database components, use cases, and orchestration runners.
-package reconciliationTypes
+package reconciliationtypes

@@ -34,7 +34,7 @@ import (
 	cnpgpostgres "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/distribution/reference"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -98,7 +98,7 @@ func newClusterModel(c client.Client, scheme *runtime.Scheme, events eventEmitte
 	return model
 }
 
-func (p *clusterModel) Name() string { return pgcConstants.ComponentProvisioner }
+func (p *clusterModel) Name() string { return pgcconstants.ComponentProvisioner }
 func (p *clusterModel) Requires() []contractKey {
 	return []contractKey{contractSecret, contractAuthority, contractServerTLS}
 }
@@ -325,7 +325,7 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 	default:
 		health = newProvisioningHealth(clusterReady, reasonCNPGProvisioning, fmt.Sprintf(msgFmtCNPGClusterPhase, phase))
 	}
-	if health.State == pgcConstants.Ready && p.contracts != nil && p.contracts.ServerTLS.initialized && p.contracts.TLSBackend.observed && !p.contracts.TLSBackend.Converged {
+	if health.State == pgcconstants.Ready && p.contracts != nil && p.contracts.ServerTLS.initialized && p.contracts.TLSBackend.observed && !p.contracts.TLSBackend.Converged {
 		return newProvisioningHealth(clusterReady, reasonCNPGProvisioning, "waiting for CNPG server TLS adoption"), nil
 	}
 	return health, convergeErr

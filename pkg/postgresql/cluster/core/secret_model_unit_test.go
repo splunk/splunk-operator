@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	sharedreconcile "github.com/splunk/splunk-operator/pkg/postgresql/shared/reconcile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -142,7 +142,7 @@ func TestSecretModelAdoptsOrphanedSecret(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	adopted := &corev1.Secret{}
 	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1-secret", Namespace: "default"}, adopted))
 	require.Len(t, adopted.OwnerReferences, 1)
@@ -172,7 +172,7 @@ func TestSecretModelObserveFailsWhenPasswordKeyMissing(t *testing.T) {
 	// Assert
 	require.NoError(t, reconcileErr)
 	require.Error(t, err)
-	assert.Equal(t, pgcConstants.Failed, health.State)
+	assert.Equal(t, pgcconstants.Failed, health.State)
 	assert.Equal(t, reasonSuperUserSecretFailed, health.Reason)
 	assert.Contains(t, health.Message, secretKeyPassword)
 }
@@ -277,7 +277,7 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 		require.ErrorAs(t, err, &invalidSecretErr,
 			"Observe must surface the empty-name guard set by reconcileExternalSecret")
 		assert.Equal(t, reasonExternalSecretInvalid, invalidSecretErr.reason)
-		assert.Equal(t, pgcConstants.Failed, health.State)
+		assert.Equal(t, pgcconstants.Failed, health.State)
 		assert.Equal(t, secretsReady, health.Condition)
 		assert.Equal(t, reasonSuperUserSecretFailed, health.Reason)
 		assert.Equal(t, failedClusterPhase, health.Phase)
@@ -303,7 +303,7 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 			"a NotFound Get must produce secretReconcileError with reasonExternalSecretMissing")
 		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)),
 			"a missing external secret is not retry-recoverable and must be terminal")
-		assert.Equal(t, pgcConstants.Failed, health.State)
+		assert.Equal(t, pgcconstants.Failed, health.State)
 		assert.Equal(t, secretsReady, health.Condition)
 		assert.Equal(t, reasonExternalSecretMissing, health.Reason)
 		assert.Equal(t, failedClusterPhase, health.Phase)
@@ -334,7 +334,7 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 			"a status-write conflict must not be terminalized — it must stay requeueable")
 		assert.True(t, sharedreconcile.IsPureConflict(err),
 			"the returned error must be a pure conflict so the controller requeues to persist status")
-		assert.Equal(t, pgcConstants.Failed, health.State)
+		assert.Equal(t, pgcconstants.Failed, health.State)
 		assert.Equal(t, reasonExternalSecretMissing, health.Reason)
 
 		assert.Equal(t, 1, status.count, "Observe must still attempt the status write exactly once")
@@ -368,7 +368,7 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 		var missingSecretErr secretReconcileError
 		assert.True(t, errors.As(err, &missingSecretErr),
 			"the joined error must still carry the missing-secret cause")
-		assert.Equal(t, pgcConstants.Failed, health.State)
+		assert.Equal(t, pgcconstants.Failed, health.State)
 		assert.Equal(t, reasonExternalSecretMissing, health.Reason)
 
 		assert.Equal(t, 1, status.count, "Observe must still attempt the status write exactly once")
@@ -399,7 +399,7 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 		health, err := s.Observe(t.Context(), reconcileErr)
 
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Ready, health.State)
+		assert.Equal(t, pgcconstants.Ready, health.State)
 		assert.Equal(t, secretsReady, health.Condition)
 		assert.Equal(t, reasonSuperUserSecretReady, health.Reason)
 		assert.Equal(t, 0, counter.count,
@@ -441,7 +441,7 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 		assert.Equal(t, reasonExternalSecretMissingLabel, secretReconcileErr.reason)
 		assert.True(t, errors.Is(err, reconcile.TerminalError(nil)),
 			"a missing reload label is deterministic — retrying cannot fix it, so it must be terminal")
-		assert.Equal(t, pgcConstants.Failed, health.State)
+		assert.Equal(t, pgcconstants.Failed, health.State)
 		assert.Equal(t, reasonExternalSecretMissingLabel, health.Reason)
 		assert.Equal(t, 0, counter.count,
 			"operator must never add the label itself")
@@ -667,7 +667,7 @@ func TestSecretModel_DeterministicValidationFailuresAreTerminal(t *testing.T) {
 			require.ErrorAs(t, err, &secretErr)
 			assert.Equal(t, tc.wantReason, secretErr.reason)
 
-			assert.Equal(t, pgcConstants.Failed, health.State)
+			assert.Equal(t, pgcconstants.Failed, health.State)
 			assert.Equal(t, secretsReady, health.Condition)
 			assert.Equal(t, failedClusterPhase, health.Phase)
 
@@ -717,7 +717,7 @@ func TestSecretModel_TerminalFailureRecoversOnSecretFix(t *testing.T) {
 
 	health, err = s.Observe(t.Context(), s.Reconcile(t.Context()))
 	require.NoError(t, err, "a corrected secret must reconcile cleanly, not stay stuck in the terminal state")
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	assert.Equal(t, secretsReady, health.Condition)
 	assert.Equal(t, reasonSuperUserSecretReady, health.Reason)
 	assert.NotNil(t, contracts.Secret, "a valid secret must be published on the contract")
@@ -759,7 +759,7 @@ func TestSecretModel_EmptyRefRecoversOnSpecFix(t *testing.T) {
 
 	health, err = s.Observe(t.Context(), s.Reconcile(t.Context()))
 	require.NoError(t, err, "a corrected spec ref must reconcile cleanly, not stay stuck")
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	assert.Equal(t, reasonSuperUserSecretReady, health.Reason)
 	assert.NotNil(t, contracts.Secret)
 }
@@ -825,7 +825,7 @@ func TestSecretModel_ActuateDispatch(t *testing.T) {
 
 		health, err := s.Observe(t.Context(), reconcileErr)
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Ready, health.State,
+		assert.Equal(t, pgcconstants.Ready, health.State,
 			"internal path must reach Ready once the Secret carries .data[\"password\"]")
 		assert.Equal(t, reasonSuperUserSecretReady, health.Reason)
 	})

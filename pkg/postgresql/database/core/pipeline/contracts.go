@@ -18,7 +18,7 @@ package pipeline
 import (
 	"fmt"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 )
 
 // ContractKey identifies a narrow per-pass fact required or provided by a step.
@@ -107,7 +107,7 @@ func missingContracts(required []ContractKey, contracts *Contracts) []ContractKe
 type useCaseStepResult struct {
 	deferred  bool
 	scheduled bool
-	outcome   reconciliationTypes.Outcome
+	outcome   reconciliationtypes.Outcome
 }
 
 func (c *Contracts) setUseCaseStepResult(step *useCaseStep, result useCaseStepResult) {

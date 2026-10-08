@@ -24,7 +24,7 @@ import (
 	"time"
 
 	dbpipeline "github.com/splunk/splunk-operator/pkg/postgresql/database/core/pipeline"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -110,7 +110,7 @@ func TestPublicationStepPublishesCurrentPassContractAndCopiesResult(t *testing.T
 
 	require.NoError(t, reconcileErr)
 	require.NoError(t, observeErr)
-	assert.Equal(t, reconciliationTypes.ModeConverged, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeConverged, outcome.Mode())
 	assert.NotNil(t, contracts.ManagedRoleIntentPublished)
 	assert.Equal(t, got, step.Publication())
 	got.Databases[0].Roles[0].Name = "mutated"
@@ -129,8 +129,8 @@ func TestPublicationStepClassifiesWriteFailuresWithoutStatus(t *testing.T) {
 		outcome, err := step.Observe(t.Context(), contracts, reconcileErr)
 
 		require.NoError(t, err)
-		assert.Equal(t, reconciliationTypes.ModeImmediateRequeue, outcome.Mode())
-		assert.Equal(t, reconciliationTypes.StatusNone, outcome.StatusAction())
+		assert.Equal(t, reconciliationtypes.ModeImmediateRequeue, outcome.Mode())
+		assert.Equal(t, reconciliationtypes.StatusNone, outcome.StatusAction())
 		assert.ErrorIs(t, outcome.Err(), dbtypes.ErrManagedRoleIntentConflict)
 		assert.Nil(t, contracts.ManagedRoleIntentPublished)
 	})
@@ -146,8 +146,8 @@ func TestPublicationStepClassifiesWriteFailuresWithoutStatus(t *testing.T) {
 		outcome, err := step.Observe(t.Context(), contracts, reconcileErr)
 
 		require.NoError(t, err)
-		assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
-		assert.Equal(t, reconciliationTypes.StatusNone, outcome.StatusAction())
+		assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
+		assert.Equal(t, reconciliationtypes.StatusNone, outcome.StatusAction())
 		assert.ErrorIs(t, outcome.Err(), writeErr)
 		assert.Nil(t, contracts.ManagedRoleIntentPublished)
 	})
@@ -166,7 +166,7 @@ func TestPublicationStepDoesNotRunWithoutCurrentPassCredentials(t *testing.T) {
 	}, nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, reconciliationTypes.ModeDeferred, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeDeferred, outcome.Mode())
 	assert.Zero(t, publishCalls)
 }
 
@@ -193,6 +193,6 @@ type testContractStep struct {
 func (s *testContractStep) Name() string                       { return s.name }
 func (s *testContractStep) Requires() []dbpipeline.ContractKey { return nil }
 func (s *testContractStep) Provides() []dbpipeline.ContractKey { return s.provides }
-func (s *testContractStep) Observe(context.Context, *dbpipeline.Contracts, error) (reconciliationTypes.Outcome, error) {
-	return reconciliationTypes.Deferred(time.Second), nil
+func (s *testContractStep) Observe(context.Context, *dbpipeline.Contracts, error) (reconciliationtypes.Outcome, error) {
+	return reconciliationtypes.Deferred(time.Second), nil
 }

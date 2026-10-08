@@ -28,7 +28,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	dbclusterreadiness "github.com/splunk/splunk-operator/pkg/postgresql/database/core/components/clusterreadiness"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
@@ -785,7 +785,7 @@ func observeClusterReadiness(
 	if err := outcome.Validate("cluster readiness"); err != nil {
 		return decision.Facts, ctrl.Result{}, err, true
 	}
-	if outcome.StatusAction() != reconciliationTypes.StatusPersistAndContinue && outcome.StatusAction() != reconciliationTypes.StatusPersistAndStop {
+	if outcome.StatusAction() != reconciliationtypes.StatusPersistAndContinue && outcome.StatusAction() != reconciliationtypes.StatusPersistAndStop {
 		return decision.Facts, ctrl.Result{}, fmt.Errorf("cluster readiness outcome %q does not persist status", outcome.Mode()), true
 	}
 	logger := logging.FromContext(ctx)
@@ -816,7 +816,7 @@ func observeClusterReadiness(
 		if result, conflictErr, ok := requeueOnConflict(ctx, err, conflictClusterStatus, "persisting cluster readiness status"); ok {
 			return decision.Facts, result, conflictErr, true
 		}
-		if outcome.Mode() == reconciliationTypes.ModeRetryableRequeue {
+		if outcome.Mode() == reconciliationtypes.ModeRetryableRequeue {
 			logger.ErrorContext(ctx, "failed to persist cluster status", "error", err)
 			return decision.Facts, ctrl.Result{}, outcome.Err(), true
 		}
@@ -824,11 +824,11 @@ func observeClusterReadiness(
 	}
 
 	switch outcome.Mode() {
-	case reconciliationTypes.ModeConverged:
+	case reconciliationtypes.ModeConverged:
 		return decision.Facts, ctrl.Result{}, nil, false
-	case reconciliationTypes.ModeWaiting:
+	case reconciliationtypes.ModeWaiting:
 		return decision.Facts, outcome.Result(), nil, true
-	case reconciliationTypes.ModeRetryableRequeue:
+	case reconciliationtypes.ModeRetryableRequeue:
 		return decision.Facts, ctrl.Result{}, outcome.Err(), true
 	default:
 		return decision.Facts, ctrl.Result{}, fmt.Errorf("unexpected cluster readiness outcome %q", outcome.Mode()), true

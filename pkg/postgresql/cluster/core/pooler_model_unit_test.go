@@ -23,7 +23,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -725,7 +725,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		// Assert
 		require.NoError(t, err)
 		assert.Nil(t, cluster.Status.ConnectionPoolerStatus)
-		assert.Equal(t, pgcConstants.Pending, health.State)
+		assert.Equal(t, pgcconstants.Pending, health.State)
 	})
 
 	t.Run("sets enabled true when pooler converges ready", func(t *testing.T) {
@@ -755,7 +755,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		// Assert
 		require.NoError(t, err)
 		assert.Equal(t, &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true}, cluster.Status.ConnectionPoolerStatus)
-		assert.Equal(t, pgcConstants.Ready, health.State)
+		assert.Equal(t, pgcconstants.Ready, health.State)
 	})
 
 	t.Run("returns Failed when RW pooler Get returns non-NotFound error", func(t *testing.T) {
@@ -788,7 +788,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 
 		// Assert
 		require.Error(t, err)
-		assert.Equal(t, pgcConstants.Failed, health.State)
+		assert.Equal(t, pgcconstants.Failed, health.State)
 	})
 
 	t.Run("returns Failed when RO pooler Get returns non-NotFound error", func(t *testing.T) {
@@ -821,7 +821,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 
 		// Assert
 		require.Error(t, err)
-		assert.Equal(t, pgcConstants.Failed, health.State)
+		assert.Equal(t, pgcconstants.Failed, health.State)
 	})
 
 	t.Run("sets status nil when pooler disabled", func(t *testing.T) {
@@ -845,7 +845,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		// Assert
 		require.NoError(t, err)
 		assert.Nil(t, cluster.Status.ConnectionPoolerStatus)
-		assert.Equal(t, pgcConstants.Ready, health.State)
+		assert.Equal(t, pgcconstants.Ready, health.State)
 	})
 }
 
@@ -932,7 +932,7 @@ func TestPoolerModelConvergeWaitsForBackendTLSState(t *testing.T) {
 	reconcileErr := model.Reconcile(context.Background())
 	health, err := model.Observe(context.Background(), reconcileErr)
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Provisioning, health.State)
+	assert.Equal(t, pgcconstants.Provisioning, health.State)
 	assert.Equal(t, reasonPoolerTLSLeafPending, health.Reason)
 	assert.Equal(t, msgPoolerTLSLeafPending, health.Message)
 	assert.True(t, health.Result.RequeueAfter > 0)
@@ -968,7 +968,7 @@ func TestPoolerModelConvergeWaitsForTLSLeafMaterial(t *testing.T) {
 	reconcileErr := model.Reconcile(context.Background())
 	health, err := model.Observe(context.Background(), reconcileErr)
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Provisioning, health.State)
+	assert.Equal(t, pgcconstants.Provisioning, health.State)
 	assert.Equal(t, reasonPoolerTLSLeafPending, health.Reason)
 	assert.Equal(t, msgPoolerTLSLeafPending, health.Message)
 	assert.True(t, health.Result.RequeueAfter > 0)
@@ -1012,7 +1012,7 @@ func TestPoolerModelConvergeTLSLeafInvalidCertEmitsFailed(t *testing.T) {
 
 	require.Error(t, err, "structural TLS-leaf failure must propagate so controller-runtime requeues with backoff")
 	assert.True(t, errors.Is(err, errServerTLSLeafInvalid), "returned error must still wrap the sentinel for upstream callers")
-	assert.Equal(t, pgcConstants.Failed, health.State, "structural failure must escalate to Failed, not Provisioning")
+	assert.Equal(t, pgcconstants.Failed, health.State, "structural failure must escalate to Failed, not Provisioning")
 	assert.Equal(t, reasonPoolerTLSLeafInvalidCert, health.Reason, "Failed must use the dedicated reason")
 	assert.Equal(t, failedClusterPhase, health.Phase)
 
@@ -1051,7 +1051,7 @@ func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
 	reconcileErr := model.Reconcile(context.Background())
 	health, err := model.Observe(context.Background(), reconcileErr)
 	require.NoError(t, err, "disabled-branch + nil CNPG must not produce an error")
-	assert.NotEqual(t, pgcConstants.Failed, health.State, "disabled-branch + nil CNPG must not produce a Failed health condition")
+	assert.NotEqual(t, pgcconstants.Failed, health.State, "disabled-branch + nil CNPG must not produce a Failed health condition")
 	assert.Empty(t, events.warnings, "no warning events should be emitted on the happy bootstrap-race path")
 }
 

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reconciliationTypes
+package reconciliationtypes
 
 // Phase is a PostgresDatabase reconciliation phase persisted in status.
 type Phase string

@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 )
 
 // externalCredentialStrategy reads and validates externally managed Secrets.
@@ -57,7 +57,7 @@ func validateExternal(intent Intent, facts ObservedSecret) Result {
 		return drift(ReasonExternalSecretMissingLabel,
 			fmt.Sprintf("external secret %q is missing the cnpg.io/reload=\"true\" label", intent.Ref.Name))
 	default:
-		return Result{Outcome: reconciliationTypes.Converged()}
+		return Result{Outcome: reconciliationtypes.Converged()}
 	}
 }
 

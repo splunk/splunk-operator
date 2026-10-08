@@ -15,6 +15,18 @@ linters:
     - unconvert
     - unused
   settings:
+    staticcheck:
+      # Keep Staticcheck's default set and exclusions, but opt into identifier
+      # naming checks (ST1003), which Staticcheck disables by default.
+      checks:
+        - all
+        - -SA9003
+        - -ST1000
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -ST1023
     gocyclo:
       min-complexity: 50
     goconst:

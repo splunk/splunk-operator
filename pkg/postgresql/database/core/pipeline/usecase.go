@@ -19,7 +19,7 @@ import (
 	"context"
 	"errors"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 )
 
 // ErrPrerequisiteNotReady defers a use case without blocking the pass.
@@ -33,7 +33,7 @@ type UseCase interface {
 	Schedule(ctx context.Context, contracts *Contracts) (bool, error)
 	// Act advances the workflow by one step.
 	// Retryable or terminal errors are classified by the returned Outcome.
-	Act(ctx context.Context, contracts *Contracts) (reconciliationTypes.Outcome, error)
+	Act(ctx context.Context, contracts *Contracts) (reconciliationtypes.Outcome, error)
 }
 
 // useCaseStep adapts a workflow-owned use case into one ordered pipeline position.
@@ -78,21 +78,21 @@ func (s *useCaseStep) Reconcile(ctx context.Context, contracts *Contracts) error
 }
 
 // Observe implements Step.Observe using the Reconcile result cached in contracts.
-func (s *useCaseStep) Observe(_ context.Context, contracts *Contracts, mutationErr error) (reconciliationTypes.Outcome, error) {
+func (s *useCaseStep) Observe(_ context.Context, contracts *Contracts, mutationErr error) (reconciliationtypes.Outcome, error) {
 	result, ok := contracts.useCaseStepResult(s)
 	if ok && result.scheduled {
 		if mutationErr != nil && !result.outcome.IsClassifiedError() {
-			return reconciliationTypes.Outcome{}, mutationErr
+			return reconciliationtypes.Outcome{}, mutationErr
 		}
 		return result.outcome, nil
 	}
 	if mutationErr != nil {
-		return reconciliationTypes.Outcome{}, mutationErr
+		return reconciliationtypes.Outcome{}, mutationErr
 	}
 	if result.deferred {
-		return reconciliationTypes.Deferred(runtimeDependencyRequeueAfter), nil
+		return reconciliationtypes.Deferred(runtimeDependencyRequeueAfter), nil
 	}
-	return reconciliationTypes.Converged(), nil
+	return reconciliationtypes.Converged(), nil
 }
 
 var _ MutatingStep = (*useCaseStep)(nil)

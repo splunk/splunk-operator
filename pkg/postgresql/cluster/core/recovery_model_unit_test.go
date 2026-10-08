@@ -48,7 +48,7 @@ func recoveryTestCfg(b *platformv1alpha1.BootstrapFrom, withObjectStore bool) *M
 			BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{
 				DestinationPath: "s3://bucket/pg",
 				S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
-					AccessKeyId:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "id"},
+					AccessKeyID:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "id"},
 					SecretAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "secret"},
 				},
 			},

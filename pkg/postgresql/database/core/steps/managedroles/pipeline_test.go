@@ -23,7 +23,7 @@ import (
 
 	dbpipeline "github.com/splunk/splunk-operator/pkg/postgresql/database/core/pipeline"
 	connectionmetadata "github.com/splunk/splunk-operator/pkg/postgresql/database/core/steps/connectionmetadata"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/stretchr/testify/assert"
@@ -58,10 +58,10 @@ func (s *readyContractProvider) Observe(
 	_ context.Context,
 	contracts *dbpipeline.Contracts,
 	_ error,
-) (reconciliationTypes.Outcome, error) {
+) (reconciliationtypes.Outcome, error) {
 	*s.events = append(*s.events, "credentials")
 	contracts.CredentialsReady = &dbpipeline.CredentialsReadyContract{}
-	return reconciliationTypes.Converged(), nil
+	return reconciliationtypes.Converged(), nil
 }
 
 type managedRolesConsumer struct {
@@ -78,10 +78,10 @@ func (s *managedRolesConsumer) Observe(
 	_ context.Context,
 	_ *dbpipeline.Contracts,
 	_ error,
-) (reconciliationTypes.Outcome, error) {
+) (reconciliationtypes.Outcome, error) {
 	s.called = true
 	*s.events = append(*s.events, "cnpg-databases")
-	return reconciliationTypes.Converged(), nil
+	return reconciliationtypes.Converged(), nil
 }
 
 func TestManagedRoleUnitsPreserveFacadeInterleaving(t *testing.T) {
@@ -135,11 +135,11 @@ func TestManagedRoleUnitsPreserveFacadeInterleaving(t *testing.T) {
 			gate,
 			consumer,
 		},
-		func(context.Context, reconciliationTypes.Outcome) error { return nil },
+		func(context.Context, reconciliationtypes.Outcome) error { return nil },
 	)
 
 	require.NoError(t, err)
-	assert.Equal(t, reconciliationTypes.ModeConverged, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeConverged, outcome.Mode())
 	assert.True(t, consumer.called)
 	assert.Equal(t, []string{
 		"credentials",
@@ -165,11 +165,11 @@ func TestManagedRoleGateBlocksDownstreamUntilExactAcknowledgement(t *testing.T) 
 	outcome, err := dbpipeline.Run(
 		t.Context(),
 		[]dbpipeline.Step{prerequisites, gate, consumer},
-		func(context.Context, reconciliationTypes.Outcome) error { return nil },
+		func(context.Context, reconciliationtypes.Outcome) error { return nil },
 	)
 
 	require.NoError(t, err)
-	assert.Equal(t, reconciliationTypes.ModeWaiting, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeWaiting, outcome.Mode())
 	assert.False(t, consumer.called)
 }
 
@@ -213,14 +213,14 @@ func TestManagedRoleIntentFailureStopsMetadataAcknowledgementAndProvisioning(t *
 			gate,
 			consumer,
 		},
-		func(context.Context, reconciliationTypes.Outcome) error {
+		func(context.Context, reconciliationtypes.Outcome) error {
 			statusWrites++
 			return nil
 		},
 	)
 
 	require.ErrorIs(t, err, writeErr)
-	assert.Equal(t, reconciliationTypes.ModeRetryableRequeue, outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeRetryableRequeue, outcome.Mode())
 	assert.Equal(t, []string{"credentials", "managed-role-intent"}, events)
 	assert.Zero(t, acknowledgementReads)
 	assert.False(t, consumer.called)
@@ -241,8 +241,8 @@ func (s *pipelinePrerequisites) Observe(
 	_ context.Context,
 	contracts *dbpipeline.Contracts,
 	_ error,
-) (reconciliationTypes.Outcome, error) {
+) (reconciliationtypes.Outcome, error) {
 	contracts.ManagedRoleIntentPublished = &dbpipeline.ManagedRoleIntentPublishedContract{}
 	contracts.ConnectionMetadataReady = &dbpipeline.ConnectionMetadataReadyContract{}
-	return reconciliationTypes.Converged(), nil
+	return reconciliationtypes.Converged(), nil
 }

@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 )
 
 // generatedCredentialStrategy owns generated Secret creation and ownership
@@ -54,7 +54,7 @@ func (s generatedCredentialStrategy) reconcileMissing(ctx context.Context, inten
 		return retryable(ReasonSecretsCreationFailed,
 			fmt.Sprintf("failed to create Secret %s: %v", intent.Ref.Name, err), err)
 	}
-	return Result{Outcome: reconciliationTypes.Converged()}
+	return Result{Outcome: reconciliationtypes.Converged()}
 }
 
 func (s generatedCredentialStrategy) reconcileCreateRace(ctx context.Context, intent Intent, createErr error) Result {
@@ -81,10 +81,10 @@ func (s generatedCredentialStrategy) reconcileObserved(ctx context.Context, inte
 			return retryable(ReasonSecretsCreationFailed,
 				fmt.Sprintf("failed to adopt Secret %s: %v", intent.Ref.Name, err), err)
 		}
-		return Result{Outcome: reconciliationTypes.Converged(), RetainedReadopted: true}
+		return Result{Outcome: reconciliationtypes.Converged(), RetainedReadopted: true}
 	}
 	if sameOwner(facts.Controller, s.owner) {
-		return Result{Outcome: reconciliationTypes.Converged()}
+		return Result{Outcome: reconciliationtypes.Converged()}
 	}
 	if facts.Controller != nil {
 		message := fmt.Sprintf("Managed Secret %s is controlled by %s; remove the conflicting owner or restore operator ownership", intent.Ref.Name, describeOwner(*facts.Controller))
@@ -100,7 +100,7 @@ func (s generatedCredentialStrategy) reconcileObserved(ctx context.Context, inte
 		return retryable(ReasonSecretsCreationFailed,
 			fmt.Sprintf("failed to adopt Secret %s: %v", intent.Ref.Name, err), err)
 	}
-	return Result{Outcome: reconciliationTypes.Converged()}
+	return Result{Outcome: reconciliationtypes.Converged()}
 }
 
 func sameOwner(actual *OwnerIdentity, expected OwnerIdentity) bool {
