@@ -27,7 +27,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -54,7 +54,7 @@ func newManagedRolesModel(c client.Client, _ *runtime.Scheme, events eventEmitte
 	return &managedRolesModel{client: c, events: events, updateStatus: updateStatus, contracts: contracts, cluster: cluster, newRoleSweeper: newRoleSweeper}
 }
 
-func (m *managedRolesModel) Name() string { return pgcConstants.ComponentManagedRoles }
+func (m *managedRolesModel) Name() string { return pgcconstants.ComponentManagedRoles }
 func (m *managedRolesModel) Requires() []contractKey {
 	return []contractKey{contractCNPGCluster, contractSecret}
 }

@@ -19,7 +19,7 @@ import (
 	"context"
 	"testing"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,10 +40,10 @@ func (u privilegeBootstrapUseCase) Schedule(context.Context, *Contracts) (bool, 
 	return true, nil
 }
 
-func (u privilegeBootstrapUseCase) Act(_ context.Context, contracts *Contracts) (reconciliationTypes.Outcome, error) {
+func (u privilegeBootstrapUseCase) Act(_ context.Context, contracts *Contracts) (reconciliationtypes.Outcome, error) {
 	*u.events = append(*u.events, "rw-privileges-act")
 	contracts.RWPrivilegesReady = &RWPrivilegesReadyContract{}
-	return reconciliationTypes.ConvergedApply("PrivilegesReady", "Granted", "RW role privileges granted", "Ready"), nil
+	return reconciliationtypes.ConvergedApply("PrivilegesReady", "Granted", "RW role privileges granted", "Ready"), nil
 }
 
 func TestRun_DatabaseOrderAllowsPrivilegeBootstrapBetweenSteadyStateSteps(t *testing.T) {
@@ -52,10 +52,10 @@ func TestRun_DatabaseOrderAllowsPrivilegeBootstrapBetweenSteadyStateSteps(t *tes
 	databases := &fakeStep{
 		name:     "cnpg-databases",
 		provides: []ContractKey{ContractDatabaseCNPGDatabasesReady},
-		observeFunc: func(c *Contracts, _ error) (reconciliationTypes.Outcome, error) {
+		observeFunc: func(c *Contracts, _ error) (reconciliationtypes.Outcome, error) {
 			events = append(events, "cnpg-databases")
 			c.CNPGDatabasesReady = &CNPGDatabasesReadyContract{}
-			return reconciliationTypes.Converged(), nil
+			return reconciliationtypes.Converged(), nil
 		},
 	}
 	privileges := NewUseCaseStep(
@@ -67,32 +67,32 @@ func TestRun_DatabaseOrderAllowsPrivilegeBootstrapBetweenSteadyStateSteps(t *tes
 	customMetrics := &fakeStep{
 		name:     "custom-metrics",
 		requires: []ContractKey{ContractDatabaseRWPrivilegesReady},
-		observeFunc: func(*Contracts, error) (reconciliationTypes.Outcome, error) {
+		observeFunc: func(*Contracts, error) (reconciliationtypes.Outcome, error) {
 			events = append(events, "custom-metrics")
-			return reconciliationTypes.ConvergedApply("CustomMetricsReady", "Ready", "custom metrics acknowledged", "Ready"), nil
+			return reconciliationtypes.ConvergedApply("CustomMetricsReady", "Ready", "custom metrics acknowledged", "Ready"), nil
 		},
 	}
 	readyFlush := &fakeStep{
 		name:     "ready-flush",
 		requires: []ContractKey{ContractDatabaseRWPrivilegesReady},
-		observeFunc: func(*Contracts, error) (reconciliationTypes.Outcome, error) {
+		observeFunc: func(*Contracts, error) (reconciliationtypes.Outcome, error) {
 			events = append(events, "ready-flush")
-			return reconciliationTypes.ConvergedFlush("Ready", "AllConverged", "database is ready", "Ready"), nil
+			return reconciliationtypes.ConvergedFlush("Ready", "AllConverged", "database is ready", "Ready"), nil
 		},
 	}
 
-	var statusActions []reconciliationTypes.Outcome
+	var statusActions []reconciliationtypes.Outcome
 	outcome, err := Run(
 		context.Background(),
 		[]Step{databases, privileges, customMetrics, readyFlush},
-		func(_ context.Context, o reconciliationTypes.Outcome) error {
+		func(_ context.Context, o reconciliationtypes.Outcome) error {
 			statusActions = append(statusActions, o)
 			return nil
 		},
 	)
 	require.NoError(t, err)
-	require.Equal(t, reconciliationTypes.ModeConverged, outcome.Mode())
-	require.Equal(t, reconciliationTypes.StatusPersistAndStop, outcome.StatusAction())
+	require.Equal(t, reconciliationtypes.ModeConverged, outcome.Mode())
+	require.Equal(t, reconciliationtypes.StatusPersistAndStop, outcome.StatusAction())
 	require.Equal(t, []string{
 		"cnpg-databases",
 		"rw-privileges-prerequisites",
@@ -103,9 +103,9 @@ func TestRun_DatabaseOrderAllowsPrivilegeBootstrapBetweenSteadyStateSteps(t *tes
 	}, events)
 	require.Len(t, statusActions, 3)
 	require.Equal(t, "PrivilegesReady", statusActions[0].Condition())
-	require.Equal(t, reconciliationTypes.StatusApplyAndContinue, statusActions[0].StatusAction())
+	require.Equal(t, reconciliationtypes.StatusApplyAndContinue, statusActions[0].StatusAction())
 	require.Equal(t, "CustomMetricsReady", statusActions[1].Condition())
-	require.Equal(t, reconciliationTypes.StatusApplyAndContinue, statusActions[1].StatusAction())
+	require.Equal(t, reconciliationtypes.StatusApplyAndContinue, statusActions[1].StatusAction())
 	require.Equal(t, "Ready", statusActions[2].Condition())
-	require.Equal(t, reconciliationTypes.StatusPersistAndStop, statusActions[2].StatusAction())
+	require.Equal(t, reconciliationtypes.StatusPersistAndStop, statusActions[2].StatusAction())
 }

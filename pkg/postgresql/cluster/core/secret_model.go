@@ -23,7 +23,7 @@ import (
 
 	password "github.com/sethvargo/go-password/password"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -50,7 +50,7 @@ func newSecretModel(c client.Client, scheme *runtime.Scheme, events eventEmitter
 	return &secretModel{client: c, scheme: scheme, events: events, updateStatus: updateStatus, cluster: cluster, name: name, contracts: contracts}
 }
 
-func (s *secretModel) Name() string            { return pgcConstants.ComponentSecret }
+func (s *secretModel) Name() string            { return pgcconstants.ComponentSecret }
 func (s *secretModel) Requires() []contractKey { return nil }
 func (s *secretModel) Provides() []contractKey { return []contractKey{contractSecret} }
 func (s *secretModel) CheckContracts() error   { return nil }

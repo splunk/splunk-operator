@@ -388,9 +388,9 @@ type CNPGBarmanObjectStoreConfig struct {
 // +kubebuilder:validation:XValidation:rule="size(self.secretAccessKey.key) > 0",message="secretAccessKey.key must not be empty"
 // CNPGBarmanS3Credentials references Kubernetes Secret keys for AWS S3 credentials.
 type CNPGBarmanS3Credentials struct {
-	// AccessKeyId references the Secret key containing the AWS access key ID.
+	// AccessKeyID selects the Secret key.
 	// +kubebuilder:validation:Required
-	AccessKeyId corev1.SecretKeySelector `json:"accessKeyId"`
+	AccessKeyID corev1.SecretKeySelector `json:"accessKeyId"`
 
 	// SecretAccessKey references the Secret key containing the AWS secret access key.
 	// +kubebuilder:validation:Required

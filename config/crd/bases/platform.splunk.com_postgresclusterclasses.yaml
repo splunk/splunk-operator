@@ -99,8 +99,7 @@ spec:
                               The referenced Secret must exist in the same namespace as the PostgresCluster.
                             properties:
                               accessKeyId:
-                                description: AccessKeyId references the Secret key
-                                  containing the AWS access key ID.
+                                description: AccessKeyID selects the Secret key.
                                 properties:
                                   key:
                                     description: The key of the secret to select from.  Must

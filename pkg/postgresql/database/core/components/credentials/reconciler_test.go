@@ -22,7 +22,7 @@ import (
 	"errors"
 	"testing"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -113,7 +113,7 @@ func TestReconcilerGeneratedCredentialPolicy(t *testing.T) {
 		name          string
 		intent        Intent
 		operations    *fakeOperations
-		wantMode      reconciliationTypes.Mode
+		wantMode      reconciliationtypes.Mode
 		wantReason    string
 		wantCreates   int
 		wantAdoptions int
@@ -124,27 +124,27 @@ func TestReconcilerGeneratedCredentialPolicy(t *testing.T) {
 			name:        "creates a new generated credential once",
 			intent:      generatedIntent(ContinuityNew),
 			operations:  &fakeOperations{reads: []readResult{{err: ErrSecretNotFound}}},
-			wantMode:    reconciliationTypes.ModeConverged,
+			wantMode:    reconciliationtypes.ModeConverged,
 			wantCreates: 1,
 		},
 		{
 			name:       "reports a missing published credential as drift",
 			intent:     generatedIntent(ContinuityPublished),
 			operations: &fakeOperations{reads: []readResult{{err: ErrSecretNotFound}}},
-			wantMode:   reconciliationTypes.ModeWaiting,
+			wantMode:   reconciliationtypes.ModeWaiting,
 			wantReason: ReasonManagedSecretMissing,
 		},
 		{
 			name:       "keeps a self-owned credential unchanged",
 			intent:     generatedIntent(ContinuityPublished),
 			operations: &fakeOperations{reads: []readResult{{facts: ObservedSecret{Controller: &owner}}}},
-			wantMode:   reconciliationTypes.ModeConverged,
+			wantMode:   reconciliationtypes.ModeConverged,
 		},
 		{
 			name:          "re-adopts retained credential before accepting its existing owner",
 			intent:        generatedIntent(ContinuityPublished),
 			operations:    &fakeOperations{reads: []readResult{{facts: ObservedSecret{Controller: &owner, RetainedFrom: owner.Name}}}},
-			wantMode:      reconciliationTypes.ModeConverged,
+			wantMode:      reconciliationtypes.ModeConverged,
 			wantAdoptions: 1,
 			wantReAdopted: true,
 		},
@@ -152,7 +152,7 @@ func TestReconcilerGeneratedCredentialPolicy(t *testing.T) {
 			name:          "re-adopts a retained credential without changing data",
 			intent:        generatedIntent(ContinuityPublished),
 			operations:    &fakeOperations{reads: []readResult{{facts: ObservedSecret{RetainedFrom: owner.Name}}}},
-			wantMode:      reconciliationTypes.ModeConverged,
+			wantMode:      reconciliationtypes.ModeConverged,
 			wantAdoptions: 1,
 			wantReAdopted: true,
 		},
@@ -160,14 +160,14 @@ func TestReconcilerGeneratedCredentialPolicy(t *testing.T) {
 			name:          "adopts an unowned credential",
 			intent:        generatedIntent(ContinuityNew),
 			operations:    &fakeOperations{reads: []readResult{{facts: ObservedSecret{}}}},
-			wantMode:      reconciliationTypes.ModeConverged,
+			wantMode:      reconciliationtypes.ModeConverged,
 			wantAdoptions: 1,
 		},
 		{
 			name:        "reports a foreign-owned credential as drift",
 			intent:      generatedIntent(ContinuityPublished),
 			operations:  &fakeOperations{reads: []readResult{{facts: ObservedSecret{Controller: &foreign}}}},
-			wantMode:    reconciliationTypes.ModeWaiting,
+			wantMode:    reconciliationtypes.ModeWaiting,
 			wantReason:  ReasonManagedSecretOwnershipConflict,
 			wantMessage: "PostgresCluster other",
 		},
@@ -193,37 +193,37 @@ func TestReconcilerExternalCredentialsAreReadOnlyAndClassifyInvalidStateAsDrift(
 	tests := []struct {
 		name       string
 		operations *fakeOperations
-		wantMode   reconciliationTypes.Mode
+		wantMode   reconciliationtypes.Mode
 		wantReason string
 	}{
 		{
 			name:       "missing",
 			operations: &fakeOperations{reads: []readResult{{err: ErrSecretNotFound}}},
-			wantMode:   reconciliationTypes.ModeTerminalError,
+			wantMode:   reconciliationtypes.ModeTerminalError,
 			wantReason: ReasonExternalSecretMissing,
 		},
 		{
 			name:       "missing data",
 			operations: &fakeOperations{reads: []readResult{{facts: ObservedSecret{}}}},
-			wantMode:   reconciliationTypes.ModeWaiting,
+			wantMode:   reconciliationtypes.ModeWaiting,
 			wantReason: ReasonExternalSecretMissingData,
 		},
 		{
 			name:       "missing required keys",
 			operations: &fakeOperations{reads: []readResult{{facts: ObservedSecret{DataDefined: true, UsernamePresent: true}}}},
-			wantMode:   reconciliationTypes.ModeWaiting,
+			wantMode:   reconciliationtypes.ModeWaiting,
 			wantReason: ReasonExternalSecretMissingKeys,
 		},
 		{
 			name:       "wrong username",
 			operations: &fakeOperations{reads: []readResult{{facts: ObservedSecret{DataDefined: true, Username: "wrong", UsernamePresent: true, PasswordPresent: true, ReloadEnabled: true}}}},
-			wantMode:   reconciliationTypes.ModeWaiting,
+			wantMode:   reconciliationtypes.ModeWaiting,
 			wantReason: ReasonExternalSecretInvalid,
 		},
 		{
 			name:       "missing reload label",
 			operations: &fakeOperations{reads: []readResult{{facts: ObservedSecret{DataDefined: true, Username: "orders_admin", UsernamePresent: true, PasswordPresent: true}}}},
-			wantMode:   reconciliationTypes.ModeWaiting,
+			wantMode:   reconciliationtypes.ModeWaiting,
 			wantReason: ReasonExternalSecretMissingLabel,
 		},
 	}
@@ -234,11 +234,11 @@ func TestReconcilerExternalCredentialsAreReadOnlyAndClassifyInvalidStateAsDrift(
 			require.NoError(t, result.Outcome.Validate("credentials"))
 			assert.Equal(t, tt.wantMode, result.Outcome.Mode())
 			assert.Equal(t, tt.wantReason, result.Outcome.Reason())
-			if tt.wantMode == reconciliationTypes.ModeTerminalError {
+			if tt.wantMode == reconciliationtypes.ModeTerminalError {
 				assert.ErrorIs(t, result.Outcome.Err(), reconcile.TerminalError(nil))
 			} else {
 				assert.NoError(t, result.Outcome.Err())
-				assert.Equal(t, reconciliationTypes.ReadinessRetryDelay, result.Outcome.Result().RequeueAfter)
+				assert.Equal(t, reconciliationtypes.ReadinessRetryDelay, result.Outcome.Result().RequeueAfter)
 			}
 			assert.Empty(t, tt.operations.created)
 			assert.Empty(t, tt.operations.adopted)
@@ -259,7 +259,7 @@ func TestExternalCredentialStrategyDependsOnlyOnSecretReader(t *testing.T) {
 
 	result := strategy.Reconcile(t.Context(), externalIntent())
 	require.NoError(t, result.Outcome.Validate("credentials"))
-	assert.Equal(t, reconciliationTypes.ModeConverged, result.Outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeConverged, result.Outcome.Mode())
 }
 
 func TestReconcilerReReadsAfterCreateRace(t *testing.T) {
@@ -274,7 +274,7 @@ func TestReconcilerReReadsAfterCreateRace(t *testing.T) {
 
 	result := newReconciler(t, operations).Reconcile(t.Context(), []Intent{generatedIntent(ContinuityNew)})
 	require.NoError(t, result.Outcome.Validate("credentials"))
-	assert.Equal(t, reconciliationTypes.ModeConverged, result.Outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeConverged, result.Outcome.Mode())
 	assert.Len(t, operations.created, 1)
 	assert.Empty(t, operations.adopted)
 }
@@ -320,7 +320,7 @@ func TestReconcilerRejectsInvalidIntentsBeforeSecretOperations(t *testing.T) {
 			operations := &fakeOperations{}
 			result := newReconciler(t, operations).Reconcile(t.Context(), tt.intents)
 			require.NoError(t, result.Outcome.Validate("credentials"))
-			assert.Equal(t, reconciliationTypes.ModeTerminalError, result.Outcome.Mode())
+			assert.Equal(t, reconciliationtypes.ModeTerminalError, result.Outcome.Mode())
 			assert.Contains(t, result.Outcome.Message(), tt.want)
 			assert.Zero(t, operations.readCalls)
 			assert.Empty(t, operations.created)
@@ -337,9 +337,9 @@ func TestReconcilerDefersAdoptionConflictWithoutStatus(t *testing.T) {
 	result := newReconciler(t, operations).Reconcile(t.Context(), []Intent{generatedIntent(ContinuityNew)})
 
 	require.NoError(t, result.Outcome.Validate("credentials"))
-	assert.Equal(t, reconciliationTypes.ModeDeferred, result.Outcome.Mode())
-	assert.Equal(t, reconciliationTypes.StatusNone, result.Outcome.StatusAction())
-	assert.Equal(t, reconciliationTypes.ReadinessRetryDelay, result.Outcome.Result().RequeueAfter)
+	assert.Equal(t, reconciliationtypes.ModeDeferred, result.Outcome.Mode())
+	assert.Equal(t, reconciliationtypes.StatusNone, result.Outcome.StatusAction())
+	assert.Equal(t, reconciliationtypes.ReadinessRetryDelay, result.Outcome.Result().RequeueAfter)
 	assert.NoError(t, result.Outcome.Err())
 }
 
@@ -360,7 +360,7 @@ func TestReconcilerPrefersCredentialPolicyAndPreservesSiblingMessages(t *testing
 	}}).Reconcile(t.Context(), []Intent{generatedIntent(ContinuityNew), externalIntent()})
 
 	require.NoError(t, result.Outcome.Validate("credentials"))
-	assert.Equal(t, reconciliationTypes.ModeWaiting, result.Outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeWaiting, result.Outcome.Mode())
 	assert.Equal(t, ReasonExternalSecretInvalid, result.Outcome.Reason())
 	assert.Contains(t, result.Outcome.Message(), "failed to read Secret orders-admin")
 	assert.Contains(t, result.Outcome.Message(), "username does not match PostgreSQL role")
@@ -386,15 +386,15 @@ func TestSelectFailurePrefersTerminalOverWaitingWithSameReason(t *testing.T) {
 	})
 
 	require.NoError(t, result.Outcome.Validate("credentials"))
-	assert.Equal(t, reconciliationTypes.ModeTerminalError, result.Outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeTerminalError, result.Outcome.Mode())
 	assert.Equal(t, ReasonExternalSecretInvalid, result.Outcome.Reason())
 }
 
 func TestReadyDocumentsFutureFacadeSuccessContract(t *testing.T) {
 	result := Ready(2)
 	require.NoError(t, result.Outcome.Validate("credentials"))
-	assert.Equal(t, reconciliationTypes.ModeConverged, result.Outcome.Mode())
-	assert.Equal(t, reconciliationTypes.StatusPersistAndContinue, result.Outcome.StatusAction())
+	assert.Equal(t, reconciliationtypes.ModeConverged, result.Outcome.Mode())
+	assert.Equal(t, reconciliationtypes.StatusPersistAndContinue, result.Outcome.StatusAction())
 	assert.Equal(t, ReasonSecretsCreated, result.Outcome.Reason())
 }
 
@@ -408,7 +408,7 @@ func TestReconcilerCombinesTerminalCredentialMessages(t *testing.T) {
 		Reconcile(t.Context(), []Intent{admin, rw})
 
 	require.NoError(t, result.Outcome.Validate("credentials"))
-	assert.Equal(t, reconciliationTypes.ModeTerminalError, result.Outcome.Mode())
+	assert.Equal(t, reconciliationtypes.ModeTerminalError, result.Outcome.Mode())
 	assert.Contains(t, result.Outcome.Message(), admin.Ref.Name)
 	assert.Contains(t, result.Outcome.Message(), rw.Ref.Name)
 	assert.Contains(t, result.Outcome.Err().Error(), admin.Ref.Name)

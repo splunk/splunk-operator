@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 )
 
 // Reconciler applies credential policy through SecretOperations. It does not
@@ -66,12 +66,12 @@ func (r Reconciler) Reconcile(ctx context.Context, intents []Intent) Result {
 	for _, intent := range intents {
 		result := r.strategyFor(intent.Source).Reconcile(ctx, intent)
 		retainedReadopted = retainedReadopted || result.RetainedReadopted
-		if result.Outcome.Mode() != reconciliationTypes.ModeConverged {
+		if result.Outcome.Mode() != reconciliationtypes.ModeConverged {
 			failures = append(failures, result)
 		}
 	}
 	if len(failures) == 0 {
-		return Result{Outcome: reconciliationTypes.Converged(), RetainedReadopted: retainedReadopted}
+		return Result{Outcome: reconciliationtypes.Converged(), RetainedReadopted: retainedReadopted}
 	}
 	selected := selectFailure(failures)
 	selected.RetainedReadopted = selected.RetainedReadopted || retainedReadopted
@@ -93,7 +93,7 @@ func (r Reconciler) strategyFor(source Source) credentialStrategy {
 // every database credential has converged. CPI-2165 will consume this result
 // when it links the dormant component into the production lifecycle.
 func Ready(databaseCount int) Result {
-	return Result{Outcome: reconciliationTypes.ConvergedStatus(
+	return Result{Outcome: reconciliationtypes.ConvergedStatus(
 		ConditionSecretsReady,
 		ReasonSecretsCreated,
 		fmt.Sprintf("All secrets provisioned for %d databases", databaseCount),
@@ -155,11 +155,11 @@ func selectFailure(failures []Result) Result {
 	// outrank transient infrastructure failures. Mode makes equal-reason policy
 	// outcomes deterministic: terminal validation errors must win over waiting
 	// drift regardless of intent order.
-	for _, mode := range []reconciliationTypes.Mode{
-		reconciliationTypes.ModeTerminalError,
-		reconciliationTypes.ModeWaiting,
-		reconciliationTypes.ModeRetryableRequeue,
-		reconciliationTypes.ModeDeferred,
+	for _, mode := range []reconciliationtypes.Mode{
+		reconciliationtypes.ModeTerminalError,
+		reconciliationtypes.ModeWaiting,
+		reconciliationtypes.ModeRetryableRequeue,
+		reconciliationtypes.ModeDeferred,
 	} {
 		for _, failure := range failures {
 			if failure.Outcome.Mode() == mode {
@@ -182,11 +182,11 @@ func withFailureDiagnostics(selected Result, failures []Result) Result {
 	}
 	message := strings.Join(messages, "; ")
 	switch selected.Outcome.Mode() {
-	case reconciliationTypes.ModeTerminalError:
+	case reconciliationtypes.ModeTerminalError:
 		return terminal(selected.Outcome.Reason(), message, joinOutcomeErrors(failures))
-	case reconciliationTypes.ModeWaiting:
+	case reconciliationtypes.ModeWaiting:
 		return waiting(selected.Outcome.Reason(), message)
-	case reconciliationTypes.ModeRetryableRequeue:
+	case reconciliationtypes.ModeRetryableRequeue:
 		return retryable(selected.Outcome.Reason(), message, joinOutcomeErrors(failures))
 	}
 	return selected
@@ -207,23 +207,23 @@ func drift(reason, message string) Result {
 }
 
 func waiting(reason, message string) Result {
-	return Result{Outcome: reconciliationTypes.Waiting(
-		ConditionSecretsReady, reason, message, PhaseProvisioning, reconciliationTypes.ReadinessRetryDelay,
+	return Result{Outcome: reconciliationtypes.Waiting(
+		ConditionSecretsReady, reason, message, PhaseProvisioning, reconciliationtypes.ReadinessRetryDelay,
 	)}
 }
 
 func deferOnConflict() Result {
-	return Result{Outcome: reconciliationTypes.Deferred(reconciliationTypes.ReadinessRetryDelay)}
+	return Result{Outcome: reconciliationtypes.Deferred(reconciliationtypes.ReadinessRetryDelay)}
 }
 
 func retryable(reason, message string, cause error) Result {
-	return Result{Outcome: reconciliationTypes.RetryableRequeue(
+	return Result{Outcome: reconciliationtypes.RetryableRequeue(
 		ConditionSecretsReady, reason, message, PhaseProvisioning, cause,
 	)}
 }
 
 func terminal(reason, message string, cause error) Result {
-	return Result{Outcome: reconciliationTypes.TerminalError(
+	return Result{Outcome: reconciliationtypes.TerminalError(
 		ConditionSecretsReady, reason, message, PhaseFailed, cause,
 	)}
 }

@@ -24,7 +24,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	tlsport "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/tls"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
@@ -227,7 +227,7 @@ func TestServerTLSModelEmitsEventsOnlyForCertificateConditionTransitions(t *test
 	events := &captureEventEmitter{}
 	updateStatus := func(_ *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 		status := metav1.ConditionFalse
-		if health.State == pgcConstants.Ready {
+		if health.State == pgcconstants.Ready {
 			status = metav1.ConditionTrue
 		}
 		meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{Type: string(certificatesReady), Status: status, Reason: string(health.Reason), Message: health.Message})

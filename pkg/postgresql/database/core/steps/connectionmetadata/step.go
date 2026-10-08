@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	dbpipeline "github.com/splunk/splunk-operator/pkg/postgresql/database/core/pipeline"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 )
@@ -154,10 +154,10 @@ func (s *Step) Reconcile(ctx context.Context, _ *dbpipeline.Contracts) error {
 
 // Observe classifies the mutation and publishes readiness only after every
 // desired ConfigMap converges.
-func (s *Step) Observe(_ context.Context, contracts *dbpipeline.Contracts, reconcileErr error) (reconciliationTypes.Outcome, error) {
+func (s *Step) Observe(_ context.Context, contracts *dbpipeline.Contracts, reconcileErr error) (reconciliationtypes.Outcome, error) {
 	if reconcileErr == nil {
 		contracts.ConnectionMetadataReady = &dbpipeline.ConnectionMetadataReadyContract{}
-		return reconciliationTypes.ConvergedStatus(
+		return reconciliationtypes.ConvergedStatus(
 			conditionConfigMapsReady,
 			reasonConfigMapsCreated,
 			fmt.Sprintf("All ConfigMaps provisioned for %d databases", len(s.input.Databases)),
@@ -165,17 +165,17 @@ func (s *Step) Observe(_ context.Context, contracts *dbpipeline.Contracts, recon
 		), nil
 	}
 	if errors.Is(reconcileErr, dbtypes.ErrConnectionMetadataConflict) {
-		return reconciliationTypes.ImmediateRequeue(reconcileErr), nil
+		return reconciliationtypes.ImmediateRequeue(reconcileErr), nil
 	}
 	if errors.Is(reconcileErr, dbtypes.ErrConnectionEndpointProviderRead) {
-		return reconciliationTypes.RetryableError(reconcileErr), nil
+		return reconciliationtypes.RetryableError(reconcileErr), nil
 	}
 
 	message := fmt.Sprintf("Failed to reconcile ConfigMaps: %v", reconcileErr)
 	if IsEndpointResolutionFailure(reconcileErr) {
 		message = fmt.Sprintf("Failed to resolve ConfigMap endpoints: %v", reconcileErr)
 	}
-	return reconciliationTypes.RetryableRequeue(
+	return reconciliationtypes.RetryableRequeue(
 		conditionConfigMapsReady,
 		reasonConfigMapsFailed,
 		message,

@@ -38,7 +38,7 @@ var ActionFailureCounters = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Help: "The number of times operator has entered an error state",
 }, []string{LabelNamespace, LabelName, LabelKind, LabelErrorType})
 
-var ApiTotalTimeMetricEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+var APITotalTimeMetricEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "splunk_operator_module_duration_in_milliseconds",
 	Help: "The time it takes to complete each call in standalone (in milliseconds)",
 }, []string{LabelNamespace, LabelName, LabelKind, LabelModuleName, LabelMethodName})
@@ -88,7 +88,7 @@ func init() {
 		ReconcileCounters,
 		ReconcileErrorCounter,
 		ActionFailureCounters,
-		ApiTotalTimeMetricEvents,
+		APITotalTimeMetricEvents,
 		UpgradeStartTime,
 		UpgradeEndTime,
 		ActiveHistoricalSearchCount,

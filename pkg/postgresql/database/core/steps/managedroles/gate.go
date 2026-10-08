@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	dbpipeline "github.com/splunk/splunk-operator/pkg/postgresql/database/core/pipeline"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 )
 
@@ -75,16 +75,16 @@ func (g *AcknowledgementGate) Observe(
 	ctx context.Context,
 	contracts *dbpipeline.Contracts,
 	_ error,
-) (reconciliationTypes.Outcome, error) {
+) (reconciliationtypes.Outcome, error) {
 	if err := validateGateInput(g.input); err != nil {
-		return reconciliationTypes.RetryableError(err), nil
+		return reconciliationtypes.RetryableError(err), nil
 	}
 	if g.reader == nil {
-		return reconciliationTypes.RetryableError(errAcknowledgementReaderNotConfigured), nil
+		return reconciliationtypes.RetryableError(errAcknowledgementReaderNotConfigured), nil
 	}
 	acknowledgement, err := g.reader.Read(ctx, g.input.Target)
 	if err != nil {
-		return reconciliationTypes.RetryableError(err), nil
+		return reconciliationtypes.RetryableError(err), nil
 	}
 
 	decision := evaluateAcknowledgement(g.input.Databases, g.input.Owner, acknowledgement)
@@ -95,39 +95,39 @@ func (g *AcknowledgementGate) Observe(
 
 	switch decision.State {
 	case GateConflict:
-		return reconciliationTypes.Waiting(
-			string(reconciliationTypes.ConditionRolesReady),
-			string(reconciliationTypes.ReasonRoleConflict),
+		return reconciliationtypes.Waiting(
+			string(reconciliationtypes.ConditionRolesReady),
+			string(reconciliationtypes.ReasonRoleConflict),
 			fmt.Sprintf("Role conflict in PostgresDatabase %s: %s", g.input.Owner.Name, decision.Message),
-			string(reconciliationTypes.PhaseFailed),
-			reconciliationTypes.ReadinessRetryDelay,
+			string(reconciliationtypes.PhaseFailed),
+			reconciliationtypes.ReadinessRetryDelay,
 		), nil
 	case GateFailed:
-		return reconciliationTypes.Waiting(
-			string(reconciliationTypes.ConditionRolesReady),
-			string(reconciliationTypes.ReasonRoleReconcileFailed),
+		return reconciliationtypes.Waiting(
+			string(reconciliationtypes.ConditionRolesReady),
+			string(reconciliationtypes.ReasonRoleReconcileFailed),
 			fmt.Sprintf("Role reconciliation failed for PostgresDatabase %s: %s", g.input.Owner.Name, decision.Message),
-			string(reconciliationTypes.PhaseFailed),
-			reconciliationTypes.ReadinessRetryDelay,
+			string(reconciliationtypes.PhaseFailed),
+			reconciliationtypes.ReadinessRetryDelay,
 		), nil
 	case GatePending:
-		return reconciliationTypes.Waiting(
-			string(reconciliationTypes.ConditionRolesReady),
-			string(reconciliationTypes.ReasonWaitingForCNPG),
+		return reconciliationtypes.Waiting(
+			string(reconciliationtypes.ConditionRolesReady),
+			string(reconciliationtypes.ReasonWaitingForCNPG),
 			decision.Message,
-			string(reconciliationTypes.PhaseProvisioning),
-			reconciliationTypes.ReadinessRetryDelay,
+			string(reconciliationtypes.PhaseProvisioning),
+			reconciliationtypes.ReadinessRetryDelay,
 		), nil
 	case GateProceed:
 		contracts.ManagedRolesReady = &dbpipeline.ManagedRolesReadyContract{}
-		return reconciliationTypes.ConvergedStatus(
-			string(reconciliationTypes.ConditionRolesReady),
-			string(reconciliationTypes.ReasonRolesAvailable),
+		return reconciliationtypes.ConvergedStatus(
+			string(reconciliationtypes.ConditionRolesReady),
+			string(reconciliationtypes.ReasonRolesAvailable),
 			fmt.Sprintf("Roles reconciled: %d active", roleCount(g.input.Databases)),
-			string(reconciliationTypes.PhaseProvisioning),
+			string(reconciliationtypes.PhaseProvisioning),
 		), nil
 	default:
-		return reconciliationTypes.RetryableError(fmt.Errorf("invalid managed-role gate state %q", decision.State)), nil
+		return reconciliationtypes.RetryableError(fmt.Errorf("invalid managed-role gate state %q", decision.State)), nil
 	}
 }
 

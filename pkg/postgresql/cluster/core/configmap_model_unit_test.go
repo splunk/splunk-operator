@@ -21,7 +21,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -201,7 +201,7 @@ func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t
 
 	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Provisioning, health.State)
+	assert.Equal(t, pgcconstants.Provisioning, health.State)
 	assert.Equal(t, reasonConfigMapFailed, health.Reason)
 	assert.Equal(t, msgConfigMapCAMetadataPending, health.Message)
 	assert.Equal(t, provisioningClusterPhase, health.Phase)

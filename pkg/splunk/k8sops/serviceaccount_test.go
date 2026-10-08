@@ -61,8 +61,8 @@ func TestApplyServiceAccount(t *testing.T) {
 	}
 
 	revised = current.DeepCopy()
-	delTs := metav1.Now()
-	revised.DeletionTimestamp = &delTs
+	delTS := metav1.Now()
+	revised.DeletionTimestamp = &delTS
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
 	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
 	err = ApplyServiceAccount(ctx, c, revised)
