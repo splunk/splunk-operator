@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	dbpipeline "github.com/splunk/splunk-operator/pkg/postgresql/database/core/pipeline"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 )
 
@@ -99,15 +99,15 @@ func (s *PublicationStep) Observe(
 	_ context.Context,
 	contracts *dbpipeline.Contracts,
 	reconcileErr error,
-) (reconciliationTypes.Outcome, error) {
+) (reconciliationtypes.Outcome, error) {
 	if reconcileErr == nil {
 		contracts.ManagedRoleIntentPublished = &dbpipeline.ManagedRoleIntentPublishedContract{}
-		return reconciliationTypes.Converged(), nil
+		return reconciliationtypes.Converged(), nil
 	}
 	if errors.Is(reconcileErr, dbtypes.ErrManagedRoleIntentConflict) {
-		return reconciliationTypes.ImmediateRequeue(reconcileErr), nil
+		return reconciliationtypes.ImmediateRequeue(reconcileErr), nil
 	}
-	return reconciliationTypes.RetryableError(reconcileErr), nil
+	return reconciliationtypes.RetryableError(reconcileErr), nil
 }
 
 // Publication returns a copy of the last successfully committed intent.

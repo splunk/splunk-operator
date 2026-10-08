@@ -23,7 +23,7 @@ import (
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	majorversionupgradetypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 )
 
 func TestReconcileSkipsUnscheduledUseCase(t *testing.T) {
@@ -44,7 +44,7 @@ func TestReconcileSkipsUnscheduledUseCase(t *testing.T) {
 func TestReconcileActsScheduledUseCase(t *testing.T) {
 	useCase := &fakeUseCase{
 		scheduled: true,
-		report: reconciliationTypes.Report{
+		report: reconciliationtypes.Report{
 			Name: "test",
 		},
 	}
@@ -64,7 +64,7 @@ func TestReconcileActsScheduledUseCase(t *testing.T) {
 func TestReconcileReturnsRetryReport(t *testing.T) {
 	useCase := &fakeUseCase{
 		scheduled: true,
-		report: reconciliationTypes.Report{
+		report: reconciliationtypes.Report{
 			Name:  "test",
 			Retry: true,
 		},
@@ -103,7 +103,7 @@ func TestCheckPrerequisitesPassesWhenAllMet(t *testing.T) {
 func TestReconcileOnlyActsFirstScheduledUseCase(t *testing.T) {
 	first := &fakeUseCase{
 		scheduled: true,
-		report:    reconciliationTypes.Report{Name: "first", Retry: false},
+		report:    reconciliationtypes.Report{Name: "first", Retry: false},
 	}
 	second := &fakeUseCase{scheduled: true}
 	reconciler := reconcilerFromUseCases([]string{"first", "second"}, map[string]UseCase{
@@ -304,7 +304,7 @@ type fakeUseCase struct {
 	scheduleErr     error
 	prerequisiteErr error
 	components      []string
-	report          reconciliationTypes.Report
+	report          reconciliationtypes.Report
 	actErr          error
 	acted           bool
 }
@@ -321,7 +321,7 @@ func (f *fakeUseCase) BlocksComponents() []string {
 	return f.components
 }
 
-func (f *fakeUseCase) Act(context.Context) (reconciliationTypes.Report, error) {
+func (f *fakeUseCase) Act(context.Context) (reconciliationtypes.Report, error) {
 	f.acted = true
 	return f.report, f.actErr
 }

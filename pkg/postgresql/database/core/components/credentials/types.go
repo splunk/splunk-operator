@@ -19,7 +19,7 @@ import (
 	"context"
 	"errors"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 )
 
 const (
@@ -132,6 +132,6 @@ type SecretOperations interface {
 // adoption for the future facade to log when it wires this component into the
 // production lifecycle.
 type Result struct {
-	Outcome           reconciliationTypes.Outcome
+	Outcome           reconciliationtypes.Outcome
 	RetainedReadopted bool
 }

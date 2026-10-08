@@ -163,5 +163,5 @@ func recordInstrumentionData(start time.Time, req ctrl.Request, module string, n
 	metricLabels[metrics.LabelModuleName] = module
 	metricLabels[metrics.LabelMethodName] = name
 	value := float64(time.Since(start) / time.Millisecond)
-	metrics.ApiTotalTimeMetricEvents.With(metricLabels).Set(value)
+	metrics.APITotalTimeMetricEvents.With(metricLabels).Set(value)
 }

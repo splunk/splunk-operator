@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,7 +66,7 @@ func newObjectStoreModel(c client.Client, scheme *runtime.Scheme, events eventEm
 	}
 }
 
-func (o *objectStoreModel) Name() string { return pgcConstants.ComponentObjectStore }
+func (o *objectStoreModel) Name() string { return pgcconstants.ComponentObjectStore }
 func (o *objectStoreModel) Requires() []contractKey {
 	return []contractKey{contractAuthority, contractEnvironmentNamer}
 }
@@ -202,8 +202,8 @@ func (o *objectStoreModel) buildObjectStore(name string, cfg *platformv1alpha1.C
 			"destinationPath": cfg.DestinationPath,
 			"s3Credentials": map[string]interface{}{
 				"accessKeyId": map[string]interface{}{
-					"name": cfg.S3Credentials.AccessKeyId.Name,
-					"key":  cfg.S3Credentials.AccessKeyId.Key,
+					"name": cfg.S3Credentials.AccessKeyID.Name,
+					"key":  cfg.S3Credentials.AccessKeyID.Key,
 				},
 				"secretAccessKey": map[string]interface{}{
 					"name": cfg.S3Credentials.SecretAccessKey.Name,

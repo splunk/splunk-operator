@@ -19,7 +19,7 @@ package majorversionupgradetypes
 import (
 	"errors"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	"k8s.io/utils/ptr"
 )
 
@@ -54,115 +54,115 @@ var (
 	ErrUpgradeUnrecoverablePostConversion = errors.New("major upgrade failed after data directory conversion")
 )
 
-func ReportFromError(err error) reconciliationTypes.Report {
+func ReportFromError(err error) reconciliationtypes.Report {
 	switch {
 	case err == nil:
-		return reconciliationTypes.Report{}
+		return reconciliationtypes.Report{}
 
 	case errors.Is(err, ErrUpgradeIntentMissing):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Scheduled),
 			Reason: ReasonUpgradeIntentMissing, Message: reportMessageUpgradeIntentMissing,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrUpgradeAlreadyComplete):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Completed),
 			Reason: ReasonUpgradeAlreadyComplete, Message: reportMessageUpgradeAlreadyComplete,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrUpgradeNoop):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Scheduled),
 			Reason: ReasonUpgradeNoop, Message: reportMessageUpgradeNoop,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 
 	case errors.Is(err, ErrStateTemporarilyUnavailable):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Scheduled),
 			Reason: ReasonStateLoadFailed, Message: reportMessageStateTemporarilyUnavailable,
 			Retry: true, Sleep: ptr.To(reportSleepQuickRetrySeconds)}
 	case errors.Is(err, ErrStatusPersistConflict):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Scheduled),
 			Reason: ReasonStatusPersistConflict, Message: reportMessageStatusPersistConflict,
 			Retry: true, Sleep: ptr.To(reportSleepQuickRetrySeconds)}
 	case errors.Is(err, ErrPreUpgradeBackupNotReady):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(PreUpgradeBackup),
 			Reason: ReasonPreUpgradeBackupNotReady, Message: reportMessagePreUpgradeBackupNotReady,
 			Retry: true, Sleep: ptr.To(reportSleepRetrySeconds)}
 	case errors.Is(err, ErrPostUpgradeBackupNotReady):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(PostUpgradeBackup),
 			Reason: ReasonPostUpgradeBackupNotReady, Message: reportMessagePostUpgradeBackupNotReady,
 			Retry: true, Sleep: ptr.To(reportSleepRetrySeconds)}
 	case errors.Is(err, ErrRollbackCapabilityNotReady):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(PreUpgradeBackup),
 			Reason: ReasonBackupStatusMissing, Message: reportMessageRollbackCapabilityNotReady,
 			Retry: true, Sleep: ptr.To(reportSleepRetrySeconds)}
 	case errors.Is(err, ErrBackupStatusMissing):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(PreUpgradeBackup),
 			Reason: ReasonBackupStatusMissing, Message: reportMessageBackupStatusMissing,
 			Retry: true, Sleep: ptr.To(reportSleepRetrySeconds)}
 	case errors.Is(err, ErrUpgradeFlowPending):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Upgrading),
 			Reason: ReasonUpgradeFlowPending, Message: reportMessageUpgradeFlowPending,
 			Retry: true, Sleep: ptr.To(reportSleepLongRetrySeconds)}
 
 	case errors.Is(err, ErrInvalidUpgradeIntent):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonInvalidUpgradeIntent, Message: reportMessageInvalidUpgradeIntent,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrUnsupportedUpgradeStrategy):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonUnsupportedUpgradeStrategy, Message: reportMessageUnsupportedUpgradeStrategy,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrBlueGreenStrategyUnavailable):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonBlueGreenStrategyUnavailable, Message: reportMessageBlueGreenStrategyUnavailable,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrRollbackCapabilityMissing):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonRollbackCapabilityMissing, Message: reportMessageRollbackCapabilityMissing,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrBackupProviderMissing):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonBackupProviderMissing, Message: reportMessageBackupProviderMissing,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrRollbackCapabilityUnavailable):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonRollbackCapabilityFailed, Message: reportMessageRollbackCapabilityUnavailable,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrUpgradeFlowFailed):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonUpgradeFlowFailed, Message: reportMessageUpgradeFlowFailed,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrUpgradeVerificationFailed):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonUpgradeVerificationFailed, Message: reportMessageUpgradeVerificationFailed,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrUpgradeUnrecoverablePreConversion):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonUpgradeUnrecoverablePreConversion, Message: reportMessageUpgradeUnrecoverablePreConversion,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	case errors.Is(err, ErrUpgradeUnrecoverablePostConversion):
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonUpgradeUnrecoverablePostConversion, Message: reportMessageUpgradeUnrecoverablePostConversion,
 			Retry: false, Sleep: ptr.To(reportSleepNone)}
 	default:
-		return reconciliationTypes.Report{
+		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Scheduled),
 			Reason: ReasonUnknownMajorUpgradeError, Message: reportMessageUnknownMajorUpgradeError,
 			Retry: true, Sleep: ptr.To(reportSleepRetrySeconds)}

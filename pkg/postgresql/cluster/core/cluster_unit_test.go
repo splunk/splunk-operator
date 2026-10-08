@@ -23,7 +23,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	custommetrics "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	monitoring "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
@@ -242,7 +242,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			require.Error(t, err)
 			require.ErrorIs(t, err, assert.AnError)
 			assert.Equal(t, tt.expectedCondition, health.Condition)
-			assert.Equal(t, pgcConstants.Failed, health.State)
+			assert.Equal(t, pgcconstants.Failed, health.State)
 			assert.Equal(t, tt.expectedReason, health.Reason)
 			assert.Equal(t, failedClusterPhase, health.Phase)
 			assert.NotEmpty(t, health.Message)

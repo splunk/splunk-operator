@@ -220,8 +220,8 @@ func TestApplyIndexerClusterOld(t *testing.T) {
 	}
 
 	cMasterCr.Status.Phase = enterpriseApi.PhasePending
-	cTs := metav1.Now()
-	idxCr.ObjectMeta.DeletionTimestamp = &cTs
+	cTS := metav1.Now()
+	idxCr.ObjectMeta.DeletionTimestamp = &cTS
 	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
 	if err != nil {
 		t.Errorf("Not Expecting an error")

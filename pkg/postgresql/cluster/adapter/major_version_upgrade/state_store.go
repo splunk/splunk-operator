@@ -25,7 +25,7 @@ import (
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -192,7 +192,7 @@ func retryRequestedAt(annotations map[string]string) (*metav1.Time, error) {
 	return &retryAt, nil
 }
 
-func stateWithReport(intent mvutypes.Intent, report reconciliationTypes.Report, baseline *mvutypes.BackupInfo) []platformv1alpha1.PostgresMajorUpgradeStatus {
+func stateWithReport(intent mvutypes.Intent, report reconciliationtypes.Report, baseline *mvutypes.BackupInfo) []platformv1alpha1.PostgresMajorUpgradeStatus {
 	return stateWithProgress(intent, mvutypes.Progress{Report: report, Baseline: baseline})
 }
 
@@ -211,7 +211,7 @@ func stateWithProgress(intent mvutypes.Intent, progress mvutypes.Progress) []pla
 	return stateWithCurrentEntry(intent.State, intent, current)
 }
 
-func applyTimestamps(current *platformv1alpha1.PostgresMajorUpgradeStatus, report reconciliationTypes.Report) {
+func applyTimestamps(current *platformv1alpha1.PostgresMajorUpgradeStatus, report reconciliationtypes.Report) {
 	if current.StartedAt == nil {
 		now := metav1.Now()
 		current.StartedAt = &now
@@ -228,7 +228,7 @@ func applyTimestamps(current *platformv1alpha1.PostgresMajorUpgradeStatus, repor
 // non-Completed report is paired with a post-upgrade backup the name lands in
 // PreUpgrade, corrupting status. This coupling is intentional but fragile: do
 // not change the pairing without updating the corresponding test.
-func applyBaseline(current *platformv1alpha1.PostgresMajorUpgradeStatus, report reconciliationTypes.Report, baseline *mvutypes.BackupInfo) {
+func applyBaseline(current *platformv1alpha1.PostgresMajorUpgradeStatus, report reconciliationtypes.Report, baseline *mvutypes.BackupInfo) {
 	if baseline == nil {
 		return
 	}
@@ -248,7 +248,7 @@ func applyBaseline(current *platformv1alpha1.PostgresMajorUpgradeStatus, report 
 	}
 }
 
-func applyConditions(current *platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent, report reconciliationTypes.Report) {
+func applyConditions(current *platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent, report reconciliationtypes.Report) {
 	if mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, *current) && report.Phase != string(mvutypes.Failed) {
 		current.Conditions = removeCondition(current.Conditions, mvutypes.ConditionMajorUpgradeTerminalFailure)
 	}
@@ -293,7 +293,7 @@ func removeCondition(conditions []metav1.Condition, conditionType string) []meta
 	return filtered
 }
 
-func conditionFromReport(report reconciliationTypes.Report) metav1.Condition {
+func conditionFromReport(report reconciliationtypes.Report) metav1.Condition {
 	conditionType := mvutypes.ConditionMajorUpgradeProgressing
 	status := metav1.ConditionTrue
 

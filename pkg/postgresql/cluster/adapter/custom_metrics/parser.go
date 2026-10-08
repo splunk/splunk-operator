@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package custom_metrics parses, validates, collides, and aggregates query packages.
-package custom_metrics
+// Package custommetrics parses, validates, collides, and aggregates query packages.
+package custommetrics
 
 import (
 	"fmt"

@@ -19,7 +19,7 @@ import (
 	"context"
 	"errors"
 
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
 	dbclusterinfo "github.com/splunk/splunk-operator/pkg/postgresql/database/ports/clusterinfo"
 )
 
@@ -47,7 +47,7 @@ const (
 // part of it because their transition policy belongs to the database facade.
 type Result struct {
 	Facts   dbclusterinfo.ResolvedClusterFacts
-	Outcome reconciliationTypes.Outcome
+	Outcome reconciliationtypes.Outcome
 }
 
 // Gate observes one referenced cluster. It does not mutate Kubernetes objects
@@ -64,7 +64,7 @@ func New(reader dbclusterinfo.ClusterReader) Gate {
 // Observe reads cluster facts and classifies the database prerequisite.
 func (g Gate) Observe(ctx context.Context, input Input) Result {
 	if g.reader == nil {
-		return Result{Outcome: reconciliationTypes.RetryableRequeue(
+		return Result{Outcome: reconciliationtypes.RetryableRequeue(
 			conditionClusterReady,
 			reasonClusterReaderNotConfigured,
 			messageClusterReaderNotConfigured,
@@ -76,15 +76,15 @@ func (g Gate) Observe(ctx context.Context, input Input) Result {
 	facts, err := g.reader.Read(ctx, input.Namespace, input.Name)
 	if err != nil {
 		if errors.Is(err, dbclusterinfo.ErrClusterNotFound) {
-			return Result{Outcome: reconciliationTypes.Waiting(
+			return Result{Outcome: reconciliationtypes.Waiting(
 				conditionClusterReady,
 				reasonClusterNotFound,
 				messageClusterNotFound,
 				phasePending,
-				reconciliationTypes.ClusterNotFoundRetryDelay,
+				reconciliationtypes.ClusterNotFoundRetryDelay,
 			)}
 		}
-		return Result{Outcome: reconciliationTypes.RetryableRequeue(
+		return Result{Outcome: reconciliationtypes.RetryableRequeue(
 			conditionClusterReady,
 			reasonClusterInfoFetchFailed,
 			messageClusterInfoFetchFailed,
@@ -95,24 +95,24 @@ func (g Gate) Observe(ctx context.Context, input Input) Result {
 
 	if facts.Lifecycle != dbclusterinfo.LifecycleReady || facts.Cluster == nil {
 		if facts.Recovery == dbclusterinfo.RecoveryInProgress && (input.WasReady || input.PreviousClusterReadyReason == reasonClusterRecovery) {
-			return Result{Facts: facts, Outcome: reconciliationTypes.Waiting(
+			return Result{Facts: facts, Outcome: reconciliationtypes.Waiting(
 				conditionClusterReady,
 				reasonClusterRecovery,
 				messageClusterRecovery,
 				phasePending,
-				reconciliationTypes.ReadinessRetryDelay,
+				reconciliationtypes.ReadinessRetryDelay,
 			)}
 		}
-		return Result{Facts: facts, Outcome: reconciliationTypes.Waiting(
+		return Result{Facts: facts, Outcome: reconciliationtypes.Waiting(
 			conditionClusterReady,
 			reasonClusterProvisioning,
 			messageClusterProvisioning,
 			phasePending,
-			reconciliationTypes.ReadinessRetryDelay,
+			reconciliationtypes.ReadinessRetryDelay,
 		)}
 	}
 
-	return Result{Facts: facts, Outcome: reconciliationTypes.ConvergedStatus(
+	return Result{Facts: facts, Outcome: reconciliationtypes.ConvergedStatus(
 		conditionClusterReady,
 		reasonClusterAvailable,
 		messageClusterAvailable,

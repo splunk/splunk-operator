@@ -1628,7 +1628,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 									EndpointURL:     ptr.To("https://s3.us-east-1.amazonaws.com"),
 									RetentionPolicy: ptr.To("30d"),
 									S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
-										AccessKeyId: v1.SecretKeySelector{
+										AccessKeyID: v1.SecretKeySelector{
 											LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
 											Key:                  "accessKeyId",
 										},
@@ -2859,7 +2859,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 								DestinationPath: "s3://test-bucket/clusters/",
 								EndpointURL:     ptr.To("https://s3.us-east-1.amazonaws.com"),
 								S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
-									AccessKeyId: v1.SecretKeySelector{
+									AccessKeyID: v1.SecretKeySelector{
 										LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
 										Key:                  "accessKeyId",
 									},

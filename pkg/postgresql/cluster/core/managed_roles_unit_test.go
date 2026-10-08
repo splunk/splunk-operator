@@ -28,7 +28,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -173,7 +173,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 		name           string
 		cnpg           *cnpgv1.Cluster
 		specRoles      []managedRole
-		expectedState  pgcConstants.State
+		expectedState  pgcconstants.State
 		expectedReason conditionReasons
 		expectErr      bool
 		expectPending  []string
@@ -185,7 +185,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 			specRoles: []managedRole{
 				{Name: "app_user", Exists: true},
 			},
-			expectedState:  pgcConstants.Pending,
+			expectedState:  pgcconstants.Pending,
 			expectedReason: reasonManagedRolesPending,
 			expectPending:  []string{"app_user"},
 		},
@@ -197,7 +197,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 				},
 			}),
 			specRoles:      []managedRole{{Name: "app_user", Exists: true}},
-			expectedState:  pgcConstants.Pending,
+			expectedState:  pgcconstants.Pending,
 			expectedReason: reasonManagedRolesPending,
 			expectPending:  []string{"app_user"},
 		},
@@ -207,7 +207,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 				CannotReconcile: map[string][]string{"app_user": {"reserved role"}},
 			}),
 			specRoles:      []managedRole{{Name: "app_user", Exists: true}},
-			expectedState:  pgcConstants.Failed,
+			expectedState:  pgcconstants.Failed,
 			expectedReason: reasonManagedRolesFailed,
 			expectErr:      true,
 			expectFailed:   map[string]string{"app_user": "reserved role"},
@@ -223,7 +223,7 @@ func TestManagedRolesModelConverge(t *testing.T) {
 				{Name: "app_user", Exists: true},
 				{Name: "app_user_rw", Exists: true},
 			},
-			expectedState:  pgcConstants.Ready,
+			expectedState:  pgcconstants.Ready,
 			expectedReason: reasonManagedRolesReady,
 		},
 	}
@@ -281,7 +281,7 @@ func TestManagedRolesContractsNotReadyIsUpstreamPending(t *testing.T) {
 	require.ErrorIs(t, reconcileErr, errContractsNotReady)
 	require.NoError(t, err)
 	assert.Equal(t, managedRolesReady, health.Condition)
-	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, reasonUpstreamNotReady, health.Reason)
 	assert.True(t, health.Result.RequeueAfter > 0)
 }
@@ -437,7 +437,7 @@ func TestManagedRolesModelNoOpWhenRolesEmpty(t *testing.T) {
 	// Assert
 	require.NoError(t, err)
 	require.NoError(t, reconcileErr)
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	assert.Equal(t, reasonManagedRolesReady, health.Reason)
 }
 
@@ -474,7 +474,7 @@ func TestManagedRolesRuntimeGateHealthMatchesConverge(t *testing.T) {
 	reconcileErr := model.Reconcile(context.Background())
 	health, err := model.Observe(context.Background(), reconcileErr)
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pgcconstants.Pending, health.State)
 }
 
 // TestManagedRolesNeedsCredentialSweep verifies the gating that makes the post-recovery
@@ -685,7 +685,7 @@ func TestManagedRolesCredentialSweepSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	// Provisioning requeue so the next reconcile re-enables managed roles.
-	assert.Equal(t, pgcConstants.Provisioning, health.State)
+	assert.Equal(t, pgcconstants.Provisioning, health.State)
 	assert.NotZero(t, health.Result.RequeueAfter)
 
 	// Restore status recorded so the sweep is not repeated.
@@ -747,7 +747,7 @@ func TestManagedRolesCredentialSweepConnectWaits(t *testing.T) {
 	// Assert: a connect failure waits (requeue), it does not fail the cluster.
 	require.ErrorIs(t, reconcileErr, errSweepConnect)
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Provisioning, health.State)
+	assert.Equal(t, pgcconstants.Provisioning, health.State)
 	assert.NotZero(t, health.Result.RequeueAfter)
 
 	// Status must NOT record completion so the sweep retries next reconcile.
@@ -799,7 +799,7 @@ func TestManagedRolesCredentialSweepConnectTerminal(t *testing.T) {
 	require.ErrorIs(t, reconcileErr, errSweepTerminal)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errSweepTerminal)
-	assert.Equal(t, pgcConstants.Failed, health.State)
+	assert.Equal(t, pgcconstants.Failed, health.State)
 
 	// Status must NOT record completion.
 	assert.Nil(t, cluster.Status.Restore)
@@ -859,7 +859,7 @@ func TestManagedRolesCredentialSweepExecFails(t *testing.T) {
 	assert.ErrorIs(t, err, errSweepTerminal)
 	assert.NotContains(t, reconcileErr.Error(), "supersecret")
 	assert.NotContains(t, err.Error(), "supersecret")
-	assert.Equal(t, pgcConstants.Failed, health.State)
+	assert.Equal(t, pgcconstants.Failed, health.State)
 	assert.Equal(t, reasonManagedRolesFailed, health.Reason)
 	assert.NotContains(t, health.Message, "supersecret")
 

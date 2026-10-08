@@ -26,7 +26,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	tlsport "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/tls"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -198,7 +198,7 @@ func (p *serverTLSModel) Observe(_ context.Context, reconcileErr error) (compone
 	}
 	statusErr := writeComponentStatus(p.updateStatus, before, health)
 	if statusErr == nil && p.events != nil && p.certManagerMode() && certificateConditionChanged(before.Conditions, p.cluster.Status.Conditions) {
-		if health.State == pgcConstants.Ready {
+		if health.State == pgcconstants.Ready {
 			p.events.emitNormal(p.cluster, EventCertificateReady, health.Message)
 		} else {
 			p.events.emitWarning(p.cluster, EventCertificateReconcileFailed, health.Message)

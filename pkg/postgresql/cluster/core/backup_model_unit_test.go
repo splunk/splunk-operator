@@ -22,7 +22,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
@@ -349,7 +349,7 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 
 		// Assert
 		require.Error(t, err)
-		assert.Equal(t, pgcConstants.Failed, health.State)
+		assert.Equal(t, pgcconstants.Failed, health.State)
 		assert.Equal(t, reasonBackupProviderMissing, health.Reason)
 	})
 }
@@ -368,7 +368,7 @@ func TestBackupModel_Reconcile_CreateError(t *testing.T) {
 
 	// Assert — the model turns a backend ensure error into a failed health + warning event.
 	require.Error(t, err)
-	assert.Equal(t, pgcConstants.Failed, health.State)
+	assert.Equal(t, pgcconstants.Failed, health.State)
 	assert.Len(t, emitter.warnings, 1)
 }
 
@@ -385,7 +385,7 @@ func TestBackupModel_Reconcile_DeleteError(t *testing.T) {
 
 	// Assert
 	require.Error(t, err)
-	assert.Equal(t, pgcConstants.Failed, health.State)
+	assert.Equal(t, pgcconstants.Failed, health.State)
 }
 
 // --- Observe ---
@@ -403,7 +403,7 @@ func TestBackupModel_Observe_Disabled(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	assert.Equal(t, reasonBackupDisabled, health.Reason)
 }
 
@@ -425,7 +425,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 
 		// Assert
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Ready, health.State)
+		assert.Equal(t, pgcconstants.Ready, health.State)
 		assert.Equal(t, reasonBackupConfigured, health.Reason)
 		require.NotNil(t, cluster.Status.BackupStatus)
 		require.NotNil(t, cluster.Status.BackupStatus.VolumeSnapshot)
@@ -445,7 +445,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 
 		// Assert
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Pending, health.State)
+		assert.Equal(t, pgcconstants.Pending, health.State)
 		assert.Equal(t, reasonScheduledBackupCreated, health.Reason)
 	})
 
@@ -461,7 +461,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 
 		// Assert
 		require.Error(t, err)
-		assert.Equal(t, pgcConstants.Failed, health.State)
+		assert.Equal(t, pgcconstants.Failed, health.State)
 	})
 
 	t.Run("populates schedule times from ScheduleResult", func(t *testing.T) {
@@ -480,7 +480,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 
 		// Assert — schedule times are copied into in-memory cluster status; writeComponentStatus persists them
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Ready, health.State)
+		assert.Equal(t, pgcconstants.Ready, health.State)
 		require.NotNil(t, cluster.Status.BackupStatus)
 		require.NotNil(t, cluster.Status.BackupStatus.VolumeSnapshot)
 		assert.WithinDuration(t, now.Time, cluster.Status.BackupStatus.VolumeSnapshot.LastScheduleTime.Time, time.Second)
@@ -529,7 +529,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 
 		// Assert — schedule times are copied into in-memory cluster status; writeComponentStatus persists them
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Ready, health.State)
+		assert.Equal(t, pgcconstants.Ready, health.State)
 		persisted := &platformv1alpha1.PostgresCluster{}
 		require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "c1", Namespace: "ns1"}, persisted))
 		require.NotNil(t, persisted.Status.BackupStatus)
@@ -563,7 +563,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 
 		// Assert — BackupStatus must be readable from the API server after Observe
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Ready, health.State)
+		assert.Equal(t, pgcconstants.Ready, health.State)
 		persisted := &platformv1alpha1.PostgresCluster{}
 		require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "c1", Namespace: "ns1"}, persisted))
 		require.NotNil(t, persisted.Status.BackupStatus)
@@ -959,7 +959,7 @@ func TestBackupModel_ContractsNotReady(t *testing.T) {
 
 		// Assert
 		require.NoError(t, err)
-		assert.Equal(t, pgcConstants.Pending, health.State)
+		assert.Equal(t, pgcconstants.Pending, health.State)
 		assert.Equal(t, reasonUpstreamNotReady, health.Reason)
 	})
 }
@@ -980,7 +980,7 @@ func newTestBarmanObjectStoreConfig() *platformv1alpha1.CNPGBarmanObjectStoreCon
 	return &platformv1alpha1.CNPGBarmanObjectStoreConfig{
 		DestinationPath: "s3://test-bucket/clusters/",
 		S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
-			AccessKeyId:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "s3-creds"}, Key: "accessKeyId"},
+			AccessKeyID:     corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "s3-creds"}, Key: "accessKeyId"},
 			SecretAccessKey: corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "s3-creds"}, Key: "secretAccessKey"},
 		},
 	}
@@ -1085,7 +1085,7 @@ func TestBackupModel_Barman_PopulatesObjectStoreStatus(t *testing.T) {
 	health, err := model.Observe(context.Background(), nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	require.NotNil(t, cluster.Status.BackupStatus)
 	require.NotNil(t, cluster.Status.BackupStatus.ObjectStore)
 	assert.True(t, cluster.Status.BackupStatus.ObjectStore.Enabled)
@@ -1126,7 +1126,7 @@ func TestBackupModel_DualProvider_PopulatesBothStatuses(t *testing.T) {
 	health, err := model.Observe(context.Background(), nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	require.NotNil(t, cluster.Status.BackupStatus)
 	require.NotNil(t, cluster.Status.BackupStatus.VolumeSnapshot)
 	assert.True(t, cluster.Status.BackupStatus.VolumeSnapshot.Enabled)
@@ -1146,7 +1146,7 @@ func TestBackupModel_DualProvider_PendingUntilBothScheduledBackupsExist(t *testi
 	health, err := model.Observe(context.Background(), nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Pending, health.State)
+	assert.Equal(t, pgcconstants.Pending, health.State)
 }
 
 func TestBackupModel_DualProvider_GCsObjectStoreBackupWhenProviderRemoved(t *testing.T) {

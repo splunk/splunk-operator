@@ -22,7 +22,7 @@ import (
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mon "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
-	pgcConstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +42,7 @@ func TestMonitoringModel_OversizedConfigConditionIsActionable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, customMetricsReady, health.Condition)
 	assert.Equal(t, reasonCustomMetricsConfigTooLarge, health.Reason)
-	assert.Equal(t, pgcConstants.Ready, health.State, "custom-metrics degradation must not make the parent cluster unavailable")
+	assert.Equal(t, pgcconstants.Ready, health.State, "custom-metrics degradation must not make the parent cluster unavailable")
 	require.NotNil(t, health.ConditionStatus)
 	assert.Equal(t, metav1.ConditionFalse, *health.ConditionStatus)
 	assert.Empty(t, health.Phase)
@@ -62,7 +62,7 @@ func TestCustomMetricsModel_ConflictStaysConfiguringAndRetryable(t *testing.T) {
 	health, err := m.computeHealth(newReconcileFailure(reasonCustomMetricsApplyFailed, conflict))
 
 	assert.ErrorIs(t, err, conflict)
-	assert.Equal(t, pgcConstants.Configuring, health.State)
+	assert.Equal(t, pgcconstants.Configuring, health.State)
 	assert.Equal(t, configuringClusterPhase, health.Phase)
 	assert.Equal(t, reasonCustomMetricsApplyRetrying, health.Reason)
 	require.NotNil(t, health.ConditionStatus)
@@ -79,7 +79,7 @@ func TestCustomMetricsModel_ConfirmedResourceDisappearanceStaysConfiguringAndRet
 	))
 
 	assert.ErrorIs(t, err, mtypes.ErrConfirmedResourceUnavailable)
-	assert.Equal(t, pgcConstants.Configuring, health.State)
+	assert.Equal(t, pgcconstants.Configuring, health.State)
 	assert.Equal(t, reasonCustomMetricsApplyRetrying, health.Reason)
 	assert.NotZero(t, health.Result.RequeueAfter)
 }
@@ -94,7 +94,7 @@ func TestCustomMetricsModel_NotFoundDuringConfirmationStaysConfiguringAndRetryab
 	health, err := m.computeHealth(newReconcileFailure(reasonCustomMetricsApplyFailed, notFound))
 
 	assert.ErrorIs(t, err, notFound)
-	assert.Equal(t, pgcConstants.Configuring, health.State)
+	assert.Equal(t, pgcconstants.Configuring, health.State)
 	assert.Equal(t, reasonCustomMetricsApplyRetrying, health.Reason)
 	assert.NotZero(t, health.Result.RequeueAfter)
 }
@@ -109,7 +109,7 @@ func TestCustomMetricsModel_NonRetryableApplyErrorRemainsFailed(t *testing.T) {
 	health, err := m.computeHealth(newReconcileFailure(reasonCustomMetricsApplyFailed, deterministic))
 
 	assert.ErrorIs(t, err, deterministic)
-	assert.Equal(t, pgcConstants.Failed, health.State)
+	assert.Equal(t, pgcconstants.Failed, health.State)
 	assert.Equal(t, failedClusterPhase, health.Phase)
 	assert.Equal(t, reasonCustomMetricsApplyFailed, health.Reason)
 }
@@ -123,7 +123,7 @@ func TestCustomMetricsModel_OwnershipConflictIsDegraded(t *testing.T) {
 	health, err := m.computeHealth(nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Ready, health.State)
+	assert.Equal(t, pgcconstants.Ready, health.State)
 	assert.Equal(t, reasonCustomMetricsOwnershipConflict, health.Reason)
 	require.NotNil(t, health.ConditionStatus)
 	assert.Equal(t, metav1.ConditionFalse, *health.ConditionStatus)
@@ -140,7 +140,7 @@ func TestCustomMetricsModel_InvalidSourceKeepsDegradedConditionWhileRepairRequeu
 	health, err := m.computeHealth(nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, pgcConstants.Configuring, health.State)
+	assert.Equal(t, pgcconstants.Configuring, health.State)
 	assert.Equal(t, configuringClusterPhase, health.Phase)
 	require.NotNil(t, health.ConditionStatus)
 	assert.Equal(t, metav1.ConditionFalse, *health.ConditionStatus)
@@ -160,7 +160,7 @@ func TestCustomMetricsModel_UnpublishedContributionReasonWinsWhileRollbackConfig
 
 	require.NoError(t, err)
 	assert.Equal(t, reasonCustomMetricsPending, health.Reason)
-	assert.Equal(t, pgcConstants.Configuring, health.State)
+	assert.Equal(t, pgcconstants.Configuring, health.State)
 	assert.NotZero(t, health.Result.RequeueAfter)
 }
 

@@ -2262,13 +2262,13 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectReconcileResult(result, err, 15*time.Second)
 
-			adoptedDb := &cnpgv1.Database{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgDatabaseName(), Namespace: scenario.namespace}, adoptedDb)).To(Succeed())
-			Expect(metav1.IsControlledBy(adoptedDb, current)).To(BeTrue())
-			_, hasRetainedAnnotation := adoptedDb.Annotations[retainedFromAnnotation]
+			adoptedDB := &cnpgv1.Database{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: scenario.cnpgDatabaseName(), Namespace: scenario.namespace}, adoptedDB)).To(Succeed())
+			Expect(metav1.IsControlledBy(adoptedDB, current)).To(BeTrue())
+			_, hasRetainedAnnotation := adoptedDB.Annotations[retainedFromAnnotation]
 			Expect(hasRetainedAnnotation).To(BeFalse())
 
-			markCNPGDatabaseAppliedWithBootstrap(ctx, adoptedDb)
+			markCNPGDatabaseAppliedWithBootstrap(ctx, adoptedDB)
 			result, err = reconcilePostgresDatabase(ctx, scenario.requestName)
 			expectEmptyReconcileResult(result, err)
 		})

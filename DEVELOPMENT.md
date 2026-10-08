@@ -30,6 +30,30 @@ truth instead of extending this file with a command catalog.
   `splunk-operator-integration-tests` skill and update
   `docs/develop/IntegrationTesting.md` to match that contract.
 
+## Go naming conventions
+
+- Use short, lowercase package names without underscores or mixed capitals;
+  name packages for their primary responsibility (for example, `resources` or
+  `reconcile`).
+- Use `MixedCaps` for exported Go names and `mixedCaps` for unexported names.
+  Preserve Go initialisms such as `ID`, `URL`, and `API` (`PodURL`,
+  `clusterID`). Prefer descriptive names for exported symbols; avoid redundant
+  package prefixes (`resources.NewConfigMap`, not
+  `resources.NewResourcesConfigMap`).
+- Name interfaces for the capability they represent. Use a `-er` name when it
+  reads naturally (`Reader`); otherwise use a domain name that describes the
+  contract (`DBRepo`). Keep interfaces small and close to their consumers.
+- Put tests in `*_test.go` files. Name standard-library tests `Test<Behavior>`
+  and benchmarks `Benchmark<Behavior>`; in Ginkgo specs, describe the behavior
+  with `Describe`, `Context`, and `It`.
+- In Go identifiers and prose, use the operator's current API terms such as
+  `ClusterManager`, `LicenseManager`, `IndexerCluster`, and `SearchHeadCluster`.
+  Keep legacy Splunk or Kubernetes wire names only where compatibility requires
+  them, and use the exact external spelling at those boundaries.
+
+The `make lint` path runs `staticcheck`, including its ST1003 naming
+check for non-idiomatic Go identifiers and initialisms.
+
 ## Validate at the owning boundary
 
 Choose the narrowest meaningful check first and broaden when the change crosses

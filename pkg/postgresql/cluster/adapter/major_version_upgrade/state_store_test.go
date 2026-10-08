@@ -25,7 +25,7 @@ import (
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	reconciliationTypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -211,7 +211,7 @@ func TestStateWithReportClearsTerminalFailureAfterRetry(t *testing.T) {
 			}},
 		}},
 	}
-	report := reconciliationTypes.Report{
+	report := reconciliationtypes.Report{
 		Name:   mvutypes.UseCaseName,
 		Phase:  string(mvutypes.PreUpgradeBackup),
 		Reason: mvutypes.ReasonBackupStatusMissing,
@@ -237,7 +237,7 @@ func TestStateWithReportSurfacesRetryableFailureForBlockingObstacle(t *testing.T
 		SourcePgVersion: source,
 		TargetPgVersion: target,
 	}
-	report := reconciliationTypes.Report{
+	report := reconciliationtypes.Report{
 		Name:   mvutypes.UseCaseName,
 		Phase:  string(mvutypes.PreUpgradeBackup),
 		Reason: mvutypes.ReasonBackupStatusMissing,
@@ -273,7 +273,7 @@ func TestStateWithReportClearsRetryableFailureWhenProgressResumes(t *testing.T) 
 			}},
 		}},
 	}
-	report := reconciliationTypes.Report{
+	report := reconciliationtypes.Report{
 		Name:   mvutypes.UseCaseName,
 		Phase:  string(mvutypes.Upgrading),
 		Reason: mvutypes.ReasonPgUpgradeStarted,
@@ -312,7 +312,7 @@ func TestStateWithReportStartsFreshEntryForNewIntent(t *testing.T) {
 			}},
 		}},
 	}
-	report := reconciliationTypes.Report{
+	report := reconciliationtypes.Report{
 		Name:    mvutypes.UseCaseName,
 		Phase:   string(mvutypes.Verifying),
 		Reason:  mvutypes.ReasonPgUpgradeObservedComplete,
@@ -360,7 +360,7 @@ func TestStateWithReportUpdatesMatchingEntryAndPreservesHistory(t *testing.T) {
 			},
 		},
 	}
-	report := reconciliationTypes.Report{
+	report := reconciliationtypes.Report{
 		Name:    mvutypes.UseCaseName,
 		Phase:   string(mvutypes.Verifying),
 		Reason:  mvutypes.ReasonPgUpgradeObservedComplete,
@@ -395,7 +395,7 @@ func TestApplyBaselineWritesPostUpgradeNameOnlyWithCompletedReport(t *testing.T)
 		SourcePgVersion: source,
 		TargetPgVersion: target,
 	}
-	report := reconciliationTypes.Report{
+	report := reconciliationtypes.Report{
 		Name:  mvutypes.UseCaseName,
 		Phase: string(mvutypes.Completed),
 		Retry: false,
@@ -423,7 +423,7 @@ func TestApplyBaselineWritesPreUpgradeNameForNonCompletedReport(t *testing.T) {
 		SourcePgVersion: source,
 		TargetPgVersion: target,
 	}
-	report := reconciliationTypes.Report{
+	report := reconciliationtypes.Report{
 		Name:  mvutypes.UseCaseName,
 		Phase: string(mvutypes.PreUpgradeBackup),
 		Retry: true,
@@ -513,7 +513,7 @@ func TestStateWithReportNilBaselineCompletedDoesNotWriteBackupName(t *testing.T)
 		SourcePgVersion: source,
 		TargetPgVersion: target,
 	}
-	report := reconciliationTypes.Report{
+	report := reconciliationtypes.Report{
 		Name:  mvutypes.UseCaseName,
 		Phase: string(mvutypes.Completed),
 		Retry: false,
@@ -555,7 +555,7 @@ func TestStateWithReportPhaseForDuplicateEntries(t *testing.T) {
 			},
 		},
 	}
-	report := reconciliationTypes.Report{
+	report := reconciliationtypes.Report{
 		Name:   mvutypes.UseCaseName,
 		Phase:  string(mvutypes.Upgrading),
 		Reason: mvutypes.ReasonPgUpgradeStarted,
@@ -597,7 +597,7 @@ func TestPreUpgradeBackupNameSurvivesTerminalFailure(t *testing.T) {
 		TargetPgVersion: target,
 		State:           []platformv1alpha1.PostgresMajorUpgradeStatus{prior},
 	}
-	failedReport := reconciliationTypes.Report{
+	failedReport := reconciliationtypes.Report{
 		Name:  mvutypes.UseCaseName,
 		Phase: string(mvutypes.Failed),
 		Retry: false,
@@ -682,7 +682,7 @@ func TestStateWithProgressReplacesBlueGreenStatusAtomically(t *testing.T) {
 			BlueGreen:       &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-2"},
 		}},
 	}
-	report := reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: phase}
+	report := reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: phase}
 
 	next := stateWithProgress(intent, mvutypes.Progress{Report: report, BlueGreen: updatedStatus})
 
@@ -726,7 +726,7 @@ func TestStateWithProgressPreservesExistingBlueGreenStatusWhenUnspecified(t *tes
 	}
 
 	next := stateWithProgress(intent, mvutypes.Progress{
-		Report: reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
+		Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
 	})
 
 	require.Len(t, next, 1)
@@ -750,7 +750,7 @@ func TestStateWithProgressLeavesPgUpgradeStatusWithoutBlueGreen(t *testing.T) {
 	}
 
 	next := stateWithProgress(intent, mvutypes.Progress{
-		Report: reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
+		Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
 	})
 
 	require.Len(t, next, 1)
@@ -862,7 +862,7 @@ func TestStateWithProgressAppendsNewBlueGreenAttemptHistory(t *testing.T) {
 	}
 
 	next := stateWithProgress(intent, mvutypes.Progress{
-		Report: reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
+		Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
 		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
 			AttemptID: "attempt-2",
 		},
@@ -896,7 +896,7 @@ func TestStateWithProgressDeepCopiesPreservedBlueGreenStatus(t *testing.T) {
 	}
 
 	next := stateWithProgress(intent, mvutypes.Progress{
-		Report: reconciliationTypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
+		Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)},
 	})
 	next[0].BlueGreen.Blue.Ref.Name = "mutated"
 	assert.Equal(t, "blue", intent.State[0].BlueGreen.Blue.Ref.Name)
