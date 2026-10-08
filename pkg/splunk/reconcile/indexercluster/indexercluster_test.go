@@ -38,6 +38,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 
@@ -2343,6 +2344,208 @@ func TestPasswordSyncCompleted(t *testing.T) {
 	if !foundEvent {
 		t.Errorf("Expected PasswordSyncCompleted event to be published")
 	}
+}
+
+func newSecretRotationWorkflowFixture(t *testing.T, replicas int32) (client.WithWatch, *appsv1.StatefulSet, *corev1.Pod, *enterpriseApi.IndexerCluster, *indexerClusterPodManager) {
+	t.Helper()
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.Background()
+	replicaCount := replicas
+
+	scheme := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+	c := newFakeClientBuilder(scheme).
+		WithStatusSubresource(&appsv1.StatefulSet{}).
+		Build()
+
+	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	require.NoError(t, err)
+
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-idxc-indexer", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicaCount,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "idxc"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "idxc"}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:test"}},
+					Volumes: []corev1.Volume{{
+						Name:         "mnt-splunk-secrets",
+						VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "idxc-secrets-v2"}},
+					}},
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        replicas,
+			ReadyReplicas:   replicas,
+			CurrentRevision: "revision-v1",
+			UpdateRevision:  "revision-v2",
+		},
+	}
+	require.NoError(t, c.Create(ctx, statefulSet))
+	require.NoError(t, c.Status().Update(ctx, statefulSet))
+
+	var stalePod *corev1.Pod
+	for i := int32(0); i < replicas; i++ {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIndexer, "idxc", i),
+				Namespace: "test",
+				Labels: map[string]string{
+					"app":                      "idxc",
+					"controller-revision-hash": "revision-v1",
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "splunk", Image: "splunk/splunk:test"}},
+				Volumes: []corev1.Volume{{
+					Name:         "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "idxc-secrets-v1"}},
+				}},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{{
+					Name:  "splunk",
+					Ready: true,
+				}},
+			},
+		}
+		require.NoError(t, c.Create(ctx, pod))
+		if i == 0 {
+			stalePod = pod
+		}
+	}
+
+	cr := &enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "idxc", Namespace: "test"},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas: replicas,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{Name: "cm"},
+			},
+		},
+		Status: enterpriseApi.IndexerClusterStatus{
+			ClusterManagerPhase:            enterpriseApi.PhaseReady,
+			NamespaceSecretResourceVersion: namespaceSecret.ResourceVersion,
+			Peers: func() []enterpriseApi.IndexerClusterMemberStatus {
+				peers := make([]enterpriseApi.IndexerClusterMemberStatus, replicas)
+				for i := range peers {
+					peers[i] = enterpriseApi.IndexerClusterMemberStatus{
+						Name:   splutil.GetSplunkStatefulsetPodName(splcommon.SplunkIndexer, "idxc", int32(i)),
+						Status: "Up",
+					}
+				}
+				return peers
+			}(),
+			// The Splunk readiness flags intentionally remain false.
+		},
+	}
+	mgr := &indexerClusterPodManager{
+		c:   c,
+		cr:  cr,
+		log: logging.FromContext(ctx).With("test", t.Name()),
+	}
+	return c, statefulSet, stalePod, cr, mgr
+}
+
+func TestUpdateWorkflowRecyclesStaleSecretBeforeSplunkReadiness(t *testing.T) {
+	ctx := context.Background()
+	c, statefulSet, stalePod, cr, mgr := newSecretRotationWorkflowFixture(t, 1)
+
+	oldGetManagerInfoCall := GetClusterManagerInfoCall
+	oldGetManagerPeersCall := GetClusterManagerPeersCall
+	defer func() {
+		GetClusterManagerInfoCall = oldGetManagerInfoCall
+		GetClusterManagerPeersCall = oldGetManagerPeersCall
+	}()
+	GetClusterManagerInfoCall = func(context.Context, *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
+		return &splclient.ClusterManagerInfo{}, nil
+	}
+	GetClusterManagerPeersCall = func(context.Context, *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+		return map[string]splclient.ClusterManagerPeerInfo{
+			stalePod.Name: {ID: "peer-0", Status: "Down"},
+		}, nil
+	}
+
+	phase, err := mgr.UpdateWorkflow(ctx, c, statefulSet.DeepCopy(), 1)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhaseUpdating, phase)
+	assert.False(t, cr.Status.IndexingReady)
+	assert.Equal(t, "Down", cr.Status.Peers[0].Status, "peer state should be refreshed from the manager before recycling")
+
+	var pod corev1.Pod
+	err = c.Get(ctx, types.NamespacedName{Namespace: "test", Name: stalePod.Name}, &pod)
+	assert.True(t, apierrors.IsNotFound(err), "stale-secret pod should be recycled before Splunk readiness is checked")
+}
+
+func TestUpdateWorkflowReportsTerminalPodFailureWhenSecretRolloutStatusRefreshFails(t *testing.T) {
+	ctx := context.Background()
+	c, statefulSet, stalePod, _, mgr := newSecretRotationWorkflowFixture(t, 1)
+
+	stalePod.Status.ContainerStatuses[0].State.Waiting = &corev1.ContainerStateWaiting{
+		Reason: "ImagePullBackOff",
+	}
+	require.NoError(t, c.Status().Update(ctx, stalePod))
+
+	oldGetManagerInfoCall := GetClusterManagerInfoCall
+	defer func() { GetClusterManagerInfoCall = oldGetManagerInfoCall }()
+	GetClusterManagerInfoCall = func(context.Context, *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
+		return nil, errors.New("cluster manager status temporarily unavailable")
+	}
+
+	phase, err := mgr.UpdateWorkflow(ctx, c, statefulSet.DeepCopy(), 1)
+	require.Error(t, err)
+	assert.Equal(t, enterpriseApi.PhaseError, phase)
+	assert.ErrorIs(t, err, reconcile.TerminalError(nil), "terminal pod failures must not be hidden by the pending secret rollout")
+}
+
+func TestUpdateWorkflowWaitsForClusterManagerBeforeSecretRollout(t *testing.T) {
+	ctx := context.Background()
+	c, statefulSet, _, cr, mgr := newSecretRotationWorkflowFixture(t, 1)
+	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseUpdating
+
+	phase, err := mgr.UpdateWorkflow(ctx, c, statefulSet.DeepCopy(), 1)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhasePending, phase)
+}
+
+func TestUpdateWorkflowDoesNotScaleDownBeforeReadinessOnSecretRotation(t *testing.T) {
+	ctx := context.Background()
+	c, statefulSet, stalePod, cr, mgr := newSecretRotationWorkflowFixture(t, 2)
+
+	oldGetManagerInfoCall := GetClusterManagerInfoCall
+	oldGetManagerPeersCall := GetClusterManagerPeersCall
+	defer func() {
+		GetClusterManagerInfoCall = oldGetManagerInfoCall
+		GetClusterManagerPeersCall = oldGetManagerPeersCall
+	}()
+	statusRefreshed := false
+	GetClusterManagerInfoCall = func(context.Context, *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
+		statusRefreshed = true
+		return &splclient.ClusterManagerInfo{}, nil
+	}
+	GetClusterManagerPeersCall = func(context.Context, *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+		return map[string]splclient.ClusterManagerPeerInfo{
+			"splunk-idxc-indexer-0": {ID: "peer-0", Status: "Down"},
+			"splunk-idxc-indexer-1": {ID: "peer-1", Status: "Down"},
+		}, nil
+	}
+
+	phase, err := mgr.UpdateWorkflow(ctx, c, statefulSet.DeepCopy(), 1)
+	require.NoError(t, err)
+	assert.Equal(t, enterpriseApi.PhasePending, phase)
+	assert.True(t, statusRefreshed, "replica changes should continue through the existing readiness-gated status refresh")
+	assert.False(t, cr.Status.IndexingReady)
+
+	var pod corev1.Pod
+	err = c.Get(ctx, types.NamespacedName{Namespace: "test", Name: stalePod.Name}, &pod)
+	assert.NoError(t, err, "secret rotation should not trigger scale-down while Splunk readiness is false")
 }
 
 func TestClusterQuorumRestoredClusterInitialized(t *testing.T) {
