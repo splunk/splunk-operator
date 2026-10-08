@@ -43,6 +43,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -336,6 +337,32 @@ func applyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 	}
 
+	// A namespace-scoped Secret rotation can require recycling pods even when
+	// Splunk's readiness flags are false. Run that recovery path before upgrade
+	// validation, which queries the Cluster Manager and can fail transiently
+	// while it is starting with the rotated credentials.
+	secretRolloutCompleted := false
+	if !versionUpgrade && !statefulSet.CreationTimestamp.IsZero() {
+		hasPendingSecretUpdate, err := hasPendingSecretVolumeUpdate(ctx, client, statefulSet)
+		if err != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to check pending secret rollout")
+			return result, fmt.Errorf("check pending secret rollout: %w", err)
+		}
+		if hasPendingSecretUpdate {
+			phase, err = mgr.UpdateWorkflow(ctx, client, statefulSet, cr.Spec.Replicas)
+			if err != nil {
+				eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
+				setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
+				return result, fmt.Errorf("update statefulset for secret rollout: %w", err)
+			}
+			setPhaseAndConditions(phase, "")
+			if phase != enterpriseApi.PhaseReady {
+				return result, nil
+			}
+			secretRolloutCompleted = true
+		}
+	}
+
 	cr.Kind = "IndexerCluster"
 	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
 	if !statefulSet.CreationTimestamp.IsZero() {
@@ -359,14 +386,7 @@ func applyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 
 	// check if version upgrade is set
-	if !versionUpgrade {
-		phase, err = mgr.UpdateWorkflow(ctx, client, statefulSet, cr.Spec.Replicas)
-		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
-			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
-			return result, fmt.Errorf("update statefulset: %w", err)
-		}
-	} else {
+	if versionUpgrade {
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
@@ -381,6 +401,13 @@ func applyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
 			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods after upgrade")
+			return result, fmt.Errorf("update statefulset: %w", err)
+		}
+	} else if !secretRolloutCompleted {
+		phase, err = mgr.UpdateWorkflow(ctx, client, statefulSet, cr.Spec.Replicas)
+		if err != nil {
+			eventPublisher.Warning(ctx, "UpdateFailed", "Update of stateful set failed. Check operator logs for details.")
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 			return result, fmt.Errorf("update statefulset: %w", err)
 		}
 	}
@@ -851,7 +878,7 @@ func (mgr *indexerClusterPodManager) UpdateWorkflow(ctx context.Context, c splco
 	// update statefulset, if necessary
 	if mgr.cr.Status.ClusterManagerPhase != enterpriseApi.PhaseReady && mgr.cr.Status.ClusterMasterPhase != enterpriseApi.PhaseReady {
 		logging.FromContext(ctx).InfoContext(ctx, "ClusterManager is not ready yet")
-		return enterpriseApi.PhaseError, nil
+		return enterpriseApi.PhasePending, nil
 	}
 	if _, err := k8sops.ApplyStatefulSet(ctx, mgr.c, statefulSet); err != nil {
 		return enterpriseApi.PhaseError, err
@@ -864,6 +891,44 @@ func (mgr *indexerClusterPodManager) UpdateWorkflow(ctx context.Context, c splco
 	if err := ApplyIdxcSecret(ctx, mgr, desiredReplicas, podExecClient); err != nil {
 		return enterpriseApi.PhaseError, err
 	}
+
+	// Secret volume references are versioned. Recycle pods that still mount the
+	// previous version before gating on Splunk cluster readiness.
+	hasPendingSecretUpdate, err := hasPendingSecretVolumeUpdate(ctx, mgr.c, statefulSet)
+	if err != nil {
+		return enterpriseApi.PhaseError, err
+	}
+	if hasPendingSecretUpdate && statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas == desiredReplicas {
+		// PrepareRecycle uses the peer status cached on the IndexerCluster. Refresh
+		// it before the early rollout path so each reconcile observes the manager's
+		// latest transition (for example Up -> Decommissioning -> Down).
+		if err := mgr.updateStatus(ctx, statefulSet); err != nil {
+			if terminalErr := k8sops.CheckPodsForTerminalFailures(ctx, c, statefulSet); terminalErr != nil {
+				mgr.log.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", terminalErr)
+				return enterpriseApi.PhaseError, terminalErr
+			}
+			mgr.log.InfoContext(ctx, "waiting for fresh peer status before secret rollout", "error", err)
+			return enterpriseApi.PhasePending, nil
+		}
+
+		phase, err := k8sops.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
+		if err != nil {
+			return phase, err
+		}
+		if phase != enterpriseApi.PhaseReady {
+			return phase, nil
+		}
+		stillPending, err := hasPendingSecretVolumeUpdate(ctx, mgr.c, statefulSet)
+		if err != nil {
+			return enterpriseApi.PhaseError, err
+		}
+		if stillPending {
+			// The StatefulSet controller may not have published its new revision yet;
+			// keep the CR pending until every live pod uses the template's Secret.
+			return enterpriseApi.PhaseUpdating, nil
+		}
+	}
+
 	if err := mgr.updateStatus(ctx, statefulSet); err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
 		if terminalErr := k8sops.CheckPodsForTerminalFailures(ctx, c, statefulSet); terminalErr != nil {
 			mgr.log.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", terminalErr)
@@ -886,6 +951,57 @@ func (mgr *indexerClusterPodManager) UpdateWorkflow(ctx context.Context, c splco
 		}
 	}
 	return phase, nil
+}
+
+// hasPendingSecretVolumeUpdate reports whether any existing pod still references
+// an older Secret than the StatefulSet template. This detects versioned secret
+// rotations independently of Splunk's readiness flags.
+func hasPendingSecretVolumeUpdate(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet) (bool, error) {
+	if statefulSet.Spec.Selector == nil {
+		return false, nil
+	}
+
+	desiredSecretNames := make(map[string]string)
+	for _, volume := range statefulSet.Spec.Template.Spec.Volumes {
+		if volume.Secret != nil {
+			desiredSecretNames[volume.Name] = volume.Secret.SecretName
+		}
+	}
+	if len(desiredSecretNames) == 0 {
+		return false, nil
+	}
+
+	pods := &corev1.PodList{}
+	if err := c.List(ctx, pods,
+		client.InNamespace(statefulSet.GetNamespace()),
+		client.MatchingLabels(statefulSet.Spec.Selector.MatchLabels),
+	); err != nil {
+		return false, err
+	}
+	for i := range pods.Items {
+		for _, volume := range pods.Items[i].Spec.Volumes {
+			wantSecretName, isSecretVolume := desiredSecretNames[volume.Name]
+			if !isSecretVolume {
+				continue
+			}
+			if volume.Secret == nil || volume.Secret.SecretName != wantSecretName {
+				return true, nil
+			}
+		}
+		for volumeName := range desiredSecretNames {
+			found := false
+			for _, volume := range pods.Items[i].Spec.Volumes {
+				if volume.Name == volumeName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // Update delegates the stateful multi-step workflow to workflow/indexercluster.
