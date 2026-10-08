@@ -433,6 +433,21 @@ func TestUpgradePathValidation(t *testing.T) {
 	// create pods for indexer cluster
 	spltest.CreatePods(t, ctx, client, "indexer", fmt.Sprintf("splunk-%s-indexer-0", idx.Name), idx.Namespace, idx.Spec.Image)
 	spltest.UpdateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-indexer", idx.Name), idx.Namespace)
+	indexerStatefulSet := &appsv1.StatefulSet{}
+	err = client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("splunk-%s-indexer", idx.Name), Namespace: idx.Namespace}, indexerStatefulSet)
+	if err != nil {
+		t.Fatalf("get indexer statefulset should not have returned error; err=%v", err)
+	}
+	indexerPod := &corev1.Pod{}
+	err = client.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("splunk-%s-indexer-0", idx.Name), Namespace: idx.Namespace}, indexerPod)
+	if err != nil {
+		t.Fatalf("get indexer pod should not have returned error; err=%v", err)
+	}
+	indexerPod.Spec.Volumes = indexerStatefulSet.Spec.Template.Spec.Volumes
+	err = client.Update(ctx, indexerPod)
+	if err != nil {
+		t.Fatalf("update indexer pod volumes should not have returned error; err=%v", err)
+	}
 
 	// search head cluster is not ready, so wait for search head cluster
 	_, err = indexercluster.ApplyIndexerClusterManager(ctx, client, &idx)
@@ -446,7 +461,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	if idx.Status.Phase != enterpriseApi.PhaseReady {
-		t.Errorf("shc is not in ready state")
+		t.Errorf("indexer cluster is not in ready state: phase=%s", idx.Status.Phase)
 	}
 
 	// mointoring console statefulset is created here
