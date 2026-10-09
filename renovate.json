@@ -80,6 +80,23 @@
       "depNameTemplate": "golang",
       "datasourceTemplate": "golang-version",
       "versioningTemplate": "semver-coerced"
+    },
+    {
+      "description": "Keep the Go-based CI image family synchronized with the Go toolchain",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^gitlab-ci\\/includes\\/base\\.yml$/",
+        "/^gitlab-ci\\/includes\\/scs-deploy\\.yml$/"
+      ],
+      "matchStrings": [
+        "docker\\.repo\\.splunkdev\\.net/ci-cd/ci-container/golang-(?<major>\\d+)\\.(?<minor>\\d+)-aws:(?<imageTag>[^\\s]+)"
+      ],
+      "currentValueTemplate": "{{{major}}}.{{{minor}}}.0",
+      "autoReplaceStringTemplate": "docker.repo.splunkdev.net/ci-cd/ci-container/golang-{{{newMajor}}}.{{{newMinor}}}-aws:{{{imageTag}}}",
+      "depNameTemplate": "golang-ci-image",
+      "packageNameTemplate": "golang",
+      "datasourceTemplate": "golang-version",
+      "versioningTemplate": "semver-coerced"
     }
   ],
   "assignAutomerge": true,
@@ -103,7 +120,7 @@
       "groupName": "SCS Loki deploy Python image"
     },
     {
-      "description": "Update the Go toolchain consistently across go.mod, .env, Makefile, and Docker builder images",
+      "description": "Update the Go toolchain consistently across go.mod, .env, Makefile, Docker builder images, and GitLab CI images",
       "matchDatasources": ["golang-version"],
       "groupName": "Go toolchain",
       "rangeStrategy": "bump"
