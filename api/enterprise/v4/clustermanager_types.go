@@ -33,6 +33,19 @@ const (
 	ClusterManagerPausedAnnotation = "clustermanager.enterprise.splunk.com/paused"
 )
 
+// RecoveryPhase describes the current phase of node failure recovery for a ClusterManager
+type RecoveryPhase string
+
+const (
+	RecoveryPhaseHealthy               RecoveryPhase = "Healthy"
+	RecoveryPhaseWaitingForGracePeriod RecoveryPhase = "WaitingForGracePeriod"
+	RecoveryPhaseBlocked               RecoveryPhase = "Blocked"
+	RecoveryPhaseRequested             RecoveryPhase = "Requested"
+	RecoveryPhaseReplacementPending    RecoveryPhase = "ReplacementPending"
+	RecoveryPhaseReadyAfterRecovery    RecoveryPhase = "ReadyAfterRecovery"
+	RecoveryPhaseFailed                RecoveryPhase = "Failed"
+)
+
 // ClusterManagerSpec defines the desired state of ClusterManager
 type ClusterManagerSpec struct {
 	CommonSplunkSpec `json:",inline"`
@@ -43,6 +56,10 @@ type ClusterManagerSpec struct {
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+
+	// Recovery defines the node failure recovery configuration for this clusterManager
+	// +optional
+	Recovery *ClusterManagerRecoveryConfig `json:"recovery,omitempty"`
 }
 
 // ClusterManagerStatus defines the observed state of ClusterManager
@@ -84,6 +101,10 @@ type ClusterManagerStatus struct {
 
 	// Auxiliary message describing CR status
 	Message string `json:"message"`
+
+	// Recovery describes current observed recovery state of this ClusterManager
+	// +optional
+	Recovery ClusterManagerRecoveryStatus `json:"recovery,omitempty"`
 }
 
 // BundlePushInfo Indicates if bundle push required
@@ -121,6 +142,46 @@ type ClusterManagerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ClusterManager `json:"items"`
+}
+
+// ClusterManagerRecoveryConfig defines the node failure configuration for a ClusterManager
+type ClusterManagerRecoveryConfig struct {
+	// Enabled activates node failure recovery for ClusterManager.
+	// When false, the controller takes no automatic action on node failure.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+	// GracePeriodSeconds is the minimum time the controller waits after observing
+	// a NotReady node condition before deleting the stale ClusterManager pod
+	// +optional
+	// +kubebuilder:validation:Minimum=30
+	// +kubebuilder:default=300
+	GracePeriodSeconds int32 `json:"gracePeriodSeconds,omitempty"`
+}
+
+// ClusterManagerRecoveryStatus describes the observed recovery state of a Cluster Manager.
+// All fields are derived from live Kubernetes resources on each reconciliation.
+type ClusterManagerRecoveryStatus struct {
+	// Phase is the current stage of the recovery state machine.
+	// +optional
+	// +kubebuilder:validation:Enum=Healthy;WaitingForGracePeriod;Blocked;Requested;ReplacementPending;ReadyAfterRecovery;Failed
+	Phase RecoveryPhase `json:"phase,omitempty"`
+
+	// NodeName is the name of the node observed as unhealthy.
+	// +optional
+	NodeName string `json:"nodeName,omitempty"`
+
+	// PodUID is the UID of the ClusterManager pod when the failure was detected.
+	// Used to confirm a replacement pod is a genuinely new instance.
+	// +optional
+	PodUID string `json:"podUID,omitempty"`
+
+	// Message is a human-readable description of the current recovery state.
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// TransitionTime is when the current phase was entered.
+	// +optional
+	TransitionTime *metav1.Time `json:"transitionTime,omitempty"`
 }
 
 func init() {
