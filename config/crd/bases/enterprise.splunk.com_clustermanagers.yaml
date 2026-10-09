@@ -1829,6 +1829,24 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              recovery:
+                description: Recovery defines the node failure recovery configuration
+                  for this clusterManager
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled activates node failure recovery for ClusterManager.
+                      When false, the controller takes no automatic action on node failure.
+                    type: boolean
+                  gracePeriodSeconds:
+                    default: 300
+                    description: |-
+                      GracePeriodSeconds is the minimum time the controller waits after observing
+                      a NotReady node condition before deleting the stale ClusterManager pod
+                    format: int32
+                    minimum: 30
+                    type: integer
+                type: object
               resources:
                 description: resource requirements for the pod containers
                 properties:
@@ -5237,6 +5255,39 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              recovery:
+                description: Recovery describes current observed recovery state of
+                  this ClusterManager
+                properties:
+                  message:
+                    description: Message is a human-readable description of the current
+                      recovery state.
+                    type: string
+                  nodeName:
+                    description: NodeName is the name of the node observed as unhealthy.
+                    type: string
+                  phase:
+                    description: Phase is the current stage of the recovery state
+                      machine.
+                    enum:
+                    - Healthy
+                    - WaitingForGracePeriod
+                    - RecoveryBlocked
+                    - RecoveryRequested
+                    - ReplacementPending
+                    - ReadyAfterRecovery
+                    - Failed
+                    type: string
+                  podUID:
+                    description: |-
+                      PodUID is the UID of the ClusterManager pod when the failure was detected.
+                      Used to confirm a replacement pod is a genuinely new instance.
+                    type: string
+                  transitionTime:
+                    description: TransitionTime is when the current phase was entered.
+                    format: date-time
+                    type: string
+                type: object
               resourceRevMap:
                 additionalProperties:
                   type: string
