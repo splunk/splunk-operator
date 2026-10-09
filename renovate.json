@@ -69,10 +69,13 @@
       "customType": "regex",
       "managerFilePatterns": [
         "/^\\.env$/",
-        "/^Makefile$/"
+        "/^Makefile$/",
+        "/^Dockerfile$/",
+        "/^Dockerfile\\.distroless$/"
       ],
       "matchStrings": [
-        "GO_VERSION\\s*(?:\\?=\\s*|=\\s*)(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+        "GO_VERSION\\s*(?:\\?=\\s*|=\\s*)(?<currentValue>\\d+\\.\\d+\\.\\d+)",
+        "ARG BUILDER_IMAGE=golang:(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
       "depNameTemplate": "golang",
       "datasourceTemplate": "golang-version",
@@ -100,7 +103,7 @@
       "groupName": "SCS Loki deploy Python image"
     },
     {
-      "description": "Update the Go toolchain consistently across go.mod, .env, and Makefile",
+      "description": "Update the Go toolchain consistently across go.mod, .env, Makefile, and Docker builder images",
       "matchDatasources": ["golang-version"],
       "groupName": "Go toolchain",
       "rangeStrategy": "bump"
