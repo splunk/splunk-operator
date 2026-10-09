@@ -365,9 +365,10 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 ## Tool Versions
+GO_VERSION ?= 1.27.2
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
-GOLANGCI_LINT_VERSION ?= v2.13.0
+GOLANGCI_LINT_VERSION ?= v2.14.0
 GOSEC_VERSION ?= v2.22.4
 GOVULNCHECK_VERSION ?= v1.1.4
 HELM_UNITTEST_VERSION ?= v1.0.3
@@ -393,9 +394,16 @@ setup-envtest: envtest ## Set up ENVTEST binaries for the correct version
 	  echo "Error setting up envtest"; exit 1; }
 
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
-golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
-$(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+GOLANGCI_LINT_BUILD = $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-go$(GO_VERSION)
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT_BUILD) ## Download golangci-lint locally if necessary.
+	ln -sf $(GOLANGCI_LINT_BUILD) $(GOLANGCI_LINT)
+$(GOLANGCI_LINT_BUILD): $(LOCALBIN)
+	@test -s $(GOLANGCI_LINT_BUILD) || { \
+		mkdir -p $(LOCALBIN)/golangci-lint-bin; \
+		GOTOOLCHAIN=go$(GO_VERSION) GOBIN=$(LOCALBIN)/golangci-lint-bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
+		mv $(LOCALBIN)/golangci-lint-bin/golangci-lint $(GOLANGCI_LINT_BUILD); \
+	}
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -645,7 +653,6 @@ generate-artifacts: generate-artifacts-namespace generate-artifacts-cluster gene
 
 #############################
 
-GO_VERSION ?= 1.27.2
 GO_DOWNLOAD_URL=https://go.dev/dl/go$(GO_VERSION).darwin-$(shell uname -m | sed 's/x86_64/amd64/').pkg
 export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/v1.17.0
 OPERATOR_SDK_DOWNLOAD_URL=curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
