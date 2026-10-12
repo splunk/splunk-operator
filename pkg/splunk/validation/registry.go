@@ -84,6 +84,18 @@ var (
 		Resource: "ingestorclusters",
 	}
 
+	IndexerClusterV3GVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v3",
+		Resource: "indexerclusters",
+	}
+
+	SearchHeadClusterV3GVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v3",
+		Resource: "searchheadclusters",
+	}
+
 	PostgresClusterGVR = schema.GroupVersionResource{
 		Group:    "platform.splunk.com",
 		Version:  "v1alpha1",

@@ -129,6 +129,10 @@ func main() {
 	pflag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 
 	config.DefaultMutableFeatureGate.AddFlag(pflag.CommandLine)
+	if err := config.ApplyFeatureGatesEnv(config.DefaultMutableFeatureGate); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	opts := zap.Options{
 		Development: true,
@@ -363,7 +367,11 @@ func main() {
 		setupLog.Info("DEPRECATED: ENABLE_VALIDATION_WEBHOOK env var is deprecated and will be removed in a future release; use --feature-gates=ValidationWebhook=true instead")
 	}
 
-	if config.DefaultMutableFeatureGate.Enabled(config.ValidationWebhook) {
+	if !config.DefaultMutableFeatureGate.Enabled(config.CrossVersionFieldProtection) {
+		slog.Warn("CrossVersionFieldProtection is disabled; writes through an older CRD version (enterprise.splunk.com/v3) can silently drop fields only a newer version supports", "featureGate", string(config.CrossVersionFieldProtection))
+	}
+
+	if config.DefaultMutableFeatureGate.Enabled(config.ValidationWebhook) || config.DefaultMutableFeatureGate.Enabled(config.CrossVersionFieldProtection) {
 		readTimeout := 10 * time.Second
 		if val := os.Getenv("WEBHOOK_READ_TIMEOUT"); val != "" {
 			if d, err := time.ParseDuration(val); err == nil {
@@ -378,11 +386,12 @@ func main() {
 		}
 
 		webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
-			Port:         9443,
-			CertDir:      webhookCertDir,
-			Validators:   validation.DefaultValidators,
-			ReadTimeout:  readTimeout,
-			WriteTimeout: writeTimeout,
+			Port:              9443,
+			CertDir:           webhookCertDir,
+			Validators:        validation.DefaultValidators,
+			ReadTimeout:       readTimeout,
+			WriteTimeout:      writeTimeout,
+			CrossVersionGuard: validation.NewCrossVersionFieldGuard(mgr.GetAPIReader()),
 		})
 
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
@@ -393,7 +402,7 @@ func main() {
 		}
 		setupLog.Info("Validation webhook enabled")
 	} else {
-		setupLog.Info("Validation webhook disabled (set --feature-gates=ValidationWebhook=true to enable)")
+		setupLog.Info("Validation webhook disabled (set --feature-gates=ValidationWebhook=true or CrossVersionFieldProtection=true to enable)")
 	}
 	//+kubebuilder:scaffold:builder
 

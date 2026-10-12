@@ -20,18 +20,21 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
-	"log/slog"
-
-	"github.com/splunk/splunk-operator/pkg/logging"
 	admissionv1 "k8s.io/api/admission/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 )
 
 var serverLog = slog.Default().With("component", "webhook-server")
@@ -61,6 +64,10 @@ type WebhookServerOptions struct {
 
 	// Client is the Kubernetes client for resource lookups (optional)
 	Client client.Client
+
+	// CrossVersionGuard checks for fields which can't be converted safely to another version.
+	// Required when the CrossVersionFieldProtection feature gate is enabled.
+	CrossVersionGuard *CrossVersionFieldGuard
 }
 
 // WebhookServer is the HTTP server for validation webhooks
@@ -175,7 +182,7 @@ func (s *WebhookServer) HandleValidate(w http.ResponseWriter, r *http.Request) {
 			"user", admissionReview.Request.UserInfo.Username)
 	}
 
-	warnings, validationErr := ValidateWithClient(&admissionReview, s.options.Validators, s.options.Client)
+	warnings, validationErr := s.validate(r.Context(), &admissionReview)
 
 	response := &admissionv1.AdmissionResponse{
 		UID: admissionReview.Request.UID,
@@ -187,11 +194,15 @@ func (s *WebhookServer) HandleValidate(w http.ResponseWriter, r *http.Request) {
 			"name", admissionReview.Request.Name,
 			"error", validationErr.Error())
 		response.Allowed = false
-		response.Result = &metav1.Status{
-			Status:  metav1.StatusFailure,
-			Message: validationErr.Error(),
-			Reason:  metav1.StatusReasonInvalid,
-			Code:    http.StatusUnprocessableEntity,
+		if se, ok := errors.AsType[*apierrors.StatusError](validationErr); ok {
+			response.Result = new(se.Status())
+		} else {
+			response.Result = &metav1.Status{
+				Status:  metav1.StatusFailure,
+				Message: validationErr.Error(),
+				Reason:  metav1.StatusReasonInvalid,
+				Code:    http.StatusUnprocessableEntity,
+			}
 		}
 	} else {
 		response.Allowed = true
@@ -219,6 +230,28 @@ func (s *WebhookServer) HandleValidate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
+}
+
+// validate runs the cross-version guard ahead of typed validation, so that a
+// write relabelled from an older version is denied with the guard's message
+// rather than whatever the stripped object fails in the typed validator.
+func (s *WebhookServer) validate(ctx context.Context, ar *admissionv1.AdmissionReview) ([]string, error) {
+	if req := ar.Request; req != nil {
+		if config.DefaultMutableFeatureGate.Enabled(config.CrossVersionFieldProtection) {
+			if err := s.options.CrossVersionGuard.Validate(ctx, req); err != nil {
+				return nil, err
+			}
+		}
+		// Version guarded requests get sent for versions where there are no validators in ValidateWithClient
+		// so return early to avoid 'no validator registered' errors
+		if isCrossVersionGuarded(schema.GroupVersionResource{Group: req.Resource.Group, Version: req.Resource.Version, Resource: req.Resource.Resource}) {
+			return nil, nil
+		}
+	}
+	if config.DefaultMutableFeatureGate.Enabled(config.ValidationWebhook) {
+		return ValidateWithClient(ar, s.options.Validators, s.options.Client)
+	}
+	return nil, nil
 }
 
 // handleReadyz handles readiness probe requests
