@@ -19,8 +19,103 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/component-base/featuregate"
 )
+
+func TestFeatureGateRegistration(t *testing.T) {
+	tests := []struct {
+		gate featuregate.Feature
+		want featuregate.FeatureSpec
+	}{
+		{gate: CrossVersionFieldProtection, want: featuregate.FeatureSpec{Default: true, PreRelease: featuregate.Beta}},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.gate), func(t *testing.T) {
+			spec, ok := DefaultMutableFeatureGate.GetAll()[tt.gate]
+			require.True(t, ok, "%s not registered", tt.gate)
+			assert.Equal(t, tt.want.Default, spec.Default, "default")
+			assert.Equal(t, tt.want.PreRelease, spec.PreRelease, "prerelease")
+			assert.Equal(t, tt.want.LockToDefault, spec.LockToDefault, "lockToDefault")
+			assert.Equal(t, tt.want.Default, DefaultMutableFeatureGate.Enabled(tt.gate), "enabled")
+		})
+	}
+}
+
+func TestApplyFeatureGatesEnv(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     string
+		flag    string
+		wantErr string
+		want    map[featuregate.Feature]bool
+	}{
+		{
+			name: "empty keeps defaults",
+			env:  "",
+			want: map[featuregate.Feature]bool{ValidationWebhook: false, CrossVersionFieldProtection: true},
+		},
+		{
+			name: "sets gates, ignoring spaces and empty entries",
+			env:  " ValidationWebhook = true , CrossVersionFieldProtection=false,",
+			want: map[featuregate.Feature]bool{ValidationWebhook: true, CrossVersionFieldProtection: false},
+		},
+		{
+			name: "leaves gates it does not name",
+			env:  "ValidationWebhook=true",
+			want: map[featuregate.Feature]bool{ValidationWebhook: true, CrossVersionFieldProtection: true},
+		},
+		{
+			name: "flag wins for a gate set in both, env-only gates keep the env value",
+			env:  "ValidationWebhook=true,CrossVersionFieldProtection=false",
+			flag: "--feature-gates=CrossVersionFieldProtection=true",
+			want: map[featuregate.Feature]bool{ValidationWebhook: true, CrossVersionFieldProtection: true},
+		},
+		{
+			name:    "unknown gate",
+			env:     "NoSuchGate=true",
+			wantErr: `invalid FEATURE_GATES "NoSuchGate=true": unrecognized feature gate: NoSuchGate`,
+		},
+		{
+			name:    "missing value",
+			env:     "ValidationWebhook",
+			wantErr: `invalid FEATURE_GATES "ValidationWebhook": missing bool value for ValidationWebhook`,
+		},
+		{
+			name:    "non-bool value",
+			env:     "ValidationWebhook=yes please",
+			wantErr: `invalid FEATURE_GATES "ValidationWebhook=yes please": invalid value of ValidationWebhook=yes please, err: strconv.ParseBool: parsing "yes please": invalid syntax`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fg := featuregate.NewFeatureGate()
+			require.NoError(t, fg.Add(defaultFeatureGates))
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			fg.AddFlag(fs)
+
+			t.Setenv(FeatureGatesEnvVar, tt.env)
+
+			err := ApplyFeatureGatesEnv(fg)
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			if tt.flag != "" {
+				require.NoError(t, fs.Parse([]string{tt.flag}))
+			}
+
+			for gate, want := range tt.want {
+				assert.Equal(t, want, fg.Enabled(gate), string(gate))
+			}
+		})
+	}
+}
 
 func TestValidationWebhookRegistered(t *testing.T) {
 	all := DefaultMutableFeatureGate.GetAll()

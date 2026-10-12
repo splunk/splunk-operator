@@ -10,7 +10,8 @@ local `go run` workflow is also available for operator development.
 
 Both workflows install cert-manager into the vCluster, which issues the operator's
 webhook serving certificate. The operator needs that certificate when the
-`ValidationWebhook` feature gate is enabled.
+`ValidationWebhook` or `CrossVersionFieldProtection` feature gate is enabled;
+`CrossVersionFieldProtection` is on by default.
 
 Prerequisites:
 
