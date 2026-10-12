@@ -37,22 +37,41 @@ When running the operator binary directly, pass feature gates at startup:
 /manager --feature-gates=ValidationWebhook=true
 ```
 
+### Environment Variable
+
+Feature gates can also be set with the `FEATURE_GATES` env var, in the same `Key1=true,Key2=false` format. Use this where you can set env vars but not container args, for example in an OLM `Subscription`:
+
+```yaml
+spec:
+  config:
+    env:
+      - name: FEATURE_GATES
+        value: ValidationWebhook=true
+```
+
+If a gate is set in both the env var and `--feature-gates`, the flag's value is used. An invalid value stops the operator at startup.
+
 ## Maturity Lifecycle
 
 | Stage     | Default | Can Override | Next Step                               |
-|-----------|---------|-------------|-----------------------------------------|
-| **Alpha** | off     | Yes         | Promote to Beta after validation        |
-| **Beta**  | on      | Yes         | Promote to GA after sustained stability |
-| **GA**    | on      | No          | Remove gate in a future release         |
+| --------- | ------- | ------------ | --------------------------------------- |
+| **Alpha** | off     | Yes          | Promote to Beta after validation        |
+| **Beta**  | on      | Yes          | Promote to GA after sustained stability |
+| **GA**    | on      | No           | Remove gate in a future release         |
 
 ## Current Feature Gates
 
-| Gate                        | Default | Stage | Since   | Description                                              |
-|-----------------------------|---------|-------|---------|----------------------------------------------------------|
-| `ValidationWebhook`         | `false` | Alpha | v3.2.0  | Centralized validation webhook server for CR admission   |
-| `PostgresController`        | `false` | Alpha | ?       | PostgresCluster, PostgresClusterClass, and PostgresDatabase controllers and CRDs |
-| `CertManagement`            | `true`  | Beta  | ?       | spec.certs[] mounting/rotation across Splunk Enterprise CR types |
-| `CertManagerCertGeneration` | `true`  | Beta  | ?       | Auto-generation of missing user-declared cert secrets via cert-manager |
+| Gate                          | Default | Stage | Since  | Description                                                                                                             |
+| ----------------------------- | ------- | ----- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `ValidationWebhook`           | `false` | Alpha | v3.2.0 | Centralized validation webhook server for CR admission                                                                  |
+| `PostgresController`          | `false` | Alpha | ?      | PostgresCluster, PostgresClusterClass, and PostgresDatabase controllers and CRDs                                        |
+| `CertManagement`              | `true`  | Beta  | ?      | spec.certs[] mounting/rotation across Splunk Enterprise CR types                                                        |
+| `CertManagerCertGeneration`   | `true`  | Beta  | ?      | Auto-generation of missing user-declared cert secrets via cert-manager                                                  |
+| `CrossVersionFieldProtection` | `true`  | Beta  | ?      | Validation webhook denies writes through an older CRD version that would drop fields only a newer version can represent |
+
+The validation webhook server starts when either `ValidationWebhook` or `CrossVersionFieldProtection` is enabled. `ValidationWebhook` controls CR spec validation and `CrossVersionFieldProtection` controls the cross-version check, so each can be turned off independently.
+
+Disabling `CrossVersionFieldProtection` is not recommended: writes through an older CRD version then silently drop fields that only newer versions can represent.
 
 ## Adding a New Feature Gate
 
