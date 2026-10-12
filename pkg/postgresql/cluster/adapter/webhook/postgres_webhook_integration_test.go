@@ -41,7 +41,7 @@ import (
 )
 
 func init() {
-	config.EnableFeatureGate(config.PostgresController)
+	config.EnableFeatureGate(config.PostgresController, config.ValidationWebhook)
 }
 
 func mustMarshal(t *testing.T, obj interface{}) []byte {

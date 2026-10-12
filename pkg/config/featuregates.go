@@ -46,16 +46,26 @@ const (
 	// When disabled, a missing secret is not auto-generated: reconciliation
 	// fails with an error instead. Existing secrets are still mounted as-is.
 	CertManagerCertGeneration featuregate.Feature = "CertManagerCertGeneration"
+	// CrossVersionFieldProtection gates the validation webhook check that
+	// denies writes through an older served CRD version when the stored object
+	// has fields that version cannot represent.
+	CrossVersionFieldProtection featuregate.Feature = "CrossVersionFieldProtection"
 )
+
+// FeatureGatesEnvVar sets feature gates in the same Key=bool,... format as
+// --feature-gates, for installs such as OLM that can set env vars but not
+// container args.
+const FeatureGatesEnvVar = "FEATURE_GATES"
 
 // defaultFeatureGates is the authoritative registry of all feature gates and
 // their default state / maturity. Each entry here automatically becomes
 // available via --feature-gates on the operator binary.
 var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
-	ValidationWebhook:         {Default: false, PreRelease: featuregate.Alpha},
-	PostgresController:        {Default: false, PreRelease: featuregate.Alpha},
-	CertManagement:            {Default: true, PreRelease: featuregate.Beta},
-	CertManagerCertGeneration: {Default: true, PreRelease: featuregate.Beta},
+	ValidationWebhook:           {Default: false, PreRelease: featuregate.Alpha},
+	PostgresController:          {Default: false, PreRelease: featuregate.Alpha},
+	CertManagement:              {Default: true, PreRelease: featuregate.Beta},
+	CertManagerCertGeneration:   {Default: true, PreRelease: featuregate.Beta},
+	CrossVersionFieldProtection: {Default: true, PreRelease: featuregate.Beta},
 }
 
 var DefaultMutableFeatureGate featuregate.MutableFeatureGate = featuregate.NewFeatureGate()
@@ -77,6 +87,19 @@ func applyLegacyValidationWebhookEnv(fg featuregate.MutableFeatureGate) {
 			fmt.Fprintf(os.Stderr, "WARNING: failed to apply legacy env var ENABLE_VALIDATION_WEBHOOK: %v\n", err)
 		}
 	}
+}
+
+// ApplyFeatureGatesEnv applies FeatureGatesEnvVar to fg. Call it before the
+// command line is parsed so that --feature-gates overrides it.
+func ApplyFeatureGatesEnv(fg featuregate.MutableFeatureGate) error {
+	value := os.Getenv(FeatureGatesEnvVar)
+	if value == "" {
+		return nil
+	}
+	if err := fg.Set(value); err != nil {
+		return fmt.Errorf("invalid %s %q: %w", FeatureGatesEnvVar, value, err)
+	}
+	return nil
 }
 
 // EnableFeatureGate enables the given feature gates on the default mutable gate.

@@ -28,6 +28,9 @@ NAMESPACE ?= "splunk-operator"
 # Example: make deploy IMG=... MANAGER_EXTRA_ARG="--feature-gates=PostgresController=true"
 MANAGER_EXTRA_ARG ?= ""
 
+# FEATURE_GATES sets the feature gates for `make run`.
+FEATURE_GATES ?= CrossVersionFieldProtection=false
+
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
@@ -211,7 +214,7 @@ build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+	FEATURE_GATES=${FEATURE_GATES} go run ./cmd/main.go
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
