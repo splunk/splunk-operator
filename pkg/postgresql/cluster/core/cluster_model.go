@@ -1209,6 +1209,44 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec
 	return normalized
 }
 
+// NormalizeBlueGreenSourceCNPGSpec captures actual blue configuration without
+// CNPG-injected defaults. Class-resolved settings are deliberately absent:
+// changes to a referenced class do not change blue during an active attempt.
+func NormalizeBlueGreenSourceCNPGSpec(spec cnpgv1.ClusterSpec) BlueGreenSourceCNPGSpec {
+	normalized := BlueGreenSourceCNPGSpec{
+		Managed:               normalizeCNPGClusterSpec(spec),
+		EnableSuperuserAccess: ptr.Deref(spec.EnableSuperuserAccess, false),
+	}
+	if len(spec.PostgresConfiguration.Parameters) > 0 {
+		normalized.PostgreSQLParameters = maps.Clone(spec.PostgresConfiguration.Parameters)
+	}
+	if spec.SuperuserSecret != nil {
+		normalized.SuperuserSecretName = spec.SuperuserSecret.Name
+	}
+	if spec.StorageConfiguration.StorageClass != nil {
+		normalized.StorageClass = *spec.StorageConfiguration.StorageClass
+	}
+	if spec.ReplicationSlots != nil {
+		normalized.ReplicationSlots = *spec.ReplicationSlots.DeepCopy()
+	}
+	if normalized.ReplicationSlots.HighAvailability == nil {
+		normalized.ReplicationSlots.HighAvailability = &cnpgv1.ReplicationSlotsHAConfiguration{}
+	}
+	if normalized.ReplicationSlots.HighAvailability.Enabled == nil {
+		normalized.ReplicationSlots.HighAvailability.Enabled = ptr.To(true)
+	}
+	if normalized.ReplicationSlots.HighAvailability.SlotPrefix == "" {
+		normalized.ReplicationSlots.HighAvailability.SlotPrefix = cnpgv1.DefaultReplicationSlotsHASlotPrefix
+	}
+	if normalized.ReplicationSlots.UpdateInterval == 0 {
+		normalized.ReplicationSlots.UpdateInterval = cnpgv1.DefaultReplicationSlotsUpdateInterval
+	}
+	if replicas := normalized.ReplicationSlots.SynchronizeReplicas; replicas != nil && replicas.Enabled == nil {
+		replicas.Enabled = ptr.To(true)
+	}
+	return normalized
+}
+
 func coreImagePullSecrets(refs []cnpgv1.LocalObjectReference) []corev1.LocalObjectReference {
 	if len(refs) == 0 {
 		return nil

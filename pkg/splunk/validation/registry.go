@@ -290,6 +290,12 @@ var DefaultValidators = map[schema.GroupVersionResource]Validator{
 		ValidateUpdateWithContextFunc: func(obj, oldObj *platformApi.PostgresDatabase, vc *ValidationContext) field.ErrorList {
 			return pgdbwebhook.ValidatePostgresDatabaseUpdate(vc.Ctx, obj, oldObj, vc.Client)
 		},
+		ValidateDeleteFunc: func(obj *platformApi.PostgresDatabase) field.ErrorList {
+			return pgdbwebhook.ValidatePostgresDatabaseDelete(context.Background(), obj, nil)
+		},
+		ValidateDeleteWithContextFunc: func(obj *platformApi.PostgresDatabase, vc *ValidationContext) field.ErrorList {
+			return pgdbwebhook.ValidatePostgresDatabaseDelete(vc.Ctx, obj, vc.Client)
+		},
 		WarningsOnCreateFunc: pgdbwebhook.GetPostgresDatabaseWarningsOnCreate,
 		WarningsOnUpdateFunc: pgdbwebhook.GetPostgresDatabaseWarningsOnUpdate,
 		GroupKind: schema.GroupKind{

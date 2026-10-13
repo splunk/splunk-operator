@@ -716,6 +716,18 @@ type PostgresBlueGreenUpgradeStatus struct {
 	// +optional
 	CredentialFingerprints []BlueGreenCredentialFingerprintStatus `json:"credentialFingerprints,omitempty"`
 
+	// SourceConfigurationFingerprint is the normalized controller and CNPG
+	// configuration baseline captured before publisher preparation. It contains
+	// no Secret material and is rechecked by later blue/green stages.
+	// +optional
+	SourceConfigurationFingerprint *string `json:"sourceConfigurationFingerprint,omitempty"`
+
+	// SourcePreparation is the write-once receipt for completed source-side
+	// replication preparation. Later stages use it rather than inferred phase
+	// conditions to avoid repeating source mutations.
+	// +optional
+	SourcePreparation *BlueGreenSourcePreparationStatus `json:"sourcePreparation,omitempty"`
+
 	// Gates records the generation and time at which each user permission was
 	// first consumed.
 	// +optional
@@ -995,6 +1007,13 @@ type BlueGreenEndpointPublicationAcknowledgementStatus struct {
 
 	// +optional
 	AcknowledgedAt *metav1.Time `json:"acknowledgedAt,omitempty"`
+}
+
+// BlueGreenSourcePreparationStatus records successful source-side replication
+// preparation for one blue/green attempt.
+type BlueGreenSourcePreparationStatus struct {
+	// +optional
+	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
 }
 
 // BlueGreenCommitReceiptStatus is monotonic evidence of the irreversible
