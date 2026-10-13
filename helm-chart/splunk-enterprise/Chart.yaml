@@ -35,10 +35,16 @@ maintainers:
     email: jbuczak@splunk.com
   - name: Gabriel Mendoza
     email: gabrielm@splunk.com
-  - name: Minjie Qiu
-    email: mqiu@splunk.com
-  - name: Qing Wang
-    email: qingw@splunk.com
+  - name: Don Ross
+    email: donjanellr@splunk.com
+  - name: Anudeep Shetty
+    email: anudeeps@splunk.com
+  - name: Bao-Nhi Vu
+    email: baov@splunk.com
+  - name: Toby Vestal
+    email: tvestal@splunk.com
+  - name: Venkata Jayanth Duppalapudi
+    email: venkatad@splunk.com
 dependencies:
 - name: splunk-operator
   version: "3.1.0"
