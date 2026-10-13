@@ -217,10 +217,12 @@ If you need help, tag one of the active maintainers of this project in a post or
 (*) Igor Grzankowski
 (*) Kasia Kozioł
 (*) Jakub Buczak
-(*) Qing Wang
 (*) Gabriel Mendoza
-(*) Minjie Qiu
-(*) Yuhan Yang
+(*) Don Ross
+(*) Anudeep Shetty
+(*) Bao-Nhi Vu
+(*) Toby Vestal
+(*) Venkata Jayanth Duppalapudi
 () Vivek Reddy
 () Sirish Mohan
 () Gaurav Gupta
@@ -232,5 +234,8 @@ If you need help, tag one of the active maintainers of this project in a post or
 () Ajeet Kumar
 () Jeff Rybczynski
 () Patrick Ogdin
+() Qing Wang
+() Minjie Qiu
+() Yuhan Yang
 
 ```
