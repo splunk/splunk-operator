@@ -121,7 +121,11 @@ func MajorUpgradeInputFromParts(spec *platformv1alpha1.PostgresClusterSpec, entr
 		RetryRequestedAt: retryRequestedAt,
 	}
 	if strategy == mvutypes.MajorUpgradeFlowBlueGreen {
-		return mvutypes.Intent{}, false, nil
+		attemptID, ok := blueGreenAttemptID(intent)
+		if !ok {
+			return mvutypes.Intent{}, false, nil
+		}
+		intent.AttemptID = attemptID
 	}
 
 	return intent, true, nil

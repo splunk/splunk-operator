@@ -525,3 +525,66 @@ func TestGetPostgresDatabaseWarningsOnUpdate(t *testing.T) {
 	}
 	assert.Empty(t, webhook.GetPostgresDatabaseWarningsOnUpdate(obj, obj))
 }
+
+func TestValidatePostgresDatabaseUpdateFreezesActiveBlueGreenDefinition(t *testing.T) {
+	oldObj := &platformApi.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders-db", Namespace: "default"},
+		Spec:       platformApi.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "orders"}, Databases: []platformApi.DatabaseDefinition{{Name: "orders"}}},
+	}
+	updated := oldObj.DeepCopy()
+	updated.Spec.Databases[0].Extensions = []string{"pg_trgm"}
+	cluster := &platformApi.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default"},
+		Status:     platformApi.PostgresClusterStatus{PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", Blue: &platformApi.BlueGreenEnvironmentStatus{}}}}},
+	}
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformApi.AddToScheme(scheme))
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+	errs := webhook.ValidatePostgresDatabaseUpdate(t.Context(), updated, oldObj, reader)
+	require.Len(t, errs, 1)
+	assert.Equal(t, "spec", errs[0].Field)
+}
+
+func TestValidatePostgresDatabaseCreateFreezesActiveBlueGreenDefinition(t *testing.T) {
+	obj := &platformApi.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "new-db", Namespace: "default"},
+		Spec:       platformApi.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "orders"}, Databases: []platformApi.DatabaseDefinition{{Name: "orders"}}},
+	}
+	cluster := &platformApi.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default"},
+		Status:     platformApi.PostgresClusterStatus{PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", Blue: &platformApi.BlueGreenEnvironmentStatus{}}}}},
+	}
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformApi.AddToScheme(scheme))
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+	errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), obj, reader)
+	require.Len(t, errs, 1)
+	assert.Equal(t, "spec", errs[0].Field)
+}
+
+func TestValidatePostgresDatabaseDeleteFreezesActiveBlueGreenDefinition(t *testing.T) {
+	obj := &platformApi.PostgresDatabase{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders-db", Namespace: "default"},
+		Spec:       platformApi.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "orders"}},
+	}
+	cluster := &platformApi.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default"},
+		Status:     platformApi.PostgresClusterStatus{PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", Blue: &platformApi.BlueGreenEnvironmentStatus{}}}}},
+	}
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformApi.AddToScheme(scheme))
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+	errs := webhook.ValidatePostgresDatabaseDelete(t.Context(), obj, reader)
+	require.Len(t, errs, 1)
+	assert.Equal(t, "spec", errs[0].Field)
+}
+
+func TestValidatePostgresDatabaseDeleteAllowsCleanupWhenFeatureGateIsDisabled(t *testing.T) {
+	config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): false})
+	t.Cleanup(func() {
+		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): true})
+	})
+
+	errs := webhook.ValidatePostgresDatabaseDelete(t.Context(), &platformApi.PostgresDatabase{}, nil)
+	assert.Empty(t, errs)
+}

@@ -19,14 +19,17 @@ package webhook
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	core "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 )
 
@@ -45,6 +48,7 @@ func ValidatePostgresDatabaseCreate(ctx context.Context, obj *platformApi.Postgr
 	if obj.GetDeletionTimestamp() != nil {
 		liveReader = nil
 	}
+	allErrs = append(allErrs, validateBlueGreenDatabaseMembershipFreeze(ctx, obj, liveReader, "creation")...)
 	allErrs = append(allErrs, validateDatabaseCustomMetrics(ctx, obj, liveReader)...)
 	allErrs = append(allErrs, validateDatabaseRoleNames(ctx, obj, nil, liveReader)...)
 
@@ -53,6 +57,56 @@ func ValidatePostgresDatabaseCreate(ctx context.Context, obj *platformApi.Postgr
 	}
 
 	return allErrs
+}
+
+func validateBlueGreenDatabaseMembershipFreeze(ctx context.Context, obj *platformApi.PostgresDatabase, reader client.Reader, operation string) field.ErrorList {
+	if obj == nil || reader == nil || obj.Spec.ClusterRef.Name == "" {
+		return nil
+	}
+	cluster := &platformApi.PostgresCluster{}
+	if err := reader.Get(ctx, client.ObjectKey{Namespace: obj.Namespace, Name: obj.Spec.ClusterRef.Name}, cluster); err != nil {
+		if apierrors.IsNotFound(err) || runtime.IsNotRegisteredError(err) {
+			return nil
+		}
+		return field.ErrorList{field.InternalError(field.NewPath("spec", "clusterRef"), err)}
+	}
+	if mvutypes.HasActiveBlueGreenAttempt(cluster.Status.PostgresMajorUpgradeStatus) {
+		return field.ErrorList{field.Forbidden(field.NewPath("spec"), "database "+operation+" is frozen while its cluster has an active blueGreen attempt")}
+	}
+	return nil
+}
+
+// validateBlueGreenDatabaseFreeze prevents a PostgresDatabase spec change from
+// invalidating the source inventory captured by an active blue/green attempt.
+// Status remains writable so the normal controllers can report their work.
+func validateBlueGreenDatabaseFreeze(ctx context.Context, obj, oldObj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+	if obj == nil || oldObj == nil || reader == nil || obj.GetDeletionTimestamp() != nil || reflect.DeepEqual(obj.Spec, oldObj.Spec) {
+		return nil
+	}
+	clusterName := oldObj.Spec.ClusterRef.Name
+	if clusterName == "" {
+		return nil
+	}
+	cluster := &platformApi.PostgresCluster{}
+	if err := reader.Get(ctx, client.ObjectKey{Namespace: oldObj.Namespace, Name: clusterName}, cluster); err != nil {
+		if apierrors.IsNotFound(err) || runtime.IsNotRegisteredError(err) {
+			return nil
+		}
+		return field.ErrorList{field.InternalError(field.NewPath("spec", "clusterRef"), err)}
+	}
+	if mvutypes.HasActiveBlueGreenAttempt(cluster.Status.PostgresMajorUpgradeStatus) {
+		return field.ErrorList{field.Forbidden(field.NewPath("spec"), "database configuration is frozen while its cluster has an active blueGreen attempt")}
+	}
+	return nil
+}
+
+// ValidatePostgresDatabaseDelete prevents a delete from removing CNPG Database
+// resources after their source inventory has been frozen for an active attempt.
+func ValidatePostgresDatabaseDelete(ctx context.Context, obj *platformApi.PostgresDatabase, reader client.Reader) field.ErrorList {
+	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
+		return nil
+	}
+	return validateBlueGreenDatabaseMembershipFreeze(ctx, obj, reader, "deletion")
 }
 
 // Admission checks reference existence; keys and mutable content remain runtime concerns.
@@ -107,6 +161,7 @@ func ValidatePostgresDatabaseUpdate(ctx context.Context, obj, oldObj *platformAp
 	if obj.GetDeletionTimestamp() != nil {
 		liveReader = nil
 	}
+	allErrs = append(allErrs, validateBlueGreenDatabaseFreeze(ctx, obj, oldObj, liveReader)...)
 	metricsReader := liveReader
 	if databaseMonitoringSelectorsUnchanged(obj, oldObj) {
 		metricsReader = nil

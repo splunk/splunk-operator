@@ -29,8 +29,37 @@ import (
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
+	bluegreen "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case/blue_green"
 	pgupgradeflow "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case/pg_upgrade"
 )
+
+type upgradeStrategy interface {
+	Advance(context.Context, mvutypes.Intent) (mvutypes.Progress, error)
+	RequiresPreUpgradeBackup(mvutypes.Intent) bool
+}
+
+type pgUpgradeStrategy struct{ flow upgradeFlow }
+
+type blueGreenStrategy struct {
+	phase    mvutypes.Status
+	preparer bluegreen.Preparer
+}
+
+func (s pgUpgradeStrategy) Advance(ctx context.Context, _ mvutypes.Intent) (mvutypes.Progress, error) {
+	report, err := s.flow.Upgrade(ctx)
+	return mvutypes.Progress{Report: report}, err
+}
+
+func (pgUpgradeStrategy) RequiresPreUpgradeBackup(mvutypes.Intent) bool { return true }
+
+func (s blueGreenStrategy) Advance(ctx context.Context, intent mvutypes.Intent) (mvutypes.Progress, error) {
+	outcome, err := bluegreen.New(s.phase, s.preparer).Advance(ctx, intent)
+	return mvutypes.Progress{Report: outcome.Report, BlueGreen: outcome.BlueGreen}, err
+}
+
+func (blueGreenStrategy) RequiresPreUpgradeBackup(intent mvutypes.Intent) bool {
+	return !bluegreen.SourcePreparationComplete(intent)
+}
 
 type upgradeFlow interface {
 	Upgrade(context.Context) (reconciliationtypes.Report, error)
@@ -40,14 +69,16 @@ type MajorUpgradeUseCase struct {
 	store     majorUpgradeInfoStore
 	rollback  backupProvider
 	pgUpgrade pgupgradeflow.PgUpgrade
+	blueGreen bluegreen.Preparer
 	notifier  pgupgradeflow.Notifier
 
 	intent mvutypes.Intent
 	active bool
 }
 
-func NewMajorUpgradeUseCase(store majorUpgradeInfoStore, rollback backupProvider, pgUpgrade pgupgradeflow.PgUpgrade, notifier pgupgradeflow.Notifier) *MajorUpgradeUseCase {
-	return &MajorUpgradeUseCase{store: store, rollback: rollback, pgUpgrade: pgUpgrade, notifier: notifier}
+// NewMajorUpgradeUseCase wires both strategies through one constructor.
+func NewMajorUpgradeUseCase(store majorUpgradeInfoStore, rollback backupProvider, pgUpgrade pgupgradeflow.PgUpgrade, notifier pgupgradeflow.Notifier, preparer bluegreen.Preparer) *MajorUpgradeUseCase {
+	return &MajorUpgradeUseCase{store: store, rollback: rollback, pgUpgrade: pgUpgrade, notifier: notifier, blueGreen: preparer}
 }
 
 func (h *MajorUpgradeUseCase) Prerequisites(ctx context.Context) error {
@@ -138,13 +169,13 @@ func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationtypes.Repo
 	strategy := h.strategyFor(h.intent)
 	if strategy == nil {
 		strategyError := mvutypes.ErrUnsupportedUpgradeStrategy
-		if h.intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen {
-			strategyError = mvutypes.ErrBlueGreenStrategyUnavailable
-		}
 		err := errors.Join(strategyError, errors.New(h.intent.Strategy))
 		return h.finish(ctx, mvutypes.ReportFromError(err), nil, err)
 	}
 
+	if !strategy.RequiresPreUpgradeBackup(h.intent) {
+		return h.advanceStrategy(ctx, strategy, nil)
+	}
 	if h.rollback == nil {
 		err := mvutypes.ErrBackupProviderMissing
 		return h.finish(ctx, mvutypes.ReportFromError(err), nil, err)
@@ -167,17 +198,22 @@ func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationtypes.Repo
 		report := mvutypes.ReportFromError(err)
 		return h.finish(ctx, report, nil, reportCause(err, report))
 	}
+	return h.advanceStrategy(ctx, strategy, backupStatus)
+}
 
-	upgrade, err := strategy.Upgrade(ctx)
-	if err != nil {
-		return h.finish(ctx, mvutypes.ReportFromError(err), backupStatus, err)
+func (h *MajorUpgradeUseCase) advanceStrategy(ctx context.Context, strategy upgradeStrategy, baseline *mvutypes.BackupInfo) (reconciliationtypes.Report, error) {
+	progress, err := strategy.Advance(ctx, h.intent)
+	if baseline != nil {
+		progress.Baseline = baseline
 	}
-
-	if upgrade.Name == "" {
-		upgrade.Name = mvutypes.UseCaseName
+	if progress.Report.Name == "" {
+		if err != nil {
+			progress.Report = mvutypes.ReportFromError(err)
+		} else {
+			progress.Report.Name = mvutypes.UseCaseName
+		}
 	}
-
-	return h.finish(ctx, upgrade, backupStatus, nil)
+	return h.finishProgress(ctx, progress, err)
 }
 
 func (h *MajorUpgradeUseCase) postUpgradeBackup(ctx context.Context) (reconciliationtypes.Report, error) {
@@ -266,10 +302,12 @@ func (h *MajorUpgradeUseCase) readIntent(ctx context.Context) (mvutypes.Intent, 
 	return h.store.ReadMajorUpgradeIntent(ctx)
 }
 
-func (h *MajorUpgradeUseCase) strategyFor(intent mvutypes.Intent) upgradeFlow {
+func (h *MajorUpgradeUseCase) strategyFor(intent mvutypes.Intent) upgradeStrategy {
 	switch intent.Strategy {
 	case mvutypes.MajorUpgradeFlowPgUpgrade:
-		return pgupgradeflow.NewPgUpgradeFlow(h.pgUpgrade, phaseForIntent(intent.State, intent))
+		return pgUpgradeStrategy{flow: pgupgradeflow.NewPgUpgradeFlow(h.pgUpgrade, phaseForIntent(intent.State, intent))}
+	case mvutypes.MajorUpgradeFlowBlueGreen:
+		return blueGreenStrategy{phase: phaseForIntent(intent.State, intent), preparer: h.blueGreen}
 	default:
 		return nil
 	}
@@ -312,9 +350,14 @@ func (h *MajorUpgradeUseCase) rawPersistedPhase() mvutypes.Status {
 }
 
 func (h *MajorUpgradeUseCase) finish(ctx context.Context, report reconciliationtypes.Report, baseline *mvutypes.BackupInfo, cause error) (reconciliationtypes.Report, error) {
+	return h.finishProgress(ctx, mvutypes.Progress{Report: report, Baseline: baseline}, cause)
+}
+
+func (h *MajorUpgradeUseCase) finishProgress(ctx context.Context, progress mvutypes.Progress, cause error) (reconciliationtypes.Report, error) {
+	report := progress.Report
 	h.emitPhaseEvent(report)
 	if h.store != nil {
-		if err := h.store.SaveMajorUpgradeProgress(ctx, h.intent, mvutypes.Progress{Report: report, Baseline: baseline}); err != nil {
+		if err := h.store.SaveMajorUpgradeProgress(ctx, h.intent, progress); err != nil {
 			return report, err
 		}
 	}

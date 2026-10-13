@@ -148,6 +148,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - platform.splunk.com
   resources:
   - postgresclusterclasses
@@ -210,6 +218,7 @@ rules:
   - clusters
   - databases
   - poolers
+  - publications
   - scheduledbackups
   verbs:
   - create
@@ -225,6 +234,7 @@ rules:
   - backups/status
   - clusters/status
   - poolers/status
+  - publications/status
   - scheduledbackups/status
   verbs:
   - get
