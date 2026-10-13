@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -109,7 +108,7 @@ func validateMajorUpgradeConfig(obj, oldObj *platformApi.PostgresCluster, specUn
 
 	activeBlueGreenAttempt := hasActiveBlueGreenAttempt(oldObj)
 	if activeBlueGreenAttempt {
-		allErrs = append(allErrs, validateActiveBlueGreenConfig(configPath, config, oldObj.Spec.PostgresMajorUpgradeConfig)...)
+		allErrs = append(allErrs, validateActiveBlueGreenClusterSpec(obj.Spec, oldObj.Spec)...)
 	}
 
 	if config == nil {
@@ -153,6 +152,20 @@ func validateMajorUpgradeConfig(obj, oldObj *platformApi.PostgresCluster, specUn
 	return allErrs
 }
 
+// validateActiveBlueGreenClusterSpec freezes every non-gate cluster setting
+// while blue remains the authoritative writer. A changed version, topology,
+// backup policy, credential reference, or PostgreSQL configuration would make
+// the preflight baselines unreliable. The major-upgrade control object is
+// handled separately because its explicit gates remain user-controlled.
+func validateActiveBlueGreenClusterSpec(current, previous platformApi.PostgresClusterSpec) field.ErrorList {
+	current = mvutypes.FrozenBlueGreenClusterSpec(current)
+	previous = mvutypes.FrozenBlueGreenClusterSpec(previous)
+	if reflect.DeepEqual(current, previous) {
+		return nil
+	}
+	return field.ErrorList{field.Forbidden(field.NewPath("spec"), "cluster configuration is frozen while a blueGreen attempt is active")}
+}
+
 func majorUpgradeStrategy(config *platformApi.PostgresMajorUpgradeConfig) string {
 	if config != nil && config.Strategy != nil && *config.Strategy != "" {
 		return *config.Strategy
@@ -161,41 +174,7 @@ func majorUpgradeStrategy(config *platformApi.PostgresMajorUpgradeConfig) string
 }
 
 func hasActiveBlueGreenAttempt(cluster *platformApi.PostgresCluster) bool {
-	if cluster == nil {
-		return false
-	}
-	for i := len(cluster.Status.PostgresMajorUpgradeStatus) - 1; i >= 0; i-- {
-		if mvutypes.IsBlueGreenAttemptActive(cluster.Status.PostgresMajorUpgradeStatus[i]) {
-			return true
-		}
-	}
-	return false
-}
-
-// validateActiveBlueGreenConfig freezes the strategy and preparation policy of
-// a durable attempt. The stage gates remain mutable because they are explicit
-// user permissions consumed by later workflow boundaries.
-func validateActiveBlueGreenConfig(path *field.Path, current, previous *platformApi.PostgresMajorUpgradeConfig) field.ErrorList {
-	if current == nil {
-		return field.ErrorList{field.Forbidden(path, "cannot remove major-upgrade configuration while a blueGreen attempt is active")}
-	}
-	if majorUpgradeStrategy(current) != majorUpgradeStrategy(previous) {
-		return field.ErrorList{field.Forbidden(path.Child("strategy"), "cannot change strategy while a blueGreen attempt is active")}
-	}
-
-	previousTimeout := effectiveSwitchoverTimeout(previous)
-	currentTimeout := effectiveSwitchoverTimeout(current)
-	if previousTimeout != currentTimeout {
-		return field.ErrorList{field.Forbidden(path.Child("blueGreen", "switchoverTimeout"), "cannot change switchoverTimeout while a blueGreen attempt is active")}
-	}
-	return nil
-}
-
-func effectiveSwitchoverTimeout(config *platformApi.PostgresMajorUpgradeConfig) time.Duration {
-	if config == nil {
-		return platformApi.DefaultBlueGreenSwitchoverTimeout
-	}
-	return config.BlueGreen.EffectiveSwitchoverTimeout()
+	return cluster != nil && mvutypes.HasActiveBlueGreenAttempt(cluster.Status.PostgresMajorUpgradeStatus)
 }
 
 func validateCustomMetrics(ctx context.Context, obj *platformApi.PostgresCluster, reader client.Reader) field.ErrorList {

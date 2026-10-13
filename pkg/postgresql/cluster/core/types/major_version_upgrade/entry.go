@@ -60,9 +60,12 @@ func IsBlueGreenAttemptCleaned(entry platformv1alpha1.PostgresMajorUpgradeStatus
 		entry.BlueGreen.Cleanup.State == platformv1alpha1.BlueGreenCleanupStateCleaned
 }
 
-// IsBlueGreenAttemptActive reports whether a blue/green entry still owns active lifecycle state.
+// IsBlueGreenAttemptActive reports whether a blue/green entry owns source-side
+// artifacts whose configuration must remain frozen. An attempt ID written while
+// entering Preflight is only a scheduling record: it becomes active after the
+// source environment has been durably recorded.
 func IsBlueGreenAttemptActive(entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
-	if entry.BlueGreen == nil || IsBlueGreenAttemptCleaned(entry) {
+	if entry.BlueGreen == nil || entry.BlueGreen.Blue == nil || IsBlueGreenAttemptCleaned(entry) {
 		return false
 	}
 	for _, condition := range entry.Conditions {
@@ -72,6 +75,18 @@ func IsBlueGreenAttemptActive(entry platformv1alpha1.PostgresMajorUpgradeStatus)
 		}
 	}
 	return true
+}
+
+// HasActiveBlueGreenAttempt reports whether any retained status entry owns
+// source-side artifacts. Admission users share this predicate so cluster and
+// database definitions freeze at the same lifecycle boundary.
+func HasActiveBlueGreenAttempt(entries []platformv1alpha1.PostgresMajorUpgradeStatus) bool {
+	for i := len(entries) - 1; i >= 0; i-- {
+		if IsBlueGreenAttemptActive(entries[i]) {
+			return true
+		}
+	}
+	return false
 }
 
 func RetryRequestedAfterTerminalFailure(retryRequestedAt *metav1.Time, entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {

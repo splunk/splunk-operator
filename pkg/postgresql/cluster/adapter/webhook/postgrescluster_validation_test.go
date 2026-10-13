@@ -283,6 +283,7 @@ func TestValidatePostgresClusterUpdateFreezesActiveBlueGreenAttempt(t *testing.T
 				Strategy: &strategy,
 				BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{
 					AttemptID: "attempt-1",
+					Blue:      &platformApi.BlueGreenEnvironmentStatus{},
 					Cleanup:   &platformApi.BlueGreenCleanupStatus{State: platformApi.BlueGreenCleanupStateRetained},
 				},
 			}},
@@ -299,7 +300,7 @@ func TestValidatePostgresClusterUpdateFreezesActiveBlueGreenAttempt(t *testing.T
 			mutate: func(obj *platformApi.PostgresCluster) {
 				obj.Spec.PostgresMajorUpgradeConfig.Strategy = ptr.To(mvutypes.MajorUpgradeFlowPgUpgrade)
 			},
-			wantField: "spec.postgresMajorUpgradeConfig.strategy",
+			wantField: "spec",
 		},
 		{
 			name: "allows clearing allow",
@@ -312,7 +313,13 @@ func TestValidatePostgresClusterUpdateFreezesActiveBlueGreenAttempt(t *testing.T
 			mutate: func(obj *platformApi.PostgresCluster) {
 				obj.Spec.PostgresMajorUpgradeConfig.BlueGreen.SwitchoverTimeout = &metav1.Duration{Duration: 2 * time.Minute}
 			},
-			wantField: "spec.postgresMajorUpgradeConfig.blueGreen.switchoverTimeout",
+			wantField: "spec",
+		},
+		{
+			name: "allows omitted blueGreen control block at the default timeout",
+			mutate: func(obj *platformApi.PostgresCluster) {
+				obj.Spec.PostgresMajorUpgradeConfig.BlueGreen = nil
+			},
 		},
 		{
 			name: "allows explicit switchover gate",
@@ -344,7 +351,7 @@ func TestValidatePostgresClusterUpdateSkipsActiveBlueGreenFreezeForMetadataAndDe
 		Status: platformApi.PostgresClusterStatus{
 			PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{
 				Strategy:  &strategy,
-				BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1"},
+				BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", Blue: &platformApi.BlueGreenEnvironmentStatus{}},
 			}},
 		},
 	}
@@ -360,6 +367,14 @@ func TestValidatePostgresClusterUpdateSkipsActiveBlueGreenFreezeForMetadataAndDe
 		now := metav1.Now()
 		obj.DeletionTimestamp = &now
 		assert.Empty(t, webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, nil))
+	})
+
+	t.Run("cluster configuration", func(t *testing.T) {
+		obj := oldObj.DeepCopy()
+		obj.Spec.PostgresVersion = ptr.To("18")
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, nil)
+		require.NotEmpty(t, errs)
+		assert.Contains(t, errs.ToAggregate().Error(), "spec")
 	})
 }
 

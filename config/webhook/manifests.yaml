@@ -39,4 +39,12 @@ webhooks:
     - postgresclusters
     - postgresclusterclasses
     - postgresdatabases
+  - apiGroups:
+    - platform.splunk.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - DELETE
+    resources:
+    - postgresdatabases
   sideEffects: None
