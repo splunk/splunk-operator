@@ -38,12 +38,18 @@ type Validator interface {
 	// ValidateUpdate validates an object on UPDATE operation
 	ValidateUpdate(obj, oldObj runtime.Object) field.ErrorList
 
+	// ValidateDelete validates an object on DELETE operation
+	ValidateDelete(obj runtime.Object) field.ErrorList
+
 	// ValidateCreateWithContext validates an object on CREATE operation with ValidationContext
 	// This allows validators to perform resource lookups (e.g., checking if secrets exist)
 	ValidateCreateWithContext(obj runtime.Object, vc *ValidationContext) field.ErrorList
 
 	// ValidateUpdateWithContext validates an object on UPDATE operation with ValidationContext
 	ValidateUpdateWithContext(obj, oldObj runtime.Object, vc *ValidationContext) field.ErrorList
+
+	// ValidateDeleteWithContext validates an object on DELETE operation with ValidationContext
+	ValidateDeleteWithContext(obj runtime.Object, vc *ValidationContext) field.ErrorList
 
 	// GetGroupKind returns the GroupKind for the object
 	GetGroupKind(obj runtime.Object) schema.GroupKind
@@ -73,6 +79,12 @@ type GenericValidator[T ValidatableObject] struct {
 	// ValidateUpdateWithContextFunc is the function to validate on UPDATE with ValidationContext
 	// If set, this is used instead of ValidateUpdateFunc when a context is available
 	ValidateUpdateWithContextFunc func(obj T, oldObj T, vc *ValidationContext) field.ErrorList
+
+	// ValidateDeleteFunc is the function to validate on DELETE
+	ValidateDeleteFunc func(obj T) field.ErrorList
+
+	// ValidateDeleteWithContextFunc is the function to validate on DELETE with ValidationContext
+	ValidateDeleteWithContextFunc func(obj T, vc *ValidationContext) field.ErrorList
 
 	// WarningsOnCreateFunc returns warnings on CREATE
 	WarningsOnCreateFunc func(obj T) []string
@@ -115,6 +127,19 @@ func (v *GenericValidator[T]) ValidateUpdate(obj, oldObj runtime.Object) field.E
 	return v.ValidateUpdateFunc(typedObj, typedOldObj)
 }
 
+// ValidateDelete implements Validator interface
+func (v *GenericValidator[T]) ValidateDelete(obj runtime.Object) field.ErrorList {
+	if v.ValidateDeleteFunc == nil {
+		return nil
+	}
+	typedObj, ok := obj.(T)
+	if !ok {
+		return field.ErrorList{field.InternalError(nil,
+			&TypeAssertionError{Expected: new(T), Actual: obj})}
+	}
+	return v.ValidateDeleteFunc(typedObj)
+}
+
 // ValidateCreateWithContext implements Validator interface
 // Uses ValidateCreateWithContextFunc if set, otherwise falls back to ValidateCreate
 func (v *GenericValidator[T]) ValidateCreateWithContext(obj runtime.Object, vc *ValidationContext) field.ErrorList {
@@ -148,6 +173,19 @@ func (v *GenericValidator[T]) ValidateUpdateWithContext(obj, oldObj runtime.Obje
 	}
 	// Fall back to non-context validation
 	return v.ValidateUpdate(obj, oldObj)
+}
+
+// ValidateDeleteWithContext implements Validator interface
+func (v *GenericValidator[T]) ValidateDeleteWithContext(obj runtime.Object, vc *ValidationContext) field.ErrorList {
+	if v.ValidateDeleteWithContextFunc != nil {
+		typedObj, ok := obj.(T)
+		if !ok {
+			return field.ErrorList{field.InternalError(nil,
+				&TypeAssertionError{Expected: new(T), Actual: obj})}
+		}
+		return v.ValidateDeleteWithContextFunc(typedObj, vc)
+	}
+	return v.ValidateDelete(obj)
 }
 
 // GetGroupKind implements Validator interface

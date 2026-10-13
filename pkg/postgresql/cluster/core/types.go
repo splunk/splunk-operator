@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	clusteridentity "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/identity"
@@ -118,6 +119,19 @@ type normalizedCNPGClusterSpec struct {
 	Plugins              []normalizedPluginSpec
 	BootstrapType        bootstrapKind
 	Recovery             *normalizedRecoverySpec
+}
+
+// BlueGreenSourceCNPGSpec is the live blue configuration that must remain stable
+// during an upgrade attempt. The ordinary reconcile projection excludes CNPG
+// defaults; these additional fields cover blue settings relevant to replication
+// and to the future green cluster.
+type BlueGreenSourceCNPGSpec struct {
+	Managed               normalizedCNPGClusterSpec
+	PostgreSQLParameters  map[string]string
+	SuperuserSecretName   string
+	EnableSuperuserAccess bool
+	StorageClass          string
+	ReplicationSlots      cnpgv1.ReplicationSlotsConfiguration
 }
 
 // normalizedRecoverySpec captures the operator-owned recovery wiring (recovery.source, the

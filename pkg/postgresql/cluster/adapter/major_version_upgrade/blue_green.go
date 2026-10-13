@@ -94,7 +94,11 @@ func blueGreenAttemptID(intent mvutypes.Intent) (string, bool) {
 		}
 		return entry.BlueGreen.AttemptID, true
 	}
+	return blueGreenAttemptIDFromHistory(intent)
+}
 
+// The first matching history entry is authoritative, even when incomplete.
+func blueGreenAttemptIDFromHistory(intent mvutypes.Intent) (string, bool) {
 	for i := range slices.Backward(intent.State) {
 		entry := intent.State[i]
 		if !mvutypes.MatchesUpgradeFamily(entry, intent) {
@@ -105,13 +109,22 @@ func blueGreenAttemptID(intent mvutypes.Intent) (string, bool) {
 			// create an attempt that could obscure retained workflow state.
 			return "", false
 		}
+		if mvutypes.IsBlueGreenAttemptCleaned(entry) {
+			if entry.BlueGreen.RearmedAt == nil {
+				return "", false
+			}
+			return uuid.NewString(), true
+		}
+		if entry.BlueGreen.Blue == nil {
+			// A scheduling entry owns the attempt identity even if preflight
+			// fails before blue is recorded. Retaining it prevents repeated
+			// reconciles from appending failed attempts; retry is explicit.
+			return entry.BlueGreen.AttemptID, true
+		}
 		if mvutypes.IsBlueGreenAttemptActive(entry) {
 			return entry.BlueGreen.AttemptID, true
 		}
-		if entry.BlueGreen.RearmedAt == nil {
-			return "", false
-		}
-		return uuid.NewString(), true
+		return "", false
 	}
 
 	return uuid.NewString(), true
@@ -147,7 +160,7 @@ func applyBlueGreenProgress(current *platformv1alpha1.PostgresMajorUpgradeStatus
 
 // validateBlueGreenProgress protects controller-owned status invariants before
 // replacing an attempt record. A writer must never rename an attempt or erase
-// or regress its irreversible endpoint-commit receipt.
+// a completed source-preparation receipt or regress its endpoint-commit receipt.
 func validateBlueGreenProgress(intent mvutypes.Intent, progress mvutypes.Progress) error {
 	if intent.Strategy != mvutypes.MajorUpgradeFlowBlueGreen {
 		return nil
@@ -158,19 +171,46 @@ func validateBlueGreenProgress(intent mvutypes.Intent, progress mvutypes.Progres
 	if progress.BlueGreen != nil && progress.BlueGreen.AttemptID != intent.AttemptID {
 		return fmt.Errorf("blue/green progress attempt ID %q does not match intent attempt ID %q", progress.BlueGreen.AttemptID, intent.AttemptID)
 	}
+	if err := validateSourcePreparationReceipt(intent.AttemptID, progress.BlueGreen); err != nil {
+		return err
+	}
 
 	for i := len(intent.State) - 1; i >= 0; i-- {
 		current := intent.State[i]
-		if !mvutypes.MatchesIntent(current, intent) || current.BlueGreen == nil || current.BlueGreen.CommitReceipt == nil {
+		if !mvutypes.MatchesIntent(current, intent) || current.BlueGreen == nil {
 			continue
 		}
-		if progress.BlueGreen == nil || progress.BlueGreen.CommitReceipt == nil {
-			return fmt.Errorf("blue/green progress cannot remove endpoint commit receipt for attempt %q", intent.AttemptID)
+		return validateExistingBlueGreenProgress(intent.AttemptID, current.BlueGreen, progress.BlueGreen)
+	}
+	return nil
+}
+
+func validateSourcePreparationReceipt(attemptID string, proposed *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
+	if proposed != nil && proposed.SourcePreparation != nil &&
+		(proposed.SourcePreparation.CompletedAt == nil || proposed.SourceConfigurationFingerprint == nil) {
+		return fmt.Errorf("blue/green source-preparation receipt requires completion time and configuration baseline for attempt %q", attemptID)
+	}
+	return nil
+}
+
+func validateExistingBlueGreenProgress(attemptID string, current, proposed *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
+	if previous := current.SourcePreparation; previous != nil && previous.CompletedAt != nil && proposed != nil {
+		receipt := proposed.SourcePreparation
+		if receipt == nil || receipt.CompletedAt == nil || !previous.CompletedAt.Time.Equal(receipt.CompletedAt.Time) {
+			return fmt.Errorf("blue/green progress cannot change source-preparation receipt for attempt %q", attemptID)
 		}
-		if progress.BlueGreen.CommitReceipt.Sequence < current.BlueGreen.CommitReceipt.Sequence {
-			return fmt.Errorf("blue/green progress cannot regress endpoint commit receipt for attempt %q", intent.AttemptID)
+		if current.SourceConfigurationFingerprint == nil || proposed.SourceConfigurationFingerprint == nil ||
+			*current.SourceConfigurationFingerprint != *proposed.SourceConfigurationFingerprint {
+			return fmt.Errorf("blue/green progress cannot change source configuration baseline for attempt %q", attemptID)
 		}
-		break
+	}
+	if current.CommitReceipt != nil {
+		if proposed == nil || proposed.CommitReceipt == nil {
+			return fmt.Errorf("blue/green progress cannot remove endpoint commit receipt for attempt %q", attemptID)
+		}
+		if proposed.CommitReceipt.Sequence < current.CommitReceipt.Sequence {
+			return fmt.Errorf("blue/green progress cannot regress endpoint commit receipt for attempt %q", attemptID)
+		}
 	}
 	return nil
 }

@@ -1637,6 +1637,22 @@ spec:
                               format: date-time
                               type: string
                           type: object
+                        sourceConfigurationFingerprint:
+                          description: |-
+                            SourceConfigurationFingerprint is the normalized controller and CNPG
+                            configuration baseline captured before publisher preparation. It contains
+                            no Secret material and is rechecked by later blue/green stages.
+                          type: string
+                        sourcePreparation:
+                          description: |-
+                            SourcePreparation is the write-once receipt for completed source-side
+                            replication preparation. Later stages use it rather than inferred phase
+                            conditions to avoid repeating source mutations.
+                          properties:
+                            completedAt:
+                              format: date-time
+                              type: string
+                          type: object
                         switchover:
                           description: Switchover records the latched timeout and
                             the durable handoff milestones.

@@ -183,7 +183,7 @@ func TestValidate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "DELETE operation - allowed by default",
+			name: "DELETE validates the existing object from oldObject",
 			ar: &admissionv1.AdmissionReview{
 				Request: &admissionv1.AdmissionRequest{
 					UID:       "test-uid",
@@ -193,7 +193,7 @@ func TestValidate(t *testing.T) {
 						Version:  "v4",
 						Resource: "standalones",
 					},
-					Object: runtime.RawExtension{
+					OldObject: runtime.RawExtension{
 						Raw: createStandaloneJSON("test", "default", 1),
 					},
 				},
@@ -268,6 +268,29 @@ func TestValidate(t *testing.T) {
 				t.Errorf("Validate() warnings = %d, want %d", len(warnings), tt.wantWarnings)
 			}
 		})
+	}
+}
+
+func TestValidateDeleteOperationUsesAvailableContext(t *testing.T) {
+	obj := &enterpriseApi.Standalone{}
+	vc := &ValidationContext{}
+	called := ""
+	validator := &GenericValidator[*enterpriseApi.Standalone]{
+		ValidateDeleteFunc: func(*enterpriseApi.Standalone) field.ErrorList {
+			called = "plain"
+			return nil
+		},
+		ValidateDeleteWithContextFunc: func(*enterpriseApi.Standalone, *ValidationContext) field.ErrorList {
+			called = "context"
+			return nil
+		},
+	}
+
+	if errs := validateDeleteOperation(validator, obj, nil); len(errs) != 0 || called != "plain" {
+		t.Fatalf("expected plain delete validation, got %v and %q", errs, called)
+	}
+	if errs := validateDeleteOperation(validator, obj, vc); len(errs) != 0 || called != "context" {
+		t.Fatalf("expected contextual delete validation, got %v and %q", errs, called)
 	}
 }
 

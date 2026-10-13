@@ -73,19 +73,9 @@ func ValidateWithClient(ar *admissionv1.AdmissionReview, validators map[schema.G
 		return nil, fmt.Errorf("no validator registered for resource %s", gvr.String())
 	}
 
-	// Deserialize the object
-	obj, err := deserializeObject(req.Object.Raw)
+	obj, oldObj, err := decodeAdmissionObjects(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to deserialize object: %w", err)
-	}
-
-	// Deserialize old object if present (for UPDATE operations)
-	var oldObj runtime.Object
-	if len(req.OldObject.Raw) > 0 {
-		oldObj, err = deserializeObject(req.OldObject.Raw)
-		if err != nil {
-			return nil, fmt.Errorf("failed to deserialize old object: %w", err)
-		}
+		return nil, err
 	}
 
 	// Create validation context if client is available
@@ -115,8 +105,11 @@ func ValidateWithClient(ar *admissionv1.AdmissionReview, validators map[schema.G
 		}
 		warnings = validator.GetWarningsOnUpdate(obj, oldObj)
 
+	case admissionv1.Delete:
+		fieldErrs = validateDeleteOperation(validator, obj, vc)
+
 	default:
-		// For other operations (DELETE, CONNECT), allow by default
+		// CONNECT and other operations are allowed by default.
 		return nil, nil
 	}
 
@@ -128,6 +121,34 @@ func ValidateWithClient(ar *admissionv1.AdmissionReview, validators map[schema.G
 	}
 
 	return warnings, nil
+}
+
+func validateDeleteOperation(validator Validator, obj runtime.Object, vc *ValidationContext) field.ErrorList {
+	if vc != nil {
+		return validator.ValidateDeleteWithContext(obj, vc)
+	}
+	return validator.ValidateDelete(obj)
+}
+
+func decodeAdmissionObjects(req *admissionv1.AdmissionRequest) (runtime.Object, runtime.Object, error) {
+	// DELETE requests carry the existing resource in OldObject. Object may be empty.
+	rawObject := req.Object.Raw
+	if req.Operation == admissionv1.Delete {
+		rawObject = req.OldObject.Raw
+	}
+	obj, err := deserializeObject(rawObject)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to deserialize object: %w", err)
+	}
+
+	var oldObj runtime.Object
+	if req.Operation != admissionv1.Delete && len(req.OldObject.Raw) > 0 {
+		oldObj, err = deserializeObject(req.OldObject.Raw)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to deserialize old object: %w", err)
+		}
+	}
+	return obj, oldObj, nil
 }
 
 // deserializeObject deserializes raw bytes into a runtime.Object
