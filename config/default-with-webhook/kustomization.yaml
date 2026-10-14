@@ -22,8 +22,8 @@ bases:
 - ../manager
 # [WEBHOOK] Enabled for opt-in webhook deployment
 - ../webhook
-# [CERTMANAGER] The serving certificate, the webhook Service and the SERVICE_* vars
-# all come from the ../conversion-webhook component below.
+# [CERTMANAGER] The serving certificate, the webhook Service and the SERVICE_* and
+# CERTIFICATE_* vars all come from the ../webhook-server component below.
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
 # [METRICS] Expose the controller manager metrics service.
@@ -40,25 +40,9 @@ patchesStrategicMerge:
 # [CERTMANAGER] Enabled for CA injection in the admission webhooks
 - webhookcainjection_patch.yaml
 
-# the following config is for teaching kustomize how to do var substitution
-vars:
-# [CERTMANAGER] Variables for cert-manager CA injection
-- name: CERTIFICATE_NAMESPACE # namespace of the certificate CR
-  objref:
-    kind: Certificate
-    group: cert-manager.io
-    version: v1
-    name: serving-cert # this name should match the one in certificate.yaml
-  fieldref:
-    fieldpath: metadata.namespace
-- name: CERTIFICATE_NAME
-  objref:
-    kind: Certificate
-    group: cert-manager.io
-    version: v1
-    name: serving-cert # this name should match the one in certificate.yaml
-# SERVICE_NAMESPACE and SERVICE_NAME are declared by the ../conversion-webhook
-# component; redeclaring them here is a kustomize error.
+# SERVICE_NAMESPACE, SERVICE_NAME, CERTIFICATE_NAMESPACE and CERTIFICATE_NAME are
+# declared by the ../webhook-server component; redeclaring them here is a
+# kustomize error.
 
 #patches:
 #- target:
@@ -131,6 +115,10 @@ patches:
     kind: Deployment
 
 components:
-# The webhook serving certificate, the Service fronting the webhook ports, and
+# The webhook serving certificate, the Service fronting the webhook port, and
 # the Deployment patch that mounts the certificate.
-- ../conversion-webhook
+- ../webhook-server
+# Denies writes through an older API version that would prune fields only the
+# stored version has. Install it only while the CrossVersionFieldProtection
+# gate is on; see docs/develop/WebhookDevelopment.md.
+- ../components/cross-version-field-protection

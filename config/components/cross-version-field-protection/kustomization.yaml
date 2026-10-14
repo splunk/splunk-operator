@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Cross-version field protection: denies writes through an older served API
+# version that would silently prune fields only the stored version can represent.
+# The versions and resources covered are in the webhook's rules. Requires the
+# ../../webhook-server component, which provides the Service, the certificate and
+# the SERVICE_* / CERTIFICATE_* vars, and an operator running with the
+# CrossVersionFieldProtection feature gate on. With the gate off, the webhook
+# server either isn't running, so failurePolicy Fail rejects every matching
+# write, or (with ValidationWebhook on) lets those writes through unchecked.
+resources:
+  - validating_webhook_configuration.yaml
+
+configurations:
+  - kustomizeconfig.yaml
