@@ -42,8 +42,7 @@ import (
 
 func TestNewWebhookServer(t *testing.T) {
 	options := WebhookServerOptions{
-		Port:    9443,
-		CertDir: "/tmp/certs",
+		Validators: DefaultValidators,
 	}
 
 	server := NewWebhookServer(options)
@@ -51,11 +50,8 @@ func TestNewWebhookServer(t *testing.T) {
 	if server == nil {
 		t.Fatal("expected non-nil server")
 	}
-	if server.options.Port != 9443 {
-		t.Errorf("expected port 9443, got %d", server.options.Port)
-	}
-	if server.options.CertDir != "/tmp/certs" {
-		t.Errorf("expected certDir /tmp/certs, got %s", server.options.CertDir)
+	if len(server.options.Validators) != len(DefaultValidators) {
+		t.Errorf("expected %d validators, got %d", len(DefaultValidators), len(server.options.Validators))
 	}
 }
 
@@ -85,7 +81,6 @@ func TestHandleValidate(t *testing.T) {
 	}
 
 	server := NewWebhookServer(WebhookServerOptions{
-		Port:       9443,
 		Validators: validators,
 	})
 
@@ -288,49 +283,6 @@ func TestHandleValidate(t *testing.T) {
 	}
 }
 
-func TestHandleReadyz(t *testing.T) {
-	server := NewWebhookServer(WebhookServerOptions{
-		Port: 9443,
-	})
-
-	tests := []struct {
-		name           string
-		method         string
-		wantStatusCode int
-		wantBody       string
-	}{
-		{
-			name:           "GET request",
-			method:         http.MethodGet,
-			wantStatusCode: http.StatusOK,
-			wantBody:       "ok",
-		},
-		{
-			name:           "POST request",
-			method:         http.MethodPost,
-			wantStatusCode: http.StatusOK,
-			wantBody:       "ok",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, "/readyz", nil)
-			rr := httptest.NewRecorder()
-
-			server.handleReadyz(rr, req)
-
-			if rr.Code != tt.wantStatusCode {
-				t.Errorf("expected status code %d, got %d", tt.wantStatusCode, rr.Code)
-			}
-
-			if rr.Body.String() != tt.wantBody {
-				t.Errorf("expected body %q, got %q", tt.wantBody, rr.Body.String())
-			}
-		})
-	}
-}
-
 func TestHandleValidateWithWarnings(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, config.DefaultMutableFeatureGate, featuregatetesting.FeatureOverrides{
 		config.ValidationWebhook:           true,
@@ -349,7 +301,6 @@ func TestHandleValidateWithWarnings(t *testing.T) {
 	}
 
 	server := NewWebhookServer(WebhookServerOptions{
-		Port:       9443,
 		Validators: validators,
 	})
 
@@ -414,55 +365,6 @@ func TestHandleValidateWithWarnings(t *testing.T) {
 
 	if len(response.Response.Warnings) != 2 {
 		t.Errorf("expected 2 warnings, got %d", len(response.Response.Warnings))
-	}
-}
-
-func TestWebhookServerOptions(t *testing.T) {
-	tests := []struct {
-		name     string
-		options  WebhookServerOptions
-		wantPort int
-	}{
-		{
-			name: "default options",
-			options: WebhookServerOptions{
-				Port: 9443,
-			},
-			wantPort: 9443,
-		},
-		{
-			name: "custom port",
-			options: WebhookServerOptions{
-				Port: 8443,
-			},
-			wantPort: 8443,
-		},
-		{
-			name: "with cert paths",
-			options: WebhookServerOptions{
-				Port:        9443,
-				TLSCertFile: "/path/to/cert.pem",
-				TLSKeyFile:  "/path/to/key.pem",
-			},
-			wantPort: 9443,
-		},
-		{
-			name: "with cert dir",
-			options: WebhookServerOptions{
-				Port:    9443,
-				CertDir: "/tmp/k8s-webhook-server/serving-certs",
-			},
-			wantPort: 9443,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := NewWebhookServer(tt.options)
-			if server.options.Port != tt.wantPort {
-				t.Errorf("expected port %d, got %d", tt.wantPort, server.options.Port)
-			}
-		})
 	}
 }
 

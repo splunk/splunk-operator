@@ -21,10 +21,8 @@ package crossversiontest
 
 import (
 	"context"
-	"crypto/tls"
-	"errors"
 	"fmt"
-	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,6 +35,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApiV4 "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -118,20 +117,21 @@ func TestMain(m *testing.M) {
 	if apiServerClient, err = client.New(restConfig, client.Options{Scheme: scheme}); err == nil {
 		// An uncached client is what mgr.GetAPIReader() returns in the operator.
 		options := &testEnv.WebhookInstallOptions
-		server := validation.NewWebhookServer(validation.WebhookServerOptions{
-			Port:              options.LocalServingPort,
-			CertDir:           options.LocalServingCertDir,
+		validator := validation.NewWebhookServer(validation.WebhookServerOptions{
 			Validators:        validation.DefaultValidators,
 			CrossVersionGuard: validation.NewCrossVersionFieldGuard(apiServerClient),
 		})
+		server := webhook.NewServer(webhook.Options{
+			Host:    options.LocalServingHost,
+			Port:    options.LocalServingPort,
+			CertDir: options.LocalServingCertDir,
+		})
+		server.Register("/validate", http.HandlerFunc(validator.HandleValidate))
 		go func() { _ = server.Start(ctx) }()
 
-		address := net.JoinHostPort(options.LocalServingHost, fmt.Sprint(options.LocalServingPort))
-		err = errors.New("webhook server did not become reachable at " + address)
+		started := server.StartedChecker()
 		for range 50 {
-			if conn, dialErr := tls.Dial("tcp", address, &tls.Config{InsecureSkipVerify: true}); dialErr == nil { //nolint:gosec // test-only reachability probe
-				_ = conn.Close()
-				err = nil
+			if err = started(nil); err == nil {
 				break
 			}
 			time.Sleep(100 * time.Millisecond)

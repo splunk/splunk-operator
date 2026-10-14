@@ -1,6 +1,6 @@
-# The Service fronting both webhook ports lives in ../conversion-webhook, which is
+# The Service fronting the webhook port lives in ../webhook-server, which is
 # a component every overlay includes. Keeping it there means one Service, one
-# certificate, and one set of SANs regardless of whether validation is enabled.
+# certificate, and one set of SANs regardless of which webhooks are enabled.
 resources:
 - manifests.yaml
 
