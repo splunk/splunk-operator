@@ -144,7 +144,6 @@ func sendAdmissionReview(t *testing.T, server *validation.WebhookServer, ar *adm
 
 func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
 		Validators: validation.DefaultValidators,
 	})
 
@@ -349,7 +348,6 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 
 func TestPostgresClusterPgHBAUpdateIntegration(t *testing.T) {
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
 		Validators: validation.DefaultValidators,
 	})
 
@@ -397,7 +395,6 @@ func TestPostgresClusterPgHBAUpdateIntegration(t *testing.T) {
 
 func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
 		Validators: validation.DefaultValidators,
 	})
 
@@ -534,7 +531,6 @@ func TestPostgresClusterClassPgHBAIntegration(t *testing.T) {
 
 func TestPostgresClusterClassPgHBAUpdateIntegration(t *testing.T) {
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
 		Validators: validation.DefaultValidators,
 	})
 
@@ -611,7 +607,6 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 	fakeClient := newFakeReader(prodClass).Build()
 
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
 		Validators: validation.DefaultValidators,
 		Client:     fakeClient,
 	})
@@ -716,7 +711,6 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 	fakeClient := newFakeReader(prodClass).Build()
 
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
 		Validators: validation.DefaultValidators,
 		Client:     fakeClient,
 	})
@@ -840,7 +834,6 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 
 	fakeClient := newFakeReader(classOne, classHA).Build()
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
 		Validators: validation.DefaultValidators,
 		Client:     fakeClient,
 	})
@@ -983,7 +976,6 @@ func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
 
 	fakeClient := newFakeReader(classWithStore, classNoStore).Build()
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
 		Validators: validation.DefaultValidators,
 		Client:     fakeClient,
 	})
@@ -1180,7 +1172,6 @@ func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
 
 func TestCrossResourceValidationDisabledWithoutClient(t *testing.T) {
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
 		Validators: validation.DefaultValidators,
 	})
 

@@ -1,0 +1,35 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: cross-version-field-protection
+  annotations:
+    cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
+webhooks:
+- name: cross-version-field-protection.enterprise.splunk.com
+  admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate
+  # Exact keeps writes at the stored version out: only requests made at the
+  # versions listed in rules are sent here.
+  matchPolicy: Exact
+  failurePolicy: Fail
+  sideEffects: None
+  timeoutSeconds: 5
+  rules:
+  - apiGroups:
+    - enterprise.splunk.com
+    apiVersions:
+    - v3
+    operations:
+    - UPDATE
+    - DELETE
+    resources:
+    - indexerclusters
+    - indexerclusters/*
+    - searchheadclusters
+    - searchheadclusters/*
+    scope: Namespaced

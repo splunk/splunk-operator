@@ -17,11 +17,11 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -53,6 +53,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -235,6 +236,11 @@ func main() {
 		LeaderElectionID:       "270bec8c.splunk.com",
 		LeaseDuration:          &leaseDuration,
 		RenewDeadline:          &renewDeadline,
+		// Only started if mgr.GetWebhookServer() is called. The port and cert dir must match the manifests.
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port:    9443,
+			CertDir: webhookCertDir,
+		}),
 	}
 
 	// Apply namespace-specific configuration
@@ -372,32 +378,15 @@ func main() {
 	}
 
 	if config.DefaultMutableFeatureGate.Enabled(config.ValidationWebhook) || config.DefaultMutableFeatureGate.Enabled(config.CrossVersionFieldProtection) {
-		readTimeout := 10 * time.Second
-		if val := os.Getenv("WEBHOOK_READ_TIMEOUT"); val != "" {
-			if d, err := time.ParseDuration(val); err == nil {
-				readTimeout = d
-			}
-		}
-		writeTimeout := 10 * time.Second
-		if val := os.Getenv("WEBHOOK_WRITE_TIMEOUT"); val != "" {
-			if d, err := time.ParseDuration(val); err == nil {
-				writeTimeout = d
-			}
-		}
-
-		webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
-			Port:              9443,
-			CertDir:           webhookCertDir,
+		validator := validation.NewWebhookServer(validation.WebhookServerOptions{
 			Validators:        validation.DefaultValidators,
-			ReadTimeout:       readTimeout,
-			WriteTimeout:      writeTimeout,
 			CrossVersionGuard: validation.NewCrossVersionFieldGuard(mgr.GetAPIReader()),
 		})
 
-		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-			return webhookServer.Start(ctx)
-		})); err != nil {
-			setupLog.Error(err, "unable to add webhook server to manager")
+		webhookServer := mgr.GetWebhookServer()
+		webhookServer.Register("/validate", http.HandlerFunc(validator.HandleValidate))
+		if err := mgr.AddReadyzCheck("webhook-server", webhookServer.StartedChecker()); err != nil {
+			setupLog.Error(err, "unable to set up webhook server ready check")
 			os.Exit(1)
 		}
 		setupLog.Info("Validation webhook enabled")
