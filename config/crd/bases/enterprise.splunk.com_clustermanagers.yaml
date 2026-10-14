@@ -5272,8 +5272,8 @@ spec:
                     enum:
                     - Healthy
                     - WaitingForGracePeriod
-                    - RecoveryBlocked
-                    - RecoveryRequested
+                    - Blocked
+                    - Requested
                     - ReplacementPending
                     - ReadyAfterRecovery
                     - Failed
