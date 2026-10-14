@@ -118,3 +118,51 @@ webhooks:
 - **Context-aware validation** (`ValidateCreateWithContextFunc`): For validations that need to query the Kubernetes API (checking if Secrets, ConfigMaps, or other resources exist)
 
 If your CRD doesn't need context-aware validation, you can omit `ValidateCreateWithContextFunc` and `ValidateUpdateWithContextFunc` — the webhook will automatically fall back to the basic validation functions.
+
+# Cross-Version Field Protection
+
+`IndexerCluster` and `SearchHeadCluster` are stored as `enterprise.splunk.com/v4`, which has fields `v3` cannot represent. A write through `v3` (an update, or a delete that writes deletion metadata back) would silently drop those fields. Cross-version field protection denies such writes. Its logic is in `pkg/splunk/validation/cross_version_guard.go` and is controlled by the `CrossVersionFieldProtection` feature gate (see [Feature Gates](FeatureGates.md)).
+
+## How it is deployed
+
+- The operator starts the webhook server on port 9443 when `CrossVersionFieldProtection` or `ValidationWebhook` is enabled. `CrossVersionFieldProtection` is on by default, so the server runs by default. A `webhook-server` readiness check passes only once the server accepts TLS connections, so a pod that isn't serving stays out of the webhook Service's endpoints.
+- `config/webhook-server` is a kustomize component that owns the webhook Service (443 → 9443), the cert-manager `Certificate` and the certificate mount. Every overlay includes it, so cert-manager is required.
+- `config/components/cross-version-field-protection` is a kustomize component holding a `ValidatingWebhookConfiguration` with only the guard entry: `UPDATE` and `DELETE` on `indexerclusters`, `searchheadclusters` and their subresources at `v3`, with `matchPolicy: Exact`, `failurePolicy: Fail` and `timeoutSeconds: 5`. cert-manager injects its CA bundle.
+- `config/default` (and `kustomization-cluster.yaml` / `kustomization-namespace.yaml`) and `config/default-with-webhook/kustomization.yaml` include both components. The namespace-scoped variant of `config/default` sets the guard's `namespaceSelector` to the operator's namespace.
+- The v4 validation entry (`config/webhook/manifests.yaml`) is only in `config/default-with-webhook`.
+
+Because `failurePolicy` is `Fail`, a `cross-version-field-protection` `ValidatingWebhookConfiguration` that is installed with no webhook server answering it makes every matching write fail. Install or remove it together with the `CrossVersionFieldProtection` gate. `ValidationWebhook` is independent of both.
+
+## Turning it off with `make deploy`
+
+1. If the `ValidatingWebhookConfiguration` is already installed, delete it first. `kubectl apply` never removes it.
+
+   ```bash
+   kubectl delete validatingwebhookconfiguration splunk-operator-cross-version-field-protection
+   ```
+
+2. Comment out `- ../components/cross-version-field-protection` under `components:` in the kustomization you deploy: `config/default/kustomization.yaml`, or `config/default-with-webhook/kustomization.yaml` with `ENVIRONMENT=default-with-webhook`.
+
+3. Deploy with the gate off:
+
+   ```bash
+   make deploy IMG=<image> MANAGER_EXTRA_ARG="--feature-gates=CrossVersionFieldProtection=false"
+   ```
+
+   `MANAGER_EXTRA_ARG` takes one flag, so combine gates in it if you need more than one, for example `--feature-gates=PostgresController=true,CrossVersionFieldProtection=false`.
+
+Don't turn the gate off without steps 1 and 2. The `ValidatingWebhookConfiguration` would stay installed with no webhook server answering it, and every matching write would fail.
+
+## Turning it off in a published release YAML
+
+For an install applied from `splunk-operator-cluster.yaml` or `splunk-operator-namespace.yaml`:
+
+1. Remove the `ValidatingWebhookConfiguration` named `splunk-operator-cross-version-field-protection` from the YAML. If it is already installed, delete it first:
+
+   ```bash
+   kubectl delete validatingwebhookconfiguration splunk-operator-cross-version-field-protection
+   ```
+
+2. Add `--feature-gates=CrossVersionFieldProtection=false` to the manager container's `args`.
+
+Do step 1 before step 2. If the webhook server stops answering while the `ValidatingWebhookConfiguration` is still installed, matching writes fail until it is removed.

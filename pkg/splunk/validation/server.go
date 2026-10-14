@@ -18,14 +18,11 @@ package validation
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -41,26 +38,8 @@ var serverLog = slog.Default().With("component", "webhook-server")
 
 // WebhookServerOptions contains configuration for the webhook server
 type WebhookServerOptions struct {
-	// TLSCertFile is the path to the TLS certificate file
-	TLSCertFile string
-
-	// TLSKeyFile is the path to the TLS key file
-	TLSKeyFile string
-
-	// Port is the port to listen on
-	Port int
-
 	// Validators is the map of validators by GVR
 	Validators map[schema.GroupVersionResource]Validator
-
-	// CertDir is the directory containing tls.crt and tls.key
-	CertDir string
-
-	// ReadTimeout is the maximum duration for reading the entire request (default: 10s)
-	ReadTimeout time.Duration
-
-	// WriteTimeout is the maximum duration before timing out writes of the response (default: 10s)
-	WriteTimeout time.Duration
 
 	// Client is the Kubernetes client for resource lookups (optional)
 	Client client.Client
@@ -70,81 +49,16 @@ type WebhookServerOptions struct {
 	CrossVersionGuard *CrossVersionFieldGuard
 }
 
-// WebhookServer is the HTTP server for validation webhooks
+// WebhookServer validates admission requests. Register HandleValidate on a
+// webhook server, such as the manager's, to serve it.
 type WebhookServer struct {
-	options    WebhookServerOptions
-	httpServer *http.Server
+	options WebhookServerOptions
 }
 
 // NewWebhookServer creates a new webhook server
 func NewWebhookServer(options WebhookServerOptions) *WebhookServer {
 	return &WebhookServer{
 		options: options,
-	}
-}
-
-// Start starts the webhook server
-func (s *WebhookServer) Start(ctx context.Context) error {
-	mux := http.NewServeMux()
-
-	// Register validation endpoint
-	mux.HandleFunc("/validate", s.HandleValidate)
-
-	// Register health check endpoint
-	mux.HandleFunc("/readyz", s.handleReadyz)
-
-	// Determine cert and key paths
-	certFile := s.options.TLSCertFile
-	keyFile := s.options.TLSKeyFile
-	if certFile == "" && s.options.CertDir != "" {
-		certFile = s.options.CertDir + "/tls.crt"
-		keyFile = s.options.CertDir + "/tls.key"
-	}
-
-	// Configure TLS
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
-
-	// Use configured timeouts or defaults
-	readTimeout := s.options.ReadTimeout
-	if readTimeout == 0 {
-		readTimeout = 10 * time.Second
-	}
-	writeTimeout := s.options.WriteTimeout
-	if writeTimeout == 0 {
-		writeTimeout = 10 * time.Second
-	}
-
-	s.httpServer = &http.Server{
-		Addr:         fmt.Sprintf(":%d", s.options.Port),
-		Handler:      mux,
-		TLSConfig:    tlsConfig,
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
-	}
-
-	serverLog.InfoContext(ctx, "starting webhook server", "port", s.options.Port)
-
-	// Start server in goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		if certFile != "" && keyFile != "" {
-			errChan <- s.httpServer.ListenAndServeTLS(certFile, keyFile)
-		} else {
-			errChan <- s.httpServer.ListenAndServe()
-		}
-	}()
-
-	// Wait for context cancellation or server error
-	select {
-	case <-ctx.Done():
-		serverLog.InfoContext(ctx, "shutting down webhook server")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return s.httpServer.Shutdown(shutdownCtx)
-	case err := <-errChan:
-		return err
 	}
 }
 
@@ -252,10 +166,4 @@ func (s *WebhookServer) validate(ctx context.Context, ar *admissionv1.AdmissionR
 		return ValidateWithClient(ar, s.options.Validators, s.options.Client)
 	}
 	return nil, nil
-}
-
-// handleReadyz handles readiness probe requests
-func (s *WebhookServer) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
 }

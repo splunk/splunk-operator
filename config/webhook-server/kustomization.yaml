@@ -3,13 +3,13 @@ kind: Component
 
 # This component is the single owner of the webhook Service, the serving
 # certificate, and the Deployment's certificate mount. Overlays include it and
-# must not declare ../certmanager or the SERVICE_* vars themselves.
+# must not declare ../certmanager or the SERVICE_* / CERTIFICATE_* vars themselves.
 resources:
   - service.yaml
   - ../certmanager
 
 patches:
-  - path: conversion_webhook_patch.yaml
+  - path: manager_webhook_server_patch.yaml
 
 vars:
 - name: SERVICE_NAMESPACE
@@ -24,6 +24,20 @@ vars:
     kind: Service
     version: v1
     name: webhook-service
+- name: CERTIFICATE_NAMESPACE
+  objref:
+    kind: Certificate
+    group: cert-manager.io
+    version: v1
+    name: serving-cert
+  fieldref:
+    fieldpath: metadata.namespace
+- name: CERTIFICATE_NAME
+  objref:
+    kind: Certificate
+    group: cert-manager.io
+    version: v1
+    name: serving-cert
 
 configurations:
   - kustomizeconfig.yaml
