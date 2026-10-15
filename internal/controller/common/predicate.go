@@ -321,6 +321,39 @@ func ClusterMasterChangedPredicate() predicate.Predicate {
 	}
 }
 
+// NodeConditionChangedPredicate fires only when a Node's Ready condition
+// status changes or the Node is deleted. Prevents the ClusterManager
+// reconciler from waking on every Node heartbeat.
+func NodeConditionChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldNode, ok := e.ObjectOld.(*corev1.Node)
+			if !ok {
+				return false
+			}
+			newNode, ok := e.ObjectNew.(*corev1.Node)
+			if !ok {
+				return false
+			}
+			return NodeReadyStatus(oldNode) != NodeReadyStatus(newNode)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return !e.DeleteStateUnknown
+		},
+	}
+}
+
+// NodeReadyStatus returns the status of the Node's Ready condition,
+// or ConditionUnknown if the condition is not present.
+func NodeReadyStatus(node *corev1.Node) corev1.ConditionStatus {
+	for _, c := range node.Status.Conditions {
+		if c.Type == corev1.NodeReady {
+			return c.Status
+		}
+	}
+	return corev1.ConditionUnknown
+}
+
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
