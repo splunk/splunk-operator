@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -30,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -62,6 +64,7 @@ type ClusterManagerReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -90,6 +93,7 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.PodChangedPredicate(),
 			common.ConfigMapChangedPredicate(),
 			common.CrdChangedPredicate(),
+			common.NodeConditionChangedPredicate(),
 		)).
 		Watches(&appsv1.StatefulSet{},
 			handler.EnqueueRequestForOwner(
@@ -152,6 +156,13 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.ClusterManagerList{})))
 	}
 
+	if config.DefaultMutableFeatureGate.Enabled(config.ClusterManagerNodeRecovery) {
+		bldr = bldr.Watches(&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(r.mapNodeToClusterManagers),
+			builder.WithPredicates(common.NodeConditionChangedPredicate()),
+		)
+	}
+
 	return bldr.
 		Named("cluster-manager-controller").
 		Complete(r)
@@ -164,4 +175,37 @@ func recordInstrumentionData(start time.Time, req ctrl.Request, module string, n
 	metricLabels[metrics.LabelMethodName] = name
 	value := float64(time.Since(start) / time.Millisecond)
 	metrics.APITotalTimeMetricEvents.With(metricLabels).Set(value)
+}
+
+// mapNodeToClusterManagers maps a Node event to reconcile requests for any
+// ClusterManager whose pod is running on the affected node.
+func (r *ClusterManagerReconciler) mapNodeToClusterManagers(ctx context.Context, obj client.Object) []reconcile.Request {
+	node, ok := obj.(*corev1.Node)
+	if !ok {
+		return nil
+	}
+
+	var cmList enterpriseApi.ClusterManagerList
+	if err := r.Client.List(ctx, &cmList); err != nil {
+		return nil
+	}
+
+	var reqs []reconcile.Request
+	for _, cm := range cmList.Items {
+		podName := fmt.Sprintf("splunk-%s-cluster-manager-0", cm.GetName())
+		pod := &corev1.Pod{}
+		err := r.Client.Get(ctx, types.NamespacedName{Name: podName, Namespace: cm.GetNamespace()}, pod)
+		if err != nil {
+			continue
+		}
+		if pod.Spec.NodeName == node.Name {
+			reqs = append(reqs, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      cm.GetName(),
+					Namespace: cm.GetNamespace(),
+				},
+			})
+		}
+	}
+	return reqs
 }
