@@ -1,0 +1,434 @@
+suite: validating webhook configuration
+templates:
+  - templates/validating_webhook_configuration.yaml
+release:
+  namespace: splunk-operator
+tests:
+  - it: should render only the guard by default
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ValidatingWebhookConfiguration
+      - equal:
+          path: metadata.name
+          value: splunk-operator-cross-version-field-protection
+
+  - it: should render the guard when CrossVersionFieldProtection is true
+    set:
+      splunkOperator.featureGates:
+        CrossVersionFieldProtection: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: splunk-operator-cross-version-field-protection
+
+  - it: should not render the guard when CrossVersionFieldProtection is false
+    set:
+      splunkOperator.featureGates:
+        CrossVersionFieldProtection: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the guard when featureGates is null
+    set:
+      splunkOperator.featureGates: null
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should render both configurations when ValidationWebhook is true
+    set:
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: splunk-operator-cross-version-field-protection
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: splunk-operator-validating-webhook-configuration
+        documentIndex: 1
+
+  - it: should render only the v4 configuration when ValidationWebhook is true and CrossVersionFieldProtection is false
+    set:
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+        CrossVersionFieldProtection: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: splunk-operator-validating-webhook-configuration
+
+  - it: should not render the v4 configuration when ValidationWebhook is false
+    set:
+      splunkOperator.featureGates:
+        ValidationWebhook: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: splunk-operator-cross-version-field-protection
+
+  - it: should configure the guard entry
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: splunk-operator/splunk-operator-serving-cert
+      - equal:
+          path: webhooks[0].name
+          value: cross-version-field-protection.enterprise.splunk.com
+      - equal:
+          path: webhooks[0].clientConfig.service
+          value:
+            name: splunk-operator-webhook-service
+            namespace: splunk-operator
+            path: /validate
+      - equal:
+          path: webhooks[0].matchPolicy
+          value: Exact
+      - equal:
+          path: webhooks[0].failurePolicy
+          value: Fail
+      - equal:
+          path: webhooks[0].sideEffects
+          value: None
+      - equal:
+          path: webhooks[0].timeoutSeconds
+          value: 5
+      - equal:
+          path: webhooks[0].rules
+          value:
+            - apiGroups:
+                - enterprise.splunk.com
+              apiVersions:
+                - v3
+              operations:
+                - UPDATE
+                - DELETE
+              resources:
+                - indexerclusters
+                - indexerclusters/*
+                - searchheadclusters
+                - searchheadclusters/*
+              scope: Namespaced
+
+  - it: should configure the v4 entry
+    set:
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: splunk-operator/splunk-operator-serving-cert
+      - equal:
+          path: webhooks[0].name
+          value: vsplunk.enterprise.splunk.com
+      - equal:
+          path: webhooks[0].clientConfig.service
+          value:
+            name: splunk-operator-webhook-service
+            namespace: splunk-operator
+            path: /validate
+      - equal:
+          path: webhooks[0].failurePolicy
+          value: Fail
+      - equal:
+          path: webhooks[0].rules[0].apiVersions
+          value:
+            - v4
+
+  - it: should use the namespace override for the service and certificate references
+    set:
+      namespaceOverride: other-ns
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: other-ns/splunk-operator-serving-cert
+      - equal:
+          path: webhooks[0].clientConfig.service.namespace
+          value: other-ns
+
+  - it: should not set a namespaceSelector when watching every namespace
+    set:
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    asserts:
+      - notExists:
+          path: webhooks[0].namespaceSelector
+
+  - it: should not set a namespaceSelector when watchNamespaces has no names
+    set:
+      splunkOperator.watchNamespaces: " , "
+    asserts:
+      - notExists:
+          path: webhooks[0].namespaceSelector
+
+  - it: should select the release namespace when clusterWideAccess is false
+    set:
+      splunkOperator.clusterWideAccess: false
+      splunkOperator.watchNamespaces: "ignored"
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    asserts:
+      - equal:
+          path: webhooks[0].namespaceSelector
+          value:
+            matchLabels:
+              kubernetes.io/metadata.name: splunk-operator
+
+  - it: should select the release namespace, not namespaceOverride, when clusterWideAccess is false
+    set:
+      namespaceOverride: other-ns
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - equal:
+          path: webhooks[0].namespaceSelector
+          value:
+            matchLabels:
+              kubernetes.io/metadata.name: splunk-operator
+      - equal:
+          path: webhooks[0].clientConfig.service.namespace
+          value: other-ns
+
+  - it: should select watchNamespaces when set
+    set:
+      splunkOperator.clusterWideAccess: true
+      splunkOperator.watchNamespaces: "ns1, ns2"
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    asserts:
+      - equal:
+          path: webhooks[0].namespaceSelector
+          value:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  - ns1
+                  - ns2
+
+  - it: should set caBundle instead of the CA injection annotation when useCertManager is false
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: |
+        -----BEGIN CERTIFICATE-----
+        MIIBtest
+        -----END CERTIFICATE-----
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - notExists:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+      - equal:
+          path: webhooks[0].clientConfig.caBundle
+          value: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ0ZXN0Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+
+  - it: should pass several concatenated CAs through in caBundle
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: |
+        -----BEGIN CERTIFICATE-----
+        MIIBolda
+        -----END CERTIFICATE-----
+        -----BEGIN CERTIFICATE-----
+        MIIBnewa
+        -----END CERTIFICATE-----
+    asserts:
+      - equal:
+          path: webhooks[0].clientConfig.caBundle
+          value: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJvbGRhCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0KLS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJuZXdhCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+
+  - it: should ignore caBundle when useCertManager is true
+    set:
+      splunkOperator.webhook.caBundle: |
+        -----BEGIN CERTIFICATE-----
+        MIIBtest
+        -----END CERTIFICATE-----
+    asserts:
+      - notExists:
+          path: webhooks[0].clientConfig.caBundle
+      - exists:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+
+  - it: should fail when useCertManager is false and caBundle is empty
+    set:
+      splunkOperator.webhook.useCertManager: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "splunkOperator.webhook.caBundle is required when splunkOperator.webhook.useCertManager is false"
+
+  - it: should fail when caBundle is base64 instead of PEM
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCg==
+    asserts:
+      - failedTemplate:
+          errorPattern: "must contain only complete PEM certificates"
+
+  - it: should fail when caBundle is truncated before the PEM footer
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: |
+        -----BEGIN CERTIFICATE-----
+        MIIBtest
+    asserts:
+      - failedTemplate:
+          errorPattern: "must contain only complete PEM certificates"
+
+  - it: should fail when a later certificate in caBundle is truncated
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: |
+        -----BEGIN CERTIFICATE-----
+        MIIBolda
+        -----END CERTIFICATE-----
+        -----BEGIN CERTIFICATE-----
+        MIIBnewa
+    asserts:
+      - failedTemplate:
+          errorPattern: "must contain only complete PEM certificates"
+
+  - it: should fail when caBundle has content outside the certificate blocks
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: |
+        -----BEGIN CERTIFICATE-----
+        MIIBtest
+        -----END CERTIFICATE-----
+        -----BEGIN RSA PRIVATE KEY-----
+        MIIBtest
+        -----END RSA PRIVATE KEY-----
+    asserts:
+      - failedTemplate:
+          errorPattern: "must contain only complete PEM certificates"
+
+  - it: should fail when a certificate body in caBundle is not valid base64
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: |
+        -----BEGIN CERTIFICATE-----
+        MIIBtes
+        -----END CERTIFICATE-----
+    asserts:
+      - failedTemplate:
+          errorPattern: "body is not a base64-encoded certificate"
+
+  - it: should fail when a certificate body in caBundle is empty
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: "-----BEGIN CERTIFICATE-----\n\n\n-----END CERTIFICATE-----\n"
+    asserts:
+      - failedTemplate:
+          errorPattern: "body is not a base64-encoded certificate"
+
+  - it: should fail when a certificate body in caBundle is valid base64 but not a certificate
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: |
+        -----BEGIN CERTIFICATE-----
+        aGVsbG8gd29ybGQh
+        -----END CERTIFICATE-----
+    asserts:
+      - failedTemplate:
+          errorPattern: "body is not a base64-encoded certificate"
+
+  - it: should accept a caBundle with CRLF line endings and render it with LF
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.caBundle: "-----BEGIN CERTIFICATE-----\r\nMIIBtest\r\n-----END CERTIFICATE-----\r\n"
+    asserts:
+      - equal:
+          path: webhooks[0].clientConfig.caBundle
+          value: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ0ZXN0Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+
+  - it: should not require caBundle when no webhook configuration is rendered
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.featureGates:
+        CrossVersionFieldProtection: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render the guard when FEATURE_GATES in extraEnvs turns it off
+    set:
+      extraEnvs:
+        - name: FEATURE_GATES
+          value: "PostgresController=true, CrossVersionFieldProtection=false"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the v4 configuration when FEATURE_GATES in extraEnvs turns ValidationWebhook on
+    set:
+      extraEnvs:
+        - name: FEATURE_GATES
+          value: ValidationWebhook=true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should render the v4 configuration when the deprecated ENABLE_VALIDATION_WEBHOOK is true
+    set:
+      extraEnvs:
+        - name: ENABLE_VALIDATION_WEBHOOK
+          value: "true"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: splunk-operator-validating-webhook-configuration
+        documentIndex: 1
+
+  - it: should let FEATURE_GATES override the deprecated ENABLE_VALIDATION_WEBHOOK
+    set:
+      extraEnvs:
+        - name: ENABLE_VALIDATION_WEBHOOK
+          value: "true"
+        - name: FEATURE_GATES
+          value: ValidationWebhook=false
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should let splunkOperator.featureGates override FEATURE_GATES in extraEnvs
+    set:
+      splunkOperator.featureGates:
+        CrossVersionFieldProtection: true
+      extraEnvs:
+        - name: FEATURE_GATES
+          value: CrossVersionFieldProtection=false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: splunk-operator-cross-version-field-protection
+
+  - it: should fail when FEATURE_GATES in extraEnvs uses valueFrom
+    set:
+      extraEnvs:
+        - name: FEATURE_GATES
+          valueFrom:
+            configMapKeyRef:
+              name: gates
+              key: gates
+    asserts:
+      - failedTemplate:
+          errorPattern: "extraEnvs FEATURE_GATES must set value, not valueFrom"

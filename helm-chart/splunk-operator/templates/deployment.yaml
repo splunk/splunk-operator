@@ -64,7 +64,7 @@ spec:
           env:
             - name: WATCH_NAMESPACE
 {{- if .Values.splunkOperator.clusterWideAccess  }}
-              value: {{ .Values.splunkOperator.watchNamespaces }}
+              value: {{ include "splunk-operator.watchNamespaces" . | quote }}
 {{- else }}
               value: {{ .Release.Namespace }}
 {{- end }}
@@ -88,8 +88,10 @@ spec:
             - containerPort: {{ .port }}
               name: {{ .name }}
             {{- end }}
-            - containerPort: {{ .Values.splunkOperator.webhook.conversionPort }}
-              name: conversion
+            # The operator serves its webhooks on 9443; this is not configurable.
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
           resources:
 {{- toYaml .Values.splunkOperator.resources | nindent 12 }}
           securityContext:

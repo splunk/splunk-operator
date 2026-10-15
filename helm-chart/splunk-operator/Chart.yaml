@@ -45,7 +45,8 @@ version: "3.1.0"
 # It is recommended to use it with quotes.
 appVersion: "3.1.0"
 
-# cert-manager is required: it issues the operator's webhook serving certificate.
+# cert-manager is required unless splunkOperator.webhook.useCertManager is false: it
+# issues the operator's webhook serving certificate.
 #
 # Installing the subchart stays conditional and defaults off, because most clusters
 # already run cert-manager and a second copy conflicts. Set cert-manager.enabled=true
