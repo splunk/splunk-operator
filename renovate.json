@@ -65,17 +65,20 @@
       "versioningTemplate": "semver-coerced"
     },
     {
-      "description": "Keep Go toolchain versions synchronized outside go.mod",
+      "description": "Keep the Go toolchain version synchronized across repository setup and documentation",
       "customType": "regex",
       "managerFilePatterns": [
         "/^\\.env$/",
         "/^Makefile$/",
         "/^Dockerfile$/",
-        "/^Dockerfile\\.distroless$/"
+        "/^Dockerfile\\.distroless$/",
+        "/^go\\.mod$/",
+        "/^docs\\/develop\\/DevelopmentSetup\\.md$/"
       ],
       "matchStrings": [
         "GO_VERSION\\s*(?:\\?=\\s*|=\\s*)(?<currentValue>\\d+\\.\\d+\\.\\d+)",
-        "ARG BUILDER_IMAGE=golang:(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+        "(?m)^go\\s+(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*$",
+        "\\| \\[Go\\].*\\| (?<currentValue>\\d+\\.\\d+\\.\\d+) \\|"
       ],
       "depNameTemplate": "golang",
       "datasourceTemplate": "golang-version",
@@ -123,7 +126,7 @@
       "groupName": "SCS Loki deploy Python image"
     },
     {
-      "description": "Update the Go toolchain consistently across go.mod, .env, Makefile, Docker builder images, and GitLab CI images",
+      "description": "Update the Go toolchain consistently across go.mod, .env, development docs, Docker builders, and GitLab CI images",
       "matchDatasources": ["golang-version"],
       "groupName": "Go toolchain",
       "rangeStrategy": "bump"
