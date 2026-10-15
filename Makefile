@@ -225,7 +225,7 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/amd64,linux/arm64
 
 docker-build: #test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build --build-arg GO_VERSION=$(GO_VERSION) -t ${IMG} .
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -256,6 +256,7 @@ docker-buildx:
 	    fi; \
 	    docker buildx build --push \
 	        --platform="${PLATFORMS}" \
+	        --build-arg GO_VERSION=$(GO_VERSION) \
 	        $$BASE_IMAGE_ARG \
 	        $$BASE_IMAGE_VERSION_ARG \
 	        $$BUILDER_IMAGE_ARG \
@@ -368,7 +369,7 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 ## Tool Versions
-GO_VERSION ?= 1.27.2
+GO_VERSION ?= $(shell awk -F= '$$1 == "GO_VERSION" { print $$2; exit }' .env)
 KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
 GOLANGCI_LINT_VERSION ?= v2.14.0
@@ -395,6 +396,39 @@ $(ENVTEST): $(LOCALBIN)
 setup-envtest: envtest ## Set up ENVTEST binaries for the correct version
 	@$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path || { \
 	  echo "Error setting up envtest"; exit 1; }
+
+.PHONY: verify-go-version
+verify-go-version: ## Verify the active Go toolchain and repository pins match .env
+	@set -eu; \
+	expected=$$(awk -F= '$$1 == "GO_VERSION" { print $$2; exit }' .env); \
+	if [ -z "$$expected" ]; then echo "ERROR: .env must define GO_VERSION" >&2; exit 1; fi; \
+	check_version() { \
+		name=$$1; actual=$$2; \
+		if [ "$$actual" != "$$expected" ]; then \
+			echo "ERROR: $$name is '$$actual'; expected '$$expected' from .env" >&2; exit 1; \
+		fi; \
+	}; \
+	check_version "Make GO_VERSION" "$(GO_VERSION)"; \
+	module_version=$$(awk '$$1 == "go" { print $$2; exit }' go.mod); \
+	check_version "go.mod Go directive" "$$module_version"; \
+	documented_version=$$(awk -F'|' '/^\| \[Go\]/ { gsub(/[[:space:]]/, "", $$3); print $$3; exit }' docs/develop/DevelopmentSetup.md); \
+	check_version "DevelopmentSetup Go version" "$$documented_version"; \
+	for dockerfile in Dockerfile Dockerfile.distroless; do \
+		image_version=$$(awk '$$1 == "ARG" && $$2 ~ /^GO_VERSION=/ { sub(/^GO_VERSION=/, "", $$2); print $$2; exit }' "$$dockerfile"); \
+		check_version "$$dockerfile GO_VERSION" "$$image_version"; \
+		builder_image=$$(awk '$$1 == "ARG" && $$2 ~ /^BUILDER_IMAGE=/ { sub(/^BUILDER_IMAGE=/, "", $$2); print $$2; exit }' "$$dockerfile"); \
+		if [ "$$builder_image" != 'golang:$${GO_VERSION}' ]; then \
+			echo "ERROR: $$dockerfile default builder image is '$$builder_image'; expected 'golang:$${GO_VERSION}'" >&2; exit 1; \
+		fi; \
+	done; \
+	actual=$$(go env GOVERSION | sed 's/^go//'); \
+	check_version "active Go toolchain" "$$actual"; \
+	echo "Go toolchain verified: $$expected"
+
+.PHONY: setup
+setup: verify-go-version ## Prepare the local Go development environment
+	go mod download
+	$(MAKE) controller-gen kustomize setup/ginkgo
 
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 GOLANGCI_LINT_BUILD = $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-go$(GO_VERSION)

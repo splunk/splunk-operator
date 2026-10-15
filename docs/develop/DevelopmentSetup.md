@@ -12,7 +12,7 @@ This guide walks you through setting up a local development environment for the 
 
 | Tool | Version | Notes |
 |------|---------|-------|
-| [Go](https://golang.org/doc/install) | 1.26.2+ | See `GO_VERSION` in `.env` for the exact version used in CI |
+| [Go](https://golang.org/doc/install) | 1.27.2 | The canonical version is `GO_VERSION` in `.env`; `make verify-go-version` checks the local toolchain and repository pins |
 | [Docker Engine](https://docs.docker.com/install/) | Latest | Required for building container images |
 | [Operator SDK](https://github.com/operator-framework/operator-sdk) | v1.42.0 | See `OPERATOR_SDK_VERSION` in `.env` |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.29+ | For interacting with your test cluster |
@@ -54,11 +54,19 @@ cd splunk-operator
 
 Run `make help` to see all available targets grouped by category. The most frequently used ones during development:
 
+For a fresh checkout, install the exact Go version above and run `make setup`.
+This verifies the Go toolchain, downloads Go modules, and installs the pinned
+controller-gen and Kustomize binaries and the Ginkgo version selected by
+`go.mod`. Run `make test` to download the matching envtest assets before
+running controller tests.
+
 ### Development
 
 | Target | Description |
 |--------|-------------|
 | `make fmt` | Format Go source files |
+| `make setup` | Verify Go, download modules, and install local development tools |
+| `make verify-go-version` | Check the active Go version against `.env`, `go.mod`, and Docker builders |
 | `make vet` | Run `go vet` on the codebase |
 | `make manifests` | Generate CRDs, RBAC, and webhook manifests |
 | `make generate` | Generate DeepCopy methods and other codegen |
