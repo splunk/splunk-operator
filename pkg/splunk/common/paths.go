@@ -39,7 +39,8 @@ const (
 	ConfigToken = "conftoken"
 
 	// SetSymbolicLinkClusterManager restores the SmartStore links after a bundle push.
-	SetSymbolicLinkClusterManager = "ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/manager-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/manager-apps/splunk-operator/local/server.conf"
+	// mkdir -p ensures the directory exists on fresh recovery pods where the filesystem starts empty.
+	SetSymbolicLinkClusterManager = "mkdir -p /opt/splunk/etc/manager-apps/splunk-operator/local && ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/manager-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/manager-apps/splunk-operator/local/server.conf"
 
 	// CommandForClusterManagerSmartstore initializes SmartStore links in a manager pod.
 	CommandForClusterManagerSmartstore = "mkdir -p " + OperatorClusterManagerAppsLocal + " && ln -sfn " + OperatorMountLocalIndexesConf + " " + OperatorClusterManagerAppsLocalIndexesConf + " && ln -sfn " + OperatorMountLocalServerConf + " " + OperatorClusterManagerAppsLocalServerConf
