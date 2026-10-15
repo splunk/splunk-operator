@@ -2,8 +2,6 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: cross-version-field-protection
-  annotations:
-    cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
 webhooks:
 - name: cross-version-field-protection.enterprise.splunk.com
   admissionReviewVersions:

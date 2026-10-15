@@ -5,10 +5,11 @@ splunk-operator:
 image:
   repository: docker.io/splunk/splunk:10.0.0
 
-# cert-manager (https://cert-manager.io/) — optional dependency used by the operator's
-# CertManagement feature gate to auto-generate TLS certificates for Splunk components.
-# Disabled by default: enable only if the target cluster does not already have
-# cert-manager installed. See https://artifacthub.io/packages/helm/cert-manager/cert-manager
+# cert-manager (https://cert-manager.io/) is required unless
+# splunkOperator.webhook.useCertManager is false: it issues the operator's webhook
+# serving certificate, and the CertManagement feature gate uses it to generate TLS
+# certificates for Splunk components. Installing this subchart is disabled by default:
+# enable it only if the target cluster does not already have cert-manager installed. See https://artifacthub.io/packages/helm/cert-manager/cert-manager
 # for the full set of configurable values.
 cert-manager:
   enabled: false
@@ -92,11 +93,19 @@ splunkOperator:
     initialDelaySeconds: 5
     periodSeconds: 10
 
-  # Webhook configuration. Requires cert-manager in the cluster.
+  # Webhook configuration. The webhook Service forwards port 443 to the operator's
+  # port 9443, which serves the certificate in certSecretName.
   webhook:
-    # Port the conversion webhook serves /convert on.
-    conversionPort: 9444
-    # Secret cert-manager writes the serving certificate into, mounted by the
+    # true: cert-manager (required in the cluster) issues the serving certificate
+    # and injects its CA into the ValidatingWebhookConfigurations.
+    # false: you create the certSecretName Secret and set caBundle; see "Option B"
+    # in the operator's docs/reference/ValidationWebhook.md.
+    useCertManager: true
+    # PEM CA (or several concatenated, e.g. while rotating) that signed the serving
+    # certificate. Required when useCertManager is false, ignored otherwise.
+    # Pass the file as is: --set-file splunkOperator.webhook.caBundle=ca.crt
+    caBundle: ""
+    # Secret holding the serving certificate (tls.crt, tls.key), mounted by the
     # operator. Change only if it collides with an existing secret.
     certSecretName: webhook-server-cert
 
@@ -169,9 +178,20 @@ splunkOperator:
   # The map is formatted into a single --feature-gates arg automatically.
   # Adding a new gate requires no chart changes — just add an entry here.
   # reference: https://splunk.github.io/splunk-operator/FeatureGates
+  #
+  # Two gates also decide which ValidatingWebhookConfigurations the chart renders:
+  # - CrossVersionFieldProtection (on unless set to false) denies writes through an
+  #   older served API version that would drop fields only the stored version can
+  #   represent. Setting it to false also removes its webhook configuration, so
+  #   writes through older versions keep working.
+  # - ValidationWebhook (off unless set to true) validates writes to the operator's
+  #   custom resources.
+  # Gates set through a FEATURE_GATES or ENABLE_VALIDATION_WEBHOOK entry in
+  # extraEnvs count too, with featureGates taking precedence as in the operator.
   featureGates: {}
   # featureGates:
   #   ValidationWebhook: true
+  #   CrossVersionFieldProtection: false
   #   MyNewFeature: false
 
   telemetry:

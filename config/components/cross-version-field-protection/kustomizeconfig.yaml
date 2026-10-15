@@ -15,7 +15,4 @@ namespace:
 varReference:
 - kind: ValidatingWebhookConfiguration
   group: admissionregistration.k8s.io
-  path: metadata/annotations
-- kind: ValidatingWebhookConfiguration
-  group: admissionregistration.k8s.io
   path: webhooks/namespaceSelector/matchLabels
