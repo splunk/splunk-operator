@@ -170,8 +170,8 @@ The webhook validates the following spec fields:
 | `spec.varVolumeStorageConfig.storageCapacity` | Must match format `^[0-9]+Gi$` | must be in Gi format (e.g., '10Gi', '100Gi') |
 | `spec.etcVolumeStorageConfig.storageClassName` | Required when `ephemeralStorage=false` and `storageCapacity` is set | storageClassName is required when using persistent storage |
 | `spec.varVolumeStorageConfig.storageClassName` | Required when `ephemeralStorage=false` and `storageCapacity` is set | storageClassName is required when using persistent storage |
-| `spec.etcVolumeStorageConfig.ephemeralStorage` | Mutually exclusive with `storageClassName` and `storageCapacity` | storageClassName/storageCapacity cannot be set when ephemeralStorage is true |
-| `spec.varVolumeStorageConfig.ephemeralStorage` | Mutually exclusive with `storageClassName` and `storageCapacity` | storageClassName/storageCapacity cannot be set when ephemeralStorage is true |
+| `spec.etcVolumeStorageConfig.ephemeralStorage` | Mutually exclusive with `storageClassName`, `volumeAttributesClassName`, and `storageCapacity` | storageClassName/volumeAttributesClassName/storageCapacity cannot be set when ephemeralStorage is true |
+| `spec.varVolumeStorageConfig.ephemeralStorage` | Mutually exclusive with `storageClassName`, `volumeAttributesClassName`, and `storageCapacity` | storageClassName/volumeAttributesClassName/storageCapacity cannot be set when ephemeralStorage is true |
 | `spec.extraEnv[*].name` | Must be unique across all entries | duplicate environment variable |
 | `spec.imagePullSecrets[*].name` | Must be unique across all entries | duplicate secret reference |
 | `spec.imagePullSecrets[*].name` | Must reference an existing Secret in the namespace | not found |
