@@ -16,8 +16,8 @@ if [[ -z "${GCR_REPOSITORY}" ]]; then
 fi
 
 if [[ -z "${GKE_CLUSTER_K8_VERSION}" ]]; then
-  echo "GKE_CLUSTER_K8_VERSION not set. Changing to 1.34"
-  export GKE_CLUSTER_K8_VERSION="1.34"
+  echo "GKE_CLUSTER_K8_VERSION not set. Changing to 1.36"
+  export GKE_CLUSTER_K8_VERSION="1.36"
 fi
 
 function deleteCluster() {

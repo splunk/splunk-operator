@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"crypto/fips140"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -227,6 +228,9 @@ func main() {
 		slog.String("log_level", logging.LevelToString(logCfg.Level)),
 		slog.String("log_format", logCfg.Format),
 		slog.Bool("log_add_source", logCfg.AddSource))
+	slog.Info("Go Cryptographic Module FIPS 140-3 status",
+		slog.Bool("fips140_enabled", fips140.Enabled()),
+		slog.String("fips140_module_version", fips140.Version()))
 
 	baseOptions := ctrl.Options{
 		Metrics:                metricsServerOptions,
