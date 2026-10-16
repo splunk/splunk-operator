@@ -7,6 +7,74 @@ nav_order: 1
 
 # Splunk Operator for Kubernetes Change Log
 
+## 3.2.0 (2026-09-08)
+
+* This is the 3.2.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
+
+#### Breaking Changes
+
+* **Index & Ingestion Separation — Queue secret reference (breaking):** the queue secret is now referenced through `secretKeyRef` instead of the previous volume-based reference (`volList`). This is a **breaking change** to the Queue secret configuration for the Index & Ingestion Separation feature. We do not expect any customers to be relying on the old volume-based reference, but if you are, you **must** migrate your Queue secret to `secretKeyRef` before upgrading to 3.2.0.
+
+#### New Features
+
+* Certificate Management: new `spec.certs[]` API on `CommonSplunkSpec` with controller integration, certificate auto-generation, and a `CertManagement` feature gate (cert-manager Issuer-based)
+* Feature gate infrastructure using the Kubernetes `FeatureGate` pattern, with Helm chart support
+* Splunk Universal Forwarder Helm chart (stateless-by-default, Deployment-only)
+* Kubernetes-standard status conditions on all CRDs, including `status.observedGeneration` and a `Paused` condition when reconciliation is paused by annotation
+* `TerminalFailure` condition with terminality classification for existing failures, plus corresponding Kubernetes events
+* Local KV Store type for SOK pods
+* Single-group to multi-group API support
+* `disableResourceDefaults` to allow non-default resource values
+* Configurable `PodAnnotations`
+* Ingestion/Indexing separation improvements: mutable Ingestor API, idempotent ingestor queue API, SmartBus config via splunk-ansible defaults (feature remains in preview)
+
+#### Postgres Integration (Preview)
+
+* Postgres Controller with `PostgresCluster` and `PostgresDatabase` custom resources
+* Point-in-Time Recovery (PITR) and Barman object-storage backups for `PostgresCluster`
+* Cluster restore, major-version upgrades, and vertical scaling
+* Connection pooler (PgBouncer) reconciliation, SAN management, and policy additions
+* Custom metrics, provisioning-latency histogram, and improved grant/connection observability
+* Validation webhooks (disk-size decrease guard, underscore database names) and terminalization of deterministic external-secret failures
+* CNPG upgraded to v1.30.0; Postgres node sidecar disabled by default in SOK deployments
+
+#### Helm Chart Improvements
+
+* Add telemetry ConfigMap to Helm
+* Helm chart support for feature gates
+
+#### Dependency and Security Updates
+
+* Upgrade Go to 1.26.2
+* Update OpenShift support to 4.22
+* Upgrade cert-manager to v1.21.1
+* Upgrade google.golang.org/grpc to v1.83.1
+* Build the operator binary with Go's native FIPS 140-3 mode (`GOFIPS140=v1.0.0`, CMVP Certificate #5247)
+
+#### Bug Fixes
+
+* Fix empty pod name in ClusterManager bundle push (#1849)
+* Handle transient phase changes during app framework operations
+* Clear stale appContext when all AppSources are removed
+* Fix `clusterModel.Actuate` clobbering unowned CNPG cluster spec fields
+* Fix timing-dependent Cluster Manager reconciliation
+* Use Kubernetes secrets instead of `kubectl exec` to obtain admin credentials
+
+#### Known Issues
+
+* Updating queue reference (queueRef) in IngestorCluster or IndexerCluster that changes the name of the underlying queue (queueRef.spec.sqs.name) only works with Splunk Enterprise 10.6 or later. On older Splunk versions the change will not take effect because the underlying fix ships in Splunk Ansible.
+### Supported Splunk Version
+
+>| Splunk Version |
+>|--------------|
+>| 10.6.0       |
+
+### Supported Kubernetes Version
+
+>| Kubernetes Version |
+>|--------------------|
+>| 1.32 - 1.36         |
+
 ## 3.1.0 (2026-02-26)
 
 * This is the 3.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
@@ -54,43 +122,42 @@ nav_order: 1
 * Update app framework documentation for deploying apps with multiple scopes
 * Update install and upgrade examples
 
-### Supported Splunk Version
+Splunk Operator 3.1.0 supports Kubernetes 1.25 through 1.34. However, Kubernetes 1.34 has additional Splunk Enterprise version requirements due to changed IRSA token format and older Splunkd versions are not compatible with. If you deploy on Kubernetes 1.34, use only the Splunk Enterprise versions listed for Kubernetes 1.34 below. Other supported Splunk Enterprise versions can still be used with Kubernetes 1.25 through 1.33.
 
->| Splunk Version |
->|----------------|
->| 10.2.0         |
+### Supported Kubernetes and Splunk versions
 
-### Supported Kubernetes Version
-
->| Kubernetes Version |
->|--------------------|
->| 1.27 - 1.33        |
+| Kubernetes Version | Supported Splunk Enterprise Version | Notes |
+| --- | --- | --- |
+| 1.34 | 9.4.9+, 10.0.4+, 10.4+ | Required for Kubernetes 1.34 deployments |
+| 1.25-1.33 | 10.2.0+, 10.4+ | Required if indexing and ingestion separation is needed |
+| 1.25-1.33 | 9.4.3 - 10.0.4 | Tested compatible without indexing and ingestion separation |
 
 ## 3.0.0 (2025-09-08)
+
+#### Breaking Changes
+
+* **Splunk General Terms acceptance (breaking):** Splunk Operator 3.0.0 introduces a breaking change. Customers must accept the Splunk General Terms (EULA) before deploying or upgrading the Splunk Operator by updating the operator deployment. For detailed steps, read the installation guide: https://github.com/splunk/splunk-operator/blob/main/docs/Install.md#install-operator-to-accept-the-splunk-general-terms
 
 * This is the 3.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
 * CSPL-3784: Update base image to latest ubi8-minimal version
-* CSPL-3675 Update Operator-SDK to v1.39
-* CSPL-3783: Update AppFramework docs with troubleshooting information
-* CSPL-3851 Adding info to docs about session stickiness for ingress
-* CSPL-3912 Allow Custom Probe Scripts
-* CSPL-3867: SHC and CM Error Message Visibility
-* CSPL-3186: Upgrade Enterprise Security Version 8.0.2
-* 1559: Added SplunkGeneralTerms acceptance
-* CSPL-4005: Remove CRDs from splunk/splunk-operator helm chart
+* CSPL-3675: Update Operator SDK to v1.39
+* CSPL-3783: Update App Framework docs with troubleshooting information
+* CSPL-3851: Add documentation about session stickiness for ingress
+* CSPL-3912: Allow custom probe scripts
+* CSPL-3867: Improve SHC and CM error message visibility
+* CSPL-3186: Upgrade Enterprise Security to version 8.0.2
+* CSPL-3357: Add Splunk General Terms acceptance
+* CSPL-4005: Remove CRDs from splunk/splunk-operator Helm chart
 
-### Supported Splunk Version
+Splunk Operator 3.0.0 supports Kubernetes 1.25 through 1.34. However, Kubernetes 1.34 has additional Splunk Enterprise version requirements due to changed IRSA token format and older Splunkd versions are not compatible with. If you deploy on Kubernetes 1.34, use only the Splunk Enterprise versions listed for Kubernetes 1.34 below. Other supported Splunk Enterprise versions can still be used with Kubernetes 1.25 through 1.33.
 
->| Splunk Version |
->|----------------|
->| 10.0.0         |
+### Supported Kubernetes and Splunk versions
 
-### Supported Kubernetes Version
-
->| Kubernetes Version|
->| --- |
->| 1.27+ |
+| Kubernetes Version | Supported Splunk Enterprise Version | Notes |
+| --- | --- | --- |
+| 1.34 | 9.4.9+, 10.0.4+ | Required for Kubernetes 1.34 deployments |
+| 1.25-1.33 | 9.3.7 - 10.2.0 | |
 
 ## 2.8.1 (2025-07-16)
 
@@ -114,7 +181,7 @@ nav_order: 1
 
 * This is the 2.8.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/GettingStarted.md#prerequisites-for-the-splunk-operator)
 
-* CSPL-3586 - Certify FIPS 140-3 Compliance
+* CSPL-3586 - Add FIPS 140-3 cluster compatibility testing
 
 * CSPL-3624 - Update Helm Charts for 2.8.0 Support
 
