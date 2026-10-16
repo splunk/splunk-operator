@@ -36,9 +36,12 @@ import (
 func reconcileNodeRecovery(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (bool, error) {
 	logger := logging.FromContext(ctx).With("func", "reconcileNodeRecovery")
 
-	// emptyDir guard — only attempt recovery when both volumes are ephemeral
+	// emptyDir guard — automatic recovery is only supported when both volumes are ephemeral.
+	// Persistent and local storage require manual intervention to avoid data loss.
 	if !cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Spec.VarVolumeStorageConfig.EphemeralStorage {
-		logger.DebugContext(ctx, "skipping recovery: storage is not ephemeral")
+		setRecoveryStatus(cr, enterpriseApi.RecoveryPhaseBlocked, "", "",
+			"automatic recovery requires ephemeral storage; persistent and local storage must be recovered manually")
+		logger.InfoContext(ctx, "recovery blocked: storage is not ephemeral, manual recovery required")
 		return false, nil
 	}
 
@@ -62,6 +65,15 @@ func reconcileNodeRecovery(ctx context.Context, c splcommon.ControllerClient, cr
 
 	// pod not yet scheduled to a node
 	if pod.Spec.NodeName == "" {
+		return false, nil
+	}
+
+	// verify pod is owned by the expected CM StatefulSet — prevents accidental
+	// deletion of a pod that happens to share the same name from another workload
+	expectedSTS := fmt.Sprintf("splunk-%s-cluster-manager", cr.GetName())
+	if !podOwnedByStatefulSet(pod, expectedSTS) {
+		logger.WarnContext(ctx, "pod not owned by expected StatefulSet, skipping recovery",
+			"pod", pod.Name, "expectedOwner", expectedSTS)
 		return false, nil
 	}
 
@@ -115,8 +127,8 @@ func handleHealthyPhase(ctx context.Context, logger *slog.Logger, cr *enterprise
 		cr.Status.Recovery = enterpriseApi.ClusterManagerRecoveryStatus{}
 		return false, nil
 
-	case corev1.ConditionFalse:
-		// node is NotReady — start grace period
+	case corev1.ConditionFalse, corev1.ConditionUnknown:
+		// node is NotReady or Unknown, start grace period
 		now := metav1.Now()
 		setRecoveryStatus(cr, enterpriseApi.RecoveryPhaseWaitingForGracePeriod,
 			pod.Spec.NodeName, string(pod.UID),
@@ -127,13 +139,7 @@ func handleHealthyPhase(ctx context.Context, logger *slog.Logger, cr *enterprise
 		return true, nil
 
 	default:
-		// node is Unknown — cannot safely act without fencing
-		setRecoveryStatus(cr, enterpriseApi.RecoveryPhaseBlocked,
-			pod.Spec.NodeName, string(pod.UID),
-			fmt.Sprintf("node %s is unreachable; fencing required before pod deletion", pod.Spec.NodeName))
-		logger.WarnContext(ctx, "node unreachable, recovery blocked pending fencing",
-			"node", pod.Spec.NodeName)
-		return true, nil
+		return false, nil
 	}
 }
 
@@ -144,14 +150,6 @@ func handleGracePeriodPhase(ctx context.Context, logger *slog.Logger, cr *enterp
 			"node", cr.Status.Recovery.NodeName)
 		cr.Status.Recovery = enterpriseApi.ClusterManagerRecoveryStatus{}
 		return false, nil
-	}
-
-	// node became unreachable — block instead of proceeding
-	if nodeStatus != corev1.ConditionFalse {
-		setRecoveryStatus(cr, enterpriseApi.RecoveryPhaseBlocked,
-			cr.Status.Recovery.NodeName, cr.Status.Recovery.PodUID,
-			fmt.Sprintf("node %s became unreachable during grace period; fencing required", cr.Status.Recovery.NodeName))
-		return true, nil
 	}
 
 	// safety: transition time missing, reset to start grace period again
@@ -267,23 +265,31 @@ func handleBlockedPhase(ctx context.Context, logger *slog.Logger, cr *enterprise
 		cr.Status.Recovery = enterpriseApi.ClusterManagerRecoveryStatus{}
 		return false, nil
 
-	case corev1.ConditionFalse:
-		// node now NotReady (not Unknown) — safe to retry with grace period
-		logger.InfoContext(ctx, "blocked node now NotReady, restarting grace period",
+	case corev1.ConditionFalse, corev1.ConditionUnknown:
+		// node is NotReady or Unknown, restart grace period
+		logger.InfoContext(ctx, "blocked node now NotReady/Unknown, restarting grace period",
 			"node", cr.Status.Recovery.NodeName)
 		now := metav1.Now()
 		setRecoveryStatus(cr, enterpriseApi.RecoveryPhaseWaitingForGracePeriod,
 			cr.Status.Recovery.NodeName, cr.Status.Recovery.PodUID,
-			fmt.Sprintf("node %s transitioned to NotReady, restarting grace period", cr.Status.Recovery.NodeName))
+			fmt.Sprintf("node %s transitioned to NotReady/Unknown, restarting grace period", cr.Status.Recovery.NodeName))
 		cr.Status.Recovery.TransitionTime = &now
 		return true, nil
 
 	default:
-		// still unreachable — stay blocked
-		logger.InfoContext(ctx, "node still unreachable, recovery remains blocked",
-			"node", cr.Status.Recovery.NodeName)
-		return true, nil
+		return false, nil
 	}
+}
+
+// podOwnedByStatefulSet returns true if the pod has an owner reference
+// pointing to the named StatefulSet.
+func podOwnedByStatefulSet(pod *corev1.Pod, stsName string) bool {
+	for _, ref := range pod.OwnerReferences {
+		if ref.Kind == "StatefulSet" && ref.Name == stsName {
+			return true
+		}
+	}
+	return false
 }
 
 // nodeReadyStatus returns the status of the Node's Ready condition,
