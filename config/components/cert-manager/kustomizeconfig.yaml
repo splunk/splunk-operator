@@ -1,0 +1,9 @@
+# Without these, kustomize does not substitute vars in these fields and the literal
+# $(SERVICE_NAME) / $(CERTIFICATE_NAME) survive into the rendered objects.
+varReference:
+- kind: Certificate
+  group: cert-manager.io
+  path: spec/dnsNames
+- kind: ValidatingWebhookConfiguration
+  group: admissionregistration.k8s.io
+  path: metadata/annotations

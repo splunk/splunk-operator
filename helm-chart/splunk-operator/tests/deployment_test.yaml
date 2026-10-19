@@ -81,6 +81,28 @@ tests:
           value:
             - /manager
 
+  - it: should expose the webhook server port and mount the serving certificate
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 9443
+            name: webhook-server
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: webhook-cert
+            mountPath: /tmp/k8s-webhook-server/serving-certs
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: webhook-cert
+            secret:
+              defaultMode: 420
+              secretName: webhook-server-cert
+
   - it: should use the configured image
     set:
       splunkOperator.image.repository: my-registry/splunk-operator:test
@@ -99,6 +121,27 @@ tests:
           content:
             name: WATCH_NAMESPACE
             value: "ns1,ns2"
+
+  - it: should strip whitespace and empty entries from WATCH_NAMESPACE
+    set:
+      splunkOperator.clusterWideAccess: true
+      splunkOperator.watchNamespaces: " ns1, ns2 ,"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WATCH_NAMESPACE
+            value: "ns1,ns2"
+
+  - it: should set WATCH_NAMESPACE to empty when watchNamespaces is unset
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WATCH_NAMESPACE
+            value: ""
 
   - it: should set WATCH_NAMESPACE to release namespace when clusterWideAccess is false
     release:
@@ -183,3 +226,16 @@ tests:
           content:
             name: MY_VAR
             value: my-value
+
+  - it: should mount the serving certificate Secret when useCertManager is false
+    set:
+      splunkOperator.webhook.useCertManager: false
+      splunkOperator.webhook.certSecretName: my-webhook-cert
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: webhook-cert
+            secret:
+              defaultMode: 420
+              secretName: my-webhook-cert

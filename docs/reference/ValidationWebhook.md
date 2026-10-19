@@ -75,17 +75,46 @@ If you prefer not to use cert-manager, you can provide your own TLS certificates
      -n splunk-operator
    ```
 
-3. **Inject the CA bundle** into the ValidatingWebhookConfiguration:
-   ```bash
-   # Get base64-encoded CA certificate
-   CA_BUNDLE=$(cat ca.crt | base64 | tr -d '\n')
+3. **Deploy with your CA.** Each install path below writes your CA into the `caBundle` of every `ValidatingWebhookConfiguration` it creates, so the API server trusts the serving certificate from the start. Because the webhooks use `failurePolicy: Fail`, a webhook whose CA does not match the serving certificate rejects every write it matches.
+   - **Helm:**
+     ```bash
+     helm install splunk-operator splunk/splunk-operator -n splunk-operator \
+       --set splunkOperator.webhook.useCertManager=false \
+       --set-file splunkOperator.webhook.caBundle=ca.crt
+     ```
+     The chart then creates no cert-manager resources and mounts the Secret named by `splunkOperator.webhook.certSecretName` (default `webhook-server-cert`). The install fails if `caBundle` is missing or is not a PEM certificate. The certificate names in step 1 assume the release namespace `splunk-operator` and no `splunkOperator.nameOverride`; otherwise use `<fullname>-webhook-service.<namespace>.svc`.
+   - **Kustomize:** copy `ca.crt` to `config/components/ca-bundle/ca.crt`. In your kustomization, replace `- ../components/cert-manager` with `- ../components/ca-bundle` under `components:` (`config/default` and `config/default-with-webhook` both list it), then apply it:
+     ```bash
+     kubectl apply --server-side -k <kustomization-dir>
+     ```
+     `<kustomization-dir>` is the kustomization you deploy, with your own values for the `WATCH_NAMESPACE_VALUE`, `SPLUNK_ENTERPRISE_IMAGE`, `SPLUNK_GENERAL_TERMS_VALUE` and `MANAGER_EXTRA_ARG_VALUE` placeholders in `config/default` (or `config/default-with-webhook`); don't apply those directories with the placeholders in place. The build fails if `ca.crt` is missing.
+   - **Published release YAML** (`splunk-operator-cluster.yaml` or `splunk-operator-namespace.yaml`): before applying, delete the `Issuer` and `Certificate` objects and the `cert-manager.io/inject-ca-from` annotations, and set `caBundle` in each webhook's `clientConfig` to the output of `base64 < ca.crt | tr -d '\n'`.
 
-   # Patch the webhook configuration
-   kubectl patch validatingwebhookconfiguration splunk-operator-validating-webhook-configuration \
-     --type='json' -p="[{'op': 'replace', 'path': '/webhooks/0/clientConfig/caBundle', 'value': '${CA_BUNDLE}'}]"
-   ```
+#### Rotating your own certificates
 
-4. **Deploy without cert-manager:** Use the `config/default-with-webhook` overlay but skip the certmanager components, or manually deploy the webhook components.
+- **New serving certificate from the same CA:** update the `webhook-server-cert` Secret. The operator picks up the new files without a restart once the kubelet refreshes the mounted Secret, which can take a minute or two. Nothing else changes.
+- **New CA:** the API server uses a new `caBundle` within seconds, but the operator serves a new certificate only after that kubelet refresh. To avoid rejected writes in between:
+  1. Update the CA bundle (see below) to hold both CAs, for example `cat old-ca.crt new-ca.crt > ca.crt`.
+  2. Update the `webhook-server-cert` Secret to the certificate signed by the new CA, and wait until the operator serves it.
+  3. Update the CA bundle to hold only the new CA.
+
+To update the CA bundle:
+
+- **Helm:**
+  ```bash
+  helm upgrade splunk-operator splunk/splunk-operator -n splunk-operator --reuse-values \
+    --set-file splunkOperator.webhook.caBundle=ca.crt
+  ```
+- **Published release YAML:** set each webhook's `caBundle` in your edited YAML to the output of `base64 < ca.crt | tr -d '\n'`, then apply the file again:
+  ```bash
+  kubectl apply --server-side -f splunk-operator-cluster.yaml
+  ```
+- **Kustomize:** copy `ca.crt` to `config/components/ca-bundle/ca.crt`, then apply the same kustomization you deployed under "Deploy with your CA" above again:
+  ```bash
+  kubectl apply --server-side -k <kustomization-dir>
+  ```
+
+Each of these changes only the `ValidatingWebhookConfiguration`s, so the operator pod is not restarted.
 
 ### Deployment Options
 
@@ -106,7 +135,7 @@ splunkOperator:
     ValidationWebhook: true
 ```
 
-**Note:** This requires the webhook Kubernetes resources (Service, ValidatingWebhookConfiguration, TLS certificates) to be deployed separately.
+**Note:** The chart creates the webhook Service and the `ValidatingWebhookConfiguration` itself, and by default a cert-manager `Issuer` and `Certificate` for the serving certificate; don't deploy them separately. By default cert-manager must already be installed (Option A above). To use your own certificate instead, follow Option B above: `--set splunkOperator.webhook.useCertManager=false --set-file splunkOperator.webhook.caBundle=ca.crt`. See [Helm: Validation webhooks](../deploy/Helm.md#validation-webhooks).
 
 #### Option 2: Use the Webhook-Enabled Kustomize Overlay
 
@@ -136,18 +165,13 @@ kubectl patch deployment splunk-operator-controller-manager -n splunk-operator \
 
 To learn more about the \<required value\> for the `SPLUNK_GENERAL_TERMS` variable, please see the [README](../README.md#splunk-general-terms-acceptance) or Splunk Enterprise 10.x image’s README.
 
-Edit `config/default/kustomization.yaml` to uncomment the webhook-related sections:
+Edit `config/default/kustomization.yaml` and uncomment `- ../webhook` in the `bases` section. The webhook Service, the certificate mount, the serving certificate and its CA injection already come from the `../webhook-server` and `../components/cert-manager` components that the file lists.
 
-1. Uncomment `- ../webhook` in the `bases` section
-2. Uncomment `- ../certmanager` in the `bases` section
-3. Uncomment `- manager_webhook_patch.yaml` in `patchesStrategicMerge`
-4. Uncomment `- webhookcainjection_patch.yaml` in `patchesStrategicMerge`
-5. Uncomment the `vars` section for certificate injection
-
-Then deploy:
+Then deploy with the feature gate on:
 
 ```bash
-make deploy IMG=<your-image> SPLUNK_GENERAL_TERMS="<required value>"
+make deploy IMG=<your-image> SPLUNK_GENERAL_TERMS="<required value>" \
+  MANAGER_EXTRA_ARG="--feature-gates=ValidationWebhook=true"
 ```
 
 ### Legacy: ENABLE_VALIDATION_WEBHOOK Environment Variable

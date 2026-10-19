@@ -140,10 +140,14 @@ patches:
     kind: Deployment
 
 components:
-# The webhook serving certificate, the Service fronting the webhook port, and
-# the Deployment patch that mounts the certificate.
+# The Service fronting the webhook port and the Deployment patch that mounts
+# the serving certificate.
 - ../webhook-server
 # Denies writes through an older API version that would prune fields only the
 # stored version has. Install it only while the CrossVersionFieldProtection
 # gate is on; see docs/develop/WebhookDevelopment.md.
 - ../components/cross-version-field-protection
+# cert-manager issues the serving certificate and injects its CA into the
+# ValidatingWebhookConfigurations. To supply your own certificate, replace it
+# with ../components/ca-bundle; see "Option B" in docs/reference/ValidationWebhook.md.
+- ../components/cert-manager

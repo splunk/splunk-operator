@@ -25,6 +25,7 @@ import (
 	"log/slog"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client/splunk"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -159,6 +160,21 @@ func applyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		eventPublisher.Warning(ctx, splcommon.EventReasonValidateSpecFailed, fmt.Sprintf("Spec validation failed for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Cluster Manager spec validation failed")
 		return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, "Cluster Manager spec validation failed", err)
+	}
+
+	// Node recovery; evaluate live cluster state and drive recovery if enabled
+	if cr.GetDeletionTimestamp() == nil &&
+		config.DefaultMutableFeatureGate.Enabled(config.ClusterManagerNodeRecovery) &&
+		cr.Spec.Recovery != nil && cr.Spec.Recovery.Enabled {
+		requeue, recoveryErr := reconcileNodeRecovery(ctx, client, cr)
+		if recoveryErr != nil {
+			setPhaseAndConditions(enterpriseApi.PhaseError, "Node recovery reconciliation failed")
+			return result, recoveryErr
+		}
+		if requeue {
+			setPhaseAndConditions(enterpriseApi.PhasePending, "Cluster Manager node recovery in progress")
+			return result, nil
+		}
 	}
 
 	// updates status after function completes
