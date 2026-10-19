@@ -57,7 +57,7 @@ The chart creates a `<fullname>-webhook-service` Service that forwards port 443 
 | `<fullname>-cross-version-field-protection` | The `CrossVersionFieldProtection` gate is on (the default) | Writes through an older served API version that would silently drop fields only the stored version can represent. It denies them. |
 | `<fullname>-validating-webhook-configuration` | The `ValidationWebhook` gate is on (off by default) | Writes to the operator's custom resources, checked against each resource's validation rules. |
 
-Set gates under `splunkOperator.featureGates`. The chart also honours a `FEATURE_GATES` or the deprecated `ENABLE_VALIDATION_WEBHOOK` entry in `extraEnvs`, with `splunkOperator.featureGates` taking precedence, in the same order the operator applies them. Either env var must use `value`, not `valueFrom`, because the chart reads it to decide what to render.
+Set gates under `splunkOperator.featureGates`. The chart also honours a `FEATURE_GATES` or the deprecated `ENABLE_VALIDATION_WEBHOOK` entry in `extraEnvs`, with `splunkOperator.featureGates` taking precedence, in the same order the operator applies them. `AllAlpha` and `AllBeta` count as well: for example, `AllBeta: false` turns `CrossVersionFieldProtection` off, and removes its webhook configuration, unless that gate is also set by name. Either env var must use `value`, not `valueFrom`, because the chart reads it to decide what to render.
 
 `<fullname>` is `splunk-operator` unless you set `splunkOperator.nameOverride`. The resources, API versions and operations each webhook covers are listed in its rules; see `helm template` output or `kubectl get validatingwebhookconfiguration <name> -o yaml`.
 
