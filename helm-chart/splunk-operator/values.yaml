@@ -187,7 +187,9 @@ splunkOperator:
   # - ValidationWebhook (off unless set to true) validates writes to the operator's
   #   custom resources.
   # Gates set through a FEATURE_GATES or ENABLE_VALIDATION_WEBHOOK entry in
-  # extraEnvs count too, with featureGates taking precedence as in the operator.
+  # extraEnvs count too, with featureGates taking precedence as in the operator,
+  # and so do AllAlpha and AllBeta (e.g. AllBeta: false turns
+  # CrossVersionFieldProtection off unless it is set by name).
   featureGates: {}
   # featureGates:
   #   ValidationWebhook: true

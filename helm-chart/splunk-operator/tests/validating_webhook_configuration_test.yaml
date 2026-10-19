@@ -432,3 +432,82 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "extraEnvs FEATURE_GATES must set value, not valueFrom"
+
+  - it: should not render the guard when AllBeta is false
+    set:
+      splunkOperator.featureGates:
+        AllBeta: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the guard when AllBeta is false but CrossVersionFieldProtection is true
+    set:
+      splunkOperator.featureGates:
+        AllBeta: false
+        CrossVersionFieldProtection: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: splunk-operator-cross-version-field-protection
+
+  - it: should not render the guard when AllBeta is true but CrossVersionFieldProtection is false
+    set:
+      splunkOperator.featureGates:
+        AllBeta: true
+        CrossVersionFieldProtection: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the v4 configuration when AllAlpha is true
+    set:
+      splunkOperator.featureGates:
+        AllAlpha: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should not render the guard when FEATURE_GATES in extraEnvs sets AllBeta to false
+    set:
+      extraEnvs:
+        - name: FEATURE_GATES
+          value: AllBeta=false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should keep the guard off when FEATURE_GATES sets AllBeta to false and featureGates sets AllBeta to true
+    set:
+      splunkOperator.featureGates:
+        AllBeta: true
+      extraEnvs:
+        - name: FEATURE_GATES
+          value: AllBeta=false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should keep ValidationWebhook on when the deprecated ENABLE_VALIDATION_WEBHOOK is true and AllAlpha is false
+    set:
+      splunkOperator.featureGates:
+        AllAlpha: false
+      extraEnvs:
+        - name: ENABLE_VALIDATION_WEBHOOK
+          value: "true"
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should use the last FEATURE_GATES entry in extraEnvs
+    set:
+      extraEnvs:
+        - name: FEATURE_GATES
+          value: CrossVersionFieldProtection=false
+        - name: FEATURE_GATES
+          value: PostgresController=true
+    asserts:
+      - hasDocuments:
+          count: 1
