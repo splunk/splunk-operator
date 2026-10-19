@@ -35,7 +35,9 @@
     "docker.io/splunk/universalforwarder",
     "docker.io/splunk/splunk",
     "docker.repo.splunkdev.net/noah/noah",
-    "docker.repo.splunkdev.net/noah/noah-migration"
+    "docker.repo.splunkdev.net/noah/noah-migration",
+    "co2/playground/cicd",
+    "cd.splunkdev.com/co2/playground/cicd/mr-stale-cleanup/tool"
   ],
   "customManagers": [
     {
