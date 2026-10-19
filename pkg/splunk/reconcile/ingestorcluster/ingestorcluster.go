@@ -505,7 +505,7 @@ func ensureIngestorDefaults(ctx context.Context, c splcommon.ControllerClient, c
 
 	var configMap resources.DefaultsConfigMap
 	if entries := splunkconfig.IngestorConf(builder); len(entries) > 0 {
-		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, entries, &owner)
+		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, entries, &owner, resources.WithDictionaryConf())
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
@@ -513,7 +513,7 @@ func ensureIngestorDefaults(ctx context.Context, c splcommon.ControllerClient, c
 
 	var secret resources.DefaultsSecret
 	if entries := splunkconfig.IngestorCredentialsConf(builder, qosCfg.AccessKey, qosCfg.SecretKey); len(entries) > 0 {
-		secret, err = configworkflow.EnsureSecret(ctx, c, cr, entries, &owner)
+		secret, err = configworkflow.EnsureSecret(ctx, c, cr, entries, &owner, resources.WithDictionaryConf())
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
