@@ -113,6 +113,9 @@ ci-output/
 helm-chart/splunk-enterprise/charts/*.tgz
 helm-chart/splunk-operator/charts/*.tgz
 
+# CA for a locally built kustomize install with config/components/ca-bundle
+config/components/ca-bundle/ca.crt
+
 # Python bytecode caches
 __pycache__/
 *.pyc

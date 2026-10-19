@@ -22,8 +22,9 @@ bases:
 - ../manager
 # [WEBHOOK] Enabled for opt-in webhook deployment
 - ../webhook
-# [CERTMANAGER] The serving certificate, the webhook Service and the SERVICE_* and
-# CERTIFICATE_* vars all come from the ../webhook-server component below.
+# [CERTMANAGER] The webhook Service and SERVICE_* vars come from the ../webhook-server
+# component, and the serving certificate, CA injection and CERTIFICATE_* vars from
+# the ../components/cert-manager component, both below.
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
 # [METRICS] Expose the controller manager metrics service.
@@ -36,13 +37,11 @@ patchesStrategicMerge:
 
 # [WEBHOOK] Enabled for webhook deployment
 - manager_webhook_patch.yaml
+- webhook_labels_patch.yaml
 
-# [CERTMANAGER] Enabled for CA injection in the admission webhooks
-- webhookcainjection_patch.yaml
-
-# SERVICE_NAMESPACE, SERVICE_NAME, CERTIFICATE_NAMESPACE and CERTIFICATE_NAME are
-# declared by the ../webhook-server component; redeclaring them here is a
-# kustomize error.
+# SERVICE_NAMESPACE and SERVICE_NAME are declared by the ../webhook-server
+# component, and CERTIFICATE_NAMESPACE and CERTIFICATE_NAME by the
+# ../components/cert-manager component; redeclaring them here is a kustomize error.
 
 #patches:
 #- target:
@@ -115,10 +114,14 @@ patches:
     kind: Deployment
 
 components:
-# The webhook serving certificate, the Service fronting the webhook port, and
-# the Deployment patch that mounts the certificate.
+# The Service fronting the webhook port and the Deployment patch that mounts
+# the serving certificate.
 - ../webhook-server
 # Denies writes through an older API version that would prune fields only the
 # stored version has. Install it only while the CrossVersionFieldProtection
 # gate is on; see docs/develop/WebhookDevelopment.md.
 - ../components/cross-version-field-protection
+# cert-manager issues the serving certificate and injects its CA into the
+# ValidatingWebhookConfigurations. To supply your own certificate, replace it
+# with ../components/ca-bundle; see "Option B" in docs/reference/ValidationWebhook.md.
+- ../components/cert-manager
