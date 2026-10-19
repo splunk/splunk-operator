@@ -42,6 +42,50 @@ Installing the ```splunk/splunk-operator``` chart deploys the Splunk Operator wi
 helm show values splunk/splunk-operator
 ```
 
+### Prerequisite: cert-manager
+
+By default the chart requires [cert-manager](https://cert-manager.io/). It creates a cert-manager `Issuer` and `Certificate` for the operator's webhook serving certificate, and cert-manager injects that certificate's CA into the chart's `ValidatingWebhookConfiguration`s. Install cert-manager before the chart. If the cluster does not already run cert-manager, you can install it as a subchart with `--set cert-manager.enabled=true`; don't do this when cert-manager is already installed, because a second copy conflicts.
+
+To supply your own serving certificate instead of using cert-manager, create the certificate Secret, set `splunkOperator.webhook.useCertManager=false` and pass the CA that signed it with `--set-file splunkOperator.webhook.caBundle=ca.crt`. The chart then creates no `Issuer` or `Certificate` and writes the CA into its `ValidatingWebhookConfiguration`s; see [Option B: Use Your Own Certificates](../reference/ValidationWebhook.md#option-b-use-your-own-certificates), including how to rotate the CA.
+
+### Validation webhooks
+
+The chart creates a `<fullname>-webhook-service` Service that forwards port 443 to the operator's webhook server on port 9443. It renders up to two `ValidatingWebhookConfiguration`s pointing at that Service, both with `failurePolicy: Fail`:
+
+| `ValidatingWebhookConfiguration` | Rendered when | What it validates |
+|---|---|---|
+| `<fullname>-cross-version-field-protection` | The `CrossVersionFieldProtection` gate is on (the default) | Writes through an older served API version that would silently drop fields only the stored version can represent. It denies them. |
+| `<fullname>-validating-webhook-configuration` | The `ValidationWebhook` gate is on (off by default) | Writes to the operator's custom resources, checked against each resource's validation rules. |
+
+Set gates under `splunkOperator.featureGates`. The chart also honours a `FEATURE_GATES` or the deprecated `ENABLE_VALIDATION_WEBHOOK` entry in `extraEnvs`, with `splunkOperator.featureGates` taking precedence, in the same order the operator applies them. `AllAlpha` and `AllBeta` count as well: for example, `AllBeta: false` turns `CrossVersionFieldProtection` off, and removes its webhook configuration, unless that gate is also set by name. Either env var must use `value`, not `valueFrom`, because the chart reads it to decide what to render.
+
+`<fullname>` is `splunk-operator` unless you set `splunkOperator.nameOverride`. The resources, API versions and operations each webhook covers are listed in its rules; see `helm template` output or `kubectl get validatingwebhookconfiguration <name> -o yaml`.
+
+For namespaced resources, both configurations only match the namespaces the operator watches. With `splunkOperator.clusterWideAccess=false` that is the in-scope namespace. With cluster-wide access and `splunkOperator.watchNamespaces` set, it is the listed namespaces. Otherwise it is every namespace. Kubernetes doesn't apply a `namespaceSelector` to cluster-scoped resources, so writes to any cluster-scoped resource in a webhook's rules are always sent to it, whatever the operator watches.
+
+#### Turning off cross-version field protection
+
+Set the gate to `false`:
+
+```
+helm upgrade --set splunkOperator.featureGates.CrossVersionFieldProtection=false <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
+```
+
+On Helm this also removes the `<fullname>-cross-version-field-protection` `ValidatingWebhookConfiguration`, so writes through older API versions keep working without the check. No manual cleanup is needed. To set more than one gate, set each one under `splunkOperator.featureGates`, for example in a ```new_values.yaml``` file:
+
+```
+splunkOperator:
+  featureGates:
+    CrossVersionFieldProtection: false
+    ValidationWebhook: true
+```
+
+Then pass the file to Helm:
+
+```
+helm upgrade -f new_values.yaml <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
+```
+
 ### Configuring Splunk Operator deployments
 
 **Note: The `SPLUNK_GENERAL_TERMS` environment variable is set to an empty string by default. This will need to be manually updated to the required value. See [SplunkGeneralTermsMigration.md](../reference/SplunkGeneralTermsMigration.md) for instructions on how to set the variable using helm commands with both the splunk/splunk-operator and splunk/splunk-enterprise charts.**

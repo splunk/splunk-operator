@@ -29,9 +29,13 @@ bases:
 - metrics_service.yaml
 
 components:
-# The webhook serving certificate, the Service fronting the webhook port, and
-# the Deployment patch that mounts the certificate.
+# The Service fronting the webhook port and the Deployment patch that mounts
+# the serving certificate.
 - ../webhook-server
+# cert-manager issues the serving certificate and injects its CA into the
+# ValidatingWebhookConfigurations. Remove it to supply your own certificate; see
+# "Option B" in docs/reference/ValidationWebhook.md.
+- ../components/cert-manager
 
 patchesStrategicMerge:
 - debug-sidecar-patch.yaml

@@ -1,12 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
-# This component is the single owner of the webhook Service, the serving
-# certificate, and the Deployment's certificate mount. Overlays include it and
-# must not declare ../certmanager or the SERVICE_* / CERTIFICATE_* vars themselves.
+# This component is the single owner of the webhook Service and the Deployment's
+# mount of the webhook-server-cert Secret. Overlays include it and must not
+# declare the SERVICE_* vars themselves. The certificate in that Secret comes
+# from the ../components/cert-manager component, or, with ../components/ca-bundle
+# in its place, from a Secret you create.
 resources:
   - service.yaml
-  - ../certmanager
 
 patches:
   - path: manager_webhook_server_patch.yaml
@@ -24,20 +25,3 @@ vars:
     kind: Service
     version: v1
     name: webhook-service
-- name: CERTIFICATE_NAMESPACE
-  objref:
-    kind: Certificate
-    group: cert-manager.io
-    version: v1
-    name: serving-cert
-  fieldref:
-    fieldpath: metadata.namespace
-- name: CERTIFICATE_NAME
-  objref:
-    kind: Certificate
-    group: cert-manager.io
-    version: v1
-    name: serving-cert
-
-configurations:
-  - kustomizeconfig.yaml

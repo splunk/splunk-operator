@@ -119,7 +119,15 @@ func checkIfSmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-	if err != nil || stdErr != "" {
+	if stdErr != "" {
+		// The shell ran but the command produced stderr (e.g. file not found).
+		// On a fresh recovery pod the conftoken does not exist yet, treat as
+		// not yet configured and proceed with setup rather than blocking.
+		logger.InfoContext(ctx, "conftoken not yet present on pod, proceeding with setup", "stderror", stdErr)
+		return nil
+	}
+	if err != nil {
+		// Exec itself failed, pod is not reachable, retry later.
 		eventPublisher.Warning(ctx, splcommon.EventReasonPodExecFailed, fmt.Sprintf("Failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err))
 		return fmt.Errorf("failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}

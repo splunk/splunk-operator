@@ -1,7 +1,9 @@
 {{/*
-The webhook serving certificate, issued by cert-manager, and the Service fronting
-the conversion webhook port.
+The webhook serving certificate, issued by cert-manager unless useCertManager is
+false, and the Service fronting the webhook server port. Every
+ValidatingWebhookConfiguration points at this Service.
 */}}
+{{- if .Values.splunkOperator.webhook.useCertManager }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -28,6 +30,7 @@ spec:
     name: {{ include "splunk-operator.operator.fullname" . }}-selfsigned-issuer
   secretName: {{ .Values.splunkOperator.webhook.certSecretName }}
 ---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -37,9 +40,9 @@ metadata:
 {{- include "splunk-operator.labels" . | nindent 4 }}
 spec:
   ports:
-  - name: conversion
-    port: {{ .Values.splunkOperator.webhook.conversionPort }}
+  - name: webhook-server
+    port: 443
     protocol: TCP
-    targetPort: {{ .Values.splunkOperator.webhook.conversionPort }}
+    targetPort: 9443
   selector:
 {{- include "splunk-operator.selectorLabels" . | nindent 4 }}

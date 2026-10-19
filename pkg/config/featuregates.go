@@ -50,6 +50,11 @@ const (
 	// denies writes through an older served CRD version when the stored object
 	// has fields that version cannot represent.
 	CrossVersionFieldProtection featuregate.Feature = "CrossVersionFieldProtection"
+	// ClusterManagerNodeRecovery gates automatic recovery of a stale ClusterManager
+	// pod following a node failure. When enabled, the controller observes node health
+	// and deletes the stale pod after the configured grace period so the StatefulSet
+	// can reschedule it on a healthy node. Only applies to ephemeral storage configurations.
+	ClusterManagerNodeRecovery featuregate.Feature = "ClusterManagerNodeRecovery"
 )
 
 // FeatureGatesEnvVar sets feature gates in the same Key=bool,... format as
@@ -66,6 +71,7 @@ var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	CertManagement:              {Default: true, PreRelease: featuregate.Beta},
 	CertManagerCertGeneration:   {Default: true, PreRelease: featuregate.Beta},
 	CrossVersionFieldProtection: {Default: true, PreRelease: featuregate.Beta},
+	ClusterManagerNodeRecovery:  {Default: false, PreRelease: featuregate.Alpha},
 }
 
 var DefaultMutableFeatureGate featuregate.MutableFeatureGate = featuregate.NewFeatureGate()
