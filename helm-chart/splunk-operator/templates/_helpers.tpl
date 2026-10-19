@@ -87,38 +87,58 @@ Produces: Key1=true,Key2=false
 {{/*
 "true" when a feature gate is on, as the operator will see it. The chart renders a
 failurePolicy Fail webhook only while its gate is on, so it must agree with the
-operator however the gate was set, or matching writes are rejected. Each source
-below overrides the one before, in the order the operator applies them: the
-gate's default; ENABLE_VALIDATION_WEBHOOK=true in extraEnvs (deprecated,
-ValidationWebhook only); FEATURE_GATES in extraEnvs; splunkOperator.featureGates
-(rendered as --feature-gates). Call with (dict "ctx" . "gate" "<name>" "default" <bool>).
+operator however the gate was set, or matching writes are rejected.
+The operator applies three passes in order, each starting from the state the last
+left (k8s.io/component-base featuregate): ENABLE_VALIDATION_WEBHOOK=true in
+extraEnvs (deprecated, sets ValidationWebhook); FEATURE_GATES in extraEnvs;
+splunkOperator.featureGates (rendered as --feature-gates). In each pass a key
+naming the gate sets it, and All<stage> (AllAlpha, AllBeta) sets it only if no
+earlier pass has. A gate nothing sets keeps its default.
+Call with (dict "ctx" . "gate" "<name>" "stage" "<Alpha|Beta|GA>" "default" <bool>);
+stage and default must match defaultFeatureGates in pkg/config/featuregates.go.
 */}}
 {{- define "splunk-operator.featureGateEnabled" -}}
 {{- $gate := .gate -}}
+{{- $all := printf "All%s" .stage -}}
 {{- $values := .ctx.Values -}}
 {{- $truthy := list "1" "t" "true" -}}
-{{- $enabled := .default -}}
+{{- $legacy := dict -}}
+{{- $env := dict -}}
 {{- range ($values.extraEnvs | default list) -}}
 {{- if and (has .name (list "FEATURE_GATES" "ENABLE_VALIDATION_WEBHOOK")) (hasKey . "valueFrom") -}}
 {{- fail (printf "extraEnvs %s must set value, not valueFrom: the chart reads it to decide which ValidatingWebhookConfigurations to render; set splunkOperator.featureGates instead" .name) -}}
 {{- end -}}
-{{- if and (eq $gate "ValidationWebhook") (eq .name "ENABLE_VALIDATION_WEBHOOK") (eq (toString .value) "true") -}}
-{{- $enabled = true -}}
+{{- /* A later env entry with the same name replaces an earlier one. */}}
+{{- if eq .name "ENABLE_VALIDATION_WEBHOOK" -}}
+{{- $legacy = dict -}}
+{{- if eq (toString .value) "true" -}}
+{{- $_ := set $legacy "ValidationWebhook" true -}}
 {{- end -}}
 {{- end -}}
-{{- range ($values.extraEnvs | default list) -}}
 {{- if eq .name "FEATURE_GATES" -}}
+{{- $env = dict -}}
 {{- range splitList "," (toString .value) -}}
 {{- $pair := splitList "=" (trim .) -}}
-{{- if and (eq (len $pair) 2) (eq (trim (first $pair)) $gate) -}}
-{{- $enabled = has (lower (trim (last $pair))) $truthy -}}
+{{- if eq (len $pair) 2 -}}
+{{- $_ := set $env (trim (first $pair)) (has (lower (trim (last $pair))) $truthy) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
-{{- $gates := $values.splunkOperator.featureGates | default dict -}}
-{{- if hasKey $gates $gate -}}
-{{- $enabled = has (lower (toString (index $gates $gate))) $truthy -}}
+{{- $flags := dict -}}
+{{- range $name, $value := ($values.splunkOperator.featureGates | default dict) -}}
+{{- $_ := set $flags $name (has (lower (toString $value)) $truthy) -}}
+{{- end -}}
+{{- $isSet := false -}}
+{{- $enabled := .default -}}
+{{- range (list $legacy $env $flags) -}}
+{{- if hasKey . $gate -}}
+{{- $enabled = index . $gate -}}
+{{- $isSet = true -}}
+{{- else if and (not $isSet) (hasKey . $all) -}}
+{{- $enabled = index . $all -}}
+{{- $isSet = true -}}
+{{- end -}}
 {{- end -}}
 {{- if $enabled -}}
 true
@@ -126,10 +146,10 @@ true
 {{- end }}
 
 {{/*
-"true" when the CrossVersionFieldProtection gate is on. The operator defaults it on.
+"true" when the CrossVersionFieldProtection gate is on. Beta, defaults on.
 */}}
 {{- define "splunk-operator.crossVersionFieldProtectionEnabled" -}}
-{{- include "splunk-operator.featureGateEnabled" (dict "ctx" . "gate" "CrossVersionFieldProtection" "default" true) -}}
+{{- include "splunk-operator.featureGateEnabled" (dict "ctx" . "gate" "CrossVersionFieldProtection" "stage" "Beta" "default" true) -}}
 {{- end }}
 
 {{/*
@@ -159,10 +179,10 @@ A bundle the API server cannot use would block every write the webhooks match.
 {{- end }}
 
 {{/*
-"true" when the ValidationWebhook gate is on. The operator defaults it off.
+"true" when the ValidationWebhook gate is on. Alpha, defaults off.
 */}}
 {{- define "splunk-operator.validationWebhookEnabled" -}}
-{{- include "splunk-operator.featureGateEnabled" (dict "ctx" . "gate" "ValidationWebhook" "default" false) -}}
+{{- include "splunk-operator.featureGateEnabled" (dict "ctx" . "gate" "ValidationWebhook" "stage" "Alpha" "default" false) -}}
 {{- end }}
 
 {{/*
