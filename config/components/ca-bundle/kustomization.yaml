@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Use instead of ../cert-manager to supply your own webhook serving certificate.
+# Put the PEM CA that signed it in ca.crt next to this file (several concatenated
+# CAs are allowed, e.g. while rotating), and create the webhook-server-cert Secret
+# yourself. List it after the components that add ValidatingWebhookConfigurations;
+# see "Option B" in docs/reference/ValidationWebhook.md.
+secretGenerator:
+- name: webhook-ca-bundle
+  files:
+  - ca.crt
+  options:
+    disableNameSuffixHash: true
+    annotations:
+      # Only a source for the replacement below; never applied to the cluster.
+      config.kubernetes.io/local-config: "true"
+
+replacements:
+- source:
+    kind: Secret
+    name: webhook-ca-bundle
+    fieldPath: data.[ca.crt]
+  targets:
+  - select:
+      group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+    fieldPaths:
+    - webhooks.*.clientConfig.caBundle
+    options:
+      create: true
