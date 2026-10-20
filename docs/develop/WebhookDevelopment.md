@@ -132,8 +132,9 @@ If your CRD doesn't need context-aware validation, you can omit `ValidateCreateW
 - `config/default` (and `kustomization-cluster.yaml` / `kustomization-namespace.yaml`), and `config/default-with-webhook/kustomization.yaml` include all three components; `config/debug` includes all but the guard. The namespace-scoped variant of `config/default` sets the guard's `namespaceSelector` to the operator's namespace.
 - The v4 validation entry (`config/webhook/manifests.yaml`) is only in `config/default-with-webhook`.
 - The Helm chart renders the same two entries in `helm-chart/splunk-operator/templates/validating_webhook_configuration.yaml`, each gated on its feature gate in `splunkOperator.featureGates`; keep its rules in sync with the kustomize manifests. See [Helm](../deploy/Helm.md#validation-webhooks).
+- The OLM bundle (`make bundle`) builds `config/manifests`, which takes the guard from `config/default` and sets its `failurePolicy` to `Ignore`. `operator-sdk generate bundle` turns it into a `ValidatingAdmissionWebhook` entry under `webhookdefinitions` in the CSV. OLM sets the webhook's `namespaceSelector` to the `OperatorGroup`'s target namespaces, so the bundle supports all four install modes. See [Turning it off under OLM](#turning-it-off-under-olm).
 
-Because `failurePolicy` is `Fail`, a `cross-version-field-protection` `ValidatingWebhookConfiguration` that is installed with no webhook server answering it makes every matching write fail. Install or remove it together with the `CrossVersionFieldProtection` gate. `ValidationWebhook` is independent of both.
+For kustomize and Helm installs, because `failurePolicy` is `Fail`, a `cross-version-field-protection` `ValidatingWebhookConfiguration` that is installed with no webhook server answering it makes every matching write fail. Install or remove it together with the `CrossVersionFieldProtection` gate. `ValidationWebhook` is independent of both.
 
 ## Turning it off with `make deploy`
 
@@ -168,3 +169,21 @@ For an install applied from `splunk-operator-cluster.yaml` or `splunk-operator-n
 2. Add `--feature-gates=CrossVersionFieldProtection=false` to the manager container's `args`.
 
 Do step 1 before step 2. If the webhook server stops answering while the `ValidatingWebhookConfiguration` is still installed, matching writes fail until it is removed.
+
+## Turning it off under OLM
+
+OLM installs the guard's webhook from the CSV, and recreates or overwrites it on every install or upgrade, so it can't be removed. Turn the gate off with the `FEATURE_GATES` env var in the `Subscription` instead:
+
+```yaml
+spec:
+  config:
+    env:
+      - name: FEATURE_GATES
+        value: CrossVersionFieldProtection=false
+```
+
+With `ValidationWebhook` also off, which is its default, the webhook server doesn't start. The webhook's `failurePolicy` is `Ignore` in the bundle, so the API server then allows v3 writes. If `FEATURE_GATES` already sets other gates, add `CrossVersionFieldProtection=false` to the same comma-separated value.
+
+## Under OLM the guard fails open
+
+Because the bundle's `failurePolicy` is `Ignore`, the guard protects only while the API server can reach the operator on port 9443. While the operator restarts, or if a `NetworkPolicy` blocks that traffic, v3 writes go through unguarded and can drop v4-only fields with no error. If your cluster uses default-deny network policies, allow ingress from the API server to the operator pod on port 9443.
