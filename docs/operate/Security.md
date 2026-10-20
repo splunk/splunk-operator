@@ -235,4 +235,8 @@ In Kubernetes, sensitive information such as passwords, OAuth tokens, and ssh ke
 
 ## Using a FIPS 140-3 Enabled Cluster
 
-The Splunk Operator for Kubernetes is fully certified to run on FIPS 140-3 compliant clusters. No modifications to the provided container images are required. To get started, simply create a Kubernetes cluster with FIPS-compliant nodes and follow the standard [installation guide](https://github.com/splunk/splunk-operator/blob/main/docs/deploy/Install.md) to deploy the operator.
+The Splunk Operator for Kubernetes has been tested on FIPS 140-3 enabled Kubernetes clusters. No modifications to the provided container images are required. To get started, create a Kubernetes cluster with FIPS-compliant nodes and follow the standard [installation guide](https://github.com/splunk/splunk-operator/blob/main/docs/deploy/Install.md) to deploy the operator.
+
+The operator binary is also built using Go's native FIPS 140-3 build mode (`GOFIPS140=v1.0.0`), which links in the CMVP-validated Go Cryptographic Module (Certificate #5247). See [Go's FIPS 140-3 documentation](https://go.dev/doc/security/fips140) for details.
+
+The Splunk Operator is FIPS 140-3 compatible. It is not FIPS 140-3 certified or compliant.

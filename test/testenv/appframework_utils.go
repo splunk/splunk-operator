@@ -416,6 +416,35 @@ func (testenvInstance *TestCaseEnv) GetAppDeploymentInfo(ctx context.Context, de
 
 }
 
+// AppFrameworkLivenessProbe returns a liveness probe tolerant of the splunkd
+// restart that installing an app forces. During that restart splunkd's
+// management port is down and the exec liveness probe (curl to :8089) fails; the
+// operator default (timeout 30s, period 30s, failureThreshold 3) allows only
+// ~90s before kubelet SIGKILLs the container. A large app such as Enterprise
+// Security restarts for several minutes on slower (graviton) nodes, so the
+// default kills it mid-install, the install rolls back, and the CR never reaches
+// Ready. A higher failureThreshold (~10 min) keeps the container alive through
+// the restart while staying under the test node timeout.
+func AppFrameworkLivenessProbe() *enterpriseApi.Probe {
+	return &enterpriseApi.Probe{
+		InitialDelaySeconds: 30,
+		TimeoutSeconds:      30,
+		PeriodSeconds:       30,
+		FailureThreshold:    20,
+	}
+}
+
+// AppFrameworkStartupProbe returns a startup probe tolerant of a slow initial
+// splunkd boot on slower (graviton) nodes, matching AppFrameworkLivenessProbe.
+func AppFrameworkStartupProbe() *enterpriseApi.Probe {
+	return &enterpriseApi.Probe{
+		InitialDelaySeconds: 40,
+		TimeoutSeconds:      30,
+		PeriodSeconds:       30,
+		FailureThreshold:    20,
+	}
+}
+
 // GenerateAppFrameworkSpec Generate Appframework spec
 func (testenvInstance *TestCaseEnv) GenerateAppFrameworkSpec(ctx context.Context, volumeName string, scope string, appSourceName string, s3TestDir string, pollInterval int) enterpriseApi.AppFrameworkSpec {
 	volumeSpec := testenvInstance.GenerateVolumeSpecForProvider(ctx, volumeName)
