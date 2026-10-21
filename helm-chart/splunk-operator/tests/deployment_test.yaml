@@ -25,7 +25,27 @@ tests:
           path: spec.template.spec.containers[0].args
           value:
             - --leader-elect
-            - --pprof
+            - --pprof=false
+
+  - it: should enable pprof on the configured dedicated listener
+    set:
+      splunkOperator.pprof.enabled: true
+      splunkOperator.pprof.bindAddress: 127.0.0.1:16060
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --leader-elect
+            - --pprof=true
+            - --pprof-bind-address=127.0.0.1:16060
+
+  - it: should require a bind address when pprof is enabled
+    set:
+      splunkOperator.pprof.enabled: true
+      splunkOperator.pprof.bindAddress: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: splunkOperator.pprof.bindAddress is required when pprof is enabled
 
   - it: should include feature-gates arg with a single gate
     set:
@@ -60,9 +80,9 @@ tests:
           path: spec.template.spec.containers[0].args
           value:
             - --leader-elect
-            - --pprof
+            - --pprof=false
 
-  - it: should always include --leader-elect and --pprof even with feature gates
+  - it: should always include --leader-elect and the pprof state even with feature gates
     set:
       splunkOperator.featureGates:
         ValidationWebhook: true
@@ -72,7 +92,7 @@ tests:
           content: --leader-elect
       - contains:
           path: spec.template.spec.containers[0].args
-          content: --pprof
+          content: --pprof=false
 
   - it: should set the command to /manager
     asserts:
