@@ -75,6 +75,14 @@ splunkOperator:
   hostPID: false
   hostIPC: false
 
+  # Enable Go runtime profiling on a dedicated listener. The default loopback
+  # address keeps pprof off the pod network; use kubectl port-forward to collect
+  # profiles. A non-loopback address intentionally overrides this secure default
+  # and requires external authentication and network access controls.
+  pprof:
+    enabled: false
+    bindAddress: 127.0.0.1:6060
+
   # Define liveness probe to check if manager container is running
   # reference: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#types-of-probe
   livenessProbe:
