@@ -131,9 +131,29 @@ func TestValidationWebhookRegistered(t *testing.T) {
 	}
 }
 
+func TestKVServiceRegistered(t *testing.T) {
+	all := DefaultMutableFeatureGate.GetAll()
+	spec, ok := all[KVService]
+	if !ok {
+		t.Fatal("KVService gate not registered")
+	}
+	if spec.Default != false {
+		t.Errorf("KVService default: got %v, want false", spec.Default)
+	}
+	if spec.PreRelease != featuregate.Alpha {
+		t.Errorf("KVService prerelease: got %v, want Alpha", spec.PreRelease)
+	}
+}
+
 func TestValidationWebhookOffByDefault(t *testing.T) {
 	if DefaultMutableFeatureGate.Enabled(ValidationWebhook) {
 		t.Error("ValidationWebhook should be disabled by default (Alpha)")
+	}
+}
+
+func TestKVServiceOffByDefault(t *testing.T) {
+	if DefaultMutableFeatureGate.Enabled(KVService) {
+		t.Error("KVService should be disabled by default (Alpha)")
 	}
 }
 

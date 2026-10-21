@@ -80,6 +80,8 @@ func enterpriseObjCopier(dst, src *client.Object) bool {
 		*dstP.(*enterpriseApi.MonitoringConsole) = *srcP.(*enterpriseApi.MonitoringConsole)
 	case *enterpriseApi.NoahCluster:
 		*dstP.(*enterpriseApi.NoahCluster) = *srcP.(*enterpriseApi.NoahCluster)
+	case *enterpriseApi.KVService:
+		*dstP.(*enterpriseApi.KVService) = *srcP.(*enterpriseApi.KVService)
 	default:
 		return false
 	}
@@ -141,6 +143,8 @@ func enterpriseObjListCopier(dst, src *client.ObjectList) bool {
 		*dstP.(*enterpriseApi.StandaloneList) = *srcP.(*enterpriseApi.StandaloneList)
 	case *enterpriseApi.MonitoringConsoleList:
 		*dstP.(*enterpriseApi.MonitoringConsoleList) = *srcP.(*enterpriseApi.MonitoringConsoleList)
+	case *enterpriseApi.KVServiceList:
+		*dstP.(*enterpriseApi.KVServiceList) = *srcP.(*enterpriseApi.KVServiceList)
 	default:
 		return false
 	}
@@ -220,7 +224,7 @@ func copyMockObject(dst, src *client.Object) {
 
 // copyMockObjectList uses the global MockObjectCopiers to perform the typed copy of a client.Object from src to dst
 func copyMockObjectList(dst, src *client.ObjectList) {
-	for n := range MockObjectCopiers {
+	for n := range MockObjectListCopiers {
 		if MockObjectListCopiers[n](dst, src) {
 			return
 		}
@@ -753,6 +757,16 @@ func testReconcileForResource(t *testing.T, c *MockClient, methodPlus string, re
 			Group:   "enterprise.splunk.com",
 			Version: "v4",
 			Kind:    "SearchHeadCluster",
+		}
+		cr.SetGroupVersionKind(gvk)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.KVService:
+		cr := resource.(*enterpriseApi.KVService)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "KVService",
 		}
 		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)

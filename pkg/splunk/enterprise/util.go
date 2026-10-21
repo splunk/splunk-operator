@@ -37,6 +37,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -1692,4 +1693,58 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	cr.SetAnnotations(annotations)
 	err := c.Update(ctx, cr)
 	return err
+}
+
+// DeleteKVServiceCR removes the current CR as an owner of the shared KVService CR.
+// If the shared KVService has no owners left, it is deleted.
+func DeleteKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject) error {
+	logger := logging.FromContext(ctx).With("func", "DeleteKVServiceCR", "kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	kvService := &enterpriseApi.KVService{}
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetKVServiceName(),
+	}
+	if err := c.Get(ctx, namespacedName, kvService); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		logger.ErrorContext(ctx, "failed to get KVService CR", "error", err)
+		return err
+	}
+
+	if kvService.GetUID() == cr.GetUID() {
+		return nil
+	}
+
+	ownerRefs := kvService.GetOwnerReferences()
+	remainingRefs := removeOwnerReference(ownerRefs, cr)
+	if len(remainingRefs) == len(ownerRefs) {
+		return nil
+	}
+
+	if len(remainingRefs) == 0 {
+		if err := c.Delete(ctx, kvService); err != nil && !k8serrors.IsNotFound(err) {
+			logger.ErrorContext(ctx, "failed to delete KVService CR", "error", err)
+			return err
+		}
+		return nil
+	}
+
+	kvService.SetOwnerReferences(remainingRefs)
+	if err := c.Update(ctx, kvService); err != nil {
+		logger.ErrorContext(ctx, "failed to update KVService owner references", "error", err)
+		return err
+	}
+	return nil
+}
+
+func removeOwnerReference(ownerRefs []metav1.OwnerReference, cr splcommon.MetaObject) []metav1.OwnerReference {
+	remainingRefs := make([]metav1.OwnerReference, 0, len(ownerRefs))
+	for _, ref := range ownerRefs {
+		if ref.UID != cr.GetUID() {
+			remainingRefs = append(remainingRefs, ref)
+		}
+	}
+	return remainingRefs
 }

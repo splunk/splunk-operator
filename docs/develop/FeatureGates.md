@@ -65,6 +65,7 @@ If a gate is set in both the env var and `--feature-gates`, the flag's value is 
 | ----------------------------- | ------- | ----- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
 | `ValidationWebhook`           | `false` | Alpha | v3.2.0 | Centralized validation webhook server for CR admission                                                                  |
 | `PostgresController`          | `false` | Alpha | ?      | PostgresCluster, PostgresClusterClass, and PostgresDatabase controllers and CRDs                                        |
+| `KVService`                   | `false` | Alpha | ?      | KVService controller for the KVService custom resource                                                                 |
 | `CertManagement`              | `true`  | Beta  | ?      | spec.certs[] mounting/rotation across Splunk Enterprise CR types                                                        |
 | `CertManagerCertGeneration`   | `true`  | Beta  | ?      | Auto-generation of missing user-declared cert secrets via cert-manager                                                  |
 | `CrossVersionFieldProtection` | `true`  | Beta  | ?      | Validation webhook denies writes through an older CRD version that would drop fields only a newer version can represent |
