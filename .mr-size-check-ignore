@@ -1,0 +1,11 @@
+# Paths excluded from the mr-size-check changed-line count (see gitlab-ci/README.md).
+# Read from the MR target branch, so edits take effect only after they merge.
+# Comments must be on their own line.
+
+# make manifests
+config/crd/bases/
+# make generate
+**/zz_generated*.go
+# make bundle
+bundle/manifests/
+go.sum
