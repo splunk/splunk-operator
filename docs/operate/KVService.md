@@ -8,6 +8,12 @@ The controller manages a Deployment and an HTTP Service on port 8066. Helm
 namespace and cluster roles, and the OLM operator permissions, include access to
 the KVService resource, its status and finalizers, and Deployments.
 
+The Helm chart creates KVService editor and viewer roles only when the KVService
+feature gate is enabled. Their names use the chart fullname, which includes the
+Helm release name unless overridden. With `splunkOperator.clusterWideAccess=false`,
+these are Roles in the release namespace; otherwise they are ClusterRoles. These
+roles are not bound to users, groups, or service accounts by the chart.
+
 ## Configuration and health
 
 - Inline `spec.defaults` is stored in an owned ConfigMap before the Deployment

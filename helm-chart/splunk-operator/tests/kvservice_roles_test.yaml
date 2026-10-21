@@ -1,0 +1,132 @@
+suite: KVService editor and viewer roles
+templates:
+  - templates/rbac/kvservice_editor_role.yaml
+  - templates/rbac/kvservice_viewer_role.yaml
+release:
+  name: verify
+  namespace: team-a
+tests:
+  - it: should omit the roles by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render release-specific Roles in namespace-only mode
+    set:
+      splunkOperator.clusterWideAccess: false
+      splunkOperator.featureGates.KVService: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Role
+      - equal:
+          path: metadata.namespace
+          value: team-a
+      - matchRegex:
+          path: metadata.name
+          pattern: ^verify-splunk-operator-kvservice-(editor|viewer)-role$
+
+  - it: should render release-specific ClusterRoles in cluster-wide mode
+    set:
+      splunkOperator.clusterWideAccess: true
+      splunkOperator.featureGates.KVService: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterRole
+      - notExists:
+          path: metadata.namespace
+      - matchRegex:
+          path: metadata.name
+          pattern: ^verify-splunk-operator-kvservice-(editor|viewer)-role$
+
+  - it: should use a different name for another release
+    release:
+      name: another
+    set:
+      splunkOperator.featureGates.KVService: true
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ^another-splunk-operator-kvservice-(editor|viewer)-role$
+
+  - it: should respect the chart fullname override
+    set:
+      fullnameOverride: custom-operator
+      splunkOperator.featureGates.KVService: true
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ^custom-operator-kvservice-(editor|viewer)-role$
+
+  - it: should omit the roles when explicitly disabled
+    set:
+      splunkOperator.featureGates.KVService: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the roles when enabled through the environment
+    set:
+      extraEnvs:
+        - name: FEATURE_GATES
+          value: KVService=true
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should omit the roles when a flag overrides the environment
+    set:
+      splunkOperator.featureGates.KVService: false
+      extraEnvs:
+        - name: FEATURE_GATES
+          value: KVService=true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the roles when all alpha features are enabled
+    set:
+      splunkOperator.featureGates.AllAlpha: true
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should omit the roles when KVService overrides AllAlpha
+    set:
+      splunkOperator.featureGates.AllAlpha: true
+      splunkOperator.featureGates.KVService: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should preserve the KVService resource rules
+    set:
+      splunkOperator.featureGates.KVService: true
+    asserts:
+      - equal:
+          path: rules[0].apiGroups
+          value:
+            - enterprise.splunk.com
+      - equal:
+          path: rules[0].resources
+          value:
+            - kvservices
+      - equal:
+          path: rules[1].resources
+          value:
+            - kvservices/status
+      - equal:
+          path: rules[1].verbs
+          value:
+            - get
+      - equal:
+          path: rules[0].verbs
+          value: [create, delete, get, list, patch, update, watch]
+        template: templates/rbac/kvservice_editor_role.yaml
+      - equal:
+          path: rules[0].verbs
+          value: [get, list, watch]
+        template: templates/rbac/kvservice_viewer_role.yaml
