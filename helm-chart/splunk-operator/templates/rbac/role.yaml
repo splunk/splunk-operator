@@ -480,4 +480,42 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - kvservices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - kvservices/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - kvservices/status
+  verbs:
+  - get
+  - patch
+  - update
 {{- end }}

@@ -22,6 +22,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -45,6 +46,9 @@ var _ = Describe("KVService Controller", func() {
 
 		BeforeEach(func() {
 			Expect(os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")).To(Succeed())
+			Expect(k8sClient.Create(ctx, &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "kvservice-test-sa", Namespace: "default"},
+			})).To(Succeed())
 			By("creating the custom resource for the Kind KVService")
 			err := k8sClient.Get(ctx, typeNamespacedName, kvservice)
 			if err != nil && errors.IsNotFound(err) {
@@ -62,7 +66,7 @@ var _ = Describe("KVService Controller", func() {
 							Spec: enterprisev4.Spec{
 								ImagePullPolicy: "IfNotPresent",
 							},
-							ServiceAccount: "default",
+							ServiceAccount: "kvservice-test-sa",
 							LicenseURL:     "file://splunk.lic",
 							DefaultsURL:    "file://splunk-defaults.yml",
 						},
@@ -81,6 +85,9 @@ var _ = Describe("KVService Controller", func() {
 
 			By("Cleanup the specific resource instance KVService")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "kvservice-test-sa", Namespace: "default"},
+			})).To(Succeed())
 			Expect(os.Unsetenv("SPLUNK_GENERAL_TERMS")).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {

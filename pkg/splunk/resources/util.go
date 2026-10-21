@@ -305,6 +305,9 @@ func GetSplunkDefaults(identifier, namespace string, instanceType splcommon.Inst
 
 // GetSplunkPorts returns ports for a Splunk instance.
 func GetSplunkPorts(instanceType splcommon.InstanceType) map[string]int {
+	if instanceType == splcommon.SplunkKVService {
+		return map[string]int{splutil.GetPortName("splunkv", "http"): splcommon.KVServicePort}
+	}
 	result := map[string]int{
 		splutil.GetPortName("splunkweb", "http"): 8000,
 		splutil.GetPortName("splunkd", "https"):  8089,
