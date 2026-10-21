@@ -79,7 +79,7 @@ types. Each CR-specific sub-package owns a thin orchestration loop:
 5. Write status and decide requeue
 
 Sub-packages: `clustermanager/`, `indexercluster/`, `ingestorcluster/`,
-`licensemanager/`, `monitoringconsole/`, `searchheadcluster/`, `standalone/`
+`kvservice/`, `licensemanager/`, `monitoringconsole/`, `searchheadcluster/`, `standalone/`
 
 ### `workflow/<domain>/`
 

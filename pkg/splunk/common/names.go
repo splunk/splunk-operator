@@ -154,3 +154,6 @@ func GetLabelTypes() map[string]string {
 		"instance":  "app.kubernetes.io/instance",
 	}
 }
+
+// KVServicePort is the KVService HTTP port.
+const KVServicePort = 8066

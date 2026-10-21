@@ -20,16 +20,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	"github.com/splunk/splunk-operator/pkg/splunk/reconcile/kvservice"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -76,50 +74,28 @@ type KVServiceReconciler struct {
 func (r *KVServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "KVService")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "KVService")
-
-	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("kvservice", req.NamespacedName)
-
-	// Fetch the KVService
-	instance := &enterpriseApi.KVService{}
-	err := r.Get(ctx, req.NamespacedName, instance)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			// Request object not found, could have been deleted after
-			// reconcile request.  Owned objects are automatically
-			// garbage collected. For additional cleanup logic use
-			// finalizers.  Return and don't requeue
-			return ctrl.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load kvservice data")
-	}
-
-	// ensure that APIVersion is defined (this gets wiped by client.Get)
-	instance.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("KVService"))
-
-	// If the reconciliation is paused, requeue
-	annotations := instance.GetAnnotations()
-	if annotations != nil {
-		if _, ok := annotations[enterpriseApi.KVServicePausedAnnotation]; ok {
-			reqLogger.Info("reconciliation paused", "annotation", enterpriseApi.KVServicePausedAnnotation)
-			return ctrl.Result{Requeue: true, RequeueAfter: splcommon.PauseRetryDelay}, nil
-		}
-	}
-
-	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
-
-	result, err := ApplyKVService(ctx, r.Client, r.Recorder, instance)
-	if result.Requeue && result.RequeueAfter != 0 {
-		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
-	}
-
-	return result, err
+	return kvservice.Apply(ctx, r.Client, req.NamespacedName, r.Recorder)
 }
-
-// ApplyKVService adding to handle unit test case
-var ApplyKVService = func(ctx context.Context, client client.Client, recorder record.EventRecorder, instance *enterpriseApi.KVService) (reconcile.Result, error) {
-	return enterprise.ApplyKVService(ctx, client, recorder, instance)
+func (r *KVServiceReconciler) mapConfigMapToKVServices(ctx context.Context, obj client.Object) []reconcile.Request {
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		return nil
+	}
+	var list enterpriseApi.KVServiceList
+	if err := r.List(ctx, &list, client.InNamespace(cm.Namespace)); err != nil {
+		log.FromContext(ctx).Error(err, "could not list KVServices for ConfigMap", "configMap", cm.Name)
+		return nil
+	}
+	var requests []reconcile.Request
+	for _, cr := range list.Items {
+		for _, volume := range cr.Spec.Volumes {
+			if common.VolumeReferencesConfigMap(volume, cm.Name) {
+				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}})
+				break
+			}
+		}
+	}
+	return requests
 }
 
 func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -160,6 +136,7 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.KVService{},
 			)).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToKVServices)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).

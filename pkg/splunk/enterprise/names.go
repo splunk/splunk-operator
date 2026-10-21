@@ -85,13 +85,6 @@ const (
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
 
-	// default docker image used for KVService instances
-	defaultKVServiceImage = "kvstore/kvservice:latest"
-
-	// defaultKVServicePort is the KVService HTTP port.
-	defaultKVServicePort = 8066
-	splunkKVServicePort  = "splunkv"
-
 	// identifier used for S3 access key
 	s3AccessKey = "s3_access_key"
 
@@ -338,9 +331,4 @@ func GetStartupScriptName() string {
 // GetManagerConfigMapName returns the name of manager configmap
 func GetManagerConfigMapName(namePrefix string) string {
 	return fmt.Sprintf(managerConfigMapTemplateStr, namePrefix)
-}
-
-// GetKVServiceName returns the fixed KVService CR name.
-func GetKVServiceName() string {
-	return splcommon.KVServiceCrName
 }
