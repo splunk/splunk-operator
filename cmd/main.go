@@ -30,7 +30,6 @@ import (
 	"github.com/spf13/pflag"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
 	"github.com/splunk/splunk-operator/pkg/logging"
 	"github.com/splunk/splunk-operator/pkg/splunk/validation"
@@ -51,7 +50,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -70,6 +68,11 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+)
+
+const (
+	defaultPprofBindAddress  = "127.0.0.1:6060"
+	disabledPprofBindAddress = "0"
 )
 
 // webhookCertDir is where the webhook server expects tls.crt and tls.key.
@@ -92,6 +95,7 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var pprofActive bool
+	var pprofAddr string
 
 	// Structured logging flags
 	var logLevel string
@@ -112,7 +116,9 @@ func main() {
 	pflag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	pflag.BoolVar(&pprofActive, "pprof", true, "Enable pprof endpoint")
+	pflag.BoolVar(&pprofActive, "pprof", false, "Enable the pprof endpoint on a dedicated listener.")
+	pflag.StringVar(&pprofAddr, "pprof-bind-address", defaultPprofBindAddress,
+		"The address the pprof endpoint binds to when --pprof is enabled. Defaults to loopback; a non-loopback address overrides the secure default and requires access controls.")
 
 	// Structured logging flags (can also be set via LOG_LEVEL, LOG_FORMAT, LOG_ADD_SOURCE env vars)
 	pflag.StringVar(&logLevel, "log-level", "", "log level: debug, info, warn, error (overrides LOG_LEVEL env var)")
@@ -236,6 +242,7 @@ func main() {
 		Metrics:                metricsServerOptions,
 		Scheme:                 scheme,
 		HealthProbeBindAddress: probeAddr,
+		PprofBindAddress:       resolvePprofBindAddress(pprofActive, pprofAddr),
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "270bec8c.splunk.com",
 		LeaseDuration:          &leaseDuration,
@@ -417,10 +424,6 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
-	if err := customSetupEndpoints(pprofActive, mgr); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
@@ -429,13 +432,10 @@ func main() {
 	}
 }
 
-// Note that these endpoints meant to be sensitive and shouldn't be exposed publicly.
-func customSetupEndpoints(pprofActive bool, mgr manager.Manager) error {
-	if pprofActive {
-		if err := debug.RegisterEndpoint(mgr.AddMetricsServerExtraHandler, nil); err != nil {
-			setupLog.Error(err, "Unable to register pprof endpoint")
-			return err
-		}
+func resolvePprofBindAddress(enabled bool, bindAddress string) string {
+	if !enabled {
+		return disabledPprofBindAddress
 	}
-	return nil
+
+	return bindAddress
 }

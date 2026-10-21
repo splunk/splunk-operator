@@ -720,7 +720,7 @@ spec:
                 - --metrics-bind-address=:8443
                 - --leader-elect
                 - --health-probe-bind-address=:8081
-                - --pprof
+                - --pprof=false
                 - MANAGER_EXTRA_ARG_VALUE
                 command:
                 - /manager

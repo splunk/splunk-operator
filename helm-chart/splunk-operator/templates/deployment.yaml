@@ -47,7 +47,10 @@ spec:
           imagePullPolicy: {{ .Values.splunkOperator.image.pullPolicy }}
           args:
             - --leader-elect
-            - --pprof
+            - --pprof={{ .Values.splunkOperator.pprof.enabled }}
+{{- if .Values.splunkOperator.pprof.enabled }}
+            - --pprof-bind-address={{ required "splunkOperator.pprof.bindAddress is required when pprof is enabled" .Values.splunkOperator.pprof.bindAddress }}
+{{- end }}
 {{- if .Values.splunkOperator.featureGates }}
             - --feature-gates={{ include "splunk-operator.featureGates" . }}
 {{- end }}
