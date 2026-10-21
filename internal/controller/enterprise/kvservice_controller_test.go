@@ -24,15 +24,65 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 var _ = Describe("KVService Controller", func() {
+	DescribeTable("records paused status with a valid phase",
+		func(initialPhase enterprisev4.Phase) {
+			ctx := context.Background()
+			resource := &enterprisev4.KVService{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "paused-status-",
+					Namespace:    "default",
+					Annotations:  map[string]string{enterprisev4.KVServicePausedAnnotation: "true"},
+				},
+				Spec: enterprisev4.KVServiceSpec{
+					CommonSplunkSpec: enterprisev4.CommonSplunkSpec{
+						Spec: enterprisev4.Spec{ImagePullPolicy: "IfNotPresent"},
+					},
+					Replicas: 1,
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			DeferCleanup(func() {
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			})
+			Expect(resource.Status.Phase).To(BeEmpty())
+			if initialPhase != "" {
+				resource.Status.Phase = initialPhase
+				Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
+			}
+			key := types.NamespacedName{Name: resource.Name, Namespace: resource.Namespace}
+			reconciler := &KVServiceReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(splcommon.PauseRetryDelay))
+
+			current := &enterprisev4.KVService{}
+			Expect(k8sClient.Get(ctx, key, current)).To(Succeed())
+			expectedPhase := initialPhase
+			if expectedPhase == "" {
+				expectedPhase = enterprisev4.PhasePending
+			}
+			Expect(current.Status.Phase).To(Equal(expectedPhase))
+			Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
+			paused := meta.FindStatusCondition(current.Status.Conditions, string(enterprisev4.ConditionPaused))
+			Expect(paused).NotTo(BeNil())
+			Expect(paused.Status).To(Equal(metav1.ConditionTrue))
+			Expect(paused.ObservedGeneration).To(Equal(current.Generation))
+		},
+		Entry("when created already paused", enterprisev4.Phase("")),
+		Entry("without replacing an existing phase", enterprisev4.PhaseReady),
+	)
+
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
