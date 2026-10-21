@@ -22,6 +22,9 @@ package common
 type EventReason = string
 
 const (
+	EventReasonReady            EventReason = "Ready"
+	EventReasonDeploymentFailed EventReason = "DeploymentFailed"
+
 	// Normal event reasons
 	EventReasonScaledUp              EventReason = "ScaledUp"
 	EventReasonScaledDown            EventReason = "ScaledDown"

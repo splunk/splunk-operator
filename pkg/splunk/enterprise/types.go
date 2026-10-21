@@ -58,6 +58,7 @@ const (
 	SplunkIngestor          = splcommon.SplunkIngestor
 	SplunkQueue             = splcommon.SplunkQueue
 	SplunkObjectStorage     = splcommon.SplunkObjectStorage
+	SplunkKVService         = splcommon.SplunkKVService
 	SplunkDeployer          = splcommon.SplunkDeployer
 	SplunkLicenseMaster     = splcommon.SplunkLicenseMaster
 	SplunkLicenseManager    = splcommon.SplunkLicenseManager

@@ -49,6 +49,7 @@ rules:
 - apiGroups:
   - apps
   resources:
+  - deployments
   - statefulsets
   verbs:
   - create
@@ -98,6 +99,7 @@ rules:
   - clustermasters
   - indexerclusters
   - ingestorclusters
+  - kvservices
   - licensemanagers
   - licensemasters
   - monitoringconsoles
@@ -120,6 +122,7 @@ rules:
   - clustermasters/finalizers
   - indexerclusters/finalizers
   - ingestorclusters/finalizers
+  - kvservices/finalizers
   - licensemanagers/finalizers
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
@@ -136,6 +139,7 @@ rules:
   - clustermasters/status
   - indexerclusters/status
   - ingestorclusters/status
+  - kvservices/status
   - licensemanagers/status
   - licensemasters/status
   - monitoringconsoles/status
