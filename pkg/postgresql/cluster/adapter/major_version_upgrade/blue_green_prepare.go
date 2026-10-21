@@ -15,7 +15,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -23,13 +22,13 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	clusteridentity "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/identity"
 	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,9 +39,15 @@ import (
 )
 
 const (
-	blueGreenAttemptLabel       = "platform.splunk.com/blue-green-attempt"
-	cnpgClusterLabel            = "cnpg.io/cluster"
-	postgresIdentifierMaxLength = 63
+	blueGreenAttemptLabel              = "platform.splunk.com/blue-green-attempt"
+	cnpgClusterLabel                   = "cnpg.io/cluster"
+	postgresIdentifierMaxLength        = 63
+	candidateImportExternalClusterName = "sok-bluegreen-import"
+	candidateSourceExternalClusterName = "sok-bluegreen-source"
+	candidateGuardSchema               = "splunk_operator_bluegreen"
+	candidateGuardFunction             = "reject_ordinary_dml"
+	candidateGuardTrigger              = "sok_bluegreen_dml_guard"
+	candidateClusterNameMaxLength      = postgresIdentifierMaxLength - len("-pooler-rw")
 )
 
 // BlueGreenPreparer reconciles only source-side CNPG resources. It deliberately
@@ -57,10 +62,11 @@ type BlueGreenPreparer struct {
 }
 
 // BlueGreenPreflightPlan is the effective target shape checked before the
-// source claim. Subsequent retries use the claimed live-blue baseline; green
-// must be built from that baseline, not from a newly resolved class.
+// source claim and frozen in its fingerprint. Later class changes cannot
+// silently change green within the same attempt.
 type BlueGreenPreflightPlan struct {
 	TargetConfiguration *platformv1alpha1.PostgresClusterSpec
+	TargetImage         string
 }
 
 func NewBlueGreenPreparer(c client.Client, key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, resolver clusteridentity.ClusterCardResolver, plan BlueGreenPreflightPlan) *BlueGreenPreparer {
@@ -355,6 +361,9 @@ func (p *BlueGreenPreparer) validateTargetPlan(source *cnpgv1.Cluster) error {
 	if source == nil {
 		return fmt.Errorf("%w: source storage is unavailable", mvutypes.ErrUpgradeFlowFailed)
 	}
+	if p.plan.TargetConfiguration.Instances != nil && int(*p.plan.TargetConfiguration.Instances) != source.Spec.Instances {
+		return fmt.Errorf("%w: green topology must inherit blue's %d instances", mvutypes.ErrUpgradeFlowFailed, source.Spec.Instances)
+	}
 	sourceStorage, err := resource.ParseQuantity(source.Spec.StorageConfiguration.Size)
 	if err != nil || sourceStorage.IsZero() {
 		return fmt.Errorf("%w: source storage capacity is unavailable", mvutypes.ErrUpgradeFlowFailed)
@@ -479,21 +488,19 @@ type declaredDatabase struct {
 	definition platformv1alpha1.DatabaseDefinition
 }
 
-type frozenDatabaseDeclaration struct {
-	Name       string                              `json:"name"`
-	UID        types.UID                           `json:"uid"`
-	Definition platformv1alpha1.DatabaseDefinition `json:"definition"`
+func (p *BlueGreenPreparer) managedDatabases(ctx context.Context) ([]declaredDatabase, error) {
+	return listManagedDatabases(ctx, p.client, p.key)
 }
 
-func (p *BlueGreenPreparer) managedDatabases(ctx context.Context) ([]declaredDatabase, error) {
+func listManagedDatabases(ctx context.Context, c client.Client, key types.NamespacedName) ([]declaredDatabase, error) {
 	var items platformv1alpha1.PostgresDatabaseList
-	if err := p.client.List(ctx, &items, client.InNamespace(p.key.Namespace)); err != nil {
+	if err := c.List(ctx, &items, client.InNamespace(key.Namespace)); err != nil {
 		return nil, err
 	}
 	var result []declaredDatabase
 	owners := make(map[string]string)
 	for _, parent := range items.Items {
-		if parent.Spec.ClusterRef.Name != p.key.Name {
+		if parent.Spec.ClusterRef.Name != key.Name {
 			continue
 		}
 		for _, database := range parent.Spec.Databases {
@@ -556,13 +563,7 @@ func (p *BlueGreenPreparer) reconcilePublication(ctx context.Context, clusterNam
 			Labels:          map[string]string{blueGreenAttemptLabel: attemptID},
 			OwnerReferences: p.ownerReferences(),
 		},
-		Spec: cnpgv1.PublicationSpec{
-			ClusterRef:    corev1.LocalObjectReference{Name: clusterName},
-			Name:          name,
-			DBName:        database.name,
-			Target:        cnpgv1.PublicationTarget{AllTables: true},
-			ReclaimPolicy: cnpgv1.PublicationReclaimDelete,
-		},
+		Spec: desiredPublicationSpec(clusterName, database.name, name),
 	}
 	if err := p.client.Create(ctx, publication); err != nil {
 		return false, err
@@ -570,13 +571,21 @@ func (p *BlueGreenPreparer) reconcilePublication(ctx context.Context, clusterNam
 	return false, nil
 }
 
+func desiredPublicationSpec(sourceName, databaseName, name string) cnpgv1.PublicationSpec {
+	return cnpgv1.PublicationSpec{
+		ClusterRef:    corev1.LocalObjectReference{Name: sourceName},
+		Name:          name,
+		DBName:        databaseName,
+		Target:        cnpgv1.PublicationTarget{AllTables: true},
+		ReclaimPolicy: cnpgv1.PublicationReclaimDelete,
+	}
+}
+
 func publicationMatchesAttempt(publication *cnpgv1.Publication, owner *platformv1alpha1.PostgresCluster, sourceName, databaseName, attemptID string) bool {
 	return publication != nil && owner != nil &&
 		publication.Labels[blueGreenAttemptLabel] == attemptID &&
 		metav1.IsControlledBy(publication, owner) &&
-		publication.Spec.ClusterRef.Name == sourceName &&
-		publication.Spec.DBName == databaseName &&
-		publication.Spec.Target.AllTables
+		equality.Semantic.DeepEqual(publication.Spec, desiredPublicationSpec(sourceName, databaseName, publication.Name))
 }
 
 func (p *BlueGreenPreparer) ownerReferences() []metav1.OwnerReference {
@@ -622,102 +631,23 @@ func (p *BlueGreenPreparer) reconcileReplicationSecret(ctx context.Context, atte
 	return role, string(secret.Data[replicationSecretPasswordKey]), nil
 }
 
-func (p *BlueGreenPreparer) secretFingerprint(ctx context.Context, name string) (platformv1alpha1.BlueGreenCredentialFingerprintStatus, error) {
-	secret := &corev1.Secret{}
-	if err := p.client.Get(ctx, types.NamespacedName{Namespace: p.key.Namespace, Name: name}, secret); err != nil {
-		return platformv1alpha1.BlueGreenCredentialFingerprintStatus{}, err
+func (p *BlueGreenPreparer) configurationFingerprint(source *cnpgv1.Cluster, databases []declaredDatabase) (string, error) {
+	if source == nil {
+		return p.baseline().configurationFingerprint(nil, databases)
 	}
-	digest := sha256.New()
-	keys := make([]string, 0, len(secret.Data))
-	for key := range secret.Data {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		digest.Write([]byte(key))
-		digest.Write([]byte{0})
-		digest.Write(secret.Data[key])
-		digest.Write([]byte{0})
-	}
-	now := metav1.Now()
-	return platformv1alpha1.BlueGreenCredentialFingerprintStatus{SecretName: secret.Name, SecretUID: string(secret.UID), Fingerprint: fmt.Sprintf("%x", digest.Sum(nil)), CapturedAt: &now, VerifiedAt: &now}, nil
+	// Source preparation records the intended post-patch value before its first
+	// mutation. Candidate verification instead hashes the actual live spec.
+	prepared := source.DeepCopy()
+	setLogicalSlotSynchronization(&prepared.Spec)
+	return p.baseline().configurationFingerprint(prepared, databases)
 }
 
 func (p *BlueGreenPreparer) credentialFingerprints(ctx context.Context, source *cnpgv1.Cluster, databases []declaredDatabase, replicationSecret string) ([]platformv1alpha1.BlueGreenCredentialFingerprintStatus, error) {
-	ordered := credentialSecretNames(source, databases, replicationSecret)
-	result := make([]platformv1alpha1.BlueGreenCredentialFingerprintStatus, 0, len(ordered))
-	for _, name := range ordered {
-		fingerprint, err := p.secretFingerprint(ctx, name)
-		if err != nil {
-			return nil, fmt.Errorf("fingerprinting credential Secret %q: %w", name, err)
-		}
-		result = append(result, fingerprint)
-	}
-	return result, nil
+	return p.baseline().credentialFingerprints(ctx, source, databases, replicationSecret)
 }
 
-func credentialSecretNames(source *cnpgv1.Cluster, databases []declaredDatabase, replicationSecret string) []string {
-	names := map[string]struct{}{replicationSecret: {}}
-	if source.GetSuperuserSecretName() != "" {
-		names[source.GetSuperuserSecretName()] = struct{}{}
-	}
-	for _, database := range databases {
-		addDatabaseCredentialSecretNames(names, database)
-	}
-	ordered := make([]string, 0, len(names))
-	for name := range names {
-		if name != "" {
-			ordered = append(ordered, name)
-		}
-	}
-	sort.Strings(ordered)
-	return ordered
-}
-
-func addDatabaseCredentialSecretNames(names map[string]struct{}, database declaredDatabase) {
-	if config := database.definition.PasswordConfig; config != nil {
-		names[config.ExternalAdminSecretRef.Name] = struct{}{}
-		names[config.ExternalRWSecretRef.Name] = struct{}{}
-	}
-	for _, info := range database.parent.Status.Databases {
-		if info.Name != database.name {
-			continue
-		}
-		if info.AdminUserSecretRef != nil {
-			names[info.AdminUserSecretRef.Name] = struct{}{}
-		}
-		if info.RWUserSecretRef != nil {
-			names[info.RWUserSecretRef.Name] = struct{}{}
-		}
-	}
-}
-
-func (p *BlueGreenPreparer) configurationFingerprint(source *cnpgv1.Cluster, databases []declaredDatabase) (string, error) {
-	if p.cluster == nil || source == nil {
-		return "", fmt.Errorf("%w: source configuration is unavailable", mvutypes.ErrUpgradeFlowFailed)
-	}
-	// The first fingerprint is written before the preparer's slot-sync patch.
-	cnpgSpec := *source.Spec.DeepCopy()
-	setLogicalSlotSynchronization(&cnpgSpec)
-	declarations := make([]frozenDatabaseDeclaration, 0, len(databases))
-	for _, database := range databases {
-		declarations = append(declarations, frozenDatabaseDeclaration{Name: database.parent.Name, UID: database.parent.UID, Definition: database.definition})
-	}
-	baseline := struct {
-		Cluster   platformv1alpha1.PostgresClusterSpec `json:"cluster"`
-		CNPG      clustercore.BlueGreenSourceCNPGSpec  `json:"cnpg"`
-		Databases []frozenDatabaseDeclaration          `json:"databases"`
-	}{
-		Cluster:   mvutypes.FrozenBlueGreenClusterSpec(p.cluster.Spec),
-		CNPG:      clustercore.NormalizeBlueGreenSourceCNPGSpec(cnpgSpec),
-		Databases: declarations,
-	}
-	encoded, err := json.Marshal(baseline)
-	if err != nil {
-		return "", fmt.Errorf("normalizing source configuration: %w", err)
-	}
-	digest := sha256.Sum256(encoded)
-	return fmt.Sprintf("%x", digest[:]), nil
+func (p *BlueGreenPreparer) baseline() sourceBaseline {
+	return sourceBaseline{client: p.client, key: p.key, cluster: p.cluster, targetConfiguration: p.plan.TargetConfiguration, targetImage: p.plan.TargetImage}
 }
 
 func replicationSecretName(clusterName, attemptID string) string {

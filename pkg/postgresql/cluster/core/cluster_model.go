@@ -35,6 +35,7 @@ import (
 	"github.com/distribution/reference"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -172,8 +173,18 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 	}
 
 	if health, blocked := p.majorVersionDriftBlock(p.cnpgCluster); blocked {
-		p.blockedHealth = &health
-		return nil
+		config := p.cluster.Spec.PostgresMajorUpgradeConfig
+		if config == nil || config.Strategy == nil || *config.Strategy != mvutypes.MajorUpgradeFlowBlueGreen || health.Reason != reasonMajorUpgradePending {
+			p.blockedHealth = &health
+			return nil
+		}
+		// Before the blue/green attempt starts, let ordinary source components
+		// converge without applying the requested target-major image to blue.
+		// Once they are Ready, the use case takes ownership of the source.
+		desiredSpec.ImageName = existingCNPG.Spec.ImageName
+		// Target capacity may be larger than blue's. It belongs to green and
+		// must not resize the authoritative source as a side effect of allow.
+		desiredSpec.StorageConfiguration.Size = existingCNPG.Spec.StorageConfiguration.Size
 	}
 
 	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec)

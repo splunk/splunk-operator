@@ -28,6 +28,7 @@ type backupProvider interface {
 
 type majorUpgradeInfoStore interface {
 	ReadMajorUpgradeIntent(context.Context) (mvutypes.Intent, bool, error)
+	ReadyToStart(context.Context) (bool, error)
 	SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, mvutypes.Progress) error
 	SaveBlueGreenRearm(context.Context, mvutypes.Intent) error
 }

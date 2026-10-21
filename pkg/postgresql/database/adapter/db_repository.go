@@ -15,8 +15,7 @@ limitations under the License.
 */
 // Package adapter contains driven adapters for the PostgresDatabase domain.
 // Each adapter implements a port defined in pkg/postgresql/shared/ports,
-// built on top of the pgx-backed primitives in
-// pkg/postgresql/database/infrastructure/postgres.
+// built on top of shared pgx-backed PostgreSQL infrastructure.
 package adapter
 
 import (
@@ -26,7 +25,7 @@ import (
 	"time"
 
 	"github.com/splunk/splunk-operator/pkg/logging"
-	"github.com/splunk/splunk-operator/pkg/postgresql/database/infrastructure/postgres"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/infrastructure/postgres"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 )
 

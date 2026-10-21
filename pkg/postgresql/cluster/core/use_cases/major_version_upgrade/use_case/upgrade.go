@@ -41,8 +41,9 @@ type upgradeStrategy interface {
 type pgUpgradeStrategy struct{ flow upgradeFlow }
 
 type blueGreenStrategy struct {
-	phase    mvutypes.Status
-	preparer bluegreen.Preparer
+	phase     mvutypes.Status
+	preparer  bluegreen.Preparer
+	candidate bluegreen.CandidatePreparer
 }
 
 func (s pgUpgradeStrategy) Advance(ctx context.Context, _ mvutypes.Intent) (mvutypes.Progress, error) {
@@ -53,7 +54,7 @@ func (s pgUpgradeStrategy) Advance(ctx context.Context, _ mvutypes.Intent) (mvut
 func (pgUpgradeStrategy) RequiresPreUpgradeBackup(mvutypes.Intent) bool { return true }
 
 func (s blueGreenStrategy) Advance(ctx context.Context, intent mvutypes.Intent) (mvutypes.Progress, error) {
-	outcome, err := bluegreen.New(s.phase, s.preparer).Advance(ctx, intent)
+	outcome, err := bluegreen.New(s.phase, s.preparer, s.candidate).Advance(ctx, intent)
 	return mvutypes.Progress{Report: outcome.Report, BlueGreen: outcome.BlueGreen}, err
 }
 
@@ -66,19 +67,20 @@ type upgradeFlow interface {
 }
 
 type MajorUpgradeUseCase struct {
-	store     majorUpgradeInfoStore
-	rollback  backupProvider
-	pgUpgrade pgupgradeflow.PgUpgrade
-	blueGreen bluegreen.Preparer
-	notifier  pgupgradeflow.Notifier
+	store              majorUpgradeInfoStore
+	rollback           backupProvider
+	pgUpgrade          pgupgradeflow.PgUpgrade
+	blueGreen          bluegreen.Preparer
+	blueGreenCandidate bluegreen.CandidatePreparer
+	notifier           pgupgradeflow.Notifier
 
 	intent mvutypes.Intent
 	active bool
 }
 
 // NewMajorUpgradeUseCase wires both strategies through one constructor.
-func NewMajorUpgradeUseCase(store majorUpgradeInfoStore, rollback backupProvider, pgUpgrade pgupgradeflow.PgUpgrade, notifier pgupgradeflow.Notifier, preparer bluegreen.Preparer) *MajorUpgradeUseCase {
-	return &MajorUpgradeUseCase{store: store, rollback: rollback, pgUpgrade: pgUpgrade, notifier: notifier, blueGreen: preparer}
+func NewMajorUpgradeUseCase(store majorUpgradeInfoStore, rollback backupProvider, pgUpgrade pgupgradeflow.PgUpgrade, notifier pgupgradeflow.Notifier, preparer bluegreen.Preparer, candidate bluegreen.CandidatePreparer) *MajorUpgradeUseCase {
+	return &MajorUpgradeUseCase{store: store, rollback: rollback, pgUpgrade: pgUpgrade, notifier: notifier, blueGreen: preparer, blueGreenCandidate: candidate}
 }
 
 func (h *MajorUpgradeUseCase) Prerequisites(ctx context.Context) error {
@@ -92,7 +94,31 @@ func (h *MajorUpgradeUseCase) Prerequisites(ctx context.Context) error {
 	if intent.SourcePgVersion == "" {
 		return errors.Join(usecases.ErrPrerequisiteNotReady, errors.New("source PostgreSQL version not yet written to status"))
 	}
+	if intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen && !blueGreenAttemptStarted(intent) {
+		ready, err := h.store.ReadyToStart(ctx)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return errors.Join(usecases.ErrPrerequisiteNotReady, errors.New("source components must be ready before blue/green preparation"))
+		}
+	}
 	return nil
+}
+
+func blueGreenAttemptStarted(intent mvutypes.Intent) bool {
+	for _, entry := range intent.State {
+		if !mvutypes.MatchesIntent(entry, intent) || entry.Phase == nil {
+			continue
+		}
+		// A requested retry is a new start, even when it reuses the durable
+		// attempt identity. Recheck source readiness before blocking components.
+		if *entry.Phase == string(mvutypes.Failed) && mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, entry) {
+			return false
+		}
+		return *entry.Phase != string(mvutypes.Scheduled)
+	}
+	return false
 }
 
 func (h *MajorUpgradeUseCase) Schedule(ctx context.Context) (bool, error) {
@@ -307,7 +333,7 @@ func (h *MajorUpgradeUseCase) strategyFor(intent mvutypes.Intent) upgradeStrateg
 	case mvutypes.MajorUpgradeFlowPgUpgrade:
 		return pgUpgradeStrategy{flow: pgupgradeflow.NewPgUpgradeFlow(h.pgUpgrade, phaseForIntent(intent.State, intent))}
 	case mvutypes.MajorUpgradeFlowBlueGreen:
-		return blueGreenStrategy{phase: phaseForIntent(intent.State, intent), preparer: h.blueGreen}
+		return blueGreenStrategy{phase: phaseForIntent(intent.State, intent), preparer: h.blueGreen, candidate: h.blueGreenCandidate}
 	default:
 		return nil
 	}

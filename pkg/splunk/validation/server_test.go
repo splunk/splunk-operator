@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 )
 
@@ -53,6 +54,49 @@ func TestNewWebhookServer(t *testing.T) {
 	if len(server.options.Validators) != len(DefaultValidators) {
 		t.Errorf("expected %d validators, got %d", len(DefaultValidators), len(server.options.Validators))
 	}
+}
+
+func TestHandleValidateFreezesPostgresDatabaseWithStaleManagerCache(t *testing.T) {
+	featuregatetesting.SetFeatureGatesDuringTest(t, config.DefaultMutableFeatureGate, featuregatetesting.FeatureOverrides{
+		config.ValidationWebhook: true, config.PostgresController: true, config.CrossVersionFieldProtection: false,
+	})
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformApi.AddToScheme(scheme))
+	cluster := &platformApi.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default"}}
+	cluster.Status.PostgresMajorUpgradeStatus = []platformApi.PostgresMajorUpgradeStatus{{BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{
+		AttemptID: "attempt-1", Blue: &platformApi.BlueGreenEnvironmentStatus{},
+	}}}
+	cached := cluster.DeepCopy()
+	cached.Status.PostgresMajorUpgradeStatus = nil
+	server := NewWebhookServer(WebhookServerOptions{Validators: DefaultValidators, Client: NewDirectReadClient(
+		fake.NewClientBuilder().WithScheme(scheme).WithObjects(cached).Build(),
+		fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build(),
+	)})
+	oldDatabase := &platformApi.PostgresDatabase{TypeMeta: metav1.TypeMeta{APIVersion: platformApi.GroupVersion.String(), Kind: "PostgresDatabase"}, ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default"}, Spec: platformApi.PostgresDatabaseSpec{
+		ClusterRef: corev1.LocalObjectReference{Name: cluster.Name}, Databases: []platformApi.DatabaseDefinition{{Name: "orders"}},
+	}}
+	newDatabase := oldDatabase.DeepCopy()
+	newDatabase.Spec.Databases = append(newDatabase.Spec.Databases, platformApi.DatabaseDefinition{Name: "extra"})
+	oldRaw, err := json.Marshal(oldDatabase)
+	require.NoError(t, err)
+	newRaw, err := json.Marshal(newDatabase)
+	require.NoError(t, err)
+	request := &admissionv1.AdmissionReview{TypeMeta: metav1.TypeMeta{APIVersion: "admission.k8s.io/v1", Kind: "AdmissionReview"}, Request: &admissionv1.AdmissionRequest{
+		UID: "freeze-test", Kind: metav1.GroupVersionKind{Group: PostgresDatabaseGVR.Group, Version: PostgresDatabaseGVR.Version, Kind: "PostgresDatabase"},
+		Resource:  metav1.GroupVersionResource{Group: PostgresDatabaseGVR.Group, Version: PostgresDatabaseGVR.Version, Resource: PostgresDatabaseGVR.Resource},
+		Operation: admissionv1.Update, Name: oldDatabase.Name, Namespace: oldDatabase.Namespace,
+		Object: runtime.RawExtension{Raw: newRaw}, OldObject: runtime.RawExtension{Raw: oldRaw},
+	}}
+	body, err := json.Marshal(request)
+	require.NoError(t, err)
+	response := httptest.NewRecorder()
+	server.HandleValidate(response, httptest.NewRequest(http.MethodPost, "/validate", bytes.NewReader(body)))
+	require.Equal(t, http.StatusOK, response.Code)
+	var review admissionv1.AdmissionReview
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &review))
+	require.NotNil(t, review.Response)
+	assert.False(t, review.Response.Allowed)
+	assert.Contains(t, review.Response.Result.Message, "frozen")
 }
 
 func TestHandleValidate(t *testing.T) {
