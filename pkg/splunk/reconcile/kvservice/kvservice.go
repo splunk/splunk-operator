@@ -41,7 +41,7 @@ func Apply(ctx context.Context, c splcommon.ControllerClient, key types.Namespac
 		return reconcile.Result{}, err
 	}
 	cr.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("KVService"))
-	if _, paused := cr.Annotations[enterpriseApi.KVServicePausedAnnotation]; paused && cr.DeletionTimestamp == nil {
+	if cr.Annotations[enterpriseApi.KVServicePausedAnnotation] == "true" && cr.DeletionTimestamp == nil {
 		if cr.Status.Phase == "" {
 			cr.Status.Phase = enterpriseApi.PhasePending
 		}
