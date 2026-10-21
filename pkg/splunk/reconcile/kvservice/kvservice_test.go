@@ -142,7 +142,7 @@ func TestKVServicePausedStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	paused := meta.FindStatusCondition(cr.Status.Conditions, string(enterpriseApi.ConditionPaused))
-	if paused == nil || paused.Status != metav1.ConditionTrue || cr.Status.ObservedGeneration != 9 {
+	if paused == nil || paused.Status != metav1.ConditionTrue || cr.Status.Phase != enterpriseApi.PhasePending || cr.Status.ObservedGeneration != 9 {
 		t.Fatalf("paused status missing: %+v", cr.Status)
 	}
 }
