@@ -24,6 +24,7 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,6 +76,49 @@ func TestGetSourcePgVersionReturnsEmptyWhenImageInfoUnset(t *testing.T) {
 	version, err := NewClusterStateStore(c, key).GetSourcePgVersion(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, version)
+}
+
+func TestGetReadyToStartRequiresReadyParentAndFullSourceTopology(t *testing.T) {
+	key := client.ObjectKey{Name: "orders", Namespace: "default"}
+	phase := "Ready"
+	generation := int64(3)
+	parent := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace, Generation: generation},
+		Status: platformv1alpha1.PostgresClusterStatus{
+			Phase: &phase, ObservedGeneration: &generation, Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, Reason: "AllComponentsReady", LastTransitionTime: metav1.Now()}},
+			ProvisionerRef: &corev1.ObjectReference{Name: "blue", Namespace: key.Namespace, UID: "blue-uid"},
+		},
+	}
+	source := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "blue", Namespace: key.Namespace, UID: "blue-uid"},
+		Spec:       cnpgv1.ClusterSpec{Instances: 3},
+		Status: cnpgv1.ClusterStatus{
+			Phase: cnpgv1.PhaseHealthy, Instances: 3, ReadyInstances: 3, CurrentPrimary: "blue-1",
+			InstancesStatus: map[cnpgv1.PodStatus][]string{cnpgv1.PodHealthy: {"blue-1", "blue-2", "blue-3"}},
+		},
+	}
+	ready, err := NewClusterStateStore(newCNPGTestClient(t, parent, source), key).GetReadyToStart(t.Context())
+	require.NoError(t, err)
+	assert.True(t, ready)
+
+	degraded := source.DeepCopy()
+	degraded.Status.ReadyInstances = 1
+	degraded.Status.InstancesStatus[cnpgv1.PodHealthy] = []string{"blue-1"}
+	ready, err = NewClusterStateStore(newCNPGTestClient(t, parent, degraded), key).GetReadyToStart(t.Context())
+	require.NoError(t, err)
+	assert.False(t, ready)
+
+	notReady := parent.DeepCopy()
+	notReady.Status.Conditions[0].Status = metav1.ConditionFalse
+	ready, err = NewClusterStateStore(newCNPGTestClient(t, notReady, source), key).GetReadyToStart(t.Context())
+	require.NoError(t, err)
+	assert.False(t, ready)
+
+	stale := parent.DeepCopy()
+	stale.Generation++
+	ready, err = NewClusterStateStore(newCNPGTestClient(t, stale, source), key).GetReadyToStart(t.Context())
+	require.NoError(t, err)
+	assert.False(t, ready)
 }
 
 func newCNPGTestClient(t *testing.T, objects ...client.Object) client.Client {

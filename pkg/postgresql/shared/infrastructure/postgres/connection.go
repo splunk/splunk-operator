@@ -14,15 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package postgres provides the infrastructure primitives for talking to a
-// PostgreSQL server over pgx: opening a superuser connection, running
-// statements/queries against it, and classifying driver errors. It has no
-// knowledge of PostgresDatabase business rules — the database domain's
-// adapter builds on this package to implement the ports it exposes to core.
+// Package postgres provides shared pgx connection, SQL quoting, and error
+// classification primitives used by the cluster and database adapters.
 package postgres
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"strings"
@@ -98,6 +97,25 @@ var connectConfig = pgx.ConnectConfig
 
 // Connect opens a direct superuser connection to dbName on host.
 func Connect(ctx context.Context, host, dbName, password string) (Conn, error) {
+	return connect(ctx, host, dbName, password, nil)
+}
+
+// ConnectVerified opens a superuser connection authenticated by the managed
+// server CA and serverName. This permits direct pod connections while checking
+// the cluster's shared Service identity; blue/green control operations must
+// not send the superuser password to an unauthenticated peer.
+func ConnectVerified(ctx context.Context, host, dbName, password, serverName string, serverCA []byte) (Conn, error) {
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(serverCA) {
+		return nil, fmt.Errorf("server CA is not valid PEM certificate data")
+	}
+	if serverName == "" {
+		return nil, fmt.Errorf("verified connection server name is required")
+	}
+	return connect(ctx, host, dbName, password, &tls.Config{RootCAs: roots, ServerName: serverName, MinVersion: tls.VersionTLS12})
+}
+
+func connect(ctx context.Context, host, dbName, password string, verifiedTLS *tls.Config) (Conn, error) {
 	cfg, err := pgx.ParseConfig(fmt.Sprintf(
 		"postgres://%s@%s:%s/%s?sslmode=require&connect_timeout=%d",
 		SuperUsername, host, Port, dbName,
@@ -107,6 +125,10 @@ func Connect(ctx context.Context, host, dbName, password string) (Conn, error) {
 		return nil, fmt.Errorf("parsing connection config for %s/%s: %w", host, dbName, err)
 	}
 	cfg.Password = password
+	if verifiedTLS != nil {
+		cfg.TLSConfig = verifiedTLS
+		cfg.Fallbacks = nil
+	}
 
 	conn, err := connectConfig(ctx, cfg)
 	if err != nil {

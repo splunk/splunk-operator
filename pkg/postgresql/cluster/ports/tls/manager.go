@@ -42,22 +42,27 @@ var (
 // Identity is the resolved identity and naming contract for one cluster's
 // server TLS resources. Core constructs it; adapters only apply it.
 type Identity struct {
-	ClusterName     string
-	Namespace       string
-	ClusterUID      types.UID
-	OwnerReference  metav1.OwnerReference
-	CertificateName string
-	ServerTLSSecret string
-	ServerCASecret  string
+	ClusterName      string
+	Namespace        string
+	ClusterUID       types.UID
+	OwnerReference   metav1.OwnerReference
+	AdditionalLabels map[string]string
+	CertificateName  string
+	ServerTLSSecret  string
+	ServerCASecret   string
 }
 
 func (i Identity) Labels() map[string]string {
-	return map[string]string{
+	labels := map[string]string{
 		"app.kubernetes.io/managed-by": "splunk-operator",
 		ClusterNameLabel:               i.ClusterName,
 		ClusterUIDLabel:                string(i.ClusterUID),
 		PurposeLabel:                   ServerTLSPurpose,
 	}
+	for key, value := range i.AdditionalLabels {
+		labels[key] = value
+	}
+	return labels
 }
 
 // IssuerReference is the resolved cert-manager issuer identity.

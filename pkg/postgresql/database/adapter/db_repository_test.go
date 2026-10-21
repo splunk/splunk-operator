@@ -25,7 +25,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/splunk/splunk-operator/pkg/logging"
-	"github.com/splunk/splunk-operator/pkg/postgresql/database/infrastructure/postgres"
+	"github.com/splunk/splunk-operator/pkg/postgresql/shared/infrastructure/postgres"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

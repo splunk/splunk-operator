@@ -228,6 +228,7 @@ rules:
   - poolers
   - publications
   - scheduledbackups
+  - subscriptions
   verbs:
   - create
   - delete
@@ -244,5 +245,6 @@ rules:
   - poolers/status
   - publications/status
   - scheduledbackups/status
+  - subscriptions/status
   verbs:
   - get

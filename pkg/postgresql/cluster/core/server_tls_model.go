@@ -110,6 +110,9 @@ func (p serverTLSPlan) ValidatesPoolerLeaf(cert *x509.Certificate) bool {
 	return true
 }
 
+// ServerTLSSecretName is empty when CNPG issues the server leaf itself.
+func (p serverTLSPlan) ServerTLSSecretName() string { return p.serverTLSSecret }
+
 func newServerTLSModel(manager tlsport.Manager, events eventEmitter, updateStatus healthStatusUpdater, cluster *platformv1alpha1.PostgresCluster, class *platformv1alpha1.PostgresClusterClass, mergedConfig *MergedConfig, contracts *reconcileContracts) *serverTLSModel {
 	return &serverTLSModel{manager: manager, events: events, updateStatus: updateStatus, cluster: cluster, class: class, mergedConfig: mergedConfig, contracts: contracts}
 }
@@ -139,23 +142,31 @@ func (p *serverTLSModel) Reconcile(ctx context.Context) error {
 }
 
 func (p *serverTLSModel) reconcilePlan(ctx context.Context) (serverTLSPlan, error) {
-	certificates := certificateConfigForClass(p.class)
-	environmentName := p.authoritativeEnvironmentName()
+	return ReconcileServerTLSForEnvironment(ctx, p.manager, p.cluster, p.class, p.mergedConfig,
+		serverTLSIdentity(p.cluster), p.authoritativeEnvironmentName())
+}
+
+// ReconcileServerTLSForEnvironment applies the same CNPG-default or cert-manager
+// TLS contract to the authoritative environment and an attempt-owned candidate.
+// Callers provide the environment's certificate identity; candidate-specific
+// verification that its leaf chains to the frozen blue CA remains in the adapter.
+func ReconcileServerTLSForEnvironment(ctx context.Context, manager tlsport.Manager, cluster *platformv1alpha1.PostgresCluster,
+	class *platformv1alpha1.PostgresClusterClass, cfg *MergedConfig, identity tlsport.Identity, environmentName string) (serverTLSPlan, error) {
+	certificates := certificateConfigForClass(class)
 	if certificates == nil || certificates.Mode == nil || *certificates.Mode == platformv1alpha1.PostgresCertificateModeCNPGDefault {
-		return newCNPGDefaultServerTLSPlan(p.cluster, p.mergedConfig, environmentName), nil
+		return newCNPGDefaultServerTLSPlan(cluster, cfg, environmentName), nil
 	}
-	if p.manager == nil {
+	if manager == nil {
 		return serverTLSPlan{}, fmt.Errorf("%w: server TLS manager is unavailable", tlsport.ErrConfiguration)
 	}
 	if certificates.IssuerRef == nil || certificates.IssuerRef.Name == "" {
 		return serverTLSPlan{}, fmt.Errorf("%w: issuerRef is required", tlsport.ErrConfiguration)
 	}
-	identity := serverTLSIdentity(p.cluster)
-	observedDNSNames, err := p.manager.ExistingCertificateDNSNames(ctx, identity)
+	observedDNSNames, err := manager.ExistingCertificateDNSNames(ctx, identity)
 	if err != nil {
 		return serverTLSPlan{}, err
 	}
-	dnsNames, retainedPoolerDNSNames := completeServerTLSNames(serverTLSNames(p.cluster, p.mergedConfig, environmentName), observedDNSNames, environmentName, p.cluster.Namespace)
+	dnsNames, retainedPoolerDNSNames := completeServerTLSNames(serverTLSNames(cluster, cfg, environmentName), observedDNSNames, environmentName, cluster.Namespace)
 	request := tlsport.Request{
 		Identity:               identity,
 		IssuerRef:              tlsport.IssuerReference{Name: certificates.IssuerRef.Name, Kind: certificates.IssuerRef.Kind, Group: certificates.IssuerRef.Group},
@@ -165,10 +176,10 @@ func (p *serverTLSModel) reconcilePlan(ctx context.Context) (serverTLSPlan, erro
 		Duration:               certificates.Duration,
 		RenewBefore:            certificates.RenewBefore,
 	}
-	if err := p.manager.Reconcile(ctx, request); err != nil {
+	if err := manager.Reconcile(ctx, request); err != nil {
 		return serverTLSPlan{}, err
 	}
-	return newCertManagerServerTLSPlan(p.cluster, p.mergedConfig, identity, environmentName), nil
+	return newCertManagerServerTLSPlan(cluster, cfg, identity, environmentName), nil
 }
 
 func (p *serverTLSModel) authoritativeEnvironmentName() string {
