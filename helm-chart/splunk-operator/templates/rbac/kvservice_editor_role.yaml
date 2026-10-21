@@ -1,11 +1,18 @@
+{{- if include "splunk-operator.featureGateEnabled" (dict "ctx" . "gate" "KVService" "stage" "Alpha" "default" false) }}
 # permissions for end users to edit kvservices.
 apiVersion: rbac.authorization.k8s.io/v1
+{{- if .Values.splunkOperator.clusterWideAccess }}
 kind: ClusterRole
+{{- else }}
+kind: Role
+{{- end }}
 metadata:
   labels:
-    app.kubernetes.io/name: splunk-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: kvservice-editor-role
+{{ include "splunk-operator.labels" . | indent 4 }}
+  name: {{ include "splunk-operator.fullname" . }}-kvservice-editor-role
+{{- if not .Values.splunkOperator.clusterWideAccess }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
 rules:
 - apiGroups:
   - enterprise.splunk.com
@@ -25,3 +32,4 @@ rules:
   - kvservices/status
   verbs:
   - get
+{{- end }}
