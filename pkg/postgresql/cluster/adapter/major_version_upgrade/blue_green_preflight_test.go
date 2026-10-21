@@ -19,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	pginfra "github.com/splunk/splunk-operator/pkg/postgresql/database/infrastructure/postgres"
+	pginfra "github.com/splunk/splunk-operator/pkg/postgresql/shared/infrastructure/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -36,6 +36,21 @@ func TestDeclaredRoleNamesIncludesAttemptReplicationRole(t *testing.T) {
 	assert.Contains(t, roles, "orders_rw")
 }
 
+func TestSourceCapacityReservesPhysicalAndTableSyncResources(t *testing.T) {
+	conn := &preflightSQLTestConn{results: [][]any{{true}, {"orders"}}}
+	err := checkSourceCapacityAndDatabases(t.Context(), conn, []declaredDatabase{{name: "orders"}}, 2)
+	require.NoError(t, err)
+	require.NotEmpty(t, conn.queries)
+	query := conn.queries[0]
+	assert.Contains(t, query, "slot_type = 'physical'")
+	assert.Contains(t, query, "pg_stat_replication")
+	assert.Contains(t, query, "max_sync_workers_per_subscription")
+	assert.Contains(t, query, "max_active_replication_origins")
+	assert.Contains(t, query, "physical_slots + logical_slots")
+	assert.Contains(t, query, "physical_senders + logical_slots")
+	assert.Contains(t, query, "logical_workers > $1::int", "at least one table-sync worker must remain")
+}
+
 func TestValidateSourceRolesUsesReservedRolePolicy(t *testing.T) {
 	allowed := map[string]struct{}{"orders_rw": {}}
 	require.NoError(t, validateSourceRoles([]string{"postgres", "streaming_replica", "cnpg_pooler_pgbouncer", "cnpg_metrics_exporter", "pg_monitor", "orders_rw"}, allowed))
@@ -45,8 +60,17 @@ func TestValidateSourceRolesUsesReservedRolePolicy(t *testing.T) {
 func TestFingerprintQueriesCoverTheFreezeContract(t *testing.T) {
 	assert.Contains(t, schemaFingerprintSQL, "pg_attribute")
 	assert.Contains(t, schemaFingerprintSQL, "pg_constraint")
+	assert.Contains(t, schemaFingerprintSQL, "con.contype <> 'n'", "PG18's NOT NULL catalog rows are already covered by attnotnull")
 	assert.Contains(t, schemaFingerprintSQL, "pg_get_functiondef")
 	assert.Contains(t, schemaFingerprintSQL, "pg_policy")
+	assert.Contains(t, schemaFingerprintSQL, "pol.polcmd")
+	assert.Contains(t, schemaFingerprintSQL, "pol.polpermissive")
+	assert.Contains(t, schemaFingerprintSQL, "unnest(pol.polroles)")
+	assert.Contains(t, schemaFingerprintSQL, "pg_get_userbyid(roleid)")
+	assert.Contains(t, schemaFingerprintSQL, "sha256(convert_to(definition, 'UTF8'))")
+	assert.Contains(t, accessFingerprintSQL, "sha256(convert_to(definition, 'UTF8'))")
+	assert.NotContains(t, schemaFingerprintSQL, "md5(")
+	assert.NotContains(t, accessFingerprintSQL, "md5(")
 	assert.Contains(t, schemaFingerprintSQL, "relreplident")
 	assert.Contains(t, schemaFingerprintSQL, "pg_trigger")
 	assert.Contains(t, schemaFingerprintSQL, "pg_enum")
@@ -58,6 +82,20 @@ func TestFingerprintQueriesCoverTheFreezeContract(t *testing.T) {
 	assert.Contains(t, accessFingerprintSQL, "attacl")
 	assert.Contains(t, accessFingerprintSQL, "aclexplode")
 	assert.NotContains(t, schemaFingerprintSQL, "nspacl", "schema privileges belong to the normalized access fingerprint")
+	assert.Contains(t, schemaFingerprintSQL, "pg_get_userbyid(nspowner)")
+	assert.Contains(t, schemaFingerprintSQL, "pg_get_userbyid(c.relowner)")
+	assert.Contains(t, schemaFingerprintSQL, "pg_inherits")
+	assert.Contains(t, schemaFingerprintSQL, "relpartbound")
+	assert.Contains(t, schemaFingerprintSQL, "pg_get_userbyid(p.proowner)")
+	assert.Contains(t, schemaFingerprintSQL, "format_type(seq.seqtypid, NULL)")
+	assert.Contains(t, accessFingerprintSQL, "pg_get_userbyid(datdba)")
+	assert.Contains(t, accessFingerprintSQL, "pg_get_userbyid(acl.grantor)", "blue and green catalog OIDs differ")
+	assert.Contains(t, accessFingerprintSQL, "CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END")
+	assert.Contains(t, accessFingerprintSQL, "role.rolname, member.rolname")
+	assert.Contains(t, accessFingerprintSQL, "pg_get_userbyid(defaclrole)")
+	assert.Contains(t, accessFingerprintSQL, "string_agg(item::text, ',' ORDER BY item::text)")
+	assert.Contains(t, accessFingerprintSQL, "AS definition", "the outer aggregate must reference a named column")
+	assert.Contains(t, accessFingerprintSQL, "cnpg_pooler_pgbouncer")
 }
 
 func TestAttemptPublicationAcceptsOnlyTheAttemptOwnedPublication(t *testing.T) {
@@ -74,10 +112,11 @@ func TestAttemptPublicationAcceptsOnlyTheAttemptOwnedPublication(t *testing.T) {
 			OwnerReferences: []metav1.OwnerReference{{UID: owner.UID, Name: owner.Name, Controller: &controller}},
 		},
 		Spec: cnpgv1.PublicationSpec{
-			ClusterRef: corev1.LocalObjectReference{Name: "source"},
-			Name:       publicationName,
-			DBName:     "orders",
-			Target:     cnpgv1.PublicationTarget{AllTables: true},
+			ClusterRef:    corev1.LocalObjectReference{Name: "source"},
+			Name:          publicationName,
+			DBName:        "orders",
+			Target:        cnpgv1.PublicationTarget{AllTables: true},
+			ReclaimPolicy: cnpgv1.PublicationReclaimDelete,
 		},
 	}
 	preflight := &postgresSourcePreflight{
@@ -90,6 +129,9 @@ func TestAttemptPublicationAcceptsOnlyTheAttemptOwnedPublication(t *testing.T) {
 	name, err := preflight.attemptPublication(t.Context(), source, "orders", "attempt-1")
 	require.NoError(t, err)
 	assert.Equal(t, publication.Name, name)
+	changed := publication.DeepCopy()
+	changed.Spec.Parameters = map[string]string{"publish": "insert"}
+	require.False(t, publicationMatchesAttempt(changed, owner, source.Name, "orders", "attempt-1"))
 
 	_, err = preflight.attemptPublication(t.Context(), source, "orders", "different-attempt")
 	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
@@ -128,6 +170,9 @@ func TestSourcePreflightInspectsInventoryWithoutMutation(t *testing.T) {
 			database.results[4] = []any{"plpgsql", "pg_cron"}
 			declaration.definition.Extensions = []string{"pg_cron"}
 		}, wantError: "requires background-worker"},
+		{name: "reserved candidate guard schema", change: func(_, database *preflightSQLTestConn, _ *declaredDatabase) {
+			database.results[5] = []any{true}
+		}, wantError: "reserved candidate-guard schema"},
 		{name: "unmanaged role", change: func(source, _ *preflightSQLTestConn, _ *declaredDatabase) {
 			source.results[2] = []any{"postgres", "stray"}
 		}, wantError: "not declared"},
@@ -135,7 +180,7 @@ func TestSourcePreflightInspectsInventoryWithoutMutation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sourceConn := &preflightSQLTestConn{results: [][]any{{true}, {"orders"}, {"postgres"}, {}, {}, {}}}
-			databaseConn := &preflightSQLTestConn{results: [][]any{{false}, {}, {}, {}, {"plpgsql"}, {"schema-hash"}, {"access-hash"}}}
+			databaseConn := &preflightSQLTestConn{results: [][]any{{false}, {}, {}, {}, {"plpgsql"}, {false}, {"schema-hash"}, {"access-hash"}}}
 			declaration := declaredDatabase{name: "orders"}
 			if tt.change != nil {
 				tt.change(sourceConn, databaseConn, &declaration)
@@ -198,13 +243,14 @@ func TestSourcePreflightReportsCatalogReadFailures(t *testing.T) {
 		{name: "foreign objects", dbRead: 3, context: "listing foreign objects"},
 		{name: "publications", dbRead: 4, context: "listing publication and subscription objects"},
 		{name: "extensions", dbRead: 5, context: "listing extensions"},
-		{name: "schema fingerprint", dbRead: 6, context: "fingerprinting source schema"},
-		{name: "access fingerprint", dbRead: 7, context: "fingerprinting source access policy"},
+		{name: "reserved candidate guard schema", dbRead: 6, context: "checking reserved candidate-guard schema"},
+		{name: "schema fingerprint", dbRead: 7, context: "fingerprinting source schema"},
+		{name: "access fingerprint", dbRead: 8, context: "fingerprinting source access policy"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sourceConn := &preflightSQLTestConn{results: [][]any{{true}, {"orders"}, {"postgres"}, {}, {}, {}}}
-			databaseConn := &preflightSQLTestConn{results: [][]any{{false}, {}, {}, {}, {"plpgsql"}, {"schema"}, {"access"}}}
+			databaseConn := &preflightSQLTestConn{results: [][]any{{false}, {}, {}, {}, {"plpgsql"}, {false}, {"schema"}, {"access"}}}
 			if tt.sourceRead != 0 {
 				sourceConn.queryErrors = make([]error, tt.sourceRead)
 				sourceConn.queryErrors[tt.sourceRead-1] = errors.New("catalog read failed")
@@ -269,7 +315,20 @@ func TestConnectSourceRequiresUsableSuperuserCredential(t *testing.T) {
 
 	secret.Data = map[string][]byte{"password": []byte("secret")}
 	require.NoError(t, preflight.client.Update(t.Context(), secret))
-	preflight.connect = func(context.Context, string, string, string) (pginfra.Conn, error) {
+	caKey := types.NamespacedName{Name: source.Status.Certificates.ServerCASecret, Namespace: source.Namespace}
+	serverCA := &corev1.Secret{}
+	require.NoError(t, preflight.client.Get(t.Context(), caKey, serverCA))
+	require.NoError(t, preflight.client.Delete(t.Context(), serverCA))
+	_, err = preflight.connectSource(t.Context(), source, "orders")
+	require.ErrorContains(t, err, "reading PostgreSQL server CA Secret")
+	serverCA.ResourceVersion = ""
+	serverCA.Data = nil
+	require.NoError(t, preflight.client.Create(t.Context(), serverCA))
+	_, err = preflight.connectSource(t.Context(), source, "orders")
+	require.ErrorContains(t, err, "has no ca.crt")
+	serverCA.Data = map[string][]byte{"ca.crt": []byte("test-ca")}
+	require.NoError(t, preflight.client.Update(t.Context(), serverCA))
+	preflight.connect = func(context.Context, string, string, string, string, []byte) (pginfra.Conn, error) {
 		return nil, errors.New("connection refused")
 	}
 	_, err = preflight.connectSource(t.Context(), source, "orders")
@@ -283,9 +342,10 @@ func newSourcePreflightForTest(t *testing.T, sourceConn, databaseConn pginfra.Co
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "source-superuser", Namespace: "default"}, Data: map[string][]byte{"password": []byte("test-password")}}
+	serverCA := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "source-server-ca", Namespace: "default"}, Data: map[string][]byte{"ca.crt": []byte("test-ca")}}
 	preflight := &postgresSourcePreflight{
-		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build(),
-		connect: func(_ context.Context, _, database, _ string) (pginfra.Conn, error) {
+		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret, serverCA).Build(),
+		connect: func(_ context.Context, _, database, _, _ string, _ []byte) (pginfra.Conn, error) {
 			if database == "postgres" {
 				return sourceConn, nil
 			}
@@ -293,6 +353,6 @@ func newSourcePreflightForTest(t *testing.T, sourceConn, databaseConn pginfra.Co
 		},
 		logicalName: "source",
 	}
-	source := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: "default"}, Spec: cnpgv1.ClusterSpec{SuperuserSecret: &cnpgv1.LocalObjectReference{Name: secret.Name}}}
+	source := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: "default"}, Spec: cnpgv1.ClusterSpec{SuperuserSecret: &cnpgv1.LocalObjectReference{Name: secret.Name}}, Status: cnpgv1.ClusterStatus{Certificates: cnpgv1.CertificatesStatus{CertificatesConfiguration: cnpgv1.CertificatesConfiguration{ServerCASecret: serverCA.Name}}}}
 	return preflight, source
 }

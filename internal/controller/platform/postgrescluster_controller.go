@@ -95,6 +95,8 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=backups/status,verbs=get
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=publications,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=publications/status,verbs=get
+// +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=subscriptions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=subscriptions/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
@@ -157,9 +159,20 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 		infoStore := majorupgradeadapter.NewMajorUpgradeStateStoreWithTarget(stateStore, targetVersion)
 		targetImage := ""
 		blueGreenPlan := majorupgradeadapter.BlueGreenPreflightPlan{}
+		blueGreenCandidatePlan := majorupgradeadapter.BlueGreenCandidatePlan{}
 		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.PostgresVersion != nil {
 			targetImage = clustercore.EffectivePostgresImage(mergedConfig)
 			blueGreenPlan.TargetConfiguration = mergedConfig.Spec.DeepCopy()
+			blueGreenPlan.TargetImage = targetImage
+			blueGreenCandidatePlan.TargetConfiguration = mergedConfig.Spec.DeepCopy()
+			blueGreenCandidatePlan.TargetImage = targetImage
+			if mergedConfig.Spec.Instances != nil {
+				blueGreenCandidatePlan.TargetInstances = int(*mergedConfig.Spec.Instances)
+			}
+			if mergedConfig.Spec.Storage != nil {
+				storage := mergedConfig.Spec.Storage.DeepCopy()
+				blueGreenCandidatePlan.TargetStorage = &storage
+			}
 		}
 		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion).
 			WithImageForVersion(func(string) (string, error) {
@@ -173,11 +186,13 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 		}
 		if !providerConfigured {
 			return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, nil, driver, notifier,
-				majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan))
+				majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan),
+				majorupgradeadapter.NewBlueGreenCandidatePreparer(r.Client, key, cluster, blueGreenCandidatePlan))
 		}
 		rollback := majorupgradeadapter.NewRollbackCapabilityAdapter(r.Client, r.Scheme, key, backupMethod, backupPluginName)
 		return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, rollback, driver, notifier,
-			majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan))
+			majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan),
+			majorupgradeadapter.NewBlueGreenCandidatePreparer(r.Client, key, cluster, blueGreenCandidatePlan))
 	}
 }
 
@@ -218,6 +233,7 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&cnpgv1.Pooler{}, builder.WithPredicates(cnpgPoolerPredicator())).
 		Owns(&cnpgv1.ScheduledBackup{}, builder.WithPredicates(scheduledBackupPredicator())).
 		Owns(&cnpgv1.Publication{}).
+		Owns(&cnpgv1.Subscription{}).
 		Owns(&corev1.Secret{}, builder.WithPredicates(secretPredicator())).
 		Owns(&corev1.ConfigMap{}, builder.WithPredicates(configMapPredicator())).
 		Watches(&platformv1alpha1.PostgresDatabase{},

@@ -22,7 +22,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	pginfra "github.com/splunk/splunk-operator/pkg/postgresql/database/infrastructure/postgres"
+	pginfra "github.com/splunk/splunk-operator/pkg/postgresql/shared/infrastructure/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -170,10 +170,11 @@ func TestReplicationGrantsDoNotChangeSourceFingerprints(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "source-superuser", Namespace: "default"}, Data: map[string][]byte{"password": []byte("unused-by-test-connector")}}
-	source := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: "default"}, Spec: cnpgv1.ClusterSpec{SuperuserSecret: &cnpgv1.LocalObjectReference{Name: secret.Name}}}
+	serverCA := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "source-server-ca", Namespace: "default"}, Data: map[string][]byte{"ca.crt": []byte("unused-by-test-connector")}}
+	source := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: "default"}, Spec: cnpgv1.ClusterSpec{SuperuserSecret: &cnpgv1.LocalObjectReference{Name: secret.Name}}, Status: cnpgv1.ClusterStatus{Certificates: cnpgv1.CertificatesStatus{CertificatesConfiguration: cnpgv1.CertificatesConfiguration{ServerCASecret: serverCA.Name}}}}
 	preflight := &postgresSourcePreflight{
-		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build(),
-		connect: func(ctx context.Context, _, databaseName, _ string) (pginfra.Conn, error) {
+		client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret, serverCA).Build(),
+		connect: func(ctx context.Context, _, databaseName, _, _ string, _ []byte) (pginfra.Conn, error) {
 			return connectDatabase(ctx, databaseName)
 		},
 	}
@@ -182,7 +183,7 @@ func TestReplicationGrantsDoNotChangeSourceFingerprints(t *testing.T) {
 		require.NoError(t, err)
 		defer conn.Close(t.Context())
 		var schema, access string
-		require.NoError(t, queryOne(t.Context(), conn, &schema, schemaFingerprintSQL))
+		require.NoError(t, queryOne(t.Context(), conn, &schema, schemaFingerprintSQL, candidateGuardTrigger, candidateGuardSchema, candidateGuardFunction))
 		require.NoError(t, queryOne(t.Context(), conn, &access, accessFingerprintSQL, role))
 		return schema, access
 	}
@@ -223,6 +224,19 @@ func TestReplicationGrantsDoNotChangeSourceFingerprints(t *testing.T) {
 	_, restoredAccess = fingerprints()
 	assert.Equal(t, baselineAccess, restoredAccess, "revoking the column grant must restore the access baseline")
 
+	_, err = conn.Exec(t.Context(), "CREATE POLICY orders_read ON public.orders FOR SELECT TO PUBLIC USING (true)")
+	require.NoError(t, err)
+	policySchema, _ := fingerprints()
+	assert.NotEqual(t, baselineSchema, policySchema, "policy creation must change the schema baseline")
+	_, err = conn.Exec(t.Context(), "ALTER POLICY orders_read ON public.orders TO "+quotedRole)
+	require.NoError(t, err)
+	changedPolicySchema, _ := fingerprints()
+	assert.NotEqual(t, policySchema, changedPolicySchema, "changing policy roles must change the schema baseline")
+	_, err = conn.Exec(t.Context(), "DROP POLICY orders_read ON public.orders")
+	require.NoError(t, err)
+	restoredSchema, _ := fingerprints()
+	assert.Equal(t, baselineSchema, restoredSchema, "dropping the policy must restore the schema baseline")
+
 	_, err = conn.Exec(t.Context(), "GRANT UPDATE ON public.orders TO PUBLIC")
 	require.NoError(t, err)
 	_, err = conn.Exec(t.Context(), "ALTER TABLE public.orders ADD COLUMN note text")
@@ -238,11 +252,37 @@ type preflightSQLTestConn struct {
 	queries     []string
 	execs       []string
 	queryErrors []error
+	rowErrors   []error
 	execErrors  []error
+	commits     int
+	rollbacks   int
 }
 
 func (c *preflightSQLTestConn) Begin(context.Context) (pginfra.Tx, error) {
-	return nil, errors.New("not used")
+	return &preflightSQLTestTx{conn: c}, nil
+}
+
+type preflightSQLTestTx struct {
+	conn *preflightSQLTestConn
+	done bool
+}
+
+func (tx *preflightSQLTestTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return tx.conn.Exec(ctx, sql, args...)
+}
+
+func (tx *preflightSQLTestTx) Commit(context.Context) error {
+	tx.done = true
+	tx.conn.commits++
+	return nil
+}
+
+func (tx *preflightSQLTestTx) Rollback(context.Context) error {
+	if !tx.done {
+		tx.done = true
+		tx.conn.rollbacks++
+	}
+	return nil
 }
 
 func (c *preflightSQLTestConn) Close(context.Context) error { return nil }
@@ -261,6 +301,10 @@ func (c *preflightSQLTestConn) Query(_ context.Context, sql string, _ ...any) (p
 	}
 	rows := &preflightSQLTestRows{values: c.results[0]}
 	c.results = c.results[1:]
+	if len(c.rowErrors) != 0 {
+		rows.err = c.rowErrors[0]
+		c.rowErrors = c.rowErrors[1:]
+	}
 	return rows, nil
 }
 
@@ -278,12 +322,15 @@ func (c *preflightSQLTestConn) Exec(_ context.Context, sql string, args ...any) 
 }
 
 type preflightSQLTestRows struct {
-	values []any
-	index  int
+	values    []any
+	index     int
+	err       error
+	exhausted bool
 }
 
 func (r *preflightSQLTestRows) Next() bool {
 	if r.index >= len(r.values) {
+		r.exhausted = true
 		return false
 	}
 	r.index++
@@ -291,22 +338,33 @@ func (r *preflightSQLTestRows) Next() bool {
 }
 
 func (r *preflightSQLTestRows) Scan(dest ...any) error {
-	if len(dest) != 1 {
-		return errors.New("expected one destination")
+	values, ok := r.values[r.index-1].([]any)
+	if !ok {
+		values = []any{r.values[r.index-1]}
 	}
-	switch value := r.values[r.index-1].(type) {
-	case string:
-		*dest[0].(*string) = value
-	case bool:
-		*dest[0].(*bool) = value
-	default:
-		return fmt.Errorf("unexpected value type %T", value)
+	if len(dest) != len(values) {
+		return fmt.Errorf("got %d destinations for %d columns", len(dest), len(values))
+	}
+	for i, value := range values {
+		switch value := value.(type) {
+		case string:
+			*dest[i].(*string) = value
+		case bool:
+			*dest[i].(*bool) = value
+		default:
+			return fmt.Errorf("unexpected value type %T", value)
+		}
 	}
 	return nil
 }
 
-func (r *preflightSQLTestRows) Close()     {}
-func (r *preflightSQLTestRows) Err() error { return nil }
+func (r *preflightSQLTestRows) Close() {}
+func (r *preflightSQLTestRows) Err() error {
+	if r.exhausted {
+		return r.err
+	}
+	return nil
+}
 
 type livePreflightSQLConn struct{ *pgx.Conn }
 

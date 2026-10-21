@@ -803,6 +803,29 @@ func TestBlueGreenAttemptRequiresObservedRearmBeforeStartingNextAttempt(t *testi
 	assert.NotEqual(t, "attempt-1", intent.AttemptID)
 }
 
+func TestBlueGreenActiveAttemptKeepsRunningAfterAllowIsCleared(t *testing.T) {
+	source, target := "17", "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	phase := string(mvutypes.Upgrading)
+	entries := []platformv1alpha1.PostgresMajorUpgradeStatus{{
+		Phase: &phase, Strategy: &strategy, SourcePgVersion: &source, TargetPgVersion: &target,
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+			AttemptID: "attempt-1", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "blue"}},
+		},
+	}}
+	spec := &platformv1alpha1.PostgresClusterSpec{
+		PostgresVersion: ptr.To(target),
+		PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
+			Allow: ptr.To(false), Strategy: &strategy,
+		},
+	}
+	intent, enabled, err := MajorUpgradeInputFromParts(spec, entries, nil, source)
+	require.NoError(t, err)
+	require.True(t, enabled, "the consumed gate must not suspend source and candidate checks")
+	assert.Equal(t, "attempt-1", intent.AttemptID)
+	assert.False(t, intent.RequiresBlueGreenRearm)
+}
+
 func TestMajorUpgradeStateStoreReadReturnsBlueGreenRearmWithoutWritingStatus(t *testing.T) {
 	source := "17"
 	target := "18"
@@ -1134,6 +1157,8 @@ func (f fakeStateStore) GetSpecificationWithAnnotations(context.Context) (*platf
 	}
 	return &platformv1alpha1.PostgresClusterSpec{}, f.annotations, nil
 }
+
+func (fakeStateStore) GetReadyToStart(context.Context) (bool, error) { return true, nil }
 
 func (f fakeStateStore) GetMajorUpgradeStatus(context.Context) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error) {
 	return f.entries, f.statusErr

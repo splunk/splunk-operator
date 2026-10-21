@@ -58,6 +58,33 @@ func TestMajorUpgradeUseCasePrerequisitesPassWhenSourceVersionKnown(t *testing.T
 	}
 }
 
+func TestBlueGreenWaitsForSourceReadinessBeforeBlockingComponents(t *testing.T) {
+	intent := mvutypes.Intent{Strategy: mvutypes.MajorUpgradeFlowBlueGreen, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "attempt-1"}
+	store := readinessStore{majorUpgradeInfoStoreFunc: fakeInfoStore(intent), ready: false}
+	useCase := NewMajorUpgradeUseCase(store, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, nil)
+	require.ErrorIs(t, useCase.Prerequisites(t.Context()), usecases.ErrPrerequisiteNotReady)
+
+	phase := string(mvutypes.Preflight)
+	strategy := intent.Strategy
+	intent.State = []platformv1alpha1.PostgresMajorUpgradeStatus{{
+		Phase: &phase, Strategy: &strategy, SourcePgVersion: &intent.SourcePgVersion,
+		TargetPgVersion: &intent.TargetPgVersion,
+		BlueGreen:       &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID},
+	}}
+	store.majorUpgradeInfoStoreFunc = fakeInfoStore(intent)
+	useCase = NewMajorUpgradeUseCase(store, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, nil)
+	require.NoError(t, useCase.Prerequisites(t.Context()), "a durable attempt must continue even after the readiness cycle starts")
+
+	failed := string(mvutypes.Failed)
+	intent.State[0].Phase = &failed
+	intent.State[0].Conditions = []metav1.Condition{{Type: mvutypes.ConditionMajorUpgradeTerminalFailure, LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Minute))}}
+	retry := metav1.Now()
+	intent.RetryRequestedAt = &retry
+	store.majorUpgradeInfoStoreFunc = fakeInfoStore(intent)
+	useCase = NewMajorUpgradeUseCase(store, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, nil)
+	require.ErrorIs(t, useCase.Prerequisites(t.Context()), usecases.ErrPrerequisiteNotReady, "a retry must wait for source readiness again")
+}
+
 func TestMajorUpgradeUseCasePrerequisitesPassWhenNotEnabled(t *testing.T) {
 	// When the use case is not enabled (allow=false etc.), prerequisites are
 	// irrelevant regardless of whether SourcePgVersion is populated.
@@ -65,7 +92,7 @@ func TestMajorUpgradeUseCasePrerequisitesPassWhenNotEnabled(t *testing.T) {
 		majorUpgradeInfoStoreFunc(func(context.Context) (mvutypes.Intent, bool, error) {
 			return mvutypes.Intent{}, false, nil
 		}),
-		nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{},
+		nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, nil,
 	)
 	if err := useCase.Prerequisites(t.Context()); err != nil {
 		t.Fatalf("Prerequisites() = %v, want nil when use case not enabled", err)
@@ -80,7 +107,7 @@ func TestMajorUpgradeUseCaseFailsWhenBackupProviderMissing(t *testing.T) {
 	}
 
 	useCase := NewMajorUpgradeUseCase(
-		fakeInfoStore(intent), nil, &fakePgUpgrade{}, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{},
+		fakeInfoStore(intent), nil, &fakePgUpgrade{}, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, nil,
 	)
 	report, err := useCase.Act(t.Context())
 	if !errors.Is(err, mvutypes.ErrBackupProviderMissing) {
@@ -113,7 +140,7 @@ func TestMajorUpgradeUseCasePreparesDeclaredBlueGreenRuntime(t *testing.T) {
 	prepared := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID}
 	preparer := &fakeBlueGreenPreparer{status: prepared}
 	useCase := NewMajorUpgradeUseCase(store, fakeBackupProvider{status: &mvutypes.BackupInfo{}}, nil,
-		pgupgradeflow.NoopNotifier(), preparer)
+		pgupgradeflow.NoopNotifier(), preparer, nil)
 
 	report, err := useCase.Act(t.Context())
 	if err != nil {
@@ -132,7 +159,7 @@ func TestMajorUpgradeUseCaseEntersBlueGreenPreflightBeforePreparingSource(t *tes
 	store := &blueGreenProgressStore{intent: intent}
 	preparer := &fakeBlueGreenPreparer{}
 	useCase := NewMajorUpgradeUseCase(store, fakeBackupProvider{status: &mvutypes.BackupInfo{}}, nil,
-		pgupgradeflow.NoopNotifier(), preparer)
+		pgupgradeflow.NoopNotifier(), preparer, nil)
 
 	report, err := useCase.Act(t.Context())
 	require.NoError(t, err)
@@ -161,18 +188,18 @@ func TestMajorUpgradeUseCaseDoesNotRecreateBackupAfterBlueGreenPreparation(t *te
 		}},
 	}
 	store := &blueGreenProgressStore{intent: intent}
-	useCase := NewMajorUpgradeUseCase(store, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{})
+	useCase := NewMajorUpgradeUseCase(store, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, &fakeBlueGreenCandidatePreparer{})
 
 	report, err := useCase.Act(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, string(mvutypes.Preflight), report.Phase)
-	assert.False(t, report.Retry)
+	assert.Equal(t, string(mvutypes.Upgrading), report.Phase)
+	assert.True(t, report.Retry)
 	assert.Nil(t, store.progress.Baseline)
 }
 
 func TestMajorUpgradeUseCaseRequiresBackupBeforeBlueGreenPreparation(t *testing.T) {
 	intent := mvutypes.Intent{Strategy: mvutypes.MajorUpgradeFlowBlueGreen, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "attempt-1"}
-	useCase := NewMajorUpgradeUseCase(&blueGreenProgressStore{intent: intent}, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{})
+	useCase := NewMajorUpgradeUseCase(&blueGreenProgressStore{intent: intent}, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, nil)
 
 	_, err := useCase.Act(t.Context())
 	require.ErrorIs(t, err, mvutypes.ErrBackupProviderMissing)
@@ -200,7 +227,7 @@ func TestMajorUpgradeUseCaseRearmsBlueGreenOnlyDuringAct(t *testing.T) {
 			},
 		}},
 	}}
-	useCase := NewMajorUpgradeUseCase(store, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{})
+	useCase := NewMajorUpgradeUseCase(store, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, nil)
 
 	require.NoError(t, useCase.Prerequisites(t.Context()))
 	assert.Zero(t, store.rearmWrites, "Prerequisites must be read-only")
@@ -378,6 +405,7 @@ func TestMajorUpgradeUseCaseBackupWaitReturnsReportWithoutError(t *testing.T) {
 		nil,
 		pgupgradeflow.NoopNotifier(),
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, err := useCase.Act(t.Context())
@@ -405,6 +433,7 @@ func TestMajorUpgradeUseCasePreUpgradeBackupResumesFromScheduled(t *testing.T) {
 		&fakePgUpgrade{},
 		pgupgradeflow.NoopNotifier(),
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, err := useCase.Act(t.Context())
@@ -431,6 +460,7 @@ func TestMajorUpgradeUseCaseCompletedFlowHoldsInPostUpgradeBackup(t *testing.T) 
 		&fakePgUpgrade{},
 		pgupgradeflow.NoopNotifier(),
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, err := useCase.Act(t.Context())
@@ -458,6 +488,7 @@ func TestMajorUpgradeUseCasePostUpgradeBackupCompletesWhenBaselineReady(t *testi
 		driver,
 		pgupgradeflow.NoopNotifier(),
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, err := useCase.Act(t.Context())
@@ -484,6 +515,7 @@ func TestMajorUpgradeUseCaseActFailsTerminalOnDowngrade(t *testing.T) {
 		&fakePgUpgrade{},
 		pgupgradeflow.NoopNotifier(),
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, err := useCase.Act(t.Context())
@@ -511,6 +543,7 @@ func TestMajorUpgradeUseCaseActFailsTerminalOnMultiMajorJump(t *testing.T) {
 		&fakePgUpgrade{},
 		pgupgradeflow.NoopNotifier(),
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, err := useCase.Act(t.Context())
@@ -535,6 +568,7 @@ func TestMajorUpgradeUseCaseActAllowsMultiMajorJumpWhenPolicyPermits(t *testing.
 		&fakePgUpgrade{},
 		pgupgradeflow.NoopNotifier(),
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, err := useCase.Act(t.Context())
@@ -564,6 +598,7 @@ func TestMajorUpgradeUseCaseActFailsTerminalOnUnknownSource(t *testing.T) {
 		&fakePgUpgrade{},
 		pgupgradeflow.NoopNotifier(),
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, err := useCase.Act(t.Context())
@@ -613,6 +648,7 @@ func TestMajorUpgradeUseCaseRetryAfterTerminalFailureResumesFlow(t *testing.T) {
 		&fakePgUpgrade{},
 		pgupgradeflow.NoopNotifier(),
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, err := useCase.Act(t.Context())
@@ -636,7 +672,7 @@ func TestMajorUpgradeUseCaseEmitsFailedEventOnFirstFailure(t *testing.T) {
 		TargetPgVersion: "17", // downgrade → terminal failure
 	}
 	notifier := &fakeNotifier{}
-	useCase := NewMajorUpgradeUseCase(fakeInfoStore(intent), fakeBackupProvider{status: &mvutypes.BackupInfo{}}, &fakePgUpgrade{}, notifier, &fakeBlueGreenPreparer{})
+	useCase := NewMajorUpgradeUseCase(fakeInfoStore(intent), fakeBackupProvider{status: &mvutypes.BackupInfo{}}, &fakePgUpgrade{}, notifier, &fakeBlueGreenPreparer{}, nil)
 
 	report, _ := useCase.Act(t.Context())
 	if report.Phase != string(mvutypes.Failed) {
@@ -664,6 +700,7 @@ func TestMajorUpgradeUseCaseEmitsPreUpgradeBackupStartedOnFirstEntry(t *testing.
 		nil,
 		notifier,
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, _ := useCase.Act(t.Context())
@@ -700,6 +737,7 @@ func TestMajorUpgradeUseCaseDoesNotReemitPreUpgradeBackupStartedOnRetry(t *testi
 		nil,
 		notifier,
 		&fakeBlueGreenPreparer{},
+		nil,
 	)
 
 	report, _ := useCase.Act(t.Context())
@@ -738,13 +776,20 @@ func (f *fakePgUpgrade) VerifyUpgrade(context.Context) (bool, error) { return tr
 
 type majorUpgradeInfoStoreFunc func(context.Context) (mvutypes.Intent, bool, error)
 
+type readinessStore struct {
+	majorUpgradeInfoStoreFunc
+	ready bool
+}
+
+func (s readinessStore) ReadyToStart(context.Context) (bool, error) { return s.ready, nil }
+
 type fakeBackupProvider struct {
 	status *mvutypes.BackupInfo
 	err    error
 }
 
 func newTestUseCase(intent mvutypes.Intent) *MajorUpgradeUseCase {
-	return NewMajorUpgradeUseCase(fakeInfoStore(intent), nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{})
+	return NewMajorUpgradeUseCase(fakeInfoStore(intent), nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, nil)
 }
 
 func fakeInfoStore(intent mvutypes.Intent) majorUpgradeInfoStoreFunc {
@@ -756,6 +801,8 @@ func fakeInfoStore(intent mvutypes.Intent) majorUpgradeInfoStoreFunc {
 func (f majorUpgradeInfoStoreFunc) ReadMajorUpgradeIntent(ctx context.Context) (mvutypes.Intent, bool, error) {
 	return f(ctx)
 }
+
+func (majorUpgradeInfoStoreFunc) ReadyToStart(context.Context) (bool, error) { return true, nil }
 
 func (f majorUpgradeInfoStoreFunc) SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, mvutypes.Progress) error {
 	return nil
@@ -780,6 +827,8 @@ func (s *blueGreenProgressStore) ReadMajorUpgradeIntent(context.Context) (mvutyp
 	return s.intent, true, nil
 }
 
+func (*blueGreenProgressStore) ReadyToStart(context.Context) (bool, error) { return true, nil }
+
 func (s *blueGreenProgressStore) SaveMajorUpgradeProgress(_ context.Context, _ mvutypes.Intent, progress mvutypes.Progress) error {
 	s.progress = progress
 	return nil
@@ -795,6 +844,17 @@ type fakeBlueGreenPreparer struct {
 	calls  int
 }
 
+type fakeBlueGreenCandidatePreparer struct {
+	status *platformv1alpha1.PostgresBlueGreenUpgradeStatus
+	err    error
+	calls  int
+}
+
+func (p *fakeBlueGreenCandidatePreparer) PrepareCandidate(context.Context, mvutypes.Intent) (*platformv1alpha1.PostgresBlueGreenUpgradeStatus, error) {
+	p.calls++
+	return p.status, p.err
+}
+
 func (p *fakeBlueGreenPreparer) Prepare(context.Context, mvutypes.Intent) (*platformv1alpha1.PostgresBlueGreenUpgradeStatus, error) {
 	p.calls++
 	return p.status, p.err
@@ -803,6 +863,8 @@ func (p *fakeBlueGreenPreparer) Prepare(context.Context, mvutypes.Intent) (*plat
 func (s *blueGreenRearmStore) ReadMajorUpgradeIntent(context.Context) (mvutypes.Intent, bool, error) {
 	return s.intent, true, nil
 }
+
+func (*blueGreenRearmStore) ReadyToStart(context.Context) (bool, error) { return true, nil }
 
 func (s *blueGreenRearmStore) SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, mvutypes.Progress) error {
 	s.progressWrites++

@@ -14,10 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package bluegreen owns the executable source-preparation portion of a
-// blue/green major upgrade. It deliberately has no target, subscription,
-// endpoint, fencing, or cleanup dependencies; those belong to later workflow
-// stages and tickets.
+// Package bluegreen owns the executable preparation stages of a blue/green
+// major upgrade. Each stage has its own port so completed source preparation
+// cannot be replayed while a candidate is being reconciled.
 package bluegreen
 
 import (
@@ -36,6 +35,12 @@ type Preparer interface {
 	Prepare(context.Context, mvutypes.Intent) (*platformv1alpha1.PostgresBlueGreenUpgradeStatus, error)
 }
 
+// CandidatePreparer owns green-only resources. It must never mutate blue or
+// publish ordinary application endpoints/status.
+type CandidatePreparer interface {
+	PrepareCandidate(context.Context, mvutypes.Intent) (*platformv1alpha1.PostgresBlueGreenUpgradeStatus, error)
+}
+
 // Outcome is the single durable result of one source-preparation transition.
 type Outcome struct {
 	Report    reconciliationTypes.Report
@@ -44,12 +49,13 @@ type Outcome struct {
 
 // Flow advances one durable source-preparation step per reconcile.
 type Flow struct {
-	phase    mvutypes.Status
-	preparer Preparer
+	phase     mvutypes.Status
+	preparer  Preparer
+	candidate CandidatePreparer
 }
 
-func New(phase mvutypes.Status, preparer Preparer) Flow {
-	return Flow{phase: phase, preparer: preparer}
+func New(phase mvutypes.Status, preparer Preparer, candidate CandidatePreparer) Flow {
+	return Flow{phase: phase, preparer: preparer, candidate: candidate}
 }
 
 // Advance records entry into Preflight before performing external preparation.
@@ -68,16 +74,11 @@ func (f Flow) Advance(ctx context.Context, intent mvutypes.Intent) (Outcome, err
 			Retry:   true,
 		}}, nil
 	}
+	if SourcePreparationComplete(intent) {
+		return f.prepareCandidate(ctx, intent)
+	}
 	if f.phase != mvutypes.Preflight {
 		return Outcome{}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green source preparation cannot resume from phase "+string(f.phase)))
-	}
-	if SourcePreparationComplete(intent) {
-		return Outcome{Report: reconciliationTypes.Report{
-			Name:    mvutypes.UseCaseName,
-			Phase:   string(mvutypes.Preflight),
-			Reason:  mvutypes.ReasonPreflightCheckPassed,
-			Message: mvutypes.MessagePreflightCheckPassed,
-		}}, nil
 	}
 	if f.preparer == nil {
 		return Outcome{}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green source preparer is not configured"))
@@ -104,6 +105,29 @@ func (f Flow) Advance(ctx context.Context, intent mvutypes.Intent) (Outcome, err
 	}, nil
 }
 
+func (f Flow) prepareCandidate(ctx context.Context, intent mvutypes.Intent) (Outcome, error) {
+	if f.phase != mvutypes.Preflight && f.phase != mvutypes.Upgrading && f.phase != mvutypes.ReadyForSwitchover {
+		return Outcome{}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green candidate preparation cannot resume from phase "+string(f.phase)))
+	}
+	if f.candidate == nil {
+		return Outcome{}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green candidate preparer is not configured"))
+	}
+	status, err := f.candidate.PrepareCandidate(ctx, intent)
+	if err != nil {
+		if sourcePreparationRetryable(err) {
+			return candidatePendingOutcome(status), nil
+		}
+		if !errors.Is(err, mvutypes.ErrUpgradeFlowFailed) && !errors.Is(err, mvutypes.ErrInvalidUpgradeIntent) {
+			return candidateRetryableFailureOutcome(status, err), err
+		}
+		return Outcome{BlueGreen: status}, err
+	}
+	if CandidateReady(status) {
+		return candidateReadyOutcome(status), nil
+	}
+	return candidatePendingOutcome(status), nil
+}
+
 func pendingOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) Outcome {
 	return Outcome{Report: reconciliationTypes.Report{
 		Name:    mvutypes.UseCaseName,
@@ -112,6 +136,55 @@ func pendingOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) Out
 		Message: "Waiting for source publication preparation to finish.",
 		Retry:   true,
 	}, BlueGreen: status}
+}
+
+func candidatePendingOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) Outcome {
+	return Outcome{Report: reconciliationTypes.Report{
+		Name:    mvutypes.UseCaseName,
+		Phase:   string(mvutypes.Upgrading),
+		Reason:  mvutypes.ReasonUpgradeFlowPending,
+		Message: "Waiting for the target-major green candidate to be prepared.",
+		Retry:   true,
+	}, BlueGreen: status}
+}
+
+func candidateReadyOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) Outcome {
+	return Outcome{Report: reconciliationTypes.Report{
+		Name:    mvutypes.UseCaseName,
+		Phase:   string(mvutypes.ReadyForSwitchover),
+		Reason:  mvutypes.ReasonCandidateReady,
+		Message: mvutypes.MessageCandidateReady,
+		// Candidate Ready is a continuously verified state, not a terminal
+		// workflow result. A later invariant failure must still be observed.
+		Retry: true,
+	}, BlueGreen: status}
+}
+
+// CandidateReady is deliberately structural: adapters prove individual
+// catalog/provider facts and persist them under the durable attempt status;
+// core alone decides when that evidence is enough to certify the candidate.
+func CandidateReady(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
+	if status == nil || status.Green == nil || status.Green.AvailableAt == nil || status.CandidateEndpoints == nil || status.CandidateEndpoints.DirectService == nil ||
+		status.SourceConfigurationFingerprint == nil || len(status.CredentialFingerprints) == 0 || len(status.DatabaseReplication) == 0 {
+		return false
+	}
+	for _, database := range status.DatabaseReplication {
+		if database.DatabaseName == "" || database.SourceSchemaFingerprint == nil || database.SourceAccessPolicyFingerprint == nil ||
+			database.TargetSchemaFingerprint == nil || database.TargetAccessPolicyFingerprint == nil ||
+			database.SchemaImported == nil || !*database.SchemaImported ||
+			database.InitialCopyComplete == nil || !*database.InitialCopyComplete ||
+			database.SubscriptionHealthy == nil || !*database.SubscriptionHealthy ||
+			database.SlotHealthy == nil || !*database.SlotHealthy ||
+			len(database.ReplicaSlots) == 0 {
+			return false
+		}
+		for _, slot := range database.ReplicaSlots {
+			if slot.Valid == nil || !*slot.Valid {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // sourcePreparationRetryable keeps infrastructure observations in the source
@@ -132,10 +205,20 @@ func retryableFailureOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeSt
 	}, BlueGreen: status}
 }
 
-// sourcePreparationComplete identifies the durable receipt produced by this
-// source-only stage. Later stages advance from that receipt; source
-// preparation must not rotate credentials or rebuild publications after it
-// exists.
+func candidateRetryableFailureOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, err error) Outcome {
+	return Outcome{Report: reconciliationTypes.Report{
+		Name:    mvutypes.UseCaseName,
+		Phase:   string(mvutypes.Upgrading),
+		Reason:  mvutypes.ReasonUnknownMajorUpgradeError,
+		Message: fmt.Sprintf("Green candidate preparation failed and will be retried: %v", err),
+		Retry:   true,
+	}, BlueGreen: status}
+}
+
+// sourcePreparationComplete identifies the immutable receipt produced by the
+// source-only stage. The parent phase and its generic progressing condition
+// necessarily change as green advances, so neither is evidence that source
+// preparation may be replayed.
 func SourcePreparationComplete(intent mvutypes.Intent) bool {
 	for i := len(intent.State) - 1; i >= 0; i-- {
 		entry := intent.State[i]

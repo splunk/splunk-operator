@@ -20,10 +20,12 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -42,6 +44,39 @@ func (s *ClusterStateStore) GetSpecificationWithAnnotations(ctx context.Context)
 		return nil, nil, err
 	}
 	return cluster.Spec.DeepCopy(), maps.Clone(cluster.Annotations), nil
+}
+
+// GetReadyToStart checks the authoritative environment before the upgrade
+// use case can block normal source reconciliation.
+func (s *ClusterStateStore) GetReadyToStart(ctx context.Context) (bool, error) {
+	cluster, err := s.getCluster(ctx)
+	if err != nil {
+		return false, err
+	}
+	if cluster.Status.Phase == nil || *cluster.Status.Phase != "Ready" ||
+		cluster.Status.ObservedGeneration == nil || *cluster.Status.ObservedGeneration != cluster.Generation ||
+		!meta.IsStatusConditionTrue(cluster.Status.Conditions, "Ready") {
+		return false, nil
+	}
+	key := s.key
+	if ref := cluster.Status.ProvisionerRef; ref != nil && ref.Name != "" {
+		key = client.ObjectKey{Namespace: cluster.Namespace, Name: ref.Name}
+	}
+	source := &cnpgv1.Cluster{}
+	if err := s.client.Get(ctx, key, source); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if cluster.Status.ProvisionerRef != nil && cluster.Status.ProvisionerRef.UID != "" && source.UID != cluster.Status.ProvisionerRef.UID {
+		return false, nil
+	}
+	return source.Status.Phase == cnpgv1.PhaseHealthy && source.Spec.Instances > 0 &&
+		source.Status.Instances == source.Spec.Instances && source.Status.ReadyInstances == source.Spec.Instances &&
+		source.Status.CurrentPrimary != "" &&
+		len(source.Status.InstancesStatus[cnpgv1.PodHealthy]) == source.Spec.Instances &&
+		slices.Contains(source.Status.InstancesStatus[cnpgv1.PodHealthy], source.Status.CurrentPrimary), nil
 }
 
 func (s *ClusterStateStore) SetAnnotations(ctx context.Context, annotations map[string]string) error {
