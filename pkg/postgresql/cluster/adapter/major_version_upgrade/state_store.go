@@ -32,9 +32,14 @@ import (
 
 type MajorUpgradeStateStore interface {
 	GetSpecificationWithAnnotations(context.Context) (*platformv1alpha1.PostgresClusterSpec, map[string]string, error)
+	GetReadyToStart(context.Context) (bool, error)
 	GetMajorUpgradeStatus(context.Context) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error)
 	SetMajorUpgradeStatus(context.Context, []platformv1alpha1.PostgresMajorUpgradeStatus) error
 	GetSourcePgVersion(context.Context) (string, error)
+}
+
+func (r *majorUpgradeInfoStoreAdapter) ReadyToStart(ctx context.Context) (bool, error) {
+	return r.store.GetReadyToStart(ctx)
 }
 
 type majorUpgradeInfoStoreAdapter struct {
@@ -91,10 +96,15 @@ func MajorUpgradeInputFromParts(spec *platformv1alpha1.PostgresClusterSpec, entr
 	if spec == nil || spec.PostgresVersion == nil {
 		return mvutypes.Intent{}, false, nil
 	}
-	if shouldObserveBlueGreenRearm(spec) {
+	strategy := majorUpgradeStrategy(spec.PostgresMajorUpgradeConfig)
+	activeBlueGreen := strategy == mvutypes.MajorUpgradeFlowBlueGreen && mvutypes.HasActiveBlueGreenAttempt(entries)
+	if shouldObserveBlueGreenRearm(spec) && !activeBlueGreen {
 		return blueGreenRearmIntent(entries, sourcePgVersion(entries, fallbackPgVersion), *spec.PostgresVersion)
 	}
-	if !majorUpgradeAllowed(spec.PostgresMajorUpgradeConfig) {
+	// Once consumed, allow is not a pause switch. Blue remains writable, but
+	// candidate replication and frozen-source checks must keep running even if
+	// the user clears allow while this attempt is active.
+	if !majorUpgradeAllowed(spec.PostgresMajorUpgradeConfig) && !activeBlueGreen {
 		return mvutypes.Intent{}, false, nil
 	}
 
@@ -102,9 +112,6 @@ func MajorUpgradeInputFromParts(spec *platformv1alpha1.PostgresClusterSpec, entr
 	if err != nil {
 		return mvutypes.Intent{}, false, err
 	}
-
-	cfg := spec.PostgresMajorUpgradeConfig
-	strategy := majorUpgradeStrategy(cfg)
 
 	source := sourcePgVersion(entries, fallbackPgVersion)
 	target := *spec.PostgresVersion

@@ -380,6 +380,7 @@ func main() {
 	if config.DefaultMutableFeatureGate.Enabled(config.ValidationWebhook) || config.DefaultMutableFeatureGate.Enabled(config.CrossVersionFieldProtection) {
 		validator := validation.NewWebhookServer(validation.WebhookServerOptions{
 			Validators:        validation.DefaultValidators,
+			Client:            validation.NewDirectReadClient(mgr.GetClient(), mgr.GetAPIReader()),
 			CrossVersionGuard: validation.NewCrossVersionFieldGuard(mgr.GetAPIReader()),
 		})
 

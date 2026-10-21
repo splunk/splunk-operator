@@ -18,8 +18,15 @@ package postgres
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -62,6 +69,40 @@ func TestConnect(t *testing.T) {
 		require.ErrorIs(t, err, dialErr)
 		assert.Nil(t, conn)
 	})
+}
+
+func TestConnectVerified(t *testing.T) {
+	original := connectConfig
+	t.Cleanup(func() { connectConfig = original })
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	certificate := &x509.Certificate{SerialNumber: big.NewInt(1), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	der, err := x509.CreateCertificate(rand.Reader, certificate, certificate, &key.PublicKey, key)
+	require.NoError(t, err)
+	serverCA := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+
+	var gotConfig *pgx.ConnConfig
+	connectConfig = func(_ context.Context, cfg *pgx.ConnConfig) (*pgx.Conn, error) {
+		gotConfig = cfg
+		return nil, nil
+	}
+	conn, err := ConnectVerified(t.Context(), "orders-1.orders-r.default.svc.cluster.local", "orders", "secret", "orders-rw.default.svc.cluster.local", serverCA)
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+	require.NotNil(t, gotConfig)
+	require.NotNil(t, gotConfig.TLSConfig)
+	assert.Equal(t, "orders-rw.default.svc.cluster.local", gotConfig.TLSConfig.ServerName)
+	assert.Equal(t, "orders-1.orders-r.default.svc.cluster.local", gotConfig.Host)
+	assert.Equal(t, uint16(tls.VersionTLS12), gotConfig.TLSConfig.MinVersion)
+	assert.False(t, gotConfig.TLSConfig.InsecureSkipVerify)
+	assert.NotNil(t, gotConfig.TLSConfig.RootCAs)
+	assert.Empty(t, gotConfig.Fallbacks)
+	assert.Equal(t, "secret", gotConfig.Password)
+
+	_, err = ConnectVerified(t.Context(), "orders-rw.default.svc.cluster.local", "orders", "secret", "orders-rw.default.svc.cluster.local", []byte("not a certificate"))
+	require.ErrorContains(t, err, "server CA is not valid PEM")
+	_, err = ConnectVerified(t.Context(), "orders-rw.default.svc.cluster.local", "orders", "secret", "", serverCA)
+	require.ErrorContains(t, err, "server name is required")
 }
 
 func TestQuoteIdentifier(t *testing.T) {

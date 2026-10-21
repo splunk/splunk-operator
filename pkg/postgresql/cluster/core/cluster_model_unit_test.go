@@ -28,6 +28,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -555,6 +556,43 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 	// The held pass still publishes the observable current version projection.
 	assert.Equal(t, "15", cluster.Status.CurrentPgVersion,
 		"held provisioner must still publish CurrentPgVersion as an observability projection")
+}
+
+func TestBlueGreenWaitsForSourceComponentsWithoutPatchingTargetImage(t *testing.T) {
+	scheme := newTestScheme()
+	sourceVersion, targetVersion := "17", "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	instances := int32(1)
+	sourceStorage, targetStorage := resource.MustParse("10Gi"), resource.MustParse("12Gi")
+	cluster := &platformv1alpha1.PostgresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default"},
+		Spec: platformv1alpha1.PostgresClusterSpec{PostgresVersion: &targetVersion,
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: ptr.To(true), Strategy: &strategy}},
+	}
+	config := func(version string, storage *resource.Quantity) *MergedConfig {
+		return &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{
+			Instances: &instances, PostgresVersion: &version, Storage: storage,
+			Resources: &corev1.ResourceRequirements{}, PostgreSQLConfig: map[string]string{}, PgHBA: []string{},
+		}, CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")}}
+	}
+	source := &cnpgv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
+		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, config(sourceVersion, &sourceStorage), cluster.Name, "orders-secret", false),
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: 1, ReadyInstances: 1},
+	}
+	require.NoError(t, ctrl.SetControllerReference(cluster, source, scheme))
+	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, source)
+	model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster,
+		&platformv1alpha1.PostgresClusterClass{}, config(targetVersion, &targetStorage),
+		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "orders-secret", Namespace: cluster.Namespace}}})
+	require.NoError(t, model.Reconcile(t.Context()))
+	updated := &cnpgv1.Cluster{}
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(source), updated))
+	assert.Equal(t, source.Spec.ImageName, updated.Spec.ImageName, "blue must retain its source-major image")
+	assert.Equal(t, sourceStorage.String(), updated.Spec.StorageConfiguration.Size, "green's larger target capacity must not resize blue")
+	health, err := model.Observe(t.Context(), nil)
+	require.NoError(t, err)
+	assert.NotEqual(t, reasonMajorUpgradePending, health.Reason, "the provisioner must not prevent downstream source reconciliation")
 }
 
 func TestClusterModelHoldsMajorVersionUpgradeForImageTagVariants(t *testing.T) {

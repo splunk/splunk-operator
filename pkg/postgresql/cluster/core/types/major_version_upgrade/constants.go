@@ -31,6 +31,7 @@ const (
 	ReasonPreUpgradeBackupNotReady           = "PreUpgradeBackupBaselineNotReady"
 	ReasonPostUpgradeBackupNotReady          = "PostUpgradeBackupBaselineNotReady"
 	ReasonPreflightCheckPassed               = "PreflightCheckPassed"
+	ReasonCandidateReady                     = "CandidateReady"
 	ReasonRollbackCapabilityMissing          = "RollbackCapabilityPortMissing"
 	ReasonBackupProviderMissing              = "BackupProviderMissing"
 	ReasonRollbackCapabilityFailed           = "RollbackCapabilityFailed"
@@ -79,6 +80,7 @@ const (
 
 const (
 	MessagePreflightCheckPassed         = "The PostgreSQL major upgrade preflight checks passed."
+	MessageCandidateReady               = "The target-major blue/green candidate is synchronized and ready for switchover."
 	MessagePgUpgradeStarted             = "The PostgreSQL pg_upgrade flow has started."
 	MessagePgUpgradeStartPending        = "The PostgreSQL pg_upgrade flow has not started yet. The operator will retry."
 	MessagePgUpgradeObservedComplete    = "The PostgreSQL pg_upgrade flow completed and is ready for verification."
