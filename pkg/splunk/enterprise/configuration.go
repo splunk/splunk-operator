@@ -113,9 +113,10 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 	var storageCapacity resource.Quantity
 	var err error
 	var storageClassName string
+	var volumeAttributesClassName string
 	var volumeClaim corev1.PersistentVolumeClaim
 
-	// Depending on the volume type, determine storage capacity and storage class name (if configured)
+	// Depending on the volume type, determine storage capacity and optional class names.
 	switch volumeType {
 	case splcommon.EtcVolumeStorage:
 		storageCapacity, err = splcommon.ParseResourceQuantity(
@@ -126,6 +127,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "etcStorage", err)
 		}
 		storageClassName = spec.EtcVolumeStorageConfig.StorageClassName
+		volumeAttributesClassName = spec.EtcVolumeStorageConfig.VolumeAttributesClassName
 
 	case splcommon.VarVolumeStorage:
 		storageCapacity, err = splcommon.ParseResourceQuantity(
@@ -136,6 +138,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "varStorage", err)
 		}
 		storageClassName = spec.VarVolumeStorageConfig.StorageClassName
+		volumeAttributesClassName = spec.VarVolumeStorageConfig.VolumeAttributesClassName
 	}
 
 	if adminManagedPV {
@@ -183,6 +186,10 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 			volumeClaim.Spec.StorageClassName = &storageClassName
 		}
 
+	}
+
+	if volumeAttributesClassName != "" {
+		volumeClaim.Spec.VolumeAttributesClassName = &volumeAttributesClassName
 	}
 
 	return volumeClaim, nil
