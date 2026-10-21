@@ -40,7 +40,8 @@ and Paused. For example:
 kubectl wait --for=condition=Ready kvservice/<name> --timeout=5m
 ```
 
-The `kvservice.enterprise.splunk.com/paused` annotation pauses reconciliation;
-removing it resumes reconciliation. A KVService created already paused reports
+The `kvservice.enterprise.splunk.com/paused` annotation pauses reconciliation only
+when its value is `"true"`. Setting it to `"false"`, setting it to an empty value,
+or removing it resumes reconciliation. A KVService created already paused reports
 `phase: Pending` and `Paused=True`. Pausing a resource with an existing phase
 preserves that phase.

@@ -97,7 +97,60 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 		t.Fatalf("ready status was not persisted: %+v", current.Status)
 	}
 
+	for _, annotation := range []struct {
+		name   string
+		value  string
+		remove bool
+	}{
+		{name: "false", value: "false"},
+		{name: "empty", value: ""},
+		{name: "removed", remove: true},
+	} {
+		t.Run("resume with annotation "+annotation.name, func(t *testing.T) {
+			if err := c.Get(ctx, key, current); err != nil {
+				t.Fatal(err)
+			}
+			current.Annotations = map[string]string{enterpriseApi.KVServicePausedAnnotation: "true"}
+			if err := c.Update(ctx, current); err != nil {
+				t.Fatal(err)
+			}
+			result, err := Apply(ctx, c, key, recorder)
+			if err != nil || result.RequeueAfter != splcommon.PauseRetryDelay {
+				t.Fatalf("true annotation did not pause reconciliation: result=%+v, error=%v", result, err)
+			}
+			if err := c.Get(ctx, key, current); err != nil {
+				t.Fatal(err)
+			}
+			paused := meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionPaused))
+			if paused == nil || paused.Status != metav1.ConditionTrue {
+				t.Fatalf("paused status missing: %+v", current.Status)
+			}
+			if annotation.remove {
+				delete(current.Annotations, enterpriseApi.KVServicePausedAnnotation)
+			} else {
+				current.Annotations[enterpriseApi.KVServicePausedAnnotation] = annotation.value
+			}
+			if err := c.Update(ctx, current); err != nil {
+				t.Fatal(err)
+			}
+			result, err = Apply(ctx, c, key, recorder)
+			if err != nil {
+				t.Fatalf("resource did not resume: %v", err)
+			}
+			if err := c.Get(ctx, key, current); err != nil {
+				t.Fatal(err)
+			}
+			paused = meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionPaused))
+			if paused == nil || paused.Status != metav1.ConditionFalse {
+				t.Fatalf("resumed status missing: %+v", current.Status)
+			}
+		})
+	}
+
 	// A missing configuration dependency must not replace a working pod template.
+	if err := c.Get(ctx, deploymentKey, deployment); err != nil {
+		t.Fatal(err)
+	}
 	before := deployment.Spec.Template.DeepCopy()
 	current.Spec.ClusterManagerRef.Name = "missing-manager"
 	current.Generation = 8
@@ -128,7 +181,7 @@ func TestKVServicePausedStatus(t *testing.T) {
 	if err := enterpriseApi.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "paused", Namespace: "test", Generation: 9, Annotations: map[string]string{enterpriseApi.KVServicePausedAnnotation: ""}}}
+	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "paused", Namespace: "test", Generation: 9, Annotations: map[string]string{enterpriseApi.KVServicePausedAnnotation: "true"}}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(cr).WithObjects(cr).Build()
 	key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 	result, err := Apply(ctx, c, key, record.NewFakeRecorder(10))
