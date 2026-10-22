@@ -8,13 +8,17 @@ The controller manages a Deployment and an HTTP Service on port 8066.
 
 ## Configuration and health
 
+- Resource defaults per pod are requests of 1 CPU and 4Gi memory, with limits of
+  4 CPUs and 16Gi memory. Values in `spec.resources` override these defaults;
+  `spec.disableResourceDefaults: true` disables resource defaulting.
 - Inline `spec.defaults` is stored in an owned ConfigMap before the Deployment
   mounts it.
 - `spec.podAnnotations` overrides inherited pod annotations.
-- Liveness and readiness checks use `/service/liveness` and `/service/readiness`.
-  Their configured delays, timeout, period, and failure threshold are honored.
-  The HTTP endpoints remain fixed; command overrides are not used for these
-  probes. KVService does not currently configure a startup probe.
+- Liveness and readiness checks use `/service/liveness` and `/service/readiness`
+  on port 8066. Both use fixed settings: a 30-second initial delay, a 1-second
+  timeout, a 5-second period, a success threshold of 1, and a failure threshold
+  of 3. KVService ignores the inherited probe and initial-delay settings and
+  does not configure a startup probe.
 - Direct and projected ConfigMap references in `spec.volumes` trigger
   reconciliation when the referenced ConfigMap changes. Content hashes on the
   pod template trigger rollout when mounted configuration changes. The shared

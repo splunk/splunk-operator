@@ -69,7 +69,7 @@ func GetKVServiceDeployment(ctx context.Context, c splcommon.ControllerClient, c
 	if err := updateSplunkPodTemplateWithConfig(ctx, c, &desired.Spec.Template, cr, spec, splcommon.SplunkKVService, nil, secret.Name); err != nil {
 		return nil, err
 	}
-	resources.ConfigureKVServiceHTTPProbes(&desired.Spec.Template, &cr.Spec)
+	resources.ConfigureKVServiceHTTPProbes(&desired.Spec.Template)
 	return desired, nil
 }
 
