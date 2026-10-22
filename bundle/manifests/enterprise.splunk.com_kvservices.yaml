@@ -33,10 +33,6 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    - description: Auxiliary message describing CR status
-      jsonPath: .status.message
-      name: Message
-      type: string
     name: v4
     schema:
       openAPIV3Schema:
@@ -1640,7 +1636,8 @@ spec:
                 type: object
               replicas:
                 default: 1
-                description: Number of KVService pods
+                description: Replicas is the desired number of KVService pods. Defaults
+                  to 1 when omitted.
                 format: int32
                 maximum: 100
                 minimum: 1
@@ -4563,9 +4560,6 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              message:
-                description: Auxillary message describing CR status
-                type: string
               observedGeneration:
                 description: |-
                   ObservedGeneration is the most recent generation observed by the controller.
@@ -4588,7 +4582,9 @@ spec:
                 format: int32
                 type: integer
               replicas:
-                description: number of desired kvservice instances
+                description: |-
+                  Replicas is the observed number of KVService pods,
+                  exposed through the scale subresource.
                 format: int32
                 type: integer
               resourceRevMap:

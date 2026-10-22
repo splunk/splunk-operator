@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -44,16 +44,16 @@ func TestKVServiceConfigMapReferences(t *testing.T) {
 	r := &KVServiceReconciler{Client: c}
 	requests := r.mapConfigMapToKVServices(context.Background(), &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test"}})
 	if len(requests) != 2 {
-		t.Fatalf("wanted two deduplicated same-namespace consumers: %v", requests)
+		t.Errorf("wanted two deduplicated same-namespace consumers: %v", requests)
 	}
 	seen := map[string]bool{}
 	for _, request := range requests {
 		if request.Namespace != "test" || seen[request.Name] {
-			t.Fatalf("unexpected or duplicate request: %v", requests)
+			t.Errorf("unexpected or duplicate request: %v", requests)
 		}
 		seen[request.Name] = true
 	}
 	if !seen["direct"] || !seen["projected"] {
-		t.Fatalf("volume reference missed: %v", requests)
+		t.Errorf("volume reference missed: %v", requests)
 	}
 }

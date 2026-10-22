@@ -326,7 +326,7 @@ func main() {
 		if err = (&enterpriseController.KVServiceReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),
-			Recorder: mgr.GetEventRecorderFor("kvservice-controller"),
+			Recorder: mgr.GetEventRecorder("kvservice-controller"),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KVService")
 			os.Exit(1)

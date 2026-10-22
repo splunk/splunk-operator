@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import (
 func TestKVServicePackagedOperatorPermissions(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 	required := map[string][]string{
+		"events":                {"create", "patch"},
 		"deployments":           {"create", "delete", "get", "list", "patch", "update", "watch"},
 		"kvservices":            {"create", "delete", "get", "list", "patch", "update", "watch"},
 		"kvservices/status":     {"get", "patch", "update"},
@@ -38,6 +39,8 @@ func TestKVServicePackagedOperatorPermissions(t *testing.T) {
 			group := "enterprise.splunk.com"
 			if resource == "deployments" {
 				group = "apps"
+			} else if resource == "events" {
+				group = "events.k8s.io"
 			}
 			for _, verb := range verbs {
 				allowed := false
@@ -53,6 +56,17 @@ func TestKVServicePackagedOperatorPermissions(t *testing.T) {
 			}
 		}
 	}
+	t.Run("canonical", func(t *testing.T) {
+		data, err := os.ReadFile(filepath.Join(root, "config/rbac/role.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var role rbacv1.ClusterRole
+		if err := yaml.Unmarshal(data, &role); err != nil {
+			t.Fatal(err)
+		}
+		check(t, role.Rules)
+	})
 	for _, name := range []string{"role", "clusterrole"} {
 		t.Run("helm-"+name, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(root, "helm-chart/splunk-operator/templates/rbac", name+".yaml"))
@@ -99,7 +113,7 @@ func TestKVServicePackagedOperatorPermissions(t *testing.T) {
 				return
 			}
 		}
-		t.Fatal("operator service account has no clusterPermissions")
+		t.Error("operator service account has no clusterPermissions")
 	})
 }
 

@@ -30,7 +30,8 @@ type KVServiceSpec struct {
 	// Common Splunk spec
 	CommonSplunkSpec `json:",inline"`
 
-	// Number of KVService pods
+	// Replicas is the desired number of KVService pods. Defaults to 1 when omitted.
+	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=1
@@ -56,7 +57,8 @@ type KVServiceStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 
-	// number of desired kvservice instances
+	// Replicas is the observed number of KVService pods,
+	// exposed through the scale subresource.
 	Replicas int32 `json:"replicas"`
 
 	// current number of ready kvservice instances
@@ -67,9 +69,6 @@ type KVServiceStatus struct {
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
-
-	// Auxillary message describing CR status
-	Message string `json:"message"`
 }
 
 // +kubebuilder:object:root=true
@@ -84,7 +83,6 @@ type KVServiceStatus struct {
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired kvservice pods"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready kvservice pods"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of kvservice resource"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 type KVService struct {
 	metav1.TypeMeta   `json:",inline"`

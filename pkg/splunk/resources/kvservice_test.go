@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,20 +110,26 @@ func TestKVServicePodSettings(t *testing.T) {
 	deployment := NewKVServiceDeployment(cr)
 	annotations := deployment.Spec.Template.Annotations
 	if annotations["sidecar.istio.io/inject"] != "false" || annotations["parent"] != "kept" || annotations["custom"] != "value" {
-		t.Fatalf("pod annotation precedence is incorrect: %v", annotations)
+		t.Errorf("pod annotation precedence is incorrect: %v", annotations)
+	}
+	if len(deployment.Spec.Template.Spec.Containers) == 0 {
+		t.Fatal("deployment containers empty")
 	}
 	container := deployment.Spec.Template.Spec.Containers[0]
 	liveness, readiness := container.LivenessProbe, container.ReadinessProbe
+	if liveness == nil || readiness == nil {
+		t.Fatal("liveness and readiness probes must be present")
+	}
 	if liveness.InitialDelaySeconds != 90 || liveness.TimeoutSeconds != 9 || liveness.PeriodSeconds != 12 || liveness.FailureThreshold != 8 {
-		t.Fatalf("liveness settings ignored: %+v", liveness)
+		t.Errorf("liveness settings ignored: %+v", liveness)
 	}
 	if readiness.InitialDelaySeconds != 65 || readiness.TimeoutSeconds != 7 || readiness.PeriodSeconds != 10 || readiness.FailureThreshold != 6 {
-		t.Fatalf("readiness settings ignored: %+v", readiness)
+		t.Errorf("readiness settings ignored: %+v", readiness)
 	}
 	for i, probe := range []*corev1.Probe{liveness, readiness} {
 		path := []string{"/service/liveness", "/service/readiness"}[i]
 		if probe.HTTPGet == nil || probe.HTTPGet.Path != path || probe.HTTPGet.Port.IntValue() != 8066 || probe.Exec != nil || probe.SuccessThreshold != 1 {
-			t.Fatalf("HTTP health endpoint lost: %+v", probe)
+			t.Errorf("HTTP health endpoint lost: %+v", probe)
 		}
 	}
 }
