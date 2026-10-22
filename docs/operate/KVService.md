@@ -1,21 +1,10 @@
 # KVService
 
-KVService is an Alpha feature. Install the KVService CRD and enable the controller
-with `--feature-gates=KVService=true` (or the corresponding Helm feature-gate
-setting). It is disabled by default.
+KVService is an Alpha feature and is disabled by default. Install the KVService
+CRD and enable its controller with `--feature-gates=KVService=true` or the
+corresponding Helm setting.
 
-The controller manages a Deployment and an HTTP Service on port 8066. Helm
-namespace and cluster roles, and the OLM operator permissions, include access to
-the KVService resource, its status and finalizers, and Deployments.
-
-The Helm chart creates KVService editor and viewer roles only when the KVService
-feature gate is enabled. Like the other custom-resource roles, their names use
-the operator name: `splunk-operator` by default, configurable through
-`splunkOperator.nameOverride`. Use distinct operator names for multiple releases
-in the same namespace or multiple cluster-wide installations.
-With `splunkOperator.clusterWideAccess=false`,
-these are Roles in the release namespace; otherwise they are ClusterRoles. These
-roles are not bound to users, groups, or service accounts by the chart.
+The controller manages a Deployment and an HTTP Service on port 8066.
 
 ## Configuration and health
 
@@ -37,7 +26,8 @@ roles are not bound to users, groups, or service accounts by the chart.
 
 `status.phase`, `status.conditions`, and `status.observedGeneration` describe
 the most recently reconciled generation. Conditions include Ready, Progressing,
-and Paused. For example:
+and Paused. Each condition provides a reason and message explaining its state.
+For example:
 
 ```sh
 kubectl wait --for=condition=Ready kvservice/<name> --timeout=5m

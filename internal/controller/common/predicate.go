@@ -164,11 +164,11 @@ func StatefulsetChangedPredicate() predicate.Predicate {
 func DeploymentChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			// This update is in fact a Delete event, process it
 			if _, ok := e.ObjectNew.(*appsv1.Deployment); !ok {
 				return false
 			}
 
+			// Reconcile updates that indicate deletion is in progress.
 			if e.ObjectNew.GetDeletionGracePeriodSeconds() != nil {
 				return true
 			}

@@ -24,8 +24,57 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	kubernetesfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/record"
 )
+
+func TestK8EventPublisherWithEventsRecorder(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := kubernetesfake.NewClientset()
+	broadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: c.EventsV1()})
+	t.Cleanup(func() {
+		cancel()
+		broadcaster.Shutdown()
+	})
+	require.NoError(t, broadcaster.StartRecordingToSinkWithContext(ctx))
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterpriseApi.AddToScheme(scheme))
+	cr := &enterpriseApi.KVService{
+		ObjectMeta: metav1.ObjectMeta{Name: "kvservice", Namespace: "test", UID: types.UID("kvservice-uid")},
+	}
+	recorder := broadcaster.NewRecorder(scheme, "kvservice-controller")
+	publisher := NewK8EventPublisherWithEventsRecorder(recorder, cr)
+	publisher.Normal(ctx, "Ready", "100% ready")
+	publisher.Warning(ctx, "ValidateSpecFailed", "invalid configuration")
+
+	require.Eventually(t, func() bool {
+		list, err := c.EventsV1().Events(cr.Namespace).List(ctx, metav1.ListOptions{})
+		return err == nil && len(list.Items) == 2
+	}, 5*time.Second, time.Millisecond)
+	list, err := c.EventsV1().Events(cr.Namespace).List(ctx, metav1.ListOptions{})
+	require.NoError(t, err)
+	for _, event := range list.Items {
+		assert.Equal(t, "kvservice-controller", event.ReportingController)
+		assert.NotEmpty(t, event.ReportingInstance)
+		assert.Equal(t, "Reconcile", event.Action)
+		assert.Equal(t, cr.Name, event.Regarding.Name)
+		assert.Equal(t, cr.Namespace, event.Regarding.Namespace)
+		assert.Equal(t, cr.UID, event.Regarding.UID)
+		switch event.Reason {
+		case "Ready":
+			assert.Equal(t, "Normal", event.Type)
+			assert.Equal(t, "100% ready", event.Note)
+		case "ValidateSpecFailed":
+			assert.Equal(t, "Warning", event.Type)
+			assert.Equal(t, "invalid configuration", event.Note)
+		default:
+			t.Errorf("unexpected event reason: %s", event.Reason)
+		}
+	}
+}
 
 func TestK8EventPublisher(t *testing.T) {
 	recorder := record.NewFakeRecorder(2)

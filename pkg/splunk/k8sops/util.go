@@ -108,7 +108,5 @@ func setStatusMessage(cr splcommon.MetaObject, crError *error) {
 		status.Status.Message = message
 	case *enterpriseApi.MonitoringConsole:
 		status.Status.Message = message
-	case *enterpriseApi.KVService:
-		status.Status.Message = message
 	}
 }

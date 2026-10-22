@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package kvservice
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -30,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -53,13 +54,13 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 	cr.Spec.PodAnnotations = map[string]string{"sidecar.istio.io/inject": "false"}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&enterpriseApi.KVService{}, &appsv1.Deployment{}).WithObjects(cr).Build()
 	key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-	recorder := record.NewFakeRecorder(100)
+	recorder := events.NewFakeRecorder(100)
 	result, err := Apply(ctx, c, key, recorder)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.RequeueAfter == 0 {
-		t.Fatal("pending Deployment should be retried")
+		t.Error("pending Deployment should be retried")
 	}
 	defaults := &corev1.ConfigMap{}
 	defaultsKey := types.NamespacedName{Namespace: cr.Namespace, Name: splutil.GetSplunkDefaultsName(cr.Name, splcommon.SplunkKVService)}
@@ -67,7 +68,7 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 		t.Fatalf("inline defaults ConfigMap was not created: %v", err)
 	}
 	if defaults.Data["default.yml"] != cr.Spec.Defaults {
-		t.Fatalf("unexpected defaults: %v", defaults.Data)
+		t.Errorf("unexpected defaults: %v", defaults.Data)
 	}
 	deployment := &appsv1.Deployment{}
 	deploymentKey := types.NamespacedName{Namespace: cr.Namespace, Name: splutil.GetSplunkDeploymentName(splcommon.SplunkKVService, cr.Name)}
@@ -75,7 +76,7 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if deployment.Spec.Template.Annotations["defaultConfigRev"] == "" {
-		t.Fatal("defaults content hash missing")
+		t.Error("defaults content hash missing")
 	}
 	deployment.Status = appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1}
 	if err := c.Status().Update(ctx, deployment); err != nil {
@@ -83,10 +84,10 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 	}
 	result, err = Apply(ctx, c, key, recorder)
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 	if result.RequeueAfter != 0 {
-		t.Fatalf("ready Deployment still polls: %v", result)
+		t.Errorf("ready Deployment still polls: %v", result)
 	}
 	current := &enterpriseApi.KVService{}
 	if err := c.Get(ctx, key, current); err != nil {
@@ -94,7 +95,7 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 	}
 	ready := meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionReady))
 	if ready == nil || ready.Status != metav1.ConditionTrue || ready.ObservedGeneration != 7 || current.Status.ObservedGeneration != 7 {
-		t.Fatalf("ready status was not persisted: %+v", current.Status)
+		t.Errorf("ready status was not persisted: %+v", current.Status)
 	}
 
 	for _, annotation := range []struct {
@@ -115,15 +116,18 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 				t.Fatal(err)
 			}
 			result, err := Apply(ctx, c, key, recorder)
-			if err != nil || result.RequeueAfter != splcommon.PauseRetryDelay {
-				t.Fatalf("true annotation did not pause reconciliation: result=%+v, error=%v", result, err)
+			if err != nil {
+				t.Fatalf("pause reconciliation failed: %v", err)
+			}
+			if result.RequeueAfter != splcommon.PauseRetryDelay {
+				t.Errorf("true annotation did not pause reconciliation: result=%+v", result)
 			}
 			if err := c.Get(ctx, key, current); err != nil {
 				t.Fatal(err)
 			}
 			paused := meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionPaused))
 			if paused == nil || paused.Status != metav1.ConditionTrue {
-				t.Fatalf("paused status missing: %+v", current.Status)
+				t.Errorf("paused status missing: %+v", current.Status)
 			}
 			if annotation.remove {
 				delete(current.Annotations, enterpriseApi.KVServicePausedAnnotation)
@@ -135,14 +139,14 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 			}
 			result, err = Apply(ctx, c, key, recorder)
 			if err != nil {
-				t.Fatalf("resource did not resume: %v", err)
+				t.Errorf("resource did not resume: %v", err)
 			}
 			if err := c.Get(ctx, key, current); err != nil {
 				t.Fatal(err)
 			}
 			paused = meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionPaused))
 			if paused == nil || paused.Status != metav1.ConditionFalse {
-				t.Fatalf("resumed status missing: %+v", current.Status)
+				t.Errorf("resumed status missing: %+v", current.Status)
 			}
 		})
 	}
@@ -158,20 +162,20 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := Apply(ctx, c, key, recorder); !apierrors.IsNotFound(err) {
-		t.Fatalf("missing dependency error was lost: %v", err)
+		t.Errorf("missing dependency error was lost: %v", err)
 	}
 	if err := c.Get(ctx, deploymentKey, deployment); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(before, &deployment.Spec.Template) {
-		t.Fatal("incomplete pod configuration replaced the working Deployment")
+		t.Error("incomplete pod configuration replaced the working Deployment")
 	}
 	if err := c.Get(ctx, key, current); err != nil {
 		t.Fatal(err)
 	}
 	ready = meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionReady))
-	if ready == nil || ready.Status != metav1.ConditionFalse || current.Status.Phase != enterpriseApi.PhaseError || current.Status.Message == "" || current.Status.ObservedGeneration != 8 {
-		t.Fatalf("failed generation was not reflected in status: %+v", current.Status)
+	if ready == nil || ready.Status != metav1.ConditionFalse || current.Status.Phase != enterpriseApi.PhaseError || !strings.Contains(ready.Message, "missing-manager") || current.Status.ObservedGeneration != 8 {
+		t.Errorf("failed generation was not reflected in status: %+v", current.Status)
 	}
 }
 
@@ -184,18 +188,18 @@ func TestKVServicePausedStatus(t *testing.T) {
 	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "paused", Namespace: "test", Generation: 9, Annotations: map[string]string{enterpriseApi.KVServicePausedAnnotation: "true"}}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(cr).WithObjects(cr).Build()
 	key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-	result, err := Apply(ctx, c, key, record.NewFakeRecorder(10))
+	result, err := Apply(ctx, c, key, events.NewFakeRecorder(10))
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 	if result.RequeueAfter != splcommon.PauseRetryDelay {
-		t.Fatalf("pause delay changed: %v", result)
+		t.Errorf("pause delay changed: %v", result)
 	}
 	if err := c.Get(ctx, key, cr); err != nil {
 		t.Fatal(err)
 	}
 	paused := meta.FindStatusCondition(cr.Status.Conditions, string(enterpriseApi.ConditionPaused))
 	if paused == nil || paused.Status != metav1.ConditionTrue || cr.Status.Phase != enterpriseApi.PhasePending || cr.Status.ObservedGeneration != 9 {
-		t.Fatalf("paused status missing: %+v", cr.Status)
+		t.Errorf("paused status missing: %+v", cr.Status)
 	}
 }

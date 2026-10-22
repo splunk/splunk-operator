@@ -1,5 +1,5 @@
 /*
-Copyright 2021.
+Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -42,7 +42,7 @@ import (
 type KVServiceReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
@@ -61,6 +61,7 @@ type KVServiceReconciler struct {
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices/finalizers,verbs=update
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -99,7 +100,9 @@ func (r *KVServiceReconciler) mapConfigMapToKVServices(ctx context.Context, obj 
 }
 
 func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Recorder = mgr.GetEventRecorderFor("kvservice-controller")
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("kvservice-controller")
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.KVService{}).
 		WithEventFilter(predicate.Or(

@@ -127,7 +127,6 @@ func GetCurrentCRWithStatusUpdate(ctx context.Context, c splcommon.ControllerCli
 		}
 	case *enterpriseApi.KVService:
 		latestCR := &enterpriseApi.KVService{}
-		setStatusMessage(cr, crError)
 		if latest, err := copyStatus(latestCR); err != nil {
 			return nil, err
 		} else {
