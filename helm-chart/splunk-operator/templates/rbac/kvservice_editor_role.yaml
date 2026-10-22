@@ -7,12 +7,7 @@ kind: ClusterRole
 kind: Role
 {{- end }}
 metadata:
-  labels:
-{{ include "splunk-operator.labels" . | indent 4 }}
-  name: {{ include "splunk-operator.fullname" . }}-kvservice-editor-role
-{{- if not .Values.splunkOperator.clusterWideAccess }}
-  namespace: {{ .Release.Namespace }}
-{{- end }}
+  name: {{ include "splunk-operator.operator.fullname" . }}-kvservice-editor-role
 rules:
 - apiGroups:
   - enterprise.splunk.com
