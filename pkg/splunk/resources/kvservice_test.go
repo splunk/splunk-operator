@@ -107,6 +107,7 @@ func TestKVServicePodSettings(t *testing.T) {
 	cr.Spec.ReadinessInitialDelaySeconds = 75
 	cr.Spec.LivenessProbe = &enterpriseApi.Probe{TimeoutSeconds: 9, PeriodSeconds: 12, FailureThreshold: 8}
 	cr.Spec.ReadinessProbe = &enterpriseApi.Probe{InitialDelaySeconds: 65, TimeoutSeconds: 7, PeriodSeconds: 10, FailureThreshold: 6}
+	cr.Spec.StartupProbe = &enterpriseApi.Probe{InitialDelaySeconds: 60, TimeoutSeconds: 5, PeriodSeconds: 10, FailureThreshold: 20}
 	deployment := NewKVServiceDeployment(cr)
 	annotations := deployment.Spec.Template.Annotations
 	if annotations["sidecar.istio.io/inject"] != "false" || annotations["parent"] != "kept" || annotations["custom"] != "value" {
@@ -120,11 +121,14 @@ func TestKVServicePodSettings(t *testing.T) {
 	if liveness == nil || readiness == nil {
 		t.Fatal("liveness and readiness probes must be present")
 	}
-	if liveness.InitialDelaySeconds != 90 || liveness.TimeoutSeconds != 9 || liveness.PeriodSeconds != 12 || liveness.FailureThreshold != 8 {
-		t.Errorf("liveness settings ignored: %+v", liveness)
+	if liveness.InitialDelaySeconds != 30 || liveness.TimeoutSeconds != 1 || liveness.PeriodSeconds != 5 || liveness.FailureThreshold != 3 {
+		t.Errorf("fixed liveness settings overridden: %+v", liveness)
 	}
-	if readiness.InitialDelaySeconds != 65 || readiness.TimeoutSeconds != 7 || readiness.PeriodSeconds != 10 || readiness.FailureThreshold != 6 {
-		t.Errorf("readiness settings ignored: %+v", readiness)
+	if readiness.InitialDelaySeconds != 30 || readiness.TimeoutSeconds != 1 || readiness.PeriodSeconds != 5 || readiness.FailureThreshold != 3 {
+		t.Errorf("fixed readiness settings overridden: %+v", readiness)
+	}
+	if container.StartupProbe != nil {
+		t.Errorf("KVService must not configure a startup probe: %+v", container.StartupProbe)
 	}
 	for i, probe := range []*corev1.Probe{liveness, readiness} {
 		path := []string{"/service/liveness", "/service/readiness"}[i]

@@ -51,15 +51,13 @@ func TestValidateKVServiceSpec(t *testing.T) {
 		t.Errorf("imagePullSecrets len=%d; want 0", len(cr.Spec.ImagePullSecrets))
 	}
 
-	invalid := &enterpriseApi.KVService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack2",
-			Namespace: "test",
-		},
-	}
-	invalid.Spec.LivenessInitialDelaySeconds = -1
-	err = validateKVServiceSpec(ctx, c, invalid)
-	if err == nil {
-		t.Errorf("Expected error")
+	// Inherited probe settings are ignored because KVService uses fixed probes.
+	cr.Spec.LivenessInitialDelaySeconds = -1
+	cr.Spec.ReadinessInitialDelaySeconds = -1
+	cr.Spec.LivenessProbe = &enterpriseApi.Probe{TimeoutSeconds: -1}
+	cr.Spec.ReadinessProbe = &enterpriseApi.Probe{PeriodSeconds: -1}
+	err = validateKVServiceSpec(ctx, c, cr)
+	if err != nil {
+		t.Errorf("ignored probe settings must not block reconciliation: %v", err)
 	}
 }

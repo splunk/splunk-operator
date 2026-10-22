@@ -121,12 +121,12 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 		deployment.Spec.Template.Annotations[k] = v
 	}
 	deployment.SetOwnerReferences([]metav1.OwnerReference{splcommon.AsOwner(cr, true)})
-	ConfigureKVServiceHTTPProbes(&deployment.Spec.Template, spec)
+	ConfigureKVServiceHTTPProbes(&deployment.Spec.Template)
 	return deployment
 }
 
-// ConfigureKVServiceHTTPProbes preserves the HTTP endpoints while applying user timing settings.
-func ConfigureKVServiceHTTPProbes(template *corev1.PodTemplateSpec, spec *enterpriseApi.KVServiceSpec) {
+// ConfigureKVServiceHTTPProbes applies fixed HTTP endpoints and timings for KVService.
+func ConfigureKVServiceHTTPProbes(template *corev1.PodTemplateSpec) {
 
 	kvserviceLivenessProbe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
@@ -158,14 +158,8 @@ func ConfigureKVServiceHTTPProbes(template *corev1.PodTemplateSpec, spec *enterp
 
 	for idx := range template.Spec.Containers {
 		if template.Spec.Containers[idx].Name == "kvservice" {
-			liveness := GetProbeWithConfigUpdates(kvserviceLivenessProbe, spec.LivenessProbe, spec.LivenessInitialDelaySeconds)
-			liveness.ProbeHandler = kvserviceLivenessProbe.ProbeHandler
-			liveness.SuccessThreshold = 1
-			template.Spec.Containers[idx].LivenessProbe = liveness
-			readiness := GetProbeWithConfigUpdates(kvserviceReadinessProbe, spec.ReadinessProbe, spec.ReadinessInitialDelaySeconds)
-			readiness.ProbeHandler = kvserviceReadinessProbe.ProbeHandler
-			readiness.SuccessThreshold = 1
-			template.Spec.Containers[idx].ReadinessProbe = readiness
+			template.Spec.Containers[idx].LivenessProbe = kvserviceLivenessProbe
+			template.Spec.Containers[idx].ReadinessProbe = kvserviceReadinessProbe
 			template.Spec.Containers[idx].StartupProbe = nil
 			break
 		}
