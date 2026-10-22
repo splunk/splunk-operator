@@ -9,8 +9,11 @@ namespace and cluster roles, and the OLM operator permissions, include access to
 the KVService resource, its status and finalizers, and Deployments.
 
 The Helm chart creates KVService editor and viewer roles only when the KVService
-feature gate is enabled. Their names use the chart fullname, which includes the
-Helm release name unless overridden. With `splunkOperator.clusterWideAccess=false`,
+feature gate is enabled. Like the other custom-resource roles, their names use
+the operator name: `splunk-operator` by default, configurable through
+`splunkOperator.nameOverride`. Use distinct operator names for multiple releases
+in the same namespace or multiple cluster-wide installations.
+With `splunkOperator.clusterWideAccess=false`,
 these are Roles in the release namespace; otherwise they are ClusterRoles. These
 roles are not bound to users, groups, or service accounts by the chart.
 

@@ -11,7 +11,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should render release-specific Roles in namespace-only mode
+  - it: should render operator-named Roles in namespace-only mode
     set:
       splunkOperator.clusterWideAccess: false
       splunkOperator.featureGates.KVService: true
@@ -20,14 +20,13 @@ tests:
           count: 1
       - isKind:
           of: Role
-      - equal:
+      - notExists:
           path: metadata.namespace
-          value: team-a
       - matchRegex:
           path: metadata.name
-          pattern: ^verify-splunk-operator-kvservice-(editor|viewer)-role$
+          pattern: ^splunk-operator-kvservice-(editor|viewer)-role$
 
-  - it: should render release-specific ClusterRoles in cluster-wide mode
+  - it: should render operator-named ClusterRoles in cluster-wide mode
     set:
       splunkOperator.clusterWideAccess: true
       splunkOperator.featureGates.KVService: true
@@ -40,21 +39,23 @@ tests:
           path: metadata.namespace
       - matchRegex:
           path: metadata.name
-          pattern: ^verify-splunk-operator-kvservice-(editor|viewer)-role$
+          pattern: ^splunk-operator-kvservice-(editor|viewer)-role$
 
-  - it: should use a different name for another release
+  - it: should support another release with a distinct operator name
     release:
       name: another
     set:
+      splunkOperator.nameOverride: another-operator
       splunkOperator.featureGates.KVService: true
     asserts:
       - matchRegex:
           path: metadata.name
-          pattern: ^another-splunk-operator-kvservice-(editor|viewer)-role$
+          pattern: ^another-operator-kvservice-(editor|viewer)-role$
 
-  - it: should respect the chart fullname override
+  - it: should use the operator name override instead of the chart fullname override
     set:
-      fullnameOverride: custom-operator
+      fullnameOverride: chart-fullname
+      splunkOperator.nameOverride: custom-operator
       splunkOperator.featureGates.KVService: true
     asserts:
       - matchRegex:
