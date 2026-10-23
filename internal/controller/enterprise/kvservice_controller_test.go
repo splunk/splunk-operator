@@ -22,6 +22,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -32,6 +33,7 @@ import (
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 var _ = Describe("KVService Controller", func() {
@@ -45,7 +47,7 @@ var _ = Describe("KVService Controller", func() {
 					Annotations:  map[string]string{enterprisev4.KVServicePausedAnnotation: "true"},
 				},
 				Spec: enterprisev4.KVServiceSpec{
-					CommonSplunkSpec: enterprisev4.CommonSplunkSpec{
+					CommonWorkloadSpec: enterprisev4.CommonWorkloadSpec{
 						Spec: enterprisev4.Spec{ImagePullPolicy: "IfNotPresent"},
 					},
 					Replicas: 1,
@@ -112,15 +114,15 @@ var _ = Describe("KVService Controller", func() {
 						Namespace: "default",
 					},
 					Spec: enterprisev4.KVServiceSpec{
-						CommonSplunkSpec: enterprisev4.CommonSplunkSpec{
+						CommonWorkloadSpec: enterprisev4.CommonWorkloadSpec{
 							Spec: enterprisev4.Spec{
 								ImagePullPolicy: "IfNotPresent",
 							},
 							ServiceAccount: "kvservice-test-sa",
-							LicenseURL:     "file://splunk.lic",
-							DefaultsURL:    "file://splunk-defaults.yml",
 						},
-						Replicas: 1,
+						LivenessInitialDelaySeconds: 90,
+						ReadinessProbe:              &enterprisev4.Probe{TimeoutSeconds: 7},
+						Replicas:                    1,
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -151,6 +153,16 @@ var _ = Describe("KVService Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+			deployment := &appsv1.Deployment{}
+			deploymentKey := types.NamespacedName{Namespace: typeNamespacedName.Namespace,
+				Name: splutil.GetSplunkDeploymentName(splcommon.SplunkKVService, resourceName)}
+			Expect(k8sClient.Get(ctx, deploymentKey, deployment)).To(Succeed())
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.LivenessProbe.InitialDelaySeconds).To(Equal(int32(90)))
+			Expect(container.LivenessProbe.TimeoutSeconds).To(Equal(int32(1)))
+			Expect(container.ReadinessProbe.InitialDelaySeconds).To(Equal(int32(30)))
+			Expect(container.ReadinessProbe.TimeoutSeconds).To(Equal(int32(7)))
+			Expect(container.ReadinessProbe.PeriodSeconds).To(Equal(int32(5)))
 		})
 	})
 })

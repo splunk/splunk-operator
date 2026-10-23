@@ -58,9 +58,6 @@ spec:
           spec:
             description: KVServiceSpec defines the desired state of KVService.
             properties:
-              Mock:
-                description: Mock to differentiate between UTs and actual reconcile
-                type: boolean
               affinity:
                 description: Kubernetes Affinity rules that control how pods are assigned
                   to particular nodes.
@@ -1092,137 +1089,15 @@ spec:
                   rule: self.filter(c, has(c.role) && c.role == 'server').size() <=
                     1 && self.filter(c, has(c.role) && c.role == 'input').size() <=
                     1
-              clusterManagerRef:
-                description: ClusterManagerRef refers to a Splunk Enterprise indexer
-                  cluster managed by the operator within Kubernetes
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
-              clusterMasterRef:
-                description: ClusterMasterRef refers to a Splunk Enterprise indexer
-                  cluster managed by the operator within Kubernetes
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               defaults:
                 description: Inline map of default.yml overrides used to initialize
                   the environment
-                type: string
-              defaultsUrl:
-                description: Full path or URL for one or more default.yml files, separated
-                  by commas
-                type: string
-              defaultsUrlApps:
-                description: |-
-                  Full path or URL for one or more defaults.yml files specific
-                  to App install, separated by commas.  The defaults listed here
-                  will be installed on the CM, standalone, search head deployer
-                  or license manager instance.
                 type: string
               disableResourceDefaults:
                 default: false
                 description: DisableResourceDefaults prevents the operator from filling
                   in default CPU and memory requests and limits.
                 type: boolean
-              etcVolumeStorageConfig:
-                description: Storage configuration for /opt/splunk/etc volume
-                properties:
-                  ephemeralStorage:
-                    default: false
-                    description: If true, ephemeral (emptyDir) storage will be used
-                    type: boolean
-                  storageCapacity:
-                    description: Storage capacity to request persistent volume claims
-                      (default="10Gi" for etc and "100Gi" for var)
-                    type: string
-                  storageClassName:
-                    description: Name of StorageClass to use for persistent volume
-                      claims
-                    type: string
-                type: object
-                x-kubernetes-validations:
-                - message: storageClassName and ephemeralStorage are mutually exclusive
-                  rule: '!(has(self.storageClassName) && size(self.storageClassName)
-                    > 0 && self.ephemeralStorage == true)'
-                - message: storageCapacity and ephemeralStorage are mutually exclusive
-                  rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
-                    > 0 && self.ephemeralStorage == true)'
               extraEnv:
                 description: |-
                   ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
@@ -1418,111 +1293,17 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
-              licenseManagerRef:
-                description: LicenseManagerRef refers to a Splunk Enterprise license
-                  manager managed by the operator within Kubernetes
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
-              licenseMasterRef:
-                description: LicenseMasterRef refers to a Splunk Enterprise license
-                  manager managed by the operator within Kubernetes
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
-              licenseUrl:
-                description: Full path or URL for a Splunk Enterprise license file
-                type: string
               livenessInitialDelaySeconds:
                 description: |-
-                  LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
-                  Note: If needed, Operator overrides with a higher value
+                  LivenessInitialDelaySeconds overrides the default 30-second liveness delay
+                  when livenessProbe.initialDelaySeconds is not specified.
                 format: int32
                 minimum: 0
                 type: integer
               livenessProbe:
-                default:
-                  failureThreshold: 3
-                  initialDelaySeconds: 30
-                  periodSeconds: 30
-                  timeoutSeconds: 30
-                description: LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
+                description: |-
+                  LivenessProbe overrides HTTP probe timings. Defaults are a 30-second delay,
+                  a 1-second timeout, a 5-second period, and a failure threshold of 3.
                 properties:
                   failureThreshold:
                     description: Minimum consecutive failures for the probe to be
@@ -1546,50 +1327,6 @@ spec:
                     format: int32
                     type: integer
                 type: object
-              monitoringConsoleRef:
-                description: MonitoringConsoleRef refers to a Splunk Enterprise monitoring
-                  console managed by the operator within Kubernetes
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               podAnnotations:
                 additionalProperties:
                   type: string
@@ -1599,18 +1336,15 @@ spec:
                 type: object
               readinessInitialDelaySeconds:
                 description: |-
-                  ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
-                  Note: If needed, Operator overrides with a higher value
+                  ReadinessInitialDelaySeconds overrides the default 30-second readiness delay
+                  when readinessProbe.initialDelaySeconds is not specified.
                 format: int32
                 minimum: 0
                 type: integer
               readinessProbe:
-                default:
-                  failureThreshold: 3
-                  initialDelaySeconds: 10
-                  periodSeconds: 5
-                  timeoutSeconds: 5
-                description: ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
+                description: |-
+                  ReadinessProbe overrides HTTP probe timings. Defaults are a 30-second delay,
+                  a 1-second timeout, a 5-second period, and a failure threshold of 3.
                 properties:
                   failureThreshold:
                     description: Minimum consecutive failures for the probe to be
@@ -2223,36 +1957,6 @@ spec:
                         type: object
                     type: object
                 type: object
-              startupProbe:
-                default:
-                  failureThreshold: 12
-                  initialDelaySeconds: 40
-                  periodSeconds: 30
-                  timeoutSeconds: 30
-                description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
-                properties:
-                  failureThreshold:
-                    description: Minimum consecutive failures for the probe to be
-                      considered failed after having succeeded.
-                    format: int32
-                    type: integer
-                  initialDelaySeconds:
-                    description: |-
-                      Number of seconds after the container has started before liveness probes are initiated.
-                      More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
-                    format: int32
-                    type: integer
-                  periodSeconds:
-                    description: How often (in seconds) to perform the probe.
-                    format: int32
-                    type: integer
-                  timeoutSeconds:
-                    description: |-
-                      Number of seconds after which the probe times out.
-                      More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
-                    format: int32
-                    type: integer
-                type: object
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
@@ -2467,29 +2171,6 @@ spec:
                   - whenUnsatisfiable
                   type: object
                 type: array
-              varVolumeStorageConfig:
-                description: Storage configuration for /opt/splunk/var volume
-                properties:
-                  ephemeralStorage:
-                    default: false
-                    description: If true, ephemeral (emptyDir) storage will be used
-                    type: boolean
-                  storageCapacity:
-                    description: Storage capacity to request persistent volume claims
-                      (default="10Gi" for etc and "100Gi" for var)
-                    type: string
-                  storageClassName:
-                    description: Name of StorageClass to use for persistent volume
-                      claims
-                    type: string
-                type: object
-                x-kubernetes-validations:
-                - message: storageClassName and ephemeralStorage are mutually exclusive
-                  rule: '!(has(self.storageClassName) && size(self.storageClassName)
-                    > 0 && self.ephemeralStorage == true)'
-                - message: storageCapacity and ephemeralStorage are mutually exclusive
-                  rule: '!(has(self.storageCapacity) && size(self.storageCapacity)
-                    > 0 && self.ephemeralStorage == true)'
               volumes:
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>

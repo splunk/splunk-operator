@@ -22,8 +22,10 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	"github.com/splunk/splunk-operator/pkg/config"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	"github.com/splunk/splunk-operator/pkg/splunk/reconcile/kvservice"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -103,7 +105,7 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder("kvservice-controller")
 	}
-	return ctrl.NewControllerManagedBy(mgr).
+	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.KVService{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
@@ -142,6 +144,10 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToKVServices)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		}).
-		Complete(r)
+		})
+	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		bldr = bldr.Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(
+			certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.KVServiceList{})))
+	}
+	return bldr.Complete(r)
 }

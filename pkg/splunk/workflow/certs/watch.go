@@ -97,9 +97,15 @@ func certSecretReferencedBy(secretName string, cr client.Object) bool {
 }
 
 // crListItems extracts the individual items from any typed CR list.
-// Supports all 9 SOK enterprise CR list types.
+// Supports all 10 SOK enterprise CR list types.
 func crListItems(list client.ObjectList) []client.Object {
 	switch l := list.(type) {
+	case *enterpriseApi.KVServiceList:
+		items := make([]client.Object, len(l.Items))
+		for i := range l.Items {
+			items[i] = &l.Items[i]
+		}
+		return items
 	case *enterpriseApi.StandaloneList:
 		items := make([]client.Object, len(l.Items))
 		for i := range l.Items {

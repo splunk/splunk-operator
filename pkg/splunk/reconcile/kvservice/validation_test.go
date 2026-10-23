@@ -19,7 +19,10 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -51,13 +54,36 @@ func TestValidateKVServiceSpec(t *testing.T) {
 		t.Errorf("imagePullSecrets len=%d; want 0", len(cr.Spec.ImagePullSecrets))
 	}
 
-	// Inherited probe settings are ignored because KVService uses fixed probes.
-	cr.Spec.LivenessInitialDelaySeconds = -1
-	cr.Spec.ReadinessInitialDelaySeconds = -1
-	cr.Spec.LivenessProbe = &enterpriseApi.Probe{TimeoutSeconds: -1}
-	cr.Spec.ReadinessProbe = &enterpriseApi.Probe{PeriodSeconds: -1}
+	cr.Spec.ImagePullPolicy = "invalid"
 	err = validateKVServiceSpec(ctx, c, cr)
-	if err != nil {
-		t.Errorf("ignored probe settings must not block reconciliation: %v", err)
+	if err == nil {
+		t.Error("invalid image pull policy must fail validation")
 	}
+	cr.Spec.ImagePullPolicy = "IfNotPresent"
+	for name, spec := range map[string]enterpriseApi.KVServiceSpec{
+		"liveness delay":   {LivenessInitialDelaySeconds: -1},
+		"readiness delay":  {ReadinessInitialDelaySeconds: -1},
+		"liveness timing":  {LivenessProbe: &enterpriseApi.Probe{TimeoutSeconds: -1}},
+		"readiness timing": {ReadinessProbe: &enterpriseApi.Probe{PeriodSeconds: -1}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			spec.CommonWorkloadSpec = cr.Spec.CommonWorkloadSpec
+			invalid := &enterpriseApi.KVService{ObjectMeta: cr.ObjectMeta, Spec: spec}
+			if err := validateKVServiceSpec(ctx, c, invalid); err == nil {
+				t.Error("negative probe timing must fail validation")
+			}
+		})
+	}
+}
+
+func TestValidateKVServiceCertsFeatureGate(t *testing.T) {
+	previous := config.DefaultMutableFeatureGate.Enabled(config.CertManagement)
+	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): false}))
+	t.Cleanup(func() {
+		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
+	})
+	cr := &enterpriseApi.KVService{}
+	cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "postgres-ca"}}}
+	err := validateKVServiceSpec(context.Background(), spltest.NewMockClient(), cr)
+	require.ErrorContains(t, err, "CertManagement")
 }

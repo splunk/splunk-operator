@@ -26,7 +26,7 @@ import (
 func AutoDNSNames(instanceType splcommon.InstanceType, name, namespace string, replicas int32) []string {
 	serviceFQDN := splcommon.GetServiceFQDN(namespace, splcommon.GetSplunkServiceName(instanceType, name, false))
 
-	if instanceType == splcommon.SplunkMonitoringConsole {
+	if instanceType == splcommon.SplunkMonitoringConsole || instanceType == splcommon.SplunkKVService {
 		return certlib.DeriveDNSNames([]string{serviceFQDN}, "", nil)
 	}
 

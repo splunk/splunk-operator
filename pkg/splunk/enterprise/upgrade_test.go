@@ -119,11 +119,13 @@ func TestUpgradePathValidation(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:old",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           "splunk/splunk:old",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 	}
@@ -142,11 +144,13 @@ func TestUpgradePathValidation(t *testing.T) {
 		},
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:old",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           "splunk/splunk:old",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 	}
@@ -158,12 +162,14 @@ func TestUpgradePathValidation(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:old",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           "splunk/splunk:old",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
-				Mock:    true,
+				Mock: true,
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: "test",
 				},
@@ -178,11 +184,13 @@ func TestUpgradePathValidation(t *testing.T) {
 		},
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:old",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           "splunk/splunk:old",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: "test",
 				},
@@ -200,11 +208,13 @@ func TestUpgradePathValidation(t *testing.T) {
 		},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:old",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           "splunk/splunk:old",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: "test",
 				},
@@ -225,11 +235,13 @@ func TestUpgradePathValidation(t *testing.T) {
 		},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:old",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           "splunk/splunk:old",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: "test",
 				},
@@ -685,7 +697,9 @@ func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-lm-gate", Namespace: "test"},
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				},
 			},
 		},
 	}
@@ -697,7 +711,9 @@ func TestUpgradePathValidation_LicenseManagerGate(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cm-gate", Namespace: "test"},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec:              enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				},
 				LicenseManagerRef: corev1.ObjectReference{Name: "test-lm-gate"},
 			},
 		},
@@ -770,7 +786,9 @@ func TestUpgradePathValidationIndexerClusterWithoutClusterManagerSkipsClusterInf
 		ObjectMeta: metav1.ObjectMeta{Name: "test-idx", Namespace: "test"},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				},
 			},
 		},
 	}
@@ -800,7 +818,9 @@ func TestUpgradePathValidationIndexerClusterWithClusterManagerRequiresClusterInf
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				},
 			},
 		},
 	}
@@ -831,7 +851,9 @@ func TestUpgradePathValidationIndexerClusterWithClusterManagerRequiresClusterInf
 		ObjectMeta: metav1.ObjectMeta{Name: "test-idx", Namespace: "test"},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec:              enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				},
 				ClusterManagerRef: corev1.ObjectReference{Name: "test-cm"},
 			},
 		},
@@ -873,7 +895,9 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:old"},
+				},
 			},
 		},
 	}
@@ -906,7 +930,9 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-idx", Namespace: "test"},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec:              enterpriseApi.Spec{Image: "splunk/splunk:new"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:new"},
+				},
 				ClusterManagerRef: corev1.ObjectReference{Name: "test-cm"},
 			},
 		},

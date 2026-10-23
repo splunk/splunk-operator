@@ -104,11 +104,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec.MaxConcurrentAppDownloads = int64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -234,11 +236,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -362,11 +366,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -509,11 +515,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -641,11 +649,13 @@ var _ = Describe("s1appfw test", func() {
 			}
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -757,11 +767,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -839,11 +851,13 @@ var _ = Describe("s1appfw test", func() {
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -998,11 +1012,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1015,11 +1031,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpecStandalone2 := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, s3TestDirStandalone2, 60)
 			specStandalone2 := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1095,11 +1113,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1175,11 +1195,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1273,11 +1295,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1352,11 +1376,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec.MaxConcurrentAppDownloads = int64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1473,11 +1499,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec.MaxConcurrentAppDownloads = int64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1602,11 +1630,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 120)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1708,11 +1738,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec.MaxConcurrentAppDownloads = int64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1776,11 +1808,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testcaseEnvInst.GenerateAppFrameworkSpec(ctx, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},
@@ -1849,11 +1883,13 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec.MaxConcurrentAppDownloads = int64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes:       []corev1.Volume{},
 					LivenessProbe: testenv.AppFrameworkLivenessProbe(),
 					StartupProbe:  testenv.AppFrameworkStartupProbe(),
 				},

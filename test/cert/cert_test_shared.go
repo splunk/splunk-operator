@@ -84,19 +84,22 @@ func RunS1CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: testenvInstance.GetSplunkImage()},
-			Certs: []enterpriseApi.CertSpec{
-				{
-					SecretRef:      corev1.LocalObjectReference{Name: autogenSecret},
-					Role:           enterpriseApi.CertRoleServer,
-					IssuerRef:      &enterpriseApi.IssuerReference{Name: issuerName},
-					DNSNames:       []string{serviceFQDN, podFQDN},
-					Duration:       &metav1.Duration{Duration: 24 * time.Hour},
-					RenewBefore:    &metav1.Duration{Duration: 6 * time.Hour},
-					RotationPolicy: enterpriseApi.PrivateKeyRotationPolicyAlways,
-				},
-				{
-					SecretRef: corev1.LocalObjectReference{Name: existingSecret},
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: testenvInstance.GetSplunkImage()},
+
+				Certs: []enterpriseApi.CertSpec{
+					{
+						SecretRef:      corev1.LocalObjectReference{Name: autogenSecret},
+						Role:           enterpriseApi.CertRoleServer,
+						IssuerRef:      &enterpriseApi.IssuerReference{Name: issuerName},
+						DNSNames:       []string{serviceFQDN, podFQDN},
+						Duration:       &metav1.Duration{Duration: 24 * time.Hour},
+						RenewBefore:    &metav1.Duration{Duration: 6 * time.Hour},
+						RotationPolicy: enterpriseApi.PrivateKeyRotationPolicyAlways,
+					},
+					{
+						SecretRef: corev1.LocalObjectReference{Name: existingSecret},
+					},
 				},
 			},
 		},
@@ -167,8 +170,11 @@ func RunC3CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 		lmPodFQDN := splunkServiceFQDN(fmt.Sprintf("splunk-%s-license-manager-0.splunk-%s-license-manager-headless", name, name), ns)
 		lmSpec := enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec:  enterpriseApi.Spec{ImagePullPolicy: "Always", Image: splunkImage},
-				Certs: serverAutogenCertSpec(lmSecret, issuerName, []string{lmServiceFQDN, lmPodFQDN}),
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: splunkImage},
+
+					Certs: serverAutogenCertSpec(lmSecret, issuerName, []string{lmServiceFQDN, lmPodFQDN}),
+				},
 			},
 		}
 		_, err := deployment.DeployLicenseManagerWithGivenSpec(ctx, deployment.GetName(), lmSpec)
@@ -189,11 +195,14 @@ func RunC3CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 	cmPodFQDN := splunkServiceFQDN(fmt.Sprintf("splunk-%s-cluster-manager-0.splunk-%s-cluster-manager-headless", name, name), ns)
 	cmSpec := enterpriseApi.ClusterManagerSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec:  enterpriseApi.Spec{ImagePullPolicy: "Always", Image: splunkImage},
-			Certs: serverAutogenCertSpec(cmSecret, issuerName, []string{cmServiceFQDN, cmPodFQDN}),
-			// RF/SF set to 1 so a single-replica IndexerCluster (below) isn't
-			// forcibly scaled up by verifyRFPeers to match the default RF of 3.
-			Defaults: "splunk:\n  idxc:\n    replication_factor: 1\n    search_factor: 1\n",
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: splunkImage},
+				// RF/SF set to 1 so a single-replica IndexerCluster (below) isn't
+				// forcibly scaled up by verifyRFPeers to match the default RF of 3.
+				Defaults: "splunk:\n  idxc:\n    replication_factor: 1\n    search_factor: 1\n",
+
+				Certs: serverAutogenCertSpec(cmSecret, issuerName, []string{cmServiceFQDN, cmPodFQDN}),
+			},
 		},
 	}
 	if lmRef != "" {
@@ -215,8 +224,11 @@ func RunC3CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 	idxcHeadlessFQDN := splunkServiceFQDN(fmt.Sprintf("splunk-%s-indexer-headless", idxcName), ns)
 	_, err = deployment.DeployIndexerClusterWithGivenSpec(ctx, idxcName, enterpriseApi.IndexerClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec:              enterpriseApi.Spec{ImagePullPolicy: "Always", Image: splunkImage},
-			Certs:             serverAutogenCertSpec(idxcSecret, issuerName, []string{idxcServiceFQDN, "*." + idxcHeadlessFQDN}),
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: splunkImage},
+
+				Certs: serverAutogenCertSpec(idxcSecret, issuerName, []string{idxcServiceFQDN, "*." + idxcHeadlessFQDN}),
+			},
 			ClusterManagerRef: corev1.ObjectReference{Name: deployment.GetName()},
 		},
 		Replicas: 1,
@@ -238,8 +250,11 @@ func RunC3CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 	shcDeployerFQDN := splunkServiceFQDN(fmt.Sprintf("splunk-%s-deployer-service", shcName), ns)
 	_, err = deployment.DeploySearchHeadClusterWithGivenSpec(ctx, shcName, enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec:              enterpriseApi.Spec{ImagePullPolicy: "Always", Image: splunkImage},
-			Certs:             serverAutogenCertSpec(shcSecret, issuerName, []string{shcServiceFQDN, shcDeployerFQDN, "*." + shcHeadlessFQDN}),
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: splunkImage},
+
+				Certs: serverAutogenCertSpec(shcSecret, issuerName, []string{shcServiceFQDN, shcDeployerFQDN, "*." + shcHeadlessFQDN}),
+			},
 			ClusterManagerRef: corev1.ObjectReference{Name: deployment.GetName()},
 		},
 		Replicas: 1,
@@ -302,8 +317,11 @@ func RunICCertTestTopology(ctx context.Context, deployment *testenv.Deployment, 
 		},
 		Spec: enterpriseApi.IngestorClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec:  enterpriseApi.Spec{ImagePullPolicy: "Always", Image: testenvInstance.GetSplunkImage()},
-				Certs: serverAutogenCertSpec(icSecret, issuerName, []string{icServiceFQDN, icPodFQDN}),
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: testenvInstance.GetSplunkImage()},
+
+					Certs: serverAutogenCertSpec(icSecret, issuerName, []string{icServiceFQDN, icPodFQDN}),
+				},
 			},
 			Replicas:         1,
 			QueueRef:         corev1.ObjectReference{Name: queue.Name},
@@ -350,16 +368,19 @@ func RunS1CertGCOnDeleteTest(ctx context.Context, deployment *testenv.Deployment
 
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: testenvInstance.GetSplunkImage()},
-			Certs: []enterpriseApi.CertSpec{
-				{
-					SecretRef: corev1.LocalObjectReference{Name: autogenSecret},
-					Role:      enterpriseApi.CertRoleServer,
-					IssuerRef: &enterpriseApi.IssuerReference{Name: issuerName},
-					DNSNames:  []string{serviceFQDN, podFQDN},
-				},
-				{
-					SecretRef: corev1.LocalObjectReference{Name: existingSecret},
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: testenvInstance.GetSplunkImage()},
+
+				Certs: []enterpriseApi.CertSpec{
+					{
+						SecretRef: corev1.LocalObjectReference{Name: autogenSecret},
+						Role:      enterpriseApi.CertRoleServer,
+						IssuerRef: &enterpriseApi.IssuerReference{Name: issuerName},
+						DNSNames:  []string{serviceFQDN, podFQDN},
+					},
+					{
+						SecretRef: corev1.LocalObjectReference{Name: existingSecret},
+					},
 				},
 			},
 		},

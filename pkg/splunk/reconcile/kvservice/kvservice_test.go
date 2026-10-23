@@ -21,8 +21,12 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -156,7 +160,7 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := deployment.Spec.Template.DeepCopy()
-	current.Spec.ClusterManagerRef.Name = "missing-manager"
+	current.Spec.ServiceAccount = "missing-service-account"
 	current.Generation = 8
 	if err := c.Update(ctx, current); err != nil {
 		t.Fatal(err)
@@ -174,7 +178,7 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	ready = meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionReady))
-	if ready == nil || ready.Status != metav1.ConditionFalse || current.Status.Phase != enterpriseApi.PhaseError || !strings.Contains(ready.Message, "missing-manager") || current.Status.ObservedGeneration != 8 {
+	if ready == nil || ready.Status != metav1.ConditionFalse || current.Status.Phase != enterpriseApi.PhaseError || !strings.Contains(ready.Message, "missing-service-account") || current.Status.ObservedGeneration != 8 {
 		t.Errorf("failed generation was not reflected in status: %+v", current.Status)
 	}
 }
@@ -202,4 +206,80 @@ func TestKVServicePausedStatus(t *testing.T) {
 	if paused == nil || paused.Status != metav1.ConditionTrue || cr.Status.Phase != enterpriseApi.PhasePending || cr.Status.ObservedGeneration != 9 {
 		t.Errorf("paused status missing: %+v", cr.Status)
 	}
+}
+
+func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	previous := config.DefaultMutableFeatureGate.Enabled(config.CertManagement)
+	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true}))
+	t.Cleanup(func() {
+		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
+	})
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, enterpriseApi.AddToScheme(scheme))
+	cr := &enterpriseApi.KVService{
+		ObjectMeta: metav1.ObjectMeta{Name: "certs", Namespace: "test", UID: "kvservice-certs"},
+		Spec: enterpriseApi.KVServiceSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Certs: []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "postgres-ca"}}},
+			},
+		},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "postgres-ca", Namespace: cr.Namespace},
+		Data:       map[string][]byte{"ca.crt": []byte("test-ca-v1")},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&enterpriseApi.KVService{}, &appsv1.Deployment{}).
+		WithObjects(cr, secret).Build()
+	key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+	_, err := Apply(ctx, c, key, nil)
+	require.NoError(t, err)
+	deploymentKey := types.NamespacedName{Namespace: cr.Namespace,
+		Name: splutil.GetSplunkDeploymentName(splcommon.SplunkKVService, cr.Name)}
+	deployment := &appsv1.Deployment{}
+	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
+	var certVolume string
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.Secret != nil && volume.Secret.SecretName == secret.Name {
+			certVolume = volume.Name
+		}
+	}
+	require.NotEmpty(t, certVolume, "certificate Secret must be mounted")
+	found := false
+	for _, mount := range deployment.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if mount.Name == certVolume {
+			found = true
+			assert.Equal(t, "/mnt/tls/postgres-ca", mount.MountPath)
+			assert.True(t, mount.ReadOnly)
+		}
+	}
+	assert.True(t, found, "KVService container must receive the certificate mount")
+	before := deployment.Spec.Template.DeepCopy()
+
+	requests := certs.CertSecretMapper(c, &enterpriseApi.KVServiceList{})(ctx, secret)
+	require.Len(t, requests, 1, "certificate Secret updates must enqueue KVService")
+	assert.Equal(t, key, requests[0].NamespacedName)
+	assert.Equal(t, []string{splcommon.GetServiceFQDN(cr.Namespace,
+		splcommon.GetSplunkServiceName(splcommon.SplunkKVService, cr.Name, false))},
+		certs.AutoDNSNames(splcommon.SplunkKVService, cr.Name, cr.Namespace, 3))
+
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, secret))
+	secret.Data["ca.crt"] = []byte("test-ca-v2")
+	require.NoError(t, c.Update(ctx, secret))
+	_, err = Apply(ctx, c, key, nil)
+	require.NoError(t, err)
+	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
+	assert.NotEqual(t, before.Annotations, deployment.Spec.Template.Annotations,
+		"certificate rotation must change the pod template to trigger a rollout")
+
+	before = deployment.Spec.Template.DeepCopy()
+	secret.Data = map[string][]byte{"tls.crt": []byte("missing-private-key")}
+	require.NoError(t, c.Update(ctx, secret))
+	_, err = Apply(ctx, c, key, nil)
+	require.ErrorContains(t, err, "tls.key")
+	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
+	assert.Equal(t, before, &deployment.Spec.Template, "invalid certificates must preserve the working Deployment")
 }

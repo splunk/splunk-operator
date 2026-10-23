@@ -46,10 +46,12 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "extraEnv - unique names are valid",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				ExtraEnv: []corev1.EnvVar{
-					{Name: "VAR1", Value: "value1"},
-					{Name: "VAR2", Value: "value2"},
-					{Name: "VAR3", Value: "value3"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ExtraEnv: []corev1.EnvVar{
+						{Name: "VAR1", Value: "value1"},
+						{Name: "VAR2", Value: "value2"},
+						{Name: "VAR3", Value: "value3"},
+					},
 				},
 			},
 			wantErrCount: 0,
@@ -57,9 +59,11 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "extraEnv - duplicate names are invalid",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				ExtraEnv: []corev1.EnvVar{
-					{Name: "VAR1", Value: "value1"},
-					{Name: "VAR1", Value: "value2"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ExtraEnv: []corev1.EnvVar{
+						{Name: "VAR1", Value: "value1"},
+						{Name: "VAR1", Value: "value2"},
+					},
 				},
 			},
 			wantErrCount: 1,
@@ -68,10 +72,12 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "extraEnv - multiple duplicates",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				ExtraEnv: []corev1.EnvVar{
-					{Name: "VAR1", Value: "value1"},
-					{Name: "VAR1", Value: "value2"},
-					{Name: "VAR1", Value: "value3"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ExtraEnv: []corev1.EnvVar{
+						{Name: "VAR1", Value: "value1"},
+						{Name: "VAR1", Value: "value2"},
+						{Name: "VAR1", Value: "value3"},
+					},
 				},
 			},
 			wantErrCount: 2, // VAR1[1] and VAR1[2] are duplicates of VAR1[0]
@@ -79,8 +85,10 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "extraEnv - KV Store default type local is valid",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				ExtraEnv: []corev1.EnvVar{
-					{Name: "SPLUNK_KVSTORE_DEFAULT_TYPE", Value: "local"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ExtraEnv: []corev1.EnvVar{
+						{Name: "SPLUNK_KVSTORE_DEFAULT_TYPE", Value: "local"},
+					},
 				},
 			},
 			wantErrCount: 0,
@@ -88,8 +96,10 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "extraEnv - invalid KV Store default type",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				ExtraEnv: []corev1.EnvVar{
-					{Name: "SPLUNK_KVSTORE_DEFAULT_TYPE", Value: "remote"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ExtraEnv: []corev1.EnvVar{
+						{Name: "SPLUNK_KVSTORE_DEFAULT_TYPE", Value: "remote"},
+					},
 				},
 			},
 			wantErrCount: 1,
@@ -99,10 +109,12 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "imagePullSecrets - unique names are valid",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				ImagePullSecrets: []corev1.LocalObjectReference{
-					{Name: "secret1"},
-					{Name: "secret2"},
-					{Name: "secret3"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ImagePullSecrets: []corev1.LocalObjectReference{
+						{Name: "secret1"},
+						{Name: "secret2"},
+						{Name: "secret3"},
+					},
 				},
 			},
 			wantErrCount: 0,
@@ -110,9 +122,11 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "imagePullSecrets - duplicate names are invalid",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				ImagePullSecrets: []corev1.LocalObjectReference{
-					{Name: "my-secret"},
-					{Name: "my-secret"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ImagePullSecrets: []corev1.LocalObjectReference{
+						{Name: "my-secret"},
+						{Name: "my-secret"},
+					},
 				},
 			},
 			wantErrCount: 1,
@@ -121,10 +135,12 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "imagePullSecrets - multiple duplicates",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				ImagePullSecrets: []corev1.LocalObjectReference{
-					{Name: "my-secret"},
-					{Name: "my-secret"},
-					{Name: "my-secret"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ImagePullSecrets: []corev1.LocalObjectReference{
+						{Name: "my-secret"},
+						{Name: "my-secret"},
+						{Name: "my-secret"},
+					},
 				},
 			},
 			wantErrCount: 2, // my-secret[1] and my-secret[2] are duplicates of my-secret[0]
@@ -246,15 +262,17 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "resources - valid: request equals limit",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
-							corev1.ResourceCPU:    resource.MustParse("500m"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
-							corev1.ResourceCPU:    resource.MustParse("500m"),
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+								corev1.ResourceCPU:    resource.MustParse("500m"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+								corev1.ResourceCPU:    resource.MustParse("500m"),
+							},
 						},
 					},
 				},
@@ -264,15 +282,17 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "resources - valid: request less than limit",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("512Mi"),
-							corev1.ResourceCPU:    resource.MustParse("250m"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
-							corev1.ResourceCPU:    resource.MustParse("500m"),
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceMemory: resource.MustParse("512Mi"),
+								corev1.ResourceCPU:    resource.MustParse("250m"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+								corev1.ResourceCPU:    resource.MustParse("500m"),
+							},
 						},
 					},
 				},
@@ -282,13 +302,15 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "resources - invalid: memory request exceeds limit",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("2Gi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceMemory: resource.MustParse("2Gi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+							},
 						},
 					},
 				},
@@ -299,13 +321,15 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "resources - invalid: cpu request exceeds limit",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("1000m"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("500m"),
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("1000m"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("500m"),
+							},
 						},
 					},
 				},
@@ -316,15 +340,17 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 		{
 			name: "resources - invalid: both memory and cpu requests exceed limits",
 			spec: &enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("2Gi"),
-							corev1.ResourceCPU:    resource.MustParse("1000m"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
-							corev1.ResourceCPU:    resource.MustParse("500m"),
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceMemory: resource.MustParse("2Gi"),
+								corev1.ResourceCPU:    resource.MustParse("1000m"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+								corev1.ResourceCPU:    resource.MustParse("500m"),
+							},
 						},
 					},
 				},

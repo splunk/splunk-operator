@@ -16,8 +16,10 @@ package kvservice
 
 import (
 	"context"
+	"fmt"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -32,13 +34,26 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 	}
 	spec := &cr.Spec
 	spec.Image = splutil.GetKVServiceImage(spec.Image)
+	for name, probe := range map[string]*enterpriseApi.Probe{"Liveness": spec.LivenessProbe, "Readiness": spec.ReadinessProbe} {
+		if probe != nil {
+			if err := splcommon.ValidateProbe(name, probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.FailureThreshold); err != nil {
+				return err
+			}
+		}
+	}
+	if spec.LivenessInitialDelaySeconds < 0 || spec.ReadinessInitialDelaySeconds < 0 {
+		return fmt.Errorf("probe initial delay must not be negative")
+	}
+	if len(spec.Certs) > 0 && !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		return fmt.Errorf("spec.certs requires the CertManagement feature gate")
+	}
 	if err := reconcileutil.ValidateSplunkGeneralTerms(); err != nil {
 		return err
 	}
-	if err := reconcileutil.ValidateImagePullSecrets(ctx, c, cr, &spec.CommonSplunkSpec); err != nil {
+	if err := reconcileutil.ValidateWorkloadImagePullSecrets(ctx, c, cr, &spec.CommonWorkloadSpec); err != nil {
 		return err
 	}
-	resources.SetVolumeDefaults(&spec.CommonSplunkSpec)
+	resources.SetWorkloadVolumeDefaults(&spec.CommonWorkloadSpec)
 	return reconcileutil.ValidateSpec(&spec.Spec, corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("4Gi")},
 		Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4"), corev1.ResourceMemory: resource.MustParse("16Gi")},

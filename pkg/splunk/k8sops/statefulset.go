@@ -17,13 +17,10 @@ package k8sops
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
@@ -864,32 +861,7 @@ func GetSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) error {
 
 	logger := logging.FromContext(ctx).With("func", "updateSplunkPodTemplateWithConfig")
-	// Add custom ports to splunk containers
-	if spec.ServiceTemplate.Spec.Ports != nil {
-		for idx := range podTemplateSpec.Spec.Containers {
-			for _, p := range spec.ServiceTemplate.Spec.Ports {
-
-				podTemplateSpec.Spec.Containers[idx].Ports = append(podTemplateSpec.Spec.Containers[idx].Ports, corev1.ContainerPort{
-					Name:          p.Name,
-					ContainerPort: int32(p.TargetPort.IntValue()),
-					Protocol:      p.Protocol,
-				})
-			}
-		}
-	}
-
-	// Add custom volumes to splunk containers other than MC(where CR spec volumes are not needed)
-	if spec.Volumes != nil {
-		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, spec.Volumes...)
-		for idx := range podTemplateSpec.Spec.Containers {
-			for v := range spec.Volumes {
-				podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, corev1.VolumeMount{
-					Name:      spec.Volumes[v].Name,
-					MountPath: "/mnt/" + spec.Volumes[v].Name,
-				})
-			}
-		}
-	}
+	resources.ConfigureWorkloadPortsAndVolumes(podTemplateSpec, &spec.CommonWorkloadSpec)
 
 	// TODO(SPL-306631): remove once the `splunk-provision` is available in the Splunk docker image
 	// TODO(SPL-306655): and once the `entrypoint.sh` has been modified in the Splunk docker image
@@ -904,104 +876,9 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
-	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
-	secretVolDefaultMode := corev1.SecretVolumeSourceDefaultMode
-	resources.AddSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
-		Secret: &corev1.SecretVolumeSource{
-			SecretName:  secretToMount,
-			DefaultMode: &secretVolDefaultMode,
-		},
-	})
+	configureWorkloadVolumes(ctx, client, podTemplateSpec, cr, &spec.CommonWorkloadSpec, instanceType, secretToMount)
 
-	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 	configMapVolDefaultMode := corev1.ConfigMapVolumeSourceDefaultMode
-
-	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
-	if spec.Defaults != "" {
-		configMapName := splutil.GetSplunkDefaultsName(cr.GetName(), instanceType)
-		resources.AddSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-defaults", "/mnt/splunk-defaults", corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: configMapName,
-				},
-				DefaultMode: &configMapVolDefaultMode,
-			},
-		})
-
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
-
-		// We stamp a content hash of configMap.Data (not ResourceVersion) so that
-		// owner-reference-only writes during bootstrap do not trigger pod restarts.
-		configMapObj, err := GetConfigMap(ctx, client, namespacedName)
-		if err == nil {
-			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = splutil.ConfigDataHash(configMapObj.Data)
-		} else {
-			logger.ErrorContext(ctx, "updation of default configMap annotation failed", "error", err)
-		}
-	}
-
-	// Stamp splcommon.ConfigMapRevAnnotationPrefix+<vol-name> annotation for each user-supplied
-	// ConfigMap volume using a content hash rather than ResourceVersion. ResourceVersion changes
-	// on any metadata update (labels, annotations) and would cause spurious pod rolls; the hash
-	// only changes when the mounted data itself changes.
-	// The annotation key uses the volume name (a valid DNS label, ≤63 chars) as the suffix,
-	// not the ConfigMap name, which can exceed Kubernetes' 63-char annotation-suffix limit.
-	// Projected volumes that reference ConfigMaps are handled via the Sources loop.
-	for _, vol := range spec.Volumes {
-		switch {
-		case vol.ConfigMap != nil:
-			cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: vol.ConfigMap.Name}
-			cm, err := GetConfigMap(ctx, client, cmNS)
-			if err != nil {
-				logger.ErrorContext(ctx, "Failed to fetch ConfigMap for restart annotation", "volume", vol.Name, "error", err)
-				break
-			}
-			if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
-				// Consumer handles dynamic reload; skip the restart-triggering annotation.
-				break
-			}
-			hash, err := GetConfigMapDataHash(ctx, client, cmNS, vol.ConfigMap.Items)
-			if err == nil {
-				podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+vol.Name] = hash
-			} else {
-				logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for annotation", "volume", vol.Name, "error", err)
-			}
-		case vol.Projected != nil:
-			for i, src := range vol.Projected.Sources {
-				if src.ConfigMap == nil {
-					continue
-				}
-				cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: src.ConfigMap.Name}
-				cm, err := GetConfigMap(ctx, client, cmNS)
-				if err != nil {
-					logger.ErrorContext(ctx, "Failed to fetch projected ConfigMap for restart annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
-					continue
-				}
-				if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
-					continue
-				}
-				hash, err := GetConfigMapDataHash(ctx, client, cmNS, src.ConfigMap.Items)
-				if err == nil {
-					// Build a collision-free annotation key suffix ≤63 chars.
-					// vol.Name is a DNS label (≤63 chars); appending ".<n>" can push past the
-					// Kubernetes annotation name-segment limit. When the combined length exceeds
-					// 63, replace vol.Name with "p.<8-hex-digest>" — the "p." prefix contains a
-					// dot, which is legal in annotation name segments but cannot appear in a
-					// Kubernetes DNS-label volume name, making hashed keys structurally distinct
-					// from any real short volume name and preventing false collisions.
-					idxStr := strconv.Itoa(i)
-					volNamePart := vol.Name
-					if len(volNamePart)+1+len(idxStr) > 63 {
-						sum := sha256.Sum256([]byte(vol.Name))
-						volNamePart = "p." + hex.EncodeToString(sum[:])[:8]
-					}
-					podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+volNamePart+"."+idxStr] = hash
-				} else {
-					logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for projected annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
-				}
-			}
-		}
-	}
 
 	smartstoreConfigMap := GetSmartstoreConfigMap(ctx, client, cr, instanceType)
 	if smartstoreConfigMap != nil {
@@ -1028,17 +905,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
-	// update security context
-	runAsUser := int64(41812)
-	fsGroup := int64(41812)
-	runAsNonRoot := true
-	fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
-	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
-		RunAsUser:           &runAsUser,
-		FSGroup:             &fsGroup,
-		RunAsNonRoot:        &runAsNonRoot,
-		FSGroupChangePolicy: &fsGroupChangePolicy,
-	}
+	resources.ConfigureWorkloadSecurity(podTemplateSpec)
 
 	livenessProbe := resources.GetLivenessProbe(spec.LivenessProbe, spec.LivenessInitialDelaySeconds)
 	readinessProbe := resources.GetReadinessProbe(spec.ReadinessProbe, spec.ReadinessInitialDelaySeconds)
@@ -1070,18 +937,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if domainName == "" {
 		domainName = "cluster.local"
 	}
-	env := []corev1.EnvVar{
-		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
-		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
-		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
-		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
-		{Name: "SPLUNK_ROLE", Value: role},
-		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
-		{Name: livenessProbeDriverPathEnv, Value: splutil.GetLivenessDriverFilePath()},
-		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
-		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
-		{Name: "SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED", Value: "true"},
-	}
+	env := getWorkloadEnv(splunkDefaults, role)
 	if instanceType != SplunkIngestor {
 		env = append(env, corev1.EnvVar{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal})
 	}
@@ -1248,7 +1104,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		env = resources.RemoveDuplicateEnvVars(env)
 	}
 
-	privileged := false
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
@@ -1256,23 +1111,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
-		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
-			RunAsUser:                &runAsUser,
-			RunAsNonRoot:             &runAsNonRoot,
-			AllowPrivilegeEscalation: &[]bool{false}[0],
-			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{
-					"ALL",
-				},
-				Add: []corev1.Capability{
-					"NET_BIND_SERVICE",
-				},
-			},
-			Privileged: &privileged,
-			SeccompProfile: &corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			},
-		}
 	}
 	return nil
 }

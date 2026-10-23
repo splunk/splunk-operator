@@ -91,12 +91,14 @@ func (testcaseEnvInst *TestCaseEnv) RunStandaloneWithServiceAccountWorkflow(ctx 
 	name := deployment.GetName()
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "IfNotPresent",
-				Image:           testcaseEnvInst.GetSplunkImage(),
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "IfNotPresent",
+					Image:           testcaseEnvInst.GetSplunkImage(),
+				},
+				Volumes:        []corev1.Volume{},
+				ServiceAccount: serviceAccountName,
 			},
-			Volumes:        []corev1.Volume{},
-			ServiceAccount: serviceAccountName,
 		},
 	}
 

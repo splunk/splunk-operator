@@ -486,8 +486,10 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 				},
 				Spec: enterpriseApi.IngestorClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "IfNotPresent",
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{
+								ImagePullPolicy: "IfNotPresent",
+							},
 						},
 					},
 					Replicas: 1,
@@ -566,8 +568,10 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 				},
 				Spec: enterpriseApi.IngestorClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "IfNotPresent",
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{
+								ImagePullPolicy: "IfNotPresent",
+							},
 						},
 					},
 					Replicas: 1,
@@ -618,8 +622,10 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 				},
 				Spec: enterpriseApi.IndexerClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "IfNotPresent",
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{
+								ImagePullPolicy: "IfNotPresent",
+							},
 						},
 					},
 					Replicas: 1,
@@ -665,8 +671,10 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 				},
 				Spec: enterpriseApi.IndexerClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "IfNotPresent",
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{
+								ImagePullPolicy: "IfNotPresent",
+							},
 						},
 					},
 					Replicas: 1,
@@ -714,8 +722,10 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 				},
 				Spec: enterpriseApi.IndexerClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "IfNotPresent",
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{
+								ImagePullPolicy: "IfNotPresent",
+							},
 						},
 					},
 					Replicas: 1,
@@ -753,7 +763,9 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "idxc-certs-empty", Namespace: namespace},
 				Spec: enterpriseApi.IndexerClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+						},
 					},
 					Replicas: 1,
 				},
@@ -785,12 +797,15 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "idxc-certs-ok", Namespace: namespace},
 				Spec: enterpriseApi.IndexerClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
-						Certs: []enterpriseApi.CertSpec{
-							{SecretRef: corev1.LocalObjectReference{Name: "server-cert"}, Role: enterpriseApi.CertRoleServer},
-							{SecretRef: corev1.LocalObjectReference{Name: "input-cert"}, Role: enterpriseApi.CertRoleInput},
-							{SecretRef: corev1.LocalObjectReference{Name: "ca-1"}},
-							{SecretRef: corev1.LocalObjectReference{Name: "ca-2"}},
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+
+							Certs: []enterpriseApi.CertSpec{
+								{SecretRef: corev1.LocalObjectReference{Name: "server-cert"}, Role: enterpriseApi.CertRoleServer},
+								{SecretRef: corev1.LocalObjectReference{Name: "input-cert"}, Role: enterpriseApi.CertRoleInput},
+								{SecretRef: corev1.LocalObjectReference{Name: "ca-1"}},
+								{SecretRef: corev1.LocalObjectReference{Name: "ca-2"}},
+							},
 						},
 					},
 					Replicas: 1,
@@ -811,10 +826,13 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 					ObjectMeta: metav1.ObjectMeta{Name: idxcName, Namespace: namespace},
 					Spec: enterpriseApi.IndexerClusterSpec{
 						CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-							Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
-							Certs: []enterpriseApi.CertSpec{
-								{SecretRef: corev1.LocalObjectReference{Name: certA}, Role: role},
-								{SecretRef: corev1.LocalObjectReference{Name: certB}, Role: role},
+							CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+								Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+
+								Certs: []enterpriseApi.CertSpec{
+									{SecretRef: corev1.LocalObjectReference{Name: certA}, Role: role},
+									{SecretRef: corev1.LocalObjectReference{Name: certB}, Role: role},
+								},
 							},
 						},
 						Replicas: 1,
@@ -839,9 +857,12 @@ var _ = Describe("IngestorCluster Controller", Label("integration"), func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "idxc-certs-update", Namespace: namespace},
 				Spec: enterpriseApi.IndexerClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
-						Certs: []enterpriseApi.CertSpec{
-							{SecretRef: corev1.LocalObjectReference{Name: "server-a"}, Role: enterpriseApi.CertRoleServer},
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{ImagePullPolicy: "IfNotPresent"},
+
+							Certs: []enterpriseApi.CertSpec{
+								{SecretRef: corev1.LocalObjectReference{Name: "server-a"}, Role: enterpriseApi.CertRoleServer},
+							},
 						},
 					},
 					Replicas: 1,
@@ -906,8 +927,10 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 		},
 		Spec: enterpriseApi.IngestorClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
 				},
 			},
 			Replicas: 3,

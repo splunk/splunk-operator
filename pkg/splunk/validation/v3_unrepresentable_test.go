@@ -32,7 +32,9 @@ func TestUnrepresentableIndexerClusterFields(t *testing.T) {
 			Replicas: 3,
 			CommonSplunkSpec: enterpriseApiV4.CommonSplunkSpec{
 				ClusterManagerRef: corev1.ObjectReference{Name: "cm"},
-				ServiceAccount:    "splunk-sa",
+				CommonWorkloadSpec: enterpriseApiV4.CommonWorkloadSpec{
+					ServiceAccount: "splunk-sa",
+				},
 			},
 		}))
 	})

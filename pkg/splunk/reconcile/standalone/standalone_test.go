@@ -1004,10 +1004,12 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},
@@ -1159,10 +1161,12 @@ func TestStandaloneWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
@@ -1420,13 +1424,15 @@ func TestConfigMapVolAnnotationStamped(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{
-					{
-						Name: "my-defaults",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "my-defaults-cm",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "my-defaults",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "my-defaults-cm",
+									},
 								},
 							},
 						},
@@ -1509,28 +1515,30 @@ func TestConfigMapVolAnnotationMultipleVolumes(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{
-					{
-						Name: "cm-vol-a",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{Name: "cm-a"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "cm-vol-a",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "cm-a"},
+								},
 							},
 						},
-					},
-					{
-						Name: "cm-vol-b",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{Name: "cm-b"},
+						{
+							Name: "cm-vol-b",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "cm-b"},
+								},
 							},
 						},
-					},
-					{
-						// Secret volume — should not produce a ConfigMapRevAnnotationPrefix annotation
-						Name: "secret-vol",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{SecretName: "my-secret"},
+						{
+							// Secret volume — should not produce a ConfigMapRevAnnotationPrefix annotation
+							Name: "secret-vol",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{SecretName: "my-secret"},
+							},
 						},
 					},
 				},
@@ -1580,15 +1588,17 @@ func TestProjectedConfigMapAnnotationLongVolName(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{
-					{
-						Name: longVolName,
-						VolumeSource: corev1.VolumeSource{
-							Projected: &corev1.ProjectedVolumeSource{
-								Sources: []corev1.VolumeProjection{
-									{
-										ConfigMap: &corev1.ConfigMapProjection{
-											LocalObjectReference: corev1.LocalObjectReference{Name: "proj-cm"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: longVolName,
+							VolumeSource: corev1.VolumeSource{
+								Projected: &corev1.ProjectedVolumeSource{
+									Sources: []corev1.VolumeProjection{
+										{
+											ConfigMap: &corev1.ConfigMapProjection{
+												LocalObjectReference: corev1.LocalObjectReference{Name: "proj-cm"},
+											},
 										},
 									},
 								},
@@ -1640,13 +1650,15 @@ func TestConfigMapVolAnnotationOptOut(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{
-					{
-						Name: "app-config",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "app-config-cm",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "app-config",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "app-config-cm",
+									},
 								},
 							},
 						},
@@ -1690,15 +1702,17 @@ func TestConfigMapVolAnnotationOptOutProjected(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{
-					{
-						Name: "proj-vol",
-						VolumeSource: corev1.VolumeSource{
-							Projected: &corev1.ProjectedVolumeSource{
-								Sources: []corev1.VolumeProjection{
-									{
-										ConfigMap: &corev1.ConfigMapProjection{
-											LocalObjectReference: corev1.LocalObjectReference{Name: "proj-cm-opt-out"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "proj-vol",
+							VolumeSource: corev1.VolumeSource{
+								Projected: &corev1.ProjectedVolumeSource{
+									Sources: []corev1.VolumeProjection{
+										{
+											ConfigMap: &corev1.ConfigMapProjection{
+												LocalObjectReference: corev1.LocalObjectReference{Name: "proj-cm-opt-out"},
+											},
 										},
 									},
 								},
