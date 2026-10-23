@@ -68,8 +68,8 @@ func TestUseCaseStep_DeferredWhenPrerequisiteNotReady(t *testing.T) {
 	step := NewUseCaseStep("upgrade", uc, nil, nil)
 
 	contracts := NewContracts()
-	require.NoError(t, step.Reconcile(context.Background(), contracts))
-	outcome, err := step.Observe(context.Background(), contracts, nil)
+	require.NoError(t, step.Reconcile(t.Context(), contracts))
+	outcome, err := step.Observe(t.Context(), contracts, nil)
 	require.NoError(t, err)
 	require.Equal(t, reconciliationtypes.ModeDeferred, outcome.Mode())
 	require.Equal(t, reconciliationtypes.StatusNone, outcome.StatusAction())
@@ -87,7 +87,7 @@ func TestUseCaseStep_DeferredUseCaseLetsPipelineContinue(t *testing.T) {
 	}}
 	independent := convergedStep("independent")
 
-	outcome, err := Run(context.Background(), []Step{useCaseStep, dependent, independent}, func(context.Context, reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{useCaseStep, dependent, independent}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("deferred use cases must not request a status action")
 		return nil
 	})
@@ -107,9 +107,9 @@ func TestUseCaseStep_PropagatesGenuinePrerequisiteError(t *testing.T) {
 	step := NewUseCaseStep("upgrade", uc, nil, nil)
 
 	contracts := NewContracts()
-	err := step.Reconcile(context.Background(), contracts)
+	err := step.Reconcile(t.Context(), contracts)
 	require.ErrorIs(t, err, wantErr)
-	outcome, observeErr := step.Observe(context.Background(), contracts, err)
+	outcome, observeErr := step.Observe(t.Context(), contracts, err)
 	require.ErrorIs(t, observeErr, wantErr)
 	require.Equal(t, reconciliationtypes.Outcome{}, outcome)
 }
@@ -119,8 +119,8 @@ func TestUseCaseStep_NotScheduledConvergesWithoutActing(t *testing.T) {
 	step := NewUseCaseStep("upgrade", uc, nil, nil)
 
 	contracts := NewContracts()
-	require.NoError(t, step.Reconcile(context.Background(), contracts))
-	outcome, err := step.Observe(context.Background(), contracts, nil)
+	require.NoError(t, step.Reconcile(t.Context(), contracts))
+	outcome, err := step.Observe(t.Context(), contracts, nil)
 	require.NoError(t, err)
 	require.Equal(t, reconciliationtypes.ModeConverged, outcome.Mode())
 	require.Equal(t, reconciliationtypes.StatusNone, outcome.StatusAction())
@@ -138,7 +138,7 @@ func TestUseCaseStep_UnscheduledProviderPublishesSatisfiedContractForConsumer(t 
 		return reconciliationtypes.Converged(), nil
 	}}
 
-	outcome, err := Run(context.Background(), []Step{provider, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	outcome, err := Run(t.Context(), []Step{provider, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.NoError(t, err)
 	require.Equal(t, reconciliationtypes.ModeConverged, outcome.Mode())
 	require.Equal(t, 1, consumer.observeCalls)
@@ -154,7 +154,7 @@ func TestUseCaseStep_UnscheduledProviderWithoutContractIsRejected(t *testing.T) 
 		return reconciliationtypes.Outcome{}, nil
 	}}
 
-	_, err := Run(context.Background(), []Step{provider, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	_, err := Run(t.Context(), []Step{provider, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `converged without providing declared contract "database.rw-privileges.ready"`)
 	require.Zero(t, consumer.observeCalls)
@@ -168,8 +168,8 @@ func TestUseCaseStep_ScheduledReportsActsOutcome(t *testing.T) {
 	step := NewUseCaseStep("upgrade", uc, nil, nil)
 
 	contracts := NewContracts()
-	require.NoError(t, step.Reconcile(context.Background(), contracts))
-	outcome, err := step.Observe(context.Background(), contracts, nil)
+	require.NoError(t, step.Reconcile(t.Context(), contracts))
+	outcome, err := step.Observe(t.Context(), contracts, nil)
 	require.NoError(t, err)
 	require.Equal(t, want, outcome, "Observe must report exactly what Act decided, not reinterpret it")
 }
@@ -204,7 +204,7 @@ func TestUseCaseStep_ActErrorWithClassifiedOutcomeIsHandledByRunner(t *testing.T
 			unreached := convergedStep("unreached")
 
 			var persisted []reconciliationtypes.Outcome
-			outcome, err := Run(context.Background(), []Step{step, unreached}, func(_ context.Context, o reconciliationtypes.Outcome) error {
+			outcome, err := Run(t.Context(), []Step{step, unreached}, func(_ context.Context, o reconciliationtypes.Outcome) error {
 				persisted = append(persisted, o)
 				return nil
 			})
@@ -225,17 +225,17 @@ func TestUseCaseStep_ResultStateIsPerContracts(t *testing.T) {
 	step := NewUseCaseStep("upgrade", uc, nil, nil)
 
 	firstContracts := NewContracts()
-	require.NoError(t, step.Reconcile(context.Background(), firstContracts))
+	require.NoError(t, step.Reconcile(t.Context(), firstContracts))
 
 	uc.scheduleResult = false
 	secondContracts := NewContracts()
-	require.NoError(t, step.Reconcile(context.Background(), secondContracts))
+	require.NoError(t, step.Reconcile(t.Context(), secondContracts))
 
-	firstOutcome, err := step.Observe(context.Background(), firstContracts, nil)
+	firstOutcome, err := step.Observe(t.Context(), firstContracts, nil)
 	require.NoError(t, err)
 	require.Equal(t, want, firstOutcome)
 
-	secondOutcome, err := step.Observe(context.Background(), secondContracts, nil)
+	secondOutcome, err := step.Observe(t.Context(), secondContracts, nil)
 	require.NoError(t, err)
 	require.Equal(t, reconciliationtypes.ModeConverged, secondOutcome.Mode())
 	require.Equal(t, reconciliationtypes.StatusNone, secondOutcome.StatusAction())
@@ -247,9 +247,9 @@ func TestUseCaseStep_ActErrorPropagatesAsGenuineFailure(t *testing.T) {
 	step := NewUseCaseStep("upgrade", uc, nil, nil)
 
 	contracts := NewContracts()
-	err := step.Reconcile(context.Background(), contracts)
+	err := step.Reconcile(t.Context(), contracts)
 	require.ErrorIs(t, err, wantErr)
-	_, observeErr := step.Observe(context.Background(), contracts, err)
+	_, observeErr := step.Observe(t.Context(), contracts, err)
 	require.ErrorIs(t, observeErr, wantErr)
 }
 

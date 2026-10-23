@@ -16,7 +16,6 @@ limitations under the License.
 package cnpgmonitoring
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -173,7 +172,7 @@ func TestApply_CreatesConfigMapAndPatchesCluster(t *testing.T) {
 	applyMetrics(t, a, cfg)
 
 	cm := &corev1.ConfigMap{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, cm))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, cm))
 	assert.Contains(t, cm.Data[cnpginfra.MonitoringCMKey], "splunk_operator_cluster:pg_conns:")
 	assert.Contains(t, cm.Data[cnpginfra.MonitoringCMKey], "name: splunk_operator_cluster_pg_conns")
 	assert.True(t, strings.HasPrefix(cm.Annotations[cnpginfra.MonitoringCMHashAnnotation], "sha256:"))
@@ -181,7 +180,7 @@ func TestApply_CreatesConfigMapAndPatchesCluster(t *testing.T) {
 	assert.Equal(t, "demo", cm.OwnerReferences[0].Name)
 
 	got := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "ns"}, got))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo", Namespace: "ns"}, got))
 	require.NotNil(t, got.Spec.Monitoring)
 	require.Len(t, got.Spec.Monitoring.CustomQueriesConfigMap, 1)
 	assert.Equal(t, "demo-metrics", got.Spec.Monitoring.CustomQueriesConfigMap[0].Name)
@@ -198,14 +197,14 @@ func TestApply_HashGateNoOpOnUnchanged(t *testing.T) {
 	applyMetrics(t, a, cfg)
 
 	cm := &corev1.ConfigMap{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, cm))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, cm))
 	rvBefore := cm.ResourceVersion
 
 	got := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "ns"}, got))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo", Namespace: "ns"}, got))
 	applyMetrics(t, a, cfg)
 
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, cm))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, cm))
 	assert.Equal(t, rvBefore, cm.ResourceVersion, "identical config must not rewrite the ConfigMap")
 }
 
@@ -223,7 +222,7 @@ func TestApply_PreservesUnrelatedSelectors(t *testing.T) {
 	applyMetrics(t, newTestAdapter(c, scheme), cfg)
 
 	got := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "ns"}, got))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo", Namespace: "ns"}, got))
 	require.Len(t, got.Spec.Monitoring.CustomQueriesConfigMap, 2)
 	assert.Equal(t, "cnpg-default-monitoring", got.Spec.Monitoring.CustomQueriesConfigMap[0].Name)
 	assert.Equal(t, "demo-metrics", got.Spec.Monitoring.CustomQueriesConfigMap[1].Name)
@@ -244,14 +243,14 @@ func TestApply_EmptyRemovesOnlyOwnedConfiguration(t *testing.T) {
 		monitoring.AggregatedConfig{ClusterQueries: []monitoring.ResolvedQuery{gaugeQuery("pg_conns")}})
 
 	current := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "ns"}, current))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo", Namespace: "ns"}, current))
 	applyMetrics(t, a, monitoring.AggregatedConfig{})
 
 	cm := &corev1.ConfigMap{}
-	err := c.Get(context.Background(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, cm)
+	err := c.Get(t.Context(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, cm)
 	assert.Error(t, err)
 	got := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "ns"}, got))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo", Namespace: "ns"}, got))
 	require.Len(t, got.Spec.Monitoring.CustomQueriesConfigMap, 1)
 	assert.Equal(t, "cnpg-default-monitoring", got.Spec.Monitoring.CustomQueriesConfigMap[0].Name)
 }
@@ -266,15 +265,15 @@ func TestApply_RepairsDataDriftWithMatchingHash(t *testing.T) {
 
 	cm := &corev1.ConfigMap{}
 	key := types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}
-	require.NoError(t, c.Get(context.Background(), key, cm))
+	require.NoError(t, c.Get(t.Context(), key, cm))
 	desired := cm.Data[cnpginfra.MonitoringCMKey]
 	cm.Data[cnpginfra.MonitoringCMKey] = "drifted"
-	require.NoError(t, c.Update(context.Background(), cm))
+	require.NoError(t, c.Update(t.Context(), cm))
 
 	current := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "ns"}, current))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo", Namespace: "ns"}, current))
 	applyMetrics(t, a, cfg)
-	require.NoError(t, c.Get(context.Background(), key, cm))
+	require.NoError(t, c.Get(t.Context(), key, cm))
 	assert.Equal(t, desired, cm.Data[cnpginfra.MonitoringCMKey])
 }
 
@@ -294,16 +293,16 @@ func TestApply_DisabledPreservesForeignConfigMapAndMatchingSelector(t *testing.T
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, foreign).Build()
 
-	_, err := newTestAdapter(c, scheme).Apply(context.Background(), monitoring.AggregatedConfig{})
+	_, err := newTestAdapter(c, scheme).Apply(t.Context(), monitoring.AggregatedConfig{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, monitoring.ErrGeneratedResourceOwnershipConflict)
 
 	gotCM := &corev1.ConfigMap{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, gotCM))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, gotCM))
 	assert.Equal(t, "consumer-owned", gotCM.Data[cnpginfra.MonitoringCMKey])
 
 	gotCluster := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "ns"}, gotCluster))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo", Namespace: "ns"}, gotCluster))
 	require.NotNil(t, gotCluster.Spec.Monitoring)
 	assert.Equal(t, expectedSelectors, gotCluster.Spec.Monitoring.CustomQueriesConfigMap)
 }
@@ -322,16 +321,16 @@ func TestApply_DisabledIgnoresForeignConfigMapWithoutMatchingSelector(t *testing
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, foreign).Build()
 
-	result, err := newTestAdapter(c, scheme).Apply(context.Background(), monitoring.AggregatedConfig{})
+	result, err := newTestAdapter(c, scheme).Apply(t.Context(), monitoring.AggregatedConfig{})
 	require.NoError(t, err)
 	assert.False(t, result.Enabled)
 
 	gotCM := &corev1.ConfigMap{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, gotCM))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, gotCM))
 	assert.Equal(t, "consumer-owned", gotCM.Data[cnpginfra.MonitoringCMKey])
 
 	gotCluster := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "ns"}, gotCluster))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo", Namespace: "ns"}, gotCluster))
 	require.NotNil(t, gotCluster.Spec.Monitoring)
 	require.Len(t, gotCluster.Spec.Monitoring.CustomQueriesConfigMap, 1)
 	assert.Equal(t, "external", gotCluster.Spec.Monitoring.CustomQueriesConfigMap[0].Name)
@@ -372,17 +371,17 @@ func TestApply_RejectsForeignConfigMapWithoutMutation(t *testing.T) {
 		Data:       map[string]string{cnpginfra.MonitoringCMKey: "consumer-owned"},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, foreign).Build()
-	_, err := newTestAdapter(c, scheme).Apply(context.Background(),
+	_, err := newTestAdapter(c, scheme).Apply(t.Context(),
 		monitoring.AggregatedConfig{ClusterQueries: []monitoring.ResolvedQuery{gaugeQuery("pg_conns")}})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, monitoring.ErrGeneratedResourceOwnershipConflict)
 	assert.Contains(t, err.Error(), "is not controlled by CNPG Cluster")
 
 	gotCM := &corev1.ConfigMap{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, gotCM))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo-metrics", Namespace: "ns"}, gotCM))
 	assert.Equal(t, "consumer-owned", gotCM.Data[cnpginfra.MonitoringCMKey])
 	gotCluster := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "ns"}, gotCluster))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "demo", Namespace: "ns"}, gotCluster))
 	require.NotNil(t, gotCluster.Spec.Monitoring)
 	require.Len(t, gotCluster.Spec.Monitoring.CustomQueriesConfigMap, 1)
 	assert.Equal(t, "external", gotCluster.Spec.Monitoring.CustomQueriesConfigMap[0].Name)
@@ -395,12 +394,12 @@ func TestObserve_RequiresExactDesiredState(t *testing.T) {
 	a := newTestAdapter(c, scheme)
 
 	expected := monitoring.ExpectedState{Revision: "missing", Enabled: true, QueryCount: 1}
-	observation, err := a.Observe(context.Background(), expected)
+	observation, err := a.Observe(t.Context(), expected)
 	require.NoError(t, err)
 	assert.Equal(t, monitoring.ObservationPending, observation.State)
 
 	applied := applyMetrics(t, a, monitoring.AggregatedConfig{ClusterQueries: []monitoring.ResolvedQuery{gaugeQuery("pg_conns")}})
-	observation, err = a.Observe(context.Background(), applied)
+	observation, err = a.Observe(t.Context(), applied)
 	require.NoError(t, err)
 	assert.Equal(t, monitoring.ObservationReady, observation.State)
 }

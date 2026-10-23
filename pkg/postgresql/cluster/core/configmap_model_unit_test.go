@@ -16,7 +16,6 @@ limitations under the License.
 package core
 
 import (
-	"context"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -55,7 +54,7 @@ func TestGenerateConfigMap(t *testing.T) {
 
 	t.Run("base endpoints without poolers", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-configmap", cm.Name)
@@ -79,7 +78,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-pooler-ro", Namespace: "default"},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler).Build()
-		cm, err := generateConfigMap(context.Background(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-rw.default.svc.cluster.local", cm.Data[pgconninfo.KeyPoolerRWEndpoint])
@@ -93,7 +92,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ConfigMapRef: &corev1.LocalObjectReference{Name: "custom-configmap"},
 		}
 
-		cm, err := generateConfigMap(context.Background(), c, scheme, pg, cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(t.Context(), c, scheme, pg, cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "custom-configmap", cm.Name)

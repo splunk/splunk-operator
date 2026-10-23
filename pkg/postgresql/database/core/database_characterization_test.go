@@ -117,7 +117,7 @@ func buildFreshDatabaseObjects(requestName types.NamespacedName, dbName string) 
 
 func TestCharacterization_SteadyStateReadyReconcileWriteCount(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
 	dbName := "payments"
 
@@ -180,7 +180,7 @@ func TestCharacterization_SteadyStateReadyReconcileWriteCount(t *testing.T) {
 
 func TestCharacterization_CurrentTerminalFailureWritesNoStatus(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
 
 	postgresDB := &platformv1alpha1.PostgresDatabase{

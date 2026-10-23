@@ -230,8 +230,8 @@ func TestBackupModel_Reconcile_Disabled(t *testing.T) {
 		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act — status is cleared in Observe, not Reconcile
-		reconcileErr := model.Reconcile(context.Background())
-		_, err := model.Observe(context.Background(), reconcileErr)
+		reconcileErr := model.Reconcile(t.Context())
+		_, err := model.Observe(t.Context(), reconcileErr)
 
 		// Assert
 		require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestBackupModel_Reconcile_Disabled(t *testing.T) {
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
-		err := model.Reconcile(context.Background())
+		err := model.Reconcile(t.Context())
 
 		// Assert — model asks the backend to delete both deterministic names; the ownership
 		// guard that keeps foreign objects safe lives in (and is tested by) the adapter.
@@ -263,7 +263,7 @@ func TestBackupModel_Reconcile_Disabled(t *testing.T) {
 		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
-		err := model.Reconcile(context.Background())
+		err := model.Reconcile(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -285,7 +285,7 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
-		err := model.Reconcile(context.Background())
+		err := model.Reconcile(t.Context())
 
 		// Assert — model passes the engine-agnostic spec; cron six-field conversion, CNPG method
 		// mapping and object creation are the adapter's job (tested in infrastructure/cnpg).
@@ -307,7 +307,7 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
-		err := model.Reconcile(context.Background())
+		err := model.Reconcile(t.Context())
 
 		// Assert — the model always drives EnsureScheduled with the desired schedule; whether the
 		// adapter creates or updates the underlying object is the adapter's concern.
@@ -326,7 +326,7 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
-		err := model.Reconcile(context.Background())
+		err := model.Reconcile(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -344,8 +344,8 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 		model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 		// Act
-		reconcileErr := model.Reconcile(context.Background())
-		health, err := model.Observe(context.Background(), reconcileErr)
+		reconcileErr := model.Reconcile(t.Context())
+		health, err := model.Observe(t.Context(), reconcileErr)
 
 		// Assert
 		require.Error(t, err)
@@ -363,8 +363,8 @@ func TestBackupModel_Reconcile_CreateError(t *testing.T) {
 	model := newTestBackupModelWithBackend(backend, emitter, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert — the model turns a backend ensure error into a failed health + warning event.
 	require.Error(t, err)
@@ -380,8 +380,8 @@ func TestBackupModel_Reconcile_DeleteError(t *testing.T) {
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert
 	require.Error(t, err)
@@ -399,7 +399,7 @@ func TestBackupModel_Observe_Disabled(t *testing.T) {
 	model := newTestBackupModel(c, scheme, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg)
 
 	// Act
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 
 	// Assert
 	require.NoError(t, err)
@@ -421,7 +421,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		model := newTestBackupModelWithBackend(backend, emitter, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		// Act
-		health, err := model.Observe(context.Background(), nil)
+		health, err := model.Observe(t.Context(), nil)
 
 		// Assert
 		require.NoError(t, err)
@@ -441,7 +441,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		// Act
-		health, err := model.Observe(context.Background(), nil)
+		health, err := model.Observe(t.Context(), nil)
 
 		// Assert
 		require.NoError(t, err)
@@ -457,7 +457,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		// Act
-		health, err := model.Observe(context.Background(), nil)
+		health, err := model.Observe(t.Context(), nil)
 
 		// Assert
 		require.Error(t, err)
@@ -476,7 +476,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 		// Act
-		health, err := model.Observe(context.Background(), nil)
+		health, err := model.Observe(t.Context(), nil)
 
 		// Assert — schedule times are copied into in-memory cluster status; writeComponentStatus persists them
 		require.NoError(t, err)
@@ -494,7 +494,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		// guard and silently dropped when condition/generation are unchanged.
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(true, "0 2 * * *")
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// Pre-populate the condition as already Ready so it won't change this cycle.
 		now1 := metav1.NewTime(metav1.Now().Add(-time.Hour))
@@ -547,7 +547,7 @@ func TestBackupModel_Observe_Enabled(t *testing.T) {
 		cfg := newTestMergedConfig(true, "0 2 * * *")
 		now := metav1.Now()
 		next := metav1.NewTime(now.Add(24 * time.Hour))
-		ctx := context.Background()
+		ctx := t.Context()
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).WithStatusSubresource(cluster).Build()
 		backend := &spyBackupBackend{schedules: map[string]backuptypes.ScheduleResult{
 			"c1-backup": {Exists: true, LastScheduleTime: &now, NextScheduleTime: &next},
@@ -919,7 +919,7 @@ func TestBackupModel_Reconcile_EnsurePassesOwner(t *testing.T) {
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
 	// Act
-	err := model.Reconcile(context.Background())
+	err := model.Reconcile(t.Context())
 
 	// Assert
 	require.NoError(t, err)
@@ -955,7 +955,7 @@ func TestBackupModel_ContractsNotReady(t *testing.T) {
 
 		// Act — simulate runComponents: CheckContracts error is passed as reconcileErr, Reconcile is skipped
 		contractErr := model.CheckContracts()
-		health, err := model.Observe(context.Background(), contractErr)
+		health, err := model.Observe(t.Context(), contractErr)
 
 		// Assert
 		require.NoError(t, err)
@@ -1059,7 +1059,7 @@ func TestBackupModel_Barman_EnsuresPluginScheduledBackup(t *testing.T) {
 	backend := &spyBackupBackend{}
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	// Barman-only config ensures the object-store ScheduledBackup with the plugin method...
 	spec, ok := backend.ensuredByName("c1-backup-objectstore")
@@ -1082,7 +1082,7 @@ func TestBackupModel_Barman_PopulatesObjectStoreStatus(t *testing.T) {
 	}}
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Ready, health.State)
@@ -1101,7 +1101,7 @@ func TestBackupModel_DualProvider_EnsuresBothScheduledBackups(t *testing.T) {
 	backend := &spyBackupBackend{}
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	vs, ok := backend.ensuredByName("c1-backup")
 	require.True(t, ok)
@@ -1123,7 +1123,7 @@ func TestBackupModel_DualProvider_PopulatesBothStatuses(t *testing.T) {
 	}}
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Ready, health.State)
@@ -1143,7 +1143,7 @@ func TestBackupModel_DualProvider_PendingUntilBothScheduledBackupsExist(t *testi
 	}}
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, newTestCNPGCluster("c1", "ns1"))
 
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Pending, health.State)
@@ -1158,7 +1158,7 @@ func TestBackupModel_DualProvider_GCsObjectStoreBackupWhenProviderRemoved(t *tes
 	cfg := newTestMergedConfig(true, "0 2 * * *")
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	// The volume-snapshot provider is ensured; the stale object-store name is asked to be deleted.
 	// The adapter's ownership guard (tested there) protects foreign objects with the same name.
@@ -1181,7 +1181,7 @@ func TestBackupModel_Reconcile_DeletesAllNamesWhenDisabled(t *testing.T) {
 	cfg := newTestMergedConfig(false, "")
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	assert.Empty(t, backend.ensured)
 	assert.ElementsMatch(t, []string{"c1-backup", "c1-backup-objectstore"}, backend.deletedNames())
@@ -1204,7 +1204,7 @@ func TestBackupModel_Reconcile_DeletesPriorEnvironmentNamesWhenDisabled(t *testi
 		testEnvironment(cluster, "c1-blue", "", identitytypes.EnvironmentRoleRetained),
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	assert.ElementsMatch(t, []string{
 		"c1-backup", "c1-backup-objectstore",
@@ -1292,9 +1292,9 @@ func TestBackupModel_NilTarget_UsesDefault(t *testing.T) {
 	model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
 	require.NotPanics(t, func() {
-		_ = model.Reconcile(context.Background())
+		_ = model.Reconcile(t.Context())
 	})
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	spec, ok := backend.ensuredByName("c1-backup")
 	require.True(t, ok)

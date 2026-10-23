@@ -16,7 +16,6 @@ limitations under the License.
 package core
 
 import (
-	"context"
 	"testing"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -60,15 +59,15 @@ func TestObjectStoreModel_Reconcile_DeletesWhenBackupDisabled(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(conventionalClusterCard(cluster)))
 
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	require.NoError(t, reconcileErr)
 	require.NoError(t, err)
 	assert.Equal(t, reasonObjectStoreDisabled, health.Reason)
 	got := &unstructured.Unstructured{}
 	got.SetGroupVersionKind(ObjectStoreGVK)
-	err = c.Get(context.Background(), types.NamespacedName{Name: objectStoreName(cluster.Name), Namespace: cluster.Namespace}, got)
+	err = c.Get(t.Context(), types.NamespacedName{Name: objectStoreName(cluster.Name), Namespace: cluster.Namespace}, got)
 	assert.True(t, apierrors.IsNotFound(err), "ObjectStore must be removed when backup is disabled")
 }
 
@@ -99,11 +98,11 @@ func TestObjectStoreModel_Reconcile_DeletesManagedObjectStoresWhenBackupDisabled
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objectStores...).Build()
 	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(authority))
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 	for _, name := range []string{"c1", "c1-green"} {
 		got := &unstructured.Unstructured{}
 		got.SetGroupVersionKind(ObjectStoreGVK)
-		err := c.Get(context.Background(), types.NamespacedName{Name: objectStoreName(name), Namespace: cluster.Namespace}, got)
+		err := c.Get(t.Context(), types.NamespacedName{Name: objectStoreName(name), Namespace: cluster.Namespace}, got)
 		assert.True(t, apierrors.IsNotFound(err), "ObjectStore for %s must be removed when backup is disabled", name)
 	}
 }
@@ -115,15 +114,15 @@ func TestObjectStoreModel_Reconcile_CreatesWhenBackupEnabled(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(conventionalClusterCard(cluster)))
 
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	require.NoError(t, reconcileErr)
 	require.NoError(t, err)
 	assert.Equal(t, reasonObjectStoreConfigured, health.Reason)
 	got := &unstructured.Unstructured{}
 	got.SetGroupVersionKind(ObjectStoreGVK)
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: objectStoreName(cluster.Name), Namespace: cluster.Namespace}, got))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: objectStoreName(cluster.Name), Namespace: cluster.Namespace}, got))
 }
 
 // foreignObjectStore builds an ObjectStore with the deterministic name but owned by a
@@ -154,11 +153,11 @@ func TestObjectStoreModel_Reconcile_DoesNotDeleteForeignObjectStore(t *testing.T
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(conventionalClusterCard(cluster)))
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	got := &unstructured.Unstructured{}
 	got.SetGroupVersionKind(ObjectStoreGVK)
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: objectStoreName(cluster.Name), Namespace: cluster.Namespace}, got),
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: objectStoreName(cluster.Name), Namespace: cluster.Namespace}, got),
 		"foreign ObjectStore must not be deleted")
 }
 
@@ -171,12 +170,12 @@ func TestObjectStoreModel_Reconcile_DoesNotMutateForeignObjectStore(t *testing.T
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 	model := newObjectStoreModel(c, scheme, noopEventEmitter{}, noopHealthUpdater, cluster, cfg, objectStoreContracts(conventionalClusterCard(cluster)))
 
-	err := model.Reconcile(context.Background())
+	err := model.Reconcile(t.Context())
 	require.Error(t, err, "reconcile must fail rather than mutate a foreign ObjectStore")
 
 	got := &unstructured.Unstructured{}
 	got.SetGroupVersionKind(ObjectStoreGVK)
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: objectStoreName(cluster.Name), Namespace: cluster.Namespace}, got))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: objectStoreName(cluster.Name), Namespace: cluster.Namespace}, got))
 	cfgField, _, _ := unstructured.NestedString(got.Object, "spec", "configuration", "destinationPath")
 	assert.Equal(t, "s3://foreign", cfgField, "foreign ObjectStore spec must be left untouched")
 }

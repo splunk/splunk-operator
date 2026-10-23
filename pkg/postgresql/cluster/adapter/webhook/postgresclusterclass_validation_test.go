@@ -17,7 +17,6 @@ limitations under the License.
 package webhook_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -290,7 +289,7 @@ func TestValidatePostgresClusterClassCreateRejectsACMEIssuer(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "acme"},
 		Spec:       cmapi.IssuerSpec{IssuerConfig: cmapi.IssuerConfig{ACME: &cmacme.ACMEIssuer{Server: "https://acme.example"}}},
 	}).Build()
-	errs := webhook.ValidatePostgresClusterClassCreateWithContext(context.Background(), class, reader)
+	errs := webhook.ValidatePostgresClusterClassCreateWithContext(t.Context(), class, reader)
 	require.Len(t, errs, 1)
 	assert.Contains(t, errs[0].Detail, "ACME issuers are not supported")
 }
@@ -306,7 +305,7 @@ func TestValidatePostgresClusterClassCreateDefersNamespacedIssuerLookup(t *testi
 	}}
 	scheme := runtime.NewScheme()
 	require.NoError(t, cmapi.AddToScheme(scheme))
-	errs := webhook.ValidatePostgresClusterClassCreateWithContext(context.Background(), class, fake.NewClientBuilder().WithScheme(scheme).Build())
+	errs := webhook.ValidatePostgresClusterClassCreateWithContext(t.Context(), class, fake.NewClientBuilder().WithScheme(scheme).Build())
 	assert.Empty(t, errs)
 }
 

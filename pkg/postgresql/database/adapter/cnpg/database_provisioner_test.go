@@ -17,7 +17,6 @@ limitations under the License.
 package cnpg
 
 import (
-	"context"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -167,7 +166,7 @@ func TestDatabaseProvisionerAppliesAndObservesExactGeneration(t *testing.T) {
 	require.Len(t, applied.Expected, 1)
 
 	database := &cnpgv1.Database{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments", Namespace: "dbs"}, database))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "primary-payments", Namespace: "dbs"}, database))
 	require.Len(t, database.OwnerReferences, 1)
 	assert.Equal(t, types.UID("owner-uid"), database.OwnerReferences[0].UID)
 	database.Status.Applied = new(true)

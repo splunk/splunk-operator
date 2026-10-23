@@ -72,7 +72,7 @@ func convergedStep(name string) *fakeStep {
 
 func TestRun_AllConvergedReturnsBareConverged(t *testing.T) {
 	s1, s2 := convergedStep("first"), convergedStep("second")
-	outcome, err := Run(context.Background(), []Step{s1, s2}, func(context.Context, reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{s1, s2}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("persist must not be called when no step requests it")
 		return nil
 	})
@@ -92,7 +92,7 @@ func TestRun_PersistAndContinueWritesOutcomeAndContinues(t *testing.T) {
 	}
 
 	var persisted []reconciliationtypes.Outcome
-	outcome, err := Run(context.Background(), []Step{clusterGate, next}, func(_ context.Context, o reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{clusterGate, next}, func(_ context.Context, o reconciliationtypes.Outcome) error {
 		persisted = append(persisted, o)
 		return nil
 	})
@@ -114,7 +114,7 @@ func TestRun_RejectsUnflushedApplyAndContinueAtEnd(t *testing.T) {
 	}
 
 	var handled []reconciliationtypes.Outcome
-	outcome, err := Run(context.Background(), []Step{privileges, next}, func(_ context.Context, o reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{privileges, next}, func(_ context.Context, o reconciliationtypes.Outcome) error {
 		handled = append(handled, o)
 		return nil
 	})
@@ -138,7 +138,7 @@ func TestRun_WaitingPersistsExplicitPendingPhaseAndStops(t *testing.T) {
 	}
 
 	var persisted []reconciliationtypes.Outcome
-	outcome, err := Run(context.Background(), []Step{waiting, reached}, func(_ context.Context, o reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{waiting, reached}, func(_ context.Context, o reconciliationtypes.Outcome) error {
 		persisted = append(persisted, o)
 		return nil
 	})
@@ -160,7 +160,7 @@ func TestRun_WaitingWithStatusPersistsExplicitConditionStatus(t *testing.T) {
 	}
 
 	var persisted []reconciliationtypes.Outcome
-	outcome, err := Run(context.Background(), []Step{waiting}, func(_ context.Context, o reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{waiting}, func(_ context.Context, o reconciliationtypes.Outcome) error {
 		persisted = append(persisted, o)
 		return nil
 	})
@@ -182,7 +182,7 @@ func TestRun_RetryableRequeuePersistsStatusAndPropagatesError(t *testing.T) {
 	}
 
 	var persisted []reconciliationtypes.Outcome
-	outcome, err := Run(context.Background(), []Step{failing}, func(_ context.Context, o reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{failing}, func(_ context.Context, o reconciliationtypes.Outcome) error {
 		persisted = append(persisted, o)
 		return nil
 	})
@@ -203,7 +203,7 @@ func TestRun_TerminalErrorPersistsStatusAndWrapsReconcileTerminalError(t *testin
 	}
 
 	var persisted []reconciliationtypes.Outcome
-	outcome, err := Run(context.Background(), []Step{failing}, func(_ context.Context, o reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{failing}, func(_ context.Context, o reconciliationtypes.Outcome) error {
 		persisted = append(persisted, o)
 		return nil
 	})
@@ -222,7 +222,7 @@ func TestRun_TerminalErrorConstructorWithNilErrorIsRejected(t *testing.T) {
 		},
 	}
 
-	_, err := Run(context.Background(), []Step{buggy}, func(context.Context, reconciliationtypes.Outcome) error {
+	_, err := Run(t.Context(), []Step{buggy}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("status handler must not run for a terminal outcome without an error")
 		return nil
 	})
@@ -240,7 +240,7 @@ func TestRun_SilentStopReturnsNilErrorAndNoRequeue(t *testing.T) {
 	}
 
 	persistCalls := 0
-	outcome, err := Run(context.Background(), []Step{stop, reached}, func(context.Context, reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{stop, reached}, func(context.Context, reconciliationtypes.Outcome) error {
 		persistCalls++
 		return nil
 	})
@@ -262,7 +262,7 @@ func TestRun_ImmediateRequeueReturnsWithoutPersistingFailureStatus(t *testing.T)
 	}
 
 	persistCalls := 0
-	outcome, err := Run(context.Background(), []Step{requeue, reached}, func(context.Context, reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{requeue, reached}, func(context.Context, reconciliationtypes.Outcome) error {
 		persistCalls++
 		return nil
 	})
@@ -323,7 +323,7 @@ func TestRun_WellBehavedMutatingStepReconciles(t *testing.T) {
 		},
 	}}
 
-	_, err := Run(context.Background(), []Step{step}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	_, err := Run(t.Context(), []Step{step}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.NoError(t, err)
 	require.Equal(t, 1, step.reconcileCalls)
 	require.Equal(t, 1, step.observeCalls)
@@ -343,7 +343,7 @@ func TestRun_MutatingStepReconcileErrorReachesObserve(t *testing.T) {
 		reconcileErr: wantErr,
 	}
 
-	_, err := Run(context.Background(), []Step{step}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	_, err := Run(t.Context(), []Step{step}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.ErrorIs(t, err, wantErr)
 	require.ErrorIs(t, observedWith, wantErr)
 }
@@ -358,7 +358,7 @@ func TestRun_RejectsContractOrderViolation(t *testing.T) {
 		return reconciliationtypes.Outcome{}, nil
 	}}
 
-	_, err := Run(context.Background(), []Step{consumer, producer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	_, err := Run(t.Context(), []Step{consumer, producer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `requires contract "database.cnpg-databases.ready"`)
 	require.Zero(t, consumer.observeCalls)
@@ -375,7 +375,7 @@ func TestRun_PassesContractsBetweenSteps(t *testing.T) {
 		return reconciliationtypes.Converged(), nil
 	}}
 
-	_, err := Run(context.Background(), []Step{producer, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	_, err := Run(t.Context(), []Step{producer, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.NoError(t, err)
 	require.Equal(t, 1, producer.observeCalls)
 	require.Equal(t, 1, consumer.observeCalls)
@@ -398,7 +398,7 @@ func TestRun_PassesContractsFromMutationToObserve(t *testing.T) {
 		},
 	}
 
-	_, err := Run(context.Background(), []Step{step}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	_, err := Run(t.Context(), []Step{step}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.NoError(t, err)
 	require.Equal(t, 1, step.reconcileCalls)
 }
@@ -416,7 +416,7 @@ func TestRun_RejectsConvergedStepThatDoesNotPublishDeclaredContract(t *testing.T
 		return reconciliationtypes.Outcome{}, nil
 	}}
 
-	_, err := Run(context.Background(), []Step{producer, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	_, err := Run(t.Context(), []Step{producer, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `converged without providing declared contract "database.cnpg-databases.ready"`)
 	require.Zero(t, consumer.observeCalls)
@@ -438,9 +438,9 @@ func TestRun_CreatesFreshContractsForEachPass(t *testing.T) {
 		return reconciliationtypes.Converged(), nil
 	}}
 
-	_, err := Run(context.Background(), []Step{producer, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	_, err := Run(t.Context(), []Step{producer, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.NoError(t, err)
-	_, err = Run(context.Background(), []Step{producer, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
+	_, err = Run(t.Context(), []Step{producer, consumer}, func(context.Context, reconciliationtypes.Outcome) error { return nil })
 	require.NoError(t, err)
 	require.NotNil(t, firstContracts)
 	require.NotNil(t, secondContracts)
@@ -452,7 +452,7 @@ func TestRun_RejectsInvalidConditionStatus(t *testing.T) {
 		return reconciliationtypes.WaitingWithStatus("Ready", metav1.ConditionStatus("Maybe"), "Pending", "waiting", "Pending", time.Second), nil
 	}}
 
-	_, err := Run(context.Background(), []Step{buggy}, func(context.Context, reconciliationtypes.Outcome) error {
+	_, err := Run(t.Context(), []Step{buggy}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("status handler must not run for an invalid condition status")
 		return nil
 	})
@@ -465,7 +465,7 @@ func TestRun_RejectsDeferredOutcomeWithoutRequeueAfter(t *testing.T) {
 		return reconciliationtypes.Deferred(0), nil
 	}}
 
-	_, err := Run(context.Background(), []Step{buggy}, func(context.Context, reconciliationtypes.Outcome) error {
+	_, err := Run(t.Context(), []Step{buggy}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("status handler must not run for an invalid deferred outcome")
 		return nil
 	})
@@ -483,7 +483,7 @@ func TestRun_DeferredOutcomePreservesExplicitRequeueAfter(t *testing.T) {
 	}}
 	independent := convergedStep("independent")
 
-	outcome, err := Run(context.Background(), []Step{provider, dependent, independent}, func(context.Context, reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{provider, dependent, independent}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("deferred outcomes must not request a status action")
 		return nil
 	})
@@ -502,7 +502,7 @@ func TestRun_DeferredOutcomesReturnShortestRequeueAfter(t *testing.T) {
 		return reconciliationtypes.Deferred(5 * time.Second), nil
 	}}
 
-	outcome, err := Run(context.Background(), []Step{slow, fast}, func(context.Context, reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{slow, fast}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("deferred outcomes must not request a status action")
 		return nil
 	})
@@ -532,7 +532,7 @@ func TestRun_RejectsErrorOutcomesWithoutErrors(t *testing.T) {
 				return tst.outcome, nil
 			}}
 
-			_, err := Run(context.Background(), []Step{buggy}, func(context.Context, reconciliationtypes.Outcome) error {
+			_, err := Run(t.Context(), []Step{buggy}, func(context.Context, reconciliationtypes.Outcome) error {
 				t.Fatal("status handler must not run for a malformed error outcome")
 				return nil
 			})
@@ -547,7 +547,7 @@ func TestRun_RejectsWaitingOutcomeWithoutRequeueAfter(t *testing.T) {
 		return reconciliationtypes.Waiting("Ready", "Pending", "waiting", "Pending", 0), nil
 	}}
 
-	_, err := Run(context.Background(), []Step{waiting}, func(context.Context, reconciliationtypes.Outcome) error {
+	_, err := Run(t.Context(), []Step{waiting}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("status handler must not run for a waiting outcome without a retry delay")
 		return nil
 	})
@@ -576,7 +576,7 @@ func TestRun_AccumulateThenFlush_PersistsExactlyOnce(t *testing.T) {
 
 	var applied []reconciliationtypes.Outcome
 	persistCalls := 0
-	outcome, err := Run(context.Background(), []Step{privileges, metrics, flush}, func(_ context.Context, o reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{privileges, metrics, flush}, func(_ context.Context, o reconciliationtypes.Outcome) error {
 		switch o.StatusAction() {
 		case reconciliationtypes.StatusApplyAndContinue:
 			applied = append(applied, o)
@@ -608,7 +608,7 @@ func TestRun_AccumulateThenFlush_ReturnsPersistError(t *testing.T) {
 	}}
 
 	persistErr := errors.New("status update conflict")
-	_, err := Run(context.Background(), []Step{flush}, func(context.Context, reconciliationtypes.Outcome) error { return persistErr })
+	_, err := Run(t.Context(), []Step{flush}, func(context.Context, reconciliationtypes.Outcome) error { return persistErr })
 	require.ErrorIs(t, err, persistErr)
 }
 
@@ -619,7 +619,7 @@ func TestRun_FlushStopsThePipeline(t *testing.T) {
 	afterFlush := convergedStep("after-flush")
 
 	persistCalls := 0
-	outcome, err := Run(context.Background(), []Step{flush, afterFlush}, func(context.Context, reconciliationtypes.Outcome) error {
+	outcome, err := Run(t.Context(), []Step{flush, afterFlush}, func(context.Context, reconciliationtypes.Outcome) error {
 		persistCalls++
 		return nil
 	})
@@ -641,7 +641,7 @@ func TestRun_RejectsFinalFlushAfterRuntimeDependencySkip(t *testing.T) {
 		return reconciliationtypes.ConvergedFlush("Ready", "AllConverged", "database is ready", "Ready"), nil
 	}}
 
-	_, err := Run(context.Background(), []Step{provider, dependent, flush}, func(context.Context, reconciliationtypes.Outcome) error {
+	_, err := Run(t.Context(), []Step{provider, dependent, flush}, func(context.Context, reconciliationtypes.Outcome) error {
 		t.Fatal("final flush must not persist after a runtime dependency skip")
 		return nil
 	})

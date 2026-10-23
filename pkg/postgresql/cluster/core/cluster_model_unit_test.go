@@ -227,13 +227,13 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, desiredConfig, contracts)
 
 	// Act
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	// Assert
 	require.True(t, model.cnpgPatch.requiresPhaseGate())
 	assert.False(t, model.cnpgCreated)
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, cnpgv1.PrimaryUpdateMethodSwitchover, updated.Spec.PrimaryUpdateMethod)
 	assert.Contains(t, events.normals, EventClusterUpdateStarted+":CNPG cluster spec updated for PostgresCluster pg1, waiting for healthy state")
 }
@@ -364,13 +364,13 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}},
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:15.10", updated.Spec.ImageName)
 
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, pendingClusterPhase, health.Phase)
@@ -442,13 +442,13 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}},
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", updated.Spec.ImageName)
 
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, pendingClusterPhase, health.Phase)
@@ -537,14 +537,14 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}},
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:15.10", updated.Spec.ImageName,
 		"allow=true must not let the provisioner patch the major bump itself")
 
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, pendingClusterPhase, health.Phase)
@@ -678,10 +678,10 @@ func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}}
 	model := newClusterModel(c, scheme, &captureEventEmitter{}, nil, cluster, clusterClass, desiredConfig, contracts)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, map[string]string{
 		"shared_buffers": "256MB",
 		"cnpg_injected":  "keep-me",
@@ -765,10 +765,10 @@ func TestClusterModelAdoptsAndPrunesLegacyPostgreSQLParameters(t *testing.T) {
 	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}}
 	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, desiredConfig, contracts)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, map[string]string{
 		"shared_buffers":   "256MB",
 		"application_name": "keep-me",
@@ -1785,14 +1785,14 @@ func TestClusterModelAdoptsOrphanedCNPGCluster(t *testing.T) {
 	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, cfg, contracts)
 
 	// Act
-	err := model.Reconcile(context.Background())
+	err := model.Reconcile(t.Context())
 
 	// Assert
 	require.NoError(t, err)
 	assert.Equal(t, cnpgPatchMetadata, model.cnpgPatch, "adoption patches only owner reference — metadata, no phase gate needed")
 	assert.False(t, model.cnpgCreated)
 	adopted := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(orphanedCNPG), adopted))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(orphanedCNPG), adopted))
 	require.Len(t, adopted.OwnerReferences, 1, "owner reference must be set after adoption")
 	assert.Equal(t, cluster.Name, adopted.OwnerReferences[0].Name)
 	assert.Contains(t, events.normals, EventClusterAdopted+":Adopted existing CNPG cluster for PostgresCluster pg1")
@@ -1813,7 +1813,7 @@ func TestClusterModelContractsNotReadyIsUpstreamPending(t *testing.T) {
 
 	// Act
 	reconcileErr := model.CheckContracts()
-	health, err := model.Observe(context.Background(), reconcileErr)
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert
 	require.ErrorIs(t, reconcileErr, errContractsNotReady)
@@ -2087,7 +2087,7 @@ func TestRunComponentsStopsOnObserveError(t *testing.T) {
 	components := []component{firstComponent, secondComponent}
 
 	// Act
-	result, err := runComponents(context.Background(), slog.Default(), components, nil)
+	result, err := runComponents(t.Context(), slog.Default(), components, nil)
 
 	// Assert: runComponents returns the error from the first component and does not proceed.
 	require.Error(t, err)
@@ -2113,7 +2113,7 @@ func TestRunComponentsSkipsReconcileWhenCheckContractsFails(t *testing.T) {
 	model := newConfigMapModel(fake.NewClientBuilder().WithScheme(scheme).Build(), scheme, noopEventEmitter{}, nil, cluster, contracts)
 
 	// Act — runComponents must not panic, and must return an intermediate result (Pending)
-	result, err := runComponents(context.Background(), slog.Default(), []component{model}, nil)
+	result, err := runComponents(t.Context(), slog.Default(), []component{model}, nil)
 
 	// Assert
 	require.NoError(t, err)
@@ -2362,12 +2362,12 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
 	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}}
 	model := newClusterModel(c, scheme, &captureEventEmitter{}, nil, cluster, clusterClass, driftedCfg, contracts)
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	require.True(t, model.cnpgPatch.requiresPhaseGate())
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.NotNil(t, updated.Spec.Managed)
 	assert.Equal(t, &roleConfig, updated.Spec.Managed)
 }
@@ -2414,11 +2414,11 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 	model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts)
 
 	// Act
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	// Assert: CNPG cluster in store now has pooler SANs
 	var got cnpgv1.Cluster
-	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
 	expectedSANs := computeDesiredPoolerSANSet(true, nil, "pg1", "default")
 	assert.ElementsMatch(t, expectedSANs, got.Spec.Certificates.ServerAltDNSNames,
 		"Reconcile must patch pooler SANs into CNPG cluster spec when drift is detected")
@@ -2525,7 +2525,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 
 	t.Run("missing_secret", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -2538,7 +2538,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 			},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -2551,7 +2551,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 			},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -2562,7 +2562,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 			Data:       map[string][]byte{corev1.TLSCertKey: []byte("this is not a PEM block")},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.Error(t, err, "malformed PEM must escalate via the sentinel so callers can route to Failed")
 		assert.True(t, errors.Is(err, errServerTLSLeafInvalid))
 		assert.Contains(t, err.Error(), "PEM decode failed")
@@ -2577,7 +2577,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 			Data:       map[string][]byte{corev1.TLSCertKey: badDER},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.Error(t, err, "x509.ParseCertificate failure must escalate via the sentinel")
 		assert.True(t, errors.Is(err, errServerTLSLeafInvalid))
 		assert.Contains(t, err.Error(), "x509 parse failed")
@@ -2969,7 +2969,7 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 
 			model := makeModel(tt.patchKind, tt.cnpgPhase, tt.specImage, tt.statusImage, tt.pgDataImage)
 
-			health, err := model.Observe(context.Background(), nil)
+			health, err := model.Observe(t.Context(), nil)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedState, health.State)
@@ -2996,7 +2996,7 @@ func TestClusterModelObserve_AdoptedClusterDoesNotStallAtProvisioning(t *testing
 	model.cnpgPatch = cnpgPatchMetadata
 
 	// Act
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 
 	// Assert: metadata-only patch must not trigger phase gate — adopted healthy cluster reaches Ready.
 	require.NoError(t, err)
